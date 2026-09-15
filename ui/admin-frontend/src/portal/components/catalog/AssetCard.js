@@ -8,7 +8,17 @@ import CommunityBadge from "../../../admin/components/submissions/CommunityBadge
 import GovernedMetadataBadges from "../GovernedMetadataBadges";
 import { PrimaryButton, SecondaryOutlineButton } from "../../../admin/styles/sharedStyles";
 import { relativeTime } from "../../../admin/components/notifications/notificationPresentation";
-import { buildActionLabel, buildAppPath, detailPath, itemKey, kindLabel, kindLogo } from "../../utils/catalog";
+import {
+  buildActionLabel,
+  buildAppPath,
+  detailPath,
+  isAppGranted,
+  itemKey,
+  kindLabel,
+  kindLogo,
+  secondaryActionLabel,
+  secondaryActionPath,
+} from "../../utils/catalog";
 
 const CardRoot = styled(Box)(({ theme }) => ({
   border: `1px solid ${theme.palette.border.neutralDefault}`,
@@ -151,14 +161,28 @@ const AssetCard = ({ item, showType = true, compact = false }) => {
         <SecondaryOutlineButton size="small" onClick={open} data-testid="asset-card-details">
           Details
         </SecondaryOutlineButton>
-        <PrimaryButton
-          size="small"
-          sx={{ padding: "2px 12px" }}
-          onClick={() => navigate(buildAppPath(item))}
-          data-testid="asset-card-build"
-        >
-          {buildActionLabel(item)}
-        </PrimaryButton>
+        {/* "Build app" only when an App credential is what grants access;
+            otherwise the providing plugin's own page is the way in. */}
+        {isAppGranted(item) ? (
+          <PrimaryButton
+            size="small"
+            sx={{ padding: "2px 12px" }}
+            onClick={() => navigate(buildAppPath(item))}
+            data-testid="asset-card-build"
+          >
+            {buildActionLabel(item)}
+          </PrimaryButton>
+        ) : (
+          secondaryActionPath(item) && (
+            <SecondaryOutlineButton
+              size="small"
+              onClick={() => navigate(secondaryActionPath(item))}
+              data-testid="asset-card-view"
+            >
+              {secondaryActionLabel(item)}
+            </SecondaryOutlineButton>
+          )
+        )}
       </CardFooter>
     </CardRoot>
   );

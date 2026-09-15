@@ -756,9 +756,12 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				pluginForUI.HookType = manifest.Capabilities.PrimaryHook
 			}
 
-			if updateErr := m.db.Model(&pluginForUI).Updates(map[string]interface{}{
-				"hook_type":  pluginForUI.HookType,
-				"hook_types": pluginForUI.HookTypes,
+			// A struct update so the hook_types JSON serializer applies; a map
+			// update hands Postgres a raw []string ("could not determine data
+			// type of parameter") and leaves hook_types empty forever.
+			if updateErr := m.db.Model(&pluginForUI).Select("hook_type", "hook_types").Updates(models.Plugin{
+				HookType:  pluginForUI.HookType,
+				HookTypes: pluginForUI.HookTypes,
 			}).Error; updateErr != nil {
 				log.Warn().
 					Uint("plugin_id", pluginID).
@@ -879,6 +882,10 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					SupportsSubmissions: rt.SupportsSubmissions,
 					SupportsMetadata:    rt.SupportsMetadata,
 					SubmissionSchema:    rt.SubmissionSchemaString(),
+					// Resolved against the plugin's hook types in
+					// RegisterPluginResourceTypes; nil means "platform default".
+					AccessGrantedViaAppDeclared: rt.AccessGrantedViaApp,
+					PortalDetailPath:            rt.PortalDetailPath,
 				}
 				if rt.FormComponent != nil {
 					prt.FormComponentTag = rt.FormComponent.Tag
@@ -887,7 +894,17 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				resourceTypes = append(resourceTypes, prt)
 			}
 
-			if err := m.service.RegisterPluginResourceTypes(pluginID, resourceTypes); err != nil {
+			// Resolve access_granted_via_app against the manifest's own hooks:
+			// on a first load the plugin row may not carry them yet, and the
+			// manifest is authoritative unless an admin customised the hooks.
+			resolvePlugin := pluginForUI
+			if !resolvePlugin.HookTypesCustomized && manifest.Capabilities != nil && len(manifest.Capabilities.Hooks) > 0 {
+				resolvePlugin.HookTypes = manifest.Capabilities.Hooks
+				if manifest.Capabilities.PrimaryHook != "" {
+					resolvePlugin.HookType = manifest.Capabilities.PrimaryHook
+				}
+			}
+			if err := m.service.RegisterPluginResourceTypesForPlugin(&resolvePlugin, resourceTypes); err != nil {
 				log.Warn().
 					Uint("plugin_id", pluginID).
 					Err(err).

@@ -23,6 +23,12 @@ import {
 
 const jsonApiName = (item) => item?.attributes?.name ?? "";
 
+// Instances of a plugin resource type that an App credential grants access
+// to. The server marks each instance (type value with any per-instance
+// override applied); a missing flag is treated as granted.
+const appGrantedInstances = (resourceType) =>
+  (resourceType?.instances || []).filter((inst) => inst.access_granted_via_app !== false);
+
 const AppBuilder = () => {
   // No placeholder name: the field is required and a default of "My New App"
   // was being submitted as-is.
@@ -114,7 +120,9 @@ const AppBuilder = () => {
           const resourceType = (pluginResourcesResponse.data?.data || []).find(
             (t) => `${t.plugin_id}:${t.slug}` === key,
           );
-          const instance = resourceType?.instances?.find((inst) => String(inst.id) === instanceId);
+          // Only instances an App credential grants access to can be
+          // preselected; a deep link to anything else is ignored.
+          const instance = appGrantedInstances(resourceType).find((inst) => String(inst.id) === instanceId);
           if (instance) setPluginResourceSelections({ [key]: [instance] });
         }
 
@@ -289,10 +297,12 @@ const AppBuilder = () => {
               />
             </Box>
             {/* Dynamic Plugin Resource Sections: one picker per resource
-                type; selections are the full instance objects. */}
+                type; selections are the full instance objects. Types whose
+                instances are not granted through an App (informational
+                assets, plugin-managed access) offer nothing here. */}
             {pluginResourceTypes.map((rt) => {
               const key = `${rt.plugin_id}:${rt.slug}`;
-              const instances = rt.instances || [];
+              const instances = appGrantedInstances(rt);
               const selected = pluginResourceSelections[key] || [];
 
               if (instances.length === 0) return null;

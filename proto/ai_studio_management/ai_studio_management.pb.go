@@ -173,11 +173,13 @@ type ResourceTypeSpec struct {
 	Description         string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	Icon                string                 `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"` // Material icon name or asset path
 	HasPrivacyScore     bool                   `protobuf:"varint,5,opt,name=has_privacy_score,json=hasPrivacyScore,proto3" json:"has_privacy_score,omitempty"`
-	SupportsSubmissions bool                   `protobuf:"varint,6,opt,name=supports_submissions,json=supportsSubmissions,proto3" json:"supports_submissions,omitempty"` // Community users may submit instances
-	FormComponentTag    string                 `protobuf:"bytes,7,opt,name=form_component_tag,json=formComponentTag,proto3" json:"form_component_tag,omitempty"`         // Optional custom App-form Web Component tag
-	FormComponentEntry  string                 `protobuf:"bytes,8,opt,name=form_component_entry,json=formComponentEntry,proto3" json:"form_component_entry,omitempty"`   // JS entry point for the form component
-	SubmissionSchema    string                 `protobuf:"bytes,9,opt,name=submission_schema,json=submissionSchema,proto3" json:"submission_schema,omitempty"`           // JSON Schema (object) for community submissions
-	SupportsMetadata    bool                   `protobuf:"varint,10,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`         // Instances can carry governed metadata (Enterprise)
+	SupportsSubmissions bool                   `protobuf:"varint,6,opt,name=supports_submissions,json=supportsSubmissions,proto3" json:"supports_submissions,omitempty"`            // Community users may submit instances
+	FormComponentTag    string                 `protobuf:"bytes,7,opt,name=form_component_tag,json=formComponentTag,proto3" json:"form_component_tag,omitempty"`                    // Optional custom App-form Web Component tag
+	FormComponentEntry  string                 `protobuf:"bytes,8,opt,name=form_component_entry,json=formComponentEntry,proto3" json:"form_component_entry,omitempty"`              // JS entry point for the form component
+	SubmissionSchema    string                 `protobuf:"bytes,9,opt,name=submission_schema,json=submissionSchema,proto3" json:"submission_schema,omitempty"`                      // JSON Schema (object) for community submissions
+	SupportsMetadata    bool                   `protobuf:"varint,10,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`                    // Instances can carry governed metadata (Enterprise)
+	AccessGrantedViaApp *bool                  `protobuf:"varint,11,opt,name=access_granted_via_app,json=accessGrantedViaApp,proto3,oneof" json:"access_granted_via_app,omitempty"` // An App credential grants access to instances; unset = platform default
+	PortalDetailPath    string                 `protobuf:"bytes,12,opt,name=portal_detail_path,json=portalDetailPath,proto3" json:"portal_detail_path,omitempty"`                   // Portal path template for an instance, "{id}" is replaced
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -280,6 +282,20 @@ func (x *ResourceTypeSpec) GetSupportsMetadata() bool {
 		return x.SupportsMetadata
 	}
 	return false
+}
+
+func (x *ResourceTypeSpec) GetAccessGrantedViaApp() bool {
+	if x != nil && x.AccessGrantedViaApp != nil {
+		return *x.AccessGrantedViaApp
+	}
+	return false
+}
+
+func (x *ResourceTypeSpec) GetPortalDetailPath() string {
+	if x != nil {
+		return x.PortalDetailPath
+	}
+	return ""
 }
 
 type RegisterResourceTypesRequest struct {
@@ -14528,7 +14544,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\auser_id\x18\a \x01(\rR\x06userId\"P\n" +
 	"\x1aCreateNotificationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x89\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x8c\x04\n" +
 	"\x10ResourceTypeSpec\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -14540,7 +14556,10 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\x14form_component_entry\x18\b \x01(\tR\x12formComponentEntry\x12+\n" +
 	"\x11submission_schema\x18\t \x01(\tR\x10submissionSchema\x12+\n" +
 	"\x11supports_metadata\x18\n" +
-	" \x01(\bR\x10supportsMetadata\"\xca\x01\n" +
+	" \x01(\bR\x10supportsMetadata\x128\n" +
+	"\x16access_granted_via_app\x18\v \x01(\bH\x00R\x13accessGrantedViaApp\x88\x01\x01\x12,\n" +
+	"\x12portal_detail_path\x18\f \x01(\tR\x10portalDetailPathB\x19\n" +
+	"\x17_access_granted_via_app\"\xca\x01\n" +
 	"\x1cRegisterResourceTypesRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12<\n" +
 	"\x05types\x18\x02 \x03(\v2&.ai_studio_management.ResourceTypeSpecR\x05types\x12-\n" +
@@ -16501,6 +16520,7 @@ func file_proto_ai_studio_management_ai_studio_management_proto_init() {
 	if File_proto_ai_studio_management_ai_studio_management_proto != nil {
 		return
 	}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[2].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[9].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[16].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[22].OneofWrappers = []any{}

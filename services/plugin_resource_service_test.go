@@ -126,6 +126,9 @@ func TestSetAppPluginResources(t *testing.T) {
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
 		Slug: "mcp_servers",
 		Name: "MCP Servers",
+		// The test plugin has no custom endpoints, so declare that an App
+		// credential grants access; otherwise binding it to an App is refused.
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 	prt, err := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "mcp_servers")
@@ -226,6 +229,9 @@ func TestSetGroupPluginResources(t *testing.T) {
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
 		Slug: "mcp_servers",
 		Name: "MCP Servers",
+		// The test plugin has no custom endpoints, so declare that an App
+		// credential grants access; otherwise binding it to an App is refused.
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 	prt, _ := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "mcp_servers")
@@ -262,6 +268,9 @@ func TestGetAccessiblePluginResourceInstances(t *testing.T) {
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
 		Slug: "mcp_servers",
 		Name: "MCP Servers",
+		// The test plugin has no custom endpoints, so declare that an App
+		// credential grants access; otherwise binding it to an App is refused.
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 	prt, _ := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "mcp_servers")
@@ -392,6 +401,9 @@ func TestCreateAppWithResources(t *testing.T) {
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
 		Slug: "mcp_servers",
 		Name: "MCP Servers",
+		// The test plugin has no custom endpoints, so declare that an App
+		// credential grants access; otherwise binding it to an App is refused.
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 
@@ -448,6 +460,9 @@ func TestUpdateAppWithResources(t *testing.T) {
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
 		Slug: "mcp_servers",
 		Name: "MCP Servers",
+		// The test plugin has no custom endpoints, so declare that an App
+		// credential grants access; otherwise binding it to an App is refused.
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 
@@ -541,6 +556,9 @@ func TestSetAppPluginResources_CachesInstanceDetails(t *testing.T) {
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
 		Slug: "mcp_servers",
 		Name: "MCP Servers",
+		// The test plugin has no custom endpoints, so declare that an App
+		// credential grants access; otherwise binding it to an App is refused.
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 	prt, _ := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "mcp_servers")
@@ -595,9 +613,10 @@ func TestCreateAppWithResources_PrivacyValidationWithScores(t *testing.T) {
 
 	// Register a resource type with privacy scoring
 	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
-		Slug:            "private_servers",
-		Name:            "Private Servers",
-		HasPrivacyScore: true,
+		Slug:                        "private_servers",
+		Name:                        "Private Servers",
+		HasPrivacyScore:             true,
+		AccessGrantedViaAppDeclared: accessViaApp(true),
 	}})
 	assert.NoError(t, err)
 

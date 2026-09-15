@@ -6,7 +6,7 @@ The Apps feature in Midsommar provides a way to create, configure, and manage AI
 
 **Core Objectives:**
 
-* **Resource Integration:** Enable applications to subscribe to and utilize LLMs, data sources, and tools.
+* **Resource Integration:** Enable applications to subscribe to and utilize LLMs, data sources, and tools, plus plugin resource instances whose type has `access_granted_via_app` (see `docs/site/docs/plugins-resource-types.md`). Binding a plugin resource only makes sense when an App credential is what unlocks it (a gateway-proxied MCP server, for example), so the App forms offer only such instances and the service refuses new bindings to any other (`services.ErrResourceNotAppGranted`, 400 from both the admin and portal handlers). Bindings that predate a type's classification are left on the App, still shown, and survive updates that resend or omit them; they are not shipped in the gateway snapshot.
 * **Access Control:** Manage which resources an app can access based on user permissions and privacy settings.
 * **Budget Management:** Control and monitor spending on AI resources at the application level.
 * **Flexibility:** Support a wide range of AI use cases through customizable configurations.

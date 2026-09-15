@@ -727,6 +727,8 @@ func (w *pluginServerWrapper) GetResourceTypeRegistrations(ctx context.Context, 
 			SupportsSubmissions: r.SupportsSubmissions,
 			SupportsMetadata:    r.SupportsMetadata,
 			SubmissionSchema:    r.SubmissionSchema,
+			AccessGrantedViaApp: r.AccessGrantedViaApp,
+			PortalDetailPath:    r.PortalDetailPath,
 		}
 		if r.FormComponent != nil {
 			pr.FormComponent = &pb.ResourceFormComponentProto{
@@ -862,9 +864,10 @@ func resourceInstanceToProto(ri *ResourceInstance) *pb.ResourceInstanceProto {
 		Id:           ri.ID,
 		Name:         ri.Name,
 		Description:  ri.Description,
-		PrivacyScore: int32(ri.PrivacyScore),
-		Metadata:     ri.Metadata,
-		IsActive:     ri.IsActive,
+		PrivacyScore:        int32(ri.PrivacyScore),
+		Metadata:            ri.Metadata,
+		IsActive:            ri.IsActive,
+		AccessGrantedViaApp: ri.AccessGrantedViaApp,
 	}
 }
 

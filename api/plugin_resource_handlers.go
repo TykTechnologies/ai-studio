@@ -34,7 +34,7 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 	}
 
 	// Verify the resource type exists
-	_, err = a.service.GetPluginResourceTypeByPluginAndSlug(uint(pluginID), slug)
+	prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(uint(pluginID), slug)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Resource type not found"})
 		return
@@ -67,11 +67,12 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 			continue
 		}
 		item := gin.H{
-			"id":            inst.Id,
-			"name":          sanitizeString(inst.Name),
-			"description":   sanitizeString(inst.Description),
-			"privacy_score": inst.PrivacyScore,
-			"is_active":     inst.IsActive,
+			"id":                     inst.Id,
+			"name":                   sanitizeString(inst.Name),
+			"description":            sanitizeString(inst.Description),
+			"privacy_score":          inst.PrivacyScore,
+			"is_active":              inst.IsActive,
+			"access_granted_via_app": models.EffectiveInstanceAccessGrantedViaApp(prt.AccessGrantedViaApp, inst.AccessGrantedViaApp),
 		}
 		if rec := governed[inst.Id]; rec != nil {
 			item["governed_metadata"], item["governed_metadata_status"] = a.adminGovernedView(objectType, rec)
@@ -122,6 +123,9 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 				"name":          sanitizeString(inst.Name),
 				"description":   sanitizeString(inst.Description),
 				"privacy_score": inst.PrivacyScore,
+				// Effective per instance: the App forms offer only instances
+				// an App credential actually grants access to.
+				"access_granted_via_app": models.EffectiveInstanceAccessGrantedViaApp(rt.Type.AccessGrantedViaApp, inst.AccessGrantedViaApp),
 			}
 			if rec := governed[inst.Id]; rec != nil {
 				item["governed_metadata"] = a.portalGovernedView(objectType, rec)
@@ -129,13 +133,15 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 			instances = append(instances, item)
 		}
 		result = append(result, gin.H{
-			"plugin_id":         rt.Type.PluginID,
-			"slug":              rt.Type.Slug,
-			"name":              sanitizeString(rt.Type.Name),
-			"description":       sanitizeString(rt.Type.Description),
-			"icon":              sanitizeString(rt.Type.Icon),
-			"supports_metadata": rt.Type.SupportsMetadata,
-			"instances":         instances,
+			"plugin_id":              rt.Type.PluginID,
+			"slug":                   rt.Type.Slug,
+			"name":                   sanitizeString(rt.Type.Name),
+			"description":            sanitizeString(rt.Type.Description),
+			"icon":                   sanitizeString(rt.Type.Icon),
+			"supports_metadata":      rt.Type.SupportsMetadata,
+			"access_granted_via_app": rt.Type.AccessGrantedViaApp,
+			"portal_detail_path":     rt.Type.PortalDetailPath,
+			"instances":              instances,
 		})
 	}
 
@@ -146,13 +152,15 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 // with portal=true, the reduced shape the portal submission form needs.
 func serializePluginResourceType(t *models.PluginResourceType, portal bool) gin.H {
 	entry := gin.H{
-		"id":                t.ID,
-		"plugin_id":         t.PluginID,
-		"slug":              t.Slug,
-		"name":              sanitizeString(t.Name),
-		"description":       sanitizeString(t.Description),
-		"icon":              sanitizeString(t.Icon),
-		"has_privacy_score": t.HasPrivacyScore,
+		"id":                     t.ID,
+		"plugin_id":              t.PluginID,
+		"slug":                   t.Slug,
+		"name":                   sanitizeString(t.Name),
+		"description":            sanitizeString(t.Description),
+		"icon":                   sanitizeString(t.Icon),
+		"has_privacy_score":      t.HasPrivacyScore,
+		"access_granted_via_app": t.AccessGrantedViaApp,
+		"portal_detail_path":     t.PortalDetailPath,
 	}
 	if !portal {
 		entry["supports_metadata"] = t.SupportsMetadata

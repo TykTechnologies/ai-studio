@@ -52,6 +52,7 @@ const renderDetail = (path, type = "llm") =>
         <Routes>
           <Route path="/portal/catalog/llms/:id" element={<AssetDetail type={type} />} />
           <Route path="/portal/catalog/tools/:id" element={<AssetDetail type="tool" />} />
+          <Route path="/portal/catalog/resources/:pluginId/:slug/:instanceId" element={<AssetDetail type="plugin_resource" />} />
         </Routes>
       </MemoryRouter>
     </ThemeProvider>
@@ -70,6 +71,47 @@ describe("AssetDetail", () => {
       if (url === "/common/catalog/tools/4") {
         return Promise.resolve({
           data: { data: { type: "tool", id: "4", attributes: { name: "Weather API", kind: "rest", privacy_score: 10, operations: ["getForecast", "getAlerts"], catalogs: [] } } },
+        });
+      }
+      if (url === "/common/catalog/resources/7/agent/ast_9") {
+        return Promise.resolve({
+          data: {
+            data: {
+              type: "plugin_resource",
+              id: "ast_9",
+              attributes: {
+                name: "Support Triage Agent",
+                kind: "7:agent",
+                kind_label: "Agent",
+                privacy_score: 20,
+                catalogs: [],
+                tags: [],
+                access_granted_via_app: false,
+                portal_detail_url: "/portal/plugins/asset-catalog#/assets/ast_9",
+                resource_type: { plugin_id: 7, slug: "agent", name: "Agent", access_granted_via_app: false },
+              },
+            },
+          },
+        });
+      }
+      if (url === "/common/catalog/resources/3/mcp_servers/srv-1") {
+        return Promise.resolve({
+          data: {
+            data: {
+              type: "plugin_resource",
+              id: "srv-1",
+              attributes: {
+                name: "Support MCP",
+                kind: "3:mcp_servers",
+                kind_label: "MCP Servers",
+                privacy_score: 20,
+                catalogs: [],
+                tags: [],
+                access_granted_via_app: true,
+                resource_type: { plugin_id: 3, slug: "mcp_servers", name: "MCP Servers", access_granted_via_app: true },
+              },
+            },
+          },
         });
       }
       return Promise.reject(new Error(`unexpected ${url}`));
@@ -108,6 +150,25 @@ describe("AssetDetail", () => {
     renderDetail("/portal/catalog/llms/8");
     expect(await screen.findByText("This LLM provider is not available to you")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to browse" })).toHaveAttribute("href", "/portal/catalog/llms");
+  });
+
+  // An asset the providing plugin gates itself must not promise a credential:
+  // no "Build app", a link to the plugin's page instead.
+  it("sends a plugin-gated resource to the plugin's own page instead of the app builder", async () => {
+    renderDetail("/portal/catalog/resources/7/agent/ast_9", "plugin_resource");
+    expect(await screen.findByRole("heading", { level: 1, name: "Support Triage Agent" })).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-build-app")).not.toBeInTheDocument();
+    expect(screen.getByTestId("asset-view-external")).toHaveTextContent("View in Agent");
+    expect(screen.getByTestId("plugin-resource-access-note")).toHaveTextContent("managed by the plugin that provides them");
+    expect(screen.getByRole("link", { name: "Open it there" })).toHaveAttribute("href", "/portal/plugins/asset-catalog#/assets/ast_9");
+  });
+
+  it("keeps Build app for an app-granted plugin resource", async () => {
+    renderDetail("/portal/catalog/resources/3/mcp_servers/srv-1", "plugin_resource");
+    expect(await screen.findByRole("heading", { level: 1, name: "Support MCP" })).toBeInTheDocument();
+    expect(screen.getByTestId("asset-build-app")).toHaveTextContent("Build app");
+    expect(screen.queryByTestId("asset-view-external")).not.toBeInTheDocument();
+    expect(screen.getByTestId("plugin-resource-access-note")).toHaveTextContent("an app credential is what grants access");
   });
 
   it("shows tool operations and links to the API documentation", async () => {

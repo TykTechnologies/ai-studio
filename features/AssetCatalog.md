@@ -101,7 +101,7 @@ Topics (`asset_catalog.` prefix, configurable): `asset.created|updated|version_c
 
 - Portal: `/portal/plugins/asset-catalog` (browse, detail with hash sub-route `#/assets/{id}`, versions, relationships, request access, owner editing) and `/portal/plugins/asset-catalog/mine` (my assets, my requests, my access).
 - Admin: `/admin/enterprise/asset-catalog/{overview,types,assets,requests}`.
-- Platform: assets appear in the App form and Teams plugin-resource sections and in the portal's auto-generated resource pages; plugin types appear in the Submission form.
+- Platform: assets appear in the Teams plugin-resource sections and in the portal's unified catalog; plugin types appear in the Submission form. The plugin declares no `access_granted_via_app`, so the platform resolves its types to false (it has no `custom_endpoint` hook): assets are not offered in the App forms, show no Build app action, and are not shipped to gateways. Attaching an asset to an App grants nothing, and access to gated fields comes only from the catalog's own access requests. The intended `portal_detail_path` is `/portal/plugins/asset-catalog#/assets/{id}`, so the unified catalog can link to the asset page; setting it on the registration (and, later, deriving a per-asset override from dependencies on proxied resources) is a follow-up in the plugin.
 
 ## Configuration
 

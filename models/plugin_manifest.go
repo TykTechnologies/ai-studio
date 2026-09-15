@@ -239,7 +239,14 @@ type ManifestResourceType struct {
 	HasPrivacyScore     bool   `json:"has_privacy_score"`
 	SupportsSubmissions bool   `json:"supports_submissions"`
 	SupportsMetadata    bool   `json:"supports_metadata"` // Instances can carry governed metadata (Enterprise)
-	FormComponent       *struct {
+	// AccessGrantedViaApp declares that an App credential grants access to
+	// instances. Omitted (nil) means the platform default: true when the
+	// plugin also declares the custom_endpoint hook, false otherwise.
+	AccessGrantedViaApp *bool `json:"access_granted_via_app,omitempty"`
+	// PortalDetailPath is a same-origin path template ("{id}" is replaced)
+	// to an instance's page in the portal.
+	PortalDetailPath string `json:"portal_detail_path,omitempty"`
+	FormComponent    *struct {
 		Tag        string `json:"tag"`
 		EntryPoint string `json:"entry_point"`
 	} `json:"form_component,omitempty"`

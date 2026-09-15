@@ -5185,15 +5185,17 @@ func (x *GetResourceTypeRegistrationsResponse) GetRegistrations() []*ResourceTyp
 
 type ResourceTypeRegistrationProto struct {
 	state               protoimpl.MessageState      `protogen:"open.v1"`
-	Slug                string                      `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`                                                           // Machine-readable identifier (unique per plugin)
-	Name                string                      `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                           // Human-readable display name
-	Description         string                      `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`                                             // Description of this resource type
-	Icon                string                      `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`                                                           // Material icon name or asset path
-	HasPrivacyScore     bool                        `protobuf:"varint,5,opt,name=has_privacy_score,json=hasPrivacyScore,proto3" json:"has_privacy_score,omitempty"`           // Whether instances carry privacy scores
-	SupportsSubmissions bool                        `protobuf:"varint,6,opt,name=supports_submissions,json=supportsSubmissions,proto3" json:"supports_submissions,omitempty"` // Whether community submissions are supported
-	FormComponent       *ResourceFormComponentProto `protobuf:"bytes,7,opt,name=form_component,json=formComponent,proto3" json:"form_component,omitempty"`                    // Optional custom form component
-	SupportsMetadata    bool                        `protobuf:"varint,8,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`          // Whether instances can carry governed metadata (Enterprise)
-	SubmissionSchema    string                      `protobuf:"bytes,9,opt,name=submission_schema,json=submissionSchema,proto3" json:"submission_schema,omitempty"`           // JSON Schema (object) describing the submission payload
+	Slug                string                      `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`                                                                      // Machine-readable identifier (unique per plugin)
+	Name                string                      `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                                      // Human-readable display name
+	Description         string                      `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`                                                        // Description of this resource type
+	Icon                string                      `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`                                                                      // Material icon name or asset path
+	HasPrivacyScore     bool                        `protobuf:"varint,5,opt,name=has_privacy_score,json=hasPrivacyScore,proto3" json:"has_privacy_score,omitempty"`                      // Whether instances carry privacy scores
+	SupportsSubmissions bool                        `protobuf:"varint,6,opt,name=supports_submissions,json=supportsSubmissions,proto3" json:"supports_submissions,omitempty"`            // Whether community submissions are supported
+	FormComponent       *ResourceFormComponentProto `protobuf:"bytes,7,opt,name=form_component,json=formComponent,proto3" json:"form_component,omitempty"`                               // Optional custom form component
+	SupportsMetadata    bool                        `protobuf:"varint,8,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`                     // Whether instances can carry governed metadata (Enterprise)
+	SubmissionSchema    string                      `protobuf:"bytes,9,opt,name=submission_schema,json=submissionSchema,proto3" json:"submission_schema,omitempty"`                      // JSON Schema (object) describing the submission payload
+	AccessGrantedViaApp *bool                       `protobuf:"varint,10,opt,name=access_granted_via_app,json=accessGrantedViaApp,proto3,oneof" json:"access_granted_via_app,omitempty"` // An App credential grants access to instances; unset = platform default
+	PortalDetailPath    string                      `protobuf:"bytes,11,opt,name=portal_detail_path,json=portalDetailPath,proto3" json:"portal_detail_path,omitempty"`                   // Portal path template for an instance, e.g. "/portal/plugins/x#/items/{id}"
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -5287,6 +5289,20 @@ func (x *ResourceTypeRegistrationProto) GetSupportsMetadata() bool {
 func (x *ResourceTypeRegistrationProto) GetSubmissionSchema() string {
 	if x != nil {
 		return x.SubmissionSchema
+	}
+	return ""
+}
+
+func (x *ResourceTypeRegistrationProto) GetAccessGrantedViaApp() bool {
+	if x != nil && x.AccessGrantedViaApp != nil {
+		return *x.AccessGrantedViaApp
+	}
+	return false
+}
+
+func (x *ResourceTypeRegistrationProto) GetPortalDetailPath() string {
+	if x != nil {
+		return x.PortalDetailPath
 	}
 	return ""
 }
@@ -5464,15 +5480,16 @@ func (x *ListResourceInstancesResponse) GetErrorMessage() string {
 }
 
 type ResourceInstanceProto struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                          // Plugin-assigned unique identifier
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                      // Human-readable display name
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`                        // Optional description
-	PrivacyScore  int32                  `protobuf:"varint,4,opt,name=privacy_score,json=privacyScore,proto3" json:"privacy_score,omitempty"` // 0-100 (only meaningful if type has privacy)
-	Metadata      []byte                 `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`                              // Opaque JSON metadata
-	IsActive      bool                   `protobuf:"varint,6,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`             // Whether instance is currently usable
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Id                  string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                                                         // Plugin-assigned unique identifier
+	Name                string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                                                     // Human-readable display name
+	Description         string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`                                                       // Optional description
+	PrivacyScore        int32                  `protobuf:"varint,4,opt,name=privacy_score,json=privacyScore,proto3" json:"privacy_score,omitempty"`                                // 0-100 (only meaningful if type has privacy)
+	Metadata            []byte                 `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`                                                             // Opaque JSON metadata
+	IsActive            bool                   `protobuf:"varint,6,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`                                            // Whether instance is currently usable
+	AccessGrantedViaApp *bool                  `protobuf:"varint,7,opt,name=access_granted_via_app,json=accessGrantedViaApp,proto3,oneof" json:"access_granted_via_app,omitempty"` // Per-instance override of the type's access_granted_via_app; unset = inherit
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ResourceInstanceProto) Reset() {
@@ -5543,6 +5560,13 @@ func (x *ResourceInstanceProto) GetMetadata() []byte {
 func (x *ResourceInstanceProto) GetIsActive() bool {
 	if x != nil {
 		return x.IsActive
+	}
+	return false
+}
+
+func (x *ResourceInstanceProto) GetAccessGrantedViaApp() bool {
+	if x != nil && x.AccessGrantedViaApp != nil {
+		return *x.AccessGrantedViaApp
 	}
 	return false
 }
@@ -6442,7 +6466,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x05ERROR\x10\x03\"%\n" +
 	"#GetResourceTypeRegistrationsRequest\"s\n" +
 	"$GetResourceTypeRegistrationsResponse\x12K\n" +
-	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\x81\x03\n" +
+	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\x84\x04\n" +
 	"\x1dResourceTypeRegistrationProto\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -6452,7 +6476,11 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x14supports_submissions\x18\x06 \x01(\bR\x13supportsSubmissions\x12I\n" +
 	"\x0eform_component\x18\a \x01(\v2\".plugin.ResourceFormComponentProtoR\rformComponent\x12+\n" +
 	"\x11supports_metadata\x18\b \x01(\bR\x10supportsMetadata\x12+\n" +
-	"\x11submission_schema\x18\t \x01(\tR\x10submissionSchema\"O\n" +
+	"\x11submission_schema\x18\t \x01(\tR\x10submissionSchema\x128\n" +
+	"\x16access_granted_via_app\x18\n" +
+	" \x01(\bH\x00R\x13accessGrantedViaApp\x88\x01\x01\x12,\n" +
+	"\x12portal_detail_path\x18\v \x01(\tR\x10portalDetailPathB\x19\n" +
+	"\x17_access_granted_via_app\"O\n" +
 	"\x1aResourceFormComponentProto\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1f\n" +
 	"\ventry_point\x18\x02 \x01(\tR\n" +
@@ -6464,14 +6492,16 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x1dListResourceInstancesResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12;\n" +
 	"\tinstances\x18\x02 \x03(\v2\x1d.plugin.ResourceInstanceProtoR\tinstances\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xbb\x01\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x90\x02\n" +
 	"\x15ResourceInstanceProto\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12#\n" +
 	"\rprivacy_score\x18\x04 \x01(\x05R\fprivacyScore\x12\x1a\n" +
 	"\bmetadata\x18\x05 \x01(\fR\bmetadata\x12\x1b\n" +
-	"\tis_active\x18\x06 \x01(\bR\bisActive\"\xc8\x01\n" +
+	"\tis_active\x18\x06 \x01(\bR\bisActive\x128\n" +
+	"\x16access_granted_via_app\x18\a \x01(\bH\x00R\x13accessGrantedViaApp\x88\x01\x01B\x19\n" +
+	"\x17_access_granted_via_app\"\xc8\x01\n" +
 	"\x1aGetResourceInstanceRequest\x12,\n" +
 	"\x12resource_type_slug\x18\x01 \x01(\tR\x10resourceTypeSlug\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
@@ -6821,6 +6851,8 @@ func file_proto_plugin_proto_init() {
 	if File_proto_plugin_proto != nil {
 		return
 	}
+	file_proto_plugin_proto_msgTypes[72].OneofWrappers = []any{}
+	file_proto_plugin_proto_msgTypes[76].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

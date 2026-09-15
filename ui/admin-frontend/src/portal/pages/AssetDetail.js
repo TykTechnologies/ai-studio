@@ -44,6 +44,9 @@ import {
   buildActionLabel,
   buildAppPath,
   embedderLabel,
+  isAppGranted,
+  secondaryActionLabel,
+  secondaryActionPath,
   formatPerMillion,
   itemKey,
   kindLabel,
@@ -278,10 +281,20 @@ const ToolSections = ({ item }) => {
 const PluginResourceSections = ({ item }) => {
   const rt = item.attributes?.resource_type;
   if (!rt) return null;
+  const granted = isAppGranted(item);
+  const external = secondaryActionPath(item);
   return (
     <Section title={rt.name} description="Provided by a plugin.">
-      <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-        {rt.name} resources are attached to apps like any other asset; the plugin that provides them documents how they are used.
+      <Typography variant="bodyMediumDefault" color="text.defaultSubdued" data-testid="plugin-resource-access-note">
+        {granted
+          ? `${rt.name} resources are attached to apps like any other asset; an app credential is what grants access to them.`
+          : `Access to ${rt.name} resources is managed by the plugin that provides them, not through an app.`}
+        {!granted && external && (
+          <>
+            {" "}
+            <RouterLink to={external}>Open it there</RouterLink> to see the details and request access.
+          </>
+        )}
       </Typography>
     </Section>
   );
@@ -393,9 +406,20 @@ const AssetDetail = ({ type }) => {
           <SecondaryLinkButton startIcon={<ArrowBackIcon />} component={RouterLink} to={browsePath(type, item)}>
             Back to browse
           </SecondaryLinkButton>
-          <PrimaryButton onClick={() => navigate(buildAppPath(item))} data-testid="asset-build-app">
-            {buildActionLabel(item)}
-          </PrimaryButton>
+          {isAppGranted(item) ? (
+            <PrimaryButton onClick={() => navigate(buildAppPath(item))} data-testid="asset-build-app">
+              {buildActionLabel(item)}
+            </PrimaryButton>
+          ) : (
+            secondaryActionPath(item) && (
+              <SecondaryOutlineButton
+                onClick={() => navigate(secondaryActionPath(item))}
+                data-testid="asset-view-external"
+              >
+                {secondaryActionLabel(item)}
+              </SecondaryOutlineButton>
+            )
+          )}
         </Box>
       </TitleBox>
 

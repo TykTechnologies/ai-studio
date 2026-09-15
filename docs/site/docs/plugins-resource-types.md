@@ -142,13 +142,30 @@ Add the `resource_types` section to your plugin manifest:
       "description": "Model Context Protocol servers for tool access",
       "icon": "Hub",
       "has_privacy_score": true,
-      "supports_submissions": true
+      "supports_submissions": true,
+      "access_granted_via_app": true
     }
   ]
 }
 ```
 
 Resource types declared in the manifest are automatically registered when the plugin loads. The `GetResourceTypeRegistrations()` method provides a runtime fallback and can return additional types not in the manifest.
+
+### Access class: is an App credential the way in?
+
+Not every resource a plugin registers is something an App credential unlocks. An MCP server behind the plugin's gateway proxy is: the proxy checks the calling App's bindings on every request. A catalogued agent or prompt is not: reading it, or requesting access through the plugin's own workflow, is how a developer uses it, and binding it to an App would grant nothing.
+
+`access_granted_via_app` records that distinction per type. Only types where it is `true`:
+
+- appear in the App forms (portal builder and admin form) and can be bound to an App;
+- show the **Build app** action in the portal catalog;
+- travel in the gateway config snapshot (`plugin_resources`).
+
+Types where it is `false` are still listed in the portal catalog and assigned to teams for visibility; the catalog shows a **View in ...** link to the plugin's own page instead of Build app when the type sets `portal_detail_path`.
+
+When the key is omitted the platform decides from the plugin's hooks: `true` when the plugin declares both `resource_provider` and `custom_endpoint` (it serves its resources through the gateway), `false` otherwise. Existing plugins therefore need no change. A resource instance may override its type through `ResourceInstance.AccessGrantedViaApp` (nil inherits).
+
+The value is resolved and stored each time the type is registered (plugin load, or `SyncResourceTypes`). After upgrading Studio, types registered by an already-installed plugin read as `false` until that plugin next loads, which happens on the first start after the upgrade. If an administrator later customises a plugin's hook types, the value is re-resolved on the next registration, not immediately.
 
 ### 3. Serve the Plugin
 
@@ -182,6 +199,8 @@ type ResourceTypeRegistration struct {
     SupportsSubmissions bool                   // Whether community submissions are supported
     FormComponent       *ResourceFormComponent // Custom Web Component (nil = standard multi-select)
     SubmissionSchema    string                 // JSON Schema (object) for community submissions
+    AccessGrantedViaApp *bool                  // An App credential grants access; nil = platform default (see Access class)
+    PortalDetailPath    string                 // Same-origin portal path template, "{id}" replaced, e.g. "/portal/plugins/x#/items/{id}"
 }
 ```
 
@@ -189,12 +208,13 @@ type ResourceTypeRegistration struct {
 
 ```go
 type ResourceInstance struct {
-    ID           string // Plugin-assigned unique identifier
-    Name         string // Display name
-    Description  string // Optional description
-    PrivacyScore int    // 0-100 (only meaningful if type has HasPrivacyScore)
-    Metadata     []byte // Opaque JSON included in config snapshots
-    IsActive     bool   // Whether instance is currently usable
+    ID                  string // Plugin-assigned unique identifier
+    Name                string // Display name
+    Description         string // Optional description
+    PrivacyScore        int    // 0-100 (only meaningful if type has HasPrivacyScore)
+    Metadata            []byte // Opaque JSON included in config snapshots
+    IsActive            bool   // Whether instance is currently usable
+    AccessGrantedViaApp *bool  // Per-instance override of the type's value; nil inherits
 }
 ```
 
@@ -339,6 +359,8 @@ message PluginResourceAssociation {
 
 Gateway plugins can access these associations from the app's config to make routing or authorization decisions. For example, an MCP proxy plugin could check if the requesting app has access to a specific MCP server by examining the `plugin_resources` field.
 
+Only types with `access_granted_via_app` set (or resolved) to `true` are included. Bindings to other types stay on the App record in Studio but are never shipped, since no gateway checks them.
+
 ## Community Submissions
 
 When `SupportsSubmissions` is `true`, community users can submit new resource instances through the existing submission workflow:
@@ -400,6 +422,8 @@ Manifest `resource_types` are registered at load time. When the set of types is 
       "icon": "string",
       "has_privacy_score": false,
       "supports_submissions": false,
+      "access_granted_via_app": true,
+      "portal_detail_path": "/portal/plugins/my-plugin#/items/{id}",
       "form_component": {
         "tag": "string (custom element tag)",
         "entry_point": "string (JS asset path)"
@@ -417,6 +441,8 @@ Manifest `resource_types` are registered at load time. When the set of types is 
 | `icon` | No | `""` | Material icon name or plugin asset path |
 | `has_privacy_score` | No | `false` | Whether instances carry privacy scores |
 | `supports_submissions` | No | `false` | Whether community submissions are enabled |
+| `access_granted_via_app` | No | hooks-based | Whether an App credential grants access to instances. Omitted: `true` when the plugin declares both `resource_provider` and `custom_endpoint`, else `false`. Gates the App forms, the catalog's Build app action and the gateway snapshot. |
+| `portal_detail_path` | No | `""` | Same-origin path template to an instance's page in the portal; `{id}` is replaced with the escaped instance ID. Shown as the catalog's action when access is not granted via an App. |
 | `form_component` | No | `null` | Custom Web Component for the App form (null = standard multi-select) |
 
 ## API Endpoints
@@ -425,7 +451,8 @@ These endpoints are available for frontend integration:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/plugin-resource-types` | List all active registered resource types |
+| `GET` | `/api/v1/plugin-resource-types` | List all active registered resource types (each carries `access_granted_via_app` and `portal_detail_path`) |
+| `GET` | `/common/accessible-plugin-resources` | Types and the instances the caller may use; every instance carries its effective `access_granted_via_app`, which the App forms filter on |
 | `GET` | `/api/v1/apps/:id/plugin-resources` | Get plugin resources for an app |
 | `GET` | `/api/v1/groups/:id/plugin-resources` | Get plugin resource access for a group |
 | `PUT` | `/api/v1/groups/:id/plugin-resources` | Set plugin resource access for a group (admin) |

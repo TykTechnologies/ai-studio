@@ -39,6 +39,19 @@ const dataSources = [{ id: "3", attributes: { name: "Docs" } }];
 const tools = [{ id: "4", attributes: { name: "Weather" } }];
 const resourceTypes = [
   { plugin_id: 3, slug: "vector-db", name: "Vector DBs", instances: [{ id: "i1", name: "Pinecone" }] },
+  // Catalog-style type: nothing here is unlocked by an app credential, except
+  // one instance the plugin explicitly opted in.
+  {
+    plugin_id: 9,
+    slug: "agent",
+    name: "Agents",
+    access_granted_via_app: false,
+    instances: [
+      { id: "a1", name: "Agent One", access_granted_via_app: false },
+      { id: "a2", name: "Proxied Agent", access_granted_via_app: true },
+    ],
+  },
+  { plugin_id: 9, slug: "prompt", name: "Prompts", access_granted_via_app: false, instances: [{ id: "p1", name: "Tone", access_granted_via_app: false }] },
 ];
 
 const DirtyProbe = () => {
@@ -122,6 +135,25 @@ describe("AppBuilder pickers, name default and commit semantics", () => {
     expect(await screen.findByText("App Submitted")).toBeInTheDocument();
     // markSaved() ran before the success screen replaced the form.
     expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
+  });
+
+  // Attaching an asset the plugin gates itself grants nothing, so the builder
+  // does not offer it; a type with nothing app-granted has no picker at all.
+  it("offers only instances an app credential unlocks and ignores deep links to the rest", async () => {
+    renderBuilder({ path: "/portal/apps/new?plugin_resource=9%3Aagent%3Aa1" });
+    await waitFor(() => expect(picker("LLM provider")).toBeTruthy());
+
+    expect(picker("prompts")).toBeUndefined();
+    expect(within(picker("agents")).getByTestId("relationship-picker-options-count")).toHaveTextContent("1");
+    expect(pickerItems("agents")).toEqual([]);
+
+    fireEvent.click(within(picker("agents")).getByTestId("relationship-picker-add"));
+    expect(pickerItems("agents")).toEqual(["Proxied Agent"]);
+  });
+
+  it("preselects an app-granted instance from a deep link", async () => {
+    renderBuilder({ path: "/portal/apps/new?plugin_resource=9%3Aagent%3Aa2" });
+    await waitFor(() => expect(pickerItems("agents")).toEqual(["Proxied Agent"]));
   });
 
   it("has a Cancel that returns to the apps list when clean and prompts when dirty", async () => {

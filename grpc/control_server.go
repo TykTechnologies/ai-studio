@@ -1397,7 +1397,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 			grouped := make(map[prKey]*pb.PluginResourceAssociation)
 			for _, apr := range appPluginResources {
-				if apr.PluginResourceType == nil {
+				// Only types an App credential grants access to reach the
+				// gateways: informational or plugin-gated resources are never
+				// checked at request time, so they have no business in the
+				// snapshot. Associations to such types (from before the type
+				// was classified) stay on the App but are not shipped.
+				if apr.PluginResourceType == nil || !apr.PluginResourceType.AccessGrantedViaApp {
 					continue
 				}
 				k := prKey{apr.PluginResourceType.PluginID, apr.PluginResourceType.Slug}

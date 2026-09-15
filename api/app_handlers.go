@@ -125,6 +125,15 @@ func (a *API) createApp(c *gin.Context) {
 			})
 			return
 		}
+		if errors.Is(err, services.ErrResourceNotAppGranted) {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Resource Not Available To Apps", Detail: err.Error()}},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -300,6 +309,15 @@ func (a *API) updateApp(c *gin.Context) {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
 				}{{Title: "Privacy Score Mismatch", Detail: err.Error()}},
+			})
+			return
+		}
+		if errors.Is(err, services.ErrResourceNotAppGranted) {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Resource Not Available To Apps", Detail: err.Error()}},
 			})
 			return
 		}

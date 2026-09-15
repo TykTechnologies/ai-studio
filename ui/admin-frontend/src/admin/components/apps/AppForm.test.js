@@ -52,9 +52,13 @@ const tools = [
   { id: "5", attributes: { name: "Time" } },
 ];
 const resourceTypes = [
-  { plugin_id: 3, slug: "vector-db", name: "Vector DBs", has_privacy_score: true },
+  { plugin_id: 3, slug: "vector-db", name: "Vector DBs", has_privacy_score: true, access_granted_via_app: true },
+  // Catalog-style types: an app credential unlocks none of their instances.
+  { plugin_id: 9, slug: "agent", name: "Agents", access_granted_via_app: false },
+  { plugin_id: 9, slug: "prompt", name: "Prompts", access_granted_via_app: false },
 ];
-const instances = [{ id: "i1", name: "Pinecone", privacy_score: 40 }];
+const instances = [{ id: "i1", name: "Pinecone", privacy_score: 40, access_granted_via_app: true }];
+const agentInstances = [{ id: "a1", name: "Agent One", access_granted_via_app: false }];
 
 const appPayload = () => ({
   data: {
@@ -134,6 +138,12 @@ describe("AppForm relationships and commit semantics", () => {
       if (url === "/plugin-resource-types/3/vector-db/instances") {
         return Promise.resolve({ data: { data: instances } });
       }
+      if (url === "/plugin-resource-types/9/agent/instances") {
+        return Promise.resolve({ data: { data: agentInstances } });
+      }
+      if (url === "/plugin-resource-types/9/prompt/instances") {
+        return Promise.resolve({ data: { data: [] } });
+      }
       return Promise.resolve({ data: { data: [] } });
     });
     appToolAPI.listAvailableTools.mockResolvedValue({ data: { data: tools } });
@@ -158,6 +168,36 @@ describe("AppForm relationships and commit semantics", () => {
     expect(within(picker("tool")).getByTestId("relationship-picker-options-count")).toHaveTextContent("2");
     expect(within(picker("vector dbs")).getByTestId("relationship-picker-options-count")).toHaveTextContent("1");
     expect(screen.queryByRole("combobox", { name: /LLM providers/ })).not.toBeInTheDocument();
+  });
+
+  // Types an app credential does not unlock get no picker, unless the app
+  // already holds a binding from before the type was classified: that stays
+  // visible, removable, and is sent back unchanged.
+  it("hides non-app-granted resource types but keeps an app's existing bindings", async () => {
+    renderForm();
+    await waitForLoaded();
+    expect(picker("agents")).toBeUndefined();
+    expect(picker("prompts")).toBeUndefined();
+  });
+
+  it("shows a legacy binding to a non-app-granted type as a removable chip and resends it unchanged", async () => {
+    const legacy = appPayload();
+    legacy.data.data.attributes.plugin_resources.push({ plugin_id: 9, resource_type_slug: "agent", instance_ids: ["legacy-agent"] });
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url) => (url === "/apps/5" ? Promise.resolve(legacy) : base(url)));
+
+    renderForm();
+    await waitForLoaded();
+    await waitFor(() => expect(pickerItems("agents")).toEqual(["legacy-agent"]));
+    expect(within(picker("agents")).getByTestId("relationship-picker-options-count")).toHaveTextContent("0");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const [, body] = apiClient.patch.mock.calls[0];
+    expect(body.data.attributes.plugin_resources).toEqual([
+      { plugin_id: 3, resource_type_slug: "vector-db", instance_ids: ["i1"] },
+      { plugin_id: 9, resource_type_slug: "agent", instance_ids: ["legacy-agent"] },
+    ]);
   });
 
   it("saves the picker selections in the unchanged id-array payload", async () => {
