@@ -93,7 +93,7 @@ func (a *API) acquireChatSession(c *gin.Context, sessionID string, mode chat_ses
 	if err != nil {
 		slog.Error("Failed to load chat session", "session_id", sessionID, "error", err)
 		if strings.HasPrefix(err.Error(), "start:") {
-			jsonError(c, http.StatusInternalServerError, "Session error", "Failed to start chat session")
+			jsonError(c, http.StatusInternalServerError, "Session error", "Failed to start chat session: "+strings.TrimPrefix(err.Error(), "start: "))
 		} else {
 			jsonError(c, http.StatusNotFound, "Session not found", "Chat session does not exist and could not be loaded")
 		}

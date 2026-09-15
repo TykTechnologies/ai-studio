@@ -231,7 +231,9 @@ func (a *API) createChatSessionV2(c *gin.Context) {
 	if err := created.Start(); err != nil {
 		created.Stop()
 		slog.Error("failed to start chat session", "chat_id", chat.ID, "error", err)
-		jsonError(c, http.StatusInternalServerError, "Session error", "Failed to start chat session")
+		// The reason is a configuration problem the user can act on (missing
+		// provider key, privacy score mismatch), so surface it.
+		jsonError(c, http.StatusInternalServerError, "Session error", "Failed to start chat session: "+err.Error())
 		return
 	}
 	hs, release := getChatHub().Add(created)
