@@ -6,6 +6,9 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@assistant-ui/react": "0.15.19",
+    "@assistant-ui/react-generative-ui": "0.0.18",
+    "@assistant-ui/react-markdown": "0.14.15",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@monaco-editor/react": "^4.7.0",
@@ -20,11 +23,13 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
+    "assistant-stream": "0.3.42",
     "axios": "^1.12.0",
     "chart.js": "^4.4.4",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.1.0",
     "dropzone": "^6.0.0-beta.2",
+    "http-proxy-middleware": "^2.0.7",
     "js-yaml": "^4.1.0",
     "notistack": "^3.0.2",
     "prismjs": "^1.30.0",
@@ -44,8 +49,7 @@
     "remark-react": "^9.0.1",
     "unist-util-visit": "^5.0.0",
     "use-debounce": "^10.0.4",
-    "web-vitals": "^2.1.4",
-    "http-proxy-middleware": "^2.0.7"
+    "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -58,10 +62,26 @@
       "^unist-util-visit-parents/do-not-use-color$": "<rootDir>/node_modules/unist-util-visit-parents/lib/color.js",
       "^#minpath$": "<rootDir>/node_modules/vfile/lib/minpath.browser.js",
       "^#minproc$": "<rootDir>/node_modules/vfile/lib/minproc.browser.js",
-      "^#minurl$": "<rootDir>/node_modules/vfile/lib/minurl.browser.js"
+      "^#minurl$": "<rootDir>/node_modules/vfile/lib/minurl.browser.js",
+      "^@assistant-ui/core/react$": "<rootDir>/node_modules/@assistant-ui/core/dist/react/index.js",
+      "^@assistant-ui/core/internal$": "<rootDir>/node_modules/@assistant-ui/core/dist/internal.js",
+      "^@assistant-ui/core/store$": "<rootDir>/node_modules/@assistant-ui/core/dist/store/index.js",
+      "^@assistant-ui/core/store/internal$": "<rootDir>/node_modules/@assistant-ui/core/dist/store/internal.js",
+      "^@assistant-ui/store/client$": "<rootDir>/node_modules/@assistant-ui/store/dist/client.js",
+      "^@assistant-ui/store/internal$": "<rootDir>/node_modules/@assistant-ui/store/dist/internal.js",
+      "^@assistant-ui/tap/react-shim$": "<rootDir>/node_modules/@assistant-ui/tap/dist/react-shim/index.js",
+      "^@assistant-ui/tap/react-shim/compiler-runtime$": "<rootDir>/node_modules/@assistant-ui/tap/dist/react-shim/compiler-runtime.js",
+      "^@assistant-ui/tap/standalone-shim$": "<rootDir>/node_modules/@assistant-ui/tap/dist/standalone-shim/index.js",
+      "^assistant-stream/utils$": "<rootDir>/node_modules/assistant-stream/dist/utils.js",
+      "^assistant-stream/resumable$": "<rootDir>/node_modules/assistant-stream/dist/resumable/index.js",
+      "^assistant-cloud/telemetry$": "<rootDir>/node_modules/assistant-cloud/dist/telemetry/index.js",
+      "^@assistant-ui/react-markdown/code-fence$": "<rootDir>/node_modules/@assistant-ui/react-markdown/dist/code-fence.js",
+      "^radix-ui/(.*)$": "<rootDir>/node_modules/radix-ui/dist/$1.js",
+      "^zustand/(.*)$": "<rootDir>/node_modules/zustand/$1.js",
+      "^@radix-ui/primitive/is-development$": "<rootDir>/node_modules/@radix-ui/primitive/dist/internal/is-development.false.js"
     },
     "transformIgnorePatterns": [
-      "node_modules/(?!(chart.js|chartjs-adapter-date-fns|axios|react-markdown|remark-gfm|vfile[^/]*|unist-util-[^/]+|unified|bail|is-plain-obj|trough|remark|remark-[^/]+|rehype-[^/]+|mdast-util-[^/]+|micromark[^/]*|parse-entities|character-entities[^/]*|character-reference-invalid|decode-named-character-reference|property-information|space-separated-tokens|comma-separated-tokens|hast-util-[^/]+|html-url-attributes|estree-util-[^/]+|devlop|style-to-object|style-to-js|inline-style-parser|trim-lines|ccount|longest-streak|markdown-table|zwitch|escape-string-regexp|is-decimal|is-hexadecimal|is-alphanumerical|is-alphabetical|extend)/)"
+      "node_modules/(?!(@assistant-ui|assistant-stream|assistant-cloud|safe-content-frame|nanoid|chart.js|chartjs-adapter-date-fns|axios|react-markdown|remark-gfm|vfile[^/]*|unist-util-[^/]+|unified|bail|is-plain-obj|trough|remark|remark-[^/]+|rehype-[^/]+|mdast-util-[^/]+|micromark[^/]*|parse-entities|character-entities[^/]*|character-reference-invalid|decode-named-character-reference|property-information|space-separated-tokens|comma-separated-tokens|hast-util-[^/]+|html-url-attributes|estree-util-[^/]+|devlop|style-to-object|style-to-js|inline-style-parser|trim-lines|ccount|longest-streak|markdown-table|zwitch|escape-string-regexp|is-decimal|is-hexadecimal|is-alphanumerical|is-alphabetical|extend)/)"
     ]
   },
   "eslintConfig": {

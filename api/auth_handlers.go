@@ -88,6 +88,9 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["feature_webhooks"] = webhooks.IsEnterpriseAvailable()
 	featureSet["feature_rbac"] = a.service.Authz().Enabled()
 
+	// New assistant-ui chat front end; CHAT_UI_V2_ENABLED=false falls back to the v1 chat UI.
+	featureSet["chat_ui_v2"] = chatUIV2Enabled()
+
 	if cfg := config.Get(""); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
 	}

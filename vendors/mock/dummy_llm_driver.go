@@ -24,7 +24,7 @@ func (d *DummyDriver) GenerateContent(ctx context.Context, messages []llms.Messa
 	paragraph := "this is a ten word sentence that should be sent."
 
 	if d.StreamingFunc != nil {
-		d.FakeChunkedResponse(paragraph, d.StreamingFunc)
+		d.FakeChunkedResponse(ctx, paragraph, d.StreamingFunc)
 	}
 
 	x := &llms.ContentResponse{
@@ -57,7 +57,11 @@ func (d *DummyDriver) GetOutputKeys() []string {
 	return []string{"result"}
 }
 
-func (d *DummyDriver) FakeChunkedResponse(para string, sFunc func(ctx context.Context, chunk []byte) error) {
+// FakeChunkedResponse streams the paragraph word by word through sFunc with
+// the request context, as the real drivers do (the chat session relies on
+// the context to tell a user's turn from side calls such as title
+// generation).
+func (d *DummyDriver) FakeChunkedResponse(ctx context.Context, para string, sFunc func(ctx context.Context, chunk []byte) error) {
 	x := strings.Split(para, " ")
 	for _, c := range x {
 		// Use minimal sleep (1-5ms) to avoid test timeouts, especially with race detector
@@ -65,7 +69,7 @@ func (d *DummyDriver) FakeChunkedResponse(para string, sFunc func(ctx context.Co
 		randomNum := rand.Intn(5) + 1
 		time.Sleep(time.Duration(randomNum) * time.Millisecond)
 
-		err := sFunc(context.Background(), []byte(c))
+		err := sFunc(ctx, []byte(c))
 		if err != nil {
 			fmt.Println("[DUMMY HANDLER STREAMING ERROR]", err)
 		}

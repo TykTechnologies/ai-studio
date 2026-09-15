@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -20,6 +21,17 @@ type GormChatMessageHistory struct {
 	Session string
 	ChatID  uint
 	UserID  uint
+
+	lastMu sync.Mutex
+	lastID uint // id of the most recently inserted row
+}
+
+// LastMessageID returns the row id of the most recent message this history
+// object inserted (0 before the first insert).
+func (h *GormChatMessageHistory) LastMessageID() uint {
+	h.lastMu.Lock()
+	defer h.lastMu.Unlock()
+	return h.lastID
 }
 
 // GormChatMessageHistoryOption is a function type for configuring GormChatMessageHistory
@@ -152,7 +164,13 @@ func (h *GormChatMessageHistory) addMessage(ctx context.Context, mc llms.Message
 		Content: asJson,
 		ChatID:  h.ChatID,
 	}
-	return h.DB.WithContext(ctx).Create(&message).Error
+	if err := h.DB.WithContext(ctx).Create(&message).Error; err != nil {
+		return err
+	}
+	h.lastMu.Lock()
+	h.lastID = message.ID
+	h.lastMu.Unlock()
+	return nil
 }
 
 // AddAIMessage adds an AIMessage to the chat message history

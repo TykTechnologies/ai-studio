@@ -268,7 +268,18 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 	if manifest.Portal != nil {
 		for _, slot := range manifest.Portal.Slots {
 			for _, item := range slot.Items {
-				if item.Type == "route" {
+				// Routes are pages; chat tool renderers are components keyed
+				// by the tool they draw (stored in RoutePattern).
+				isToolRenderer := item.Type == "component" && slot.Slot == models.PortalSlotChatToolRenderer
+				if item.Type == "route" || isToolRenderer {
+					routePattern := item.Path
+					if isToolRenderer {
+						routePattern = item.RendererKey()
+						if routePattern == "" {
+							log.Warn().Uint("plugin_id", plugin.ID).Msg("chat.tool_renderer item without a tool name skipped")
+							continue
+						}
+					}
 					log.Debug().
 						Uint("plugin_id", plugin.ID).
 						Str("original_path", item.Path).
@@ -278,7 +289,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 					uiEntry := models.UIRegistry{
 						PluginID:     plugin.ID,
 						SlotType:     slot.Slot,
-						RoutePattern: item.Path,
+						RoutePattern: routePattern,
 						ComponentTag: item.Mount.Tag,
 						EntryPoint:   item.Mount.Entry,
 						MountConfig: map[string]interface{}{
