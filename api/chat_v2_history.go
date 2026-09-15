@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -134,7 +135,14 @@ func materialiseHistory(rows []models.CMessage) []V2Message {
 // appends a synthetic tool-call part when the request row is missing.
 func attachToolResult(msg *V2Message, resp llms.ToolCallResponse) {
 	isErr := strings.HasPrefix(resp.Content, "ERROR: ")
-	result := jsonValueOrString(resp.Content)
+	var result json.RawMessage
+	if answer, ok := chat_session.UnwrapClientAnswer(resp.Content); ok {
+		// A client tool answer is stored in a labelled envelope for the
+		// model; the person sees what they entered.
+		result, _ = json.Marshal(answer)
+	} else {
+		result = jsonValueOrString(resp.Content)
+	}
 	for i := range msg.Parts {
 		if msg.Parts[i].Type == "tool-call" && msg.Parts[i].ToolCallID == resp.ToolCallID {
 			msg.Parts[i].Result = result

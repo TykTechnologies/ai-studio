@@ -163,7 +163,12 @@ func TestClientTools_ParkAndResume(t *testing.T) {
 	assert.Equal(t, llms.ChatMessageTypeTool, toolRow.Role)
 	resp, ok := toolRow.Parts[0].(llms.ToolCallResponse)
 	require.True(t, ok)
-	assert.Equal(t, `{"approved":true}`, resp.Content)
+	// Stored as a labelled envelope: the model sees user input, not a
+	// trusted tool response.
+	answer, isEnvelope := UnwrapClientAnswer(resp.Content)
+	require.True(t, isEnvelope, resp.Content)
+	assert.Equal(t, map[string]interface{}{"approved": true}, answer)
+	assert.Contains(t, resp.Content, `"untrusted":true`)
 }
 
 func TestClientTools_AbandonedOnNextMessage(t *testing.T) {

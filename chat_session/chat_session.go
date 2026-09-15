@@ -1610,7 +1610,7 @@ func (cs *ChatSession) handleToolCalls(ctx context.Context, choice *llms.Content
 		case models.ToolTypeREST:
 			cs.executeRESTToolCall(ctx, t, toolDef, toolResult)
 		case models.ToolTypeClient:
-			cs.parkClientCall(t)
+			cs.parkClientCall(t, toolDef)
 			parked++
 		default:
 			// Unknown types are skipped without a result part (existing behaviour).

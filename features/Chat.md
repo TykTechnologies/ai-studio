@@ -83,7 +83,7 @@ sequenceDiagram
 **3. Implementation Notes**
 
 *   **Edits and regenerate:** the browser maps runtime message ids to database row ids (history load + `data-message-ids`); an edit sends `after_message_id` of the message before the edited one (`root` for the first), regenerate sends `regenerate: true` (server rewinds to after the last user turn and re-runs).
-*   **Client tools:** `tool_results` are sent when the runtime resumes a message that assistant-ui marked `requires-action`; the server verifies a call is pending and refuses otherwise (409).
+*   **Client tools:** `tool_results` are sent when the runtime resumes a message that assistant-ui marked `requires-action`; the server verifies a call is pending and refuses otherwise (409). Each answer is validated against the card's shape (`chat_session/client_results.go`: approval object, form response schema, 32 KiB cap) and stored as a labelled `{"source":"user","untrusted":true,...}` envelope so the model treats it as user input rather than a trusted tool response; `materialiseHistory` unwraps it for display.
 *   **Output modes:** the hub refuses to attach a v1 reader to a v2 session and vice versa; the v1 reader silently drops envelope JSON.
 *   **Distributed queues:** v2 subscribes through the session's own fan-out over the queue channels; cross-instance consumption of one session's output is not supported (use session affinity). See `features/ChatQueue.md`.
 *   **Jest:** the assistant-ui packages are ESM-only; `package.json` maps their subpath exports and allows their transformation, and `setupTests.js` polyfills Web Streams.

@@ -358,7 +358,15 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 			jsonError(c, http.StatusConflict, "Nothing to resume", "No client tool call is waiting for a result")
 			return
 		}
+		if len(req.ToolResults) > 32 {
+			jsonError(c, http.StatusBadRequest, "Invalid request", "Too many tool results")
+			return
+		}
 		for _, r := range req.ToolResults {
+			if len(r.Result) > 32<<10 {
+				jsonError(c, http.StatusBadRequest, "Invalid request", "A tool result may not exceed 32 KiB")
+				return
+			}
 			result := strings.TrimSpace(string(r.Result))
 			// A JSON string is unwrapped so the model sees the text itself.
 			var s string

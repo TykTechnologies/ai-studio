@@ -88,3 +88,23 @@ func TestJSONHelpers(t *testing.T) {
 	assert.JSONEq(t, `"plain"`, string(jsonValueOrString("plain")))
 	assert.JSONEq(t, `"42"`, string(jsonValueOrString("42")), "scalars stay strings so the client renders them verbatim")
 }
+
+func TestMaterialiseHistory_UnwrapsClientAnswers(t *testing.T) {
+	envelope := `{"source":"user","untrusted":true,"note":"n","tool":"ask-approval","kind":"approval","answer":{"approved":true,"comment":"ok"}}`
+	rows := []models.CMessage{
+		row(t, 1, llms.TextParts(llms.ChatMessageTypeHuman, "Delete it")),
+		row(t, 2, llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: []llms.ContentPart{
+			llms.ToolCall{ID: "call_1", Type: "function", FunctionCall: &llms.FunctionCall{Name: "ask-approval", Arguments: `{"action":"delete"}`}},
+		}}),
+		row(t, 3, llms.MessageContent{Role: llms.ChatMessageTypeTool, Parts: []llms.ContentPart{
+			llms.ToolCallResponse{ToolCallID: "call_1", Name: "ask-approval", Content: envelope},
+		}}),
+	}
+	msgs := materialiseHistory(rows)
+	require.Len(t, msgs, 2)
+	part := msgs[1].Parts[0]
+	require.Equal(t, "tool-call", part.Type)
+	assert.False(t, part.IsError)
+	// The person sees their answer, not the envelope the model was given.
+	assert.JSONEq(t, `{"approved":true,"comment":"ok"}`, string(part.Result))
+}

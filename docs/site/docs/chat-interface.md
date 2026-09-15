@@ -97,6 +97,8 @@ The definition is stored in the tool's spec field as JSON:
 
 Approval answers are sent as `{"approved": true|false, "comment": "..."}`; form answers are the form's data.
 
+Because an answer comes from the browser rather than from a tool backend, the server does not pass it to the model as-is. It is checked against the shape the card produces (an approval must be an object with a boolean `approved` and an optional `comment`; a form answer must match the form's response schema; anything over 32 KiB is refused), and it is stored as a labelled envelope, `{"source": "user", "untrusted": true, "note": "...", "answer": ...}`, so the model reads it as data the person supplied and not as a trusted system response. A rejected answer reaches the model as an error result. The chat still shows the person's own answer.
+
 ### Generative UI (the `present` tool)
 
 The third interaction kind, **Generative UI (present)**, lets the model compose its own interface instead of answering in prose: dashboards, cards, key figures, tables, charts, alerts, lists, images, forms and buttons, assembled from a fixed component vocabulary (the [assistant-ui generative UI library](https://www.assistant-ui.com/docs/tools/generative-ui)). The chat draws the tree the model produces; no user input is needed, so the call resolves by itself and the model carries on.

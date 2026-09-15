@@ -34,6 +34,7 @@ type ClientToolInfo struct {
 type pendingClientCall struct {
 	id   string
 	name string
+	ui   models.ClientToolUI // how the answer is collected, hence its expected shape
 }
 
 // clientToolState is the session's view of one parked turn.
@@ -102,13 +103,17 @@ func clientToolDefinition(t models.Tool) (llms.Tool, error) {
 }
 
 // parkClientCall records a client tool call to be answered by the user.
-func (cs *ChatSession) parkClientCall(t llms.ToolCall) {
+func (cs *ChatSession) parkClientCall(t llms.ToolCall, tool models.Tool) {
+	ui := models.ClientToolUI{Kind: models.ClientToolKindApproval}
+	if def, err := tool.ClientDefinition(); err == nil {
+		ui = def.UI
+	}
 	cs.stateMu.Lock()
 	defer cs.stateMu.Unlock()
 	if cs.clientState == nil {
 		cs.clientState = &clientToolState{partial: llms.MessageContent{Role: llms.ChatMessageTypeTool}}
 	}
-	cs.clientState.pending = append(cs.clientState.pending, pendingClientCall{id: t.ID, name: t.FunctionCall.Name})
+	cs.clientState.pending = append(cs.clientState.pending, pendingClientCall{id: t.ID, name: t.FunctionCall.Name, ui: ui})
 }
 
 // parkTurn stores the partial (server-side) tool results of a reply that
@@ -150,14 +155,10 @@ func (cs *ChatSession) resumeWithToolResults(results []models.ToolResult) bool {
 	toolResult.Role = llms.ChatMessageTypeTool
 	for _, p := range st.pending {
 		r, ok := byID[p.id]
-		content := r.Result
-		isErr := r.IsError
-		if !ok {
-			content = "ERROR: no result was provided by the user"
-			isErr = true
-		} else if isErr && !strings.HasPrefix(content, "ERROR:") {
-			content = "ERROR: " + content
-		}
+		// The answer is validated against the card's shape and stored in a
+		// labelled envelope so the model reads it as user input, not as a
+		// trusted tool response (see client_results.go).
+		content, _ := wrapClientResult(p, r, ok)
 		// No tool-result event here: the client supplied the answer and
 		// already holds it; the resumed stream carries only what follows.
 		toolResult.Parts = append(toolResult.Parts, llms.ToolCallResponse{ToolCallID: p.id, Name: p.name, Content: content})
