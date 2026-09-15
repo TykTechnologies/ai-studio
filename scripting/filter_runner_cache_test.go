@@ -41,9 +41,7 @@ func runOnce(t *testing.T, f *models.Filter) *ScriptOutput {
 // a filter with no identity (the test endpoint's temporary one), is not
 // served from the cache.
 func TestGuardrailRunner_PreparesASavedFilterOncePerVersion(t *testing.T) {
-	preparedMu.Lock()
-	prepared = map[string]*preparedGuardrail{}
-	preparedMu.Unlock()
+	prepared.Reset()
 
 	v1 := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	f := cachedGuardrail(7, v1)
@@ -68,17 +66,19 @@ func TestGuardrailRunner_PreparesASavedFilterOncePerVersion(t *testing.T) {
 
 	// A temporary filter has no key and leaves nothing behind.
 	temp := cachedGuardrail(0, time.Time{})
-	before := len(prepared)
+	before := prepared.Len()
 	require.True(t, runOnce(t, temp).Block)
 	assert.Equal(t, "", preparedKey(temp))
-	assert.Equal(t, before, len(prepared))
+	assert.Equal(t, before, prepared.Len())
 
-	// An expired entry is prepared again.
-	preparedMu.Lock()
-	prepared[preparedKey(f)].at = time.Now().Add(-2 * preparedTTL)
-	preparedMu.Unlock()
+	// An expired entry is dropped on lookup and prepared again.
+	stale, ok := prepared.Get(preparedKey(f))
+	require.True(t, ok)
+	stale.at = time.Now().Add(-2 * preparedTTL)
 	_, ok = lookupPrepared(preparedKey(f))
 	assert.False(t, ok)
+	_, ok = prepared.Get(preparedKey(f))
+	assert.False(t, ok, "the expired entry is removed, not left to be served again")
 	require.True(t, runOnce(t, f).Block)
 	fresh, ok := lookupPrepared(preparedKey(f))
 	require.True(t, ok)

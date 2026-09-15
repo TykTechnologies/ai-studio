@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/tmc/langchaingo/llms"
@@ -74,10 +75,9 @@ const (
 	preparedMax = 1024
 )
 
-var (
-	preparedMu sync.Mutex
-	prepared   = map[string]*preparedGuardrail{}
-)
+// prepared is bounded and least-recently-used; concurrent first requests
+// for one filter version share a single preparation.
+var prepared = lrucache.New[*preparedGuardrail](preparedMax)
 
 // preparedKey identifies a saved filter version. A filter without an ID or
 // an update time (the test endpoint's temporary filter) is never cached.
@@ -88,65 +88,71 @@ func preparedKey(f *models.Filter) string {
 	return fmt.Sprintf("%d@%d", f.ID, f.UpdatedAt.UnixNano())
 }
 
+// lookupPrepared returns the live entry for key; an expired one is dropped
+// so the next preparation replaces it.
 func lookupPrepared(key string) (*preparedGuardrail, bool) {
 	if key == "" {
 		return nil, false
 	}
-	preparedMu.Lock()
-	defer preparedMu.Unlock()
-	p, ok := prepared[key]
-	if !ok || time.Since(p.at) > preparedTTL {
+	p, ok := prepared.Get(key)
+	if !ok {
+		return nil, false
+	}
+	if time.Since(p.at) > preparedTTL {
+		prepared.Remove(key)
 		return nil, false
 	}
 	return p, true
 }
 
-func storePrepared(key string, p *preparedGuardrail) {
-	if key == "" {
-		return
-	}
-	preparedMu.Lock()
-	defer preparedMu.Unlock()
-	if len(prepared) >= preparedMax {
-		// Bounded by starting over: entries are cheap to rebuild and the
-		// cap is only reached by churn through very many filter versions.
-		prepared = map[string]*preparedGuardrail{}
-	}
-	prepared[key] = p
-}
-
 // prepare parses, normalises and resolves the filter's config and builds
 // its provider, from the cache when this filter version was prepared
-// recently. Errors are never cached.
+// recently. Errors are never cached. A failed build still hands back the
+// config it got as far as, so the caller can apply the filter's fail mode.
 func (g *guardrailRunner) prepare() (*preparedGuardrail, error) {
 	key := preparedKey(g.filter)
 	if p, ok := lookupPrepared(key); ok {
 		return p, nil
 	}
-	cfg, err := guardrails.ParseConfig(g.filter.Config)
-	if err != nil {
-		return nil, fmt.Errorf("guardrail '%s': %w", g.filter.Name, err)
-	}
-	cfg, err = guardrails.Normalize(cfg, g.filter.ResponseFilter)
-	if err != nil {
-		return nil, fmt.Errorf("guardrail '%s': %w", g.filter.Name, err)
-	}
-	// Connection values are stored as $SECRET/ and $ENV/ references. Resolve
-	// them here, where the filter runs: on Studio against the secret store,
-	// at the edge against the values the hub already resolved into the
-	// snapshot (GetValue leaves a non-reference untouched).
-	resolved := make(map[string]string, len(cfg.Connection))
-	for k, v := range cfg.Connection {
-		resolved[k] = secrets.GetValue(v, false)
-	}
-	cfg.Connection = resolved
+	var partial *preparedGuardrail
+	build := func() (*preparedGuardrail, error) {
+		cfg, err := guardrails.ParseConfig(g.filter.Config)
+		if err != nil {
+			return nil, fmt.Errorf("guardrail '%s': %w", g.filter.Name, err)
+		}
+		cfg, err = guardrails.Normalize(cfg, g.filter.ResponseFilter)
+		if err != nil {
+			return nil, fmt.Errorf("guardrail '%s': %w", g.filter.Name, err)
+		}
+		// Connection values are stored as $SECRET/ and $ENV/ references.
+		// Resolve them here, where the filter runs: on Studio against the
+		// secret store, at the edge against the values the hub already
+		// resolved into the snapshot (GetValue leaves a non-reference
+		// untouched).
+		resolved := make(map[string]string, len(cfg.Connection))
+		for k, v := range cfg.Connection {
+			resolved[k] = secrets.GetValue(v, false)
+		}
+		cfg.Connection = resolved
 
-	provider, err := guardrails.NewProvider(cfg)
-	if err != nil {
-		return &preparedGuardrail{cfg: cfg}, err
+		provider, err := guardrails.NewProvider(cfg)
+		if err != nil {
+			partial = &preparedGuardrail{cfg: cfg}
+			return nil, err
+		}
+		return &preparedGuardrail{cfg: cfg, provider: provider, caps: provider.Capabilities(), at: time.Now()}, nil
 	}
-	p := &preparedGuardrail{cfg: cfg, provider: provider, caps: provider.Capabilities(), at: time.Now()}
-	storePrepared(key, p)
+	if key == "" {
+		p, err := build()
+		if err != nil {
+			return partial, err
+		}
+		return p, nil
+	}
+	p, err := prepared.Do(key, build)
+	if err != nil {
+		return partial, err
+	}
 	return p, nil
 }
 

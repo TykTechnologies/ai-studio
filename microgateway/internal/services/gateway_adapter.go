@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/rs/zerolog/log"
@@ -890,35 +891,23 @@ func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
 }
 
 // Filters are materialised onto the LLM on every request, so the guardrail
-// config JSON the hub sent is parsed once per filter version and reused. The
-// map is read-only downstream (the runner marshals it back out); a new
-// UpdatedAt from the hub is a new entry.
-var (
-	parsedConfigsMu sync.Mutex
-	parsedConfigs   = map[string]map[string]any{}
-)
-
+// config JSON the hub sent is parsed once per filter version and reused
+// from a bounded least-recently-used cache; concurrent first requests share
+// one parse. The map is read-only downstream (the runner marshals it back
+// out); a new UpdatedAt from the hub is a new entry.
 const parsedConfigsMax = 1024
+
+var parsedConfigs = lrucache.New[map[string]any](parsedConfigsMax)
 
 func parsedGuardrailConfig(dbFilter *database.Filter) map[string]any {
 	key := fmt.Sprintf("%d@%d:%d", dbFilter.ID, dbFilter.UpdatedAt.UnixNano(), len(dbFilter.Config))
-	parsedConfigsMu.Lock()
-	cfg, ok := parsedConfigs[key]
-	parsedConfigsMu.Unlock()
-	if ok {
-		return cfg
-	}
-	cfg, err := guardrails.ConfigFromJSON(dbFilter.Config)
+	cfg, err := parsedConfigs.Do(key, func() (map[string]any, error) {
+		return guardrails.ConfigFromJSON(dbFilter.Config)
+	})
 	if err != nil {
 		log.Error().Err(err).Uint("filter_id", dbFilter.ID).Msg("Guardrail filter config from hub is not valid JSON")
 		return nil
 	}
-	parsedConfigsMu.Lock()
-	if len(parsedConfigs) >= parsedConfigsMax {
-		parsedConfigs = map[string]map[string]any{}
-	}
-	parsedConfigs[key] = cfg
-	parsedConfigsMu.Unlock()
 	return cfg
 }
 

@@ -1,7 +1,6 @@
 package guardrails
 
 import (
-	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
 )
 
 // DetectorSpec describes one detector a provider offers, for the API and the
@@ -87,7 +88,9 @@ func RegisterFactory(name string, f Factory) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	factories[name] = f
-	providerCache.reset()
+	// A newly registered factory must not be shadowed by providers built
+	// before it existed.
+	providerCache.Reset()
 }
 
 // ProviderSpec returns the description of a provider.
@@ -128,72 +131,11 @@ func Available() bool {
 // provider keeps its HTTP client and the built-in one its compiled pattern
 // set across requests. It is bounded: every edit of a filter's config is a
 // new key, and the entries for configurations nobody runs any more are the
-// least recently used, so they are the ones dropped.
+// least recently used, so they are the ones dropped. Concurrent first
+// requests for one config share a single build.
 const providerCacheSize = 256
 
-var providerCache = newProviderLRU(providerCacheSize)
-
-type providerLRU struct {
-	mu    sync.Mutex
-	max   int
-	order *list.List // front is most recently used
-	items map[string]*list.Element
-}
-
-type providerEntry struct {
-	key      string
-	provider Provider
-}
-
-func newProviderLRU(max int) *providerLRU {
-	return &providerLRU{max: max, order: list.New(), items: make(map[string]*list.Element)}
-}
-
-// get returns the cached provider for key and marks it recently used.
-func (c *providerLRU) get(key string) (Provider, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	el, ok := c.items[key]
-	if !ok {
-		return nil, false
-	}
-	c.order.MoveToFront(el)
-	return el.Value.(*providerEntry).provider, true
-}
-
-// add stores p under key unless another goroutine got there first, in which
-// case the existing provider wins so every caller shares one instance. The
-// least recently used entry is dropped once the cache is over capacity.
-func (c *providerLRU) add(key string, p Provider) Provider {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if el, ok := c.items[key]; ok {
-		c.order.MoveToFront(el)
-		return el.Value.(*providerEntry).provider
-	}
-	c.items[key] = c.order.PushFront(&providerEntry{key: key, provider: p})
-	for c.order.Len() > c.max {
-		oldest := c.order.Back()
-		c.order.Remove(oldest)
-		delete(c.items, oldest.Value.(*providerEntry).key)
-	}
-	return p
-}
-
-func (c *providerLRU) len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.order.Len()
-}
-
-// reset drops every entry; a newly registered factory must not be shadowed
-// by providers built before it existed.
-func (c *providerLRU) reset() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.order.Init()
-	c.items = make(map[string]*list.Element)
-}
+var providerCache = lrucache.New[Provider](providerCacheSize)
 
 func configKey(cfg Config) string {
 	b, _ := json.Marshal(cfg)
@@ -204,11 +146,6 @@ func configKey(cfg Config) string {
 // NewProvider returns the provider for a normalised config, building and
 // caching it on first use.
 func NewProvider(cfg Config) (Provider, error) {
-	key := configKey(cfg)
-	if p, ok := providerCache.get(key); ok {
-		return p, nil
-	}
-
 	registryMu.RLock()
 	f, ok := factories[cfg.Provider]
 	none := len(factories) == 0
@@ -219,12 +156,7 @@ func NewProvider(cfg Config) (Provider, error) {
 	if !ok {
 		return nil, ErrUnknownProvider
 	}
-
-	p, err := f(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return providerCache.add(key, p), nil
+	return providerCache.Do(configKey(cfg), func() (Provider, error) { return f(cfg) })
 }
 
 // Classify runs the provider for cfg on in, bounded by cfg.TimeoutMs, and

@@ -14,9 +14,7 @@ import (
 // config JSON is parsed once per filter version and the hub's timestamps
 // travel with the model, which is what the runner keys its own cache on.
 func TestConvertDatabaseFilterToModel_ParsesGuardrailConfigOncePerVersion(t *testing.T) {
-	parsedConfigsMu.Lock()
-	parsedConfigs = map[string]map[string]any{}
-	parsedConfigsMu.Unlock()
+	parsedConfigs.Reset()
 
 	v1 := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	row := &database.Filter{
