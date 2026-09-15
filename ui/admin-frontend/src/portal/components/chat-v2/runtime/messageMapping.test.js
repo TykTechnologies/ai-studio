@@ -4,6 +4,7 @@ import {
   extractText,
   extractFileRefs,
   buildRunBody,
+  toRunResult,
   ROOT_MESSAGE_ID,
 } from './messageMapping';
 
@@ -122,5 +123,27 @@ describe('buildRunBody (client tools)', () => {
     const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'go' }] }];
     expect(isResume(current, new Set(['ask-form']))).toBe(false);
     expect(buildRunBody(messages, new Map(), null, new Set(['ask-form']), current)).toEqual({ message: 'go', file_refs: [] });
+  });
+});
+
+describe('toRunResult', () => {
+  it('keeps content, status and metadata but drops the cumulative steps', () => {
+    const value = {
+      content: [{ type: 'text', text: 'hi' }],
+      status: { type: 'requires-action', reason: 'tool-calls' },
+      metadata: { steps: [{ state: 'started' }, { state: 'finished' }], custom: { a: 1 } },
+    };
+    expect(toRunResult(value)).toEqual({
+      content: value.content,
+      status: value.status,
+      metadata: { custom: { a: 1 } },
+    });
+  });
+
+  it('omits metadata when only steps were present', () => {
+    expect(toRunResult({ content: [], status: { type: 'running' }, metadata: { steps: [] } })).toEqual({
+      content: [],
+      status: { type: 'running' },
+    });
   });
 });

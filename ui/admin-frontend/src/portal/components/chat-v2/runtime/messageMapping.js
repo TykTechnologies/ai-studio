@@ -123,3 +123,20 @@ export const buildRunBody = (messages, idMap, backendHead, humanToolNames = new 
   }
   return body;
 };
+
+/**
+ * Shapes one accumulated stream message into the ChatModelRunResult the
+ * LocalRuntime expects. `metadata.steps` is dropped on purpose: the
+ * accumulator reports steps cumulatively while the runtime treats them as
+ * increments, so a single turn already counted as two steps and tripped the
+ * runtime's maxSteps guard, which silently refused to resume after a
+ * human-in-the-loop answer. The backend owns the tool loop anyway.
+ */
+export const toRunResult = (value) => {
+  const { steps, ...metadata } = value.metadata || {};
+  return {
+    content: value.content,
+    status: value.status,
+    ...(Object.keys(metadata).length ? { metadata } : {}),
+  };
+};

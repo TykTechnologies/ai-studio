@@ -37,23 +37,15 @@ const Composer = ({ hideFileUpload = false, placeholder }) => (
       <ComposerPrimitive.AttachmentDropzone asChild disabled={hideFileUpload}>
         <Box
           sx={{
-            position: 'relative',
+            // 1px gradient frame: a padded wrapper around an opaque inner box,
+            // so the interior always paints above the gradient in every browser
+            // (the masked pseudo-element approach hid the typed text).
+            p: '1px',
             borderRadius: '8px',
-            bgcolor: 'background.paper',
-            minHeight: 92,
-            '&:before': {
-              content: '""',
-              position: 'absolute',
-              inset: -1,
-              padding: '1px',
-              borderRadius: '8px',
-              background: 'linear-gradient(163.33deg, #23E2C2 46.22%, #5900CB 161.35%)',
-              WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-              WebkitMaskComposite: 'xor',
-              pointerEvents: 'none',
-            },
+            background: 'linear-gradient(163.33deg, #23E2C2 46.22%, #5900CB 161.35%)',
           }}
         >
+        <Box sx={{ position: 'relative', borderRadius: '7px', bgcolor: 'background.paper', minHeight: 90 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, px: 1.5, pt: 1 }}>
             <ComposerPrimitive.Attachments components={attachmentComponents} />
           </Box>
@@ -82,6 +74,7 @@ const Composer = ({ hideFileUpload = false, placeholder }) => (
               </ComposerPrimitive.Cancel>
             </ThreadPrimitive.If>
           </Box>
+        </Box>
         </Box>
       </ComposerPrimitive.AttachmentDropzone>
     </Box>

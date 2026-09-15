@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { useLocalRuntime, ExportedMessageRepository, generateId } from '@assistant-ui/react';
 import { streamRun, fetchHistory, uploadFile, cancelRun } from '../api/chatV2Client';
-import { toThreadMessageLike, buildRunBody } from './messageMapping';
+import { toThreadMessageLike, buildRunBody, toRunResult } from './messageMapping';
 
 /**
  * Builds an assistant-ui LocalRuntime on top of one v2 session (chat room or
@@ -53,11 +53,7 @@ export const useStudioRuntime = ({ sessionId, endpoints, clientToolNames = [], o
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            yield {
-              content: value.content,
-              status: value.status,
-              metadata: value.metadata,
-            };
+            yield toRunResult(value);
           }
         } catch (err) {
           if (err?.name === 'AbortError' || abortSignal.aborted) {
