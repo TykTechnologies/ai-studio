@@ -23,7 +23,7 @@ export const FIELD_TYPES = [
 ];
 
 const FORMAT_BY_TYPE = { date: "date", email: "email", url: "uri" };
-const TYPE_BY_FORMAT = { date: "date", email: "email", uri: "url", tel: "phone" };
+const TYPE_BY_FORMAT = { date: "date", email: "email", uri: "url" };
 
 let counter = 0;
 /** A blank field with a stable key for React lists. */
@@ -72,8 +72,10 @@ export const fieldsToSchema = (fields) => {
         prop.enum = (field.options || []).map((o) => String(o).trim()).filter(Boolean);
         break;
       case "phone":
+        // Not a JSON Schema format (ajv would warn); an input-type hint the
+        // chat form and the builder both understand.
         prop.type = "string";
-        prop.format = "tel";
+        prop["x-input-type"] = "tel";
         break;
       case "textarea":
         prop.type = "string";
@@ -125,7 +127,7 @@ export const schemaToFields = (schema) => {
         unsupported.push(name);
         return;
       }
-      const t = TYPE_BY_FORMAT[prop.format] || (prop["x-multiline"] ? "textarea" : "text");
+      const t = TYPE_BY_FORMAT[prop.format] || (prop["x-input-type"] === "tel" ? "phone" : prop["x-multiline"] ? "textarea" : "text");
       fields.push(newField({ ...base, type: t }));
     } else if (type === "number" || type === "integer") {
       fields.push(newField({ ...base, type: "number" }));

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../../utils/testTheme";
@@ -68,6 +68,23 @@ describe("ClientToolEditor", () => {
     render(<Harness initial={{ ...blank, parameters: JSON.stringify({ type: "object", properties: { action: { type: "string" } } }) }} />);
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     expect(screen.getByTestId("client-tool-preview-answer")).toHaveTextContent('"approved": true');
+  });
+
+  it("validates and answers the preview form without a nested <form>", () => {
+    render(<Harness initial={{ ...blank, kind: "form" }} />);
+    fireEvent.click(screen.getByText("Contact information"));
+    const card = screen.getByTestId("client-tool-preview-card");
+    expect(card.querySelector("form")).toBeNull();
+
+    // Required fields empty: validation blocks, nothing is "sent".
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    expect(screen.queryByTestId("client-tool-preview-answer")).not.toBeInTheDocument();
+
+    fireEvent.change(within(card).getByLabelText(/Full name/), { target: { value: "Ada Lovelace" } });
+    fireEvent.change(within(card).getByLabelText(/^Email/), { target: { value: "ada@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    expect(screen.getByTestId("client-tool-preview-answer")).toHaveTextContent("Ada Lovelace");
+    expect(screen.getByTestId("client-tool-preview-answer")).toHaveTextContent("ada@example.com");
   });
 
   it("hides the builders for generative UI", () => {

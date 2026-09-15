@@ -70,7 +70,7 @@ export const uiSchemaFor = (schema) => {
   Object.entries(schema?.properties || {}).forEach(([name, prop]) => {
     if (!prop || typeof prop !== 'object') return;
     if (prop['x-multiline']) ui[name] = { 'ui:widget': 'textarea', 'ui:options': { rows: 3 } };
-    else if (prop.format === 'tel') ui[name] = { 'ui:options': { inputType: 'tel' } };
+    else if (prop['x-input-type'] === 'tel') ui[name] = { 'ui:options': { inputType: 'tel' } };
   });
   return ui;
 };
@@ -103,7 +103,19 @@ export const FormCard = ({ title, description, args, schema, addResult, nested =
       >
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
           {nested ? (
-            <Button type="button" variant="contained" size="small" onClick={() => formRef.current?.submit()}>Submit</Button>
+            // rjsf's submit() calls requestSubmit(), which only exists on
+            // <form>; validate and read the data ourselves instead.
+            <Button
+              type="button"
+              variant="contained"
+              size="small"
+              onClick={() => {
+                const form = formRef.current;
+                if (form && form.validateForm()) addResult(form.state.formData);
+              }}
+            >
+              Submit
+            </Button>
           ) : (
             <Button type="submit" variant="contained" size="small">Submit</Button>
           )}

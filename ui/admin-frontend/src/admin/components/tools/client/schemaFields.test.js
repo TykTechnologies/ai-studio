@@ -23,7 +23,8 @@ describe("schemaFields", () => {
     expect(schema.properties.express.type).toBe("boolean");
     expect(schema.properties.when.format).toBe("date");
     expect(schema.properties.email.format).toBe("email");
-    expect(schema.properties.phone.format).toBe("tel");
+    expect(schema.properties.phone["x-input-type"]).toBe("tel");
+    expect(schema.properties.phone.format).toBeUndefined();
     expect(schema.properties.site.format).toBe("uri");
     expect(schema.properties.size.enum).toEqual(["S", "M", "L"]);
 
