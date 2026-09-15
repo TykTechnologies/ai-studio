@@ -133,9 +133,19 @@ export const buildRunBody = (messages, idMap, backendHead, humanToolNames = new 
  * human-in-the-loop answer. The backend owns the tool loop anyway.
  */
 export const toRunResult = (value) => {
-  const { steps, ...metadata } = value.metadata || {};
+  const { steps, unstable_data, ...metadata } = value.metadata || {};
+  // The stream decoder files `data-*` chunks (status, context, error) under
+  // metadata.unstable_data rather than as message parts; lift them into
+  // `data` parts so the thread renders them. Status and context lead the
+  // reply, errors trail it.
+  const dataParts = (unstable_data || [])
+    .filter((d) => d && typeof d.name === 'string')
+    .map((d) => ({ type: 'data', name: d.name, data: d.data }));
+  const leading = dataParts.filter((p) => p.name !== 'error');
+  const trailing = dataParts.filter((p) => p.name === 'error');
+  const content = dataParts.length ? [...leading, ...(value.content || []), ...trailing] : value.content;
   return {
-    content: value.content,
+    content,
     status: value.status,
     ...(Object.keys(metadata).length ? { metadata } : {}),
   };

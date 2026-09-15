@@ -299,27 +299,28 @@ func (cs *ChatSession) Subscribe(runID string, buf int) (<-chan ChatEvent, func(
 	return sub.ch, unsubscribe
 }
 
-// muteStreaming makes streamingFunc drop chunks until the returned func is
-// called. Side calls to the model (title generation) reuse the driver, and
-// some drivers stream through the driver-level callback regardless of call
+type muteStreamKey struct{}
+
+// mutedContext marks a request whose streamed chunks streamingFunc must
+// drop. Side calls to the model (title generation) reuse the driver, and
+// drivers stream through the driver-level callback regardless of call
 // options; without this their chunks would leak into the user's reply.
-func (cs *ChatSession) muteStreaming() func() {
-	cs.stateMu.Lock()
-	cs.streamMuted++
-	cs.stateMu.Unlock()
-	return func() {
-		cs.stateMu.Lock()
-		if cs.streamMuted > 0 {
-			cs.streamMuted--
-		}
-		cs.stateMu.Unlock()
-	}
+//
+// The mark travels with the request context rather than a session-wide
+// flag because side calls run concurrently with the user's turn: a
+// session-wide mute swallowed the opening of the next reply while the
+// title was being generated.
+func mutedContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, muteStreamKey{}, true)
 }
 
-func (cs *ChatSession) streamingMuted() bool {
-	cs.stateMu.Lock()
-	defer cs.stateMu.Unlock()
-	return cs.streamMuted > 0
+// streamingMuted reports whether chunks for this request must be dropped.
+func streamingMuted(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	muted, _ := ctx.Value(muteStreamKey{}).(bool)
+	return muted
 }
 
 // runCtx is the context LLM calls should use: the active run's context when a

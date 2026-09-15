@@ -140,6 +140,28 @@ describe('toRunResult', () => {
     });
   });
 
+  it('lifts data chunks into data parts, status first and errors last', () => {
+    const value = {
+      content: [{ type: 'text', text: 'hi' }],
+      status: { type: 'incomplete', reason: 'error' },
+      metadata: {
+        steps: [],
+        unstable_data: [
+          { name: 'error', data: { code: 'api', message: 'boom' } },
+          { name: 'status', data: { text: 'Running filters' } },
+          { name: 'context', data: { text: 'ctx', source: 'rag' } },
+        ],
+      },
+    };
+    expect(toRunResult(value).content).toEqual([
+      { type: 'data', name: 'status', data: { text: 'Running filters' } },
+      { type: 'data', name: 'context', data: { text: 'ctx', source: 'rag' } },
+      { type: 'text', text: 'hi' },
+      { type: 'data', name: 'error', data: { code: 'api', message: 'boom' } },
+    ]);
+    expect(toRunResult(value).metadata).toBeUndefined();
+  });
+
   it('omits metadata when only steps were present', () => {
     expect(toRunResult({ content: [], status: { type: 'running' }, metadata: { steps: [] } })).toEqual({
       content: [],

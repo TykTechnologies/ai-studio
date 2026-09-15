@@ -77,7 +77,6 @@ type ChatSession struct {
 	activeRun   *runState                   // turn being processed by the session goroutine
 	subMu       sync.Mutex                  // guards subs
 	subs        map[string]*eventSubscriber // run id -> subscriber
-	streamMuted int                         // >0 while side calls to the model must not stream (see muteStreaming)
 	clientState *clientToolState            // parked client tool calls (see client_tools.go)
 }
 
@@ -1302,9 +1301,7 @@ User message: %s`, userMessage)
 		llms.WithTemperature(0.7),
 	}
 
-	unmute := cs.muteStreaming()
-	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
-	unmute()
+	resp, err := cs.caller.GenerateContent(mutedContext(ctx), messages, opts...)
 	if err != nil {
 		return "", fmt.Errorf("error generating chat title: %v", err)
 	}
@@ -1758,7 +1755,7 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
-	if cs.streamingMuted() {
+	if streamingMuted(ctx) {
 		return nil
 	}
 	// Try to parse as JSON to check if it's a final message
