@@ -521,3 +521,20 @@ NATS_CREDENTIALS_FILE=/path/to/creds.file
 - Priority queues
 - Dead letter queues
 - Circuit breakers
+
+
+## v2 chat events on the stream channel (September 2026)
+
+Sessions started for the v2 chat API (`ChatSession.SetOutputMode(OutputModeEvents)`) publish typed envelopes on the **stream** channel instead of raw text chunks:
+
+```json
+{"v":"aui/v1","run_id":"<turn id>","seq":12,"kind":"text-delta","data":{"delta":"Hello"}}
+```
+
+Kinds: `start`, `text-delta`, `text-end`, `reasoning-delta`, `tool-call-start`, `tool-call-delta`, `tool-call-end`, `tool-result`, `data-status`, `data-context`, `data-error`, `finish`. Status lines and errors that v1 sends on the message/error channels are folded into these envelopes, so a v2 session's message channel stays quiet. No new queue channel was added: every implementation (in-memory, NATS, PostgreSQL) carries the envelopes as opaque bytes.
+
+Per-run delivery is done by the session itself: `Start()` runs one reader goroutine over the queue's stream and error channels and dispatches envelopes to the subscriber of their `run_id` (`ChatSession.Subscribe`). Readers therefore never compete on the raw channels, which matters for NATS where two consumers of the same durable would each get part of the stream.
+
+A session is bound to one output mode for its lifetime; the API's `SessionHub` refuses to attach a v1 SSE reader to a v2 session and vice versa.
+
+**Known limitation:** the fan-out runs on the instance that owns the session goroutine. In a multi-instance deployment the v2 run request must reach that instance (session affinity); a run handled elsewhere would create a second session for the same id. The v1 behaviour is unchanged.

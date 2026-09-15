@@ -94,6 +94,13 @@ See [Audit Trail](./audit-trail.md) for the record schema, redaction rules and A
 *   Queue Type (`QUEUE_TYPE`): `inmemory` (default), `nats`, or `postgres`
 *   Buffer Size (`QUEUE_BUFFER_SIZE`): Default 100
 
+### Chat Interface
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHAT_UI_V2_ENABLED` | `true` | Serve the assistant-ui based chat pages and the v2 per-turn chat API. Set to `false` to fall back to the previous chat pages and the v1 SSE API. |
+| `CHAT_SESSION_IDLE_TTL` | `10m` | How long an idle chat or agent session stays in memory between turns (Go duration). Keep it short with NATS or PostgreSQL queues, which hold a connection per live session. |
+
 ### NATS Configuration (when QUEUE_TYPE=nats)
 *   **Connection**: `NATS_URL`, `NATS_STORAGE_TYPE`, `NATS_RETENTION_POLICY`
 *   **Authentication**: `NATS_USERNAME`/`NATS_PASSWORD`, `NATS_TOKEN`, `NATS_CREDENTIALS_FILE`
