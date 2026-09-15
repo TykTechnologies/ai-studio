@@ -82,7 +82,13 @@ func (a *API) acquireChatSession(c *gin.Context, sessionID string, mode chat_ses
 		if err != nil {
 			return nil, err
 		}
-		loaded.SetOutputMode(mode)
+		if mode == chat_session.OutputModeAny {
+			// A mutation reloads a dormant session; the next reader picks the
+			// API version (raw for v1, or a switch to events for v2).
+			loaded.SetOutputMode(chat_session.OutputModeRaw)
+		} else {
+			loaded.SetOutputMode(mode)
+		}
 		if err := loaded.Start(); err != nil {
 			loaded.Stop()
 			return nil, fmt.Errorf("start: %w", err)
@@ -106,10 +112,15 @@ func (a *API) acquireChatSession(c *gin.Context, sessionID string, mode chat_ses
 		jsonError(c, http.StatusConflict, "Session mismatch", "Session is not a chat session")
 		return nil, nil, false
 	}
-	if cs.OutputMode() != mode {
-		rel()
-		jsonError(c, http.StatusConflict, "Session mismatch", "Session is attached to a different chat API version")
-		return nil, nil, false
+	if mode != chat_session.OutputModeAny && cs.OutputMode() != mode {
+		// A session reloaded through a mutation endpoint starts in raw mode;
+		// the v2 client may take it over as long as nobody else holds it and
+		// no run is in flight.
+		if getChatHub().Refs(sessionID) > 1 || !cs.SwitchOutputMode(mode) {
+			rel()
+			jsonError(c, http.StatusConflict, "Session mismatch", "Session is attached to a different chat API version")
+			return nil, nil, false
+		}
 	}
 	return cs, rel, true
 }
@@ -426,7 +437,9 @@ func (a *API) handleSSEUserMessage(c *gin.Context) {
 // sessionMutationHandler wraps the shared "acquire session, mutate, respond"
 // shape of the tool/datasource endpoints. mutate returns the success message.
 func (a *API) withChatSession(c *gin.Context, sessionID string, mutate func(*chat_session.ChatSession) (string, error), failTitle string) {
-	session, release, ok := a.acquireChatSession(c, sessionID, chat_session.OutputModeRaw)
+	// Mutations serve both API versions: the JSON reply carries the outcome,
+	// so the session's output mode is irrelevant here.
+	session, release, ok := a.acquireChatSession(c, sessionID, chat_session.OutputModeAny)
 	if !ok {
 		return
 	}
@@ -530,7 +543,7 @@ func (a *API) removeToolFromChatSession(c *gin.Context) {
 func (a *API) UploadFileToSession(c *gin.Context) {
 	sessionID := c.Param("session_id")
 
-	session, release, ok := a.acquireChatSession(c, sessionID, chat_session.OutputModeRaw)
+	session, release, ok := a.acquireChatSession(c, sessionID, chat_session.OutputModeAny)
 	if !ok {
 		return
 	}

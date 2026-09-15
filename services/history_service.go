@@ -156,6 +156,33 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 	return nil
 }
 
+// GetCMessagesForSessionPage returns up to limit messages of a session ending
+// just before the row id `before` (0 = the newest), oldest first, and whether
+// older rows exist. The v2 history endpoint pages backwards with it so a long
+// conversation is never loaded whole.
+func (s *Service) GetCMessagesForSessionPage(sessionID string, before uint, limit int) ([]models.CMessage, bool, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	q := s.DB.Where("session = ?", sessionID)
+	if before > 0 {
+		q = q.Where("id < ?", before)
+	}
+	var page []models.CMessage
+	// One extra row tells us whether there is more without a second query.
+	if err := q.Order("id desc").Limit(limit + 1).Find(&page).Error; err != nil {
+		return nil, false, err
+	}
+	hasMore := len(page) > limit
+	if hasMore {
+		page = page[:limit]
+	}
+	for i, j := 0, len(page)-1; i < j; i, j = i+1, j-1 {
+		page[i], page[j] = page[j], page[i]
+	}
+	return page, hasMore, nil
+}
+
 // GetCMessagesForSession returns every message of a session, oldest first.
 func (s *Service) GetCMessagesForSession(sessionID string) ([]models.CMessage, error) {
 	var messages []models.CMessage

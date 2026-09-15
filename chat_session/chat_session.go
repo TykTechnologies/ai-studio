@@ -77,6 +77,7 @@ type ChatSession struct {
 	activeRun   *runState                   // turn being processed by the session goroutine
 	subMu       sync.Mutex                  // guards subs
 	subs        map[string]*eventSubscriber // run id -> subscriber
+	fanoutStarted bool                      // the events fan-out goroutine is running (see startEventFanout)
 	clientState *clientToolState            // parked client tool calls (see client_tools.go)
 }
 

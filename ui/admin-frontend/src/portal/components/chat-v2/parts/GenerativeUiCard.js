@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { renderGenerativeUI, defaultGenerativeUILibrary } from '@assistant-ui/react-generative-ui';
 import { toGenerativeTree } from './generativeTree';
+import { safeBackground, safeImageSrc } from './generativeSafety';
 
 /**
  * Generative UI: the "present" client tool. The model composes a tree of
@@ -29,9 +30,12 @@ const Markdown = ({ value }) => (
 );
 
 /**
- * The default vocabulary with a real markdown renderer, and a Button that
- * also accepts `text` (the flat schema tempts models into using Header's
- * prop name for the label).
+ * The default vocabulary with a real markdown renderer (react-markdown
+ * without raw HTML, so model text cannot inject markup), a Button that also
+ * accepts `text` (the flat schema tempts models into using Header's prop
+ * name for the label), and guards on the props that reach attributes or
+ * inline styles: image sources are limited to http(s), same-origin paths
+ * and inline images; backgrounds to colours and gradients.
  */
 export const studioGenerativeLibrary = {
   ...defaultGenerativeUILibrary,
@@ -39,6 +43,22 @@ export const studioGenerativeLibrary = {
   Button: {
     ...defaultGenerativeUILibrary.Button,
     render: ({ label, text, value, ...rest }) => defaultGenerativeUILibrary.Button.render({ label: label ?? text ?? value, ...rest }),
+  },
+  Image: {
+    ...defaultGenerativeUILibrary.Image,
+    render: ({ src, alt, ...rest }) => {
+      const safe = safeImageSrc(src);
+      if (!safe) return <span data-aui="image-blocked">{typeof alt === 'string' ? alt : ''}</span>;
+      return defaultGenerativeUILibrary.Image.render({ src: safe, alt, ...rest });
+    },
+  },
+  Card: {
+    ...defaultGenerativeUILibrary.Card,
+    render: ({ background, ...rest }) => defaultGenerativeUILibrary.Card.render({ background: safeBackground(background), ...rest }),
+  },
+  Box: {
+    ...defaultGenerativeUILibrary.Box,
+    render: ({ background, ...rest }) => defaultGenerativeUILibrary.Box.render({ background: safeBackground(background), ...rest }),
   },
 };
 

@@ -27,6 +27,10 @@ type OutputMode int
 const (
 	OutputModeRaw OutputMode = iota
 	OutputModeEvents
+	// OutputModeAny is accepted by callers that only mutate a session (add a
+	// tool, upload a file) and never read its output, so they work for both
+	// API versions.
+	OutputModeAny
 )
 
 // Event kinds. Where the AI SDK "UI message stream" has a native chunk type the
@@ -233,6 +237,30 @@ func (cs *ChatSession) SetOutputMode(m OutputMode) {
 	cs.outputMode = m
 }
 
+// SwitchOutputMode moves an idle session to another API version and reports
+// whether it did. A session reloaded from the database through a v1 endpoint
+// (a tool toggle, an upload) starts in raw mode; when the v2 client then
+// runs a turn it takes the session over here instead of being refused.
+//
+// Only raw -> events is supported: the events fan-out owns the queue's
+// stream channel once started, so a v1 SSE reader could not attach
+// afterwards. A busy session (run in flight) is never switched.
+func (cs *ChatSession) SwitchOutputMode(m OutputMode) bool {
+	if !cs.TryLockRun() {
+		return false
+	}
+	defer cs.UnlockRun()
+	if cs.outputMode == m {
+		return true
+	}
+	if m != OutputModeEvents {
+		return false
+	}
+	cs.outputMode = m
+	cs.startEventFanout()
+	return true
+}
+
 // OutputMode returns the session's output mode.
 func (cs *ChatSession) OutputMode() OutputMode {
 	return cs.outputMode
@@ -436,6 +464,13 @@ func (cs *ChatSession) emit(kind string, data any) {
 // and dispatches envelopes to the subscriber of their run. It is started by
 // Start() in OutputModeEvents and exits when the queue closes.
 func (cs *ChatSession) startEventFanout() {
+	cs.stateMu.Lock()
+	if cs.fanoutStarted {
+		cs.stateMu.Unlock()
+		return
+	}
+	cs.fanoutStarted = true
+	cs.stateMu.Unlock()
 	stream := cs.queue.ConsumeStream(cs.ctx)
 	errs := cs.queue.ConsumeErrors(cs.ctx)
 	go func() {

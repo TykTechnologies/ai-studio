@@ -148,6 +148,7 @@ Every turn is one streamed request. The stream is the [AI SDK UI message stream]
 | `POST` | `/common/chat/:chat_id/sessions` | Create a session, or resume one by passing `{"session_id": "..."}`. Returns the session id, the tools and datasources attached, the client tools, and the chat's name, description and prompt templates. |
 | `POST` | `/common/chat-sessions/:session_id/runs` | Run one turn and stream the reply. Body: `{"message": "...", "file_refs": []}` for a new turn; add `"after_message_id"` to rewind the history first (an edit); `{"regenerate": true}` to answer the last user message again; `{"tool_results": [{"tool_call_id": "...", "result": ...}]}` to resume after a client tool. |
 | `POST` | `/common/chat-sessions/:session_id/cancel` | Stop the reply in flight. |
+| `GET` | `/common/chat-sessions/:session_id/messages/v2` | The transcript as assistant-ui parts, newest page first: `?limit=` (default 200, max 1000) and `?before=<row id>` page backwards; the response carries `has_more` and `next_before`. |
 | `GET` | `/common/chat-sessions/:session_id/messages/v2` | The conversation as thread messages: `text`, `tool-call` (with arguments and result) and `data` parts (retrieved context). |
 | `POST` | `/common/chat-sessions/:session_id/tools` / `datasources` / `upload` | Unchanged: attach tools and datasources, upload files for the next message. |
 

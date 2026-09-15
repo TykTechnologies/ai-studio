@@ -40,8 +40,13 @@ export const createSession = async (endpoints, sessionId) => {
   return res.data;
 };
 
-export const fetchHistory = async (endpoints, sessionId) => {
-  const res = await pubClient.get(endpoints.history(sessionId));
+/** The most recent turns a thread starts with; older ones are not loaded. */
+export const HISTORY_PAGE_SIZE = 200;
+
+export const fetchHistory = async (endpoints, sessionId, { limit = HISTORY_PAGE_SIZE, before } = {}) => {
+  const params = { limit };
+  if (before) params.before = before;
+  const res = await pubClient.get(endpoints.history(sessionId), { params });
   return res.data?.messages || [];
 };
 

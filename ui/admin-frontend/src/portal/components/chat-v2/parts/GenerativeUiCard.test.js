@@ -74,6 +74,26 @@ describe('GenerativeUiCard', () => {
     expect(msg.content[0].text).toContain('EMEA');
   });
 
+  it('blocks unsafe image sources and backgrounds from the model', () => {
+    const tree = {
+      component: 'Card',
+      background: 'url(https://evil.example/track.png)',
+      children: [
+        { component: 'Image', src: 'javascript:alert(1)', alt: 'blocked picture' },
+        { component: 'Image', src: 'https://example.com/ok.png', alt: 'fine' },
+        { component: 'Markdown', value: 'Hello <script>alert(1)</script> <img src=x onerror=alert(1)>' },
+      ],
+    };
+    render(wrap(<GenerativeUiCard args={tree} result={{}} status={{ type: 'complete' }} />));
+    const root = screen.getByTestId('generative-ui');
+    expect(root.querySelectorAll('img')).toHaveLength(1);
+    expect(root.querySelector('img').getAttribute('src')).toBe('https://example.com/ok.png');
+    expect(root.querySelector('[data-aui="image-blocked"]')).toHaveTextContent('blocked picture');
+    expect(root.querySelector('[data-aui="card"]').getAttribute('style') || '').not.toContain('url(');
+    expect(root.querySelector('script')).toBeNull();
+    expect(root.querySelector('[data-aui="markdown"]')).toHaveTextContent('<script>');
+  });
+
   it('is picked for client tools of kind present', () => {
     const registry = getToolUiRegistry([
       { name: 'present', ui: { kind: 'present' } },

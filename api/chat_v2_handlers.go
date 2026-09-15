@@ -262,12 +262,29 @@ func (a *API) getChatMessagesV2(c *gin.Context) {
 		jsonError(c, http.StatusForbidden, "Forbidden", "You don't have permission to access this session")
 		return
 	}
-	rows, err := a.service.GetCMessagesForSession(sessionID)
+	// Pages backwards from the newest row: ?limit=N (default 200, max 1000)
+	// and ?before=<row id> for the page preceding an earlier one.
+	limit := 200
+	if v, err := strconv.Atoi(c.DefaultQuery("limit", "200")); err == nil && v > 0 {
+		limit = v
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	var before uint
+	if v, err := strconv.ParseUint(c.DefaultQuery("before", "0"), 10, 64); err == nil {
+		before = uint(v)
+	}
+	rows, hasMore, err := a.service.GetCMessagesForSessionPage(sessionID, before, limit)
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"session_id": sessionID, "messages": materialiseHistory(rows)})
+	resp := gin.H{"session_id": sessionID, "messages": materialiseHistory(rows), "has_more": hasMore}
+	if hasMore && len(rows) > 0 {
+		resp["next_before"] = rows[0].ID
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // cancelChatRunV2 handles POST /chat-sessions/:session_id/cancel.

@@ -233,4 +233,35 @@ func TestChatV2(t *gotest.T) {
 	// 9. Validation.
 	w = apitest.PerformRequest(router, "POST", fmt.Sprintf("/common/chat-sessions/%s/runs", sess.SessionID), api.V2RunRequest{})
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// 10. The v1 mutation endpoints (sidebar tool / datasource toggles) serve
+	// v2 sessions too: removing a tool that is not attached is a no-op 200,
+	// not a "different API version" 409.
+	w = apitest.PerformRequest(router, "DELETE", fmt.Sprintf("/common/chat-sessions/%s/tools/999", sess.SessionID), nil)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// 11. History pages backwards from the newest row.
+	w = apitest.PerformRequest(router, "GET", fmt.Sprintf("/common/chat-sessions/%s/messages/v2?limit=1", sess.SessionID), nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	var page struct {
+		Messages   []api.V2Message `json:"messages"`
+		HasMore    bool            `json:"has_more"`
+		NextBefore uint            `json:"next_before"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	require.Len(t, page.Messages, 1)
+	assert.Equal(t, "assistant", page.Messages[0].Role, "the newest row comes first when paging")
+	assert.True(t, page.HasMore)
+	require.NotZero(t, page.NextBefore)
+	w = apitest.PerformRequest(router, "GET", fmt.Sprintf("/common/chat-sessions/%s/messages/v2?limit=1&before=%d", sess.SessionID, page.NextBefore), nil)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	require.Len(t, page.Messages, 1)
+	assert.Equal(t, "user", page.Messages[0].Role)
+	// Paging counts stored rows; the system prompt row precedes the user
+	// turn, so one more (empty) page follows.
+	assert.True(t, page.HasMore)
+	w = apitest.PerformRequest(router, "GET", fmt.Sprintf("/common/chat-sessions/%s/messages/v2?limit=1&before=%d", sess.SessionID, page.NextBefore), nil)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	assert.Empty(t, page.Messages)
+	assert.False(t, page.HasMore)
 }
