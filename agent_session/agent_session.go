@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -34,11 +35,21 @@ type AgentSession struct {
 	db              *gorm.DB
 	ctx             context.Context
 	cancel          context.CancelFunc
+
+	// Run tracking and the in-memory transcript (see runs.go).
+	mu         sync.Mutex
+	runMu      sync.Mutex
+	closeOnce  sync.Once
+	activeRun  *runState
+	transcript []TranscriptMessage
+	current    *TranscriptMessage
+	nextID     int
+	ownerID    uint
 }
 
 // AgentMessageChunk represents a chunk of agent response
 type AgentMessageChunk struct {
-	Type     string                 `json:"type"`     // CONTENT, TOOL_CALL, TOOL_RESULT, THINKING, ERROR, DONE
+	Type     string                 `json:"type"` // CONTENT, TOOL_CALL, TOOL_RESULT, THINKING, ERROR, DONE
 	Content  string                 `json:"content"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	IsFinal  bool                   `json:"is_final"`
@@ -93,12 +104,16 @@ func (as *AgentSession) SendMessage(userMessage string, history []map[string]int
 	return nil
 }
 
-// receiveChunks receives chunks from plugin gRPC stream and forwards to message queue
-func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessageClient) {
+// receiveChunks receives chunks from the plugin gRPC stream, records them in
+// the transcript and forwards them to the message queue. It returns nil when
+// the stream ended cleanly (EOF or a final chunk) and the stream error
+// otherwise; the error is also published on the queue's error channel.
+func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessageClient) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("panic in receiveChunks", "error", r, "session_id", as.id)
-			as.queue.PublishError(as.ctx, fmt.Errorf("panic: %v", r))
+			retErr = fmt.Errorf("panic: %v", r)
+			as.queue.PublishError(as.ctx, retErr)
 		}
 	}()
 
@@ -108,11 +123,14 @@ func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessage
 			// Stream ended or error occurred
 			if err.Error() == "EOF" {
 				slog.Debug("agent stream completed", "session_id", as.id)
-			} else {
-				slog.Error("error receiving chunk", "error", err, "session_id", as.id)
-				as.queue.PublishError(as.ctx, err)
+				return nil
 			}
-			return
+			if as.ctx.Err() != nil {
+				return nil
+			}
+			slog.Error("error receiving chunk", "error", err, "session_id", as.id)
+			as.queue.PublishError(as.ctx, err)
+			return err
 		}
 
 		// Convert proto chunk to internal format and publish
@@ -130,6 +148,9 @@ func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessage
 			}
 		}
 
+		// Fold into the transcript; this also tags tool calls with ids.
+		agentChunk = as.recordChunk(agentChunk)
+
 		// Publish as stream chunk (raw bytes for compatibility with chat_session queue)
 		chunkJSON, err := json.Marshal(agentChunk)
 		if err != nil {
@@ -137,21 +158,20 @@ func (as *AgentSession) receiveChunks(stream pb.PluginService_HandleAgentMessage
 			continue
 		}
 
-		slog.Info("Publishing chunk to queue", "type", agentChunk.Type, "content_length", len(agentChunk.Content), "session_id", as.id)
+		slog.Debug("Publishing chunk to queue", "type", agentChunk.Type, "content_length", len(agentChunk.Content), "session_id", as.id)
 
 		ctx, cancel := context.WithTimeout(as.ctx, 5*time.Second)
 		if err := as.queue.PublishStream(ctx, chunkJSON); err != nil {
 			cancel()
 			slog.Error("failed to publish chunk to queue", "error", err, "session_id", as.id)
-			return
+			return err
 		}
 		cancel()
-		slog.Info("Successfully published chunk to queue", "type", agentChunk.Type, "session_id", as.id)
 
 		// If this is the final chunk, we're done
 		if chunk.GetIsFinal() {
 			slog.Debug("received final chunk", "session_id", as.id)
-			return
+			return nil
 		}
 	}
 }
@@ -223,10 +243,10 @@ func (as *AgentSession) buildAgentRequest(userMessage string, history []map[stri
 	pluginContext := &pb.PluginContext{
 		AppId: uint32(agentConfig.App.ID),
 		Metadata: map[string]string{
-			"agent_config_id":     fmt.Sprintf("%d", agentConfig.ID),
-			"plugin_id":           fmt.Sprintf("%d", agentConfig.PluginID),
-			"session_id":          as.id,
-			"_service_broker_id":  fmt.Sprintf("%d", as.serviceBrokerID),
+			"agent_config_id":    fmt.Sprintf("%d", agentConfig.ID),
+			"plugin_id":          fmt.Sprintf("%d", agentConfig.PluginID),
+			"session_id":         as.id,
+			"_service_broker_id": fmt.Sprintf("%d", as.serviceBrokerID),
 		},
 	}
 

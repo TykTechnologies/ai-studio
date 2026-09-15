@@ -4,7 +4,8 @@ import { streamRun, fetchHistory, uploadFile, cancelRun } from '../api/chatV2Cli
 import { toThreadMessageLike, buildRunBody } from './messageMapping';
 
 /**
- * Builds an assistant-ui LocalRuntime on top of one v2 chat session.
+ * Builds an assistant-ui LocalRuntime on top of one v2 session (chat room or
+ * agent, selected by `endpoints`).
  *
  * The runtime owns thread state; we supply three adapters:
  *  - chatModel: POSTs a turn and streams the reply (edit and regenerate are
@@ -12,9 +13,9 @@ import { toThreadMessageLike, buildRunBody } from './messageMapping';
  *  - history: loads the persisted transcript; appends are a no-op because the
  *    backend already persists every turn
  *  - attachments: uploads files to the session so they become file_refs on
- *    the next message
+ *    the next message (chat rooms only)
  */
-export const useStudioRuntime = ({ sessionId, onRunError }) => {
+export const useStudioRuntime = ({ sessionId, endpoints, onRunError }) => {
   // runtime message id -> backend row id, plus the backend's last row id.
   const idMap = useRef(new Map());
   const backendHead = useRef(null);
@@ -28,7 +29,7 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
         let ids = null;
         let stream;
         try {
-          stream = await streamRun(sessionId, body, {
+          stream = await streamRun(endpoints, sessionId, body, {
             signal: abortSignal,
             onData: (d) => {
               if (d.name === 'message-ids') ids = d.data;
@@ -36,7 +37,7 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
           });
         } catch (err) {
           if (err?.name === 'AbortError') {
-            cancelRun(sessionId);
+            cancelRun(endpoints, sessionId);
             throw err;
           }
           onRunError?.(err);
@@ -56,7 +57,7 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
           }
         } catch (err) {
           if (err?.name === 'AbortError' || abortSignal.aborted) {
-            cancelRun(sessionId);
+            cancelRun(endpoints, sessionId);
           }
           throw err;
         } finally {
@@ -74,13 +75,13 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
         }
       },
     }),
-    [sessionId, onRunError],
+    [sessionId, endpoints, onRunError],
   );
 
   const history = useMemo(
     () => ({
       async load() {
-        const messages = await fetchHistory(sessionId);
+        const messages = await fetchHistory(endpoints, sessionId);
         idMap.current = new Map();
         messages.forEach((m) => idMap.current.set(String(m.id), String(m.id)));
         backendHead.current = messages.length ? String(messages[messages.length - 1].id) : null;
@@ -90,11 +91,12 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
         // The backend persists every turn itself.
       },
     }),
-    [sessionId],
+    [sessionId, endpoints],
   );
 
-  const attachments = useMemo(
-    () => ({
+  const attachments = useMemo(() => {
+    if (!endpoints.upload) return undefined;
+    return {
       accept: '*/*',
       async add({ file }) {
         return {
@@ -107,7 +109,7 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
         };
       },
       async send(attachment) {
-        await uploadFile(sessionId, attachment.file);
+        await uploadFile(endpoints, sessionId, attachment.file);
         return {
           ...attachment,
           status: { type: 'complete' },
@@ -115,11 +117,10 @@ export const useStudioRuntime = ({ sessionId, onRunError }) => {
         };
       },
       async remove() {},
-    }),
-    [sessionId],
-  );
+    };
+  }, [sessionId, endpoints]);
 
-  return useLocalRuntime(adapter, { adapters: { history, attachments } });
+  return useLocalRuntime(adapter, { adapters: { history, ...(attachments ? { attachments } : {}) } });
 };
 
 export default useStudioRuntime;

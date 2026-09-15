@@ -5,36 +5,60 @@ import { fetchCSRFToken } from '../../../../admin/utils/urlUtils';
 /**
  * Thin client for the v2 chat API.
  *
- * Plain JSON calls go through the shared axios client (cookies + CSRF); the
- * streamed turn uses fetch so the response body can be piped through the
+ * Chat rooms and plugin agents expose the same session/run/history shape
+ * under different paths, described by an `endpoints` object so the runtime
+ * is shared. Plain JSON calls go through the shared axios client (cookies +
+ * CSRF); the streamed turn uses fetch so the body can be piped through the
  * assistant-stream decoder.
  */
 
 const baseUrl = () => pubClient.defaults.baseURL || '';
 
-export const createSession = async (chatId, sessionId) => {
+/** Endpoints for a chat room. */
+export const chatEndpoints = (chatId) => ({
+  kind: 'chat',
+  sessions: `/common/chat/${chatId}/sessions`,
+  history: (sid) => `/common/chat-sessions/${sid}/messages/v2`,
+  runs: (sid) => `/common/chat-sessions/${sid}/runs`,
+  cancel: (sid) => `/common/chat-sessions/${sid}/cancel`,
+  upload: (sid) => `/common/chat-sessions/${sid}/upload`,
+});
+
+/** Endpoints for a plugin agent. */
+export const agentEndpoints = (agentId) => ({
+  kind: 'agent',
+  sessions: `/common/agents/${agentId}/sessions`,
+  history: (sid) => `/common/agent-sessions/${sid}/messages/v2`,
+  runs: (sid) => `/common/agent-sessions/${sid}/runs`,
+  cancel: (sid) => `/common/agent-sessions/${sid}/cancel`,
+  upload: null,
+});
+
+export const createSession = async (endpoints, sessionId) => {
   const body = sessionId ? { session_id: sessionId } : {};
-  const res = await pubClient.post(`/common/chat/${chatId}/sessions`, body);
+  const res = await pubClient.post(endpoints.sessions, body);
   return res.data;
 };
 
-export const fetchHistory = async (sessionId) => {
-  const res = await pubClient.get(`/common/chat-sessions/${sessionId}/messages/v2`);
+export const fetchHistory = async (endpoints, sessionId) => {
+  const res = await pubClient.get(endpoints.history(sessionId));
   return res.data?.messages || [];
 };
 
-export const uploadFile = async (sessionId, file) => {
+export const uploadFile = async (endpoints, sessionId, file) => {
+  if (!endpoints.upload) throw new Error('This chat does not accept file uploads');
   const formData = new FormData();
   formData.append('file', file);
-  await pubClient.post(`/common/chat-sessions/${sessionId}/upload`, formData, {
+  await pubClient.post(endpoints.upload(sessionId), formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return { name: file.name, size: file.size };
 };
 
-export const cancelRun = (sessionId) =>
-  pubClient.post(`/common/chat-sessions/${sessionId}/cancel`).catch(() => null);
+export const cancelRun = (endpoints, sessionId) =>
+  pubClient.post(endpoints.cancel(sessionId)).catch(() => null);
 
+// Chat-room only: mid-session tool / datasource management.
 export const addTool = (sessionId, toolId) =>
   pubClient.post(`/common/chat-sessions/${sessionId}/tools`, { tool_id: String(toolId) });
 
@@ -66,11 +90,12 @@ const readError = async (res) => {
  * Streams one turn. Resolves to a ReadableStream of accumulated assistant
  * messages (assistant-stream's AssistantMessage), one per update.
  *
+ * @param {object} endpoints
  * @param {string} sessionId
  * @param {object} body  V2RunRequest
  * @param {{signal?: AbortSignal, onData?: (d: {name: string, data: any}) => void}} options
  */
-export const streamRun = async (sessionId, body, { signal, onData } = {}) => {
+export const streamRun = async (endpoints, sessionId, body, { signal, onData } = {}) => {
   const csrf = await fetchCSRFToken();
   const headers = {
     'Content-Type': 'application/json',
@@ -78,7 +103,7 @@ export const streamRun = async (sessionId, body, { signal, onData } = {}) => {
   };
   if (csrf) headers['X-CSRF-Token'] = csrf;
 
-  const res = await fetch(`${baseUrl()}/common/chat-sessions/${sessionId}/runs`, {
+  const res = await fetch(`${baseUrl()}${endpoints.runs(sessionId)}`, {
     method: 'POST',
     credentials: 'include',
     headers,

@@ -1,97 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Box, Button, CircularProgress, Grid, Snackbar, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, Snackbar } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import PrintIcon from '@mui/icons-material/Print';
-import { AssistantRuntimeProvider, useAuiState } from '@assistant-ui/react';
-import { TitleBox } from '../../admin/styles/sharedStyles';
 import pubClient from '../../admin/utils/pubClient';
 import ChatSidebar from '../components/chat/ChatSidebar';
-import usePrintChat from '../components/chat/hooks/usePrintChat';
-import '../components/chat/printChat.css';
 import { ChatUiProvider } from '../components/chat-v2/ChatUiContext';
-import StudioThread from '../components/chat-v2/StudioThread';
-import { useStudioRuntime } from '../components/chat-v2/runtime/useStudioRuntime';
+import StudioChatShell from '../components/chat-v2/StudioChatShell';
 import {
+  chatEndpoints,
   createSession,
   addTool,
   removeTool,
   addDatasource,
   removeDatasource,
 } from '../components/chat-v2/api/chatV2Client';
-
-/** Everything that needs the runtime: toolbar, thread and sidebar. */
-const StudioChat = ({ session, chatId, onNewChat, onError, tools, databases, onToggle, showTools }) => {
-  const viewportRef = useRef(null);
-  const runtime = useStudioRuntime({ sessionId: session.session_id, onRunError: onError });
-
-  return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <StudioChatLayout
-        session={session}
-        chatId={chatId}
-        onNewChat={onNewChat}
-        tools={tools}
-        databases={databases}
-        onToggle={onToggle}
-        showTools={showTools}
-        viewportRef={viewportRef}
-      />
-    </AssistantRuntimeProvider>
-  );
-};
-
-const StudioChatLayout = ({ session, onNewChat, tools, databases, onToggle, showTools, viewportRef }) => {
-  const isEmpty = useAuiState((s) => s.thread.isEmpty);
-  // usePrintChat only inspects the array for a user turn.
-  const printMessages = useMemo(() => (isEmpty ? [] : [{ role: 'user' }]), [isEmpty]);
-  const { handlePrint, canPrint } = usePrintChat({
-    chatName: session.chat?.name,
-    messages: printMessages,
-    messagesContainerRef: viewportRef,
-  });
-
-  return (
-    <>
-      <TitleBox top="64px" data-print-role="toolbar">
-        <Typography variant="headingXLarge">{session.chat?.name}</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant="outlined"
-            startIcon={<PrintIcon />}
-            onClick={handlePrint}
-            disabled={!canPrint}
-            title="Opens your browser's print dialog, where you can save the conversation as a PDF"
-          >
-            Print
-          </Button>
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={onNewChat}>
-            New Chat
-          </Button>
-        </Box>
-      </TitleBox>
-      <Box sx={{ height: '85vh', display: 'flex', flexDirection: 'column' }} data-print-role="chat-outer">
-        <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
-          <Grid item xs={9} sx={{ height: '100%' }}>
-            <StudioThread ref={viewportRef} />
-          </Grid>
-          <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }} data-print-role="sidebar">
-            <ChatSidebar
-              currentlyUsing={[]}
-              databases={databases}
-              tools={tools}
-              showTools={showTools}
-              removeFromCurrentlyUsing={(item) => onToggle(item, false)}
-              addToCurrentlyUsing={(item) => onToggle(item, true)}
-              messages={printMessages}
-              roomName={session.chat?.name}
-            />
-          </Grid>
-        </Grid>
-      </Box>
-    </>
-  );
-};
 
 /**
  * Chat room page on the v2 API + assistant-ui. Owns the session (create /
@@ -103,6 +25,7 @@ const ChatViewV2 = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const continueId = new URLSearchParams(location.search).get('continue_id');
+  const endpoints = useMemo(() => chatEndpoints(chatId), [chatId]);
 
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -133,7 +56,7 @@ const ChatViewV2 = () => {
       setLoading(true);
       setFatal(null);
       try {
-        const sess = await createSession(chatId, resumeId);
+        const sess = await createSession(endpoints, resumeId);
         setSession(sess);
         applySelection(sess);
         try {
@@ -149,7 +72,7 @@ const ChatViewV2 = () => {
         setLoading(false);
       }
     },
-    [chatId, applySelection],
+    [chatId, endpoints, applySelection],
   );
 
   // Catalogue + identity (same sources as the v1 page).
@@ -254,18 +177,29 @@ const ChatViewV2 = () => {
     );
   }
 
+  const showTools = session.chat?.tool_support !== false;
+
   return (
     <ChatUiProvider session={session} userName={userName}>
-      <StudioChat
+      <StudioChatShell
         key={session.session_id}
         session={session}
-        chatId={chatId}
+        endpoints={endpoints}
+        onRunError={handleRunError}
+        title={session.chat?.name}
         onNewChat={handleNewChat}
-        onError={handleRunError}
-        tools={tools}
-        databases={databases}
-        onToggle={handleToggle}
-        showTools={session.chat?.tool_support !== false}
+        sidebar={({ printMessages }) => (
+          <ChatSidebar
+            currentlyUsing={[]}
+            databases={databases}
+            tools={tools}
+            showTools={showTools}
+            removeFromCurrentlyUsing={(item) => handleToggle(item, false)}
+            addToCurrentlyUsing={(item) => handleToggle(item, true)}
+            messages={printMessages}
+            roomName={session.chat?.name}
+          />
+        )}
       />
       <Snackbar
         open={snackbar.open}
