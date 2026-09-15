@@ -387,6 +387,7 @@ func (a *API) SetupChatRoutes(r *gin.RouterGroup) {
 	r.DELETE("/chat-sessions/:session_id/tools/:tool_id", a.removeToolFromChatSession)
 	r.POST("/chat-sessions/:session_id/upload", a.UploadFileToSession)
 	r.PUT("/chat-sessions/:session_id/messages/:message_id", a.editMessageInChatSession)
+	a.SetupChatV2Routes(r)
 }
 
 // handleSSEUserMessage handles user messages sent via POST for SSE connections

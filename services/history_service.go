@@ -1,8 +1,10 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
@@ -152,6 +154,44 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 	slog.Debug("Deleted messages", "count", result.RowsAffected)
 
 	return nil
+}
+
+// GetCMessagesForSession returns every message of a session, oldest first.
+func (s *Service) GetCMessagesForSession(sessionID string) ([]models.CMessage, error) {
+	var messages []models.CMessage
+	err := s.DB.Where("session = ?", sessionID).Order("created_at asc, id asc").Find(&messages).Error
+	return messages, err
+}
+
+// TruncateToLastUserMessage deletes the last user turn of a session and every
+// message after it (the assistant reply, tool calls and tool results), so the
+// caller can re-send the user's text to regenerate the reply. Human rows that
+// carry only a [CONTEXT] block (tool documentation injected on AddTool) do not
+// count as a turn. It returns the number of rows removed; zero when the
+// session has no user turn.
+func (s *Service) TruncateToLastUserMessage(sessionID string) (int64, error) {
+	messages, err := s.GetCMessagesForSession(sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load messages: %w", err)
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		var stored struct {
+			Role string `json:"role"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(messages[i].Content, &stored); err != nil || stored.Role != "human" {
+			continue
+		}
+		if _, userText, _ := models.SplitContext(stored.Text); strings.TrimSpace(userText) == "" {
+			continue
+		}
+		res := s.DB.Where("session = ? AND id >= ?", sessionID, messages[i].ID).Delete(&models.CMessage{})
+		if res.Error != nil {
+			return 0, fmt.Errorf("failed to delete messages: %w", res.Error)
+		}
+		return res.RowsAffected, nil
+	}
+	return 0, nil
 }
 
 // EditUserMessageByIndex removes messages from the specified index onwards
