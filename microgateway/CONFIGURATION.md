@@ -92,7 +92,7 @@ In edge mode API tokens are validated on demand against the hub and the result i
 | `EDGE_TOKEN_CACHE_TTL` | 5m | How long a validation result is served without asking the hub again |
 | `EDGE_TOKEN_CACHE_MAX_SIZE` | 1000 | Maximum cached tokens (oldest entries are evicted first) |
 | `EDGE_TOKEN_CACHE_CLEANUP_INTERVAL` | 1m | How often expired entries are purged |
-| `EDGE_TOKEN_CACHE_STALE_GRACE` | 1h | How long past its TTL a cached result may still be served when the hub is **unreachable**. An explicit rejection from the hub is never bridged and evicts the entry. Set to `0` to fail closed on every cache miss while the hub is down |
+| `EDGE_TOKEN_CACHE_STALE_GRACE` | 0 (off) | Opt-in: how long past its TTL a cached result may still be served when the hub is **unreachable**. Off by default because the grace window is also how long a token revoked on the hub keeps working on this edge during an outage. An explicit rejection from the hub is never bridged and evicts the entry |
 
 ### Observability Configuration
 

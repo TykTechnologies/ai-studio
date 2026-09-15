@@ -137,8 +137,11 @@ type HubSpokeConfig struct {
 	// TokenCacheStaleGrace is how long past its TTL a cached validation result
 	// may still be served when the hub cannot be reached (transport failure).
 	// An explicit rejection from the hub never falls back to a stale entry.
-	// 0 disables the grace: a cache miss while the hub is down fails closed.
-	TokenCacheStaleGrace time.Duration `env:"EDGE_TOKEN_CACHE_STALE_GRACE" envDefault:"1h"`
+	// Off by default (0): a cache miss while the hub is down fails closed,
+	// because a grace window is also the window in which a token revoked on
+	// the hub keeps working on this edge. Operators who prefer availability
+	// during a hub outage opt in with an explicit duration.
+	TokenCacheStaleGrace time.Duration `env:"EDGE_TOKEN_CACHE_STALE_GRACE" envDefault:"0"`
 
 	// gRPC message size limits (bytes). Default 16MB.
 	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
