@@ -25,16 +25,7 @@ func ExecuteResponseFilters(
 	currentBuffer string,
 	r *http.Request,
 ) (blocked bool, blockMessage string, err error) {
-	// Filter to only response filters (ResponseFilter = true)
-	responseFilters := []*models.Filter{}
-	for _, filter := range llm.Filters {
-		if filter.ResponseFilter {
-			responseFilters = append(responseFilters, filter)
-		}
-	}
-
-	// If no response filters, pass through
-	if len(responseFilters) == 0 {
+	if !hasResponseFilterList(llm) {
 		return false, "", nil
 	}
 
@@ -53,6 +44,50 @@ func ExecuteResponseFilters(
 		}
 	}
 
+	return runResponseFilters(llm, service, responseText, statusCode, isChunk, false, chunkIndex, currentBuffer, r)
+}
+
+// ExecuteFinalResponseFilters runs the response filters once more when a
+// streaming response has completed, over the whole accumulated text. Per-chunk
+// evaluation can legitimately skip a response that never reaches a script's
+// buffer threshold or a guardrail's cadence; this pass makes sure every
+// streamed response is looked at in full at least once. The chunks are
+// already with the client, so a block here ends the stream with an error
+// event and is recorded, rather than withholding content.
+func ExecuteFinalResponseFilters(
+	llm *models.LLM,
+	service services.ServiceInterface,
+	statusCode int,
+	chunkIndex int,
+	fullText string,
+	r *http.Request,
+) (blocked bool, blockMessage string, err error) {
+	if !hasResponseFilterList(llm) || fullText == "" {
+		return false, "", nil
+	}
+	return runResponseFilters(llm, service, "", statusCode, true, true, chunkIndex, fullText, r)
+}
+
+func hasResponseFilterList(llm *models.LLM) bool {
+	for _, filter := range llm.Filters {
+		if filter.ResponseFilter {
+			return true
+		}
+	}
+	return false
+}
+
+func runResponseFilters(
+	llm *models.LLM,
+	service services.ServiceInterface,
+	responseText string,
+	statusCode int,
+	isChunk bool,
+	isFinal bool,
+	chunkIndex int,
+	currentBuffer string,
+	r *http.Request,
+) (blocked bool, blockMessage string, err error) {
 	// Get model name from request context
 	modelName := ""
 	if modelFromCtx := r.Context().Value("model_name"); modelFromCtx != nil {
@@ -73,10 +108,10 @@ func ExecuteResponseFilters(
 
 	// Build script input for response context
 	scriptInput := &scripting.ScriptInput{
-		RawInput:      responseText,
-		Messages:      []llms.MessageContent{}, // Empty for response filters
-		VendorName:    string(llm.Vendor),
-		ModelName:     modelName,
+		RawInput:   responseText,
+		Messages:   []llms.MessageContent{}, // Empty for response filters
+		VendorName: string(llm.Vendor),
+		ModelName:  modelName,
 		Context: map[string]interface{}{
 			"llm_id":     int64(llm.ID),
 			"app_id":     appID,
@@ -85,6 +120,7 @@ func ExecuteResponseFilters(
 		IsChat:        false,
 		IsResponse:    true,
 		IsChunk:       isChunk,
+		IsFinal:       isFinal,
 		ChunkIndex:    chunkIndex,
 		CurrentBuffer: currentBuffer,
 		StatusCode:    statusCode,
@@ -92,8 +128,11 @@ func ExecuteResponseFilters(
 	}
 
 	// Execute response filters in chain
-	for _, filter := range responseFilters {
-		slog.Debug("executing response filter", "filter_name", filter.Name, "is_chunk", isChunk, "chunk_index", chunkIndex)
+	for _, filter := range llm.Filters {
+		if !filter.ResponseFilter {
+			continue
+		}
+		slog.Debug("executing response filter", "filter_name", filter.Name, "is_chunk", isChunk, "is_final", isFinal, "chunk_index", chunkIndex)
 
 		runner := scripting.NewFilterRunner(filter)
 		output, err := runner.RunScript(scriptInput, service)
@@ -112,7 +151,7 @@ func ExecuteResponseFilters(
 			if msg == "" {
 				msg = fmt.Sprintf("Response blocked by filter: %s", filter.Name)
 			}
-			slog.Info("response blocked by filter", "filter_name", filter.Name, "message", msg, "is_chunk", isChunk)
+			slog.Info("response blocked by filter", "filter_name", filter.Name, "message", msg, "is_chunk", isChunk, "is_final", isFinal)
 			return true, msg, nil
 		}
 

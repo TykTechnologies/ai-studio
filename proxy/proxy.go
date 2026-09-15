@@ -1625,6 +1625,30 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			break
 		}
 	}
+	// The stream is complete: evaluate the whole response once. Per-chunk
+	// runs can skip a short response entirely (a script's buffer threshold, a
+	// guardrail's cadence), and a credential in a two-chunk answer is still a
+	// leak worth recording. Everything is already with the client, so a block
+	// here ends the stream with an error event and logs a blocked response.
+	if !isErr && hasResponseFilters {
+		blocked, blockMsg, filterErr := ExecuteFinalResponseFilters(llm, p.gatewayService, resp.StatusCode, chunkIndex, textBuffer.String(), r)
+		if filterErr != nil {
+			logger.Errorf("Response filter execution error at end of stream: %v", filterErr)
+		} else if blocked {
+			metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+			logger.Warnf("Streaming response blocked by filter at end of stream: %s", blockMsg)
+			w.Write(buildFilterBlockedErrorChunk(blockMsg))
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			isErr = true
+			blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
+			p.goAnalyze(func() {
+				p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+			})
+			return
+		}
+	}
 	if !isErr {
 		p.goAnalyze(func() {
 			p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))

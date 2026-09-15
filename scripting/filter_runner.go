@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -63,6 +64,15 @@ func (g *guardrailRunner) RunScript(input *ScriptInput, _ services.ServiceInterf
 	if err != nil {
 		return nil, fmt.Errorf("guardrail '%s': %w", g.filter.Name, err)
 	}
+	// Connection values are stored as $SECRET/ and $ENV/ references. Resolve
+	// them here, where the filter runs: on Studio against the secret store,
+	// at the edge against the values the hub already resolved into the
+	// snapshot (GetValue leaves a non-reference untouched).
+	resolved := make(map[string]string, len(cfg.Connection))
+	for k, v := range cfg.Connection {
+		resolved[k] = secrets.GetValue(v, false)
+	}
+	cfg.Connection = resolved
 
 	provider, err := guardrails.NewProvider(cfg)
 	if errors.Is(err, guardrails.ErrNoProviders) {
@@ -192,6 +202,11 @@ func passThrough(input *ScriptInput) *ScriptOutput {
 // multiple of every characters. RawInput on a chunk is the text delta the
 // chunk added, so the previous length is the buffer minus the delta.
 func shouldEvaluateChunk(input *ScriptInput, every int) bool {
+	if input.IsFinal {
+		// End of stream: always look at the whole response once, so a
+		// response shorter than the cadence is not skipped.
+		return strings.TrimSpace(input.CurrentBuffer) != ""
+	}
 	if every <= 0 {
 		return true
 	}

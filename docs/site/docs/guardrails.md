@@ -23,7 +23,7 @@ In **Filters**, add a filter and choose **Guardrail** as the filter type. The fo
 | Messages to inspect | On LLM requests: the last user message, all user messages (default), system and user messages, or every message. Chat messages and tool calls always inspect the whole text. |
 | If the provider fails | `closed` blocks (default on requests and tool calls), `open` lets the text through (default on responses). A timeout or error records a `guardrail.error` compliance event either way. |
 | Timeout | Per provider call, default 2000 ms. |
-| Streaming cadence | On response filters: re-check the accumulated response every N characters (default 250 for the built-in library, 1000 for remote providers). Remote providers are never called per chunk. |
+| Streaming cadence | On response filters: re-check the accumulated response every N characters (default 250 for the built-in library, 1000 for remote providers), and once more when the stream completes, so a response shorter than the cadence is still checked. Remote providers are never called per chunk. A block mid-stream stops the stream; a block at completion ends it with an error event and is recorded, but chunks already sent have reached the client. |
 | Block message | What the caller sees on a block. Findings are never included. |
 | Connection | Endpoint, key and other settings for remote providers. Keys are `$SECRET/name` or `$ENV/NAME` references, resolved when the filter runs and when the configuration is pushed to edges. |
 

@@ -984,6 +984,7 @@ input := {
     raw_input: "current chunk text",
     is_response: true,
     is_chunk: true,
+    is_final: false,        // true on the extra run after the last chunk: raw_input is "" and current_buffer is the whole response
     chunk_index: 5,
     current_buffer: "accumulated response text so far",
     vendor_name: "openai",
@@ -1127,9 +1128,9 @@ if !input.is_chunk || len(response_text) >= 200 {
 - If blocked: Error returned to client instead of response
 
 **Proxy (Streaming)**:
-- Executes on every chunk
+- Executes on every chunk, and once more when the stream completes with `is_final: true`, `raw_input` empty and `current_buffer` holding the whole response, so a short response that never reached a script's buffer threshold is still evaluated once
 - Access to both `raw_input` (current chunk) and `current_buffer` (accumulated text)
-- If blocked: Streaming stops, error sent to client
+- If blocked: Streaming stops, error sent to client. A block on the final run ends the stream with an error event and is logged as a blocked response; chunks already sent have reached the client
 
 **Chat (Non-Streaming)**:
 - Executes before adding to chat history

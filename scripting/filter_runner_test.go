@@ -288,6 +288,20 @@ func TestGuardrailRunner_StreamingCadence(t *testing.T) {
 	if p.lastIn.Segments[0].Text != "abcdefghijklmno SECRET" {
 		t.Errorf("provider saw %q, want the accumulated buffer", p.lastIn.Segments[0].Text)
 	}
+
+	// End of stream: a response shorter than the cadence is still evaluated.
+	p.calls = 0
+	out, err := NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "", CurrentBuffer: "tiny SECRET", IsResponse: true, IsChunk: true, IsFinal: true, ChunkIndex: 3}, nil)
+	if err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+	if p.calls != 1 || !out.Block {
+		t.Errorf("calls=%d block=%v, want the final evaluation to run and block", p.calls, out.Block)
+	}
+	out, _ = NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "", CurrentBuffer: "   ", IsResponse: true, IsChunk: true, IsFinal: true}, nil)
+	if p.calls != 1 || out.Block {
+		t.Error("an empty response must not be sent to the provider at the end of the stream")
+	}
 }
 
 func TestGuardrailRunner_SplitsLongSegmentsAndMergesRewrites(t *testing.T) {
@@ -330,6 +344,34 @@ func TestGuardrailRunner_ScopeSelectsMessages(t *testing.T) {
 		if strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("%s: provider saw %v, want %v", scope, got, want)
 		}
+	}
+}
+
+// Connection references are resolved where the filter runs, so a provider
+// never sees "$ENV/NAME" as its credential.
+func TestGuardrailRunner_ResolvesConnectionReferences(t *testing.T) {
+	t.Setenv("GUARDRAIL_TEST_KEY", "resolved-key")
+	var seen guardrails.Config
+	guardrails.RegisterSpec(guardrails.Spec{
+		Name: "fake_conn", DisplayName: "fake_conn",
+		Detectors:        []guardrails.DetectorSpec{{Name: "secrets"}},
+		ConnectionFields: []guardrails.ConnectionField{{Name: "api_key", Secret: true}},
+	})
+	guardrails.RegisterFactory("fake_conn", func(cfg guardrails.Config) (guardrails.Provider, error) {
+		seen = cfg
+		return &fakeProvider{}, nil
+	})
+	f := guardrailFilter("conn", false, models.JSONMap{
+		"provider":   "fake_conn",
+		"detectors":  []any{map[string]any{"name": "secrets"}},
+		"on_detect":  guardrails.ActionLog,
+		"connection": map[string]any{"api_key": "$ENV/GUARDRAIL_TEST_KEY", "endpoint": "http://x"},
+	})
+	if _, err := NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "x", Messages: []llms.MessageContent{userMsg("x")}}, nil); err != nil {
+		t.Fatalf("RunScript() error = %v", err)
+	}
+	if seen.Connection["api_key"] != "resolved-key" || seen.Connection["endpoint"] != "http://x" {
+		t.Errorf("provider saw connection %v, want the $ENV reference resolved and the endpoint untouched", seen.Connection)
 	}
 }
 

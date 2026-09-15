@@ -1,6 +1,9 @@
 package models
 
-import "gorm.io/gorm"
+import (
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
+	"gorm.io/gorm"
+)
 
 // Filter kinds. A script filter runs a Tengo script; a guardrail filter runs
 // a typed provider (the built-in pattern library or an external classifier)
@@ -81,7 +84,8 @@ func DefaultFilters() []Filter {
 // GetOrCreateDefaultFilters seeds DefaultFilters by name, creating only the
 // ones that do not exist yet so a renamed or edited filter is never
 // overwritten and a deleted one is not resurrected on the next start (soft
-// deletes are matched by Unscoped).
+// deletes are matched by Unscoped). Configs are stored normalised, as the
+// admin API stores them, so edges receive explicit defaults.
 func GetOrCreateDefaultFilters(db *gorm.DB) error {
 	for _, f := range DefaultFilters() {
 		var count int64
@@ -92,6 +96,16 @@ func GetOrCreateDefaultFilters(db *gorm.DB) error {
 			continue
 		}
 		filter := f
+		cfg, err := guardrails.ParseConfig(filter.Config)
+		if err != nil {
+			return err
+		}
+		if cfg, err = guardrails.Normalize(cfg, filter.ResponseFilter); err != nil {
+			return err
+		}
+		if filter.Config, err = cfg.ToMap(); err != nil {
+			return err
+		}
 		if err := db.Create(&filter).Error; err != nil {
 			return err
 		}
