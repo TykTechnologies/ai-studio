@@ -95,7 +95,7 @@ func ExecuteResponseFilters(
 	for _, filter := range responseFilters {
 		slog.Debug("executing response filter", "filter_name", filter.Name, "is_chunk", isChunk, "chunk_index", chunkIndex)
 
-		runner := scripting.NewScriptRunner(filter.Script)
+		runner := scripting.NewFilterRunner(filter)
 		output, err := runner.RunScript(scriptInput, service)
 		if err != nil {
 			slog.Error("response filter execution error", "filter_name", filter.Name, "error", err)

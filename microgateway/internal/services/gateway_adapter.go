@@ -15,6 +15,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
@@ -858,12 +859,34 @@ func (a *GatewayServiceAdapter) GetFilterByID(id uint) (*models.Filter, error) {
 		return nil, err
 	}
 
-	return &models.Filter{
-		ID:          dbFilter.ID,
-		Name:        dbFilter.Name,
-		Description: dbFilter.Description,
-		Script:      []byte(dbFilter.Script),
-	}, nil
+	return convertDatabaseFilterToModel(dbFilter), nil
+}
+
+// convertDatabaseFilterToModel maps an edge filter row onto the shared
+// models.Filter the proxy's filter chain runs. Kind and Config are what make
+// a guardrail filter a guardrail filter at the edge; an invalid Config is
+// logged and left nil, which the runner reports as a misconfigured filter.
+func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
+	f := &models.Filter{
+		ID:             dbFilter.ID,
+		Name:           dbFilter.Name,
+		Description:    dbFilter.Description,
+		Script:         []byte(dbFilter.Script),
+		ResponseFilter: dbFilter.ResponseFilter,
+		Namespace:      dbFilter.Namespace,
+		Kind:           dbFilter.Kind,
+	}
+	if f.Kind == "" {
+		f.Kind = models.FilterKindScript
+	}
+	if f.Kind == models.FilterKindGuardrail {
+		cfg, err := guardrails.ConfigFromJSON(dbFilter.Config)
+		if err != nil {
+			log.Error().Err(err).Uint("filter_id", dbFilter.ID).Msg("Guardrail filter config from hub is not valid JSON")
+		}
+		f.Config = cfg
+	}
+	return f
 }
 
 // GetAllFilters returns all filters with pagination
@@ -881,15 +904,8 @@ func (a *GatewayServiceAdapter) GetAllFilters(pageSize int, pageNumber int, all 
 
 	// Convert database filters to models
 	modelFilters := make([]models.Filter, len(dbFilters))
-	for i, dbFilter := range dbFilters {
-		modelFilters[i] = models.Filter{
-			ID:             dbFilter.ID,
-			Name:           dbFilter.Name,
-			Description:    dbFilter.Description,
-			Script:         []byte(dbFilter.Script),
-			ResponseFilter: dbFilter.ResponseFilter,
-			Namespace:      dbFilter.Namespace,
-		}
+	for i := range dbFilters {
+		modelFilters[i] = *convertDatabaseFilterToModel(&dbFilters[i])
 	}
 
 	totalPages := 1
@@ -916,15 +932,8 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 
 	// Convert associated filters
 	filters := make([]*models.Filter, len(dbLLM.Filters))
-	for i, dbFilter := range dbLLM.Filters {
-		filters[i] = &models.Filter{
-			ID:             dbFilter.ID,
-			Name:           dbFilter.Name,
-			Description:    dbFilter.Description,
-			Script:         []byte(dbFilter.Script),
-			ResponseFilter: dbFilter.ResponseFilter,
-			Namespace:      dbFilter.Namespace,
-		}
+	for i := range dbLLM.Filters {
+		filters[i] = convertDatabaseFilterToModel(&dbLLM.Filters[i])
 	}
 
 	// Convert allowed models from JSON

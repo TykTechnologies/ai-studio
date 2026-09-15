@@ -10,6 +10,8 @@ import {
   FormControlLabel,
   Checkbox,
   FormHelperText,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -32,6 +34,10 @@ import "prismjs/components/prism-javascript";
 import "prismjs/themes/prism-tomorrow.css";
 import ScriptTemplateSelector from "./ScriptTemplateSelector";
 import ScriptTestPanel from "./ScriptTestPanel";
+import GuardrailConfigForm, { emptyGuardrailConfig } from "./GuardrailConfigForm";
+
+export const FILTER_KIND_SCRIPT = "script";
+export const FILTER_KIND_GUARDRAIL = "guardrail";
 
 const FilterForm = () => {
   const [filter, setFilter] = useState({
@@ -40,6 +46,8 @@ const FilterForm = () => {
     script: "",
     response_filter: false, // Response filter checkbox
     namespace: "", // Added for edge availability
+    kind: FILTER_KIND_SCRIPT,
+    config: null,
   });
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -60,6 +68,8 @@ const FilterForm = () => {
       script: filter.script,
       response_filter: filter.response_filter,
       namespace: filter.namespace,
+      kind: filter.kind,
+      config: JSON.stringify(filter.config || null),
     },
     { ready: !id || loaded }
   );
@@ -78,9 +88,11 @@ const FilterForm = () => {
       const filterData = response.data.attributes; // Remove .data here
       setFilter({
         ...filterData,
-        script: atob(filterData.script), // Decode base64
+        script: filterData.script ? atob(filterData.script) : "", // Decode base64
         response_filter: filterData.response_filter || false, // Response filter flag
         namespace: filterData.namespace || "",
+        kind: filterData.kind || FILTER_KIND_SCRIPT,
+        config: filterData.config || null,
       });
       setLoaded(true);
     } catch (error) {
@@ -93,6 +105,8 @@ const FilterForm = () => {
     }
   };
 
+  const isGuardrail = filter.kind === FILTER_KIND_GUARDRAIL;
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFilter({ ...filter, [name]: value });
@@ -101,6 +115,20 @@ const FilterForm = () => {
   const handleCheckboxChange = (e) => {
     const { name, checked } = e.target;
     setFilter({ ...filter, [name]: checked });
+  };
+
+  const handleKindChange = (e, kind) => {
+    if (!kind) return;
+    setFilter({
+      ...filter,
+      kind,
+      config: kind === FILTER_KIND_GUARDRAIL ? filter.config || emptyGuardrailConfig() : filter.config,
+    });
+    setErrors({});
+  };
+
+  const handleConfigChange = (config) => {
+    setFilter({ ...filter, config });
   };
 
   const handleNamespaceChange = (namespaces) => {
@@ -120,7 +148,13 @@ const FilterForm = () => {
   const validateForm = () => {
     const newErrors = {};
     if (!filter.name.trim()) newErrors.name = "Name is required";
-    if (!filter.script.trim()) newErrors.script = "Script is required";
+    if (isGuardrail) {
+      const config = filter.config || {};
+      if (!config.provider) newErrors.provider = "Choose a provider";
+      if (!config.detectors || config.detectors.length === 0) newErrors.detectors = "Enable at least one detector";
+    } else if (!filter.script.trim()) {
+      newErrors.script = "Script is required";
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -129,13 +163,19 @@ const FilterForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    const { config, ...rest } = filter;
+    const attributes = {
+      ...rest,
+      kind: filter.kind,
+      script: isGuardrail ? "" : btoa(filter.script), // Encode to base64
+    };
+    if (isGuardrail) {
+      attributes.config = config;
+    }
     const filterData = {
       data: {
         type: "filter", // Changed to lowercase "filter"
-        attributes: {
-          ...filter,
-          script: btoa(filter.script), // Encode to base64
-        },
+        attributes,
       },
     };
 
@@ -159,9 +199,12 @@ const FilterForm = () => {
       });
     } catch (error) {
       console.error("Error saving filter", error);
+      // The server names what is wrong with a guardrail config; show that
+      // rather than a generic failure.
+      const detail = error.response?.data?.errors?.[0]?.detail;
       setSnackbar({
         open: true,
-        message: "Failed to save filter. Please try again.",
+        message: detail ? `Failed to save filter: ${detail}` : "Failed to save filter. Please try again.",
         severity: "error",
       });
     }
@@ -190,7 +233,7 @@ const FilterForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>
       </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -219,6 +262,30 @@ const FilterForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom>
+                Filter type
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                value={filter.kind}
+                onChange={handleKindChange}
+                size="small"
+                aria-label="Filter type"
+              >
+                <ToggleButton value={FILTER_KIND_GUARDRAIL} data-testid="filter-kind-guardrail">
+                  Guardrail
+                </ToggleButton>
+                <ToggleButton value={FILTER_KIND_SCRIPT} data-testid="filter-kind-script">
+                  Script
+                </ToggleButton>
+              </ToggleButtonGroup>
+              <FormHelperText sx={{ mt: 1 }}>
+                {isGuardrail
+                  ? "A guardrail runs a detection provider (the built-in pattern library, or an external classifier or NER service) and blocks, redacts or logs on its verdict. No code."
+                  : "A script runs Tengo code you write against the request or response."}
+              </FormHelperText>
+            </Grid>
+            <Grid item xs={12}>
               <Box sx={{ mb: 2 }}>
                 <FormControlLabel
                   control={
@@ -235,50 +302,66 @@ const FilterForm = () => {
                 </FormHelperText>
               </Box>
             </Grid>
-            <Grid item xs={12}>
-              <ScriptTemplateSelector
-                onTemplateSelect={handleTemplateSelect}
-                currentScript={filter.script}
-                filterType={filter.response_filter ? "response" : "request"}
-              />
-            </Grid>
 
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Script *
-              </Typography>
-              <Box
-                sx={{
-                  border: errors.script ? "1px solid #d32f2f" : "1px solid #444",
-                  borderRadius: "4px",
-                  minHeight: "400px",
-                  "& textarea": {
-                    outline: "none !important",
-                  },
-                }}
-              >
-                <Editor
-                  value={filter.script}
-                  onValueChange={handleScriptChange}
-                  highlight={(code) => highlight(code, languages.js, "javascript")}
-                  padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", "Monaco", monospace',
-                    fontSize: 14,
-                    backgroundColor: "#2d2d2d",
-                    color: "#ccc",
-                    minHeight: "400px",
-                  }}
+            {isGuardrail ? (
+              <Grid item xs={12}>
+                <GuardrailConfigForm
+                  value={filter.config}
+                  onChange={handleConfigChange}
+                  responseFilter={!!filter.response_filter}
+                  errors={errors}
                 />
-              </Box>
-              {errors.script && (
-                <FormHelperText error>{errors.script}</FormHelperText>
-              )}
-            </Grid>
+              </Grid>
+            ) : (
+              <>
+                <Grid item xs={12}>
+                  <ScriptTemplateSelector
+                    onTemplateSelect={handleTemplateSelect}
+                    currentScript={filter.script}
+                    filterType={filter.response_filter ? "response" : "request"}
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Script *
+                  </Typography>
+                  <Box
+                    sx={{
+                      border: errors.script ? "1px solid #d32f2f" : "1px solid #444",
+                      borderRadius: "4px",
+                      minHeight: "400px",
+                      "& textarea": {
+                        outline: "none !important",
+                      },
+                    }}
+                  >
+                    <Editor
+                      value={filter.script}
+                      onValueChange={handleScriptChange}
+                      highlight={(code) => highlight(code, languages.js, "javascript")}
+                      padding={10}
+                      style={{
+                        fontFamily: '"Fira code", "Fira Mono", "Monaco", monospace',
+                        fontSize: 14,
+                        backgroundColor: "#2d2d2d",
+                        color: "#ccc",
+                        minHeight: "400px",
+                      }}
+                    />
+                  </Box>
+                  {errors.script && (
+                    <FormHelperText error>{errors.script}</FormHelperText>
+                  )}
+                </Grid>
+              </>
+            )}
 
             <Grid item xs={12}>
               <ScriptTestPanel
                 script={filter.script}
+                kind={filter.kind}
+                config={filter.config}
                 filterType={filter.response_filter ? "response" : "request"}
               />
             </Grid>

@@ -238,6 +238,10 @@ type Filter struct {
 	ResponseFilter bool      `gorm:"default:false" json:"response_filter"` // true = response filter, false = request filter
 	IsActive       bool      `gorm:"default:true" json:"is_active"`
 	OrderIndex     int       `gorm:"default:0" json:"order_index"`
+	// Kind is "script" (default) or "guardrail"; Config is the guardrail
+	// configuration JSON as the hub rendered it for the edge.
+	Kind   string `gorm:"default:'script'" json:"kind"`
+	Config string `gorm:"type:text" json:"config"`
 
 	// Hub-and-Spoke Configuration
 	Namespace      string    `gorm:"default:'';index:idx_filter_namespace" json:"namespace"` // Empty = global, specific = filtered to edge

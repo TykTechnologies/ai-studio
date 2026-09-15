@@ -574,15 +574,18 @@ func (p *GRPCProvider) convertPBFilterToDatabase(pbFilter *pb.FilterConfig) *dat
 	}
 	
 	return &database.Filter{
-		ID:          uint(pbFilter.Id),
-		Name:        pbFilter.Name,
-		Description: pbFilter.Description,
-		Script:      pbFilter.Script,
-		IsActive:    pbFilter.IsActive,
-		OrderIndex:  int(pbFilter.OrderIndex),
-		Namespace:   pbFilter.Namespace,
-		CreatedAt:   createdAt,
-		UpdatedAt:   updatedAt,
+		ID:             uint(pbFilter.Id),
+		Name:           pbFilter.Name,
+		Description:    pbFilter.Description,
+		Script:         pbFilter.Script,
+		ResponseFilter: pbFilter.ResponseFilter,
+		Kind:           pbFilter.Kind,
+		Config:         pbFilter.Config,
+		IsActive:       pbFilter.IsActive,
+		OrderIndex:     int(pbFilter.OrderIndex),
+		Namespace:      pbFilter.Namespace,
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
 	}
 }
 

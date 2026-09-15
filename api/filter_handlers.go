@@ -3,14 +3,18 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -44,30 +48,82 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
-	if input.Data.Attributes.Name == "" || input.Data.Attributes.Description == "" || len(input.Data.Attributes.Script) == 0 {
+	if msg := validateFilterInput(input); msg != "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
-		}{{"Bad Request", "Name, description, and script are required"}}})
+		}{{"Bad Request", msg}}})
 		return
 	}
 
-	filter, err := a.service.CreateFilter(
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.Script,
-		input.Data.Attributes.ResponseFilter,
-		input.Data.Attributes.Namespace,
-	)
+	filter, err := a.service.CreateFilterFromSpec(filterSpecFromInput(input))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
-		}{{"Internal Server Error", err.Error()}}})
+		}{{"Invalid filter", err.Error()}}})
 		return
 	}
 
 	c.JSON(http.StatusCreated, toFilterResponse(filter))
+}
+
+// validateFilterInput checks the attributes every kind needs; the service
+// validates the kind-specific ones (script present, guardrail config sound).
+func validateFilterInput(input FilterInput) string {
+	attrs := input.Data.Attributes
+	if attrs.Name == "" || attrs.Description == "" {
+		return "Name and description are required"
+	}
+	switch attrs.Kind {
+	case "", models.FilterKindScript:
+		if len(attrs.Script) == 0 {
+			return "Script is required for a script filter"
+		}
+	case models.FilterKindGuardrail:
+		if len(attrs.Config) == 0 {
+			return "Config is required for a guardrail filter"
+		}
+	default:
+		return "Kind must be script or guardrail"
+	}
+	return ""
+}
+
+func filterSpecFromInput(input FilterInput) services.FilterSpec {
+	attrs := input.Data.Attributes
+	return services.FilterSpec{
+		Name:           attrs.Name,
+		Description:    attrs.Description,
+		Script:         attrs.Script,
+		ResponseFilter: attrs.ResponseFilter,
+		Namespace:      attrs.Namespace,
+		Kind:           attrs.Kind,
+		Config:         attrs.Config,
+	}
+}
+
+// filterErrorStatus maps a service error to a status: a configuration the
+// service rejected is the caller's mistake, anything else is ours.
+func filterErrorStatus(err error) int {
+	if err == gorm.ErrRecordNotFound {
+		return http.StatusNotFound
+	}
+	if errors.Is(err, guardrails.ErrUnknownProvider) || strings.Contains(err.Error(), "guardrail config") ||
+		strings.Contains(err.Error(), "is required") || strings.Contains(err.Error(), "filter kind") {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
+}
+
+// @Summary List guardrail providers
+// @Description Describe every guardrail provider this build knows about: detectors, connection fields, and whether it is available in this edition
+// @Tags filters
+// @Produce json
+// @Success 200 {array} guardrails.Spec
+// @Router /filters/guardrail-providers [get]
+func (a *API) listGuardrailProviders(c *gin.Context) {
+	c.JSON(http.StatusOK, guardrails.Specs())
 }
 
 // @Summary Get a filter by ID
@@ -149,14 +205,15 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 
-	filter, err := a.service.UpdateFilter(
-		uint(id),
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.Script,
-		input.Data.Attributes.ResponseFilter,
-		input.Data.Attributes.Namespace,
-	)
+	if msg := validateFilterInput(input); msg != "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", msg}}})
+		return
+	}
+
+	filter, err := a.service.UpdateFilterFromSpec(uint(id), filterSpecFromInput(input))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
@@ -166,10 +223,10 @@ func (a *API) updateFilter(c *gin.Context) {
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
-		}{{"Internal Server Error", err.Error()}}})
+		}{{"Invalid filter", err.Error()}}})
 		return
 	}
 
@@ -238,21 +295,21 @@ func (a *API) listFilters(c *gin.Context) {
 }
 
 func toFilterResponse(filter *models.Filter) FilterResponse {
+	kind := filter.Kind
+	if kind == "" {
+		kind = models.FilterKindScript
+	}
 	return FilterResponse{
 		Type: "filter",
 		ID:   strconv.FormatUint(uint64(filter.ID), 10),
-		Attributes: struct {
-			Name           string `json:"name"`
-			Description    string `json:"description"`
-			Script         []byte `json:"script"`
-			ResponseFilter bool   `json:"response_filter"`
-			Namespace      string `json:"namespace"`
-		}{
+		Attributes: FilterAttributes{
 			Name:           filter.Name,
 			Description:    filter.Description,
 			Script:         filter.Script,
 			ResponseFilter: filter.ResponseFilter,
 			Namespace:      filter.Namespace,
+			Kind:           kind,
+			Config:         filter.Config,
 		},
 	}
 }
@@ -293,10 +350,25 @@ func (a *API) testFilter(c *gin.Context) {
 		return
 	}
 
-	// Create a temporary filter for testing
+	// Create a temporary filter for testing. A guardrail test calls the real
+	// provider with the composed input; the UI says so next to the button.
 	tempFilter := &models.Filter{
-		Name:   "test-filter",
-		Script: []byte(input.Script),
+		Name:           "test-filter",
+		Script:         []byte(input.Script),
+		ResponseFilter: input.ResponseFilter,
+		Kind:           input.Kind,
+		Config:         input.Config,
+	}
+	if tempFilter.Kind == "" {
+		tempFilter.Kind = models.FilterKindScript
+	}
+	if tempFilter.Kind == models.FilterKindScript && input.Script == "" {
+		c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: "script is required"})
+		return
+	}
+	if tempFilter.Kind == models.FilterKindGuardrail && len(input.Config) == 0 {
+		c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: "config is required for a guardrail filter"})
+		return
 	}
 
 	// Convert the input map to ScriptInput struct
@@ -324,7 +396,7 @@ func (a *API) testFilter(c *gin.Context) {
 
 	// Execute in goroutine to support timeout
 	go func() {
-		runner := scripting.NewScriptRunner(tempFilter.Script)
+		runner := scripting.NewFilterRunner(tempFilter)
 		output, err := runner.RunScript(scriptInput, a.service)
 		resultChan <- struct {
 			output *scripting.ScriptOutput

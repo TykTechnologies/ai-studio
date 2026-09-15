@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
@@ -1477,6 +1478,19 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			LlmIds:         llmIDs, // Populated from llm_filters join table
 			CreatedAt:      timestamppb.New(filter.CreatedAt),
 			UpdatedAt:      timestamppb.New(filter.UpdatedAt),
+			Kind:           filter.Kind,
+		}
+		if filter.IsGuardrail() {
+			// Edges have no secret store: resolve connection references here,
+			// as the LLM API keys above are.
+			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, func(v string) string {
+				return secrets.GetValue(v, false)
+			})
+			if err != nil {
+				log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
+				continue
+			}
+			pbFilter.Config = configJSON
 		}
 		snapshot.Filters = append(snapshot.Filters, pbFilter)
 

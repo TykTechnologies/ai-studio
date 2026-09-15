@@ -11,6 +11,8 @@ weight: 40
 
 # Filters and Middleware
 
+A filter is either a **script** (Tengo code, described on this page) or a **guardrail** (a detection provider such as the built-in pattern library, Lakera, Azure Content Safety, Presidio or Bedrock Guardrails, with a block, redact or log action and no code). Both kinds attach, run and audit identically; see [Guardrails](/docs/guardrails) for the provider kind.
+
 The **Filters List View** allows administrators to manage filters and middleware applied to prompts or data sent to Large Language Models (LLMs) via the AI Gateway or Chat Rooms. Filters and middleware ensure data governance, compliance, and security by processing or controlling the flow of information. Below is an enhanced description with the distinction between **Filters** and **Middleware**:
 
 ---

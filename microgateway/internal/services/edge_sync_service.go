@@ -464,6 +464,8 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 			Description:    pbFilter.Description,
 			Script:         pbFilter.Script,
 			ResponseFilter: pbFilter.ResponseFilter,
+			Kind:           pbFilter.Kind,
+			Config:         pbFilter.Config,
 			IsActive:       pbFilter.IsActive,
 			OrderIndex:     int(pbFilter.OrderIndex),
 			Namespace:      pbFilter.Namespace,

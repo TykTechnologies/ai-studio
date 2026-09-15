@@ -21,7 +21,12 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import apiClient from "../../utils/apiClient";
 
-const ScriptTestPanel = ({ script, filterType }) => {
+// Runs a filter of either kind server-side against composed input. A script
+// runs in the sandbox with no traffic; a guardrail calls its provider for
+// real, which is the point: an author sees what a configuration does before
+// attaching it.
+const ScriptTestPanel = ({ script, filterType, kind = "script", config = null }) => {
+  const isGuardrail = kind === "guardrail";
   const [testInput, setTestInput] = useState({
     raw_input: filterType === "response"
       ? "I will issue a refund to your account immediately."
@@ -56,11 +61,15 @@ const ScriptTestPanel = ({ script, filterType }) => {
     setTestInput({ ...testInput, [name]: checked });
   };
 
+  const canRun = isGuardrail ? !!(config && config.provider) : !!(script && script.trim());
+
   const handleTest = async () => {
-    if (!script || !script.trim()) {
+    if (!canRun) {
       setTestResult({
         success: false,
-        error: "No script to test. Please write a script first.",
+        error: isGuardrail
+          ? "No guardrail to test. Choose a provider and at least one detector first."
+          : "No script to test. Please write a script first.",
       });
       return;
     }
@@ -114,10 +123,11 @@ const ScriptTestPanel = ({ script, filterType }) => {
         messages: derivedMessages,
       };
 
-      const response = await apiClient.post("/filters/test", {
-        script: script,
-        input: scriptInput,
-      });
+      const body = isGuardrail
+        ? { kind, config, response_filter: filterType === "response", input: scriptInput }
+        : { script: script, kind: "script", input: scriptInput };
+
+      const response = await apiClient.post("/filters/test", body);
 
       setTestResult(response.data);
     } catch (error) {
@@ -158,8 +168,9 @@ const ScriptTestPanel = ({ script, filterType }) => {
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Test your filter script with sample input before saving. Configure the input
-              parameters below and click "Run script" to see the output.
+              {isGuardrail
+                ? "Run the guardrail against sample input before saving. This calls the configured provider for real, using the connection settings above."
+                : "Test your filter script with sample input before saving. Configure the input parameters below and click \"Run filter\" to see the output."}
             </Typography>
           </Grid>
 
@@ -309,10 +320,10 @@ const ScriptTestPanel = ({ script, filterType }) => {
             <Button
               variant="contained"
               onClick={handleTest}
-              disabled={testing || !script}
+              disabled={testing || !canRun}
               startIcon={testing && <CircularProgress size={20} />}
             >
-              {testing ? "Running..." : "Run script"}
+              {testing ? "Running..." : "Run filter"}
             </Button>
           </Grid>
 

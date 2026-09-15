@@ -595,6 +595,16 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 		logger.Info("Default LLM configurations checked/initialized")
 	}
 
+	// Seed the default guardrail filters (Enterprise, where filters execute).
+	// They are created unattached, so nothing is enforced until an
+	// administrator attaches one. SKIP_FILTER_DEFAULTS=true skips this.
+	if config.IsEnterprise() && os.Getenv("SKIP_FILTER_DEFAULTS") != "true" {
+		if err := models.GetOrCreateDefaultFilters(db); err != nil {
+			return fmt.Errorf("failed to create default guardrail filters: %w", err)
+		}
+		logger.Info("Default guardrail filters checked/initialized")
+	}
+
 	logger.Info("Default group and catalogues successfully initialized and linked")
 	return nil
 }

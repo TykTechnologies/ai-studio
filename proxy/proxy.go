@@ -1883,7 +1883,7 @@ func (p *Proxy) runRequestFilters(llm *models.LLM, r *http.Request, bodyBytes []
 			continue
 		}
 
-		runner := scripting.NewScriptRunner(filter.Script)
+		runner := scripting.NewFilterRunner(filter)
 		output, err := runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
 			return nil, fmt.Errorf("script error in filter '%s': %v", filter.Name, err)

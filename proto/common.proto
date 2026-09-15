@@ -117,6 +117,8 @@ message FilterConfig {
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
   bool response_filter = 11; // true = response filter, false = request filter
+  string kind = 12;          // "script" (default) or "guardrail"
+  string config = 13;        // JSON guardrails.Config for a guardrail filter, connection secrets resolved
 }
 
 // PluginConfig represents a plugin configuration

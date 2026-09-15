@@ -468,7 +468,7 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 
 	for _, filter := range requestFilters {
 		slog.Info("Running chat request filter", "filter_name", filter.Name)
-		sr := scripting.NewScriptRunner(filter.Script)
+		sr := scripting.NewFilterRunner(filter)
 
 		// Create MessageContent for user message
 		messages := []llms.MessageContent{
@@ -835,7 +835,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 			currentContent := content
 
 			for i2, _ := range cs.filters {
-				sr := scripting.NewScriptRunner(cs.filters[i2].Script)
+				sr := scripting.NewFilterRunner(cs.filters[i2])
 				if sr == nil {
 					cs.sendError(fmt.Errorf("error creating script runner"))
 					continue
