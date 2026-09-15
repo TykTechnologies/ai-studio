@@ -53,9 +53,7 @@ Complete reference for all microgateway environment variables organized by funct
 ### Access Control
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ENABLE_RATE_LIMITING` | true | Enable rate limiting |
 | `ENABLE_IP_WHITELIST` | false | Enable IP address whitelisting |
-| `DEFAULT_RATE_LIMIT` | 100 | Default requests per minute |
 
 ## Cache Configuration
 
@@ -76,7 +74,6 @@ Complete reference for all microgateway environment variables organized by funct
 | `GATEWAY_TIMEOUT` | 5m | Request timeout for upstream LLM calls (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | 10MB | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
-| `GATEWAY_DEFAULT_RATE_LIMIT` | 100 | Default requests per minute |
 
 ### Unified Endpoint
 | Variable | Default | Description |
@@ -266,7 +263,6 @@ DB_AUTO_MIGRATE=true
 
 JWT_SECRET=${JWT_SECRET}
 ENCRYPTION_KEY=${ENCRYPTION_KEY}
-ENABLE_RATE_LIMITING=true
 ENABLE_IP_WHITELIST=true
 
 CACHE_ENABLED=true
@@ -366,7 +362,6 @@ PLUGINS_ALLOW_UNSIGNED=true
 ```bash
 # Production security settings
 TLS_ENABLED=true
-ENABLE_RATE_LIMITING=true
 PLUGINS_VERIFY_SIGNATURES=true
 REDACT_SENSITIVE_HEADERS=true
 LOG_REQUEST_BODY=false

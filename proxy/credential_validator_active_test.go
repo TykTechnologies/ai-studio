@@ -3,10 +3,35 @@ package proxy
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
+
+// setAppActiveRetrying flips the app's live switch, retrying the SQLite
+// "database table is locked" error the shared-cache test database raises
+// while the analytics goroutine for the previous request is still writing.
+// The same contention is handled the same way in unregisterTestTool.
+func setAppActiveRetrying(t *testing.T, service *services.Service, appID uint, active bool, userID uint) {
+	t.Helper()
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		_, err = service.SetAppActive(appID, active, userID)
+		if err == nil {
+			return
+		}
+		if !strings.Contains(err.Error(), "locked") {
+			break
+		}
+		t.Logf("Database locked during SetAppActive, retrying... (attempt %d/5)", attempt+1)
+		time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
+	}
+	require.NoError(t, err)
+}
 
 // The app's live switch (apps:publish) must be enforced by the embedded
 // gateway exactly as the microgateway enforces it. Before this test the
@@ -25,8 +50,7 @@ func TestInactiveAppIsRefusedByEmbeddedGateway(t *testing.T) {
 	f.handler.ServeHTTP(rr, restToolRequest(t, f.toolA.Slug, cred.Secret))
 	require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
 
-	_, err = f.service.SetAppActive(f.appA.ID, false, f.userA.ID)
-	require.NoError(t, err)
+	setAppActiveRetrying(t, f.service, f.appA.ID, false, f.userA.ID)
 
 	// Bearer (app secret) path.
 	rr = httptest.NewRecorder()
@@ -42,8 +66,7 @@ func TestInactiveAppIsRefusedByEmbeddedGateway(t *testing.T) {
 	require.NotEqual(t, http.StatusOK, rr.Code, "inactive app must not be served via API key; body: %s", rr.Body.String())
 
 	// Switching it back on restores service.
-	_, err = f.service.SetAppActive(f.appA.ID, true, f.userA.ID)
-	require.NoError(t, err)
+	setAppActiveRetrying(t, f.service, f.appA.ID, true, f.userA.ID)
 	rr = httptest.NewRecorder()
 	f.handler.ServeHTTP(rr, restToolRequest(t, f.toolA.Slug, cred.Secret))
 	require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())

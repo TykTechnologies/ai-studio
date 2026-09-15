@@ -89,15 +89,15 @@ flowchart LR
 **3. Implementation Details**
 
 *   **Script Language:** Filters are written in Tengo (`github.com/d5/tengo`).
-*   **Script Input:** The request body is passed to the script as a string variable named `payload`.
-*   **Script Output:** The script *must* set a variable named `result`. A value of `true` allows the request; `false` blocks it.
+*   **Script Input:** the script reads an `input` map: `raw_input` (the request body as a string), `messages` (normalised chat messages), `vendor_name`, `model_name`, `context` (`llm_id`, `app_id`, `request_id`) and, on the response side, `is_response`, `is_chunk`, `chunk_index`, `current_buffer` and `status_code`.
+*   **Script Output:** the script assigns an `output` map: `block` (bool, stops the chain), `payload` (rewritten body; empty means unchanged), `messages` (rewritten messages, an alternative to `payload`, rebuilt into the vendor's wire format by the message reconstructor) and `message` (block reason). The legacy `payload`-in / `result`-out contract is no longer supported anywhere; the microgateway's last implementation of it (`FilterService.ExecuteFilter`) had no callers and was removed.
 *   **Execution Context:** Scripts run within the `Scripting Engine` (`scripting/scripting.go`). They have access to Tengo's standard library and custom Midsommar functions provided via `scriptExtensions`.
 *   **Custom Functions:**
     *   `tyk.makeHTTPRequest(method, url, body, headers)`: Makes an HTTP call.
     *   `tyk.llm(llm_id, prompt)`: Calls another LLM managed by Midsommar.
 *   **Compliance Events:** Scripts can optionally include a `compliance_events` array in the output object. Each event requires an `event_type` (string), and can include `severity` ("info"/"warning"/"critical"), `description` (string), and `metadata` (map). Events are stored in the `compliance_events` table (`models/compliance_event.go`) for audit reporting via `GET /compliance/events`. Events are non-blocking and do not affect the filter's block/allow decision.
-*   **Error Handling:** Compilation or runtime errors in the script, or a `result` of `false`, lead to request rejection (HTTP 403).
-*   **Script Panics:** Tengo panics rather than returning an error for faults it does not model (integer divide by zero being the common one), and filters run on the goroutine serving the request. `scripting.RunScript` (and the microgateway's `FilterService.executeFilterScript`) therefore recover and convert the panic into an ordinary script error, so a malformed script costs a single failed request instead of the whole process. The recovered error carries the underlying fault and is logged with the full stack. Each call site then applies its existing policy: request filters fail closed (request rejected), response filters fail open.
+*   **Error Handling:** Compilation or runtime errors in the script, or `output.block = true`, lead to request rejection (HTTP 400 on the proxy, `Policy error` message).
+*   **Script Panics:** Tengo panics rather than returning an error for faults it does not model (integer divide by zero being the common one), and filters run on the goroutine serving the request. `scripting.RunScript` therefore recovers and converts the panic into an ordinary script error, so a malformed script costs a single failed request instead of the whole process. The microgateway runs filters through the same shared `proxy` package, so it inherits this behaviour. The recovered error carries the underlying fault and is logged with the full stack. Each call site then applies its existing policy: request filters fail closed (request rejected), response filters fail open.
 *   **Association:** Filters are linked to LLMs and Chats via many-to-many relationships in the database, managed through the respective entity's update endpoints or specific association endpoints (like for Tools).
 *   **API Endpoints:**
     *   `POST /filters`: Create a new Filter.

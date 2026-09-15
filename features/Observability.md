@@ -147,6 +147,15 @@ One span covers each proxy hop, carrying the same `gen_ai.*` attributes as the
 metrics, named `{operation} {model}` per the conventions, with `codes.Error` and
 `http.response.status_code` set on failures.
 
+Chat tool calls get their own span. `chat_session.executeRESTToolCall` starts
+`execute_tool {operation}` (`gen_ai.operation.name=execute_tool`,
+`gen_ai.tool.name`, `gen_ai.tool.call.id`, `tyk.tool.id`) as a child of the
+session context, runs the governance filters and the HTTP call under it, and
+`universalclient.CallOperationWithContext` injects the trace context into the
+outbound request so the tool backend continues the same trace. Tool calls used
+to run under `context.Background()`, which made child spans impossible and left
+in-flight calls uncancellable when a session closed.
+
 Two properties matter more than the spans themselves:
 
 - **The gateway joins the caller's trace.** The inbound `traceparent` is

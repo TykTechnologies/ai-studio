@@ -1,6 +1,7 @@
 package chat_session
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,7 +101,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -157,7 +158,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -216,7 +217,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -287,7 +288,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 2, "Tool call should have two parts")
@@ -344,7 +345,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is not populated
 		assert.Empty(t, toolCall.Parts, "Tool call should be empty for empty ID")
@@ -393,7 +394,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -448,7 +449,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -501,7 +502,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -557,7 +558,7 @@ func TestHandleToolCalls(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -913,7 +914,7 @@ func TestHandleToolCallsResponseTypes(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -1015,7 +1016,7 @@ func TestHandleToolCallsResponseTypes(t *testing.T) {
 		}
 
 		// Call handleToolCalls
-		cs.handleToolCalls(choice, toolCall, toolResult)
+		cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 		// Verify toolCall is populated correctly
 		require.Len(t, toolCall.Parts, 1, "Tool call should have one part")
@@ -1174,7 +1175,7 @@ func TestHandleToolCallsWithFilters(t *testing.T) {
 	}
 
 	// Call handleToolCalls
-	cs.handleToolCalls(choice, toolCall, toolResult)
+	cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 	// Verify toolCall is populated correctly
 	require.Len(t, toolCall.Parts, 1, "Tool call should have one part")

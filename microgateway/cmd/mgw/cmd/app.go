@@ -59,7 +59,6 @@ var appCreateCmd = &cobra.Command{
 		email, _ := cmd.Flags().GetString("email")
 		budget, _ := cmd.Flags().GetFloat64("budget")
 		resetDay, _ := cmd.Flags().GetInt("reset-day")
-		rateLimit, _ := cmd.Flags().GetInt("rate-limit")
 		allowedIPs, _ := cmd.Flags().GetString("allowed-ips")
 		llmIDs, _ := cmd.Flags().GetString("llm-ids")
 
@@ -76,7 +75,6 @@ var appCreateCmd = &cobra.Command{
 			OwnerEmail:     email,
 			MonthlyBudget:  budget,
 			BudgetResetDay: resetDay,
-			RateLimitRPM:   rateLimit,
 		}
 
 		// Parse allowed IPs
@@ -156,10 +154,6 @@ var appUpdateCmd = &cobra.Command{
 		if cmd.Flags().Changed("reset-day") {
 			val, _ := cmd.Flags().GetInt("reset-day")
 			req.BudgetResetDay = &val
-		}
-		if cmd.Flags().Changed("rate-limit") {
-			val, _ := cmd.Flags().GetInt("rate-limit")
-			req.RateLimitRPM = &val
 		}
 		if allowedIPs, _ := cmd.Flags().GetString("allowed-ips"); allowedIPs != "" {
 			req.AllowedIPs = strings.Split(allowedIPs, ",")
@@ -257,7 +251,6 @@ func init() {
 	appCreateCmd.Flags().String("email", "", "owner email (required)")
 	appCreateCmd.Flags().Float64("budget", 0, "monthly budget limit")
 	appCreateCmd.Flags().Int("reset-day", 1, "budget reset day of month (1-28)")
-	appCreateCmd.Flags().Int("rate-limit", 0, "requests per minute limit")
 	appCreateCmd.Flags().String("allowed-ips", "", "comma-separated list of allowed IP addresses")
 	appCreateCmd.Flags().String("llm-ids", "", "comma-separated list of LLM IDs to associate")
 	appCreateCmd.MarkFlagRequired("name")
@@ -270,7 +263,6 @@ func init() {
 	appUpdateCmd.Flags().Bool("active", true, "whether app is active")
 	appUpdateCmd.Flags().Float64("budget", 0, "monthly budget limit")
 	appUpdateCmd.Flags().Int("reset-day", 0, "budget reset day of month (1-28)")
-	appUpdateCmd.Flags().Int("rate-limit", 0, "requests per minute limit")
 	appUpdateCmd.Flags().String("allowed-ips", "", "comma-separated list of allowed IP addresses")
 
 	// app llms flags

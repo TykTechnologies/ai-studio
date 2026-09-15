@@ -2,6 +2,7 @@ package universalclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
@@ -309,7 +311,21 @@ func (c *Client) GetInputSpecForOperation(operationId string) (map[string]interf
 	return schemas, nil
 }
 
+// CallOperation is CallOperationWithContext with a background context. Callers
+// that have a request or session context should pass it, so the outbound call
+// is cancelled with its caller and carries the caller's trace context.
 func (c *Client) CallOperation(operationId string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
+	return c.CallOperationWithContext(context.Background(), operationId, params, payload, headers)
+}
+
+// CallOperationWithContext invokes operationId over HTTP. The request is bound
+// to ctx, and the W3C trace context in ctx (if any) is injected into the
+// outbound headers so the tool backend can continue the caller's trace.
+func (c *Client) CallOperationWithContext(ctx context.Context, operationId string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Find the operation in the OpenAPI document
 	operation, path, method, err := c.findOperation(operationId)
 	if err != nil {
@@ -334,10 +350,13 @@ func (c *Client) CallOperation(operationId string, params map[string][]string, p
 	}
 
 	// Create the request
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	// Continue the caller's trace into the tool. Done before the caller's own
+	// headers are applied so an explicit traceparent from a filter wins.
+	tracing.InjectOutgoing(ctx, req.Header)
 
 	// Set headers
 	for k, v := range headers {

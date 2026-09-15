@@ -58,7 +58,6 @@ export MGW_TOKEN="admin-token-here"  # You'll generate this in step 5
   --model=gpt-4 \
   --api-key=$OPENAI_API_KEY \
   --budget=1000.0 \
-  --rate-limit=100 \
   --active=true
 
 # Create Anthropic LLM
@@ -182,8 +181,7 @@ curl -X POST http://localhost:8080/llm/rest/gpt-4-production/chat/completions \
 ```bash
 # Update LLM settings
 ./dist/mgw llm update 1 \
-  --budget=2000.0 \
-  --rate-limit=200
+  --budget=2000.0
 
 # Temporarily disable LLM
 ./dist/mgw llm update 1 --active=false
@@ -260,8 +258,7 @@ echo "Setup complete. App ID: $APP_ID"
   --vendor=openai \
   --model=gpt-4 \
   --api-key=$OPENAI_API_KEY_PROD \
-  --budget=${GPT4_BUDGET:-1000} \
-  --rate-limit=${GPT4_RATE_LIMIT:-100}
+  --budget=${GPT4_BUDGET:-1000}
 
 # Verify deployment
 ./dist/mgw system health
