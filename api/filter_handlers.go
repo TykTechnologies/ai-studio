@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -104,16 +106,62 @@ func filterSpecFromInput(input FilterInput) services.FilterSpec {
 }
 
 // filterErrorStatus maps a service error to a status: a configuration the
-// service rejected is the caller's mistake, anything else is ours.
+// service rejected is the caller's mistake, anything else is ours. The
+// service and the guardrails package wrap every rejection in a sentinel, so
+// this never has to read the message.
 func filterErrorStatus(err error) int {
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return http.StatusNotFound
 	}
-	if errors.Is(err, guardrails.ErrUnknownProvider) || strings.Contains(err.Error(), "guardrail config") ||
-		strings.Contains(err.Error(), "is required") || strings.Contains(err.Error(), "filter kind") {
+	if errors.Is(err, services.ErrInvalidFilterSpec) ||
+		errors.Is(err, guardrails.ErrInvalidConfig) ||
+		errors.Is(err, guardrails.ErrUnknownProvider) {
 		return http.StatusBadRequest
 	}
 	return http.StatusInternalServerError
+}
+
+// guardrailTestReferencesAllowed decides whether a guardrail test may run
+// with the connection block it was given. A config posted to the test
+// endpoint is the caller's own: resolving $SECRET/ or $ENV/ references into
+// it and sending the result to an endpoint the same caller chose would hand
+// any secret the platform holds to any host. So references are only honoured
+// when the provider and the whole connection block are exactly what is saved
+// on the filter named by filter_id, which took write permission to store.
+// The returned string is the reason for refusing, empty when allowed.
+func (a *API) guardrailTestReferencesAllowed(input FilterTestInput) string {
+	cfg, err := guardrails.ParseConfig(input.Config)
+	if err != nil {
+		return err.Error()
+	}
+	var refs []string
+	for k, v := range cfg.Connection {
+		if strings.HasPrefix(v, "$") {
+			refs = append(refs, "connection."+k)
+		}
+	}
+	if len(refs) == 0 {
+		return ""
+	}
+	sort.Strings(refs)
+	if input.FilterID == 0 {
+		return fmt.Sprintf("%s holds a secret reference; save the filter first, then test it from its edit page so references resolve against the stored configuration", strings.Join(refs, ", "))
+	}
+	saved, err := a.service.GetFilterByID(input.FilterID)
+	if err != nil {
+		return fmt.Sprintf("filter %d not found", input.FilterID)
+	}
+	if !saved.IsGuardrail() {
+		return fmt.Sprintf("filter %d is not a guardrail filter", input.FilterID)
+	}
+	savedCfg, err := guardrails.ParseConfig(saved.Config)
+	if err != nil {
+		return err.Error()
+	}
+	if savedCfg.Provider != cfg.Provider || !maps.Equal(savedCfg.Connection, cfg.Connection) {
+		return "the provider or connection settings differ from the saved filter; save them first so the secret references they use are only ever sent to the stored endpoint"
+	}
+	return ""
 }
 
 // @Summary List guardrail providers
@@ -366,9 +414,15 @@ func (a *API) testFilter(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: "script is required"})
 		return
 	}
-	if tempFilter.Kind == models.FilterKindGuardrail && len(input.Config) == 0 {
-		c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: "config is required for a guardrail filter"})
-		return
+	if tempFilter.Kind == models.FilterKindGuardrail {
+		if len(input.Config) == 0 {
+			c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: "config is required for a guardrail filter"})
+			return
+		}
+		if reason := a.guardrailTestReferencesAllowed(input); reason != "" {
+			c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: reason})
+			return
+		}
 	}
 
 	// Convert the input map to ScriptInput struct

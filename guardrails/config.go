@@ -105,14 +105,14 @@ type Config struct {
 func ParseConfig(raw map[string]any) (Config, error) {
 	var cfg Config
 	if raw == nil {
-		return cfg, fmt.Errorf("guardrail config is required")
+		return cfg, fmt.Errorf("%w is required", ErrInvalidConfig)
 	}
 	b, err := json.Marshal(raw)
 	if err != nil {
 		return cfg, err
 	}
 	if err := json.Unmarshal(b, &cfg); err != nil {
-		return cfg, fmt.Errorf("guardrail config: %w", err)
+		return cfg, fmt.Errorf("%w: %w", ErrInvalidConfig, err)
 	}
 	return cfg, nil
 }
@@ -128,7 +128,7 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	}
 
 	if len(cfg.Detectors) == 0 {
-		return cfg, fmt.Errorf("guardrail config: at least one detector is required")
+		return cfg, fmt.Errorf("%w: at least one detector is required", ErrInvalidConfig)
 	}
 	known := map[string]bool{}
 	for _, d := range spec.Detectors {
@@ -137,10 +137,10 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	for i, d := range cfg.Detectors {
 		d.Name = strings.TrimSpace(d.Name)
 		if d.Name == "" {
-			return cfg, fmt.Errorf("guardrail config: detectors[%d] has no name", i)
+			return cfg, fmt.Errorf("%w: detectors[%d] has no name", ErrInvalidConfig, i)
 		}
 		if !spec.OpenDetectors && !known[d.Name] {
-			return cfg, fmt.Errorf("guardrail config: detector %q is not offered by provider %q", d.Name, cfg.Provider)
+			return cfg, fmt.Errorf("%w: detector %q is not offered by provider %q", ErrInvalidConfig, d.Name, cfg.Provider)
 		}
 		cfg.Detectors[i] = d
 	}
@@ -149,7 +149,7 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	for _, f := range spec.ConnectionFields {
 		v := strings.TrimSpace(cfg.Connection[f.Name])
 		if f.Required && v == "" {
-			return cfg, fmt.Errorf("guardrail config: connection.%s is required for provider %q", f.Name, cfg.Provider)
+			return cfg, fmt.Errorf("%w: connection.%s is required for provider %q", ErrInvalidConfig, f.Name, cfg.Provider)
 		}
 		if v != "" {
 			anyConnection = true
@@ -160,19 +160,19 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		for _, f := range spec.ConnectionFields {
 			names = append(names, f.Name)
 		}
-		return cfg, fmt.Errorf("guardrail config: provider %q needs at least one of connection.%s", cfg.Provider, strings.Join(names, ", connection."))
+		return cfg, fmt.Errorf("%w: provider %q needs at least one of connection.%s", ErrInvalidConfig, cfg.Provider, strings.Join(names, ", connection."))
 	}
 
 	switch cfg.OnDetect {
 	case ActionBlock, ActionLog:
 	case ActionRedact:
 		if !spec.Redacts {
-			return cfg, fmt.Errorf("guardrail config: provider %q cannot redact; use block or log", cfg.Provider)
+			return cfg, fmt.Errorf("%w: provider %q cannot redact; use block or log", ErrInvalidConfig, cfg.Provider)
 		}
 	case "":
-		return cfg, fmt.Errorf("guardrail config: on_detect is required (block, redact or log)")
+		return cfg, fmt.Errorf("%w: on_detect is required (block, redact or log)", ErrInvalidConfig)
 	default:
-		return cfg, fmt.Errorf("guardrail config: on_detect %q is not one of block, redact, log", cfg.OnDetect)
+		return cfg, fmt.Errorf("%w: on_detect %q is not one of block, redact, log", ErrInvalidConfig, cfg.OnDetect)
 	}
 
 	switch cfg.Scope {
@@ -180,7 +180,7 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		cfg.Scope = ScopeAllUser
 	case ScopeLastUser, ScopeAllUser, ScopeSystemAndUser, ScopeAllMessages:
 	default:
-		return cfg, fmt.Errorf("guardrail config: scope %q is not one of last_user, all_user, system_and_user, all_messages", cfg.Scope)
+		return cfg, fmt.Errorf("%w: scope %q is not one of last_user, all_user, system_and_user, all_messages", ErrInvalidConfig, cfg.Scope)
 	}
 
 	switch cfg.FailMode {
@@ -192,7 +192,7 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		}
 	case FailOpen, FailClosed:
 	default:
-		return cfg, fmt.Errorf("guardrail config: fail_mode %q is not one of open, closed", cfg.FailMode)
+		return cfg, fmt.Errorf("%w: fail_mode %q is not one of open, closed", ErrInvalidConfig, cfg.FailMode)
 	}
 
 	switch cfg.Redaction.Style {
@@ -200,20 +200,20 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		cfg.Redaction.Style = RedactionPlaceholder
 	case RedactionPlaceholder, RedactionMask, RedactionHash:
 	default:
-		return cfg, fmt.Errorf("guardrail config: redaction.style %q is not one of placeholder, mask, hash", cfg.Redaction.Style)
+		return cfg, fmt.Errorf("%w: redaction.style %q is not one of placeholder, mask, hash", ErrInvalidConfig, cfg.Redaction.Style)
 	}
 	if cfg.Redaction.Placeholder == "" {
 		cfg.Redaction.Placeholder = DefaultPlaceholder
 	}
 
 	if cfg.TimeoutMs < 0 {
-		return cfg, fmt.Errorf("guardrail config: timeout_ms must not be negative")
+		return cfg, fmt.Errorf("%w: timeout_ms must not be negative", ErrInvalidConfig)
 	}
 	if cfg.TimeoutMs == 0 {
 		cfg.TimeoutMs = DefaultTimeoutMs
 	}
 	if cfg.Stream.EvaluateEveryChars < 0 {
-		return cfg, fmt.Errorf("guardrail config: stream.evaluate_every_chars must not be negative")
+		return cfg, fmt.Errorf("%w: stream.evaluate_every_chars must not be negative", ErrInvalidConfig)
 	}
 	if cfg.BlockMessage == "" {
 		if responseFilter {

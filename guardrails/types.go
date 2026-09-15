@@ -126,3 +126,9 @@ var ErrNoProviders = errors.New("guardrail providers are an Enterprise feature")
 // ErrUnknownProvider is returned by NewProvider for a provider name no
 // registered factory claims.
 var ErrUnknownProvider = errors.New("unknown guardrail provider")
+
+// ErrInvalidConfig wraps every validation failure from ParseConfig and
+// Normalize, so a caller can tell a rejected configuration (the user's
+// mistake) from anything else with errors.Is rather than by reading the
+// message. Its text is the prefix the messages have always carried.
+var ErrInvalidConfig = errors.New("guardrail config")

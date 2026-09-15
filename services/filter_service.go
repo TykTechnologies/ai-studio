@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -21,6 +22,10 @@ type FilterSpec struct {
 	Config         models.JSONMap
 }
 
+// ErrInvalidFilterSpec wraps a spec the service refuses to store: the
+// caller's mistake, distinguishable with errors.Is.
+var ErrInvalidFilterSpec = errors.New("invalid filter")
+
 // validate checks the spec and returns the kind and config to store.
 func (spec FilterSpec) validate() (string, models.JSONMap, error) {
 	kind := spec.Kind
@@ -30,7 +35,7 @@ func (spec FilterSpec) validate() (string, models.JSONMap, error) {
 	switch kind {
 	case models.FilterKindScript:
 		if len(spec.Script) == 0 {
-			return "", nil, fmt.Errorf("script is required for a script filter")
+			return "", nil, fmt.Errorf("%w: script is required for a script filter", ErrInvalidFilterSpec)
 		}
 		return kind, nil, nil
 	case models.FilterKindGuardrail:
@@ -48,7 +53,7 @@ func (spec FilterSpec) validate() (string, models.JSONMap, error) {
 		}
 		return kind, stored, nil
 	default:
-		return "", nil, fmt.Errorf("filter kind %q is not one of script, guardrail", kind)
+		return "", nil, fmt.Errorf("%w: kind %q is not one of script, guardrail", ErrInvalidFilterSpec, kind)
 	}
 }
 

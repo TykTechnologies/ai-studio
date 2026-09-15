@@ -362,6 +362,7 @@ const FilterForm = () => {
                 script={filter.script}
                 kind={filter.kind}
                 config={filter.config}
+                filterId={id}
                 filterType={filter.response_filter ? "response" : "request"}
               />
             </Grid>

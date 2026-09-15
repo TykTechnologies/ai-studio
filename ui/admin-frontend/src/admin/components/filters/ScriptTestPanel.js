@@ -17,6 +17,7 @@ import {
   Checkbox,
   CircularProgress,
   FormHelperText,
+  Alert,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import apiClient from "../../utils/apiClient";
@@ -25,8 +26,19 @@ import apiClient from "../../utils/apiClient";
 // runs in the sandbox with no traffic; a guardrail calls its provider for
 // real, which is the point: an author sees what a configuration does before
 // attaching it.
-const ScriptTestPanel = ({ script, filterType, kind = "script", config = null }) => {
+// A connection value starting with "$" is a $SECRET/ or $ENV/ reference.
+const connectionHasReferences = (config) =>
+  !!config &&
+  !!config.connection &&
+  Object.values(config.connection).some((v) => typeof v === "string" && v.startsWith("$"));
+
+// filterId is the saved filter being edited, if any. The server only resolves
+// secret references in a test for a saved filter whose connection block is
+// unchanged, so the resolved value can only ever go to the stored endpoint.
+const ScriptTestPanel = ({ script, filterType, kind = "script", config = null, filterId = null }) => {
   const isGuardrail = kind === "guardrail";
+  const savedId = filterId ? Number(filterId) : 0;
+  const needsSaveForReferences = isGuardrail && !savedId && connectionHasReferences(config);
   const [testInput, setTestInput] = useState({
     raw_input: filterType === "response"
       ? "I will issue a refund to your account immediately."
@@ -124,7 +136,13 @@ const ScriptTestPanel = ({ script, filterType, kind = "script", config = null })
       };
 
       const body = isGuardrail
-        ? { kind, config, response_filter: filterType === "response", input: scriptInput }
+        ? {
+            kind,
+            config,
+            response_filter: filterType === "response",
+            input: scriptInput,
+            ...(savedId ? { filter_id: savedId } : {}),
+          }
         : { script: script, kind: "script", input: scriptInput };
 
       const response = await apiClient.post("/filters/test", body);
@@ -172,6 +190,13 @@ const ScriptTestPanel = ({ script, filterType, kind = "script", config = null })
                 ? "Run the guardrail against sample input before saving. This calls the configured provider for real, using the connection settings above."
                 : "Test your filter script with sample input before saving. Configure the input parameters below and click \"Run filter\" to see the output."}
             </Typography>
+            {needsSaveForReferences && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                The connection settings use secret references. Save the filter first, then test it from
+                its edit page: references are only resolved for a saved filter whose connection settings
+                are unchanged, so a resolved secret can only ever be sent to the stored endpoint.
+              </Alert>
+            )}
           </Grid>
 
           <Grid item xs={12}>

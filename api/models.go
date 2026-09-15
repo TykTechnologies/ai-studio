@@ -753,9 +753,14 @@ type FilterResponse struct {
 // test performs a real call to the configured provider.
 // @Description Filter test input model
 type FilterTestInput struct {
-	Script         string                 `json:"script"`
-	Kind           string                 `json:"kind"`
-	Config         map[string]interface{} `json:"config"`
+	Script string                 `json:"script"`
+	Kind   string                 `json:"kind"`
+	Config map[string]interface{} `json:"config"`
+	// FilterID names the saved filter this test belongs to. A guardrail config
+	// whose connection holds $SECRET/ or $ENV/ references is only run when
+	// its connection block matches that saved filter's, so the test endpoint
+	// cannot be used to send a resolved secret to a caller-chosen endpoint.
+	FilterID       uint                   `json:"filter_id"`
 	ResponseFilter bool                   `json:"response_filter"`
 	Input          map[string]interface{} `json:"input" binding:"required"`
 }
