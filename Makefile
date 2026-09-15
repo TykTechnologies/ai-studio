@@ -716,6 +716,12 @@ test-vendors-update-golden: ## Refresh golden envelope snapshots
 		go test -tags vendorlive -v -count=1 \
 		-timeout $(VENDOR_TEST_TIMEOUT) ./tests/vendorconformance/...
 
+.PHONY: test-vendors-filters
+test-vendors-filters: ## Live check that request filters run on the Bedrock /ai/ and /anthropic/ paths (needs Bedrock credentials; enterprise scripting)
+	cd microgateway && VENDOR_TESTS_VENDORS=bedrock \
+		go test -tags "vendorlive enterprise" -v -count=1 \
+		-timeout 15m -run 'TestBedrockRequestFilters' ./tests/vendorconformance/...
+
 .PHONY: test-vendors-harness
 test-vendors-harness: ## Run the credential-free unit tests that protect the conformance harness itself
 	go test -count=1 ./pkg/testinfra/vendorconformance/...

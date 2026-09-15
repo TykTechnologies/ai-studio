@@ -54,7 +54,40 @@ type harness struct {
 	// account, not per test, so unbounded t.Parallel() fan-out turns a working
 	// suite into a wall of 429s that look exactly like product failures.
 	inflight chan struct{}
+	// db is the gateway's own SQLite, kept so tests can read what the data
+	// plane recorded (analytics events carry the logged request body).
+	db *gorm.DB
+	// filteredBedrock is the extra Bedrock route seeded with a request filter
+	// (see seedFilteredBedrock); nil when Bedrock has no credentials. It is
+	// deliberately not in cfg.Vendors so the conformance matrix never sees it.
+	filteredBedrock *mgwdb.LLM
 }
+
+// filteredBedrockSlug is the route slug of the filter-bearing Bedrock LLM.
+const filteredBedrockSlug = "vt-bedrock-filtered"
+
+// filteredBedrockScript is the request filter on that route. It blocks any
+// prompt carrying filterBlockMarker and redacts filterSecret everywhere else,
+// so one route proves both halves of request filtering on the Bedrock paths
+// that call the AWS SDK directly and never take the /llm/call/ loopback hop.
+const (
+	filterBlockMarker  = "FORBIDDEN-TOPIC"
+	filterSecret       = "SECRET-123"
+	filterRedacted     = "[REDACTED]"
+	filterBlockMessage = "blocked by the conformance filter"
+	// Tengo scopes ":=" to the enclosing block, so output is declared once at
+	// the top level and assigned inside the branches.
+	filteredBedrockScript = `
+text := import("text")
+output := {block: false, payload: "", message: ""}
+if text.contains(input.raw_input, "` + filterBlockMarker + `") {
+    output.block = true
+    output.message = "` + filterBlockMessage + `"
+} else {
+    output.payload = text.replace(input.raw_input, "` + filterSecret + `", "` + filterRedacted + `", -1)
+}
+`
+)
 
 // maxRateLimitRetries bounds the retry loop. Rate limits are transient and
 // worth waiting out; anything still failing after this is a real result.
@@ -290,7 +323,9 @@ func (h *harness) boot() error {
 			EncryptionKey: "12345678901234567890123456789012",
 			JWTSecret:     "vendor-conformance-secret",
 		},
-		Analytics:     config.AnalyticsConfig{Enabled: false},
+		// Bodies are stored on the analytics event (MaxBodySize > 0) so the
+		// filter tests can read back exactly what the proxy logged.
+		Analytics:     config.AnalyticsConfig{Enabled: false, MaxBodySize: 65535},
 		Observability: config.ObservabilityConfig{LogLevel: "error", LogFormat: "json"},
 	}
 
@@ -315,6 +350,18 @@ func (h *harness) boot() error {
 			return err
 		}
 	}
+
+	if bedrock, ok := h.cfg.Vendor("bedrock"); ok {
+		llm, err := seedFilteredBedrock(db, container, bedrock, h.cfg.MaxTokens)
+		if err != nil {
+			return fmt.Errorf("seeding filtered bedrock route: %w", err)
+		}
+		if err := db.Create(&mgwdb.AppLLM{AppID: app.ID, LLMID: llm.ID, IsActive: true}).Error; err != nil {
+			return err
+		}
+		h.filteredBedrock = llm
+	}
+	h.db = db
 
 	if err := db.Create(&mgwdb.APIToken{
 		Token: testAPIToken, Name: "vendor-conformance", AppID: app.ID, IsActive: true,
@@ -393,6 +440,45 @@ func seedLLM(db *gorm.DB, container *services.ServiceContainer, v vc.VendorConfi
 	}
 
 	if err := db.Create(llm).Error; err != nil {
+		return nil, err
+	}
+	return llm, nil
+}
+
+// seedFilteredBedrock seeds a second Bedrock route with the same credentials
+// and one request filter attached. Its default model is the Anthropic bridge
+// model when one is configured, because /anthropic/{route}/v1/messages always
+// calls the route's default model; the /ai/ shim names its model per request.
+func seedFilteredBedrock(db *gorm.DB, container *services.ServiceContainer, v vc.VendorConfig, maxTokens int) (*mgwdb.LLM, error) {
+	// A copy with its own key, so Slug() yields filteredBedrockSlug and the
+	// row never collides with the matrix's own Bedrock route.
+	filtered := v
+	filtered.Key = "bedrock-filtered"
+	filtered.Models = map[vc.ModelSlot]string{}
+	for slot, m := range v.Models {
+		filtered.Models[slot] = m
+	}
+	if bridge := v.Extra["anthropic_bridge_model"]; bridge != "" {
+		filtered.Models[vc.ModelLatest] = bridge
+	}
+	if filtered.Slug() != filteredBedrockSlug {
+		return nil, fmt.Errorf("filtered bedrock slug %q != %q", filtered.Slug(), filteredBedrockSlug)
+	}
+
+	llm, err := seedLLM(db, container, filtered, maxTokens)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := &mgwdb.Filter{
+		Name:     "vt-block-and-redact",
+		Script:   filteredBedrockScript,
+		IsActive: true,
+	}
+	if err := db.Create(filter).Error; err != nil {
+		return nil, err
+	}
+	if err := db.Create(&mgwdb.LLMFilter{LLMID: llm.ID, FilterID: filter.ID, IsActive: true}).Error; err != nil {
 		return nil, err
 	}
 	return llm, nil
