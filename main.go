@@ -551,6 +551,13 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 	}
 	logger.Info("Default LLM settings checked/initialized")
 
+	// Seed the built-in client tools (generative UI "present") so chat rooms
+	// can pick them as defaults without an administrator authoring them.
+	if err := models.GetOrCreateDefaultClientTools(db); err != nil {
+		return fmt.Errorf("failed to create default client tools: %w", err)
+	}
+	logger.Info("Default client tools checked/initialized")
+
 	// Seed the default governed metadata vocabularies and "Governance Core" schema
 	// (Enterprise only; advisory mode so existing objects are never blocked).
 	if governed_metadata.IsEnterpriseAvailable() {

@@ -113,23 +113,51 @@ describe("ToolForm client (human-in-the-loop) tools", () => {
     fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "Asks the user" } });
     fireEvent.click(screen.getByLabelText("Client (human-in-the-loop)"));
 
-    // REST-only sections disappear, the definition editor appears.
+    // REST-only sections disappear, the field builder and preview appear.
     expect(screen.queryByLabelText("OAS Spec")).not.toBeInTheDocument();
-    expect(screen.getByTestId("client-parameters")).toBeInTheDocument();
+    expect(screen.getByTestId("client-parameters-builder")).toBeInTheDocument();
+    expect(screen.getByTestId("client-tool-preview")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByTestId("client-parameters"), {
-      target: { value: JSON.stringify({ type: "object", properties: { action: { type: "string" } } }) },
-    });
+    // The default definition has one "summary" detail; rename it to "Action".
+    fireEvent.change(screen.getByLabelText("Detail 1 label"), { target: { value: "Action" } });
+    expect(screen.getByLabelText("Detail 1 identifier").value).toBe("action");
     fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
 
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
     const attrs = lastPostAttributes();
     expect(attrs.tool_type).toBe("CLIENT");
     expect(attrs.operations).toEqual([]);
-    expect(decodeSpec(attrs.oas_spec)).toEqual({
-      parameters: { type: "object", properties: { action: { type: "string" } } },
-      ui: { kind: "approval" },
-    });
+    const spec = decodeSpec(attrs.oas_spec);
+    expect(spec.ui).toEqual({ kind: "approval" });
+    expect(spec.parameters.required).toEqual(["action"]);
+    expect(spec.parameters.properties.action).toMatchObject({ type: "string", title: "Action" });
+  });
+
+  it("pre-fills everything from a shipped example", async () => {
+    renderForm();
+    await screen.findByRole("button", { name: "Add tool" });
+    fireEvent.click(screen.getByLabelText("Client (human-in-the-loop)"));
+
+    fireEvent.mouseDown(screen.getByLabelText(/Interaction/));
+    fireEvent.click(await screen.findByRole("option", { name: "Form" }));
+    fireEvent.click(screen.getByText("Shipping address (US)"));
+
+    // Name and description come from the preset; the response builder shows its fields.
+    expect(screen.getByLabelText(/^Name/).value).toBe("Shipping address (US)");
+    expect(screen.getByLabelText(/^Description/).value).toMatch(/shipping address/i);
+    expect(screen.getByTestId("client-response-builder")).toBeInTheDocument();
+    expect(screen.getAllByTestId("client-response-row").length).toBeGreaterThan(5);
+    // The preview renders the form with the preset's fields.
+    expect(screen.getByTestId("client-tool-preview-card")).toHaveTextContent("Where should we ship to?");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
+    const spec = decodeSpec(lastPostAttributes().oas_spec);
+    expect(spec.ui.kind).toBe("form");
+    expect(spec.ui.title).toBe("Where should we ship to?");
+    expect(spec.ui.response_schema.required).toEqual(expect.arrayContaining(["full_name", "city", "state", "zip"]));
+    expect(spec.ui.response_schema.properties.state.enum).toContain("CA");
+    expect(spec.parameters.properties.purpose).toBeDefined();
   });
 
   it("creates a generative UI (present) tool without a hand-written schema", async () => {
@@ -157,7 +185,8 @@ describe("ToolForm client (human-in-the-loop) tools", () => {
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Ask" } });
     fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "Asks" } });
     fireEvent.click(screen.getByLabelText("Client (human-in-the-loop)"));
-    fireEvent.change(screen.getByTestId("client-parameters"), { target: { value: "{not json" } });
+    fireEvent.click(screen.getByTestId("client-parameters-toggle-json"));
+    fireEvent.change(screen.getByTestId("client-parameters-json"), { target: { value: "{not json" } });
     fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
     expect(await screen.findByText(/Parameters schema is not valid JSON/)).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalledWith("/tools", expect.anything());
@@ -169,8 +198,11 @@ describe("ToolForm client (human-in-the-loop) tools", () => {
     await screen.findByDisplayValue("Ask approval");
     expect(screen.getByLabelText("Client (human-in-the-loop)")).toBeChecked();
     expect(screen.getByDisplayValue("Confirm the action")).toBeInTheDocument();
-    expect(screen.getByTestId("client-parameters").value).toContain('"action"');
-    // Form kind shows the response schema editor with the stored schema.
-    expect(screen.getByLabelText(/Response schema/).value).toContain('"ok"');
+    // The stored schemas are shown as fields: one parameter, one response field.
+    expect(screen.getByLabelText("Detail 1 identifier").value).toBe("action");
+    expect(screen.getByTestId("client-response-builder")).toBeInTheDocument();
+    const responseRows = screen.getAllByTestId("client-response-row");
+    expect(responseRows).toHaveLength(1);
+    expect(responseRows[0]).toHaveTextContent("Yes / no");
   });
 });

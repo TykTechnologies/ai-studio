@@ -21,7 +21,6 @@ import {
   FormLabel,
   Radio,
   RadioGroup,
-  MenuItem,
   AccordionSummary,
   AccordionDetails,
   IconButton,
@@ -58,6 +57,7 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
 import { usePermissions } from "../../context/PermissionsContext";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
+import ClientToolEditor from "./client/ClientToolEditor";
 
 const SectionTitle = ({ children, tooltip }) => (
   <Box sx={{ display: "flex", alignItems: "center", mt: 3, mb: 2 }}>
@@ -829,7 +829,12 @@ const ToolForm = () => {
                 value={tool.description}
                 onChange={handleChange}
                 error={!!errors.description}
-                helperText={errors.description}
+                helperText={
+                  errors.description ||
+                  (isClient
+                    ? "Read by the assistant to decide when to use this tool: say what it is for and when to reach for it"
+                    : undefined)
+                }
                 multiline
                 rows={4}
                 required
@@ -883,92 +888,17 @@ const ToolForm = () => {
 
           {isClient && (
             <>
-              <SectionTitle tooltip="How the chat UI collects the user's answer, and the JSON Schema of the arguments the model supplies when it calls this tool.">
+              <SectionTitle tooltip="How the assistant asks, what it must state, and what the person in the chat answers. The preview on the right shows both sides.">
                 Client tool definition
               </SectionTitle>
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    select
-                    fullWidth
-                    label="Interaction"
-                    value={clientDef.kind}
-                    onChange={(e) => setClientDef((prev) => ({ ...prev, kind: e.target.value }))}
-                    helperText={
-                      clientDef.kind === "present"
-                        ? "The model composes cards, facts, tables, charts and forms from the built-in component vocabulary; no user input is needed"
-                        : "Approval shows Approve / Reject; Form collects the response schema below"
-                    }
-                  >
-                    <MenuItem value="approval">Approval</MenuItem>
-                    <MenuItem value="form">Form</MenuItem>
-                    <MenuItem value="present">Generative UI (present)</MenuItem>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} md={8}>
-                  <TextField
-                    fullWidth
-                    label="Card title"
-                    value={clientDef.title}
-                    onChange={(e) => setClientDef((prev) => ({ ...prev, title: e.target.value }))}
-                    helperText="Shown to the user; defaults to the tool description"
-                    autoComplete="off"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Instructions for the user"
-                    value={clientDef.description}
-                    onChange={(e) => setClientDef((prev) => ({ ...prev, description: e.target.value }))}
-                    multiline
-                    rows={2}
-                    autoComplete="off"
-                  />
-                </Grid>
-                {clientDef.kind === "present" && (
-                  <Grid item xs={12}>
-                    <Typography variant="body2" color="text.secondary" data-testid="present-schema-note">
-                      The parameters schema is built in (the generative UI component vocabulary) and kept in step with the chat
-                      renderer, so there is nothing to author here. Name the tool <code>present</code> unless you have a reason
-                      not to: that is the name the model expects from the tool description.
-                    </Typography>
-                  </Grid>
-                )}
-                {clientDef.kind !== "present" && (
-                <Grid item xs={12}>
-                  <StyledTextField
-                    fullWidth
-                    label="Parameters schema (JSON Schema the model fills)"
-                    value={clientDef.parameters}
-                    onChange={(e) => setClientDef((prev) => ({ ...prev, parameters: e.target.value }))}
-                    error={!!clientDefErrors.parameters}
-                    helperText={clientDefErrors.parameters}
-                    multiline
-                    rows={8}
-                    variant="outlined"
-                    autoComplete="off"
-                    inputProps={{ "data-testid": "client-parameters" }}
-                  />
-                </Grid>
-                )}
-                {clientDef.kind === "form" && (
-                  <Grid item xs={12}>
-                    <StyledTextField
-                      fullWidth
-                      label="Response schema (JSON Schema the user fills)"
-                      value={clientDef.responseSchema}
-                      onChange={(e) => setClientDef((prev) => ({ ...prev, responseSchema: e.target.value }))}
-                      error={!!clientDefErrors.responseSchema}
-                      helperText={clientDefErrors.responseSchema || "Optional; a single free-text field is used when empty"}
-                      multiline
-                      rows={6}
-                      variant="outlined"
-                      autoComplete="off"
-                    />
-                  </Grid>
-                )}
-              </Grid>
+              <ClientToolEditor
+                value={clientDef}
+                onChange={setClientDef}
+                errors={clientDefErrors}
+                toolName={tool.name}
+                toolDescription={tool.description}
+                onApplyPreset={(preset) => setTool((prev) => ({ ...prev, name: preset.name, description: preset.description }))}
+              />
             </>
           )}
 

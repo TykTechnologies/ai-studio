@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Box, Button, Chip, Paper, TextField, Typography } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HowToVoteIcon from '@mui/icons-material/HowToVote';
@@ -33,7 +33,7 @@ const Answered = ({ toolName, result, isError }) => (
   </Paper>
 );
 
-const ApprovalCard = ({ title, description, args, addResult }) => {
+export const ApprovalCard = ({ title, description, args, addResult }) => {
   const [comment, setComment] = useState('');
   return (
     <>
@@ -60,24 +60,53 @@ const ApprovalCard = ({ title, description, args, addResult }) => {
   );
 };
 
-const FormCard = ({ title, description, args, schema, addResult }) => {
+/**
+ * Widget hints the form builder writes into the schema: long text becomes
+ * a textarea, phone numbers get the tel input. Everything else is rjsf's
+ * default for the type / format.
+ */
+export const uiSchemaFor = (schema) => {
+  const ui = {};
+  Object.entries(schema?.properties || {}).forEach(([name, prop]) => {
+    if (!prop || typeof prop !== 'object') return;
+    if (prop['x-multiline']) ui[name] = { 'ui:widget': 'textarea', 'ui:options': { rows: 3 } };
+    else if (prop.format === 'tel') ui[name] = { 'ui:options': { inputType: 'tel' } };
+  });
+  return ui;
+};
+
+/**
+ * `nested` renders the form as a <div> and submits it programmatically, for
+ * hosts that already sit inside a <form> (the admin preview): nested forms
+ * are invalid HTML and their submit would bubble into the outer form.
+ */
+export const FormCard = ({ title, description, args, schema, addResult, nested = false }) => {
+  const formRef = useRef(null);
   const formSchema = useMemo(() => {
     if (schema && typeof schema === 'object' && Object.keys(schema).length > 0) return schema;
     return { type: 'object', properties: { response: { type: 'string', title: 'Your response' } }, required: ['response'] };
   }, [schema]);
+  const uiSchema = useMemo(() => uiSchemaFor(formSchema), [formSchema]);
   return (
     <>
       <Typography variant="bodyMedium" fontWeight={500}>{title}</Typography>
       {description && <Typography variant="body2" color="text.secondary">{description}</Typography>}
       <ArgsSummary args={args} />
       <Form
+        ref={formRef}
         schema={formSchema}
+        uiSchema={uiSchema}
         validator={validator}
         onSubmit={({ formData }) => addResult(formData)}
         showErrorList={false}
+        {...(nested ? { tagName: 'div' } : {})}
       >
         <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-          <Button type="submit" variant="contained" size="small">Submit</Button>
+          {nested ? (
+            <Button type="button" variant="contained" size="small" onClick={() => formRef.current?.submit()}>Submit</Button>
+          ) : (
+            <Button type="submit" variant="contained" size="small">Submit</Button>
+          )}
           <Button variant="text" size="small" onClick={() => addResult({ error: 'The user declined to answer' }, true)}>
             Skip
           </Button>
