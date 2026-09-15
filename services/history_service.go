@@ -163,13 +163,10 @@ func (s *Service) GetCMessagesForSession(sessionID string) ([]models.CMessage, e
 	return messages, err
 }
 
-// TruncateToLastUserMessage deletes the last user turn of a session and every
-// message after it (the assistant reply, tool calls and tool results), so the
-// caller can re-send the user's text to regenerate the reply. Human rows that
-// carry only a [CONTEXT] block (tool documentation injected on AddTool) do not
-// count as a turn. It returns the number of rows removed; zero when the
-// session has no user turn.
-func (s *Service) TruncateToLastUserMessage(sessionID string) (int64, error) {
+// LastUserMessageID returns the row id of the last user turn of a session, or
+// 0 when there is none. Human rows that carry only a [CONTEXT] block (tool
+// documentation injected on AddTool) do not count as a turn.
+func (s *Service) LastUserMessageID(sessionID string) (uint, error) {
 	messages, err := s.GetCMessagesForSession(sessionID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to load messages: %w", err)
@@ -185,13 +182,41 @@ func (s *Service) TruncateToLastUserMessage(sessionID string) (int64, error) {
 		if _, userText, _ := models.SplitContext(stored.Text); strings.TrimSpace(userText) == "" {
 			continue
 		}
-		res := s.DB.Where("session = ? AND id >= ?", sessionID, messages[i].ID).Delete(&models.CMessage{})
-		if res.Error != nil {
-			return 0, fmt.Errorf("failed to delete messages: %w", res.Error)
-		}
-		return res.RowsAffected, nil
+		return messages[i].ID, nil
 	}
 	return 0, nil
+}
+
+// TruncateAfterMessage deletes every non-system message of a session whose id
+// is greater than afterID (afterID 0 clears the conversation while keeping the
+// system prompt). It is how an edit or a regenerate rewinds the stored
+// history. It returns the number of rows removed.
+func (s *Service) TruncateAfterMessage(sessionID string, afterID uint) (int64, error) {
+	messages, err := s.GetCMessagesForSession(sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load messages: %w", err)
+	}
+	var ids []uint
+	for _, m := range messages {
+		if m.ID <= afterID {
+			continue
+		}
+		var stored struct {
+			Role string `json:"role"`
+		}
+		if err := json.Unmarshal(m.Content, &stored); err == nil && stored.Role == "system" {
+			continue
+		}
+		ids = append(ids, m.ID)
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	res := s.DB.Where("session = ? AND id IN ?", sessionID, ids).Delete(&models.CMessage{})
+	if res.Error != nil {
+		return 0, fmt.Errorf("failed to delete messages: %w", res.Error)
+	}
+	return res.RowsAffected, nil
 }
 
 // EditUserMessageByIndex removes messages from the specified index onwards

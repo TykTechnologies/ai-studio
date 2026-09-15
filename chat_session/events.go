@@ -136,6 +136,10 @@ type ErrorData struct {
 
 type FinishData struct {
 	Reason string `json:"reason"`
+	// Database ids of the rows this turn produced, so a client can address
+	// them later (edit truncation, regenerate) without reloading history.
+	UserMessageID      uint `json:"user_message_id,omitempty"`
+	AssistantMessageID uint `json:"assistant_message_id,omitempty"`
 }
 
 // DecodeChatEvent reports whether b is an event envelope and decodes it.
@@ -195,6 +199,28 @@ type runState struct {
 	ctx      context.Context
 	streamed bool // at least one text delta was emitted for the current LLM reply
 	seq      uint64
+
+	userMsgID      uint // row id of the user message of this turn (0 for regenerate)
+	assistantMsgID uint // row id of the first assistant row of this turn
+}
+
+// noteUserMessageID records the row id of the turn's user message.
+func (cs *ChatSession) noteUserMessageID(id uint) {
+	cs.stateMu.Lock()
+	if cs.activeRun != nil {
+		cs.activeRun.userMsgID = id
+	}
+	cs.stateMu.Unlock()
+}
+
+// noteAssistantMessageID records the first assistant row of the turn; later
+// rows of the same turn (tool calls, follow-up text) fold into it in history.
+func (cs *ChatSession) noteAssistantMessageID(id uint) {
+	cs.stateMu.Lock()
+	if cs.activeRun != nil && cs.activeRun.assistantMsgID == 0 {
+		cs.activeRun.assistantMsgID = id
+	}
+	cs.stateMu.Unlock()
 }
 
 // eventSubscriber receives the envelopes of one run.
@@ -311,7 +337,7 @@ func (cs *ChatSession) finishRun(reason string) {
 	if run.ctx.Err() != nil && reason != FinishToolCalls {
 		reason = FinishCancelled
 	}
-	cs.emit(EventFinish, FinishData{Reason: reason})
+	cs.emit(EventFinish, FinishData{Reason: reason, UserMessageID: run.userMsgID, AssistantMessageID: run.assistantMsgID})
 	cs.stateMu.Lock()
 	if cs.activeRun == run {
 		cs.activeRun = nil

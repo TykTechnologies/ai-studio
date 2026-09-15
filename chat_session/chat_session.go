@@ -425,6 +425,10 @@ func (cs *ChatSession) Start() error {
 // queue (so the turn continues in HandleLLMResponse) and false when the turn
 // ended here.
 func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
+	if msg.Regenerate {
+		return cs.regenerateTurn()
+	}
+
 	err := cs.preProcessMessage(msg)
 	if err != nil {
 		cs.sendStatus(fmt.Sprintf("Content guideline violation detected. This request cannot be processed."))
@@ -543,6 +547,50 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 	_, err = cs.HandleUserMessage(msg, docs, tools, files)
 	if err != nil {
 		cs.sendError(fmt.Errorf("error handling user message: %v", err))
+		return false
+	}
+	return true
+}
+
+// regenerateTurn re-runs the model on the stored history as it stands (the
+// caller has already truncated the previous reply). It returns true when a
+// response was dispatched to the queue.
+func (cs *ChatSession) regenerateTurn() bool {
+	if cs.caller == nil {
+		cs.sendError(fmt.Errorf("LLM driver is not initialized"))
+		return false
+	}
+	messages, err := cs.getMessages()
+	if err != nil {
+		cs.sendError(fmt.Errorf("error getting chat history: %v", err))
+		return false
+	}
+	if len(messages) == 0 {
+		cs.sendError(fmt.Errorf("nothing to regenerate: the session has no messages"))
+		return false
+	}
+	messages = cs.PreflightTokenLengthCheck(messages)
+
+	tools := cs.prepareTools()
+	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
+
+	cs.streamBuffer = ""
+	cs.streamChunkIndex = 0
+	cs.streamFilterBlocked = false
+	cs.resetStreamed()
+
+	ctx, done := context.WithTimeout(cs.runCtx(), 300*time.Second)
+	defer done()
+	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		cs.sendError(fmt.Errorf("[regenerate] error generating content: %v", err))
+		return false
+	}
+
+	publishCtx, publishCancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer publishCancel()
+	if err := cs.queue.PublishLLMResponse(publishCtx, &LLMResponseWrapper{Response: resp, Opts: opts}); err != nil {
+		cs.sendError(fmt.Errorf("could not send response to llm responses queue: %v", err))
 		return false
 	}
 	return true
@@ -1045,6 +1093,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 			cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
 			return false, err
 		}
+		cs.noteAssistantMessageID(cs.chatHistory.LastMessageID())
 
 		if cs.outputMode == OutputModeEvents {
 			// A vendor that did not stream (or a reply that arrived whole)
@@ -1081,6 +1130,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
 			return false, err
 		}
+		cs.noteAssistantMessageID(cs.chatHistory.LastMessageID())
 
 		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
 		if err != nil {
@@ -1169,6 +1219,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	if err != nil {
 		return nil, fmt.Errorf("error adding message to history: %v", err)
 	}
+	cs.noteUserMessageID(cs.chatHistory.LastMessageID())
 
 	messages, err := cs.getMessages()
 	if err != nil {

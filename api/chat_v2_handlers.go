@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -66,11 +67,32 @@ type V2ChatSummary struct {
 }
 
 // V2RunRequest is the body of POST /chat-sessions/:session_id/runs.
+//
+// Exactly one of these shapes is expected:
+//   - {message, file_refs?}: append a user turn and run.
+//   - {message, after_message_id}: an edit; rewind the history to just after
+//     the given message id ("" or "root" = the start) first.
+//   - {regenerate: true, after_message_id?}: re-run the model on the history
+//     rewound to after the given id (default: after the last user turn).
+//   - {tool_results}: resume a turn waiting on client-side tools.
 type V2RunRequest struct {
-	Message     string         `json:"message"`
-	FileRefs    []string       `json:"file_refs"`
-	Regenerate  bool           `json:"regenerate"`
-	ToolResults []V2ToolResult `json:"tool_results"`
+	Message        string         `json:"message"`
+	FileRefs       []string       `json:"file_refs"`
+	Regenerate     bool           `json:"regenerate"`
+	AfterMessageID *string        `json:"after_message_id"`
+	ToolResults    []V2ToolResult `json:"tool_results"`
+}
+
+// chatUIV2Enabled reads CHAT_UI_V2_ENABLED; the new chat UI is on unless the
+// variable is explicitly false.
+func chatUIV2Enabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("CHAT_UI_V2_ENABLED")))
+	switch v {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
 
 type V2ToolResult struct {
@@ -86,6 +108,13 @@ func (a *API) SetupChatV2Routes(r *gin.RouterGroup) {
 	r.POST("/chat-sessions/:session_id/runs", a.runChatTurnV2)
 	r.POST("/chat-sessions/:session_id/cancel", a.cancelChatRunV2)
 	r.GET("/chat-sessions/:id/messages/v2", a.getChatMessagesV2)
+}
+
+func idString(id uint) string {
+	if id == 0 {
+		return ""
+	}
+	return strconv.FormatUint(uint64(id), 10)
 }
 
 func chatSummary(chat *models.Chat) V2ChatSummary {
@@ -263,9 +292,23 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "Unsupported", "client tool results are not supported yet")
 		return
 	}
-	if strings.TrimSpace(req.Message) == "" && len(req.FileRefs) == 0 {
+	if !req.Regenerate && strings.TrimSpace(req.Message) == "" && len(req.FileRefs) == 0 {
 		jsonError(c, http.StatusBadRequest, "Invalid input", "message is required")
 		return
+	}
+	var afterID *uint
+	if req.AfterMessageID != nil {
+		raw := strings.TrimSpace(*req.AfterMessageID)
+		var id uint
+		if raw != "" && raw != "root" {
+			n, err := strconv.ParseUint(raw, 10, 64)
+			if err != nil {
+				jsonError(c, http.StatusBadRequest, "Invalid input", "after_message_id must be a message id")
+				return
+			}
+			id = uint(n)
+		}
+		afterID = &id
 	}
 	if !a.assertSessionOwner(c, sessionID) {
 		return
@@ -283,9 +326,21 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 	}
 	defer cs.UnlockRun()
 
-	if req.Regenerate {
-		if _, err := a.service.TruncateToLastUserMessage(sessionID); err != nil {
+	if req.Regenerate && afterID == nil {
+		last, err := a.service.LastUserMessageID(sessionID)
+		if err != nil {
 			jsonError(c, http.StatusInternalServerError, "Regenerate failed", err.Error())
+			return
+		}
+		if last == 0 {
+			jsonError(c, http.StatusBadRequest, "Invalid input", "nothing to regenerate")
+			return
+		}
+		afterID = &last
+	}
+	if afterID != nil {
+		if _, err := a.service.TruncateAfterMessage(sessionID, *afterID); err != nil {
+			jsonError(c, http.StatusInternalServerError, "Rewind failed", err.Error())
 			return
 		}
 	}
@@ -295,7 +350,7 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 	defer unsubscribe()
 
 	select {
-	case cs.Input() <- &models.UserMessage{Payload: req.Message, FileRef: req.FileRefs, RunID: runID}:
+	case cs.Input() <- &models.UserMessage{Payload: req.Message, FileRef: req.FileRefs, RunID: runID, Regenerate: req.Regenerate}:
 	case <-c.Request.Context().Done():
 		return
 	case <-time.After(10 * time.Second):
@@ -468,6 +523,12 @@ func (u *uiStreamWriter) handle(ev chat_session.ChatEvent) bool {
 	case chat_session.EventFinish:
 		var d chat_session.FinishData
 		_ = json.Unmarshal(ev.Data, &d)
+		u.closeText()
+		// Transient: reaches the client's onData hook without becoming a part.
+		u.chunk(gin.H{"type": "data-message-ids", "transient": true, "data": gin.H{
+			"user_message_id":      idString(d.UserMessageID),
+			"assistant_message_id": idString(d.AssistantMessageID),
+		}})
 		u.finish(d.Reason)
 		return true
 	}

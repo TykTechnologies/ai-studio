@@ -42,6 +42,15 @@ func readUIStream(t *gotest.T, body *bufio.Scanner) (chunks []uiChunk, sawDone b
 	return chunks, false
 }
 
+func indexOf(list []string, want string) int {
+	for i, v := range list {
+		if v == want {
+			return i
+		}
+	}
+	return -1
+}
+
 func chunkTypes(chunks []uiChunk) []string {
 	out := make([]string, 0, len(chunks))
 	for _, c := range chunks {
@@ -124,7 +133,9 @@ func TestChatV2(t *gotest.T) {
 	assert.Equal(t, "text-start", types[2])
 	assert.Equal(t, "finish", types[len(types)-1])
 	assert.Equal(t, "finish-step", types[len(types)-2])
-	assert.Equal(t, "text-end", types[len(types)-3])
+	assert.Less(t, indexOf(types, "text-start"), indexOf(types, "text-delta"))
+	assert.Less(t, indexOf(types, "text-delta"), indexOf(types, "text-end"))
+	assert.Less(t, indexOf(types, "text-end"), indexOf(types, "finish-step"))
 	assert.Equal(t, "stop", chunks[len(chunks)-1]["finishReason"])
 
 	var text strings.Builder
@@ -149,18 +160,46 @@ func TestChatV2(t *gotest.T) {
 	assert.Equal(t, "assistant", hist.Messages[1].Role)
 	assert.Equal(t, "this is a ten word sentence that should be sent.", hist.Messages[1].Parts[0].Text)
 
-	// 4. Regenerate replaces the last turn instead of appending.
-	body, _ = json.Marshal(api.V2RunRequest{Message: "Hello again!", Regenerate: true})
+	// The finish carries the row ids of the turn (transient data chunk).
+	var ids map[string]any
+	for _, c := range chunks {
+		if c["type"] == "data-message-ids" {
+			ids = c["data"].(map[string]any)
+		}
+	}
+	require.NotNil(t, ids)
+	assert.Equal(t, hist.Messages[0].ID, ids["user_message_id"])
+	assert.Equal(t, hist.Messages[1].ID, ids["assistant_message_id"])
+	firstAssistantID := hist.Messages[1].ID
+
+	// 4. Regenerate replaces the last reply instead of appending.
+	body, _ = json.Marshal(api.V2RunRequest{Regenerate: true})
 	resp2, err := http.Post(runURL, "application/json", bytes.NewReader(body))
 	require.NoError(t, err)
-	_, done = readUIStream(t, bufio.NewScanner(resp2.Body))
+	require.Equal(t, http.StatusOK, resp2.StatusCode)
+	chunks2, done := readUIStream(t, bufio.NewScanner(resp2.Body))
 	resp2.Body.Close()
 	require.True(t, done)
+	assert.Contains(t, chunkTypes(chunks2), "text-delta")
 
 	w = apitest.PerformRequest(router, "GET", fmt.Sprintf("/common/chat-sessions/%s/messages/v2", sess.SessionID), nil)
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &hist))
 	require.Len(t, hist.Messages, 2, "regenerate must not grow the history")
-	assert.Equal(t, "Hello again!", hist.Messages[0].Parts[0].Text)
+	assert.Equal(t, "Hello, assistant!", hist.Messages[0].Parts[0].Text, "the user turn is kept")
+	assert.NotEqual(t, firstAssistantID, hist.Messages[1].ID, "the reply row was replaced")
+
+	// 4b. An edit rewinds to after a given message, then appends.
+	root := "root"
+	body, _ = json.Marshal(api.V2RunRequest{Message: "Edited opener", AfterMessageID: &root})
+	resp2b, err := http.Post(runURL, "application/json", bytes.NewReader(body))
+	require.NoError(t, err)
+	_, done = readUIStream(t, bufio.NewScanner(resp2b.Body))
+	resp2b.Body.Close()
+	require.True(t, done)
+	w = apitest.PerformRequest(router, "GET", fmt.Sprintf("/common/chat-sessions/%s/messages/v2", sess.SessionID), nil)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &hist))
+	require.Len(t, hist.Messages, 2)
+	assert.Equal(t, "Edited opener", hist.Messages[0].Parts[0].Text)
 
 	// 5. Resume the session by id returns the same session.
 	w = apitest.PerformRequest(router, "POST", fmt.Sprintf("/common/chat/%d/sessions", chat.ID), map[string]any{"session_id": sess.SessionID})
