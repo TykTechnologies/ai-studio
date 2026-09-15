@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
@@ -67,6 +68,15 @@ type ChatSession struct {
 	streamBuffer        string // Accumulated response text for streaming response filters
 	streamChunkIndex    int    // Current chunk index for streaming response filters
 	streamFilterBlocked bool   // Indicates if streaming was blocked by a filter
+
+	// Lifecycle and v2 event support (see events.go).
+	outputMode OutputMode
+	stopOnce   sync.Once
+	runMu      sync.Mutex                  // held by a v2 run handler for the whole turn
+	stateMu    sync.Mutex                  // guards activeRun, tools, datasources, files
+	activeRun  *runState                   // turn being processed by the session goroutine
+	subMu      sync.Mutex                  // guards subs
+	subs       map[string]*eventSubscriber // run id -> subscriber
 }
 
 type ChatResponse struct {
@@ -169,14 +179,16 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 	ds.EmbedAPIKey = secrets.GetValue(ds.EmbedAPIKey, false)
 	ds.DBConnAPIKey = secrets.GetValue(ds.DBConnAPIKey, false)
 
+	cs.stateMu.Lock()
 	cs.datasources[id] = &ds
-
 	// Validate privacy scores
-	if err := cs.validatePrivacyScores(); err != nil {
+	if err := cs.validatePrivacyScoresLocked(); err != nil {
 		// If validation fails, remove the datasource and return the error
 		delete(cs.datasources, id)
+		cs.stateMu.Unlock()
 		return err
 	}
+	cs.stateMu.Unlock()
 
 	cs.sendStatus(fmt.Sprintf("Datasource '%s' added to room", ds.Name))
 
@@ -184,12 +196,16 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 }
 
 func (cs *ChatSession) RemoveDatasource(id uint) {
+	cs.stateMu.Lock()
 	ds, ok := cs.datasources[id]
+	if ok {
+		delete(cs.datasources, id)
+	}
+	cs.stateMu.Unlock()
 	if !ok {
 		return
 	}
 
-	delete(cs.datasources, id)
 	cs.sendStatus(fmt.Sprintf("Datasource '%s' removed from room", ds.Name))
 }
 
@@ -203,12 +219,17 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 		return fmt.Errorf("user does not have access to tool %s", t.Name)
 	}
 
-	// Validate privacy scores
-	if err := cs.validatePrivacyScores(); err != nil {
+	// Validate privacy scores with the new tool included, so a tool whose own
+	// score exceeds the LLM's is rejected rather than admitted.
+	cs.stateMu.Lock()
+	cs.tools[id] = t
+	if err := cs.validatePrivacyScoresLocked(); err != nil {
 		// If validation fails, remove the tool and return the error
 		delete(cs.tools, id)
+		cs.stateMu.Unlock()
 		return err
 	}
+	cs.stateMu.Unlock()
 
 	slog.Info("tool added to chat", "tool", t.Name)
 	cs.sendStatus(fmt.Sprintf("Tool '%s' added to room", t.Name))
@@ -220,15 +241,17 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 			return fmt.Errorf("error decoding file contents: %v", err)
 		}
 
-		pl := fmt.Sprintf("[CONTEXT]\nThe following additional documentation file '%s' has been provided for the tool '%s' to help you use it:\n%s\n[/CONTEXT]",
+		docText := fmt.Sprintf("The following additional documentation file '%s' has been provided for the tool '%s' to help you use it:\n%s",
 			t.FileStores[i].FileName,
 			t.Name,
 			content)
+		pl := fmt.Sprintf("[CONTEXT]\n%s\n[/CONTEXT]", docText)
 
 		err = cs.chatHistory.AddUserMessage(context.Background(), pl)
 		if err != nil {
 			return fmt.Errorf("error adding message to history: %v", err)
 		}
+		cs.emit(EventContext, ContextData{Text: docText, Source: ContextSourceToolDocs})
 
 	}
 
@@ -250,36 +273,45 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 		}
 	}
 
-	cs.tools[id] = t
-
 	return nil
 }
 
 func (cs *ChatSession) AddFileReference(filename, contents string) {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
 	cs.files[filename] = contents
 }
 
 func (cs *ChatSession) GetFileReference(filename string) (string, bool) {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
 	contents, ok := cs.files[filename]
 	return contents, ok
 }
 
 func (cs *ChatSession) RemoveTool(id string) {
+	cs.stateMu.Lock()
 	t, ok := cs.tools[id]
+	if ok {
+		delete(cs.tools, id)
+	}
+	cs.stateMu.Unlock()
 	if !ok {
 		return
 	}
 
-	delete(cs.tools, id)
 	cs.sendStatus(fmt.Sprintf("Tool '%s' removed from room", t.Name))
 }
 
+// CurrentTools returns a copy of the tools attached to the session.
 func (cs *ChatSession) CurrentTools() map[string]models.Tool {
-	return cs.tools
+	return cs.snapshotTools()
 }
 
 // GetCurrentDatasources returns a slice of current datasources
 func (cs *ChatSession) GetCurrentDatasources() []*models.Datasource {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
 	datasources := make([]*models.Datasource, 0, len(cs.datasources))
 	for _, ds := range cs.datasources {
 		datasources = append(datasources, ds)
@@ -296,11 +328,28 @@ func (cs *ChatSession) AddPreProcessor(fn func(*models.UserMessage) error) {
 	cs.preProcessors = append(cs.preProcessors, fn)
 }
 
+// Stop ends the session: it cancels the session context (aborting any in-flight
+// LLM call), stops the processing goroutine and closes the queue. It is
+// idempotent and never blocks on the goroutine, so a reaper can call it on a
+// busy session. The input channel is deliberately not closed: handlers that
+// still hold a reference would panic on send; they get a queue-closed error
+// from the session instead.
 func (cs *ChatSession) Stop() {
-	cs.ctxCancel() // Cancel session-scoped context
-	cs.stop <- struct{}{}
-	close(cs.input)
-	cs.queue.Close() // Close the queue instead of individual channels
+	cs.stopOnce.Do(func() {
+		cs.ctxCancel()
+		close(cs.stop)
+		cs.queue.Close()
+	})
+}
+
+// Stopped reports whether Stop has been called.
+func (cs *ChatSession) Stopped() bool {
+	select {
+	case <-cs.stop:
+		return true
+	default:
+		return false
+	}
 }
 
 func (cs *ChatSession) Start() error {
@@ -330,139 +379,39 @@ func (cs *ChatSession) Start() error {
 		return fmt.Errorf("error handling defaults: %v", err)
 	}
 
+	if cs.outputMode == OutputModeEvents {
+		cs.startEventFanout()
+	}
+
 	go func() {
 		for {
 			select {
 			case <-cs.stop:
 				return
-			case msg := <-cs.input:
-				err := cs.preProcessMessage(msg)
-				if err != nil {
-					cs.sendStatus(fmt.Sprintf("Content guideline violation detected. This request cannot be processed."))
-					continue
-				}
-
-				// Run chat REQUEST filters on user message before RAG search (exclude response filters)
-				filteredMessage := msg.Payload
-				filterBlocked := false
-
-				// Filter to only request filters (ResponseFilter = false)
-				requestFilters := []*models.Filter{}
-				for _, filter := range cs.filters {
-					if !filter.ResponseFilter {
-						requestFilters = append(requestFilters, filter)
-					}
-				}
-
-				slog.Info("Chat request filters check", "filter_count", len(requestFilters))
-
-				for _, filter := range requestFilters {
-					slog.Info("Running chat request filter", "filter_name", filter.Name)
-					sr := scripting.NewScriptRunner(filter.Script)
-
-					// Create MessageContent for user message
-					messages := []llms.MessageContent{
-						{
-							Role:  llms.ChatMessageTypeHuman,
-							Parts: []llms.ContentPart{llms.TextPart(filteredMessage)},
-						},
-					}
-
-					scriptInput := &scripting.ScriptInput{
-						RawInput:   filteredMessage,
-						Messages:   messages,
-						VendorName: string(cs.chatRef.LLM.Vendor),
-						ModelName:  cs.chatRef.LLMSettings.ModelName,
-						Context: map[string]interface{}{
-							"session_id": cs.ID(),
-							"user_id":    int64(cs.userID),
-							"chat_id":    int64(cs.chatRef.ID),
-						},
-						IsChat: true,
-					}
-
-					output, err := sr.RunScript(scriptInput, cs.service)
-					if err != nil {
-						cs.sendError(fmt.Errorf("filter error: %v", err))
-						filterBlocked = true
-						break
-					}
-
-					// Record any compliance events reported by the script
-					scripting.RecordComplianceEvents(cs.ctx, output, filter.Name, "chat_request", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
-
-					if output.Block {
-						blockMsg := output.Message
-						if blockMsg == "" {
-							blockMsg = "content blocked by policy"
-						}
-						cs.sendError(fmt.Errorf("blocked by filter '%s': %s", filter.Name, blockMsg))
-						filterBlocked = true
-						break
-					}
-
-					// Apply modifications for next filter and RAG search
-					if output.Payload != "" && output.Payload != filteredMessage {
-						filteredMessage = output.Payload
-					}
-				}
-
-				// Skip RAG and LLM if filter blocked the message
-				if filterBlocked {
-					continue
-				}
-
-				// Update message payload with filtered content for RAG
-				msg.Payload = filteredMessage
-
-				// handle RAG
-				n := cs.chatRef.RagResultsPerSource
-				if n == 0 {
-					n = 10
-				}
-				ds := dataSession.NewDataSession(cs.datasources)
-				docs, err := ds.Search(filteredMessage, 10) //TODO this should be configurable in the future
-				if err != nil {
-					cs.sendError(fmt.Errorf("error searching datasources: %v", err))
-					continue
-				}
-
-				// prep tools
-				tools := cs.prepareTools()
-
-				// secure file references
-				scanFailureResponse, ok := cs.scanFiles(msg.FileRef)
+			case msg, ok := <-cs.input:
 				if !ok {
-					cs.sendError(fmt.Errorf("%s", scanFailureResponse))
-					continue
+					return
+				}
+				cs.beginRun(msg.RunID)
+				if !cs.processUserMessage(msg) {
+					// Nothing was dispatched to the LLM, so no response will
+					// arrive on the queue: the turn is over now.
+					cs.finishRun(FinishError)
 				}
 
-				// Add file references
-				files := make(map[string]string)
-				if len(msg.FileRef) > 0 {
-					for i, _ := range msg.FileRef {
-						fileContents, ok := cs.GetFileReference(msg.FileRef[i])
-						if !ok {
-							cs.sendError(fmt.Errorf("file reference not found: %s", msg.FileRef[i]))
-							continue
-						}
-						files[msg.FileRef[i]] = fileContents
-					}
+			case resp, ok := <-cs.queue.ConsumeLLMResponses(context.Background()):
+				if !ok {
+					return
 				}
-
-				// Handle the message from the user
-				_, err = cs.HandleUserMessage(msg, docs, tools, files)
-				if err != nil {
-					cs.sendError(fmt.Errorf("error handling user message: %v", err))
-					continue
-				}
-
-			case resp := <-cs.queue.ConsumeLLMResponses(context.Background()):
 				// handle any response from the LLM
-				err := cs.HandleLLMResponse(resp)
+				continued, err := cs.HandleLLMResponse(resp)
 				if err != nil {
 					cs.sendError(fmt.Errorf("error handling LLM response: %v", err))
+					cs.finishRun(FinishError)
 					continue
+				}
+				if !continued {
+					cs.finishRun(FinishStop)
 				}
 			}
 		}
@@ -471,11 +420,144 @@ func (cs *ChatSession) Start() error {
 	return nil
 }
 
+// processUserMessage runs filters, RAG, file scanning and the LLM call for one
+// user message. It returns true when an LLM response was dispatched to the
+// queue (so the turn continues in HandleLLMResponse) and false when the turn
+// ended here.
+func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
+	err := cs.preProcessMessage(msg)
+	if err != nil {
+		cs.sendStatus(fmt.Sprintf("Content guideline violation detected. This request cannot be processed."))
+		return false
+	}
+
+	// Run chat REQUEST filters on user message before RAG search (exclude response filters)
+	filteredMessage := msg.Payload
+	filterBlocked := false
+
+	// Filter to only request filters (ResponseFilter = false)
+	requestFilters := []*models.Filter{}
+	for _, filter := range cs.filters {
+		if !filter.ResponseFilter {
+			requestFilters = append(requestFilters, filter)
+		}
+	}
+
+	slog.Info("Chat request filters check", "filter_count", len(requestFilters))
+
+	for _, filter := range requestFilters {
+		slog.Info("Running chat request filter", "filter_name", filter.Name)
+		sr := scripting.NewScriptRunner(filter.Script)
+
+		// Create MessageContent for user message
+		messages := []llms.MessageContent{
+			{
+				Role:  llms.ChatMessageTypeHuman,
+				Parts: []llms.ContentPart{llms.TextPart(filteredMessage)},
+			},
+		}
+
+		scriptInput := &scripting.ScriptInput{
+			RawInput:   filteredMessage,
+			Messages:   messages,
+			VendorName: string(cs.chatRef.LLM.Vendor),
+			ModelName:  cs.chatRef.LLMSettings.ModelName,
+			Context: map[string]interface{}{
+				"session_id": cs.ID(),
+				"user_id":    int64(cs.userID),
+				"chat_id":    int64(cs.chatRef.ID),
+			},
+			IsChat: true,
+		}
+
+		output, err := sr.RunScript(scriptInput, cs.service)
+		if err != nil {
+			cs.sendError(fmt.Errorf("filter error: %v", err))
+			filterBlocked = true
+			break
+		}
+
+		// Record any compliance events reported by the script
+		scripting.RecordComplianceEvents(cs.ctx, output, filter.Name, "chat_request", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
+
+		if output.Block {
+			blockMsg := output.Message
+			if blockMsg == "" {
+				blockMsg = "content blocked by policy"
+			}
+			cs.sendError(fmt.Errorf("blocked by filter '%s': %s", filter.Name, blockMsg))
+			filterBlocked = true
+			break
+		}
+
+		// Apply modifications for next filter and RAG search
+		if output.Payload != "" && output.Payload != filteredMessage {
+			filteredMessage = output.Payload
+		}
+	}
+
+	// Skip RAG and LLM if filter blocked the message
+	if filterBlocked {
+		return false
+	}
+
+	// Update message payload with filtered content for RAG
+	msg.Payload = filteredMessage
+
+	// handle RAG
+	n := cs.chatRef.RagResultsPerSource
+	if n == 0 {
+		n = 10
+	}
+	ds := dataSession.NewDataSession(cs.snapshotDatasources())
+	docs, err := ds.Search(filteredMessage, 10) //TODO this should be configurable in the future
+	if err != nil {
+		cs.sendError(fmt.Errorf("error searching datasources: %v", err))
+		return false
+	}
+
+	// prep tools
+	tools := cs.prepareTools()
+
+	// secure file references
+	scanFailureResponse, ok := cs.scanFiles(msg.FileRef)
+	if !ok {
+		cs.sendError(fmt.Errorf("%s", scanFailureResponse))
+		return false
+	}
+
+	// Add file references
+	files := make(map[string]string)
+	if len(msg.FileRef) > 0 {
+		for i, _ := range msg.FileRef {
+			fileContents, ok := cs.GetFileReference(msg.FileRef[i])
+			if !ok {
+				cs.sendError(fmt.Errorf("file reference not found: %s", msg.FileRef[i]))
+				continue
+			}
+			files[msg.FileRef[i]] = fileContents
+		}
+	}
+
+	// Handle the message from the user
+	_, err = cs.HandleUserMessage(msg, docs, tools, files)
+	if err != nil {
+		cs.sendError(fmt.Errorf("error handling user message: %v", err))
+		return false
+	}
+	return true
+}
+
 func (cs *ChatSession) sendOutput(resp string) {
 	// Disabled to prevent duplicate messages
 }
 
 func (cs *ChatSession) sendStatus(resp string) {
+	if cs.outputMode == OutputModeEvents {
+		cs.emit(EventStatus, StatusData{Text: resp, Level: "info"})
+		return
+	}
+
 	msg := fmt.Sprintf(":::system %s:::", resp)
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -486,6 +568,16 @@ func (cs *ChatSession) sendStatus(resp string) {
 }
 
 func (cs *ChatSession) sendError(err error) {
+	if cs.outputMode == OutputModeEvents {
+		code := ClassifyError(err)
+		cs.emit(EventError, ErrorData{
+			Code:      code,
+			Message:   err.Error(),
+			Retryable: code == ErrCodeConnection || code == ErrCodeAPI,
+		})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
@@ -497,7 +589,7 @@ func (cs *ChatSession) sendError(err error) {
 func (cs *ChatSession) prepareTools() []llms.Tool {
 	tools := make([]llms.Tool, 0)
 	ids := make(map[string]struct{})
-	for _, t := range cs.tools {
+	for _, t := range cs.snapshotTools() {
 		// make sure only unique tool names go into the final array
 		if _, ok := ids[t.Name]; ok {
 			continue
@@ -774,6 +866,29 @@ func isToolCaller(name string) bool {
 	return false
 }
 
+// snapshotTools returns a copy of the tool map for readers on the session
+// goroutine, so HTTP handlers can add and remove tools concurrently.
+func (cs *ChatSession) snapshotTools() map[string]models.Tool {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
+	out := make(map[string]models.Tool, len(cs.tools))
+	for k, v := range cs.tools {
+		out[k] = v
+	}
+	return out
+}
+
+// snapshotDatasources returns a copy of the datasource map (see snapshotTools).
+func (cs *ChatSession) snapshotDatasources() map[uint]*models.Datasource {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
+	out := make(map[uint]*models.Datasource, len(cs.datasources))
+	for k, v := range cs.datasources {
+		out[k] = v
+	}
+	return out
+}
+
 func (cs *ChatSession) prepHumanMessage(payload string, docs []schema.Document) llms.HumanChatMessage {
 	pl := payload
 	if len(docs) > 0 {
@@ -857,14 +972,18 @@ func extractEmbeddedToolCalls(content string) (string, []llms.ToolCall) {
 	return result, toolCalls
 }
 
-func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
+// HandleLLMResponse persists and forwards one LLM reply. When the reply asked
+// for tools it executes them and dispatches a follow-up LLM call, in which case
+// it returns continued=true: the turn is not over and the next reply will
+// arrive on the queue. continued=false means the turn ended with this reply.
+func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool, err error) {
 	if config.Get("").EchoConversation {
 		handleEcho("LLM", w.Response)
 	}
 	resp := w.Response
 	if len(resp.Choices) == 0 {
 		cs.sendError(fmt.Errorf("no choices in response"))
-		return nil
+		return false, nil
 	}
 
 	toolCall := false
@@ -917,17 +1036,25 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 			// Response blocked by filter - send error to user instead
 			slog.Info("chat response blocked by filter", "message", blockMsg)
 			cs.sendError(fmt.Errorf("Response blocked: %s", blockMsg))
-			return nil
+			return false, nil
 		}
 
 		// For regular messages without tool calls
 		err := cs.chatHistory.AddAIMessage(ctx, content)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error adding AI message to history: %v", err))
-			return err
+			return false, err
 		}
-		// Only send to output stream if this is not a tool call
-		if !toolCall {
+
+		if cs.outputMode == OutputModeEvents {
+			// A vendor that did not stream (or a reply that arrived whole)
+			// still has to reach the client as text.
+			if !cs.hasStreamed() {
+				cs.emit(EventTextDelta, TextDeltaData{Delta: content})
+			}
+			cs.emit(EventTextEnd, nil)
+		} else if !toolCall {
+			// Only send to output stream if this is not a tool call
 			// Send message via queue to both message and stream channels
 			msgCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 			defer cancel()
@@ -946,26 +1073,26 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		history, err := cs.getMessages()
 		if err != nil {
 			cs.sendError(fmt.Errorf("error getting chat history after tool call: %v", err))
-			return err
+			return false, err
 		}
 
 		err = cs.chatHistory.AddMessage(ctx, toolCallRequest)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
-			return err
+			return false, err
 		}
 
 		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
-			return err
+			return false, err
 		}
 
 		// Get updated history with tool call and result
 		history, err = cs.getMessages()
 		if err != nil {
 			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
-			return err
+			return false, err
 		}
 
 		// Regenerate options from current session state instead of using w.Opts
@@ -980,21 +1107,26 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		cs.streamBuffer = ""
 		cs.streamChunkIndex = 0
 		cs.streamFilterBlocked = false
+		cs.resetStreamed()
 
-		resp, err := cs.caller.GenerateContent(ctx, history, currentOpts...)
+		resp, err := cs.caller.GenerateContent(cs.runCtx(), history, currentOpts...)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
-			return err
+			return false, err
 		}
 
 		// Send the new LLM response to continue the conversation
 		// Note: We still use nil for Opts since they'll be regenerated when needed
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		cs.queue.PublishLLMResponse(ctx, &LLMResponseWrapper{Response: resp, Opts: nil})
+		if err := cs.queue.PublishLLMResponse(ctx, &LLMResponseWrapper{Response: resp, Opts: nil}); err != nil {
+			cs.sendError(fmt.Errorf("could not queue LLM response after tool call: %v", err))
+			return false, err
+		}
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.Document, tools []llms.Tool, files map[string]string) (*llms.ContentResponse, error) {
@@ -1003,7 +1135,8 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		return nil, fmt.Errorf("LLM driver is not initialized")
 	}
 
-	ctx, done := context.WithTimeout(context.Background(), 300*time.Second)
+	// Derived from the run context so a cancel (or session stop) aborts the call.
+	ctx, done := context.WithTimeout(cs.runCtx(), 300*time.Second)
 	defer done()
 
 	if len(files) > 0 {
@@ -1028,6 +1161,9 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		handleEcho("USER", ComboObj{Message: msg, Docs: docs})
 	}
 
+	if len(docs) > 0 {
+		cs.emit(EventContext, ContextData{Text: cs.joinDocuments(docs, "\n\n"), Source: ContextSourceRAG})
+	}
 	pl := cs.prepHumanMessage(msg.Payload, docs).Content
 	err := cs.chatHistory.AddUserMessage(context.Background(), pl)
 	if err != nil {
@@ -1046,6 +1182,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	cs.streamBuffer = ""
 	cs.streamChunkIndex = 0
 	cs.streamFilterBlocked = false
+	cs.resetStreamed()
 
 	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
@@ -1340,7 +1477,10 @@ func interfaceToString(value interface{}) (string, error) {
 }
 
 func (cs *ChatSession) handleToolError(errMsg string, toolCallID string, functionName string, toolResult *llms.MessageContent) {
-	cs.sendStatus(errMsg)
+	if cs.outputMode == OutputModeRaw {
+		cs.sendStatus(errMsg)
+	}
+	cs.emit(EventToolResult, ToolResultData{ToolCallID: toolCallID, Result: errMsg, IsError: true})
 
 	toolResp := llms.ToolCallResponse{
 		ToolCallID: toolCallID,
@@ -1352,6 +1492,7 @@ func (cs *ChatSession) handleToolError(errMsg string, toolCallID string, functio
 }
 
 func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) {
+	currentTools := cs.snapshotTools()
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
 
@@ -1368,8 +1509,15 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			},
 		})
 
+		// The model hands us complete arguments, so the three structured
+		// events are emitted back to back; the client sees the same shape a
+		// token-streamed tool call would produce.
+		cs.emit(EventToolCallStart, ToolCallStartData{ToolCallID: t.ID, ToolName: t.FunctionCall.Name})
+		cs.emit(EventToolCallDelta, ToolCallDeltaData{ToolCallID: t.ID, ArgsText: t.FunctionCall.Arguments})
+		cs.emit(EventToolCallEnd, ToolCallEndData{ToolCallID: t.ID})
+
 		toolDefIndex := ""
-		for i, tool := range cs.tools {
+		for i, tool := range currentTools {
 			asList := strings.Split(tool.AvailableOperations, ",")
 			for _, op := range asList {
 				if op == t.FunctionCall.Name {
@@ -1382,7 +1530,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			}
 		}
 
-		toolDef, ok := cs.tools[toolDefIndex]
+		toolDef, ok := currentTools[toolDefIndex]
 		if !ok {
 			errMsg := fmt.Sprintf("tool not found: %s", t.FunctionCall.Name)
 			cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
@@ -1445,8 +1593,11 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 		Headers:     args.Headers,
 	}
 
-	cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
-	cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
+	if cs.outputMode == OutputModeRaw {
+		// v2 clients get the structured tool-call events instead.
+		cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
+		cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
+	}
 	if config.Get("").EchoConversation {
 		slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
 		slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
@@ -1518,7 +1669,10 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 		Content:    asStr,
 	}
 
-	cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
+	if cs.outputMode == OutputModeRaw {
+		cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
+	}
+	cs.emit(EventToolResult, ToolResultData{ToolCallID: t.ID, Result: asStr, Bytes: len(asStr)})
 	if config.Get("").EchoConversation && len(toolDef.Filters) > 0 {
 		slog.Info("[TOOL-CALL]", "[FILTERED]", t.FunctionCall.Name)
 		fmt.Println("===============================================")
@@ -1580,10 +1734,15 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 			cs.streamFilterBlocked = true
 
 			// Send error message to user
+			errorMsg := fmt.Sprintf("Response blocked: %s", blockMsg)
+			if cs.outputMode == OutputModeEvents {
+				cs.emit(EventError, ErrorData{Code: ErrCodeFilter, Message: errorMsg})
+				return fmt.Errorf("streaming blocked by filter: %s", blockMsg)
+			}
+
 			streamCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 			defer cancel()
 
-			errorMsg := fmt.Sprintf("Response blocked: %s", blockMsg)
 			if queueErr := cs.queue.PublishStream(streamCtx, []byte(errorMsg)); queueErr != nil {
 				return fmt.Errorf("error publishing block message: %v", queueErr)
 			}
@@ -1593,6 +1752,12 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 		}
 
 		// Filter passed - send chunk to queue
+		if cs.outputMode == OutputModeEvents {
+			cs.markStreamed()
+			cs.emit(EventTextDelta, TextDeltaData{Delta: chunkText})
+			return nil
+		}
+
 		streamCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
 
@@ -1607,7 +1772,16 @@ func (cs *ChatSession) getOptions(llmSettings *models.LLMSettings, tools []llms.
 	return llmSettings.GenerateOptionsFromSettings(tools, string(cs.mode), cs.streamingFunc)
 }
 
+// validatePrivacyScores takes stateMu and runs validatePrivacyScoresLocked.
 func (cs *ChatSession) validatePrivacyScores() error {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
+	return cs.validatePrivacyScoresLocked()
+}
+
+// validatePrivacyScoresLocked checks tool/datasource privacy scores against the
+// LLM's. The caller must hold stateMu.
+func (cs *ChatSession) validatePrivacyScoresLocked() error {
 	var maxLLMScore int
 	var maxDataSourceScore int = 0 // Initialize with a value higher than the maximum possible score
 
