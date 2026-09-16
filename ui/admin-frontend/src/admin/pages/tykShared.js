@@ -27,6 +27,7 @@ export const CAPABILITY_LABELS = {
   mcp_write: "Create MCP proxies",
   policies_write: "Create policies",
   mdcb_read: "MDCB data planes",
+  template_read: "API template",
 };
 
 export const connectionStatusColor = (status, degraded) => {
@@ -115,8 +116,8 @@ export const TykUpsell = () => (
         Enterprise Feature
       </Typography>
       <Typography>
-        The Tyk Dashboard integration is an Enterprise Edition feature that makes MCP servers
-        managed by your Tyk API platform part of the AI Portal:
+        Tyk Connections is an Enterprise Edition feature that makes MCP servers managed by your
+        Tyk API platform part of the AI Portal:
       </Typography>
       <ul>
         <li>Discover MCP proxies defined in a Tyk Dashboard and publish them as portal assets</li>
@@ -139,11 +140,11 @@ export const TykDisabledNotice = ({ status }) => (
   <Box sx={{ p: 3 }}>
     <Alert severity="warning">
       {status?.disabled_reason ? (
-        <>The Tyk Dashboard integration could not start: {status.disabled_reason}</>
+        <>Tyk Connections could not start: {status.disabled_reason}</>
       ) : (
         <>
-          The Tyk Dashboard integration is switched off. Set <code>TYK_MCP_ENABLED=true</code> on the
-          AI Studio server to enable it.
+          Tyk Connections is switched off. Set <code>TYK_MCP_ENABLED=true</code> on the AI Studio
+          server to enable it.
         </>
       )}
     </Alert>

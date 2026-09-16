@@ -127,7 +127,7 @@ func (s *communityService) UnpublishServer(ctx context.Context, actor Actor, id 
 	return nil, ErrEnterpriseFeature
 }
 
-func (s *communityService) SetServerGroups(ctx context.Context, actor Actor, id uint, groupIDs []uint) (*models.MCPServerResponse, error) {
+func (s *communityService) SetServerCatalogues(ctx context.Context, actor Actor, id uint, catalogueIDs []uint) (*models.MCPServerResponse, error) {
 	return nil, ErrEnterpriseFeature
 }
 

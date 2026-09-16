@@ -14,6 +14,11 @@ import (
 // active on its Dashboard.
 var ErrMCPServerNotVisible = errors.New("MCP server is not available to this app")
 
+// ErrMCPServerNotBrokerable is returned when an App would be bound to an MCP
+// server AI Studio issues no key for (OAuth, mTLS, keyless, or no policy
+// bundle pinned yet): the App would grant nothing, so it is refused.
+var ErrMCPServerNotBrokerable = errors.New("AI Studio cannot issue a key for this MCP server; connect to it directly")
+
 // ValidateMCPServerBindings checks that every server may be bound by this
 // user to an App with the given providers: visible (team grant, or any
 // published server for an administrator), published and active on the
@@ -43,6 +48,9 @@ func (s *Service) ValidateMCPServerBindings(userID uint, isAdmin bool, llmIDs []
 		srv, ok := byID[id]
 		if !ok {
 			return nil, fmt.Errorf("%w: server %d", ErrMCPServerNotVisible, id)
+		}
+		if !srv.Brokerable {
+			return nil, fmt.Errorf("%w: %s", ErrMCPServerNotBrokerable, srv.Name)
 		}
 		ordered = append(ordered, srv)
 	}

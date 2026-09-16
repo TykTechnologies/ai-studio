@@ -47,6 +47,7 @@ type HandoffPackage struct {
 	Definition           json.RawMessage            `json:"definition"`
 	SecretsIncluded      bool                       `json:"secrets_included"`
 	RequestedGatewayTags []string                   `json:"requested_gateway_tags"`
+	TemplateID           string                     `json:"template_id,omitempty"`
 	TransportNotes       string                     `json:"transport_notes,omitempty"`
 	PolicyShape          map[string]interface{}     `json:"policy_shape"`
 	Instructions         []string                   `json:"instructions"`

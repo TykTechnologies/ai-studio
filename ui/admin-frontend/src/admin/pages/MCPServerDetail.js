@@ -4,7 +4,6 @@ import {
   Alert,
   Autocomplete,
   Box,
-  Button,
   Checkbox,
   Chip,
   CircularProgress,
@@ -12,10 +11,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   FormControlLabel,
   Grid,
   MenuItem,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -29,17 +28,55 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import apiClient from "../utils/apiClient";
 import Can from "../components/rbac/Can";
 import PublishSwitch from "../components/rbac/PublishSwitch";
+import Section from "../components/common/Section";
+import ConfirmationDialog from "../components/common/ConfirmationDialog";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
+import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
+import RelationshipPicker from "../components/common/relationship-picker";
 import { P } from "../rbac/permissions";
-import { TitleBox, StyledPaper } from "../styles/sharedStyles";
+import {
+  TitleBox,
+  ContentBox,
+  FieldLabel,
+  FieldValue,
+  PrimaryButton,
+  SecondaryLinkButton,
+  SecondaryOutlineButton,
+  DangerOutlineButton,
+} from "../styles/sharedStyles";
 import { apiErrorDetail, formatTime, preStyle } from "./webhookShared";
 import { AUTH_MODE_LABELS, DashboardStateChip, KindChip } from "./MCPServers";
 
-const normaliseList = (data) => (Array.isArray(data) ? data : data?.data || data?.groups || []);
+// Tool catalogues come back as JSON:API rows; the picker wants {id, name}.
+const catalogueOptions = (data) =>
+  (Array.isArray(data) ? data : data?.data || []).map((c) => ({
+    id: Number(c.id),
+    name: c.attributes?.name ?? c.name ?? `Catalog ${c.id}`,
+  }));
+
+// How a portal user reaches a server AI Studio does not broker keys for.
+export const directAccessWording = (authMode) => {
+  switch (authMode) {
+    case "keyless":
+      return "no credential";
+    case "oauth21":
+    case "oauth_tyk":
+    case "oauth_external":
+      return "an OAuth token from the advertised authorization server";
+    case "jwt":
+      return "a JWT issued by the configured identity provider";
+    case "mtls":
+      return "a client certificate";
+    default:
+      return "their own credential";
+  }
+};
 
 // PolicyCreator writes a partitioned Studio-managed policy to the Dashboard
 // (full-mode connections) and pins it to this server in the same call.
 const PolicyCreator = ({ open, server, onClose, onCreated, onError }) => {
-  const [form, setForm] = useState({ kind: "access", name: "", rate: "", per: "60", quota_max: "", quota_renewal_rate: "3600", key_expires_in: "" });
+  const blank = { kind: "access", name: "", rate: "", per: "60", quota_max: "", quota_renewal_rate: "3600", key_expires_in: "" };
+  const [form, setForm] = useState(blank);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const num = (v) => (v === "" ? 0 : Number(v));
@@ -56,7 +93,7 @@ const PolicyCreator = ({ open, server, onClose, onCreated, onError }) => {
       }
       const res = await apiClient.post(`/tyk-connections/${server.connection_id}/policies`, body);
       onCreated(res.data);
-      setForm({ kind: "access", name: "", rate: "", per: "60", quota_max: "", quota_renewal_rate: "3600", key_expires_in: "" });
+      setForm(blank);
     } catch (err) {
       onError(apiErrorDetail(err, "Creating the policy failed"));
     } finally {
@@ -73,40 +110,40 @@ const PolicyCreator = ({ open, server, onClose, onCreated, onError }) => {
         </Typography>
         <Grid container spacing={2}>
           <Grid item xs={12} md={5}>
-            <TextField select fullWidth size="small" label="Kind" value={form.kind} onChange={set("kind")} inputProps={{ "data-testid": "policy-kind" }}>
+            <TextField select fullWidth label="Kind" value={form.kind} onChange={set("kind")} inputProps={{ "data-testid": "policy-kind" }}>
               <MenuItem value="access">Access (ACL for this proxy)</MenuItem>
               <MenuItem value="consumption">Consumption (rate limit / quota)</MenuItem>
             </TextField>
           </Grid>
           <Grid item xs={12} md={7}>
-            <TextField fullWidth size="small" label="Name" value={form.name} onChange={set("name")} inputProps={{ "data-testid": "policy-name" }} />
+            <TextField fullWidth label="Name" value={form.name} onChange={set("name")} inputProps={{ "data-testid": "policy-name" }} />
           </Grid>
           {form.kind === "consumption" && (
             <>
               <Grid item xs={6} md={3}>
-                <TextField fullWidth size="small" type="number" label="Rate" value={form.rate} onChange={set("rate")} inputProps={{ "data-testid": "policy-rate" }} />
+                <TextField fullWidth type="number" label="Rate" value={form.rate} onChange={set("rate")} inputProps={{ "data-testid": "policy-rate" }} />
               </Grid>
               <Grid item xs={6} md={3}>
-                <TextField fullWidth size="small" type="number" label="Per (seconds)" value={form.per} onChange={set("per")} />
+                <TextField fullWidth type="number" label="Per (seconds)" value={form.per} onChange={set("per")} />
               </Grid>
               <Grid item xs={6} md={3}>
-                <TextField fullWidth size="small" type="number" label="Quota max" value={form.quota_max} onChange={set("quota_max")} helperText="-1 unlimited" />
+                <TextField fullWidth type="number" label="Quota max" value={form.quota_max} onChange={set("quota_max")} helperText="-1 unlimited" />
               </Grid>
               <Grid item xs={6} md={3}>
-                <TextField fullWidth size="small" type="number" label="Quota renews (s)" value={form.quota_renewal_rate} onChange={set("quota_renewal_rate")} />
+                <TextField fullWidth type="number" label="Quota renews (s)" value={form.quota_renewal_rate} onChange={set("quota_renewal_rate")} />
               </Grid>
               <Grid item xs={12} md={6}>
-                <TextField fullWidth size="small" type="number" label="Key expires in (seconds, 0 = never)" value={form.key_expires_in} onChange={set("key_expires_in")} />
+                <TextField fullWidth type="number" label="Key expires in (seconds, 0 = never)" value={form.key_expires_in} onChange={set("key_expires_in")} />
               </Grid>
             </>
           )}
         </Grid>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={submit} disabled={busy || !form.name.trim()} data-testid="policy-create">
+        <SecondaryOutlineButton onClick={onClose}>Cancel</SecondaryOutlineButton>
+        <PrimaryButton variant="contained" onClick={submit} disabled={busy || !form.name.trim()} data-testid="policy-create">
           Create and pin
-        </Button>
+        </PrimaryButton>
       </DialogActions>
     </Dialog>
   );
@@ -155,7 +192,7 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
   };
   return (
     <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         The Dashboard is the source of truth: the push is refused if the proxy changed there since this page loaded. Leave
         masked values (***) in place; they are restored from the live definition and never shown here.
       </Typography>
@@ -168,27 +205,17 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
           {w}
         </Alert>
       ))}
-      <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-        <Button variant="outlined" onClick={() => run(true)} disabled={busy} data-testid="validate-definition">
+      <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+        <SecondaryOutlineButton onClick={() => run(true)} disabled={busy} data-testid="validate-definition">
           Validate definition
-        </Button>
-        <Button variant="contained" onClick={() => run(false)} disabled={busy || (server.origin === "dashboard" && !confirmOrigin)} data-testid="push-definition">
+        </SecondaryOutlineButton>
+        <PrimaryButton variant="contained" onClick={() => run(false)} disabled={busy || (server.origin === "dashboard" && !confirmOrigin)} data-testid="push-definition">
           Push to the Dashboard
-        </Button>
+        </PrimaryButton>
       </Box>
     </Box>
   );
 };
-
-const Section = ({ title, children, action }) => (
-  <StyledPaper sx={{ p: 2, mb: 2 }}>
-    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-      <Typography variant="h6">{title}</Typography>
-      {action}
-    </Box>
-    {children}
-  </StyledPaper>
-);
 
 // BundleEditor pins one access policy and any number of consumption
 // policies from the connection's cached Tyk policies.
@@ -223,14 +250,9 @@ const BundleEditor = ({ server, policies, onSaved, onError }) => {
 
   return (
     <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        A bundle is one access policy (the ACL that names this proxy) plus optional consumption policies (rate limit and
-        quota partitions). Keys minted for Apps carry the union of the bundles of every MCP server they use, and Tyk applies
-        policy changes to those keys at request time.
-      </Typography>
-      <Grid container spacing={2}>
+      <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <TextField select fullWidth size="small" label="Access policy" value={access} onChange={(e) => setAccess(e.target.value)} inputProps={{ "data-testid": "access-select" }}>
+          <TextField select fullWidth label="Access policy" value={access} onChange={(e) => setAccess(e.target.value)} inputProps={{ "data-testid": "access-select" }}>
             <MenuItem value="">None</MenuItem>
             {accessOptions.map((p) => (
               <MenuItem key={p.tyk_policy_id} value={p.tyk_policy_id}>
@@ -247,7 +269,6 @@ const BundleEditor = ({ server, policies, onSaved, onError }) => {
         <Grid item xs={12} md={6}>
           <Autocomplete
             multiple
-            size="small"
             options={consumptionOptions.map((p) => p.tyk_policy_id)}
             getOptionLabel={(id) => policies.find((p) => p.tyk_policy_id === id)?.name || id}
             value={consumption}
@@ -264,25 +285,37 @@ const BundleEditor = ({ server, policies, onSaved, onError }) => {
             .join("; ")}
         </Alert>
       )}
-      <Box sx={{ mt: 2 }}>
-        <Button variant="contained" onClick={save} disabled={saving} data-testid="save-bundle">
+      <Box sx={{ mt: 3 }}>
+        <PrimaryButton variant="contained" onClick={save} disabled={saving} data-testid="save-bundle">
           Save bundle
-        </Button>
+        </PrimaryButton>
       </Box>
     </Box>
   );
 };
 
+const InfoRow = ({ label, children }) => (
+  <>
+    <Grid item xs={12} sm={3}>
+      <FieldLabel>{label}:</FieldLabel>
+    </Grid>
+    <Grid item xs={12} sm={9}>
+      <FieldValue component="div">{children}</FieldValue>
+    </Grid>
+  </>
+);
+
 const MCPServerDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { notify, snackbarProps } = useFeedbackSnackbar();
   const [server, setServer] = useState(null);
   const [policies, setPolicies] = useState([]);
-  const [groups, setGroups] = useState([]);
+  const [catalogues, setCatalogues] = useState([]);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
   const [form, setForm] = useState({ name: "", description: "", long_description: "", logo_url: "", tags: "", privacy_score: "" });
-  const [groupIds, setGroupIds] = useState([]);
+  const [selectedCatalogues, setSelectedCatalogues] = useState([]);
+  const [savingCatalogues, setSavingCatalogues] = useState(false);
   const [connection, setConnection] = useState(null);
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [handoff, setHandoff] = useState(null);
@@ -303,13 +336,13 @@ const MCPServerDetail = () => {
         tags: (s.tags || []).join(", "),
         privacy_score: s.privacy_score === null || s.privacy_score === undefined ? "" : s.privacy_score,
       });
-      setGroupIds(s.group_ids || []);
-      const [pols, grps] = await Promise.all([
+      setSelectedCatalogues((s.tool_catalogues || []).map((c) => ({ id: Number(c.id), name: c.name })));
+      const [pols, cats] = await Promise.all([
         s.connection_id ? apiClient.get(`/tyk-connections/${s.connection_id}/policies`) : Promise.resolve({ data: [] }),
-        apiClient.get("/groups"),
+        apiClient.get("/tool-catalogues", { params: { all: true } }),
       ]);
       setPolicies(pols.data || []);
-      setGroups(normaliseList(grps.data));
+      setCatalogues(catalogueOptions(cats.data));
       if (s.connection_id) {
         try {
           const conn = await apiClient.get(`/tyk-connections/${s.connection_id}`);
@@ -350,7 +383,7 @@ const MCPServerDetail = () => {
       else body.privacy_score = Number(form.privacy_score);
       const res = await apiClient.patch(`/mcp-servers/${server.id}`, body);
       setServer(res.data);
-      setNotice("Saved");
+      notify("Saved");
     } catch (err) {
       setError(apiErrorDetail(err, "Save failed"));
     }
@@ -362,20 +395,26 @@ const MCPServerDetail = () => {
     try {
       const res = await apiClient.post(`/mcp-servers/${server.id}/${next ? "activate" : "deactivate"}`, {});
       setServer(res.data);
-      setNotice(next ? "Published to the portal" : "Unpublished");
+      notify(next ? "Published to the portal" : "Unpublished");
     } catch (err) {
       setError(apiErrorDetail(err, "Publish failed"));
     }
   };
 
-  const saveGroups = async () => {
+  const saveCatalogues = async () => {
     setError(null);
+    setSavingCatalogues(true);
     try {
-      const res = await apiClient.put(`/mcp-servers/${server.id}/groups`, { group_ids: groupIds });
+      const res = await apiClient.put(`/mcp-servers/${server.id}/catalogues`, {
+        tool_catalogue_ids: selectedCatalogues.map((c) => Number(c.id)),
+      });
       setServer(res.data);
-      setNotice("Teams saved");
+      setSelectedCatalogues((res.data.tool_catalogues || []).map((c) => ({ id: Number(c.id), name: c.name })));
+      notify("Catalogs saved");
     } catch (err) {
-      setError(apiErrorDetail(err, "Saving teams failed"));
+      setError(apiErrorDetail(err, "Saving catalogs failed"));
+    } finally {
+      setSavingCatalogues(false);
     }
   };
 
@@ -403,7 +442,7 @@ const MCPServerDetail = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setNotice(includeSecrets ? "Handoff package downloaded with the upstream credential; this download is audited." : "Handoff package downloaded");
+      notify(includeSecrets ? "Handoff package downloaded with the upstream credential; this download is audited." : "Handoff package downloaded");
     } catch (err) {
       setError(apiErrorDetail(err, "Download failed"));
     }
@@ -448,333 +487,366 @@ const MCPServerDetail = () => {
   const fullMode = connection?.effective_mode === "full" && connection?.status === "active";
   const onDashboard = server.dashboard_state !== "missing" && server.dashboard_state !== "pending_platform";
   const studioOwned = server.origin === "studio" || server.origin === "submission";
+  const canDelete = !onDashboard || (studioOwned && fullMode);
+  const prettyDefinition = server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available";
 
   return (
-    <Box>
-      <TitleBox>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/admin/mcp-servers")}>
-            Back
-          </Button>
-          <Typography variant="h5">{server.name}</Typography>
+    <>
+      <TitleBox top="64px">
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          <Typography variant="headingXLarge">{server.name}</Typography>
           <KindChip kind={server.kind} />
           <DashboardStateChip state={server.dashboard_state} />
           {server.brokerable && <Chip size="small" color="primary" variant="outlined" label="Brokerable" />}
         </Box>
-        <PublishSwitch
-          permission={P.MCP_SERVERS_PUBLISH}
-          checked={server.is_active}
-          onChange={togglePublish}
-          name="is_active"
-          label="Published"
-          disabled={!server.is_active && !canPublish}
-        />
+        <Stack direction="row" spacing={2} alignItems="center">
+          <PublishSwitch
+            permission={P.MCP_SERVERS_PUBLISH}
+            checked={server.is_active}
+            onChange={togglePublish}
+            name="is_active"
+            label="Published"
+            disabled={!server.is_active && !canPublish}
+          />
+          <SecondaryLinkButton startIcon={<ArrowBackIcon />} onClick={() => navigate("/admin/mcp-servers")} color="inherit">
+            Back to MCP servers
+          </SecondaryLinkButton>
+        </Stack>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+          {server.description ||
+            "An MCP server proxied by the Tyk Gateway. Publish it to tool catalogs so portal users can find it, and pin a policy bundle so AI Studio can mint keys for the Apps that use it."}
+        </Typography>
+      </Box>
+      <ContentBox sx={{ pt: 0 }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="page-error">
+            {error}
+          </Alert>
+        )}
+        {!canPublish && !server.is_active && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {server.dashboard_state !== "active"
+              ? "This server is not active on the Tyk Dashboard and cannot be published."
+              : "Set a privacy score before publishing this server to the portal."}
+          </Alert>
+        )}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="page-error">
-          {error}
-        </Alert>
-      )}
-      {notice && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice(null)}>
-          {notice}
-        </Alert>
-      )}
-      {!canPublish && !server.is_active && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {server.dashboard_state !== "active"
-            ? "This server is not active on the Tyk Dashboard and cannot be published."
-            : "Set a privacy score before publishing this server to the portal."}
-        </Alert>
-      )}
-
-      {server.dashboard_state === "pending_platform" && (
-        <Section
-          title="Awaiting the platform team"
-          action={
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button size="small" variant="outlined" onClick={() => downloadHandoff(false)} data-testid="download-handoff">
-                Download handoff package
-              </Button>
-              <Can permission={P.MCP_SERVERS_EXECUTE}>
-                <Button size="small" variant="outlined" color="warning" onClick={() => downloadHandoff(true)} data-testid="download-handoff-secrets">
-                  Download with credential
-                </Button>
-              </Can>
-            </Box>
-          }
-        >
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            This server was approved on a connection AI Studio may not write to. The platform team creates the proxy from the
-            handoff package; once a sync has imported it, link it here so the submitter's ownership, privacy score and team
-            visibility carry over.
-          </Typography>
-          {handoff && (
-            <>
-              <Typography variant="body2" color="text.secondary">
-                Submitted by {handoff.submitter?.name || "unknown"} ({handoff.submitter?.email || "no email"})
-                {handoff.submitter?.primary_contact ? `, contact ${handoff.submitter.primary_contact}` : ""}
-                {(handoff.requested_gateway_tags || []).length > 0 ? ` · requested target: ${handoff.requested_gateway_tags.join(", ")}` : ""}
-              </Typography>
-              <Box component="ol" sx={{ pl: 3, mt: 1 }}>
-                {(handoff.instructions || []).map((step) => (
-                  <Typography key={step} component="li" variant="body2">
-                    {step}
-                  </Typography>
-                ))}
-              </Box>
-              {(handoff.candidates || []).length > 0 ? (
-                <Box sx={{ mt: 1 }} data-testid="link-candidates">
-                  <Typography variant="subtitle2">Imported proxies that look like this server</Typography>
-                  {handoff.candidates.map((c) => (
-                    <Box key={c.id} sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
-                      <Typography variant="body2">
-                        {c.name} · {c.listen_path} · <code>{c.tyk_api_id}</code>
-                      </Typography>
-                      <Can permission={P.MCP_SERVERS_EXECUTE}>
-                        <Button size="small" variant="contained" onClick={() => linkTo(c.tyk_api_id)} data-testid={`link-${c.tyk_api_id}`}>
-                          Link
-                        </Button>
-                      </Can>
-                    </Box>
+        {server.dashboard_state === "pending_platform" && (
+          <Section
+            title="Awaiting the platform team"
+            description="This server was approved on a connection AI Studio may not write to."
+            actions={
+              <>
+                <SecondaryOutlineButton size="small" onClick={() => downloadHandoff(false)} data-testid="download-handoff">
+                  Download handoff package
+                </SecondaryOutlineButton>
+                <Can permission={P.MCP_SERVERS_EXECUTE}>
+                  <SecondaryOutlineButton size="small" onClick={() => downloadHandoff(true)} data-testid="download-handoff-secrets">
+                    Download with credential
+                  </SecondaryOutlineButton>
+                </Can>
+              </>
+            }
+          >
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              The platform team creates the proxy from the handoff package; once a sync has imported it, link it here so the
+              submitter's ownership, privacy score and catalog visibility carry over.
+            </Typography>
+            {handoff && (
+              <>
+                <Typography variant="body2" color="text.secondary">
+                  Submitted by {handoff.submitter?.name || "unknown"} ({handoff.submitter?.email || "no email"})
+                  {handoff.submitter?.primary_contact ? `, contact ${handoff.submitter.primary_contact}` : ""}
+                  {(handoff.requested_gateway_tags || []).length > 0 ? ` · requested target: ${handoff.requested_gateway_tags.join(", ")}` : ""}
+                  {handoff.template_id ? ` · Dashboard template: ${handoff.template_id}` : ""}
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mt: 1 }}>
+                  {(handoff.instructions || []).map((step) => (
+                    <Typography key={step} component="li" variant="body2">
+                      {step}
+                    </Typography>
                   ))}
                 </Box>
+                {(handoff.candidates || []).length > 0 ? (
+                  <Box sx={{ mt: 1 }} data-testid="link-candidates">
+                    <Typography variant="subtitle2">Imported proxies that look like this server</Typography>
+                    {handoff.candidates.map((c) => (
+                      <Box key={c.id} sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
+                        <Typography variant="body2">
+                          {c.name} · {c.listen_path} · <code>{c.tyk_api_id}</code>
+                        </Typography>
+                        <Can permission={P.MCP_SERVERS_EXECUTE}>
+                          <PrimaryButton size="small" variant="contained" onClick={() => linkTo(c.tyk_api_id)} data-testid={`link-${c.tyk_api_id}`}>
+                            Link
+                          </PrimaryButton>
+                        </Can>
+                      </Box>
+                    ))}
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    No imported proxy matches yet. Run a sync after the platform team has created it.
+                  </Typography>
+                )}
+              </>
+            )}
+          </Section>
+        )}
+
+        <Section title="Server information">
+          <Grid container spacing={2}>
+            <InfoRow label="Connection">{server.connection_name || server.connection_id}</InfoRow>
+            <InfoRow label="Kind">
+              <KindChip kind={server.kind} />
+            </InfoRow>
+            <InfoRow label="Dashboard">
+              <DashboardStateChip state={server.dashboard_state} />
+              {server.tyk_api_id ? (
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  API id {server.tyk_api_id}
+                </Typography>
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  No imported proxy matches yet. Run a sync after the platform team has created it.
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  not on the Dashboard yet
                 </Typography>
               )}
-            </>
-          )}
-        </Section>
-      )}
-
-      <Section title="On the Tyk Gateway">
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <Typography variant="body2">
-              <strong>Connection:</strong> {server.connection_name || server.connection_id}
-            </Typography>
-            <Typography variant="body2">
-              <strong>API id:</strong> {server.tyk_api_id || "not on the Dashboard yet"}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Listen path:</strong> {server.listen_path} {server.transport_path ? `(transport ${server.transport_path})` : ""}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Endpoint:</strong> {server.endpoint_url || "set a gateway base URL on the connection"}
-            </Typography>
-            {Object.entries(server.endpoint_urls || {}).map(([tag, url]) => (
-              <Typography key={tag} variant="body2">
-                <strong>{tag}:</strong> {url}
-              </Typography>
-            ))}
-            <Typography variant="body2">
-              <strong>Upstream:</strong> {server.upstream_url}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Typography variant="body2">
-              <strong>Consumer auth:</strong> {AUTH_MODE_LABELS[server.auth_mode] || server.auth_mode}
-              {auth.header_name ? ` (header ${auth.header_name})` : ""}
-            </Typography>
-            {auth.prm && (
-              <Typography variant="body2">
-                <strong>OAuth authorization servers:</strong> {(auth.prm.authorization_servers || []).join(", ") || "none"}
-                {auth.prm.url ? ` · metadata ${auth.prm.url}` : ""}
-              </Typography>
-            )}
-            <Typography variant="body2" component="div">
-              <strong>Deployed to:</strong>{" "}
-              {(server.gateway_tags?.tags || []).length > 0 ? (
-                server.gateway_tags.tags.map((t) => <Chip key={t} size="small" label={t} sx={{ mr: 0.5 }} />)
-              ) : (
-                "every non-segmented gateway"
-              )}
-            </Typography>
-            <Typography variant="body2">
-              <strong>Origin:</strong> {server.origin} · last seen {server.last_seen_at ? formatTime(server.last_seen_at) : "never"}
-            </Typography>
-          </Grid>
-        </Grid>
-      </Section>
-
-      <Section title="Presentation and governance">
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} helperText={server.name_overridden ? "Overridden; the Dashboard name no longer applies" : "Follows the Dashboard until edited"} />
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <TextField fullWidth size="small" type="number" label="Privacy score" value={form.privacy_score} onChange={(e) => setForm({ ...form, privacy_score: e.target.value })} inputProps={{ min: 0, max: 100, "data-testid": "privacy-score" }} />
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <TextField fullWidth size="small" label="Logo URL" value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField fullWidth size="small" label="Short description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField fullWidth size="small" multiline minRows={2} label="Long description" value={form.long_description} onChange={(e) => setForm({ ...form, long_description: e.target.value })} />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField fullWidth size="small" label="Tags (comma separated)" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
-          </Grid>
-        </Grid>
-        <Can permission={P.MCP_SERVERS_WRITE}>
-          <Box sx={{ mt: 2 }}>
-            <Button variant="contained" onClick={savePresentation} data-testid="save-presentation">
-              Save
-            </Button>
-          </Box>
-        </Can>
-      </Section>
-
-      <Section title="Teams that can see this server">
-        <Autocomplete
-          multiple
-          size="small"
-          options={groups.map((g) => g.id)}
-          getOptionLabel={(gid) => groups.find((g) => g.id === gid)?.name || String(gid)}
-          value={groupIds}
-          onChange={(_, v) => setGroupIds(v)}
-          renderInput={(params) => <TextField {...params} label="Teams" />}
-        />
-        <Can permission={P.MCP_SERVERS_WRITE}>
-          <Box sx={{ mt: 2 }}>
-            <Button variant="outlined" onClick={saveGroups}>
-              Save teams
-            </Button>
-          </Box>
-        </Can>
-      </Section>
-
-      <Section
-        title="Policy bundle"
-        action={
-          fullMode && server.tyk_api_id ? (
-            <Can permission={P.MCP_SERVERS_EXECUTE}>
-              <Button size="small" variant="outlined" onClick={() => setCreatorOpen(true)} data-testid="open-policy-creator">
-                Create policy
-              </Button>
-            </Can>
-          ) : null
-        }
-      >
-        <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{(server.bundle || []).map((p) => `${p.role}: ${p.policy?.name}`).join(", ") || "No bundle pinned."}</Typography>}>
-          <BundleEditor server={server} policies={policies} onSaved={(s) => { setServer(s); setNotice("Bundle saved"); }} onError={setError} />
-        </Can>
-        <PolicyCreator
-          open={creatorOpen}
-          server={server}
-          onClose={() => setCreatorOpen(false)}
-          onError={setError}
-          onCreated={async (pol) => {
-            setCreatorOpen(false);
-            setNotice(`Policy ${pol.name} created on the Dashboard and pinned`);
-            await reloadPolicies();
-            await load();
-          }}
-        />
-      </Section>
-
-      <Section title={`Primitives (${(server.primitives || []).length})`}>
-        {(server.primitives || []).length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No tools, resources or prompts are declared in the definition.
-          </Typography>
-        ) : (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Type</TableCell>
-                <TableCell>Name</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell>Auth</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {server.primitives.map((p) => (
-                <TableRow key={`${p.type}:${p.name}`}>
-                  <TableCell>{p.type}</TableCell>
-                  <TableCell>{p.name}</TableCell>
-                  <TableCell>{p.description || p.source || ""}</TableCell>
-                  <TableCell>
-                    {p.auth?.ignore_authentication ? "no auth" : ""}
-                    {(p.auth?.scopes || []).length > 0 ? `scopes: ${p.auth.scopes.join(", ")}` : ""}
-                  </TableCell>
-                </TableRow>
+            </InfoRow>
+            <InfoRow label="Listen path">
+              {server.listen_path}
+              {server.transport_path ? ` (transport ${server.transport_path})` : ""}
+            </InfoRow>
+            <InfoRow label="Endpoint">
+              {server.endpoint_url || "set a gateway base URL on the connection"}
+              {Object.entries(server.endpoint_urls || {}).map(([tag, url]) => (
+                <Typography key={tag} variant="body2" component="div">
+                  {tag}: {url}
+                </Typography>
               ))}
-            </TableBody>
-          </Table>
-        )}
-      </Section>
+            </InfoRow>
+            <InfoRow label="Upstream">{server.upstream_url || "—"}</InfoRow>
+            <InfoRow label="Consumer auth">
+              {AUTH_MODE_LABELS[server.auth_mode] || server.auth_mode}
+              {auth.header_name ? ` (header ${auth.header_name})` : ""}
+              {auth.prm && (
+                <Typography variant="body2" component="div" color="text.secondary">
+                  OAuth authorization servers: {(auth.prm.authorization_servers || []).join(", ") || "none"}
+                  {auth.prm.url ? ` · metadata ${auth.prm.url}` : ""}
+                </Typography>
+              )}
+            </InfoRow>
+            <InfoRow label="Privacy level">
+              {server.privacy_score === null || server.privacy_score === undefined ? "Not set" : <PrivacyLevelChip score={server.privacy_score} />}
+            </InfoRow>
+            <InfoRow label="Deployed to">
+              {(server.gateway_tags?.tags || []).length > 0
+                ? server.gateway_tags.tags.map((t) => <Chip key={t} size="small" label={t} sx={{ mr: 0.5 }} />)
+                : "every non-segmented gateway"}
+            </InfoRow>
+            <InfoRow label="Origin">
+              {server.origin} · last seen {server.last_seen_at ? formatTime(server.last_seen_at) : "never"}
+            </InfoRow>
+          </Grid>
+        </Section>
 
-      <Section
-        title="Credentials"
-        action={
-          <Button size="small" onClick={() => navigate(`/admin/mcp-credentials?server_id=${server.id}`)} data-testid="view-credentials">
-            View minted keys
-          </Button>
-        }
-      >
-        <Typography variant="body2" color="text.secondary">
-          Keys minted for Apps bound to this server are listed in the MCP credentials ledger, together with the access report of who reaches it.
-          {" "}
-          <Link component="button" variant="body2" onClick={() => navigate(`/admin/mcp-credentials?tab=report&server=${server.id}`)} data-testid="view-access-report">
-            Open the access report
-          </Link>
-        </Typography>
-      </Section>
-
-      {fullMode && onDashboard ? (
-        <Section title="Definition (edit and push to the Dashboard)">
-          <Can permission={P.MCP_SERVERS_EXECUTE} fallback={<Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>{server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available"}</Box>}>
-            <DefinitionEditor
-              server={server}
-              onError={setError}
-              onNotice={setNotice}
-              onPushed={(s, warnings) => {
-                setServer(s);
-                setNotice(warnings.length ? `Pushed. ${warnings.join(" ")}` : "Pushed to the Dashboard");
-              }}
-            />
+        <Section title="Presentation and governance" description="What portal users read about this server. Definition-derived fields above always follow the Dashboard.">
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} helperText={server.name_overridden ? "Overridden; the Dashboard name no longer applies" : "Follows the Dashboard until edited"} />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField fullWidth type="number" label="Privacy score" value={form.privacy_score} onChange={(e) => setForm({ ...form, privacy_score: e.target.value })} inputProps={{ min: 0, max: 100, "data-testid": "privacy-score" }} />
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <TextField fullWidth label="Logo URL" value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth label="Short description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth multiline rows={3} label="Long description" value={form.long_description} onChange={(e) => setForm({ ...form, long_description: e.target.value })} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth label="Tags (comma separated)" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+            </Grid>
+          </Grid>
+          <Can permission={P.MCP_SERVERS_WRITE}>
+            <Box sx={{ mt: 3 }}>
+              <PrimaryButton variant="contained" onClick={savePresentation} data-testid="save-presentation">
+                Save
+              </PrimaryButton>
+            </Box>
           </Can>
         </Section>
-      ) : (
-        <Section title="Definition (from the Dashboard, upstream credentials masked)">
-          <Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>
-            {server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available"}
-          </Box>
-        </Section>
-      )}
 
-      {(!onDashboard || (studioOwned && fullMode)) && (
-        <Can permission={P.MCP_SERVERS_DELETE}>
-          <Divider sx={{ my: 2 }} />
-          <Button color="error" variant="outlined" onClick={() => (onDashboard ? setDeleteOpen(true) : remove())} data-testid="delete-server">
-            {onDashboard ? "Delete from the Dashboard" : "Delete record"}
-          </Button>
-        </Can>
-      )}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-        <DialogTitle>Delete this MCP proxy from the Tyk Dashboard?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            The proxy is removed from the Dashboard and the gateways stop serving it. Apps lose the binding; keys that reach
-            nothing else on this connection are revoked when you tick the box below, otherwise the delete is refused while
-            such keys exist.
+        <Section title="Portal visibility" description="Portal users see this server through the teams granted these catalogs.">
+          {!server.brokerable && (
+            <Alert severity="info" sx={{ mb: 2 }} data-testid="not-brokerable">
+              AI Studio does not broker access to this server. Portal users connect to it directly with {directAccessWording(server.auth_mode)}; the
+              portal shows no Build app button for it.
+            </Alert>
+          )}
+          <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{selectedCatalogues.map((c) => c.name).join(", ") || "Not in any catalog."}</Typography>}>
+            <RelationshipPicker
+              label="Tool catalogs this server is published in"
+              itemLabel="catalog"
+              value={selectedCatalogues}
+              onChange={setSelectedCatalogues}
+              options={catalogues}
+              idField="id"
+              getOptionLabel={(c) => c.name}
+            />
+            <Box sx={{ mt: 3 }}>
+              <PrimaryButton variant="contained" onClick={saveCatalogues} disabled={savingCatalogues} data-testid="save-catalogues">
+                Save catalogs
+              </PrimaryButton>
+            </Box>
+          </Can>
+        </Section>
+
+        <Section
+          title="Access policies"
+          description="A bundle is one access policy (the ACL that names this proxy) plus optional consumption policies (rate limit and quota partitions). Keys minted for Apps carry the union of the bundles of every MCP server they use; Tyk applies policy changes to those keys at request time."
+          actions={
+            fullMode && server.tyk_api_id ? (
+              <Can permission={P.MCP_SERVERS_EXECUTE}>
+                <SecondaryOutlineButton size="small" onClick={() => setCreatorOpen(true)} data-testid="open-policy-creator">
+                  Create policy
+                </SecondaryOutlineButton>
+              </Can>
+            ) : null
+          }
+        >
+          <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{(server.bundle || []).map((p) => `${p.role}: ${p.policy?.name}`).join(", ") || "No bundle pinned."}</Typography>}>
+            <BundleEditor server={server} policies={policies} onSaved={(s) => { setServer(s); notify("Bundle saved"); }} onError={setError} />
+          </Can>
+          <PolicyCreator
+            open={creatorOpen}
+            server={server}
+            onClose={() => setCreatorOpen(false)}
+            onError={setError}
+            onCreated={async (pol) => {
+              setCreatorOpen(false);
+              notify(`Policy ${pol.name} created on the Dashboard and pinned`);
+              await reloadPolicies();
+              await load();
+            }}
+          />
+        </Section>
+
+        <Section title={`Primitives (${(server.primitives || []).length})`}>
+          {(server.primitives || []).length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No tools, resources or prompts are declared in the definition.
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Auth</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {server.primitives.map((p) => (
+                  <TableRow key={`${p.type}:${p.name}`}>
+                    <TableCell>{p.type}</TableCell>
+                    <TableCell>{p.name}</TableCell>
+                    <TableCell>{p.description || p.source || ""}</TableCell>
+                    <TableCell>
+                      {p.auth?.ignore_authentication ? "no auth" : ""}
+                      {(p.auth?.scopes || []).length > 0 ? `scopes: ${p.auth.scopes.join(", ")}` : ""}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Section>
+
+        <Section
+          title="Credentials using this server"
+          actions={
+            <SecondaryOutlineButton size="small" onClick={() => navigate(`/admin/mcp-credentials?server_id=${server.id}`)} data-testid="view-credentials">
+              View minted keys
+            </SecondaryOutlineButton>
+          }
+        >
+          <Typography variant="body2" color="text.secondary">
+            Keys minted for Apps bound to this server are listed in the MCP credentials ledger, together with the access report of who reaches it.{" "}
+            <Link component="button" variant="body2" onClick={() => navigate(`/admin/mcp-credentials?tab=report&server=${server.id}`)} data-testid="view-access-report">
+              Open the access report
+            </Link>
           </Typography>
-          <FormControlLabel control={<Checkbox checked={deleteForce} onChange={(e) => setDeleteForce(e.target.checked)} inputProps={{ "data-testid": "delete-force" }} />} label="Revoke keys that would be left without access" />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={remove} data-testid="confirm-delete">
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        </Section>
+
+        {fullMode && onDashboard ? (
+          <Section title="Definition" description="Edit the Tyk OAS document and push it to the Dashboard.">
+            <Can permission={P.MCP_SERVERS_EXECUTE} fallback={<Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>{prettyDefinition}</Box>}>
+              <DefinitionEditor
+                server={server}
+                onError={setError}
+                onNotice={notify}
+                onPushed={(s, warnings) => {
+                  setServer(s);
+                  notify(warnings.length ? `Pushed. ${warnings.join(" ")}` : "Pushed to the Dashboard");
+                }}
+              />
+            </Can>
+          </Section>
+        ) : (
+          <Section title="Definition" description="As synced from the Dashboard, upstream credentials masked.">
+            <Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>
+              {prettyDefinition}
+            </Box>
+          </Section>
+        )}
+
+        {canDelete && (
+          <Can permission={P.MCP_SERVERS_DELETE}>
+            <Section
+              title="Danger zone"
+              description={onDashboard ? "Removes the proxy from the Tyk Dashboard and this record from AI Studio." : "Removes this record from AI Studio."}
+            >
+              <DangerOutlineButton onClick={() => (onDashboard ? setDeleteOpen(true) : remove())} data-testid="delete-server">
+                {onDashboard ? "Delete from the Dashboard" : "Delete record"}
+              </DangerOutlineButton>
+            </Section>
+          </Can>
+        )}
+      </ContentBox>
+
+      <ConfirmationDialog
+        open={deleteOpen}
+        data-testid="delete-dialog"
+        title={`Delete ${server.name} from the Tyk Dashboard?`}
+        message={
+          <>
+            The proxy is removed from the Dashboard and the gateways stop serving it. Apps lose the binding; keys that reach nothing else on
+            this connection are revoked when you tick the box below, otherwise the delete is refused while such keys exist.
+            <FormControlLabel
+              sx={{ display: "flex", mt: 1 }}
+              control={<Checkbox checked={deleteForce} onChange={(e) => setDeleteForce(e.target.checked)} inputProps={{ "data-testid": "delete-force" }} />}
+              label="Revoke keys that would be left without access"
+            />
+          </>
+        }
+        confirmText="This cannot be undone."
+        buttonLabel="Delete"
+        onConfirm={remove}
+        onCancel={() => setDeleteOpen(false)}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
+      />
+      <FeedbackSnackbar {...snackbarProps} />
+    </>
   );
 };
 

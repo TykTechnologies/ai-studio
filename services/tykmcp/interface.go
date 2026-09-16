@@ -58,6 +58,7 @@ type ConnectionInput struct {
 	Description           string                 `json:"description"`
 	DashboardURL          string                 `json:"dashboard_url"`
 	GatewayBaseURL        string                 `json:"gateway_base_url"`
+	TemplateID            string                 `json:"template_id"`
 	DashboardAccessToken  string                 `json:"dashboard_access_token"`
 	OrgID                 string                 `json:"org_id"`
 	DeclaredMode          string                 `json:"declared_mode"`
@@ -81,6 +82,7 @@ type ConnectionPatch struct {
 	Description           *string                 `json:"description"`
 	DashboardURL          *string                 `json:"dashboard_url"`
 	GatewayBaseURL        *string                 `json:"gateway_base_url"`
+	TemplateID            *string                 `json:"template_id"`
 	DashboardAccessToken  *string                 `json:"dashboard_access_token"`
 	OrgID                 *string                 `json:"org_id"`
 	DeclaredMode          *string                 `json:"declared_mode"`
@@ -335,11 +337,12 @@ type RegisterInput struct {
 	ConfirmNoGatewayTags bool     `json:"confirm_no_gateway_tags"`
 
 	// Studio presentation and governance
-	Description     string   `json:"description"`
-	LongDescription string   `json:"long_description"`
-	Tags            []string `json:"tags"`
-	PrivacyScore    *int     `json:"privacy_score"`
-	Publish         bool     `json:"publish"`
+	Description      string   `json:"description"`
+	LongDescription  string   `json:"long_description"`
+	Tags             []string `json:"tags"`
+	PrivacyScore     *int     `json:"privacy_score"`
+	Publish          bool     `json:"publish"`
+	ToolCatalogueIDs []uint   `json:"tool_catalogue_ids"`
 }
 
 // RegisterPreview is a dry-run result: the definition Studio would send
@@ -466,7 +469,9 @@ type Service interface {
 	LinkServer(ctx context.Context, actor Actor, pendingID uint, tykAPIID string) (*models.MCPServerResponse, error)
 	PublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
 	UnpublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
-	SetServerGroups(ctx context.Context, actor Actor, id uint, groupIDs []uint) (*models.MCPServerResponse, error)
+	// SetServerCatalogues replaces the tool catalogues the server belongs to;
+	// teams see it through the catalogues they are granted.
+	SetServerCatalogues(ctx context.Context, actor Actor, id uint, catalogueIDs []uint) (*models.MCPServerResponse, error)
 	SetServerBundle(ctx context.Context, actor Actor, id uint, pins []PinInput) (*models.MCPServerResponse, error)
 
 	// Policies and sync

@@ -379,7 +379,7 @@ func init() {
 		Description: "Outbound webhook targets and the delivery log. Execute approves, revokes, tests and replays: it sends platform data to an external URL."})
 
 	// Settings
-	Register(Resource{Key: "tyk-connections", Label: "Tyk Dashboard connections", Group: "Settings", Actions: crudx, Sensitive: true, Privileged: true,
+	Register(Resource{Key: "tyk-connections", Label: "Tyk connections", Group: "Settings", Actions: crudx, Sensitive: true, Privileged: true,
 		Description: "Connections to Tyk Dashboards for MCP proxy discovery, registration and key brokering. Execute activates, disables, probes and syncs a connection, and allows internal Dashboard hosts."})
 	Register(Resource{Key: "secrets", Label: "Secrets", Group: "Settings", Actions: crud,
 		Description: "Secret references. Values are never returned by the API."})

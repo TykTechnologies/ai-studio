@@ -22,6 +22,7 @@ removed at the end (best effort). Exit code 1 on any failure.
 import json
 import os
 import subprocess
+import tempfile
 import sys
 import time
 import traceback
@@ -49,11 +50,12 @@ SP = os.path.dirname(os.path.abspath(__file__))
 UPSTREAM_SECRET = "demo-upstream-secret-" + str(int(time.time()))
 
 failures = []
-created = {"servers": [], "dash_policies": [], "dash_mcps": [], "apps": [], "targets": [], "conn": None}
+created = {"servers": [], "dash_policies": [], "dash_mcps": [], "dash_assets": [], "catalogues": [], "apps": [], "targets": [], "conn": None}
+TEMPLATE_ID = "ai-studio-e2e-template"
 
 
 def http(method, url, body=None, headers=None, raw=False):
-    hfile = os.path.join(SP, "last_headers.tmp")
+    hfile = os.path.join(tempfile.gettempdir(), f"tykmcp_headers_{os.getpid()}.tmp")
     args = ["curl", "-s", "-X", method, url, "-H", "Content-Type: application/json", "-w", "\n%{http_code}", "-D", hfile]
     for k, v in (headers or {}).items():
         args += ["-H", f"{k}: {v}"]
@@ -148,7 +150,20 @@ try:
     check("1.probe: mcp_write permitted, other writes unverified", caps.get("mcp_write", {}).get("state") == "ok" and all(caps.get(k, {}).get("state") == "unverified" for k in ("policies_write", "keys_write")), {k: caps.get(k, {}).get("state") for k in ("mcp_write", "policies_write", "keys_write")})
     check("1.effective mode full", act.get("effective_mode") == "full", act.get("effective_mode"))
 
-    # ---------- 2. register a remote proxy ----------
+    # ---------- 2. register a remote proxy (with the connection's API template) ----------
+    dash("DELETE", "/api/assets/" + TEMPLATE_ID)
+    code, tpl = dash("POST", "/api/assets", {
+        "id": TEMPLATE_ID, "kind": "oas-template", "name": "AI Studio e2e governance", "description": "traffic logs on every proxy Studio creates",
+        "data": {"openapi": "3.0.3", "info": {"title": "template", "version": "1.0.0"}, "paths": {},
+                 "x-tyk-api-gateway": {"info": {"name": "template", "state": {"active": True}}, "server": {"listenPath": {"value": "/template/", "strip": True}},
+                                       "upstream": {"url": "http://template.invalid"},
+                                       "middleware": {"global": {"trafficLogs": {"enabled": True}, "contextVariables": {"enabled": True}}}}},
+    })
+    check("2.template asset created on Dashboard", code in (200, 201), (code, tpl))
+    created["dash_assets"].append(TEMPLATE_ID)
+    code, cc = studio("GET", f"/api/v1/tyk-connections/{cid}")
+    code, upd = studio("PATCH", f"/api/v1/tyk-connections/{cid}", {"template_id": TEMPLATE_ID, "lock_version": cc.get("lock_version")})
+    check("2.template id saved and probed", code == 200 and upd.get("template_id") == TEMPLATE_ID and upd.get("capabilities", {}).get("template_read", {}).get("state") == "ok", (code, upd.get("template_id"), upd.get("capabilities", {}).get("template_read")))
     reg = {
         "connection_id": cid, "kind": "remote", "name": "Live Weather MCP", "listen_path": "/live-weather/",
         "upstream_url": UPSTREAM, "upstream_auth_header_name": "X-Upstream-Token", "upstream_auth_token": UPSTREAM_SECRET,
@@ -166,8 +181,12 @@ try:
     check("2.studio never shows the secret", UPSTREAM_SECRET not in json.dumps(res), "")
     code, live = dash("GET", "/api/mcps/" + srv["tyk_api_id"])
     check("2.proxy exists on Dashboard", code == 200 and live.get("x-tyk-api-gateway", {}).get("server", {}).get("listenPath", {}).get("value") == "/live-weather/", code)
-    hdr = live.get("x-tyk-api-gateway", {}).get("middleware", {}).get("global", {}).get("transformRequestHeaders", {})
+    glob = live.get("x-tyk-api-gateway", {}).get("middleware", {}).get("global", {})
+    hdr = glob.get("transformRequestHeaders", {})
     check("2.Dashboard holds the upstream header", any(h.get("value") == UPSTREAM_SECRET for h in hdr.get("add", [])), hdr)
+    check("2.template defaults merged into the proxy", glob.get("trafficLogs", {}).get("enabled") is True and glob.get("contextVariables", {}).get("enabled") is True, glob)
+    check("2.registration values win over the template", live.get("x-tyk-api-gateway", {}).get("upstream", {}).get("url", "").startswith(UPSTREAM.rstrip("/")), live.get("x-tyk-api-gateway", {}).get("upstream"))
+    check("2.preview mentions the template", any("template" in w.lower() for w in prev.get("warnings", [])), prev.get("warnings"))
     code, c2 = studio("GET", f"/api/v1/tyk-connections/{cid}")
     check("2.capability mcp_write now ok", c2.get("capabilities", {}).get("mcp_write", {}).get("state") == "ok", c2.get("capabilities", {}).get("mcp_write"))
 
@@ -188,11 +207,26 @@ try:
     check("3.bundle pinned + brokerable", len(detail.get("bundle", [])) == 2 and detail.get("brokerable"), (len(detail.get("bundle", [])), detail.get("brokerable")))
     code, pub = studio("POST", f"/api/v1/mcp-servers/{srv['id']}/activate")
     check("3.publish", code == 200 and pub.get("is_active"), (code, pub))
+    # Portal visibility goes through tool catalogues (Catalogs -> Teams), like
+    # tools: put the server in a catalogue every team is granted.
+    code, cats = studio("GET", "/api/v1/tool-catalogues?all=true")
+    clist = cats.get("data") if isinstance(cats, dict) else cats
+    cat_id = next((int(c["id"]) for c in (clist or []) if (c.get("attributes") or {}).get("name") == "Live MCP e2e"), None)
+    if cat_id is None:
+        code, cat = studio("POST", "/api/v1/tool-catalogues", {"data": {"type": "ToolCatalogue", "attributes": {"name": "Live MCP e2e", "short_description": "e2e"}}})
+        cat_id = int(cat["data"]["id"])
+        created["catalogues"].append(cat_id)
     code, groups = studio("GET", "/api/v1/groups")
     glist = groups if isinstance(groups, list) else groups.get("data") or groups.get("groups") or []
     gids = [int(g["id"]) for g in glist]
-    code, _ = studio("PUT", f"/api/v1/mcp-servers/{srv['id']}/groups", {"group_ids": gids})
-    check("3.grant teams", code == 200, (code, gids))
+    for g in gids:
+        studio("POST", f"/api/v1/groups/{g}/tool-catalogues", {"data": {"type": "ToolCatalogue", "id": str(cat_id)}})
+    code, _ = studio("PUT", f"/api/v1/mcp-servers/{srv['id']}/catalogues", {"tool_catalogue_ids": [cat_id]})
+    check("3.attach to catalogue", code == 200, (code, cat_id))
+    code, bad = studio("PUT", f"/api/v1/mcp-servers/{srv['id']}/catalogues", {"tool_catalogue_ids": ["1"]})
+    check("3.string catalogue ids are refused", code == 400, code)
+    code, detail = studio("GET", f"/api/v1/mcp-servers/{srv['id']}")
+    check("3.server lists its catalogue by name", any(c.get("name") == "Live MCP e2e" for c in detail.get("tool_catalogues", [])), detail.get("tool_catalogues"))
 
     # ---------- 4. portal: App, approval, key, gateway call ----------
     code, items = studio("GET", "/common/catalog?type=mcp_server")
@@ -258,7 +292,7 @@ try:
     created["dash_policies"].append(acl2.get("tyk_policy_id"))
     wait_gateway_policies()
     studio("POST", f"/api/v1/mcp-servers/{srv2['id']}/activate")
-    studio("PUT", f"/api/v1/mcp-servers/{srv2['id']}/groups", {"group_ids": gids})
+    studio("PUT", f"/api/v1/mcp-servers/{srv2['id']}/catalogues", {"tool_catalogue_ids": [cat_id]})
     code, upd = studio("PATCH", f"/api/v1/apps/{app_id}", {"data": {"type": "apps", "attributes": {"name": "Live weather app", "description": "e2e", "user_id": app["attributes"]["user_id"], "datasource_ids": [], "llm_ids": [], "tool_ids": [], "mcp_server_ids": [srv["id"], srv2["id"]]}}})
     check("5.bind second server to App", code == 200, (code, upd))
     code, cr = studio("GET", f"/api/v1/mcp-credentials/{cred['id']}")
@@ -346,7 +380,7 @@ try:
     created["servers"].append(pending_id)
     code, p7 = studio("GET", f"/api/v1/mcp-servers/{pending_id}")
     check("7.server awaiting the platform team", p7.get("dashboard_state") == "pending_platform", p7.get("dashboard_state"))
-    studio("PUT", f"/api/v1/mcp-servers/{pending_id}/groups", {"group_ids": gids})
+    studio("PUT", f"/api/v1/mcp-servers/{pending_id}/catalogues", {"tool_catalogue_ids": [cat_id]})
     code, pkg = studio("GET", f"/api/v1/mcp-servers/{pending_id}/handoff")
     check("7.handoff package (masked)", code == 200 and UPSTREAM_SECRET not in json.dumps(pkg) and '"***"' in json.dumps(pkg), code)
     code, pkgs = studio("GET", f"/api/v1/mcp-servers/{pending_id}/handoff?include_secrets=true")
@@ -403,6 +437,10 @@ finally:
                 print(" dash policy", p, dash("DELETE", "/api/portal/policies/" + p)[0])
         for t in created["targets"]:
             print(" target", t, studio("DELETE", f"/api/v1/webhooks/targets/{t}")[0])
+        for a in created["dash_assets"]:
+            print(" dash asset", a, dash("DELETE", "/api/assets/" + a)[0])
+        for c in created["catalogues"]:
+            print(" catalogue", c, studio("DELETE", f"/api/v1/tool-catalogues/{c}")[0])
         print(" connection", cid, studio("DELETE", f"/api/v1/tyk-connections/{cid}?force=true")[0])
     print("FAILURES:", len(failures), failures)
     sys.exit(1 if failures else 0)

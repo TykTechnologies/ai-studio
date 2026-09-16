@@ -418,7 +418,7 @@ func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, fi
 	}
 
 	if submission.ResourceType == models.SubmissionResourceTypeMCPServer {
-		return s.approveMCPSubmission(submission, reviewerID, finalPrivacyScore, reviewNotes, opts)
+		return s.approveMCPSubmission(submission, reviewerID, finalPrivacyScore, catalogueIDsFrom(catalogueIDs), reviewNotes, opts)
 	}
 
 	isPluginResource := submission.ResourceType == models.SubmissionResourceTypePlugin

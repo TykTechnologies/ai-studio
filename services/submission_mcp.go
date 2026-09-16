@@ -61,7 +61,7 @@ func (s *Service) mcpActor(userID uint) tykmcp.Actor {
 // approveMCPSubmission creates the proxy (or the handoff record) first, in
 // its own short write, then runs the approval transaction. A retry after a
 // failure between the two finds ResourceID set and skips the create.
-func (s *Service) approveMCPSubmission(submission *models.Submission, reviewerID uint, finalPrivacyScore int, reviewNotes string, opts SubmissionApproveOptions) (*models.Submission, error) {
+func (s *Service) approveMCPSubmission(submission *models.Submission, reviewerID uint, finalPrivacyScore int, catalogueIDs []uint, reviewNotes string, opts SubmissionApproveOptions) (*models.Submission, error) {
 	if err := s.mcpSubmissionsAvailable(); err != nil {
 		return nil, err
 	}
@@ -72,6 +72,7 @@ func (s *Service) approveMCPSubmission(submission *models.Submission, reviewerID
 		score := finalPrivacyScore
 		in.PrivacyScore = &score
 		in.Publish = false
+		in.ToolCatalogueIDs = catalogueIDs
 		if opts.GatewayTags != nil {
 			in.GatewayTags = *opts.GatewayTags
 			if len(in.GatewayTags) == 0 {

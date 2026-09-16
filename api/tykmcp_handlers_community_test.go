@@ -53,7 +53,7 @@ func TestTykMCPCommunity_NotAvailable(t *testing.T) {
 		{"DELETE", "/api/v1/mcp-servers/1"},
 		{"POST", "/api/v1/mcp-servers/1/activate"},
 		{"POST", "/api/v1/mcp-servers/1/deactivate"},
-		{"PUT", "/api/v1/mcp-servers/1/groups"},
+		{"PUT", "/api/v1/mcp-servers/1/catalogues"},
 		{"PUT", "/api/v1/mcp-servers/1/bundle"},
 		{"POST", "/api/v1/mcp-servers/register"},
 		{"POST", "/api/v1/mcp-servers/1/push"},

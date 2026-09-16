@@ -44,9 +44,12 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	require.Len(t, list.Servers, 1)
 	srv := list.Servers[0]
 
-	// Two portal users; only one is in the granted team.
+	// Two portal users; only one is in the team that holds the catalogue.
+	cat := &models.ToolCatalogue{Name: "AI catalogue"}
+	require.NoError(t, db.Create(cat).Error)
 	team := &models.Group{Name: "AI team"}
 	require.NoError(t, db.Create(team).Error)
+	require.NoError(t, db.Model(team).Association("ToolCatalogues").Append(cat))
 	mkUser := func(email string) *models.User {
 		u := models.NewUser()
 		u.Email, u.Name, u.Password, u.EmailVerified, u.ShowPortal = email, email, "hash", true, true
@@ -70,7 +73,7 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/activate", nil, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/groups", map[string]interface{}{"group_ids": []uint{team.ID}}, adminKey)
+	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/catalogues", map[string]interface{}{"tool_catalogue_ids": []uint{cat.ID}}, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	// Member sees it in the mixed view and the typed view, with facets.
@@ -84,7 +87,7 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	assert.Equal(t, "https://gw.example.com/weather/mcp", item.Attributes.EndpointURL)
 	assert.Equal(t, "auth_token", item.Attributes.AuthMode)
 	assert.Equal(t, []string{"edge-eu"}, item.Attributes.GatewayTags)
-	assert.True(t, item.Attributes.AccessGrantedViaApp)
+	assert.False(t, item.Attributes.AccessGrantedViaApp, "no bundle pinned yet, so no App could hold a key for it")
 	assert.Equal(t, 1, page.Meta.Counts["mcp_server"])
 	assert.NotContains(t, w.Body.String(), "weather.example.com", "upstream never reaches the portal")
 	assert.NotContains(t, w.Body.String(), "UPSTREAM-SECRET")
@@ -92,10 +95,15 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	decodeWebhookJSON(t, w, &page)
 	assert.Len(t, page.Data, 1)
-	w = apitest.PerformAuthRequest(r, "GET", "/common/catalog?type=mcp_server&catalog=mcp_server:1", nil, member.APIKey)
+	// MCP servers live in tool catalogues, so the tool catalogue filter applies.
+	w = apitest.PerformAuthRequest(r, "GET", "/common/catalog?type=mcp_server&catalog=tool:"+tykIDStr(cat.ID), nil, member.APIKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	decodeWebhookJSON(t, w, &page)
-	assert.Empty(t, page.Data, "catalog filters never match a type without catalogues")
+	assert.Len(t, page.Data, 1)
+	w = apitest.PerformAuthRequest(r, "GET", "/common/catalog?type=mcp_server&catalog=tool:9999", nil, member.APIKey)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	decodeWebhookJSON(t, w, &page)
+	assert.Empty(t, page.Data)
 
 	// Detail: member 200, outsider 404.
 	w = apitest.PerformAuthRequest(r, "GET", "/common/catalog/mcp-servers/"+tykIDStr(srv.ID), nil, member.APIKey)
@@ -110,10 +118,19 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	decodeWebhookJSON(t, w, &page)
 	assert.Empty(t, page.Data)
 
-	// Outsider cannot bind it; member can.
+	// Outsider cannot bind it; the member cannot either until AI Studio can
+	// issue a key for it (a pinned bundle), then can.
 	appReq := map[string]interface{}{"name": "Weather app", "description": "d", "data_source_ids": []uint{}, "llm_ids": []uint{}, "tool_ids": []uint{}, "mcp_server_ids": []uint{srv.ID}}
 	w = apitest.PerformAuthRequest(r, "POST", "/common/apps", appReq, outsider.APIKey)
 	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = apitest.PerformAuthRequest(r, "POST", "/common/apps", appReq, member.APIKey)
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "cannot issue a key")
+	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/bundle", map[string]interface{}{"pins": []map[string]string{{"tyk_policy_id": "pol-acl", "role": "access"}}}, adminKey)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = apitest.PerformAuthRequest(r, "GET", "/common/catalog/mcp-servers/"+tykIDStr(srv.ID), nil, member.APIKey)
+	decodeWebhookJSON(t, w, &detail)
+	assert.True(t, detail.Data.Attributes.AccessGrantedViaApp, "brokerable now")
 	w = apitest.PerformAuthRequest(r, "POST", "/common/apps", appReq, member.APIKey)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	var app AppResponse
@@ -125,10 +142,10 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	// Privacy rule: a low-privacy provider refuses the server.
 	llm := &models.LLM{Name: "Public LLM", Vendor: "openai", PrivacyScore: 10, Active: true}
 	require.NoError(t, db.Create(llm).Error)
-	cat := &models.Catalogue{Name: "c"}
-	require.NoError(t, db.Create(cat).Error)
-	require.NoError(t, db.Model(cat).Association("LLMs").Append(llm))
-	require.NoError(t, db.Model(team).Association("Catalogues").Append(cat))
+	llmCat := &models.Catalogue{Name: "c"}
+	require.NoError(t, db.Create(llmCat).Error)
+	require.NoError(t, db.Model(llmCat).Association("LLMs").Append(llm))
+	require.NoError(t, db.Model(team).Association("Catalogues").Append(llmCat))
 	lowReq := map[string]interface{}{"name": "Low app", "description": "d", "data_source_ids": []uint{}, "llm_ids": []uint{llm.ID}, "tool_ids": []uint{}, "mcp_server_ids": []uint{srv.ID}}
 	w = apitest.PerformAuthRequest(r, "POST", "/common/apps", lowReq, member.APIKey)
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())

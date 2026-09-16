@@ -201,18 +201,20 @@ func (a *API) unpublishMCPServer(c *gin.Context) {
 	c.JSON(http.StatusOK, view)
 }
 
-type mcpServerGroupsInput struct {
-	GroupIDs []uint `json:"group_ids"`
+type mcpServerCataloguesInput struct {
+	ToolCatalogueIDs []uint `json:"tool_catalogue_ids"`
 }
 
-// setMCPServerGroups godoc
-// @Summary Set the teams that can see an MCP server
+// setMCPServerCatalogues godoc
+// @Summary Set the tool catalogues an MCP server belongs to
 // @Tags TykMCP
 // @Accept json
+// @Produce json
 // @Param id path int true "Server ID"
+// @Param body body mcpServerCataloguesInput true "Tool catalogue ids"
 // @Success 200 {object} models.MCPServerResponse
-// @Router /mcp-servers/{id}/groups [put]
-func (a *API) setMCPServerGroups(c *gin.Context) {
+// @Router /mcp-servers/{id}/catalogues [put]
+func (a *API) setMCPServerCatalogues(c *gin.Context) {
 	actor, ok := requireTykMCPActor(c, "mcp-servers")
 	if !ok {
 		return
@@ -221,12 +223,12 @@ func (a *API) setMCPServerGroups(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var in mcpServerGroupsInput
+	var in mcpServerCataloguesInput
 	if err := c.ShouldBindJSON(&in); err != nil {
 		webhookBadRequest(c, "invalid request body")
 		return
 	}
-	view, err := a.tykMCPService().SetServerGroups(c.Request.Context(), actor, id, in.GroupIDs)
+	view, err := a.tykMCPService().SetServerCatalogues(c.Request.Context(), actor, id, in.ToolCatalogueIDs)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to set MCP server teams")
 		return

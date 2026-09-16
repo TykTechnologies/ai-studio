@@ -12,7 +12,9 @@ type ToolCatalogue struct {
 	LongDescription  string `json:"long_description"`
 	Icon             string `json:"icon"`
 	Tools            []Tool `json:"tools" gorm:"many2many:tool_catalogue_tools;"`
-	Tags             []Tag  `json:"tags" gorm:"many2many:tool_catalogue_tags;"`
+	// Tyk-managed MCP servers (Enterprise) share the tool catalogues.
+	MCPServers []MCPServer `json:"-" gorm:"many2many:tool_catalogue_mcp_servers;"`
+	Tags       []Tag       `json:"tags" gorm:"many2many:tool_catalogue_tags;"`
 }
 
 type ToolCatalogues []ToolCatalogue

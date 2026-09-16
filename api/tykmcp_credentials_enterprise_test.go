@@ -123,9 +123,12 @@ func TestTykMCPEnterprise_CredentialFlow(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/activate", nil, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	cat := &models.ToolCatalogue{Name: "AI catalogue"}
+	require.NoError(t, db.Create(cat).Error)
 	team := &models.Group{Name: "AI team"}
 	require.NoError(t, db.Create(team).Error)
-	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/groups", map[string]interface{}{"group_ids": []uint{team.ID}}, adminKey)
+	require.NoError(t, db.Model(team).Association("ToolCatalogues").Append(cat))
+	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/catalogues", map[string]interface{}{"tool_catalogue_ids": []uint{cat.ID}}, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	// Portal user builds an App with the server.

@@ -161,13 +161,17 @@ func TestTykMCPEnterprise_DiscoveryFlow(t *testing.T) {
 	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/bundle", bad, key)
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 
-	// Teams.
-	grp := &models.Group{Name: "AI team"}
-	require.NoError(t, h.api.service.DB.Create(grp).Error)
-	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/groups", map[string]interface{}{"group_ids": []uint{grp.ID}}, key)
+	// Catalogues.
+	cat := &models.ToolCatalogue{Name: "AI catalogue"}
+	require.NoError(t, h.api.service.DB.Create(cat).Error)
+	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/catalogues", map[string]interface{}{"tool_catalogue_ids": []uint{cat.ID}}, key)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	decodeWebhookJSON(t, w, &detail)
-	assert.Equal(t, []uint{grp.ID}, detail.GroupIDs)
+	assert.Equal(t, []uint{cat.ID}, detail.ToolCatalogueIDs)
+	require.Len(t, detail.ToolCatalogues, 1)
+	assert.Equal(t, "AI catalogue", detail.ToolCatalogues[0].Name)
+	w = apitest.PerformAuthRequest(r, "PUT", "/api/v1/mcp-servers/"+tykIDStr(srv.ID)+"/catalogues", map[string]interface{}{"tool_catalogue_ids": []uint{999}}, key)
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 
 	// Deleting a live server is refused; unpublish works.
 	w = apitest.PerformAuthRequest(r, "DELETE", "/api/v1/mcp-servers/"+tykIDStr(srv.ID), nil, key)

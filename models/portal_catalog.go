@@ -92,7 +92,9 @@ func AccessibleToolQuery(db *gorm.DB, userID uint) *gorm.DB {
 // this type; grants are per server.
 func AccessibleMCPServerQuery(db *gorm.DB, userID uint) *gorm.DB {
 	return db.Model(&MCPServer{}).
-		Joins("JOIN mcp_server_groups ON mcp_server_groups.mcp_server_id = mcp_servers.id").
-		Joins("JOIN user_groups ON user_groups.group_id = mcp_server_groups.group_id").
+		Joins("JOIN tool_catalogue_mcp_servers ON tool_catalogue_mcp_servers.mcp_server_id = mcp_servers.id").
+		Joins("JOIN tool_catalogues ON tool_catalogues.id = tool_catalogue_mcp_servers.tool_catalogue_id AND tool_catalogues.deleted_at IS NULL").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
 		Where("user_groups.user_id = ? AND mcp_servers.is_active = ? AND mcp_servers.dashboard_state = ?", userID, true, MCPDashboardActive)
 }

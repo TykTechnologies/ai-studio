@@ -310,7 +310,14 @@ const MCPServerSections = ({ item }) => {
   const oauth = a.oauth;
   return (
     <>
-      <Section title="How to connect" description="This server is served by a Tyk Gateway; AI Studio brokers access to it.">
+      <Section
+        title="How to connect"
+        description={
+          a.brokerable
+            ? "This server is served by a Tyk Gateway; AI Studio brokers access to it."
+            : "This server is served by a Tyk Gateway; you connect to it directly."
+        }
+      >
         <Grid container spacing={2}>
           <Field label="Authentication" md={4}>
             {MCP_AUTH_LABELS[a.auth_mode] || a.auth_mode || "—"}
@@ -354,8 +361,8 @@ const MCPServerSections = ({ item }) => {
           {a.brokerable
             ? "Build an app with this server and, once it is approved, request a Tyk access key from the app page."
             : a.auth_mode === "keyless"
-              ? "No credential is needed; attach it to an app so your access is recorded."
-              : "Attach it to an app to record your access; the credential itself is obtained from the authentication method above."}
+              ? "AI Studio does not broker access to this server: no credential is needed, point your MCP client at the endpoint above."
+              : "AI Studio does not broker access to this server: obtain a token from the authentication method above and point your MCP client at the endpoint."}
         </Typography>
       </Section>
       <Section title="Tools, resources and prompts" description="What the server offers, as declared on the Tyk Gateway.">
@@ -562,7 +569,7 @@ const AssetDetail = ({ type }) => {
           </Section>
         )}
 
-        {APP_ID_FIELDS[type] && (
+        {APP_ID_FIELDS[type] && isAppGranted(item) && (
           <Section
             title="Your apps"
             description={`Apps of yours that already have access to this ${typeLabelLower(type)}.`}

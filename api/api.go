@@ -1110,7 +1110,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/mcp-servers/:id", authz.Delete("mcp-servers"), a.deleteMCPServer)
 	v1.POST("/mcp-servers/:id/activate", authz.Publish("mcp-servers"), a.publishMCPServer)
 	v1.POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.unpublishMCPServer)
-	v1.PUT("/mcp-servers/:id/groups", authz.Write("mcp-servers"), a.setMCPServerGroups)
+	v1.PUT("/mcp-servers/:id/catalogues", authz.Write("mcp-servers"), a.setMCPServerCatalogues)
 	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
 	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
 	v1.POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.pushMCPServer)

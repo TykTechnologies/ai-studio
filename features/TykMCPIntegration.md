@@ -146,6 +146,7 @@ All new tables use `gorm.Model` unless noted; timestamps in UTC; JSON columns as
 | `auto_publish` | default false; when true requires `default_privacy_score` and publishes as `SYSTEM` (audited) |
 | `default_privacy_score` (nullable) | administrator-chosen; required for `auto_publish`. Without `auto_publish` every imported server keeps a null score until an administrator sets one, and publish refuses meanwhile |
 | `accept_handoffs` | default true; lets `catalogue`/`broker` connections receive community registrations as handoff packages |
+| `template_id` | optional Dashboard API template asset id (kind `oas-template`). Fetched with `GET /api/assets/{id}` and merged into every proxy Studio creates or pushes on the connection (template as base, the definition wins, arrays replaced, template identity dropped), mirroring what the Dashboard does for `POST /api/apis/oas?templateID=`; Dashboard 5.14 ignores `templateID` on `/api/mcps`, so Studio merges itself. Probe capability `template_read`; a template that cannot be fetched fails registration closed. Added 2026-09-17. |
 | `key_defaults` (text JSON) | `expires_in_seconds` (0 = never), `alias_prefix`, `detailed_recording` |
 | `allow_internal_host` | per-connection exemption for an internal Dashboard hostname (§10) |
 | `mdcb_url` (nullable), `mdcb_access_token` (`json:"-"`, encrypted), `mdcb_allow_internal_host` | optional MDCB section (§4a); same URL policy and encryption rules as the Dashboard fields |
@@ -181,12 +182,12 @@ All new tables use `gorm.Model` unless noted; timestamps in UTC; JSON columns as
 | `owner_user_id`, `community_submitted` | |
 | `last_seen_at`, `last_synced_at`, `lock_version` | |
 
-Studio-owned fields (`description`, `long_description`, `logo_url`, `tags`, `name` when overridden, `privacy_score`, `is_active`, team grants, bundle) are never overwritten by sync. Definition-derived fields always follow the Dashboard.
+Studio-owned fields (`description`, `long_description`, `logo_url`, `tags`, `name` when overridden, `privacy_score`, `is_active`, catalogue membership, bundle) are never overwritten by sync. Definition-derived fields always follow the Dashboard.
 
 The GORM relation on `models.App` is `MCPServers []MCPServer gorm:"many2many:app_mcp_servers" json:"-"`, excluded from the generic `App.Get` preload; App DTOs carry a slim `mcp_servers[] {id, name, slug, connection_id, auth_mode, endpoint_url}` projection.
 
-### `mcp_server_groups`
-`mcp_server_id`, `group_id` — direct team grants (same model as `group_plugin_resources`). A newly published server is visible to no team until granted, except under `auto_publish` (Default team).
+### `tool_catalogue_mcp_servers`
+`tool_catalogue_id`, `mcp_server_id` — GORM many-to-many between `tool_catalogues` and `mcp_servers`. Portal visibility follows the platform's rule for tools: a server is visible to the teams granted the catalogues it belongs to (`AccessibleMCPServerQuery` joins `tool_catalogue_mcp_servers → tool_catalogues → group_toolcatalogues → user_groups`). A newly published server is in no catalogue until an administrator adds it, except under `auto_publish` (the Default tool catalogue). Replaced the direct team grants (`mcp_server_groups`) on 2026-09-17 after the UX review: visibility is a catalogue concern everywhere else in the product.
 
 ### `tyk_policies` (cache)
 | Column | Notes |
@@ -282,7 +283,7 @@ api/tykmcp_handlers.go, api/tykmcp_portal_handlers.go
 4. Credential reconciliation (§7.4).
 5. Write `mcp_sync_runs`; on transport error mark failed and back off (jittered, capped 30 min) without touching asset state; on 401/403 → `degraded`.
 
-**Admin review → publish**: edit presentation, set `privacy_score`, grant teams, pin a bundle (§8.2), flip `is_active` (`mcp-servers:publish`). Published servers appear in the unified portal catalogue (§9).
+**Admin review → publish**: edit presentation, set `privacy_score`, add to tool catalogues, pin a bundle (§8.2), flip `is_active` (`mcp-servers:publish`). Published servers appear in the unified portal catalogue (§9).
 
 ### 7.2 Registration: Studio admin → Dashboard (`full` mode only)
 
@@ -291,7 +292,7 @@ Wizard at Admin → MCP Servers → "Register MCP server", two shapes:
 - **Remote MCP server**: name, listen path (validated `^/[a-z0-9-/]+/$` and against the synced `listen_path`s; the real create's 400 is the authority since `dryRun` validates schema only), deployment target (§4a, when tags are known), upstream MCP URL, upstream auth (none / static header). The header value is entered in the form, sent in the create call, and **never persisted in Studio**: not on the asset, not in the masked definition. Consumer auth: `authToken` (default), `oauth21` with PRM authorization servers, or keyless with an explicit confirmation. Optional primitive allow-list.
 - **REST API to MCP** (only when `rest_to_mcp_supported`): pick a Tyk OAS API, choose operations (from `GET /api/apis/oas/{id}`), per-tool name/description/annotations. Studio builds `x-tyk-mcp-server.primitives[]` and `upstream.url = tyk://<id>/mcp`.
 
-Sequence: build → `POST /api/mcps?dryRun=true&expand=true` (errors surfaced verbatim) → confirm → `POST /api/mcps` → read `ID` (fall back to `Meta`) → `GET /api/mcps/{id}` → upsert `origin=studio` → optional policy create + pin → publish.
+Sequence: build → merge the connection's API template when one is set (§5 `template_id`) → `POST /api/mcps?dryRun=true&expand=true` (errors surfaced verbatim) → confirm → `POST /api/mcps` → read `ID` (fall back to `Meta`) → `GET /api/mcps/{id}` → upsert `origin=studio` → optional policy create + pin → publish.
 
 Edits: Dashboard is the source of truth. The edit form is offered for `studio`/`submission` origin and, behind an explicit confirmation, for `dashboard` origin. Before `PUT /api/mcps/{id}` Studio re-fetches the live doc, compares its hash with the one the form loaded, refuses on mismatch (`ErrDashboardConflict`, 409, "reload"), and **splices the live `upstream.authentication` block back into the outgoing document** so the masked `***` is never pushed. Deleting a `studio`-origin server revokes its credentials, then `DELETE /api/mcps/{id}`; `dashboard`-origin servers can only be unpublished.
 
@@ -329,7 +330,7 @@ Update proposals reuse `is_update`; on approval Studio applies the diff via the 
 
 ### 7.4 Credentials: minting, drift, revocation
 
-**Pre-conditions.** Binding a server to an App requires: `is_active`, `dashboard_state=active`, visible to the caller's teams (a new `AccessibleMCPServerQuery` checked in `createUserApp`/update paths, like the handler-side `GetAccessibleLLMs` check in `api/common.go:376-412`; `ErrResourceNotAppGranted` is *not* the right error, it means a plugin type is not app-granted), and the privacy rule `mcp_servers.privacy_score ≤ max LLM privacy score` (extend `validatePrivacyScoresWithPluginResources`). App approval stays the existing credential activation, which also writes `mcp_access_grants` (and every later binding change does too).
+**Pre-conditions.** Binding a server to an App requires: `brokerable` (Studio never brokers OAuth, JWT, mTLS, keyless or custom-auth servers; the App builder does not offer them, the portal shows no Build app for them, and `ValidateMCPServerBindings` refuses with `ErrMCPServerNotBrokerable`, decided 2026-09-17), `is_active`, `dashboard_state=active`, visible to the caller's teams (a new `AccessibleMCPServerQuery` checked in `createUserApp`/update paths, like the handler-side `GetAccessibleLLMs` check in `api/common.go:376-412`; `ErrResourceNotAppGranted` is *not* the right error, it means a plugin type is not app-granted), and the privacy rule `mcp_servers.privacy_score ≤ max LLM privacy score` (extend `validatePrivacyScoresWithPluginResources`). App approval stays the existing credential activation, which also writes `mcp_access_grants` (and every later binding change does too).
 
 **Minting** is per (App, connection), on demand by the App owner after activation (portal App page, one "Get access key" per connection) or by an admin (`mcp-credentials:execute`). Plaintext is never stored: it is returned once. Steps:
 
@@ -373,7 +374,7 @@ Creates only partitioned policies:
 ## 9. Portal, App and admin surfaces
 
 ### Portal (`/common`)
-- Unified catalogue type `mcp_server`: `GET /common/catalog` items `{type:"mcp_server", attributes:{…, kind, auth_mode, endpoint_url, primitives (names, per-primitive auth), brokerable, access_granted_via_app:true}}`. `api/portal_catalog_query.go`: add an `AccessibleMCPServerQuery` source (team-grant join) to the `UNION ALL`; make `catalogueNameCol`/`catalogueIDCol` optional in `scope()` (`:246-263`) so a source without catalogue membership skips those clauses and `catalog=` filters do not apply to it. Facets: `counts.mcp_server`, kind = `remote|rest_to_mcp`.
+- Unified catalogue type `mcp_server`: `GET /common/catalog` items `{type:"mcp_server", attributes:{…, kind, auth_mode, endpoint_url, primitives (names, per-primitive auth), brokerable, access_granted_via_app:true}}`. `api/portal_catalog_query.go`: add an `AccessibleMCPServerQuery` source (tool-catalogue join) to the `UNION ALL`; the MCP source carries `catalogueType: tool`, so `catalog=tool:<id>` filters apply to it like to tools. `access_granted_via_app` is `brokerable`, so the portal's Build app button and the App builder's picker skip servers Studio does not broker. Facets: `counts.mcp_server`, kind = `remote|rest_to_mcp`.
 - Detail `GET /common/catalog/mcp-servers/:id` (404 when not visible): About, Primitives (with auth badges), How to connect (endpoint, auth mode, OAuth PRM info), Governance, Your apps.
 - App builder: "MCP servers" picker; `?mcp_server=<id>` deep link; privacy feedback.
 - App page: "MCP access" section grouped by connection: bound servers, credential status, "Get access key" / "Rotate" / "Revoke" per connection, endpoint docs, OAuth/keyless instructions.
@@ -389,7 +390,7 @@ Creates only partitioned policies:
 | `POST /tyk-connections/:id/policies`, `PATCH …/policies/:pid` (minimal creator, `full` only) | `mcp-servers:execute` |
 | `GET/POST /mcp-servers`, `GET/PATCH/DELETE /mcp-servers/:id` | `mcp-servers` r/w/d |
 | `POST /mcp-servers/:id/{activate,deactivate}` | `mcp-servers:publish` (refuses unless `dashboard_state=active` and `privacy_score` set) |
-| `PUT /mcp-servers/:id/bundle`, `PUT /mcp-servers/:id/groups` | `mcp-servers:write` |
+| `PUT /mcp-servers/:id/bundle`, `PUT /mcp-servers/:id/catalogues` (`{tool_catalogue_ids: [numbers]}`) | `mcp-servers:write` |
 | `POST /mcp-servers/register` (`?dry_run=1`), `POST /mcp-servers/:id/push`, `POST /mcp-servers/:id/link` | `mcp-servers:execute` |
 | `GET /mcp-servers/:id/handoff` | `mcp-servers:read` |
 | `GET /mcp-credentials`, `GET /mcp-credentials/:id` | `mcp-credentials:read` |
@@ -397,9 +398,9 @@ Creates only partitioned policies:
 | `GET /mcp-access-report?connection=&server=&user=` (JSON) | `mcp-credentials:read` |
 | `GET /tyk-mcp/status` | `authz.AnyAdmin`; 200 `{available:false}` in CE/disabled |
 
-RBAC (`pkg/authz/catalogue.go`, `Actions[0]` must be `read`): `tyk-connections` (Settings, `crudx`, Sensitive, Privileged), `mcp-servers` (Context management, `crudxp`), `mcp-credentials` (AI Portal, `crudx`, Sensitive, Privileged). Frontend: constants in `admin/rbac/permissions.js`, nav in `Drawer.js` (Settings → Tyk Dashboard; Context management → MCP Servers, `exact` on the parent path; AI Portal → MCP Credentials), descriptors in `admin/routes.js`, soft-gated (mounted in CE, page shows the enterprise prompt). Audit action names in `enterprise/features/audit/actions.go` for `register`, `push`, `link`, `apply-drift`.
+RBAC (`pkg/authz/catalogue.go`, `Actions[0]` must be `read`): `tyk-connections` (Settings, `crudx`, Sensitive, Privileged), `mcp-servers` (Context management, `crudxp`), `mcp-credentials` (AI Portal, `crudx`, Sensitive, Privileged). Frontend: constants in `admin/rbac/permissions.js`, nav in `Drawer.js` (Settings → Tyk Connections; Context management → MCP servers, `exact` on the parent path; AI Portal → MCP credentials), descriptors in `admin/routes.js`, soft-gated (mounted in CE, page shows the enterprise prompt). Audit action names in `enterprise/features/audit/actions.go` for `register`, `push`, `link`, `apply-drift`.
 
-Admin pages: `TykConnections.js` (+ form with probe panel), `MCPServers.js`, `MCPServerDetail.js` (definition viewer, bundle editor, teams, primitives, credentials using it), `MCPServerRegister.js`, `MCPCredentials.js` (ledger with drift filter, access report). Portal: `AssetDetail.js` `mcp_server` branch + `DETAIL_PATHS`, `CATALOG_TYPES.MCP_SERVER` in `portal/utils/catalog.js`, App builder/detail changes.
+Admin pages, built on the platform's list/detail/form primitives (`DataTable` + `useListQuery`, `TitleBox`/`PrimaryButton`, `Section`, `RelationshipPicker`, `EmptyStateWidget`, `FeedbackSnackbar`, `DeleteConfirmationDialog`; restyled 2026-09-17 after the UX review): `TykConnections.js` + `TykConnectionForm.js` (page-level form with probe panel and the API template field), `MCPServers.js`, `MCPServerDetail.js` (definition viewer, bundle editor, tool-catalogue picker, primitives, credentials using it), `MCPServerRegister.js`, `MCPCredentials.js` (ledger with drift filter, access report). Portal: `AssetDetail.js` `mcp_server` branch + `DETAIL_PATHS`, `CATALOG_TYPES.MCP_SERVER` in `portal/utils/catalog.js`, App builder/detail changes.
 
 ## 10. Security
 
@@ -443,8 +444,8 @@ Admin pages: `TykConnections.js` (+ form with probe panel), `MCPServers.js`, `MC
 | App owner leaves (orphaned App) | existing orphan flow suspends; reassignment resumes |
 | Two Studio nodes | connection lease + heartbeat + `lock_version` CAS |
 | Dashboard 429 | backoff honours `Retry-After`; run marked partial |
-| Keyless proxy | catalogued, grant recorded (`keyless`), no key |
-| OAuth 2.1 / external OAuth / JWT / mTLS proxy | catalogued, grant recorded, no key; detail page shows PRM / authorization servers / configurable "contact platform" text |
+| Keyless proxy | catalogued and publishable; not brokerable, so not bindable to an App and no Build app in the portal; detail page says no credential is needed |
+| OAuth 2.1 / external OAuth / JWT / mTLS proxy | catalogued and publishable; not brokerable, so not bindable and no Build app; detail page shows PRM / authorization servers and how to connect directly |
 | Mixed schemes | `auth_mode=mixed`; brokerable only if a token or basic scheme is among them |
 | Per-primitive `ignoreAuthentication` / scopes | shown per primitive; proxy-level `auth_mode` unchanged |
 | `per_api` in a bundle | refused at pin/mint |
@@ -469,7 +470,6 @@ Goal: chat sessions and agents use a Tyk MCP server's tools under the calling Ap
 - Discovery probe key (`tools/list` through the proxy to enrich `primitives` for remote servers) — deferred because it is itself a long-lived credential to protect.
 - Rotation grace window; CSV export of the access report.
 - Auto-link handoff rows by a Dashboard tag convention.
-- Catalogue (Catalogs → Teams) membership for MCP servers, if admins prefer it over direct team grants.
 - Dashboard MCP analytics (`/api/activity/mcp/*`) on the App usage page.
 - Tyk Developer Portal awareness; governed-metadata schema pack for MCP servers.
 
@@ -533,9 +533,13 @@ Broker rules that were settled during M4 and are not obvious from the code:
 - Gateway propagation lags the Dashboard by up to ~10 s: a key update that references a policy created moments earlier fails with `403 Failed to update session object to Tyk` until the gateway has loaded it; the credential records the drift error and the next sync retries.
 - OAuth 2.1 proxies built by the wizard carry `components.securitySchemes.oauth21` (`type: oauth2`) plus the vendor scheme's `oauth2.protectedResourceMetadata`, which is what the discovery parser classifies as `oauth21`; the OAS flow URLs point at the first authorization server and are informational.
 
+UX round (2026-09-17, after the user's review of the dev stack): the admin pages were rebuilt on the platform primitives (see §9), MCP servers moved from direct team grants to tool-catalogue membership (`PUT /mcp-servers/:id/catalogues`, numeric ids; the team picker had shown ids and the string-id body `{"group_ids":["1"]}` was refused), Settings → "Tyk Dashboard" became "Tyk Connections", Build app is offered only for brokerable servers and binding a non-brokerable one is refused server-side (so the access report is key-backed by construction), and connections gained the API template id (§5) with Studio-side merging verified against Dashboard 5.14 (template merged on `POST /api/apis/oas?templateID=`, ignored on `POST /api/mcps`; the definition wins on conflicts, arrays are replaced).
+
 ## 19. Live verification (2026-09-16)
 
 `tests/tykmcp/live_e2e.py` ran the §16 recipe against Tyk Dashboard 5.14 + Gateway EE (local Docker stack) and the enterprise dev Studio: **80 checks passed** covering connection probe and effective mode, registration with dry-run preview, the policy creator, pinning, publishing and team grants, portal catalogue and App binding, approval, key minting (shown once, endpoint and `mcp-remote` snippet), a JSON-RPC `initialize` and `tools/list` through the Gateway with the key (and a 401 without it), the static upstream header arriving at the upstream, the Dashboard key carrying both policies, `meta_data.studio_*` and the `ai-studio` tag, the access report, Dashboard-side limit edits causing no drift, automatic narrowing on re-pin, widening held for approval after a second server was bound and applied by an administrator, a foreign policy preserved and reported, the proxy going missing (server unpublished, key narrowed) and resuming under the same id (key restored without approval), a key deleted on the Dashboard showing as revoked, re-mint and rotate, catalogue mode refusing to mint, a community submission with the credential redacted, approval producing a `pending_platform` server, handoff packages masked and with the credential, the `registration_handoff` webhook delivered to a local receiver without the secret, manual creation from the package, sync, link, and `gatewayTags` on the Dashboard definition, the catalogue row and the portal detail.
+
+Run 7 (2026-09-17, after the UX round): **87 checks passed** with the driver switched from team grants to tool-catalogue membership (`PUT /mcp-servers/:id/catalogues`, string ids refused with 400, the server lists its catalogue by name, portal visibility through Catalogs → Teams) and with an API template: a `oas-template` asset created on the Dashboard, `template_id` saved on the connection and probed as `template_read=ok`, the registered proxy carrying the template's `trafficLogs` and `contextVariables` defaults while the registration's upstream URL won, and the preview naming the template.
 
 What the run found and fixed (M8): Dashboard 5.14 persists dry runs (previews are now local; the probe writes nothing), the sync's re-probe reset learned capabilities (merge), soft-deleted servers blocked re-registration (partial unique indexes), connection deletes left servers and policies behind (cascade), an upstream URL pasted with its `/mcp` endpoint was proxied to `/mcp/mcp` (suffix removed with a warning), and `per_api`/MCP ACL field behaviour (§8.2, §8.3). Known Tyk timing: the Gateway loads a new proxy or policy within about ten seconds of the Dashboard change; a key update that references a policy created moments earlier fails until then and is retried on the next sync.
 

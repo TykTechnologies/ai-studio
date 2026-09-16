@@ -2,7 +2,7 @@
 
 :::note Enterprise Edition
 The Tyk Dashboard MCP integration is an Enterprise Edition feature. In
-Community Edition the Settings → Tyk Dashboard page shows what the feature
+Community Edition the Settings → Tyk Connections page shows what the feature
 offers and every integration route answers `403`.
 :::
 
@@ -36,7 +36,7 @@ that path.
 A **connection** is one Tyk Dashboard URL and one Dashboard user access
 key. Several connections are supported; every imported server, cached policy
 and minted key belongs to exactly one. Connections live under Settings →
-Tyk Dashboard.
+Tyk Connections.
 
 The Dashboard user's permissions are the trust boundary. The connection's
 **mode** can only narrow what AI Studio does with them:
@@ -75,6 +75,23 @@ The admin secret is never accepted. The organisation id is entered on the
 connection (pre-filled from a key preview when the Dashboard returns it) and
 every imported object is checked against it.
 
+### API template
+
+A connection can name a Dashboard **API template** (Assets → API templates;
+the template's custom id or database id). Its defaults are merged into every
+MCP proxy AI Studio creates on that connection, whether an administrator
+registers it or a community submission is approved, and again on every push
+from AI Studio, so an edit never strips them. This is how a platform team
+says "publish MCP proxies as you like, but every one of them carries our
+traffic logging, caching, middleware and tags". The merge follows the
+Dashboard's own rule for `POST /api/apis/oas?templateID=`: the template is
+the base, the registration's own values win on conflicts, arrays are
+replaced rather than combined, and the template's identity fields are
+dropped. A Dashboard 5.14 ignores `templateID` on the MCP endpoint, which is
+why AI Studio fetches the asset (`GET /api/assets/{id}`) and merges it
+itself. The probe records `template_read`; a template that cannot be fetched
+fails registration closed rather than creating an ungoverned proxy.
+
 ### Segmented gateways and MDCB
 
 Where gateways are segmented, a proxy is only loaded by gateways whose tags
@@ -107,7 +124,8 @@ unpublished. Before publishing, an administrator:
 
 1. sets a **privacy score** (there is no platform default; an imported server
    has none until someone decides),
-2. grants the **teams** that may see it in the portal,
+2. adds it to the **tool catalogs** whose teams may see it in the portal
+   (Catalogs → Teams, exactly as for tools),
 3. optionally pins a **policy bundle** so keys can be minted for it.
 
 A server can only be published while its proxy is active on the Dashboard. A
@@ -115,8 +133,8 @@ proxy that disappears from the Dashboard is marked missing, unpublished, and
 its keys are suspended; if the same proxy id comes back, the server resumes
 and the keys are restored.
 
-Presentation (name override, descriptions, logo, tags), privacy score, teams
-and bundle are AI Studio's and survive every sync; everything derived from
+Presentation (name override, descriptions, logo, tags), privacy score,
+catalogs and bundle are AI Studio's and survive every sync; everything derived from
 the definition follows the Dashboard.
 
 ## Policy bundles and keys
@@ -186,10 +204,13 @@ connection remembers that for next time.
 ### Servers without keys
 
 OAuth 2.1, external OAuth, JWT, mTLS and keyless proxies are catalogued and
-bindable like any other. AI Studio mints nothing for them: the App page and
-the portal detail show the protected-resource metadata, the authorization
-servers and scopes, or that no credential is needed, and the access grant is
-recorded so the access report still lists who reaches them.
+published like any other, but AI Studio does not broker access to them: they
+cannot be attached to an App (the App builder does not offer them and the
+API refuses the binding), the portal shows no **Build app** button for them,
+and the detail page tells the user how to connect directly, with the
+protected-resource metadata, authorization servers and scopes, or that no
+credential is needed. Consequently the access report lists key-backed access
+only.
 
 ## Registering a proxy from AI Studio
 
@@ -252,25 +273,26 @@ transactional nor idempotent:
   unless someone with `mcp-servers: execute` downloads the package with it,
   which is audited. When the platform team has created the proxy and a
   sync has imported it, the page lists candidates on the same name or listen
-  path and **Link** moves ownership, privacy score, teams and the submission
-  onto the imported server.
+  path and **Link** moves ownership, privacy score, catalogs and the
+  submission onto the imported server.
 
 ## Access report
 
 AI Portal → MCP credentials has two tabs: the **minted keys** ledger (App,
 connection, key hint, status, applied and external policies, drift, expiry,
 with rotate, suspend, resume, revoke and apply-change actions) and the
-**access report**, one row per App and MCP server with the App's owner, the
-kind of access (Tyk key, OAuth, keyless, external) and the key behind it,
-filterable by connection, server, user and App, with closed grants on
-request.
+**access report**, one row per App and MCP server the App holds a key for,
+with the App's owner and the key behind it, filterable by connection,
+server, user and App, with closed grants on request. Servers AI Studio does
+not broker (OAuth, mTLS, keyless) never appear: nobody can attach them to an
+App.
 
 ## Permissions
 
 | Resource | Group | Actions | Notes |
 |---|---|---|---|
 | `tyk-connections` | Settings | read, write, delete, execute | execute: activate, disable, probe, sync now. Sensitive and privileged. |
-| `mcp-servers` | Context management | read, write, delete, execute, publish | write: presentation, teams, bundle; publish: portal visibility; execute: register, push, link, create policies, download a handoff with the credential. |
+| `mcp-servers` | Context management | read, write, delete, execute, publish | write: presentation, catalogs, bundle; publish: portal visibility; execute: register, push, link, create policies, download a handoff with the credential. |
 | `mcp-credentials` | AI Portal | read, write, delete, execute | execute: mint, rotate, suspend, resume, revoke, apply a widening change. Sensitive and privileged. |
 
 Portal actions (binding servers, minting a key for one's own App) are
@@ -308,7 +330,8 @@ access key, mode `full`, **allow internal host** on, and a gateway base URL
 of `http://localhost:8080`. The probe should report MCP support and, on a
 5.14 Dashboard, no REST-to-MCP support. Register a remote proxy that points
 at an MCP server reachable from the gateway container, pin a bundle, publish
-to a team, and as a portal user build an App with it and take a key:
+it, add it to a catalog a team is granted, and as a portal user build an App
+with it and take a key:
 
 ```bash
 npx mcp-remote http://localhost:8080/<listen-path>/mcp \

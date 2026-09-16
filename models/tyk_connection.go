@@ -58,6 +58,11 @@ type TykConnection struct {
 
 	DashboardURL   string `gorm:"size:2048;not null" json:"dashboard_url"`
 	GatewayBaseURL string `gorm:"size:2048" json:"gateway_base_url"`
+	// TemplateID names a Dashboard API template asset (kind oas-template)
+	// merged into every MCP proxy AI Studio creates on this connection, so
+	// the API team's governance defaults (logging, caching, middleware,
+	// tags) apply to community and Studio registrations alike.
+	TemplateID string `gorm:"size:255" json:"template_id"`
 	// DashboardAccessToken is the Dashboard user's API access key. Encrypted.
 	DashboardAccessToken string `gorm:"type:text" json:"-"`
 	OrgID                string `gorm:"size:64" json:"org_id"`
@@ -134,6 +139,9 @@ const (
 	TykCapPoliciesWrite   = "policies_write"
 	TykCapKeyDeleteByHash = "key_delete_by_hash"
 	TykCapMDCBRead        = "mdcb_read"
+	// TykCapTemplateRead records whether the connection's API template
+	// asset can be fetched (GET /api/assets/{id}).
+	TykCapTemplateRead = "template_read"
 	// TykCapMCPDryRun records whether POST /api/mcps?dryRun=true really
 	// validates without persisting. Dashboard 5.14 ignores the flag and
 	// creates the proxy; Studio detects that, deletes it, and validates
@@ -362,6 +370,7 @@ type TykConnectionResponse struct {
 	Description         string                   `json:"description"`
 	DashboardURL        string                   `json:"dashboard_url"`
 	GatewayBaseURL      string                   `json:"gateway_base_url"`
+	TemplateID          string                   `json:"template_id"`
 	HasToken            bool                     `json:"has_token"`
 	TokenHint           string                   `json:"token_hint,omitempty"`
 	OrgID               string                   `json:"org_id"`
@@ -408,7 +417,7 @@ func (t *TykConnection) ToResponse() TykConnectionResponse {
 	}
 	return TykConnectionResponse{
 		ID: t.ID, Name: t.Name, Description: t.Description,
-		DashboardURL: t.DashboardURL, GatewayBaseURL: t.GatewayBaseURL,
+		DashboardURL: t.DashboardURL, GatewayBaseURL: t.GatewayBaseURL, TemplateID: t.TemplateID,
 		HasToken: t.DashboardAccessToken != "", TokenHint: tokenHint(t.DashboardAccessToken),
 		OrgID: t.OrgID, DeclaredMode: t.DeclaredMode, EffectiveMode: t.EffectiveMode,
 		Capabilities: t.Capabilities(), Status: t.Status, Degraded: t.Degraded, DegradedReason: t.DegradedReason,

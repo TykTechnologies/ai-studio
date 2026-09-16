@@ -84,4 +84,23 @@ describe("AssetDetail (MCP server)", () => {
     expect(usingApps).toHaveTextContent("Weather app");
     expect(usingApps).not.toHaveTextContent("Other app");
   });
+
+  it("offers no Build app for a server AI Studio does not broker", async () => {
+    const oauthServer = {
+      ...server,
+      attributes: { ...server.attributes, access_granted_via_app: false, brokerable: false, auth_mode: "oauth21", auth_header: "", oauth: { authorization_servers: ["https://auth.example.com"] } },
+    };
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/catalog/mcp-servers/12") return Promise.resolve({ data: { data: oauthServer } });
+      if (url === "/common/apps") return Promise.resolve({ data: apps });
+      return Promise.reject(new Error("unexpected " + url));
+    });
+    renderDetail();
+    expect(await screen.findByText("Weather MCP proxy")).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-build-app")).not.toBeInTheDocument();
+    expect(screen.getByTestId("mcp-access-note")).toHaveTextContent(/does not broker access/);
+    expect(screen.getByText(/https:\/\/auth.example.com/)).toBeInTheDocument();
+    expect(screen.queryByTestId("asset-apps")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your apps")).not.toBeInTheDocument();
+  });
 });

@@ -159,7 +159,10 @@ type catalogSource struct {
 	communityCol     string // empty when the type has no community submissions
 	catalogueIDCol   string
 	catalogueNameCol string
-	searchCols       []string
+	// catalogueType is the catalogue family the type belongs to when it is
+	// not its own (MCP servers live in tool catalogues). Empty means typ.
+	catalogueType string
+	searchCols    []string
 	// extraSearch is an optional clause with one "?" for the LIKE pattern
 	// (tags live in a join table).
 	extraSearch string
@@ -190,11 +193,10 @@ var catalogSources = []catalogSource{
 		base:       models.AccessibleToolQuery,
 	},
 	{
-		// Tyk-managed MCP servers are granted to teams directly, so they
-		// have no catalogue columns: the catalog filter never applies and
-		// search does not look at a catalogue name.
+		// Tyk-managed MCP servers share the tool catalogues.
 		typ: CatalogItemMCPServer, table: "mcp_servers",
 		kindCol: "mcp_servers.kind", privacyCol: "mcp_servers.privacy_score", communityCol: "mcp_servers.community_submitted",
+		catalogueIDCol: "tool_catalogue_mcp_servers.tool_catalogue_id", catalogueNameCol: "tool_catalogues.name", catalogueType: CatalogItemTool,
 		searchCols: []string{"mcp_servers.name", "mcp_servers.description", "mcp_servers.long_description", "mcp_servers.listen_path", "mcp_servers.primitives", "mcp_servers.tags", "mcp_servers.auth_mode"},
 		base:       models.AccessibleMCPServerQuery,
 	},
@@ -219,10 +221,19 @@ func (src catalogSource) applies(q catalogQuery) bool {
 	if q.Community && src.communityCol == "" {
 		return false
 	}
-	if t, _ := q.catalogFilter(); t != "" && (t != src.typ || src.catalogueIDCol == "") {
+	if t, _ := q.catalogFilter(); t != "" && (t != src.catalogueFamily() || src.catalogueIDCol == "") {
 		return false
 	}
 	return true
+}
+
+// catalogueFamily is the catalogue type a `catalog=<type>:<id>` filter must
+// name to apply to this source.
+func (src catalogSource) catalogueFamily() string {
+	if src.catalogueType != "" {
+		return src.catalogueType
+	}
+	return src.typ
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)

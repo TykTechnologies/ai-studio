@@ -1,8 +1,7 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithRoutesAndTheme } from "../../test-utils/render-with-theme";
 import MCPServerDetail from "./MCPServerDetail";
 import apiClient from "../utils/apiClient";
 
@@ -11,13 +10,6 @@ jest.mock("../utils/apiClient");
 jest.mock("../context/PermissionsContext", () => ({
   usePermissions: () => ({ can: () => true, canAny: () => true, canAll: () => true, isFullAdmin: true, hasAdminAccess: true, rbacEnabled: false }),
 }));
-
-jest.mock("../styles/sharedStyles", () => ({
-  TitleBox: ({ children }) => <div>{children}</div>,
-  StyledPaper: ({ children, sx, ...props }) => <div {...props}>{children}</div>,
-}));
-
-const theme = createTheme();
 
 const pending = {
   id: 9,
@@ -40,7 +32,8 @@ const pending = {
   brokerable: false,
   lock_version: 1,
   definition: "{}",
-  group_ids: [],
+  tool_catalogue_ids: [],
+  tool_catalogues: [],
   bundle: [],
 };
 
@@ -51,6 +44,7 @@ const handoff = {
   definition: { openapi: "3.0.3" },
   secrets_included: false,
   requested_gateway_tags: ["edge-eu"],
+  template_id: "gov-defaults",
   instructions: ["Create the proxy on the Tyk Dashboard.", "Link it here."],
   candidates: [{ id: 12, name: "tickets mcp", listen_path: "/tickets-mcp/", tyk_api_id: "api-tickets-platform" }],
 };
@@ -64,7 +58,7 @@ describe("MCPServerDetail handoff", () => {
       if (path === "/mcp-servers/9/handoff?include_secrets=true") return Promise.resolve({ data: { ...handoff, secrets_included: true } });
       if (path === "/tyk-connections/1/policies") return Promise.resolve({ data: [] });
       if (path === "/tyk-connections/1") return Promise.resolve({ data: { id: 1, name: "Catalogue", status: "active", effective_mode: "catalogue" } });
-      if (path === "/groups") return Promise.resolve({ data: [] });
+      if (path === "/tool-catalogues") return Promise.resolve({ data: { data: [] } });
       return Promise.reject(new Error("unexpected " + path));
     });
     global.URL.createObjectURL = jest.fn(() => "blob:x");
@@ -73,17 +67,13 @@ describe("MCPServerDetail handoff", () => {
 
   it("shows the handoff, downloads the package with the credential and links a candidate", async () => {
     apiClient.post.mockResolvedValue({ data: { id: 12 } });
-    render(
-      <ThemeProvider theme={theme}>
-        <MemoryRouter initialEntries={["/admin/mcp-servers/9"]}>
-          <Routes>
-            <Route path="/admin/mcp-servers/:id" element={<MCPServerDetail />} />
-          </Routes>
-        </MemoryRouter>
-      </ThemeProvider>
-    );
+    renderWithRoutesAndTheme(null, {
+      initialEntry: "/admin/mcp-servers/9",
+      routes: [{ path: "/admin/mcp-servers/:id", element: <MCPServerDetail /> }],
+    });
     expect(await screen.findByText(/Awaiting the platform team/)).toBeInTheDocument();
     expect(await screen.findByText(/Submitted by Member/)).toBeInTheDocument();
+    expect(screen.getByText(/Dashboard template: gov-defaults/)).toBeInTheDocument();
     expect(screen.getByText("Link it here.")).toBeInTheDocument();
     expect(screen.getByTestId("link-candidates")).toHaveTextContent("api-tickets-platform");
 

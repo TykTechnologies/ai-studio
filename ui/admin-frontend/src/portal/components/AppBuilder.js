@@ -90,11 +90,16 @@ const AppBuilder = () => {
               .get("/common/catalog", { params: { type: "mcp_server", page_size: 100 } })
               .catch(() => ({ data: { data: [] } })),
           ]);
-        const mcpOptions = (mcpResponse.data?.data || []).map((item) => ({
-          id: item.id,
-          name: item.attributes?.name || "",
-          attributes: item.attributes,
-        }));
+        // Only servers AI Studio brokers (key-backed) belong on an App;
+        // OAuth, mTLS and keyless servers are reached directly and the
+        // server refuses to bind them.
+        const mcpOptions = (mcpResponse.data?.data || [])
+          .filter((item) => item.attributes?.access_granted_via_app !== false)
+          .map((item) => ({
+            id: item.id,
+            name: item.attributes?.name || "",
+            attributes: item.attributes,
+          }));
         setMCPServers(mcpOptions);
         setDataSources(dataSourcesResponse.data);
         setLLMs(llmsResponse.data);

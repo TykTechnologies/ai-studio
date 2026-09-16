@@ -4,7 +4,6 @@ import {
   Alert,
   Autocomplete,
   Box,
-  Button,
   Checkbox,
   Chip,
   CircularProgress,
@@ -26,7 +25,9 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import apiClient from "../utils/apiClient";
-import { TitleBox, StyledPaper } from "../styles/sharedStyles";
+import Section from "../components/common/Section";
+import RelationshipPicker from "../components/common/relationship-picker";
+import { TitleBox, ContentBox, PrimaryButton, SecondaryLinkButton, SecondaryOutlineButton } from "../styles/sharedStyles";
 import { apiErrorDetail, preStyle } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
 
@@ -61,6 +62,7 @@ export const buildPayload = (f) => {
     long_description: f.long_description,
     tags: parseList(f.tags),
     publish: f.publish,
+    tool_catalogue_ids: (f.tool_catalogues || []).map((c) => Number(c.id)),
   };
   if (f.privacy_score !== "") body.privacy_score = Number(f.privacy_score);
   if (f.kind === "remote") {
@@ -106,6 +108,7 @@ const initialForm = {
   tags: "",
   privacy_score: "",
   publish: false,
+  tool_catalogues: [],
 };
 
 const MCPServerRegister = () => {
@@ -118,6 +121,7 @@ const MCPServerRegister = () => {
   const [form, setForm] = useState(initialForm);
   const [tagOptions, setTagOptions] = useState([]);
   const [sourceAPIs, setSourceAPIs] = useState([]);
+  const [catalogues, setCatalogues] = useState([]);
   const [opsLoading, setOpsLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -132,6 +136,13 @@ const MCPServerRegister = () => {
         if (st.data?.available && st.data?.enabled) {
           const conns = await apiClient.get("/tyk-connections");
           setConnections((conns.data || []).filter((c) => c.status === "active" && c.effective_mode === "full"));
+          try {
+            const cats = await apiClient.get("/tool-catalogues", { params: { all: true } });
+            const rows = Array.isArray(cats.data) ? cats.data : cats.data?.data || [];
+            setCatalogues(rows.map((c) => ({ id: Number(c.id), name: c.attributes?.name ?? c.name ?? `Catalog ${c.id}` })));
+          } catch {
+            setCatalogues([]);
+          }
         }
       } catch (err) {
         setError(apiErrorDetail(err, "Failed to load"));
@@ -270,264 +281,297 @@ const MCPServerRegister = () => {
   if (status && !status.available) return <TykUpsell />;
   if (status && !status.enabled) return <TykDisabledNotice status={status} />;
 
-  return (
-    <Box>
-      <TitleBox>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/admin/mcp-servers")}>
-            Back
-          </Button>
-          <Typography variant="h5">Register MCP server</Typography>
-        </Box>
-      </TitleBox>
-      <Stepper activeStep={step} sx={{ mb: 3 }}>
-        {STEPS.map((label) => (
-          <Step key={label}>
-            <StepLabel>{label}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="page-error">
-          {error}
-        </Alert>
-      )}
+  const setPrimitive = (i, patch) => setForm((f) => ({ ...f, primitives: f.primitives.map((q, j) => (j === i ? { ...q, ...patch } : q)) }));
 
-      <StyledPaper sx={{ p: 3, mb: 2 }}>
+  return (
+    <>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">Register MCP server</Typography>
+        <SecondaryLinkButton startIcon={<ArrowBackIcon />} onClick={() => navigate("/admin/mcp-servers")} color="inherit">
+          Back to MCP servers
+        </SecondaryLinkButton>
+      </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+          Create an MCP proxy on a connected Tyk Dashboard from here. The Tyk Gateway serves it; AI Studio catalogues it, publishes it to tool
+          catalogs and mints keys for the Apps that use it.
+        </Typography>
+      </Box>
+      <ContentBox sx={{ pt: 0 }}>
+        <Stepper activeStep={step} sx={{ mb: 3 }}>
+          {STEPS.map((label) => (
+            <Step key={label}>
+              <StepLabel>{label}</StepLabel>
+            </Step>
+          ))}
+        </Stepper>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="page-error">
+            {error}
+          </Alert>
+        )}
+
         {step === 0 && (
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <TextField select fullWidth size="small" label="Tyk Dashboard connection" value={form.connection_id} onChange={set("connection_id")} inputProps={{ "data-testid": "connection" }} helperText="Only active connections in full mode can create proxies.">
-                {connections.map((c) => (
-                  <MenuItem key={c.id} value={String(c.id)}>
-                    {c.name}
+          <Section title="Connection and kind" description="Where the proxy is created and what it fronts.">
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <TextField select fullWidth label="Tyk connection" value={form.connection_id} onChange={set("connection_id")} inputProps={{ "data-testid": "connection" }} helperText="Only active connections in full mode can create proxies.">
+                  {connections.map((c) => (
+                    <MenuItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                {connections.length === 0 && (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    No connection runs in full mode. Registration needs a Dashboard user that may create APIs and policies; set the connection's mode to full under Settings → Tyk Connections.
+                  </Alert>
+                )}
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField select fullWidth label="Kind" value={form.kind} onChange={set("kind")} inputProps={{ "data-testid": "kind" }}>
+                  <MenuItem value="remote">Remote MCP server (proxy an existing MCP endpoint)</MenuItem>
+                  <MenuItem value="rest_to_mcp" disabled={!restSupported}>
+                    REST API to MCP {restSupported ? "" : "(needs Tyk 5.15+)"}
                   </MenuItem>
-                ))}
-              </TextField>
-              {connections.length === 0 && (
-                <Alert severity="info" sx={{ mt: 2 }}>
-                  No connection runs in full mode. Registration needs a Dashboard user that may create APIs and policies; set the connection's mode to full under Settings → Tyk Dashboard.
-                </Alert>
-              )}
+                </TextField>
+              </Grid>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField select fullWidth size="small" label="Kind" value={form.kind} onChange={set("kind")} inputProps={{ "data-testid": "kind" }}>
-                <MenuItem value="remote">Remote MCP server (proxy an existing MCP endpoint)</MenuItem>
-                <MenuItem value="rest_to_mcp" disabled={!restSupported}>
-                  REST API to MCP {restSupported ? "" : "(needs Tyk 5.15+)"}
-                </MenuItem>
-              </TextField>
-            </Grid>
-          </Grid>
+          </Section>
         )}
 
         {step === 1 && (
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value, listen_path: f.listen_path || "" }))} inputProps={{ "data-testid": "name" }} />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField fullWidth size="small" label="Listen path" value={form.listen_path} onChange={set("listen_path")} placeholder={form.name ? `/${slugify(form.name)}/` : "/my-mcp/"} inputProps={{ "data-testid": "listen-path" }} helperText="Lowercase letters, digits and dashes, wrapped in slashes. Left empty, it is derived from the name." />
-            </Grid>
-            {form.kind === "remote" ? (
-              <>
-                <Grid item xs={12}>
-                  <TextField fullWidth size="small" label="Upstream MCP URL" value={form.upstream_url} onChange={set("upstream_url")} inputProps={{ "data-testid": "upstream-url" }} helperText="The remote MCP server's base URL; the gateway appends /mcp itself (a pasted /mcp suffix is removed). AI Studio never calls it; the Tyk Gateway does." />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth size="small" label="Upstream auth header" value={form.upstream_auth_header_name} onChange={set("upstream_auth_header_name")} inputProps={{ "data-testid": "upstream-header" }} />
-                </Grid>
-                <Grid item xs={12} md={8}>
-                  <TextField fullWidth size="small" type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={set("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText="Sent to the Dashboard once and never stored in AI Studio." autoComplete="new-password" />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField fullWidth size="small" label="Allowed tools (optional, comma separated)" value={form.allowed_tools} onChange={set("allowed_tools")} inputProps={{ "data-testid": "allowed-tools" }} helperText="When set, every other tool the upstream server offers is blocked by the gateway." />
-                </Grid>
-              </>
-            ) : (
-              <>
-                <Grid item xs={12}>
-                  <TextField select fullWidth size="small" label="Source API (Tyk OAS)" value={form.source_api_id} onChange={(e) => loadOperations(e.target.value)} inputProps={{ "data-testid": "source-api" }}>
-                    {sourceAPIs.map((a) => (
-                      <MenuItem key={a.api_id} value={a.api_id}>
-                        {a.name} ({a.listen_path})
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Grid>
-                <Grid item xs={12}>
-                  {opsLoading ? (
-                    <CircularProgress size={20} />
-                  ) : form.primitives.length > 0 ? (
-                    <Table size="small" data-testid="operations">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Expose</TableCell>
-                          <TableCell>Operation</TableCell>
-                          <TableCell>Tool name</TableCell>
-                          <TableCell>Description</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {form.primitives.map((p, i) => (
-                          <TableRow key={`${p.method} ${p.path}`}>
-                            <TableCell>
-                              <Checkbox
-                                checked={p.selected}
-                                onChange={(e) => setForm((f) => ({ ...f, primitives: f.primitives.map((q, j) => (j === i ? { ...q, selected: e.target.checked } : q)) }))}
-                                inputProps={{ "data-testid": `op-${i}` }}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <code>
-                                {p.method} {p.path}
-                              </code>
-                              {p.operation_id && (
-                                <Typography variant="caption" display="block" color="text.secondary">
-                                  {p.operation_id}
-                                </Typography>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <TextField size="small" value={p.name} onChange={(e) => setForm((f) => ({ ...f, primitives: f.primitives.map((q, j) => (j === i ? { ...q, name: e.target.value } : q)) }))} inputProps={{ "data-testid": `op-name-${i}` }} />
-                            </TableCell>
-                            <TableCell>
-                              <TextField size="small" fullWidth value={p.description} onChange={(e) => setForm((f) => ({ ...f, primitives: f.primitives.map((q, j) => (j === i ? { ...q, description: e.target.value } : q)) }))} />
-                            </TableCell>
+          <Section title="Proxy details" description={form.kind === "remote" ? "The remote MCP endpoint the gateway fronts." : "The Tyk OAS API whose operations become MCP tools."}>
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value, listen_path: f.listen_path || "" }))} inputProps={{ "data-testid": "name" }} required />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth label="Listen path" value={form.listen_path} onChange={set("listen_path")} placeholder={form.name ? `/${slugify(form.name)}/` : "/my-mcp/"} inputProps={{ "data-testid": "listen-path" }} helperText="Lowercase letters, digits and dashes, wrapped in slashes. Left empty, it is derived from the name." />
+              </Grid>
+              {form.kind === "remote" ? (
+                <>
+                  <Grid item xs={12}>
+                    <TextField fullWidth label="Upstream MCP URL" value={form.upstream_url} onChange={set("upstream_url")} inputProps={{ "data-testid": "upstream-url" }} helperText="The remote MCP server's base URL; the gateway appends /mcp itself (a pasted /mcp suffix is removed). AI Studio never calls it; the Tyk Gateway does." required />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <TextField fullWidth label="Upstream auth header" value={form.upstream_auth_header_name} onChange={set("upstream_auth_header_name")} inputProps={{ "data-testid": "upstream-header" }} />
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <TextField fullWidth type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={set("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText="Sent to the Dashboard once and never stored in AI Studio." autoComplete="new-password" />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField fullWidth label="Allowed tools (optional, comma separated)" value={form.allowed_tools} onChange={set("allowed_tools")} inputProps={{ "data-testid": "allowed-tools" }} helperText="When set, every other tool the upstream server offers is blocked by the gateway." />
+                  </Grid>
+                </>
+              ) : (
+                <>
+                  <Grid item xs={12}>
+                    <TextField select fullWidth label="Source API (Tyk OAS)" value={form.source_api_id} onChange={(e) => loadOperations(e.target.value)} inputProps={{ "data-testid": "source-api" }}>
+                      {sourceAPIs.map((a) => (
+                        <MenuItem key={a.api_id} value={a.api_id}>
+                          {a.name} ({a.listen_path})
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12}>
+                    {opsLoading ? (
+                      <CircularProgress size={20} />
+                    ) : form.primitives.length > 0 ? (
+                      <Table size="small" data-testid="operations">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Expose</TableCell>
+                            <TableCell>Operation</TableCell>
+                            <TableCell>Tool name</TableCell>
+                            <TableCell>Description</TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    form.source_api_id && <Typography variant="body2">This API has no operations.</Typography>
-                  )}
-                </Grid>
-              </>
-            )}
-          </Grid>
+                        </TableHead>
+                        <TableBody>
+                          {form.primitives.map((p, i) => (
+                            <TableRow key={`${p.method} ${p.path}`}>
+                              <TableCell>
+                                <Checkbox checked={p.selected} onChange={(e) => setPrimitive(i, { selected: e.target.checked })} inputProps={{ "data-testid": `op-${i}` }} />
+                              </TableCell>
+                              <TableCell>
+                                <code>
+                                  {p.method} {p.path}
+                                </code>
+                                {p.operation_id && (
+                                  <Typography variant="caption" display="block" color="text.secondary">
+                                    {p.operation_id}
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <TextField size="small" value={p.name} onChange={(e) => setPrimitive(i, { name: e.target.value })} inputProps={{ "data-testid": `op-name-${i}` }} />
+                              </TableCell>
+                              <TableCell>
+                                <TextField size="small" fullWidth value={p.description} onChange={(e) => setPrimitive(i, { description: e.target.value })} />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      form.source_api_id && <Typography variant="body2">This API has no operations.</Typography>
+                    )}
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          </Section>
         )}
 
         {step === 2 && (
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
-              <TextField select fullWidth size="small" label="Consumer authentication" value={form.consumer_auth} onChange={set("consumer_auth")} inputProps={{ "data-testid": "consumer-auth" }}>
-                <MenuItem value="auth_token">API key (AI Studio can mint keys)</MenuItem>
-                <MenuItem value="oauth21">OAuth 2.1 (clients bring their own token)</MenuItem>
-                <MenuItem value="keyless">Keyless (no credential)</MenuItem>
-              </TextField>
-            </Grid>
-            {form.consumer_auth === "oauth21" && (
-              <>
+          <>
+            <Section title="Consumer authentication" description="How clients authenticate to the gateway. AI Studio mints keys only for API-key proxies.">
+              <Grid container spacing={3}>
                 <Grid item xs={12} md={4}>
-                  <TextField fullWidth size="small" label="Authorization servers (comma separated)" value={form.authorization_servers} onChange={set("authorization_servers")} inputProps={{ "data-testid": "authorization-servers" }} />
+                  <TextField select fullWidth label="Consumer authentication" value={form.consumer_auth} onChange={set("consumer_auth")} inputProps={{ "data-testid": "consumer-auth" }}>
+                    <MenuItem value="auth_token">API key (AI Studio can mint keys)</MenuItem>
+                    <MenuItem value="oauth21">OAuth 2.1 (clients bring their own token)</MenuItem>
+                    <MenuItem value="keyless">Keyless (no credential)</MenuItem>
+                  </TextField>
                 </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField fullWidth size="small" label="Scopes (optional)" value={form.scopes_supported} onChange={set("scopes_supported")} />
-                </Grid>
-              </>
-            )}
-            {form.consumer_auth === "keyless" && (
-              <Grid item xs={12} md={8}>
-                <Alert severity="warning">
-                  Anyone who can reach the gateway can call a keyless proxy.
-                  <FormControlLabel sx={{ ml: 1 }} control={<Checkbox checked={form.confirm_keyless} onChange={set("confirm_keyless")} inputProps={{ "data-testid": "confirm-keyless" }} />} label="I understand" />
-                </Alert>
-              </Grid>
-            )}
-            {tagOptions.length > 0 && (
-              <Grid item xs={12}>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Deployment target
-                </Typography>
-                <Autocomplete
-                  multiple
-                  size="small"
-                  options={tagOptions.map((o) => o.tag)}
-                  value={form.gateway_tags}
-                  onChange={(_, v) => setForm((f) => ({ ...f, gateway_tags: v }))}
-                  renderOption={(props, tag) => {
-                    const o = tagOptions.find((x) => x.tag === tag);
-                    return (
-                      <li {...props} key={tag}>
-                        <Box>
-                          <Typography variant="body2">
-                            {tag}
-                            {o?.label ? ` · ${o.label}` : ""}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {o?.verified ? `${o.data_planes.length} data plane(s) reported by MDCB` : "not reported by any data plane"}
-                            {o?.description ? ` · ${o.description}` : ""}
-                          </Typography>
-                        </Box>
-                      </li>
-                    );
-                  }}
-                  renderTags={(value, getTagProps) => value.map((tag, index) => <Chip {...getTagProps({ index })} key={tag} size="small" label={tag} color={tagOptions.find((x) => x.tag === tag)?.verified ? "primary" : "default"} />)}
-                  renderInput={(params) => <TextField {...params} label="Gateway tags" placeholder="Choose the gateways that should load this proxy" inputProps={{ ...params.inputProps, "data-testid": "gateway-tags" }} />}
-                />
-                {form.gateway_tags.length === 0 && (
-                  <FormControlLabel
-                    control={<Checkbox checked={form.confirm_no_gateway_tags} onChange={set("confirm_no_gateway_tags")} inputProps={{ "data-testid": "confirm-no-tags" }} />}
-                    label="No target: only non-segmented gateways should load this proxy"
-                  />
+                {form.consumer_auth === "oauth21" && (
+                  <>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth label="Authorization servers (comma separated)" value={form.authorization_servers} onChange={set("authorization_servers")} inputProps={{ "data-testid": "authorization-servers" }} />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField fullWidth label="Scopes (optional)" value={form.scopes_supported} onChange={set("scopes_supported")} />
+                    </Grid>
+                  </>
+                )}
+                {form.consumer_auth !== "auth_token" && (
+                  <Grid item xs={12} md={8}>
+                    <Alert severity={form.consumer_auth === "keyless" ? "warning" : "info"}>
+                      {form.consumer_auth === "keyless"
+                        ? "Anyone who can reach the gateway can call a keyless proxy. "
+                        : "Portal users connect with a token from the authorization server; "}
+                      AI Studio does not broker access to this server and the portal shows no Build app button for it.
+                      {form.consumer_auth === "keyless" && (
+                        <FormControlLabel sx={{ ml: 1 }} control={<Checkbox checked={form.confirm_keyless} onChange={set("confirm_keyless")} inputProps={{ "data-testid": "confirm-keyless" }} />} label="I understand" />
+                      )}
+                    </Alert>
+                  </Grid>
+                )}
+                {tagOptions.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                      Deployment target
+                    </Typography>
+                    <Autocomplete
+                      multiple
+                      options={tagOptions.map((o) => o.tag)}
+                      value={form.gateway_tags}
+                      onChange={(_, v) => setForm((f) => ({ ...f, gateway_tags: v }))}
+                      renderOption={(props, tag) => {
+                        const o = tagOptions.find((x) => x.tag === tag);
+                        return (
+                          <li {...props} key={tag}>
+                            <Box>
+                              <Typography variant="body2">
+                                {tag}
+                                {o?.label ? ` · ${o.label}` : ""}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {o?.verified ? `${o.data_planes.length} data plane(s) reported by MDCB` : "not reported by any data plane"}
+                                {o?.description ? ` · ${o.description}` : ""}
+                              </Typography>
+                            </Box>
+                          </li>
+                        );
+                      }}
+                      renderTags={(value, getTagProps) => value.map((tag, index) => <Chip {...getTagProps({ index })} key={tag} size="small" label={tag} color={tagOptions.find((x) => x.tag === tag)?.verified ? "primary" : "default"} />)}
+                      renderInput={(params) => <TextField {...params} label="Gateway tags" placeholder="Choose the gateways that should load this proxy" inputProps={{ ...params.inputProps, "data-testid": "gateway-tags" }} />}
+                    />
+                    {form.gateway_tags.length === 0 && (
+                      <FormControlLabel
+                        control={<Checkbox checked={form.confirm_no_gateway_tags} onChange={set("confirm_no_gateway_tags")} inputProps={{ "data-testid": "confirm-no-tags" }} />}
+                        label="No target: only non-segmented gateways should load this proxy"
+                      />
+                    )}
+                  </Grid>
                 )}
               </Grid>
-            )}
-            <Grid item xs={12} md={8}>
-              <TextField fullWidth size="small" label="Description (portal)" value={form.description} onChange={set("description")} inputProps={{ "data-testid": "description" }} />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField fullWidth size="small" label="Tags (comma separated)" value={form.tags} onChange={set("tags")} />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField fullWidth size="small" multiline minRows={2} label="Long description" value={form.long_description} onChange={set("long_description")} />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField fullWidth size="small" type="number" label="Privacy score" value={form.privacy_score} onChange={set("privacy_score")} inputProps={{ "data-testid": "privacy-score", min: 0, max: 100 }} helperText="Required before the server can be published." />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Tooltip title={form.privacy_score === "" ? "Set a privacy score first" : ""}>
-                <FormControlLabel control={<Switch checked={form.publish} onChange={set("publish")} inputProps={{ "data-testid": "publish" }} disabled={form.privacy_score === ""} />} label="Publish to the portal right away" />
-              </Tooltip>
-            </Grid>
-          </Grid>
+            </Section>
+
+            <Section title="Portal presentation" description="What portal users read about this server, and where it shows up.">
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={8}>
+                  <TextField fullWidth label="Description" value={form.description} onChange={set("description")} inputProps={{ "data-testid": "description" }} />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField fullWidth label="Tags (comma separated)" value={form.tags} onChange={set("tags")} />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth multiline rows={3} label="Long description" value={form.long_description} onChange={set("long_description")} />
+                </Grid>
+                <Grid item xs={12}>
+                  <RelationshipPicker
+                    label="Tool catalogs this server is published in"
+                    itemLabel="catalog"
+                    value={form.tool_catalogues}
+                    onChange={(next) => setForm((f) => ({ ...f, tool_catalogues: next }))}
+                    options={catalogues}
+                    idField="id"
+                    getOptionLabel={(c) => c.name}
+                    helperText="Portal users see this server through the teams granted these catalogs."
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField fullWidth type="number" label="Privacy score" value={form.privacy_score} onChange={set("privacy_score")} inputProps={{ "data-testid": "privacy-score", min: 0, max: 100 }} helperText="Required before the server can be published." />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Tooltip title={form.privacy_score === "" ? "Set a privacy score first" : ""}>
+                    <FormControlLabel control={<Switch checked={form.publish} onChange={set("publish")} inputProps={{ "data-testid": "publish" }} disabled={form.privacy_score === ""} />} label="Publish to the portal right away" />
+                  </Tooltip>
+                </Grid>
+              </Grid>
+            </Section>
+          </>
         )}
 
         {step === 3 && preview && (
-          <Box data-testid="preview">
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              {preview.dashboard_validated
-                ? "The Tyk Dashboard validated this definition."
-                : "AI Studio validated this definition; the Dashboard validates it when the proxy is created."}{" "}
-              Clients will reach the server at <code>{preview.endpoint_url || "(set a gateway base URL on the connection)"}</code>.
-            </Typography>
-            {(preview.warnings || []).map((wng) => (
-              <Alert key={wng} severity="warning" sx={{ mb: 1 }}>
-                {wng}
-              </Alert>
-            ))}
-            <Box component="pre" sx={{ ...preStyle, maxHeight: 400 }} data-testid="preview-definition">
-              {JSON.stringify(preview.definition, null, 2)}
+          <Section title="Review" description="The definition AI Studio sends to the Dashboard, upstream credentials masked.">
+            <Box data-testid="preview">
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                {preview.dashboard_validated
+                  ? "The Tyk Dashboard validated this definition."
+                  : "AI Studio validated this definition; the Dashboard validates it when the proxy is created."}{" "}
+                Clients will reach the server at <code>{preview.endpoint_url || "(set a gateway base URL on the connection)"}</code>.
+              </Typography>
+              {(preview.warnings || []).map((wng) => (
+                <Alert key={wng} severity="warning" sx={{ mb: 1 }}>
+                  {wng}
+                </Alert>
+              ))}
+              <Box component="pre" sx={{ ...preStyle, maxHeight: 400 }} data-testid="preview-definition">
+                {JSON.stringify(preview.definition, null, 2)}
+              </Box>
             </Box>
-          </Box>
+          </Section>
         )}
-      </StyledPaper>
 
-      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-        <Button disabled={step === 0 || busy} onClick={() => setStep(step - 1)} data-testid="back">
-          Back
-        </Button>
-        {step < 3 ? (
-          <Button variant="contained" onClick={next} disabled={busy} data-testid="next">
-            {step === 2 ? "Validate and review" : "Next"}
-          </Button>
-        ) : (
-          <Button variant="contained" onClick={create} disabled={busy} data-testid="create">
-            Create on the Dashboard
-          </Button>
-        )}
-      </Box>
-    </Box>
+        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
+          <SecondaryOutlineButton disabled={step === 0 || busy} onClick={() => setStep(step - 1)} data-testid="back">
+            Back
+          </SecondaryOutlineButton>
+          {step < 3 ? (
+            <PrimaryButton variant="contained" onClick={next} disabled={busy} data-testid="next">
+              {step === 2 ? "Validate and review" : "Next"}
+            </PrimaryButton>
+          ) : (
+            <PrimaryButton variant="contained" onClick={create} disabled={busy} data-testid="create">
+              Create on the Dashboard
+            </PrimaryButton>
+          )}
+        </Box>
+      </ContentBox>
+    </>
   );
 };
 

@@ -1,8 +1,7 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { renderWithRoutesAndTheme } from "../../test-utils/render-with-theme";
 import MCPServerDetail from "./MCPServerDetail";
 import apiClient from "../utils/apiClient";
 
@@ -18,13 +17,6 @@ jest.mock("../context/PermissionsContext", () => ({
     rbacEnabled: false,
   }),
 }));
-
-jest.mock("../styles/sharedStyles", () => ({
-  TitleBox: ({ children }) => <div>{children}</div>,
-  StyledPaper: ({ children, sx, ...props }) => <div {...props}>{children}</div>,
-}));
-
-const theme = createTheme();
 
 const definition = { openapi: "3.0.3", "x-tyk-api-gateway": { info: { id: "mcp-1" }, upstream: { url: "https://w.example.com" }, middleware: { global: { transformRequestHeaders: { add: [{ name: "Authorization", value: "***" }] } } } } };
 
@@ -50,28 +42,33 @@ const server = {
   lock_version: 1,
   definition: JSON.stringify(definition),
   definition_hash: "hash-1",
-  group_ids: [],
+  tool_catalogue_ids: [2],
+  tool_catalogues: [{ id: 2, name: "Ops tools" }],
   bundle: [],
 };
 
+const catalogues = {
+  data: [
+    { id: "2", type: "ToolCatalogue", attributes: { name: "Ops tools" } },
+    { id: "3", type: "ToolCatalogue", attributes: { name: "Research" } },
+  ],
+};
+
 const renderDetail = () =>
-  render(
-    <ThemeProvider theme={theme}>
-      <MemoryRouter initialEntries={["/admin/mcp-servers/7"]}>
-        <Routes>
-          <Route path="/admin/mcp-servers/:id" element={<MCPServerDetail />} />
-          <Route path="/admin/mcp-servers" element={<div data-testid="list-page" />} />
-        </Routes>
-      </MemoryRouter>
-    </ThemeProvider>
-  );
+  renderWithRoutesAndTheme(null, {
+    initialEntry: "/admin/mcp-servers/7",
+    routes: [
+      { path: "/admin/mcp-servers/:id", element: <MCPServerDetail /> },
+      { path: "/admin/mcp-servers", element: <div data-testid="list-page" /> },
+    ],
+  });
 
 const mockGets = (srv = server, mode = "full") => {
   apiClient.get.mockImplementation((path) => {
     if (path === "/mcp-servers/7") return Promise.resolve({ data: srv });
     if (path === "/tyk-connections/1/policies") return Promise.resolve({ data: [] });
     if (path === "/tyk-connections/1") return Promise.resolve({ data: { id: 1, name: "Prod", status: "active", effective_mode: mode } });
-    if (path === "/groups") return Promise.resolve({ data: [] });
+    if (path === "/tool-catalogues") return Promise.resolve({ data: catalogues });
     return Promise.reject(new Error("unexpected " + path));
   });
 };
@@ -102,7 +99,7 @@ describe("MCPServerDetail registration controls", () => {
     expect(await screen.findByText("Pushed to the Dashboard")).toBeInTheDocument();
   });
 
-  it("requires the confirmation for Dashboard-origin proxies and hides the editor outside full mode", async () => {
+  it("requires the confirmation for Dashboard-origin proxies and hides delete", async () => {
     mockGets({ ...server, origin: "dashboard" });
     renderDetail();
     await screen.findByTestId("definition-editor");
@@ -115,10 +112,29 @@ describe("MCPServerDetail registration controls", () => {
   it("hides the editor, creator and delete outside full mode", async () => {
     mockGets(server, "broker");
     renderDetail();
-    await screen.findByText(/Definition \(from the Dashboard/);
+    await screen.findByText(/As synced from the Dashboard/);
     expect(screen.queryByTestId("definition-editor")).not.toBeInTheDocument();
     expect(screen.queryByTestId("open-policy-creator")).not.toBeInTheDocument();
     expect(screen.queryByTestId("delete-server")).not.toBeInTheDocument();
+  });
+
+  it("saves tool catalogue membership with numeric ids and explains non-brokerable servers", async () => {
+    mockGets({ ...server, auth_mode: "oauth21" });
+    apiClient.put.mockResolvedValue({ data: { ...server, tool_catalogue_ids: [2, 3], tool_catalogues: [{ id: 2, name: "Ops tools" }, { id: 3, name: "Research" }] } });
+    renderDetail();
+
+    const picker = await screen.findByTestId("relationship-picker");
+    expect(within(picker).getByLabelText("Remove Ops tools")).toBeInTheDocument();
+    expect(screen.getByTestId("not-brokerable")).toHaveTextContent("an OAuth token from the advertised authorization server");
+
+    const input = within(picker).getByRole("combobox", { name: "Add catalog" });
+    fireEvent.mouseDown(input);
+    fireEvent.click(await screen.findByRole("option", { name: "Research" }));
+    expect(within(picker).getByLabelText("Remove Research")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("save-catalogues"));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith("/mcp-servers/7/catalogues", { tool_catalogue_ids: [2, 3] }));
+    expect(await screen.findByText("Catalogs saved")).toBeInTheDocument();
   });
 
   it("creates and pins a consumption policy through the creator", async () => {
@@ -139,13 +155,42 @@ describe("MCPServerDetail registration controls", () => {
     expect(await screen.findByText(/Policy Gold created/)).toBeInTheDocument();
   });
 
+  it("publishes through the switch and pins a bundle from the cached policies", async () => {
+    const policies = [
+      { tyk_policy_id: "acl-1", name: "Weather access", api_ids: ["mcp-1"], is_partitioned: true, partitions: { acl: true } },
+      { tyk_policy_id: "gold", name: "Gold", api_ids: [], is_partitioned: true, partitions: { rate_limit: true } },
+    ];
+    apiClient.get.mockImplementation((path) => {
+      if (path === "/mcp-servers/7") return Promise.resolve({ data: server });
+      if (path === "/tyk-connections/1/policies") return Promise.resolve({ data: policies });
+      if (path === "/tyk-connections/1") return Promise.resolve({ data: { id: 1, name: "Prod", status: "active", effective_mode: "full" } });
+      if (path === "/tool-catalogues") return Promise.resolve({ data: catalogues });
+      return Promise.reject(new Error("unexpected " + path));
+    });
+    apiClient.post.mockResolvedValue({ data: { ...server, is_active: true } });
+    apiClient.put.mockResolvedValue({ data: { ...server, brokerable: true, bundle: [{ role: "access", policy: policies[0] }] } });
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Published" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/mcp-servers/7/activate", {}));
+    expect(await screen.findByText("Published to the portal")).toBeInTheDocument();
+
+    const access = screen.getByTestId("access-select");
+    fireEvent.mouseDown(access.parentElement.querySelector('[role="combobox"]') || access.parentElement);
+    fireEvent.click(await screen.findByRole("option", { name: /Weather access/ }));
+    fireEvent.click(screen.getByTestId("save-bundle"));
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith("/mcp-servers/7/bundle", { pins: [{ tyk_policy_id: "acl-1", role: "access" }] }));
+    expect(await screen.findByText("Brokerable")).toBeInTheDocument();
+  });
+
   it("deletes a Studio-registered proxy with force", async () => {
     mockGets();
     apiClient.delete.mockResolvedValue({});
     renderDetail();
     fireEvent.click(await screen.findByTestId("delete-server"));
-    fireEvent.click(await screen.findByTestId("delete-force"));
-    fireEvent.click(screen.getByTestId("confirm-delete"));
+    const dialog = await screen.findByTestId("delete-dialog");
+    fireEvent.click(within(dialog).getByTestId("delete-force"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith("/mcp-servers/7?force=true"));
     expect(await screen.findByTestId("list-page")).toBeInTheDocument();
   });

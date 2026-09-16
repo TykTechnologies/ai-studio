@@ -26,19 +26,21 @@ func mcpServerCatalogItem(srv *models.MCPServer) CatalogItem {
 		prims[i].Description = cleanText(prims[i].Description)
 	}
 	item := CatalogItem{Type: CatalogItemMCPServer, ID: uintID(srv.ID), Attributes: CatalogItemAttributes{
-		Name:                cleanText(srv.Name),
-		ShortDescription:    cleanText(srv.Description),
-		LongDescription:     cleanText(srv.LongDescription),
-		LogoURL:             srv.LogoURL,
-		Kind:                srv.Kind,
-		KindLabel:           mcpKindLabel(srv.Kind),
-		PrivacyScore:        srv.PrivacyScore,
-		CommunitySubmitted:  srv.CommunitySubmitted,
-		Tags:                cleanTexts(srv.Tags()),
-		Catalogs:            []CatalogRef{},
-		CreatedAt:           timePtr(srv.CreatedAt),
-		UpdatedAt:           timePtr(srv.UpdatedAt),
-		AccessGrantedViaApp: true,
+		Name:               cleanText(srv.Name),
+		ShortDescription:   cleanText(srv.Description),
+		LongDescription:    cleanText(srv.LongDescription),
+		LogoURL:            srv.LogoURL,
+		Kind:               srv.Kind,
+		KindLabel:          mcpKindLabel(srv.Kind),
+		PrivacyScore:       srv.PrivacyScore,
+		CommunitySubmitted: srv.CommunitySubmitted,
+		Tags:               cleanTexts(srv.Tags()),
+		Catalogs:           []CatalogRef{},
+		CreatedAt:          timePtr(srv.CreatedAt),
+		UpdatedAt:          timePtr(srv.UpdatedAt),
+		// Only servers AI Studio can issue a key for are bound to Apps;
+		// OAuth, mTLS and keyless servers are called directly.
+		AccessGrantedViaApp: brokerable,
 		AuthMode:            srv.AuthMode,
 		AuthHeader:          auth.HeaderName,
 		EndpointURL:         srv.EndpointURL,
@@ -89,6 +91,8 @@ func mcpBindingError(c *gin.Context, err error) bool {
 		simpleError(c, http.StatusBadRequest, "Privacy Score Mismatch", err.Error())
 	case errors.Is(err, services.ErrMCPServerNotVisible):
 		simpleError(c, http.StatusForbidden, "Forbidden", "User does not have access to one or more specified MCP servers")
+	case errors.Is(err, services.ErrMCPServerNotBrokerable):
+		simpleError(c, http.StatusBadRequest, "MCP server cannot be bound", err.Error())
 	default:
 		return false
 	}

@@ -108,8 +108,8 @@ type MCPServer struct {
 	// TykAPIID is x-tyk-api-gateway.info.id; empty while pending_platform.
 	TykAPIID string `gorm:"size:64;uniqueIndex:idx_mcp_servers_live_conn_api,where:deleted_at IS NULL" json:"tyk_api_id"`
 
-	Name            string `gorm:"size:200;not null" json:"name"`
-	NameOverridden  bool   `json:"name_overridden"`
+	Name           string `gorm:"size:200;not null" json:"name"`
+	NameOverridden bool   `json:"name_overridden"`
 	// Soft-deleted rows keep their slug and api id out of the way: the unique
 	// indexes only cover live rows, so a deleted server can be re-imported or
 	// re-registered under the same name.
@@ -155,18 +155,12 @@ type MCPServer struct {
 	LastSyncedAt *time.Time `json:"last_synced_at"`
 	LockVersion  int        `gorm:"not null;default:0" json:"lock_version"`
 
-	Groups []Group `gorm:"many2many:mcp_server_groups;" json:"-"`
+	// Portal visibility follows the platform rule: catalogues bundle assets,
+	// teams are granted catalogues. MCP servers live in tool catalogues.
+	ToolCatalogues []ToolCatalogue `gorm:"many2many:tool_catalogue_mcp_servers;" json:"-"`
 }
 
 func (MCPServer) TableName() string { return "mcp_servers" }
-
-// MCPServerGroup is the direct team grant row (visibility in the portal).
-type MCPServerGroup struct {
-	MCPServerID uint `gorm:"primaryKey;column:mcp_server_id" json:"mcp_server_id"`
-	GroupID     uint `gorm:"primaryKey" json:"group_id"`
-}
-
-func (MCPServerGroup) TableName() string { return "mcp_server_groups" }
 
 // Tags decodes the presentation tags.
 func (m *MCPServer) Tags() []string {
@@ -313,9 +307,10 @@ type MCPServerResponse struct {
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 	// Detail-only fields.
-	Definition string                  `json:"definition,omitempty"`
-	GroupIDs   []uint                  `json:"group_ids,omitempty"`
-	Bundle     []MCPServerPolicyPinView `json:"bundle,omitempty"`
+	Definition       string                   `json:"definition,omitempty"`
+	ToolCatalogueIDs []uint                   `json:"tool_catalogue_ids,omitempty"`
+	ToolCatalogues   []MCPServerCatalogueView `json:"tool_catalogues,omitempty"`
+	Bundle           []MCPServerPolicyPinView `json:"bundle,omitempty"`
 }
 
 // ToResponse converts the server to its administrator API shape.
@@ -340,4 +335,10 @@ func (m *MCPServer) ToResponse(detail bool) MCPServerResponse {
 		r.Definition = m.Definition
 	}
 	return r
+}
+
+// MCPServerCatalogueView names a tool catalogue the server belongs to.
+type MCPServerCatalogueView struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
 }

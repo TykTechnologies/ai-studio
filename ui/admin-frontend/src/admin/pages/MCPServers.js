@@ -1,37 +1,18 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
-  Table,
-  TableBody,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import HubIcon from "@mui/icons-material/Hub";
-import RefreshIcon from "@mui/icons-material/Refresh";
+import { Alert, Box, Chip, CircularProgress, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import SyncIcon from "@mui/icons-material/Sync";
 import apiClient from "../utils/apiClient";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
-import {
-  TitleBox,
-  StyledPaper,
-  StyledTableHeaderCell,
-  StyledTableCell,
-  StyledTableRow,
-} from "../styles/sharedStyles";
+import DataTable from "../components/common/DataTable";
+import ActiveStatusDot from "../components/common/ActiveStatusDot";
+import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
+import useListQuery from "../hooks/useListQuery";
+import useConfig from "../hooks/useConfig";
+import { TitleBox, ContentBox, PrimaryButton, PrimaryOutlineButton } from "../styles/sharedStyles";
 import { apiErrorDetail, formatTime } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
 
@@ -79,61 +60,137 @@ export const KindChip = ({ kind }) => (
   <Chip size="small" variant="outlined" label={kind === "rest_to_mcp" ? "REST API to MCP" : "Remote MCP"} />
 );
 
+const INTRO =
+  "MCP servers are Tyk Gateway proxies imported from a connected Tyk Dashboard or registered from here. Publish a server to a tool catalog to make it visible in the portal; pin a policy bundle so AI Studio can mint keys for Apps that use it.";
+
+const EMPTY_FILTERS = { connection_id: "", state: "", published: "" };
+
 const MCPServers = () => {
   const navigate = useNavigate();
+  const { getDocsLink } = useConfig();
+  const { notify, snackbarProps } = useFeedbackSnackbar();
   const [status, setStatus] = useState(null);
   const [connections, setConnections] = useState([]);
   const [servers, setServers] = useState([]);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-  const [filters, setFilters] = useState({ connection_id: "", state: "", published: "", q: "" });
-  const [page, setPage] = useState(1);
-  const pageSize = 25;
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
 
-  const load = useCallback(async () => {
+  const { queryParams, updatePaginationData, searchTerm, tableProps, pageSize, handlePageChange } = useListQuery({
+    initialPageSize: 25,
+  });
+
+  const fetchServers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const st = await apiClient.get("/tyk-mcp/status");
       setStatus(st.data);
       if (!(st.data?.available && st.data?.enabled)) return;
-      const params = { page, page_size: pageSize };
+      // The list endpoint takes `q` for search and reports totals in the body.
+      const { search, ...rest } = queryParams;
+      const params = { ...rest };
+      if (search) params.q = search;
       Object.entries(filters).forEach(([k, v]) => {
         if (v !== "") params[k] = v;
       });
-      const [conns, list] = await Promise.all([apiClient.get("/tyk-connections"), apiClient.get("/mcp-servers", { params })]);
+      const [conns, list] = await Promise.all([
+        apiClient.get("/tyk-connections"),
+        apiClient.get("/mcp-servers", { params }),
+      ]);
       setConnections(conns.data || []);
       setServers(list.data?.servers || []);
-      setTotal(list.data?.total || 0);
+      const total = list.data?.total || 0;
+      updatePaginationData(total, Math.max(1, Math.ceil(total / pageSize)));
     } catch (err) {
       setError(apiErrorDetail(err, "Failed to load MCP servers"));
     } finally {
       setLoading(false);
     }
-  }, [filters, page]);
+  }, [queryParams, filters, pageSize, updatePaginationData]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchServers();
+  }, [fetchServers]);
 
-  const syncNow = async (connectionId) => {
+  const setFilter = (key) => (e) => {
+    handlePageChange(1);
+    setFilters((f) => ({ ...f, [key]: e.target.value }));
+  };
+
+  const activeConnections = useMemo(() => connections.filter((c) => c.status === "active"), [connections]);
+  const canRegister = activeConnections.some((c) => c.effective_mode === "full");
+  const filtersApplied = Object.values(filters).some((v) => v !== "");
+
+  const syncNow = async () => {
+    const connectionId = filters.connection_id || activeConnections[0]?.id;
+    if (!connectionId) return;
     setError(null);
     try {
       const res = await apiClient.post(`/tyk-connections/${connectionId}/sync?wait=true`, {});
       const run = res.data;
-      setNotice(`Sync ${run.status}: ${run.proxies_added} added, ${run.proxies_updated} updated, ${run.proxies_missing} missing`);
-      await load();
+      notify(`Sync ${run.status}: ${run.proxies_added} added, ${run.proxies_updated} updated, ${run.proxies_missing} missing`);
+      await fetchServers();
     } catch (err) {
-      setError(apiErrorDetail(err, "Sync failed"));
+      notify(apiErrorDetail(err, "Sync failed"), "error");
     }
   };
 
-  const setFilter = (k) => (e) => {
-    setPage(1);
-    setFilters({ ...filters, [k]: e.target.value });
-  };
+  const columns = useMemo(
+    () => [
+      {
+        field: "name",
+        headerName: "Server",
+        renderCell: (s) => (
+          <Box>
+            <Typography variant="body2" fontWeight={600}>
+              {s.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {s.listen_path}
+              {s.tyk_api_id ? ` · ${s.tyk_api_id}` : ""}
+            </Typography>
+          </Box>
+        ),
+      },
+      { field: "connection_name", headerName: "Connection", renderCell: (s) => s.connection_name || s.connection_id },
+      { field: "kind", headerName: "Kind", renderCell: (s) => <KindChip kind={s.kind} /> },
+      { field: "auth_mode", headerName: "Auth", renderCell: (s) => AUTH_MODE_LABELS[s.auth_mode] || s.auth_mode },
+      { field: "dashboard_state", headerName: "Dashboard", renderCell: (s) => <DashboardStateChip state={s.dashboard_state} /> },
+      {
+        field: "is_active",
+        headerName: "Portal",
+        renderCell: (s) => (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <ActiveStatusDot active={Boolean(s.is_active)} activeLabel="Published" inactiveLabel="Unpublished" showLabel />
+            {s.brokerable && (
+              <Tooltip title="Keys can be minted for Apps">
+                <Chip size="small" label="Brokerable" color="primary" variant="outlined" />
+              </Tooltip>
+            )}
+          </Box>
+        ),
+      },
+      {
+        field: "gateway_tags",
+        headerName: "Tags",
+        renderCell: (s) =>
+          (s.gateway_tags?.tags || []).length > 0 ? (
+            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+              {s.gateway_tags.tags.map((t) => (
+                <Chip key={t} size="small" label={t} />
+              ))}
+            </Box>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              all gateways
+            </Typography>
+          ),
+      },
+      { field: "last_seen_at", headerName: "Last seen", renderCell: (s) => (s.last_seen_at ? formatTime(s.last_seen_at) : "never") },
+    ],
+    []
+  );
 
   if (loading && !status) {
     return (
@@ -145,181 +202,99 @@ const MCPServers = () => {
   if (status && !status.available) return <TykUpsell />;
   if (status && !status.enabled) return <TykDisabledNotice status={status} />;
 
-  const activeConnections = connections.filter((c) => c.status === "active");
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const registerButton = (
+    <PrimaryButton variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/admin/mcp-servers/register")} data-testid="register-server">
+      Register MCP server
+    </PrimaryButton>
+  );
+  const syncButton = (
+    <PrimaryOutlineButton variant="contained" startIcon={<SyncIcon />} onClick={syncNow} data-testid="sync-now">
+      Sync now
+    </PrimaryOutlineButton>
+  );
 
   return (
-    <Box>
-      <TitleBox>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <HubIcon />
-          <Typography variant="h5">MCP servers</Typography>
-          <Typography variant="body2" color="text.secondary">
-            {total} total
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
-            Refresh
-          </Button>
-          <Can permission={P.MCP_SERVERS_EXECUTE}>
-            {activeConnections.some((c) => c.effective_mode === "full") && (
-              <Button variant="contained" onClick={() => navigate("/admin/mcp-servers/register")} data-testid="register-server">
-                Register MCP server
-              </Button>
-            )}
-          </Can>
-          <Can permission={P.TYK_CONNECTIONS_EXECUTE}>
-            {activeConnections.length > 0 && (
-              <Button
-                startIcon={<SyncIcon />}
-                variant="outlined"
-                onClick={() => syncNow(filters.connection_id || activeConnections[0].id)}
-                data-testid="sync-now"
-              >
-                Sync now
-              </Button>
-            )}
-          </Can>
-        </Box>
+    <>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">MCP servers</Typography>
+        <Stack direction="row" spacing={2}>
+          <Can permission={P.TYK_CONNECTIONS_EXECUTE}>{activeConnections.length > 0 && syncButton}</Can>
+          <Can permission={P.MCP_SERVERS_EXECUTE}>{canRegister && registerButton}</Can>
+        </Stack>
       </TitleBox>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+          {INTRO}
+        </Typography>
+      </Box>
+      <ContentBox>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="page-error">
+            {error}
+          </Alert>
+        )}
+        {connections.length === 0 && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            No Tyk Dashboard is connected. Connect one under Settings → Tyk Connections to import its MCP proxies.
+          </Alert>
+        )}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="page-error">
-          {error}
-        </Alert>
-      )}
-      {notice && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice(null)}>
-          {notice}
-        </Alert>
-      )}
-      {connections.length === 0 && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          No Tyk Dashboard is connected. Connect one under Settings → Tyk Dashboard to import its MCP proxies.
-        </Alert>
-      )}
-
-      <Box sx={{ display: "flex", gap: 1, mb: 2, flexWrap: "wrap" }}>
-        <TextField size="small" label="Search" value={filters.q} onChange={setFilter("q")} inputProps={{ "data-testid": "search" }} />
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Connection</InputLabel>
-          <Select label="Connection" value={filters.connection_id} onChange={setFilter("connection_id")}>
-            <MenuItem value="">All</MenuItem>
+        <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap" }} useFlexGap>
+          <TextField select size="small" label="Connection" value={filters.connection_id} onChange={setFilter("connection_id")} sx={{ minWidth: 200 }} inputProps={{ "data-testid": "filter-connection" }}>
+            <MenuItem value="">All connections</MenuItem>
             {connections.map((c) => (
-              <MenuItem key={c.id} value={c.id}>
+              <MenuItem key={c.id} value={String(c.id)}>
                 {c.name}
               </MenuItem>
             ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Dashboard state</InputLabel>
-          <Select label="Dashboard state" value={filters.state} onChange={setFilter("state")}>
-            <MenuItem value="">All</MenuItem>
+          </TextField>
+          <TextField select size="small" label="Dashboard state" value={filters.state} onChange={setFilter("state")} sx={{ minWidth: 200 }} inputProps={{ "data-testid": "filter-state" }}>
+            <MenuItem value="">Any state</MenuItem>
             {Object.entries(STATE_LABELS).map(([k, v]) => (
               <MenuItem key={k} value={k}>
                 {v}
               </MenuItem>
             ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Published</InputLabel>
-          <Select label="Published" value={filters.published} onChange={setFilter("published")}>
-            <MenuItem value="">All</MenuItem>
+          </TextField>
+          <TextField select size="small" label="Portal" value={filters.published} onChange={setFilter("published")} sx={{ minWidth: 160 }} inputProps={{ "data-testid": "filter-published" }}>
+            <MenuItem value="">Any</MenuItem>
             <MenuItem value="true">Published</MenuItem>
             <MenuItem value="false">Unpublished</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
+          </TextField>
+        </Stack>
 
-      <StyledPaper>
-        {servers.length === 0 ? (
-          <Box sx={{ p: 3 }}>
-            <Typography color="text.secondary">No MCP servers match. Run a sync to import proxies from the Dashboard.</Typography>
-          </Box>
-        ) : (
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <StyledTableHeaderCell>Server</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Connection</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Kind</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Auth</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Dashboard</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Portal</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Last seen</StyledTableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {servers.map((s) => (
-                  <StyledTableRow
-                    key={s.id}
-                    hover
-                    sx={{ cursor: "pointer" }}
-                    onClick={() => navigate(`/admin/mcp-servers/${s.id}`)}
-                    data-testid={`server-row-${s.id}`}
-                  >
-                    <StyledTableCell>
-                      <Typography variant="body2" fontWeight={600}>
-                        {s.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {s.listen_path} · {s.tyk_api_id || "no api id"}
-                      </Typography>
-                    </StyledTableCell>
-                    <StyledTableCell>{s.connection_name || s.connection_id}</StyledTableCell>
-                    <StyledTableCell>
-                      <KindChip kind={s.kind} />
-                    </StyledTableCell>
-                    <StyledTableCell>{AUTH_MODE_LABELS[s.auth_mode] || s.auth_mode}</StyledTableCell>
-                    <StyledTableCell>
-                      <DashboardStateChip state={s.dashboard_state} />
-                    </StyledTableCell>
-                    <StyledTableCell>
-                      <Box sx={{ display: "flex", gap: 0.5 }}>
-                        <Chip size="small" label={s.is_active ? "Published" : "Unpublished"} color={s.is_active ? "success" : "default"} />
-                        {s.brokerable && (
-                          <Tooltip title="Keys can be minted for Apps">
-                            <Chip size="small" label="Brokerable" color="primary" variant="outlined" />
-                          </Tooltip>
-                        )}
-                      </Box>
-                    </StyledTableCell>
-                    <StyledTableCell>
-                      {(s.gateway_tags?.tags || []).length > 0 ? (
-                        s.gateway_tags.tags.map((t) => <Chip key={t} size="small" label={t} sx={{ mr: 0.5 }} />)
-                      ) : (
-                        <Typography variant="caption" color="text.secondary">
-                          all gateways
-                        </Typography>
-                      )}
-                    </StyledTableCell>
-                    <StyledTableCell>{s.last_seen_at ? formatTime(s.last_seen_at) : "never"}</StyledTableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </StyledPaper>
-      {totalPages > 1 && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1, alignItems: "center" }}>
-          <Button size="small" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            Previous
-          </Button>
-          <Typography variant="body2">
-            Page {page} of {totalPages}
-          </Typography>
-          <Button size="small" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-            Next
-          </Button>
-        </Box>
-      )}
-    </Box>
+        <Can permission={P.MCP_SERVERS_EXECUTE}>
+          {(canExecute) => (
+            <DataTable
+              {...tableProps}
+              ariaLabel="MCP servers"
+              searchPlaceholder="Search MCP servers by name..."
+              columns={columns}
+              data={servers}
+              loading={loading}
+              onRowClick={(s) => navigate(`/admin/mcp-servers/${s.id}`)}
+              rowProps={(s) => ({ "data-testid": `server-row-${s.id}` })}
+              emptyState={
+                !searchTerm && !filtersApplied ? (
+                  <EmptyStateWidget
+                    title="No MCP servers yet"
+                    description="MCP servers arrive from a connected Tyk Dashboard: run a sync to import the proxies it already serves, or register a new one from here on a full-mode connection. Community members can also propose servers through the portal."
+                    learnMoreLink={getDocsLink("mcp_servers")}
+                    actions={
+                      <>
+                        {activeConnections.length > 0 && syncButton}
+                        {canExecute && canRegister && registerButton}
+                      </>
+                    }
+                  />
+                ) : undefined
+              }
+            />
+          )}
+        </Can>
+      </ContentBox>
+      <FeedbackSnackbar {...snackbarProps} />
+    </>
   );
 };
 

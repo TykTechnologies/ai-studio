@@ -1,8 +1,9 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter } from "react-router-dom";
+import testTheme from "../utils/testTheme";
 import MCPCredentials from "./MCPCredentials";
 import apiClient from "../utils/apiClient";
 
@@ -18,16 +19,10 @@ jest.mock("../context/PermissionsContext", () => ({
     rbacEnabled: false,
   }),
 }));
-
-jest.mock("../styles/sharedStyles", () => ({
-  TitleBox: ({ children }) => <div>{children}</div>,
-  StyledPaper: ({ children, sx, ...props }) => <div {...props}>{children}</div>,
-  StyledTableHeaderCell: ({ children, sx, ...props }) => <th {...props}>{children}</th>,
-  StyledTableCell: ({ children, sx, ...props }) => <td {...props}>{children}</td>,
-  StyledTableRow: ({ children, hover, sx, ...props }) => <tr {...props}>{children}</tr>,
+jest.mock("../hooks/useConfig", () => ({
+  __esModule: true,
+  default: () => ({ config: {}, loading: false, getDocsLink: () => "https://docs.example.com/mcp" }),
 }));
-
-const theme = createTheme();
 
 const credential = {
   id: "cred-1",
@@ -50,7 +45,7 @@ const credential = {
 
 const renderPage = (route = "/admin/mcp-credentials") =>
   render(
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={testTheme}>
       <MemoryRouter initialEntries={[route]}>
         <MCPCredentials />
       </MemoryRouter>
@@ -67,12 +62,18 @@ const mockGets = (rows = [credential], report = []) => {
   });
 };
 
+// Row actions live in the DataTable overflow menu.
+const openRowMenu = async (rowTestId) => {
+  const row = await screen.findByTestId(rowTestId);
+  fireEvent.click(within(row).getByTestId("row-actions"));
+};
+
 describe("MCPCredentials", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it("lists minted keys with external policies and applies pending drift", async () => {
+  it("lists minted keys with external policies and applies pending drift from the row menu", async () => {
     mockGets();
     apiClient.post.mockResolvedValue({ data: { ...credential, drift: "none" } });
     renderPage();
@@ -81,10 +82,12 @@ describe("MCPCredentials", () => {
     expect(row).toHaveTextContent("Weather app");
     expect(row).toHaveTextContent("pol-ops");
     expect(screen.getByTestId("drift-pending_widen")).toBeInTheDocument();
+    expect(apiClient.get).toHaveBeenCalledWith("/mcp-credentials", { params: { page: 1, page_size: 25 } });
 
-    fireEvent.click(screen.getByTestId("apply-drift-cred-1"));
+    await openRowMenu("credential-cred-1");
+    fireEvent.click(await screen.findByTestId("apply-drift-cred-1"));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/mcp-credentials/cred-1/apply-drift", {}));
-    expect(await screen.findByTestId("page-notice")).toHaveTextContent("updated");
+    expect(await screen.findByText(/updated\./)).toBeInTheDocument();
   });
 
   it("revokes with a reason after confirmation", async () => {
@@ -92,10 +95,19 @@ describe("MCPCredentials", () => {
     apiClient.post.mockResolvedValue({ data: { ...credential, status: "revoked" } });
     renderPage();
 
+    await openRowMenu("credential-cred-1");
     fireEvent.click(await screen.findByTestId("revoke-cred-1"));
-    fireEvent.change(screen.getByTestId("action-reason"), { target: { value: "offboarding" } });
+    fireEvent.change(await screen.findByTestId("action-reason"), { target: { value: "offboarding" } });
     fireEvent.click(screen.getByTestId("confirm-action"));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/mcp-credentials/cred-1/revoke", { reason: "offboarding" }));
+  });
+
+  it("filters the ledger by status", async () => {
+    mockGets();
+    renderPage();
+    await screen.findByTestId("credential-cred-1");
+    fireEvent.change(screen.getByTestId("filter-status"), { target: { value: "suspended" } });
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/mcp-credentials", { params: { page: 1, page_size: 25, status: "suspended" } }));
   });
 
   it("mints a key from the admin page and reveals it once", async () => {
@@ -109,12 +121,13 @@ describe("MCPCredentials", () => {
       },
     });
     renderPage();
-    await screen.findByTestId("empty");
+    expect(await screen.findByText("No keys minted yet")).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("open-mint"));
     fireEvent.change(await screen.findByTestId("mint-app"), { target: { value: "4" } });
     // MUI Select: open and pick.
-    fireEvent.mouseDown(screen.getByTestId("mint-connection").querySelector('[role="combobox"]') || screen.getByTestId("mint-connection").firstChild);
+    const select = screen.getByTestId("mint-connection");
+    fireEvent.mouseDown(within(select).getByRole("combobox"));
     fireEvent.click(await screen.findByRole("option", { name: "Prod" }));
     fireEvent.click(screen.getByTestId("mint-submit"));
 
@@ -124,7 +137,7 @@ describe("MCPCredentials", () => {
     await waitFor(() => expect(screen.queryByText(/org1plaintextkey9/)).not.toBeInTheDocument());
   });
 
-  it("shows the access report with grant kinds and keyless rows", async () => {
+  it("shows the access report with grant kinds and key-less rows", async () => {
     mockGets([], [
       { grant_id: 1, app_id: 4, app_name: "Weather app", user_id: 2, user_email: "member@tyk.io", server_id: 7, server_name: "Weather", connection_id: 1, connection_name: "Prod", grant_kind: "key", granted_at: "2026-09-16T10:00:00Z", credential_id: "cred-1", credential_hash: "abcdef1234567890", credential_status: "active" },
       { grant_id: 2, app_id: 4, app_name: "Weather app", user_id: 2, user_email: "member@tyk.io", server_id: 8, server_name: "Tickets", connection_id: 1, connection_name: "Prod", grant_kind: "oauth", granted_at: "2026-09-16T10:00:00Z" },
@@ -135,6 +148,7 @@ describe("MCPCredentials", () => {
     expect(oauth).toHaveTextContent("OAuth");
     expect(oauth).toHaveTextContent("No key");
     expect(screen.getByTestId("grant-1")).toHaveTextContent("Tyk key");
+    expect(screen.getByText(/Only key-backed access is listed/)).toBeInTheDocument();
     expect(apiClient.get).toHaveBeenCalledWith("/mcp-access-report", { params: {} });
 
     fireEvent.click(screen.getByTestId("report-include-revoked"));
