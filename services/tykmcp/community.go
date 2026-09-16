@@ -79,7 +79,28 @@ func (s *communityService) UpdateServer(ctx context.Context, actor Actor, id uin
 	return nil, ErrEnterpriseFeature
 }
 
-func (s *communityService) DeleteServer(ctx context.Context, actor Actor, id uint) error {
+func (s *communityService) RegisterServer(context.Context, Actor, RegisterInput, bool) (*RegisterPreview, *models.MCPServerResponse, error) {
+	return nil, nil, ErrEnterpriseFeature
+}
+func (s *communityService) PushServer(context.Context, Actor, uint, PushInput, bool) (*RegisterPreview, *models.MCPServerResponse, error) {
+	return nil, nil, ErrEnterpriseFeature
+}
+func (s *communityService) ListSourceAPIs(context.Context, uint, string) ([]SourceAPI, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) ListSourceOperations(context.Context, uint, string) ([]SourceOperation, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) GatewayTagOptions(context.Context, uint) ([]GatewayTagOption, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) CreatePolicy(context.Context, Actor, uint, PolicyInput) (*models.TykPolicyResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) UpdatePolicy(context.Context, Actor, uint, string, PolicyInput) (*models.TykPolicyResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) DeleteServer(ctx context.Context, actor Actor, id uint, force bool) error {
 	return ErrEnterpriseFeature
 }
 

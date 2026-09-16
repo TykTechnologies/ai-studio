@@ -1096,6 +1096,13 @@ func (a *API) setupRoutes() {
 	v1.POST("/tyk-connections/:id/sync", authz.Execute("tyk-connections"), a.syncTykConnection)
 	v1.GET("/tyk-connections/:id/policies", authz.Read("tyk-connections"), a.listTykPolicies)
 	v1.GET("/tyk-connections/:id/sync-runs", authz.Read("tyk-connections"), a.listTykSyncRuns)
+	// Registration helpers and the minimal policy creator: creating policies
+	// writes to the Dashboard, so it is an execute on mcp-servers.
+	v1.GET("/tyk-connections/:id/apis", authz.Read("tyk-connections"), a.listTykSourceAPIs)
+	v1.GET("/tyk-connections/:id/apis/:api_id/operations", authz.Read("tyk-connections"), a.listTykSourceOperations)
+	v1.GET("/tyk-connections/:id/gateway-tags", authz.Read("tyk-connections"), a.listTykGatewayTags)
+	v1.POST("/tyk-connections/:id/policies", authz.Execute("mcp-servers"), a.createTykPolicy)
+	v1.PATCH("/tyk-connections/:id/policies/:pid", authz.Execute("mcp-servers"), a.updateTykPolicy)
 	v1.GET("/mcp-servers", authz.Read("mcp-servers"), a.listMCPServers)
 	v1.GET("/mcp-servers/:id", authz.Read("mcp-servers"), a.getMCPServer)
 	v1.PATCH("/mcp-servers/:id", authz.Write("mcp-servers"), a.updateMCPServer)
@@ -1104,6 +1111,8 @@ func (a *API) setupRoutes() {
 	v1.POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.unpublishMCPServer)
 	v1.PUT("/mcp-servers/:id/groups", authz.Write("mcp-servers"), a.setMCPServerGroups)
 	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
+	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
+	v1.POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.pushMCPServer)
 	// Minted Tyk keys: minting, rotating, suspending, revoking and applying
 	// widening changes reach the Dashboard, so they are execute permissions.
 	v1.GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)

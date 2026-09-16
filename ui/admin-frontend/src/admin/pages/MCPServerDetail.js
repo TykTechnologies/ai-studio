@@ -5,9 +5,15 @@ import {
   Autocomplete,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  FormControlLabel,
   Grid,
   MenuItem,
   Table,
@@ -29,6 +35,150 @@ import { apiErrorDetail, formatTime, preStyle } from "./webhookShared";
 import { AUTH_MODE_LABELS, DashboardStateChip, KindChip } from "./MCPServers";
 
 const normaliseList = (data) => (Array.isArray(data) ? data : data?.data || data?.groups || []);
+
+// PolicyCreator writes a partitioned Studio-managed policy to the Dashboard
+// (full-mode connections) and pins it to this server in the same call.
+const PolicyCreator = ({ open, server, onClose, onCreated, onError }) => {
+  const [form, setForm] = useState({ kind: "access", name: "", rate: "", per: "60", quota_max: "", quota_renewal_rate: "3600", key_expires_in: "" });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const num = (v) => (v === "" ? 0 : Number(v));
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const body = { kind: form.kind, name: form.name, server_id: server.id, pin: true };
+      if (form.kind === "consumption") {
+        body.rate = num(form.rate);
+        body.per = num(form.per);
+        body.quota_max = num(form.quota_max);
+        body.quota_renewal_rate = num(form.quota_renewal_rate);
+        body.key_expires_in = num(form.key_expires_in);
+      }
+      const res = await apiClient.post(`/tyk-connections/${server.connection_id}/policies`, body);
+      onCreated(res.data);
+      setForm({ kind: "access", name: "", rate: "", per: "60", quota_max: "", quota_renewal_rate: "3600", key_expires_in: "" });
+    } catch (err) {
+      onError(apiErrorDetail(err, "Creating the policy failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" data-testid="policy-creator">
+      <DialogTitle>Create a Tyk policy</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Partitioned policies only: an access policy grants this proxy, a consumption policy carries limits. Both are tagged
+          studio-managed on the Dashboard and pinned to this server.
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={5}>
+            <TextField select fullWidth size="small" label="Kind" value={form.kind} onChange={set("kind")} inputProps={{ "data-testid": "policy-kind" }}>
+              <MenuItem value="access">Access (ACL for this proxy)</MenuItem>
+              <MenuItem value="consumption">Consumption (rate limit / quota)</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={7}>
+            <TextField fullWidth size="small" label="Name" value={form.name} onChange={set("name")} inputProps={{ "data-testid": "policy-name" }} />
+          </Grid>
+          {form.kind === "consumption" && (
+            <>
+              <Grid item xs={6} md={3}>
+                <TextField fullWidth size="small" type="number" label="Rate" value={form.rate} onChange={set("rate")} inputProps={{ "data-testid": "policy-rate" }} />
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <TextField fullWidth size="small" type="number" label="Per (seconds)" value={form.per} onChange={set("per")} />
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <TextField fullWidth size="small" type="number" label="Quota max" value={form.quota_max} onChange={set("quota_max")} helperText="-1 unlimited" />
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <TextField fullWidth size="small" type="number" label="Quota renews (s)" value={form.quota_renewal_rate} onChange={set("quota_renewal_rate")} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField fullWidth size="small" type="number" label="Key expires in (seconds, 0 = never)" value={form.key_expires_in} onChange={set("key_expires_in")} />
+              </Grid>
+            </>
+          )}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={submit} disabled={busy || !form.name.trim()} data-testid="policy-create">
+          Create and pin
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// DefinitionEditor edits the masked definition and pushes it to the
+// Dashboard. Masked values are restored server-side from the live document.
+const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
+  const [text, setText] = useState("");
+  const [confirmOrigin, setConfirmOrigin] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(null);
+  useEffect(() => {
+    setText(server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "");
+    setPreview(null);
+  }, [server]);
+  const parsed = () => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      onError("The definition is not valid JSON.");
+      return null;
+    }
+  };
+  const run = async (dryRun) => {
+    const doc = parsed();
+    if (!doc) return;
+    setBusy(true);
+    try {
+      const res = await apiClient.post(`/mcp-servers/${server.id}/push${dryRun ? "?dry_run=1" : ""}`, {
+        definition: doc,
+        expected_hash: server.definition_hash,
+        confirm_dashboard_origin: confirmOrigin,
+      });
+      if (dryRun) {
+        setPreview(res.data);
+        onNotice("The Dashboard accepted the definition. Push to apply it.");
+      } else {
+        onPushed(res.data.server, res.data.warnings || []);
+      }
+    } catch (err) {
+      onError(apiErrorDetail(err, dryRun ? "Validation failed" : "Push failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        The Dashboard is the source of truth: the push is refused if the proxy changed there since this page loaded. Leave
+        masked values (***) in place; they are restored from the live definition and never shown here.
+      </Typography>
+      <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} inputProps={{ "data-testid": "definition-editor", style: { fontFamily: "monospace", fontSize: "0.8rem" } }} />
+      {server.origin === "dashboard" && (
+        <FormControlLabel control={<Checkbox checked={confirmOrigin} onChange={(e) => setConfirmOrigin(e.target.checked)} inputProps={{ "data-testid": "confirm-origin" }} />} label="This proxy was created on the Dashboard; AI Studio may overwrite it" />
+      )}
+      {preview && (preview.warnings || []).map((w) => (
+        <Alert key={w} severity="warning" sx={{ mt: 1 }}>
+          {w}
+        </Alert>
+      ))}
+      <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+        <Button variant="outlined" onClick={() => run(true)} disabled={busy} data-testid="validate-definition">
+          Validate on the Dashboard
+        </Button>
+        <Button variant="contained" onClick={() => run(false)} disabled={busy || (server.origin === "dashboard" && !confirmOrigin)} data-testid="push-definition">
+          Push to the Dashboard
+        </Button>
+      </Box>
+    </Box>
+  );
+};
 
 const Section = ({ title, children, action }) => (
   <StyledPaper sx={{ p: 2, mb: 2 }}>
@@ -133,6 +283,10 @@ const MCPServerDetail = () => {
   const [notice, setNotice] = useState(null);
   const [form, setForm] = useState({ name: "", description: "", long_description: "", logo_url: "", tags: "", privacy_score: "" });
   const [groupIds, setGroupIds] = useState([]);
+  const [connection, setConnection] = useState(null);
+  const [creatorOpen, setCreatorOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteForce, setDeleteForce] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -155,6 +309,14 @@ const MCPServerDetail = () => {
       ]);
       setPolicies(pols.data || []);
       setGroups(normaliseList(grps.data));
+      if (s.connection_id) {
+        try {
+          const conn = await apiClient.get(`/tyk-connections/${s.connection_id}`);
+          setConnection(conn?.data || null);
+        } catch {
+          setConnection(null);
+        }
+      }
     } catch (err) {
       setError(apiErrorDetail(err, "Failed to load MCP server"));
     }
@@ -211,10 +373,20 @@ const MCPServerDetail = () => {
   const remove = async () => {
     setError(null);
     try {
-      await apiClient.delete(`/mcp-servers/${server.id}`);
+      await apiClient.delete(`/mcp-servers/${server.id}${deleteForce ? "?force=true" : ""}`);
       navigate("/admin/mcp-servers");
     } catch (err) {
+      setDeleteOpen(false);
       setError(apiErrorDetail(err, "Delete failed"));
+    }
+  };
+
+  const reloadPolicies = async () => {
+    try {
+      const pols = await apiClient.get(`/tyk-connections/${server.connection_id}/policies`);
+      setPolicies(pols.data || []);
+    } catch {
+      // the bundle response already carries the pinned policy
     }
   };
 
@@ -235,6 +407,9 @@ const MCPServerDetail = () => {
 
   const auth = server.auth_details || {};
   const canPublish = server.dashboard_state === "active" && server.privacy_score !== null && server.privacy_score !== undefined;
+  const fullMode = connection?.effective_mode === "full" && connection?.status === "active";
+  const onDashboard = server.dashboard_state !== "missing" && server.dashboard_state !== "pending_platform";
+  const studioOwned = server.origin === "studio" || server.origin === "submission";
 
   return (
     <Box>
@@ -375,10 +550,33 @@ const MCPServerDetail = () => {
         </Can>
       </Section>
 
-      <Section title="Policy bundle">
+      <Section
+        title="Policy bundle"
+        action={
+          fullMode && server.tyk_api_id ? (
+            <Can permission={P.MCP_SERVERS_EXECUTE}>
+              <Button size="small" variant="outlined" onClick={() => setCreatorOpen(true)} data-testid="open-policy-creator">
+                Create policy
+              </Button>
+            </Can>
+          ) : null
+        }
+      >
         <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{(server.bundle || []).map((p) => `${p.role}: ${p.policy?.name}`).join(", ") || "No bundle pinned."}</Typography>}>
           <BundleEditor server={server} policies={policies} onSaved={(s) => { setServer(s); setNotice("Bundle saved"); }} onError={setError} />
         </Can>
+        <PolicyCreator
+          open={creatorOpen}
+          server={server}
+          onClose={() => setCreatorOpen(false)}
+          onError={setError}
+          onCreated={async (pol) => {
+            setCreatorOpen(false);
+            setNotice(`Policy ${pol.name} created on the Dashboard and pinned`);
+            await reloadPolicies();
+            await load();
+          }}
+        />
       </Section>
 
       <Section title={`Primitives (${(server.primitives || []).length})`}>
@@ -430,20 +628,53 @@ const MCPServerDetail = () => {
         </Typography>
       </Section>
 
-      <Section title="Definition (from the Dashboard, upstream credentials masked)">
-        <Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>
-          {server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available"}
-        </Box>
-      </Section>
+      {fullMode && onDashboard ? (
+        <Section title="Definition (edit and push to the Dashboard)">
+          <Can permission={P.MCP_SERVERS_EXECUTE} fallback={<Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>{server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available"}</Box>}>
+            <DefinitionEditor
+              server={server}
+              onError={setError}
+              onNotice={setNotice}
+              onPushed={(s, warnings) => {
+                setServer(s);
+                setNotice(warnings.length ? `Pushed. ${warnings.join(" ")}` : "Pushed to the Dashboard");
+              }}
+            />
+          </Can>
+        </Section>
+      ) : (
+        <Section title="Definition (from the Dashboard, upstream credentials masked)">
+          <Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>
+            {server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available"}
+          </Box>
+        </Section>
+      )}
 
-      {(server.dashboard_state === "missing" || server.dashboard_state === "pending_platform") && (
+      {(!onDashboard || (studioOwned && fullMode)) && (
         <Can permission={P.MCP_SERVERS_DELETE}>
           <Divider sx={{ my: 2 }} />
-          <Button color="error" variant="outlined" onClick={remove} data-testid="delete-server">
-            Delete record
+          <Button color="error" variant="outlined" onClick={() => (onDashboard ? setDeleteOpen(true) : remove())} data-testid="delete-server">
+            {onDashboard ? "Delete from the Dashboard" : "Delete record"}
           </Button>
         </Can>
       )}
+      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
+        <DialogTitle>Delete this MCP proxy from the Tyk Dashboard?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            The proxy is removed from the Dashboard and the gateways stop serving it. Apps lose the binding; keys that reach
+            nothing else on this connection are revoked when you tick the box below, otherwise the delete is refused while
+            such keys exist.
+          </Typography>
+          <FormControlLabel control={<Checkbox checked={deleteForce} onChange={(e) => setDeleteForce(e.target.checked)} inputProps={{ "data-testid": "delete-force" }} />} label="Revoke keys that would be left without access" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={remove} data-testid="confirm-delete">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

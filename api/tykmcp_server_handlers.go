@@ -147,7 +147,8 @@ func (a *API) deleteMCPServer(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := a.tykMCPService().DeleteServer(c.Request.Context(), actor, id); err != nil {
+	force, _ := strconv.ParseBool(c.Query("force"))
+	if err := a.tykMCPService().DeleteServer(c.Request.Context(), actor, id, force); err != nil {
 		tykMCPErrorResponse(c, err, "Failed to delete MCP server")
 		return
 	}

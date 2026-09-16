@@ -162,6 +162,13 @@ const MCPServers = () => {
           <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
             Refresh
           </Button>
+          <Can permission={P.MCP_SERVERS_EXECUTE}>
+            {activeConnections.some((c) => c.effective_mode === "full") && (
+              <Button variant="contained" onClick={() => navigate("/admin/mcp-servers/register")} data-testid="register-server">
+                Register MCP server
+              </Button>
+            )}
+          </Can>
           <Can permission={P.TYK_CONNECTIONS_EXECUTE}>
             {activeConnections.length > 0 && (
               <Button

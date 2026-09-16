@@ -91,6 +91,7 @@ import WebhookDeliveries from "./pages/WebhookDeliveries";
 import TykConnections from "./pages/TykConnections";
 import MCPServers from "./pages/MCPServers";
 import MCPServerDetail from "./pages/MCPServerDetail";
+import MCPServerRegister from "./pages/MCPServerRegister";
 import MCPCredentials from "./pages/MCPCredentials";
 
 import SubmissionReviewQueue from "./pages/SubmissionReviewQueue";
@@ -194,6 +195,7 @@ const mainAdminRoutes = [
   // Tyk Dashboard MCP integration (Enterprise only; page self-gates via /tyk-mcp/status)
   { path: "tyk-connections", element: <TykConnections />, permission: P.TYK_CONNECTIONS_READ },
   { path: "mcp-servers", element: <MCPServers />, permission: P.MCP_SERVERS_READ },
+  { path: "mcp-servers/register", element: <MCPServerRegister />, permission: P.MCP_SERVERS_EXECUTE },
   { path: "mcp-servers/:id", element: <MCPServerDetail />, permission: P.MCP_SERVERS_READ },
   { path: "mcp-credentials", element: <MCPCredentials />, permission: P.MCP_CREDENTIALS_READ },
 

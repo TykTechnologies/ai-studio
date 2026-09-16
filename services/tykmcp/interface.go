@@ -14,6 +14,7 @@ package tykmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -284,6 +285,130 @@ const (
 	MaxPageSize     = 200
 )
 
+// --- Registration (full mode) ---
+
+// Consumer authentication shapes the registration wizard can produce.
+const (
+	ConsumerAuthToken   = "auth_token"
+	ConsumerAuthOAuth21 = "oauth21"
+	ConsumerAuthKeyless = "keyless"
+)
+
+// RegisterPrimitive is one REST operation exposed as an MCP tool by a
+// REST-to-MCP proxy. Either OperationID or Method+Path names the source.
+type RegisterPrimitive struct {
+	OperationID string                 `json:"operation_id"`
+	Method      string                 `json:"method"`
+	Path        string                 `json:"path"`
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Annotations map[string]interface{} `json:"annotations"`
+}
+
+// RegisterInput describes an MCP proxy to create on a Tyk Dashboard.
+// UpstreamAuthToken is sent to the Dashboard and never persisted in Studio.
+type RegisterInput struct {
+	ConnectionID    uint   `json:"connection_id"`
+	Kind            string `json:"kind"` // remote | rest_to_mcp
+	Name            string `json:"name"`
+	ListenPath      string `json:"listen_path"`
+	StripListenPath *bool  `json:"strip_listen_path"` // default true
+
+	// Remote MCP server
+	UpstreamURL            string   `json:"upstream_url"`
+	UpstreamAuthHeaderName string   `json:"upstream_auth_header_name"`
+	UpstreamAuthToken      string   `json:"upstream_auth_token"`
+	AllowedTools           []string `json:"allowed_tools"`
+
+	// REST API to MCP
+	SourceAPIID string              `json:"source_api_id"`
+	Primitives  []RegisterPrimitive `json:"primitives"`
+
+	// Consumer authentication
+	ConsumerAuth         string   `json:"consumer_auth"` // auth_token | oauth21 | keyless
+	AuthorizationServers []string `json:"authorization_servers"`
+	ScopesSupported      []string `json:"scopes_supported"`
+	ConfirmKeyless       bool     `json:"confirm_keyless"`
+
+	// Deployment target (segmented gateways)
+	GatewayTags          []string `json:"gateway_tags"`
+	ConfirmNoGatewayTags bool     `json:"confirm_no_gateway_tags"`
+
+	// Studio presentation and governance
+	Description     string   `json:"description"`
+	LongDescription string   `json:"long_description"`
+	Tags            []string `json:"tags"`
+	PrivacyScore    *int     `json:"privacy_score"`
+	Publish         bool     `json:"publish"`
+}
+
+// RegisterPreview is a dry-run result: the definition Studio would send
+// (secrets masked), the Dashboard's expanded rendering when it returned one,
+// and warnings the administrator should read before confirming.
+type RegisterPreview struct {
+	Definition  json.RawMessage `json:"definition"`
+	Rendered    json.RawMessage `json:"rendered,omitempty"`
+	Warnings    []string        `json:"warnings"`
+	EndpointURL string          `json:"endpoint_url,omitempty"`
+}
+
+// PushInput replaces a server's definition on the Dashboard. Definition is
+// the edited document; masked values ("***") are restored from the live
+// document before sending. ExpectedHash is the hash the editor loaded; a
+// different live hash is a conflict.
+type PushInput struct {
+	Definition             json.RawMessage `json:"definition"`
+	ExpectedHash           string          `json:"expected_hash"`
+	ConfirmDashboardOrigin bool            `json:"confirm_dashboard_origin"`
+}
+
+// SourceAPI is a Tyk OAS API that can back a REST-to-MCP proxy.
+type SourceAPI struct {
+	APIID      string `json:"api_id"`
+	Name       string `json:"name"`
+	ListenPath string `json:"listen_path"`
+	Active     bool   `json:"active"`
+}
+
+// SourceOperation is one operation of a source API.
+type SourceOperation struct {
+	OperationID string `json:"operation_id"`
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	Summary     string `json:"summary"`
+}
+
+// GatewayTagOption is one deployment target the wizard can offer.
+type GatewayTagOption struct {
+	Tag         string                `json:"tag"`
+	Label       string                `json:"label,omitempty"`
+	Description string                `json:"description,omitempty"`
+	Sources     []string              `json:"sources"` // mdcb | known | proxies
+	DataPlanes  []models.TykDataPlane `json:"data_planes"`
+	// Verified is true when MDCB currently reports a data plane with this tag.
+	Verified bool `json:"verified"`
+}
+
+// PolicyInput is the minimal policy creator's input. An access policy
+// grants one MCP server; a consumption policy carries rate and quota limits.
+type PolicyInput struct {
+	Kind             string `json:"kind"` // access | consumption
+	Name             string `json:"name"`
+	ServerID         uint   `json:"server_id"`
+	Rate             int64  `json:"rate"`
+	Per              int64  `json:"per"`
+	QuotaMax         int64  `json:"quota_max"`
+	QuotaRenewalRate int64  `json:"quota_renewal_rate"`
+	KeyExpiresIn     int64  `json:"key_expires_in"`
+	// Pin adds the new policy to ServerID's bundle straight away.
+	Pin bool `json:"pin"`
+}
+
+const (
+	PolicyKindAccess      = "access"
+	PolicyKindConsumption = "consumption"
+)
+
 // Service is the Tyk Dashboard MCP integration contract shared by both editions.
 type Service interface {
 	// MCP servers (discovery)
@@ -291,9 +416,30 @@ type Service interface {
 	GetServer(ctx context.Context, id uint) (*models.MCPServerResponse, error)
 	UpdateServer(ctx context.Context, actor Actor, id uint, p ServerPatch) (*models.MCPServerResponse, error)
 	// DeleteServer removes a record the Dashboard no longer has (missing) or
-	// that never reached it (pending_platform). Studio-origin proxies are
-	// deleted on the Dashboard by the registration milestone.
-	DeleteServer(ctx context.Context, actor Actor, id uint) error
+	// that never reached it (pending_platform), or, on a full connection,
+	// deletes a Studio-registered proxy from the Dashboard. force revokes the
+	// keys that would otherwise block the delete.
+	DeleteServer(ctx context.Context, actor Actor, id uint, force bool) error
+
+	// Registration (full mode)
+	// RegisterServer creates an MCP proxy on the Dashboard from the wizard's
+	// input. With dryRun the Dashboard only validates and the preview is
+	// returned; otherwise the catalogued server is returned.
+	RegisterServer(ctx context.Context, actor Actor, in RegisterInput, dryRun bool) (*RegisterPreview, *models.MCPServerResponse, error)
+	// PushServer replaces a server's definition on the Dashboard after
+	// checking the live hash and restoring masked secrets.
+	PushServer(ctx context.Context, actor Actor, id uint, in PushInput, dryRun bool) (*RegisterPreview, *models.MCPServerResponse, error)
+	ListSourceAPIs(ctx context.Context, connectionID uint, search string) ([]SourceAPI, error)
+	ListSourceOperations(ctx context.Context, connectionID uint, apiID string) ([]SourceOperation, error)
+	// GatewayTagOptions lists the deployment targets known for a connection:
+	// MDCB-discovered, administrator-known and seen on synced proxies. Empty
+	// means the control should not render.
+	GatewayTagOptions(ctx context.Context, connectionID uint) ([]GatewayTagOption, error)
+	// CreatePolicy creates a partitioned Studio-managed policy on the
+	// Dashboard, caches it and optionally pins it.
+	CreatePolicy(ctx context.Context, actor Actor, connectionID uint, in PolicyInput) (*models.TykPolicyResponse, error)
+	// UpdatePolicy edits a Studio-managed policy (name and limits only).
+	UpdatePolicy(ctx context.Context, actor Actor, connectionID uint, tykPolicyID string, in PolicyInput) (*models.TykPolicyResponse, error)
 	PublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
 	UnpublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
 	SetServerGroups(ctx context.Context, actor Actor, id uint, groupIDs []uint) (*models.MCPServerResponse, error)
