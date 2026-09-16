@@ -2,10 +2,47 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+// devCSRFTrustedOrigins builds the DEVMODE-only CSRF trusted-origin list.
+//
+// gorilla/csrf compares the browser's Origin (or Referer) host:port against
+// the request Host. In development the two never match: the React dev server
+// proxies API calls with changeOrigin, and in Docker the frontend is reached on
+// a host-mapped port. The frontend origin is whatever SITE_URL says, so its
+// host is trusted automatically; extra is CSRF_TRUSTED_ORIGINS, a
+// comma-separated list of host[:port] values for anything else (a locally
+// served production build, a second frontend). localhost:3000 stays in the
+// list so a stack that never sets SITE_URL keeps working.
+func devCSRFTrustedOrigins(siteURL, extra string) []string {
+	trusted := []string{"localhost:3000"}
+	add := func(host string) {
+		host = strings.TrimSpace(host)
+		if host == "" {
+			return
+		}
+		for _, existing := range trusted {
+			if existing == host {
+				return
+			}
+		}
+		trusted = append(trusted, host)
+	}
+
+	if siteURL = strings.TrimSpace(siteURL); siteURL != "" {
+		if parsed, err := url.Parse(siteURL); err == nil && parsed.Host != "" {
+			add(parsed.Host)
+		}
+	}
+	for _, origin := range strings.Split(extra, ",") {
+		add(origin)
+	}
+	return trusted
+}
 
 // csrfGuard adapts a net/http CSRF middleware (gorilla/csrf) into gin's chain.
 //

@@ -135,3 +135,78 @@ func TestCSRFGuard_OAuthPathsBypassCSRF(t *testing.T) {
 	assert.True(t, reached, "OAuth endpoints run their own state/PKCE checks")
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestDevCSRFTrustedOrigins(t *testing.T) {
+	cases := []struct {
+		name    string
+		siteURL string
+		extra   string
+		want    []string
+	}{
+		{"nothing set keeps the default", "", "", []string{"localhost:3000"}},
+		{"site url on another port is trusted", "http://localhost:3100", "",
+			[]string{"localhost:3000", "localhost:3100"}},
+		{"site url on the default port is not duplicated", "http://localhost:3000", "",
+			[]string{"localhost:3000"}},
+		{"site url with a path keeps only host:port", "https://studio.example.com/app/", "",
+			[]string{"localhost:3000", "studio.example.com"}},
+		{"extra origins are appended and trimmed", "http://localhost:3100", " 127.0.0.1:5173 ,, localhost:3100",
+			[]string{"localhost:3000", "localhost:3100", "127.0.0.1:5173"}},
+		{"unparseable site url is ignored", "://nope", "", []string{"localhost:3000"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, devCSRFTrustedOrigins(tc.siteURL, tc.extra))
+		})
+	}
+}
+
+// A browser on the SITE_URL port must be able to complete the token dance even
+// though the proxied request Host (studio:8080) never matches its Origin.
+func TestCSRFGuard_SiteURLPortIsTrusted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(csrfGuard(csrf.Protect(
+		[]byte("0123456789abcdef0123456789abcdef"),
+		csrf.Secure(false),
+		csrf.Path("/"),
+		csrf.TrustedOrigins(devCSRFTrustedOrigins("http://localhost:3100", "")),
+	)))
+	mutated := false
+	r.POST("/thing", func(c *gin.Context) { mutated = true; c.Status(http.StatusCreated) })
+	r.GET("/token", func(c *gin.Context) {
+		c.Header("X-CSRF-Token", csrf.Token(c.Request))
+		c.Status(http.StatusOK)
+	})
+
+	tokenRec := httptest.NewRecorder()
+	tokenReq := httptest.NewRequest("GET", "/token", nil)
+	tokenReq.Host = "studio:8080"
+	r.ServeHTTP(tokenRec, tokenReq)
+
+	for _, origin := range []string{"http://localhost:3100", "http://localhost:3000"} {
+		mutated = false
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/thing", nil)
+		req.Host = "studio:8080"
+		req.Header.Set("Origin", origin)
+		req.Header.Set("X-CSRF-Token", tokenRec.Header().Get("X-CSRF-Token"))
+		for _, c := range tokenRec.Result().Cookies() {
+			req.AddCookie(c)
+		}
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusCreated, w.Code, origin)
+		assert.True(t, mutated, origin)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/thing", nil)
+	req.Host = "studio:8080"
+	req.Header.Set("Origin", "http://localhost:4000")
+	req.Header.Set("X-CSRF-Token", tokenRec.Header().Get("X-CSRF-Token"))
+	for _, c := range tokenRec.Result().Cookies() {
+		req.AddCookie(c)
+	}
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusForbidden, w.Code, "an untrusted port is still rejected")
+}

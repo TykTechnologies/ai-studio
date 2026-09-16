@@ -38,8 +38,8 @@ If no argument is provided, show the user the available options and ask what the
 ## Services
 
 - **postgres** - PostgreSQL 17 database (port 5432)
-- **studio** - AI Studio control plane with hot reload (ports 8080, 9090)
-- **frontend** - React dev server with HMR (port 3000)
+- **studio** - AI Studio control plane with hot reload (host port 8080, override with `STUDIO_PORT`; 9090)
+- **frontend** - React dev server with HMR (host port 3000; set `FRONTEND_PORT=3100` in `dev/.env` or the shell if 3000 is taken, login works on the new port)
 - **gateway** - Microgateway data plane (port 8081) - full mode only
 - **plugins** - Plugin watcher/builder - full mode only
 

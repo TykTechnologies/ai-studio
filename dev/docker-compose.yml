@@ -11,8 +11,15 @@
 #
 # Services:
 #   - postgres:  PostgreSQL 17 database (host port 55432 → container 5432)
-#   - studio:    AI Studio backend (ports 8080, 9090, 50051)
-#   - frontend:  React development server (port 3000)
+#   - studio:    AI Studio backend (host port STUDIO_PORT, default 8080; 9090, 50051)
+#   - frontend:  React development server (host port FRONTEND_PORT, default 3000)
+#
+# Ports 3000 / 8080 already taken? Set FRONTEND_PORT / STUDIO_PORT (in dev/.env
+# or the shell):
+#   FRONTEND_PORT=3100 STUDIO_PORT=8090 make dev
+# SITE_URL and the CSRF trusted origins follow FRONTEND_PORT automatically; the
+# frontend reaches the API over the compose network, so STUDIO_PORT only
+# matters for direct curl/API access from the host.
 #
 # For full stack with Gateway, use:
 #   docker compose -f docker-compose.yml -f docker-compose.full.yml up
@@ -71,7 +78,7 @@ services:
       # Persistent data directory
       - studio_data:/app/data
     ports:
-      - "8080:8080"   # REST API
+      - "${STUDIO_PORT:-8080}:8080"   # REST API
       - "50051:50051" # gRPC Control Server
       - "9090:9090"   # embedded gateway
       - "9898:9898"   # API Documentation Server
@@ -85,8 +92,9 @@ services:
       DEVMODE: "true"
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       LOG_FORMAT: text
-      # URLs for frontend communication
-      SITE_URL: http://localhost:3000
+      # URLs for frontend communication. SITE_URL must be the origin the
+      # browser uses: in DEVMODE its host is added to the CSRF trusted origins.
+      SITE_URL: http://localhost:${FRONTEND_PORT:-3000}
       PROXY_URL: http://localhost:9090
       # Gateway mode - Studio acts as control plane
       GATEWAY_MODE: control
@@ -128,15 +136,15 @@ services:
       # Preserve node_modules
       - /app/ui/admin-frontend/node_modules
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
       # Enable polling for file watching (required for Docker on Mac/Windows)
       CHOKIDAR_USEPOLLING: "true"
       # Backend API URL for proxy - uses Docker service name
       PROXY_TARGET: http://studio:8080
       REACT_APP_API_URL: http://localhost:8080
-      # WebSocket port for HMR
-      WDS_SOCKET_PORT: 3000
+      # WebSocket port for HMR (the host port the browser connects to)
+      WDS_SOCKET_PORT: ${FRONTEND_PORT:-3000}
     depends_on:
       - studio
     networks:

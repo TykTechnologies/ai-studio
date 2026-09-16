@@ -266,14 +266,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			csrf.Path("/"),
 		}
 		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {
-			// The dev frontend runs on :3000; CSRF_TRUSTED_ORIGINS (comma-separated
-			// host[:port] values) lets a locally served build on another port log in.
-			trusted := []string{"localhost:3000"}
-			for _, origin := range strings.Split(os.Getenv("CSRF_TRUSTED_ORIGINS"), ",") {
-				if origin = strings.TrimSpace(origin); origin != "" {
-					trusted = append(trusted, origin)
-				}
-			}
+			// The dev frontend proxies to the API from another origin (its own
+			// port, or a host-mapped port in Docker), so the browser's Origin never
+			// matches the request Host. Trust the SITE_URL host plus any extra
+			// CSRF_TRUSTED_ORIGINS (comma-separated host[:port] values).
+			trusted := devCSRFTrustedOrigins(os.Getenv("SITE_URL"), os.Getenv("CSRF_TRUSTED_ORIGINS"))
+			logger.Infof("DEVMODE: CSRF trusted origins: %s", strings.Join(trusted, ", "))
 			csrfOpts = append(csrfOpts, csrf.TrustedOrigins(trusted))
 		}
 		csrfMiddleware := csrf.Protect(
