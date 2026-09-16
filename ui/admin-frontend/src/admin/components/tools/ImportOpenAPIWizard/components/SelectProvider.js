@@ -72,7 +72,6 @@ const SelectProvider = ({
         onChange={(e) => {
           const provider = providers.find((p) => p.id === e.target.value);
           if (provider) {
-            console.log('Selected provider:', provider);
             onSelect(provider);
           }
         }}

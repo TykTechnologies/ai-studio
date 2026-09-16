@@ -91,6 +91,9 @@ func (s *communityService) ListSourceAPIs(context.Context, uint, string) ([]Sour
 func (s *communityService) ListSourceOperations(context.Context, uint, string) ([]SourceOperation, error) {
 	return nil, ErrEnterpriseFeature
 }
+func (s *communityService) GetSourceAPIDocument(context.Context, uint, string) (*SourceAPIDocument, error) {
+	return nil, ErrEnterpriseFeature
+}
 func (s *communityService) GatewayTagOptions(context.Context, uint) ([]GatewayTagOption, error) {
 	return nil, ErrEnterpriseFeature
 }

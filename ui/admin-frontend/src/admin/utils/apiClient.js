@@ -71,15 +71,6 @@ const createApiClient = () => {
 // Initialize the API client instance
 apiClientInstance = createApiClient();
 
-// Provider API endpoints
-export const providerAPI = {
-  listProviders: () => apiClientInstance.get('/providers'),
-  configureProvider: (providerId, config) => apiClientInstance.post(`/providers/${providerId}/configure`, {
-    config,
-  }),
-  getProviderSpecs: (providerId) => apiClientInstance.get(`/providers/${providerId}/specs`),
-};
-
 // App-Tool API endpoints
 export const appToolAPI = {
   getAppTools: (appId) => apiClientInstance.get(`/apps/${appId}/tools`),

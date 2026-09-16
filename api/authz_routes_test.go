@@ -103,7 +103,7 @@ func TestAuthzRoutes_RegistryLookup(t *testing.T) {
 	assert.Equal(t, authz.Write("model-prices"), get("GET", "/api/v1/model-prices/by-name").perm, "get-or-create is a write")
 	assert.Equal(t, authz.AnyAdmin, get("POST", "/api/v1/logout").perm)
 	assert.Equal(t, authz.AnyAdmin, get("GET", "/api/v1/plugins/sidebar-menu").perm)
-	assert.Equal(t, authz.Read("tools"), get("GET", "/api/v1/providers").perm)
+	assert.Equal(t, authz.Write("tools"), get("GET", "/api/v1/tools/import/tyk/connections").perm, "importing creates a tool")
 	assert.Equal(t, authz.Read("marketplace"), get("GET", "/api/v1/admin/marketplaces").perm)
 	assert.Equal(t, authz.Write("sso-profiles"), get("POST", "/api/v1/sso-profiles").perm)
 

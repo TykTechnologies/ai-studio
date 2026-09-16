@@ -385,6 +385,17 @@ type SourceOperation struct {
 	Summary     string `json:"summary"`
 }
 
+// SourceAPIDocument is a Tyk OAS API's definition as the Tools import
+// stores it: the OAS document with the vendor extension kept and every
+// credential under x-tyk-api-gateway masked.
+type SourceAPIDocument struct {
+	APIID      string          `json:"api_id"`
+	Name       string          `json:"name"`
+	ListenPath string          `json:"listen_path"`
+	Active     bool            `json:"active"`
+	Definition json.RawMessage `json:"definition"`
+}
+
 // GatewayTagOption is one deployment target the wizard can offer.
 type GatewayTagOption struct {
 	Tag         string                `json:"tag"`
@@ -438,6 +449,9 @@ type Service interface {
 	PushServer(ctx context.Context, actor Actor, id uint, in PushInput, dryRun bool) (*RegisterPreview, *models.MCPServerResponse, error)
 	ListSourceAPIs(ctx context.Context, connectionID uint, search string) ([]SourceAPI, error)
 	ListSourceOperations(ctx context.Context, connectionID uint, apiID string) ([]SourceOperation, error)
+	// GetSourceAPIDocument fetches one Tyk OAS API for the Tools import,
+	// masking upstream credentials before it leaves the service.
+	GetSourceAPIDocument(ctx context.Context, connectionID uint, apiID string) (*SourceAPIDocument, error)
 	// GatewayTagOptions lists the deployment targets known for a connection:
 	// MDCB-discovered, administrator-known and seen on synced proxies. Empty
 	// means the control should not render.
