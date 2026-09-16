@@ -88,6 +88,7 @@ import ComplianceOverview from "./pages/ComplianceOverview";
 import AuditTrail from "./pages/AuditTrail";
 import Webhooks from "./pages/Webhooks";
 import WebhookDeliveries from "./pages/WebhookDeliveries";
+import TykConnections from "./pages/TykConnections";
 
 import SubmissionReviewQueue from "./pages/SubmissionReviewQueue";
 import SubmissionReview from "./pages/SubmissionReview";
@@ -187,6 +188,8 @@ const mainAdminRoutes = [
   // Webhooks (Enterprise only; pages self-gate via /webhooks/status)
   { path: "webhooks", element: <Webhooks />, permission: P.WEBHOOKS_READ },
   { path: "webhooks/deliveries", element: <WebhookDeliveries />, permission: P.WEBHOOKS_READ },
+  // Tyk Dashboard MCP integration (Enterprise only; page self-gates via /tyk-mcp/status)
+  { path: "tyk-connections", element: <TykConnections />, permission: P.TYK_CONNECTIONS_READ },
 
   { path: "submissions", element: <SubmissionReviewQueue />, permission: P.SUBMISSIONS_READ },
   { path: "submissions/:id", element: <SubmissionReview />, permission: P.SUBMISSIONS_READ },

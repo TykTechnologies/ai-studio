@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
+	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
@@ -91,6 +92,9 @@ type API struct {
 	// webhooksFallback answers webhook routes when the service has no
 	// webhooks implementation attached (community stub semantics).
 	webhooksFallback webhooks.Service
+	// tykMCPFallback answers Tyk MCP routes when the service has no
+	// implementation attached (community stub semantics).
+	tykMCPFallback tykmcp.Service
 	auditHandler gin.HandlerFunc
 	// routePerms maps "METHOD /path" to the permission a route requires.
 	// Populated by permRouter at registration; see authz_routes.go.
@@ -179,6 +183,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 
 	api := &API{
 		webhooksFallback: webhooks.NewCommunityService(),
+		tykMCPFallback:   tykmcp.NewCommunityService(),
 		service:          service,
 		router:           router,
 		disableCORS:      disableCORS,
@@ -1069,6 +1074,21 @@ func (a *API) setupRoutes() {
 	v1.POST("/webhooks/deliveries/:id/replay", authz.Execute("webhooks"), a.replayWebhookDelivery)
 	v1.POST("/webhooks/deliveries/:id/cancel", authz.Execute("webhooks"), a.cancelWebhookDelivery)
 	v1.GET("/webhooks/stats", authz.Read("webhooks"), a.getWebhookStats)
+
+	// Tyk Dashboard MCP integration (Enterprise feature). Activating,
+	// disabling, probing and syncing a connection reach an external system,
+	// so they are execute permissions.
+	v1.GET("/tyk-mcp/status", authz.AnyAdmin, a.getTykMCPStatus)
+	v1.GET("/tyk-connections", authz.Read("tyk-connections"), a.listTykConnections)
+	v1.POST("/tyk-connections", authz.Write("tyk-connections"), a.createTykConnection)
+	v1.POST("/tyk-connections/probe", authz.Write("tyk-connections"), a.probeTykConnectionInput)
+	v1.GET("/tyk-connections/:id", authz.Read("tyk-connections"), a.getTykConnection)
+	v1.PATCH("/tyk-connections/:id", authz.Write("tyk-connections"), a.updateTykConnection)
+	v1.DELETE("/tyk-connections/:id", authz.Delete("tyk-connections"), a.deleteTykConnection)
+	v1.POST("/tyk-connections/:id/activate", authz.Execute("tyk-connections"), a.activateTykConnection)
+	v1.POST("/tyk-connections/:id/disable", authz.Execute("tyk-connections"), a.disableTykConnection)
+	v1.POST("/tyk-connections/:id/probe", authz.Execute("tyk-connections"), a.probeTykConnection)
+	v1.POST("/tyk-connections/:id/sync", authz.Execute("tyk-connections"), a.syncTykConnection)
 
 	// RBAC routes (Enterprise feature; the permission catalogue is served in both editions)
 	v1.GET("/rbac/permissions", authz.AnyAdmin, a.getPermissionCatalogue)

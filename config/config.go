@@ -85,6 +85,9 @@ type AppConf struct {
 	// Webhooks Configuration (Enterprise)
 	Webhooks WebhooksConfig
 
+	// Tyk Dashboard MCP integration (Enterprise)
+	TykMCP TykMCPConfig
+
 	// Marketplace Configuration
 	MarketplaceEnabled      bool
 	MarketplaceIndexURL     string
@@ -526,6 +529,7 @@ func getConfigFromEnv(envFile string) *AppConf {
 
 	// Webhooks configuration
 	conf.Webhooks = getWebhooksConfig()
+	conf.TykMCP = getTykMCPConfig()
 
 	// Marketplace configuration
 	conf.MarketplaceEnabled = true // Enabled by default

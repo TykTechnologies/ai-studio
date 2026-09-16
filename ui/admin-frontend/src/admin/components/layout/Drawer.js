@@ -235,6 +235,9 @@ const Drawer = () => {
       subItems: [
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets', permission: P.SECRETS_READ },
         { id: 'branding', text: 'Branding', path: '/admin/branding', permission: P.BRANDING_WRITE },
+        ...(features.feature_tyk_mcp
+          ? [{ id: 'tyk-connections', text: 'Tyk Dashboard', path: '/admin/tyk-connections', permission: P.TYK_CONNECTIONS_READ }]
+          : []),
       ],
     },
     ...(features.feature_chat

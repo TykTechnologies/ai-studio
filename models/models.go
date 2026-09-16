@@ -109,6 +109,8 @@ func InitModels(db *gorm.DB) error {
 		&WebhookEvent{},           // Persisted bus events (fan-out source, replay)
 		&WebhookDelivery{},        // Per (event, target) outbox rows
 		&WebhookDeliveryAttempt{}, // Per-attempt delivery log
+		// Tyk Dashboard MCP integration (Enterprise; tables exist in CE, unused)
+		&TykConnection{}, // Dashboard connections (credentials encrypted)
 	); err != nil {
 		return err
 	}

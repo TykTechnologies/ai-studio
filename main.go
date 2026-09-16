@@ -387,6 +387,7 @@ func main() {
 		service.SetEventBus(controlServer.GetEventBus())
 		logger.Info("Event bus wired to service for system CRUD events")
 		service.InitWebhooks(appConf.Webhooks, Version)
+		service.InitTykMCP(appConf.TykMCP, Version)
 
 		logger.Info("Reload coordinator created and connected to control server and namespace service")
 
@@ -421,6 +422,7 @@ func main() {
 		}
 		service.SetEventBus(localBus)
 		service.InitWebhooks(appConf.Webhooks, Version)
+		service.InitTykMCP(appConf.TykMCP, Version)
 	}
 
 	noDocsArg := appConf.DocsDisabled
