@@ -143,7 +143,7 @@ const MCPServers = () => {
         headerName: "Server",
         renderCell: (s) => (
           <Box>
-            <Typography variant="body2" fontWeight={600}>
+            <Typography variant="body2">
               {s.name}
             </Typography>
             <Typography variant="caption" color="text.secondary">
