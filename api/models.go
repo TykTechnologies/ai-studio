@@ -475,6 +475,9 @@ type AppInput struct {
 			Namespace       string                 `json:"namespace,omitempty"`
 			Metadata        map[string]interface{} `json:"metadata,omitempty"`
 			PluginResources []PluginResourceInput  `json:"plugin_resources,omitempty"`
+			// MCPServerIDs binds Tyk-managed MCP servers (Enterprise). Omitted
+			// leaves the bindings unchanged on update; an empty list clears them.
+			MCPServerIDs *[]uint `json:"mcp_server_ids,omitempty"`
 			// IsActive is the live switch. Omitted = unchanged on update, live
 			// on create (unless the caller lacks apps:publish, in which case
 			// the app is created inactive). Setting it needs apps:publish.
@@ -506,6 +509,9 @@ type AppResponse struct {
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		Namespace        string                 `json:"namespace,omitempty"`
 		PluginResources  []PluginResourceOutput `json:"plugin_resources,omitempty"`
+		// Tyk-managed MCP servers bound to the app (Enterprise).
+		MCPServerIDs []uint               `json:"mcp_server_ids"`
+		MCPServers   []AppMCPServerOutput `json:"mcp_servers,omitempty"`
 	} `json:"attributes"`
 }
 

@@ -41,6 +41,7 @@ const (
 	CatalogItemDatasource     = "datasource"
 	CatalogItemTool           = "tool"
 	CatalogItemPluginResource = "plugin_resource"
+	CatalogItemMCPServer      = "mcp_server"
 )
 
 // CatalogRef names one catalog an item is available through.
@@ -117,6 +118,17 @@ type CatalogItemAttributes struct {
 
 	// Plugin resources
 	ResourceType *CatalogResourceType `json:"resource_type,omitempty"`
+
+	// MCP servers (Tyk-managed): how a client reaches the proxy and what it
+	// offers. Brokerable says whether an App credential can be minted for it.
+	AuthMode     string                               `json:"auth_mode,omitempty"`
+	AuthHeader   string                               `json:"auth_header,omitempty"`
+	EndpointURL  string                               `json:"endpoint_url,omitempty"`
+	EndpointURLs map[string]string                    `json:"endpoint_urls,omitempty"`
+	Primitives   []models.MCPPrimitive                `json:"primitives,omitempty"`
+	GatewayTags  []string                             `json:"gateway_tags,omitempty"`
+	Brokerable   *bool                                `json:"brokerable,omitempty"`
+	OAuth        *models.MCPProtectedResourceMetadata `json:"oauth,omitempty"`
 }
 
 // CatalogItem is one entry of the unified catalog.
@@ -291,6 +303,17 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 		}
 		idOf = func(i int) uint { return tools[i].ID }
 		memberships, objectType = models.ToolCatalogueMemberships, models.GovernedObjectTypeTool
+	case CatalogItemMCPServer:
+		var servers []models.MCPServer
+		if err := query.Find(&servers).Error; err != nil {
+			return nil, err
+		}
+		items = make([]CatalogItem, len(servers))
+		for i := range servers {
+			items[i] = mcpServerCatalogItem(&servers[i])
+		}
+		idOf = func(i int) uint { return servers[i].ID }
+		memberships, objectType = nil, models.GovernedObjectTypeMCPServer
 	default:
 		return nil, nil
 	}
@@ -302,9 +325,11 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 	if err != nil {
 		return nil, err
 	}
-	membership, err := memberships(db, catalogues.ids)
-	if err != nil {
-		return nil, err
+	membership := map[uint][]uint{}
+	if memberships != nil {
+		if membership, err = memberships(db, catalogues.ids); err != nil {
+			return nil, err
+		}
 	}
 	ids := make([]string, len(items))
 	for i := range items {
@@ -526,7 +551,7 @@ func (a *API) getPortalCatalog(c *gin.Context) {
 
 	// Facets over the whole accessible set: aggregates for the database
 	// types, the plugin instances (which the plugins list in full anyway).
-	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0}
+	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0, CatalogItemMCPServer: 0}
 	kinds := []CatalogKindFacet{}
 	catalogs := []CatalogFilterOption{}
 	for i := range catalogSources {

@@ -85,3 +85,14 @@ func AccessibleToolQuery(db *gorm.DB, userID uint) *gorm.DB {
 		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
 		Where("user_groups.user_id = ? AND tools.active = ?", userID, true)
 }
+
+// AccessibleMCPServerQuery is the portal visibility rule for Tyk-managed
+// MCP servers: the user's teams -> direct team grants -> published servers
+// that are active on their Dashboard. There is no catalogue family for
+// this type; grants are per server.
+func AccessibleMCPServerQuery(db *gorm.DB, userID uint) *gorm.DB {
+	return db.Model(&MCPServer{}).
+		Joins("JOIN mcp_server_groups ON mcp_server_groups.mcp_server_id = mcp_servers.id").
+		Joins("JOIN user_groups ON user_groups.group_id = mcp_server_groups.group_id").
+		Where("user_groups.user_id = ? AND mcp_servers.is_active = ? AND mcp_servers.dashboard_state = ?", userID, true, MCPDashboardActive)
+}

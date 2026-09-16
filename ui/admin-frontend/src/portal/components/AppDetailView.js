@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { MCP_AUTH_LABELS } from "../utils/catalog";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Typography,
@@ -606,6 +607,20 @@ const AppDetailView = () => {
               )) : <Typography variant="body2">No tools associated.</Typography>}
             </Box>
           </Grid>
+          {(app.attributes.mcp_servers || []).length > 0 && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>MCP servers:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-mcp-servers">
+                  {app.attributes.mcp_servers.map((server) => (
+                    <Chip key={server.id} label={server.name} />
+                  ))}
+                </Box>
+              </Grid>
+            </>
+          )}
           {/* Plugin Resources */}
           {pluginResources.length > 0 && pluginResources.map((pr) => (
             <React.Fragment key={`pr-${pr.plugin_id || ''}-${pr.resource_type_slug || ''}`}>
@@ -1414,6 +1429,33 @@ const AppDetailView = () => {
       </Paper>
 
       <Paper sx={{ p: 3, mt: 3 }}>
+        {(app.attributes.mcp_servers || []).length > 0 && (
+          <>
+            <SectionTitle>MCP Server Access Details</SectionTitle>
+            {app.attributes.mcp_servers.map((server) => (
+              <Card key={server.id} sx={{ mb: 2 }} data-testid={`app-mcp-server-${server.id}`}>
+                <CardContent>
+                  <Typography variant="h6">{server.name}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Served by a Tyk Gateway. Authentication: {MCP_AUTH_LABELS[server.auth_mode] || server.auth_mode}.
+                  </Typography>
+                  {server.endpoint_url ? (
+                    <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
+                      {server.endpoint_url}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2">The gateway URL has not been configured for this server yet.</Typography>
+                  )}
+                  {server.brokerable && (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      Once this app is approved you can request a Tyk access key for this server from this page.
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
         <SectionTitle>Tool Access Details</SectionTitle>
         {appTools.length > 0 ? (
           appTools.map((tool) => (

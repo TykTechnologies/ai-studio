@@ -110,3 +110,11 @@ func (s *communityService) ListSyncRuns(ctx context.Context, connectionID uint, 
 func (s *communityService) RunSync(ctx context.Context, actor Actor, connectionID uint) (*models.MCPSyncRun, error) {
 	return nil, ErrEnterpriseFeature
 }
+
+func (s *communityService) SyncAppGrants(ctx context.Context, appID uint) error {
+	return nil
+}
+
+func (s *communityService) AppMCPSummary(ctx context.Context, appID uint) (*AppMCPSummary, error) {
+	return &AppMCPSummary{Servers: []AppMCPServerView{}}, nil
+}

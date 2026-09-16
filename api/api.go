@@ -549,6 +549,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/catalog/llms/:id", a.getPortalCatalogLLM)
 	authed.GET("/catalog/datasources/:id", a.getPortalCatalogDatasource)
 	authed.GET("/catalog/tools/:id", a.getPortalCatalogTool)
+	authed.GET("/catalog/mcp-servers/:id", a.getPortalCatalogMCPServer)
 	authed.GET("/catalog/resources/:plugin_id/:slug/:id", a.getPortalCatalogPluginResource)
 	authed.GET("/apps", a.getUserApps)
 	authed.GET("/apps/usage-summary", a.getUserAppsUsageSummary)
@@ -557,6 +558,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/apps/:id", a.getUserAppDetails)
 	authed.DELETE("/apps/:id", a.deleteUserApp)
 	authed.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
+	authed.GET("/apps/:id/mcp", a.getUserAppMCP)
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)

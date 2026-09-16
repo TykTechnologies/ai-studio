@@ -37,5 +37,6 @@ func BuiltinObjectTypes() []ObjectTypeInfo {
 		{Slug: "llm", Label: "LLM", Source: "builtin"},
 		{Slug: "tool", Label: "Tool", Source: "builtin"},
 		{Slug: "datasource", Label: "Datasource", Source: "builtin"},
+		{Slug: "mcp_server", Label: "MCP server", Source: "builtin"},
 	}
 }

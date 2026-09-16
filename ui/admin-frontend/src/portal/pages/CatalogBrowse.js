@@ -218,7 +218,10 @@ const CatalogBrowse = ({ type: routeType = "" }) => {
             sx={{ mb: 2, borderBottom: (theme) => `1px solid ${theme.palette.border.neutralDefault}` }}
           >
             <Tab value="all" label={`All${meta ? ` (${accessibleTotal})` : ""}`} />
-            {TYPE_TABS.map((t) => (
+            {[
+              ...TYPE_TABS,
+              ...((counts[CATALOG_TYPES.MCP_SERVER] || 0) > 0 || routeType === CATALOG_TYPES.MCP_SERVER ? [CATALOG_TYPES.MCP_SERVER] : []),
+            ].map((t) => (
               <Tab key={t} value={t} label={`${typeLabel(t, { plural: true })}${meta ? ` (${counts[t] || 0})` : ""}`} />
             ))}
             {resourceTypes.map((rt) => (

@@ -484,6 +484,17 @@ func (a *API) createUserApp(c *gin.Context) {
 		}
 	}
 
+	// MCP server bindings are validated before the app exists so a refusal
+	// leaves nothing behind.
+	if len(req.MCPServerIDs) > 0 {
+		if _, err := a.service.ValidateMCPServerBindings(currentUser.ID, currentUser.IsAdmin, req.LLMIDs, req.MCPServerIDs); err != nil {
+			if !mcpBindingError(c, err) {
+				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			}
+			return
+		}
+	}
+
 	// Create the app (with plugin resources if any)
 	var app *models.App
 	if len(pluginResources) > 0 {
@@ -519,6 +530,16 @@ func (a *API) createUserApp(c *gin.Context) {
 	}
 
 	currentAppTools := app.Tools // Explicitly copy/reference before response construction
+
+	if len(req.MCPServerIDs) > 0 {
+		if err := a.service.SetAppMCPServers(app.ID, req.MCPServerIDs); err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		if reloaded, err := a.service.GetAppByID(app.ID); err == nil {
+			app = reloaded
+		}
+	}
 
 	// Prepare the response (use shared serializer)
 	_ = currentAppTools // verified above for logging
@@ -556,6 +577,8 @@ type CreateAppRequest struct {
 	MonthlyBudget   *float64   `json:"monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date"`
 	PluginResources []PluginResourceInput `json:"plugin_resources,omitempty"`
+	// MCPServerIDs binds Tyk-managed MCP servers the user's teams can see.
+	MCPServerIDs []uint `json:"mcp_server_ids,omitempty"`
 }
 
 // getUserAccessibleDataSources godoc

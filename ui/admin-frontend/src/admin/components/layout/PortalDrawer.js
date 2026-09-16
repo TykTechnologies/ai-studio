@@ -86,6 +86,9 @@ const PortalDrawer = ({ open }) => {
           { id: 'browse-llms', text: 'LLM providers', path: '/portal/catalog/llms' },
           { id: 'browse-datasources', text: 'Data sources', path: '/portal/catalog/datasources' },
           { id: 'browse-tools', text: 'Tools', path: '/portal/catalog/tools' },
+          ...(features.feature_tyk_mcp
+            ? [{ id: 'browse-mcp-servers', text: 'MCP servers', path: '/portal/catalog/mcp-servers' }]
+            : []),
           ...pluginResourceTypes.map(rt => ({
             id: `browse-resource-${rt.plugin_id}-${rt.slug}`,
             text: rt.name,

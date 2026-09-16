@@ -21,6 +21,7 @@ export const CATALOG_TYPES = {
   DATASOURCE: "datasource",
   TOOL: "tool",
   PLUGIN_RESOURCE: "plugin_resource",
+  MCP_SERVER: "mcp_server",
 };
 
 // Terminology from the September 2026 audit (M9): "LLM provider", "Data
@@ -30,6 +31,7 @@ const TYPE_LABELS = {
   [CATALOG_TYPES.DATASOURCE]: { singular: "Data source", plural: "Data sources", slug: "datasources", icon: "layer-group" },
   [CATALOG_TYPES.TOOL]: { singular: "Tool", plural: "Tools", slug: "tools", icon: "screwdriver-wrench" },
   [CATALOG_TYPES.PLUGIN_RESOURCE]: { singular: "Resource", plural: "Resources", slug: "resources", icon: "puzzle-piece" },
+  [CATALOG_TYPES.MCP_SERVER]: { singular: "MCP server", plural: "MCP servers", slug: "mcp-servers", icon: "server" },
 };
 
 export const typeLabel = (type, { plural = false } = {}) => {
@@ -75,9 +77,27 @@ export const kindLabel = (item) => {
       return getVectorStoreName(a.kind) || a.kind || "";
     case CATALOG_TYPES.TOOL:
       return a.kind ? a.kind.toUpperCase() : "";
+    case CATALOG_TYPES.MCP_SERVER:
+      return MCP_KIND_LABELS[a.kind] || a.kind || "";
     default:
       return a.kind || "";
   }
+};
+
+export const MCP_KIND_LABELS = { remote: "Remote MCP server", rest_to_mcp: "REST API to MCP" };
+
+export const MCP_AUTH_LABELS = {
+  keyless: "No credential needed",
+  auth_token: "API key (Tyk access key)",
+  basic: "Basic authentication",
+  jwt: "JWT",
+  oauth_tyk: "OAuth (Tyk authorization server)",
+  oauth_external: "OAuth (external provider)",
+  oauth21: "OAuth 2.1",
+  mtls: "Mutual TLS",
+  hmac: "HMAC signature",
+  custom: "Custom authentication",
+  mixed: "Several methods",
 };
 
 /** A small vendor/store logo for the kind, when one is bundled. */
@@ -116,6 +136,8 @@ export const detailPath = (item) => {
       return `/portal/catalog/datasources/${item.id}`;
     case CATALOG_TYPES.TOOL:
       return `/portal/catalog/tools/${item.id}`;
+    case CATALOG_TYPES.MCP_SERVER:
+      return `/portal/catalog/mcp-servers/${item.id}`;
     case CATALOG_TYPES.PLUGIN_RESOURCE:
       return a.resource_type
         ? `/portal/catalog/resources/${a.resource_type.plugin_id}/${a.resource_type.slug}/${encodeURIComponent(item.id)}`
@@ -135,6 +157,8 @@ export const buildAppPath = (item) => {
       return `/portal/app/new?datasource=${item.id}`;
     case CATALOG_TYPES.TOOL:
       return `/portal/app/new?tool=${item.id}`;
+    case CATALOG_TYPES.MCP_SERVER:
+      return `/portal/app/new?mcp_server=${item.id}`;
     case CATALOG_TYPES.PLUGIN_RESOURCE:
       return a.resource_type
         ? `/portal/app/new?plugin_resource=${encodeURIComponent(`${a.resource_type.plugin_id}:${a.resource_type.slug}:${item.id}`)}`

@@ -606,10 +606,14 @@ func (s *Service) DeleteApp(id uint) error {
 	if err := s.ClearAppPluginResources(id); err != nil {
 		return fmt.Errorf("failed to clear app plugin resources: %w", err)
 	}
+	if err := s.ClearAppMCPServers(id); err != nil {
+		return fmt.Errorf("failed to clear app MCP servers: %w", err)
+	}
 
 	if err := app.Delete(s.DB); err != nil {
 		return err
 	}
+	s.syncAppMCPGrants(id)
 
 	// Emit system event
 	if s.SystemEvents != nil {
@@ -644,6 +648,7 @@ func (s *Service) ActivateAppCredential(appID uint) error {
 	if err := app.ActivateCredential(s.DB); err != nil {
 		return err
 	}
+	s.syncAppMCPGrants(app.ID)
 
 	// Emit app approved event (credential activated)
 	if s.SystemEvents != nil {
@@ -660,7 +665,11 @@ func (s *Service) DeactivateAppCredential(appID uint) error {
 		return err
 	}
 
-	return app.DeactivateCredential(s.DB)
+	if err := app.DeactivateCredential(s.DB); err != nil {
+		return err
+	}
+	s.syncAppMCPGrants(app.ID)
+	return nil
 }
 
 // ResetAppBudget resets the budget period for an app by setting the start date to today

@@ -43,6 +43,7 @@ import {
   browsePath,
   buildActionLabel,
   buildAppPath,
+  MCP_AUTH_LABELS,
   embedderLabel,
   isAppGranted,
   secondaryActionLabel,
@@ -69,6 +70,7 @@ const DETAIL_PATHS = {
   [CATALOG_TYPES.LLM]: (params) => `/common/catalog/llms/${params.id}`,
   [CATALOG_TYPES.DATASOURCE]: (params) => `/common/catalog/datasources/${params.id}`,
   [CATALOG_TYPES.TOOL]: (params) => `/common/catalog/tools/${params.id}`,
+  [CATALOG_TYPES.MCP_SERVER]: (params) => `/common/catalog/mcp-servers/${params.id}`,
   [CATALOG_TYPES.PLUGIN_RESOURCE]: (params) =>
     `/common/catalog/resources/${params.pluginId}/${params.slug}/${encodeURIComponent(params.instanceId)}`,
 };
@@ -77,6 +79,7 @@ const APP_ID_FIELDS = {
   [CATALOG_TYPES.LLM]: "llm_ids",
   [CATALOG_TYPES.DATASOURCE]: "datasource_ids",
   [CATALOG_TYPES.TOOL]: "tool_ids",
+  [CATALOG_TYPES.MCP_SERVER]: "mcp_server_ids",
 };
 
 const formatDate = (value) => {
@@ -300,6 +303,85 @@ const PluginResourceSections = ({ item }) => {
   );
 };
 
+const MCPServerSections = ({ item }) => {
+  const a = item.attributes || {};
+  const primitives = a.primitives || [];
+  const perTag = Object.entries(a.endpoint_urls || {});
+  const oauth = a.oauth;
+  return (
+    <>
+      <Section title="How to connect" description="This server is served by a Tyk Gateway; AI Studio brokers access to it.">
+        <Grid container spacing={2}>
+          <Field label="Authentication" md={4}>
+            {MCP_AUTH_LABELS[a.auth_mode] || a.auth_mode || "—"}
+            {a.auth_header ? ` (${a.auth_header} header)` : ""}
+          </Field>
+          <Field label="Kind" md={4}>{kindLabel(item) || "—"}</Field>
+          <Field label="Deployed to" md={4}>
+            {(a.gateway_tags || []).length > 0 ? (
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }} data-testid="asset-gateway-tags">
+                {a.gateway_tags.map((tag) => (
+                  <Chip key={tag} size="small" label={tag} />
+                ))}
+              </Box>
+            ) : (
+              "All gateways"
+            )}
+          </Field>
+          {a.endpoint_url && (
+            <Field label="MCP endpoint" md={12}>
+              <CopyableCode value={a.endpoint_url} label="MCP endpoint" />
+            </Field>
+          )}
+          {perTag.map(([tag, url]) => (
+            <Field key={tag} label={`MCP endpoint (${tag})`} md={12}>
+              <CopyableCode value={url} label={`MCP endpoint for ${tag}`} />
+            </Field>
+          ))}
+          {!a.endpoint_url && perTag.length === 0 && (
+            <Field label="MCP endpoint" md={12}>
+              Ask your platform team for the gateway address; it has not been configured in AI Studio.
+            </Field>
+          )}
+          {oauth && (
+            <Field label="OAuth authorization servers" md={12}>
+              {(oauth.authorization_servers || []).length > 0 ? oauth.authorization_servers.join(", ") : "advertised by the server"}
+              {oauth.url ? ` · metadata at ${oauth.url}` : ""}
+            </Field>
+          )}
+        </Grid>
+        <Typography variant="bodyMediumDefault" color="text.defaultSubdued" sx={{ mt: 2 }} data-testid="mcp-access-note">
+          {a.brokerable
+            ? "Build an app with this server and, once it is approved, request a Tyk access key from the app page."
+            : a.auth_mode === "keyless"
+              ? "No credential is needed; attach it to an app so your access is recorded."
+              : "Attach it to an app to record your access; the credential itself is obtained from the authentication method above."}
+        </Typography>
+      </Section>
+      <Section title="Tools, resources and prompts" description="What the server offers, as declared on the Tyk Gateway.">
+        {primitives.length > 0 ? (
+          <Box component="ul" sx={{ m: 0, pl: 2 }} data-testid="asset-primitives">
+            {primitives.map((p) => (
+              <li key={`${p.type}:${p.name}`}>
+                <Typography variant="bodyMediumMedium" component="span">{p.name}</Typography>
+                <Typography variant="bodySmallDefault" component="span" color="text.defaultSubdued">
+                  {" "}· {p.type}
+                  {p.description ? ` · ${p.description}` : ""}
+                  {p.auth?.ignore_authentication ? " · no auth" : ""}
+                </Typography>
+              </li>
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+            The definition does not list its primitives; connect a client to discover them.
+          </Typography>
+        )}
+      </Section>
+    </>
+  );
+};
+
 const AssetDetail = ({ type }) => {
   const params = useParams();
   const navigate = useNavigate();
@@ -452,7 +534,7 @@ const AssetDetail = ({ type }) => {
                 </Box>
               ) : (
                 <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-                  {type === CATALOG_TYPES.PLUGIN_RESOURCE ? "Your team's resource grants" : "—"}
+                  {type === CATALOG_TYPES.PLUGIN_RESOURCE || type === CATALOG_TYPES.MCP_SERVER ? "Your team's resource grants" : "—"}
                 </Typography>
               )}
             </Field>
@@ -471,6 +553,7 @@ const AssetDetail = ({ type }) => {
         {type === CATALOG_TYPES.LLM && <LLMSections item={item} />}
         {type === CATALOG_TYPES.DATASOURCE && <DatasourceSections item={item} />}
         {type === CATALOG_TYPES.TOOL && <ToolSections item={item} />}
+        {type === CATALOG_TYPES.MCP_SERVER && <MCPServerSections item={item} />}
         {type === CATALOG_TYPES.PLUGIN_RESOURCE && <PluginResourceSections item={item} />}
 
         {governed.length > 0 && (

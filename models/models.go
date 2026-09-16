@@ -116,6 +116,7 @@ func InitModels(db *gorm.DB) error {
 		&TykPolicy{},           // Cached Tyk security policies
 		&MCPServerPolicyPin{},  // Policy bundles pinned to MCP servers
 		&MCPSyncRun{},          // Discovery sync run log
+		&MCPAccessGrant{},      // Who has access to which MCP server
 	); err != nil {
 		return err
 	}

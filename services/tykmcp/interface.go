@@ -110,6 +110,29 @@ type ProbeResult struct {
 	ProbedAt      time.Time                       `json:"probed_at"`
 }
 
+// AppMCPServerView is one MCP server as seen from an App.
+type AppMCPServerView struct {
+	ID             uint                                 `json:"id"`
+	ConnectionID   *uint                                `json:"connection_id"`
+	ConnectionName string                               `json:"connection_name,omitempty"`
+	Name           string                               `json:"name"`
+	Slug           string                               `json:"slug"`
+	Kind           string                               `json:"kind"`
+	AuthMode       string                               `json:"auth_mode"`
+	EndpointURL    string                               `json:"endpoint_url"`
+	EndpointURLs   map[string]string                    `json:"endpoint_urls"`
+	PRM            *models.MCPProtectedResourceMetadata `json:"prm,omitempty"`
+	HeaderName     string                               `json:"header_name,omitempty"`
+	Brokerable     bool                                 `json:"brokerable"`
+	GrantKind      string                               `json:"grant_kind"`
+	GrantOpen      bool                                 `json:"grant_open"`
+}
+
+// AppMCPSummary is the App page's MCP section.
+type AppMCPSummary struct {
+	Servers []AppMCPServerView `json:"servers"`
+}
+
 // Status describes the running feature so the UI can explain itself.
 type Status struct {
 	Available bool `json:"available"`
@@ -217,6 +240,15 @@ type Service interface {
 	ProbeInput(ctx context.Context, in ConnectionInput) (*ProbeResult, error)
 	// TriggerSync asks for the next sync to run as soon as a node polls.
 	TriggerSync(ctx context.Context, actor Actor, id uint) error
+
+	// Apps
+	// SyncAppGrants reconciles the access-grant ledger of an App with its
+	// bound MCP servers and its credential state. Called by the App service
+	// after binding changes, activation, deactivation and deletion.
+	SyncAppGrants(ctx context.Context, appID uint) error
+	// AppMCPSummary describes, for the portal App page, the servers an App
+	// reaches and (in later milestones) its minted credentials.
+	AppMCPSummary(ctx context.Context, appID uint) (*AppMCPSummary, error)
 
 	// Lifecycle
 	Status() Status
