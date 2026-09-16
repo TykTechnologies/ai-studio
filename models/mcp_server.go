@@ -103,14 +103,17 @@ type MCPGatewayTags struct {
 // Studio-owned presentation and governance columns never do.
 type MCPServer struct {
 	gorm.Model
-	ConnectionID *uint          `gorm:"index;uniqueIndex:idx_mcp_servers_conn_api" json:"connection_id"`
+	ConnectionID *uint          `gorm:"index;uniqueIndex:idx_mcp_servers_live_conn_api,where:deleted_at IS NULL" json:"connection_id"`
 	Connection   *TykConnection `gorm:"foreignKey:ConnectionID" json:"-"`
 	// TykAPIID is x-tyk-api-gateway.info.id; empty while pending_platform.
-	TykAPIID string `gorm:"size:64;uniqueIndex:idx_mcp_servers_conn_api" json:"tyk_api_id"`
+	TykAPIID string `gorm:"size:64;uniqueIndex:idx_mcp_servers_live_conn_api,where:deleted_at IS NULL" json:"tyk_api_id"`
 
 	Name            string `gorm:"size:200;not null" json:"name"`
 	NameOverridden  bool   `json:"name_overridden"`
-	Slug            string `gorm:"size:200;uniqueIndex" json:"slug"`
+	// Soft-deleted rows keep their slug and api id out of the way: the unique
+	// indexes only cover live rows, so a deleted server can be re-imported or
+	// re-registered under the same name.
+	Slug            string `gorm:"size:200;uniqueIndex:idx_mcp_servers_live_slug,where:deleted_at IS NULL" json:"slug"`
 	Description     string `gorm:"size:2048" json:"description"`
 	LongDescription string `gorm:"type:text" json:"long_description"`
 	LogoURL         string `gorm:"size:2048" json:"logo_url"`

@@ -68,15 +68,15 @@ describe("SubmissionReview for MCP servers", () => {
   });
 
   it("shows the MCP payload with the credential redacted and validates on the Dashboard", async () => {
-    apiClient.post.mockResolvedValue({ data: { data: { type: "mcp_server", check_kind: "spec_validation", check_label: "Definition validated by the Tyk Dashboard", check_detail: "The upstream MCP server was not contacted." } } });
+    apiClient.post.mockResolvedValue({ data: { data: { type: "mcp_server", check_kind: "spec_validation", check_label: "Definition rendered and checked", check_detail: "The upstream MCP server was not contacted." } } });
     renderPage();
     const summary = await screen.findByTestId("mcp-submission-summary");
     expect(summary).toHaveTextContent("https://weather.example.com/mcp");
     expect(summary).toHaveTextContent("X-Token: [redacted]");
     expect(summary).toHaveTextContent("edge-eu");
-    fireEvent.click(screen.getByText("Validate on the Dashboard"));
+    fireEvent.click(screen.getByText("Validate definition"));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/submissions/5/test"));
-    expect(await screen.findByText("Definition validated by the Tyk Dashboard")).toBeInTheDocument();
+    expect(await screen.findByText("Definition rendered and checked")).toBeInTheDocument();
   });
 
   it("sends the reviewer's deployment target and publish choice on approve", async () => {

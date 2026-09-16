@@ -143,7 +143,7 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
       });
       if (dryRun) {
         setPreview(res.data);
-        onNotice("The Dashboard accepted the definition. Push to apply it.");
+        onNotice(res.data.dashboard_validated ? "The Dashboard accepted the definition. Push to apply it." : "AI Studio validated the definition; the Dashboard validates it on push.");
       } else {
         onPushed(res.data.server, res.data.warnings || []);
       }
@@ -170,7 +170,7 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
       ))}
       <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
         <Button variant="outlined" onClick={() => run(true)} disabled={busy} data-testid="validate-definition">
-          Validate on the Dashboard
+          Validate definition
         </Button>
         <Button variant="contained" onClick={() => run(false)} disabled={busy || (server.origin === "dashboard" && !confirmOrigin)} data-testid="push-definition">
           Push to the Dashboard

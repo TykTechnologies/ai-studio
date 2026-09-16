@@ -547,7 +547,7 @@ const SubmissionReview = () => {
                     {submission.resource_type === "tool"
                       ? "Validate specification"
                       : submission.resource_type === "mcp_server"
-                        ? "Validate on the Dashboard"
+                        ? "Validate definition"
                         : "Test connection"}
                   </PrimaryOutlineButton>
                       )}

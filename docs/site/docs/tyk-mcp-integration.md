@@ -199,16 +199,19 @@ MCP server** walks through:
 1. the connection and the kind: a **remote MCP server** (the gateway proxies
    an existing MCP endpoint) or **REST API to MCP** (Tyk 5.15 and later turn
    the operations of a Tyk OAS API into MCP tools),
-2. the proxy: name, listen path, upstream URL and an optional static
-   upstream header, or the source API and the operations to expose as tools
+2. the proxy: name, listen path, the upstream server's base URL (the
+   gateway strips the listen path and appends `/mcp` itself, so a pasted
+   `/mcp` suffix is removed) and an optional static upstream header, or the source API and the operations to expose as tools
    with their names and descriptions,
 3. consumer authentication (API key, OAuth 2.1 with its authorization
    servers, or keyless after an explicit confirmation), the deployment
    target, and the portal presentation, privacy score and whether to
    publish,
-4. a review: the Dashboard validates the rendered definition (`dryRun`)
-   and AI Studio shows the masked document, the endpoint and any warnings
-   before creating it.
+4. a review: AI Studio renders the definition, checks it against the
+   connection and shows the masked document, the endpoint and any warnings
+   before creating it. The Dashboard validates it on create (Dashboard 5.14
+   persists `dryRun` requests instead of validating them, so AI Studio never
+   sends any).
 
 The upstream header value travels to the Dashboard in the create request
 and is stored nowhere in AI Studio. The definition AI Studio keeps masks it,
@@ -318,7 +321,7 @@ npx mcp-remote http://localhost:8080/<listen-path>/mcp \
   the integration covers discovery, access and registration.
 - One bundle per server; consumption tiers per server are a follow-on.
 - The minimal policy creator writes plain access rights. Tyk's per-primitive
-  policy fields for MCP are documented but were not yet verified against a
-  live 5.13+ Gateway, so primitive-level rules are made on the Dashboard.
+  policy fields for MCP are documented, but a Dashboard 5.14 rejects or drops
+  them, so primitive-level rules are made on the Dashboard.
 - Key rotation has no grace window: the old key stops when the new one is
   shown.

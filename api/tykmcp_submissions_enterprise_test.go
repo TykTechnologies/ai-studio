@@ -87,7 +87,7 @@ func TestTykMCPEnterprise_SubmissionFlow(t *testing.T) {
 	subID := submit(full.ID, "Weather MCP", "/weather-mcp/")
 	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/submissions/"+tykIDStr(subID)+"/test", nil, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	assert.Contains(t, w.Body.String(), "validated by the Tyk Dashboard")
+	assert.Contains(t, w.Body.String(), "rendered and checked")
 	assert.NotContains(t, w.Body.String(), "UPSTREAM-SECRET")
 	w = apitest.PerformAuthRequest(r, "GET", "/api/v1/submissions/"+tykIDStr(subID), nil, adminKey)
 	require.Equal(t, http.StatusOK, w.Code)

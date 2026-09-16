@@ -350,6 +350,10 @@ type RegisterPreview struct {
 	Rendered    json.RawMessage `json:"rendered,omitempty"`
 	Warnings    []string        `json:"warnings"`
 	EndpointURL string          `json:"endpoint_url,omitempty"`
+	// DashboardValidated is always false today: Dashboard 5.14 persists dry
+	// runs instead of validating them, so previews are Studio's own render
+	// and checks and the Dashboard validates on create or push.
+	DashboardValidated bool `json:"dashboard_validated"`
 }
 
 // PushInput replaces a server's definition on the Dashboard. Definition is

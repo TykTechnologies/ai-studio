@@ -98,7 +98,7 @@ const MCPSubmissionFields = ({ payload, onChange, connections = [], errors = {} 
           {kind === "remote" ? (
             <>
               <Grid item xs={12}>
-                <TextField fullWidth label="Upstream MCP URL" value={payload.upstream_url || ""} onChange={set("upstream_url")} error={!!errors.upstream_url} helperText={errors.upstream_url || "The MCP server's Streamable HTTP endpoint. AI Studio never calls it; the Tyk Gateway does."} inputProps={{ "data-testid": "mcp-upstream-url" }} required />
+                <TextField fullWidth label="Upstream MCP URL" value={payload.upstream_url || ""} onChange={set("upstream_url")} error={!!errors.upstream_url} helperText={errors.upstream_url || "The MCP server's base URL; the gateway appends /mcp itself. AI Studio never calls it; the Tyk Gateway does."} inputProps={{ "data-testid": "mcp-upstream-url" }} required />
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField fullWidth label="Upstream auth header (optional)" value={payload.upstream_auth_header_name || ""} onChange={set("upstream_auth_header_name")} inputProps={{ "data-testid": "mcp-upstream-header" }} placeholder="Authorization" />

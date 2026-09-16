@@ -332,7 +332,7 @@ const MCPServerRegister = () => {
             {form.kind === "remote" ? (
               <>
                 <Grid item xs={12}>
-                  <TextField fullWidth size="small" label="Upstream MCP URL" value={form.upstream_url} onChange={set("upstream_url")} inputProps={{ "data-testid": "upstream-url" }} helperText="The remote MCP server's Streamable HTTP endpoint. AI Studio never calls it; the Tyk Gateway does." />
+                  <TextField fullWidth size="small" label="Upstream MCP URL" value={form.upstream_url} onChange={set("upstream_url")} inputProps={{ "data-testid": "upstream-url" }} helperText="The remote MCP server's base URL; the gateway appends /mcp itself (a pasted /mcp suffix is removed). AI Studio never calls it; the Tyk Gateway does." />
                 </Grid>
                 <Grid item xs={12} md={4}>
                   <TextField fullWidth size="small" label="Upstream auth header" value={form.upstream_auth_header_name} onChange={set("upstream_auth_header_name")} inputProps={{ "data-testid": "upstream-header" }} />
@@ -496,7 +496,10 @@ const MCPServerRegister = () => {
         {step === 3 && preview && (
           <Box data-testid="preview">
             <Typography variant="body2" sx={{ mb: 1 }}>
-              The Tyk Dashboard validated this definition. Clients will reach the server at <code>{preview.endpoint_url || "(set a gateway base URL on the connection)"}</code>.
+              {preview.dashboard_validated
+                ? "The Tyk Dashboard validated this definition."
+                : "AI Studio validated this definition; the Dashboard validates it when the proxy is created."}{" "}
+              Clients will reach the server at <code>{preview.endpoint_url || "(set a gateway base URL on the connection)"}</code>.
             </Typography>
             {(preview.warnings || []).map((wng) => (
               <Alert key={wng} severity="warning" sx={{ mb: 1 }}>
@@ -516,7 +519,7 @@ const MCPServerRegister = () => {
         </Button>
         {step < 3 ? (
           <Button variant="contained" onClick={next} disabled={busy} data-testid="next">
-            {step === 2 ? "Validate on the Dashboard" : "Next"}
+            {step === 2 ? "Validate and review" : "Next"}
           </Button>
         ) : (
           <Button variant="contained" onClick={create} disabled={busy} data-testid="create">

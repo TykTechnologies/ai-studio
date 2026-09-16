@@ -123,17 +123,22 @@ const (
 
 // Capability names.
 const (
-	TykCapMCPRead          = "mcp_read"
-	TykCapPoliciesRead     = "policies_read"
-	TykCapAPIsRead         = "apis_read"
-	TykCapMCPSupported     = "mcp_supported"
-	TykCapRestToMCP        = "rest_to_mcp_supported"
-	TykCapKeysWrite        = "keys_write"
-	TykCapKeysReadByHash   = "keys_read_by_hash"
-	TykCapMCPWrite         = "mcp_write"
-	TykCapPoliciesWrite    = "policies_write"
-	TykCapKeyDeleteByHash  = "key_delete_by_hash"
-	TykCapMDCBRead         = "mdcb_read"
+	TykCapMCPRead         = "mcp_read"
+	TykCapPoliciesRead    = "policies_read"
+	TykCapAPIsRead        = "apis_read"
+	TykCapMCPSupported    = "mcp_supported"
+	TykCapRestToMCP       = "rest_to_mcp_supported"
+	TykCapKeysWrite       = "keys_write"
+	TykCapKeysReadByHash  = "keys_read_by_hash"
+	TykCapMCPWrite        = "mcp_write"
+	TykCapPoliciesWrite   = "policies_write"
+	TykCapKeyDeleteByHash = "key_delete_by_hash"
+	TykCapMDCBRead        = "mdcb_read"
+	// TykCapMCPDryRun records whether POST /api/mcps?dryRun=true really
+	// validates without persisting. Dashboard 5.14 ignores the flag and
+	// creates the proxy; Studio detects that, deletes it, and validates
+	// locally from then on.
+	TykCapMCPDryRun        = "mcp_dry_run"
 	TykCapDashboardVersion = "dashboard_version"
 )
 
@@ -413,7 +418,7 @@ func (t *TykConnection) ToResponse() TykConnectionResponse {
 		MDCBURL: t.MDCBURL, HasMDCBToken: t.MDCBAccessToken != "", MDCBAllowInternal: t.MDCBAllowInternalHost,
 		KnownGatewayTags: t.KnownGatewayTags(), GatewayBaseURLs: t.GatewayBaseURLs(), DataPlanes: t.DataPlanes(),
 		GatewayTags: tags,
-		LastSyncAt: t.LastSyncAt, LastSyncStatus: t.LastSyncStatus, LastSyncError: t.LastSyncError,
+		LastSyncAt:  t.LastSyncAt, LastSyncStatus: t.LastSyncStatus, LastSyncError: t.LastSyncError,
 		LastProbeAt: t.LastProbeAt, LastMDCBProbeAt: t.LastMDCBProbeAt,
 		CreatedByUserID: t.CreatedByUserID, CreatedByEmail: t.CreatedByEmail,
 		ActivatedByUserID: t.ActivatedByUserID, ActivatedByEmail: t.ActivatedByEmail, ActivatedAt: t.ActivatedAt,

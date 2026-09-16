@@ -63,8 +63,8 @@ func (a *API) testMCPSubmission(c *gin.Context, submission *models.Submission) {
 	c.JSON(http.StatusOK, gin.H{"data": gin.H{
 		"type":         "mcp_server",
 		"check_kind":   CheckSpecValidation,
-		"check_label":  "Definition validated by the Tyk Dashboard",
-		"check_detail": "The rendered MCP proxy definition passed the Dashboard's validation. The upstream MCP server was not contacted.",
+		"check_label":  "Definition rendered and checked",
+		"check_detail": "AI Studio rendered the MCP proxy definition and checked it against the connection; the Tyk Dashboard validates it when the proxy is created. The upstream MCP server was not contacted.",
 		"preview":      preview,
 	}})
 }
