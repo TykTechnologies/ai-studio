@@ -17,6 +17,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  Link,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import apiClient from "../utils/apiClient";
@@ -410,6 +411,23 @@ const MCPServerDetail = () => {
             </TableBody>
           </Table>
         )}
+      </Section>
+
+      <Section
+        title="Credentials"
+        action={
+          <Button size="small" onClick={() => navigate(`/admin/mcp-credentials?server_id=${server.id}`)} data-testid="view-credentials">
+            View minted keys
+          </Button>
+        }
+      >
+        <Typography variant="body2" color="text.secondary">
+          Keys minted for Apps bound to this server are listed in the MCP credentials ledger, together with the access report of who reaches it.
+          {" "}
+          <Link component="button" variant="body2" onClick={() => navigate(`/admin/mcp-credentials?tab=report&server=${server.id}`)} data-testid="view-access-report">
+            Open the access report
+          </Link>
+        </Typography>
       </Section>
 
       <Section title="Definition (from the Dashboard, upstream credentials masked)">

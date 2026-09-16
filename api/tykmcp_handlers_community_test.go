@@ -55,6 +55,15 @@ func TestTykMCPCommunity_NotAvailable(t *testing.T) {
 		{"POST", "/api/v1/mcp-servers/1/deactivate"},
 		{"PUT", "/api/v1/mcp-servers/1/groups"},
 		{"PUT", "/api/v1/mcp-servers/1/bundle"},
+		{"GET", "/api/v1/mcp-credentials"},
+		{"POST", "/api/v1/mcp-credentials"},
+		{"GET", "/api/v1/mcp-credentials/x"},
+		{"POST", "/api/v1/mcp-credentials/x/rotate"},
+		{"POST", "/api/v1/mcp-credentials/x/suspend"},
+		{"POST", "/api/v1/mcp-credentials/x/resume"},
+		{"POST", "/api/v1/mcp-credentials/x/revoke"},
+		{"POST", "/api/v1/mcp-credentials/x/apply-drift"},
+		{"GET", "/api/v1/mcp-access-report"},
 	} {
 		w := apitest.PerformAuthRequest(r, rq.method, rq.path, body, key)
 		assert.Equal(t, http.StatusForbidden, w.Code, "%s %s", rq.method, rq.path)

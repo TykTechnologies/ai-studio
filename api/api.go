@@ -559,6 +559,9 @@ func (a *API) setupRoutes() {
 	authed.DELETE("/apps/:id", a.deleteUserApp)
 	authed.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
 	authed.GET("/apps/:id/mcp", a.getUserAppMCP)
+	authed.POST("/apps/:id/mcp/credentials", a.mintUserAppMCPCredential)
+	authed.POST("/apps/:id/mcp/credentials/:cid/rotate", a.rotateUserAppMCPCredential)
+	authed.POST("/apps/:id/mcp/credentials/:cid/revoke", a.revokeUserAppMCPCredential)
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
@@ -1101,6 +1104,17 @@ func (a *API) setupRoutes() {
 	v1.POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.unpublishMCPServer)
 	v1.PUT("/mcp-servers/:id/groups", authz.Write("mcp-servers"), a.setMCPServerGroups)
 	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
+	// Minted Tyk keys: minting, rotating, suspending, revoking and applying
+	// widening changes reach the Dashboard, so they are execute permissions.
+	v1.GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)
+	v1.POST("/mcp-credentials", authz.Execute("mcp-credentials"), a.mintMCPCredential)
+	v1.GET("/mcp-credentials/:id", authz.Read("mcp-credentials"), a.getMCPCredential)
+	v1.POST("/mcp-credentials/:id/rotate", authz.Execute("mcp-credentials"), a.rotateMCPCredential)
+	v1.POST("/mcp-credentials/:id/suspend", authz.Execute("mcp-credentials"), a.suspendMCPCredential)
+	v1.POST("/mcp-credentials/:id/resume", authz.Execute("mcp-credentials"), a.resumeMCPCredential)
+	v1.POST("/mcp-credentials/:id/revoke", authz.Execute("mcp-credentials"), a.revokeMCPCredential)
+	v1.POST("/mcp-credentials/:id/apply-drift", authz.Execute("mcp-credentials"), a.applyMCPCredentialDrift)
+	v1.GET("/mcp-access-report", authz.Read("mcp-credentials"), a.getMCPAccessReport)
 
 	// RBAC routes (Enterprise feature; the permission catalogue is served in both editions)
 	v1.GET("/rbac/permissions", authz.AnyAdmin, a.getPermissionCatalogue)

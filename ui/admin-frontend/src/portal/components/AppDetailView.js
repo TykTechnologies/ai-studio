@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { MCP_AUTH_LABELS } from "../utils/catalog";
+import AppMCPAccess from "./AppMCPAccess";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Typography,
@@ -1432,28 +1432,7 @@ const AppDetailView = () => {
         {(app.attributes.mcp_servers || []).length > 0 && (
           <>
             <SectionTitle>MCP Server Access Details</SectionTitle>
-            {app.attributes.mcp_servers.map((server) => (
-              <Card key={server.id} sx={{ mb: 2 }} data-testid={`app-mcp-server-${server.id}`}>
-                <CardContent>
-                  <Typography variant="h6">{server.name}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Served by a Tyk Gateway. Authentication: {MCP_AUTH_LABELS[server.auth_mode] || server.auth_mode}.
-                  </Typography>
-                  {server.endpoint_url ? (
-                    <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>
-                      {server.endpoint_url}
-                    </Typography>
-                  ) : (
-                    <Typography variant="body2">The gateway URL has not been configured for this server yet.</Typography>
-                  )}
-                  {server.brokerable && (
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      Once this app is approved you can request a Tyk access key for this server from this page.
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+            <AppMCPAccess appId={id} credentialActive={!!app.attributes.credential?.active} />
           </>
         )}
         <SectionTitle>Tool Access Details</SectionTitle>

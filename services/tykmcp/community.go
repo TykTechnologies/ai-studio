@@ -116,5 +116,41 @@ func (s *communityService) SyncAppGrants(ctx context.Context, appID uint) error 
 }
 
 func (s *communityService) AppMCPSummary(ctx context.Context, appID uint) (*AppMCPSummary, error) {
-	return &AppMCPSummary{Servers: []AppMCPServerView{}}, nil
+	return &AppMCPSummary{Servers: []AppMCPServerView{}, Credentials: []models.MCPCredentialResponse{}, Connections: []AppMCPConnectionState{}}, nil
+}
+
+func (s *communityService) MintCredential(ctx context.Context, actor Actor, in MintInput) (*MintedCredential, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) ListCredentials(ctx context.Context, f CredentialFilter) (*CredentialList, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) GetCredential(ctx context.Context, id string) (*models.MCPCredentialResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) RotateCredential(ctx context.Context, actor Actor, id string) (*MintedCredential, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) SuspendCredential(ctx context.Context, actor Actor, id string, reason string) (*models.MCPCredentialResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) ResumeCredential(ctx context.Context, actor Actor, id string) (*models.MCPCredentialResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) RevokeCredential(ctx context.Context, actor Actor, id string, reason string) (*models.MCPCredentialResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) ApplyDrift(ctx context.Context, actor Actor, id string) (*models.MCPCredentialResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) AccessReport(ctx context.Context, f ReportFilter) ([]AccessReportRow, error) {
+	return nil, ErrEnterpriseFeature
 }

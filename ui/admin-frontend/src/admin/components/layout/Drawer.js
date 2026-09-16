@@ -190,6 +190,9 @@ const Drawer = () => {
             subItems: [
               { id: 'portal-apps', text: 'Apps', path: '/admin/apps', permission: P.APPS_READ },
               { id: 'edge-gateways', text: 'Edge Gateways', path: '/admin/edge-gateways', permission: P.EDGES_READ },
+              ...(features.feature_tyk_mcp
+                ? [{ id: 'mcp-credentials', text: 'MCP credentials', path: '/admin/mcp-credentials', permission: P.MCP_CREDENTIALS_READ }]
+                : []),
             ],
           },
         ]

@@ -128,9 +128,94 @@ type AppMCPServerView struct {
 	GrantOpen      bool                                 `json:"grant_open"`
 }
 
-// AppMCPSummary is the App page's MCP section.
+// AppMCPSummary is the App page's MCP section: the servers the App reaches
+// and the credentials minted for it, one per connection.
 type AppMCPSummary struct {
-	Servers []AppMCPServerView `json:"servers"`
+	Servers     []AppMCPServerView             `json:"servers"`
+	Credentials []models.MCPCredentialResponse `json:"credentials"`
+	// Connections lists, per connection the App touches, whether a key can
+	// be minted now and why not otherwise.
+	Connections []AppMCPConnectionState `json:"connections"`
+}
+
+// AppMCPConnectionState summarises one connection for the App page.
+type AppMCPConnectionState struct {
+	ConnectionID   uint   `json:"connection_id"`
+	ConnectionName string `json:"connection_name"`
+	CanMint        bool   `json:"can_mint"`
+	Reason         string `json:"reason,omitempty"`
+	CredentialID   string `json:"credential_id,omitempty"`
+}
+
+// MintInput names the App and connection to mint for.
+type MintInput struct {
+	AppID        uint `json:"app_id"`
+	ConnectionID uint `json:"connection_id"`
+}
+
+// SkippedServer is a bound server the key could not cover.
+type SkippedServer struct {
+	ID     uint   `json:"id"`
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// MintedCredential is the mint result. Key is returned exactly once.
+type MintedCredential struct {
+	Credential models.MCPCredentialResponse `json:"credential"`
+	Key        string                       `json:"key"`
+	Servers    []AppMCPServerView           `json:"servers"`
+	Skipped    []SkippedServer              `json:"skipped"`
+}
+
+// CredentialFilter narrows ListCredentials.
+type CredentialFilter struct {
+	AppID        uint
+	ConnectionID uint
+	ServerID     uint // credentials of Apps bound to this server
+	UserID       uint // credentials of Apps owned by this user
+	Status       string
+	Drift        string
+	Page         int
+	PageSize     int
+}
+
+// CredentialList is one page of credentials.
+type CredentialList struct {
+	Credentials []models.MCPCredentialResponse `json:"credentials"`
+	Total       int64                          `json:"total"`
+	Page        int                            `json:"page"`
+	PageSize    int                            `json:"page_size"`
+}
+
+// AccessReportRow answers "who has access to what": one row per open (or,
+// when IncludeRevoked, any) grant with the credential that backs it.
+type AccessReportRow struct {
+	GrantID          uint       `json:"grant_id"`
+	AppID            uint       `json:"app_id"`
+	AppName          string     `json:"app_name"`
+	UserID           uint       `json:"user_id"`
+	UserEmail        string     `json:"user_email"`
+	ServerID         uint       `json:"server_id"`
+	ServerName       string     `json:"server_name"`
+	ConnectionID     *uint      `json:"connection_id"`
+	ConnectionName   string     `json:"connection_name,omitempty"`
+	GrantKind        string     `json:"grant_kind"`
+	GrantedAt        time.Time  `json:"granted_at"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
+	RevokeReason     string     `json:"revoke_reason,omitempty"`
+	CredentialID     string     `json:"credential_id,omitempty"`
+	CredentialHash   string     `json:"credential_hash,omitempty"`
+	CredentialStatus string     `json:"credential_status,omitempty"`
+}
+
+// ReportFilter narrows AccessReport.
+type ReportFilter struct {
+	ConnectionID   uint
+	ServerID       uint
+	UserID         uint
+	AppID          uint
+	IncludeRevoked bool
 }
 
 // Status describes the running feature so the UI can explain itself.
@@ -249,6 +334,20 @@ type Service interface {
 	// AppMCPSummary describes, for the portal App page, the servers an App
 	// reaches and (in later milestones) its minted credentials.
 	AppMCPSummary(ctx context.Context, appID uint) (*AppMCPSummary, error)
+
+	// Credentials (broker)
+	// MintCredential mints a Tyk key for an App on one connection and
+	// returns the plaintext exactly once. The caller has checked ownership.
+	MintCredential(ctx context.Context, actor Actor, in MintInput) (*MintedCredential, error)
+	ListCredentials(ctx context.Context, f CredentialFilter) (*CredentialList, error)
+	GetCredential(ctx context.Context, id string) (*models.MCPCredentialResponse, error)
+	RotateCredential(ctx context.Context, actor Actor, id string) (*MintedCredential, error)
+	SuspendCredential(ctx context.Context, actor Actor, id string, reason string) (*models.MCPCredentialResponse, error)
+	ResumeCredential(ctx context.Context, actor Actor, id string) (*models.MCPCredentialResponse, error)
+	RevokeCredential(ctx context.Context, actor Actor, id string, reason string) (*models.MCPCredentialResponse, error)
+	// ApplyDrift applies a pending widening change.
+	ApplyDrift(ctx context.Context, actor Actor, id string) (*models.MCPCredentialResponse, error)
+	AccessReport(ctx context.Context, f ReportFilter) ([]AccessReportRow, error)
 
 	// Lifecycle
 	Status() Status

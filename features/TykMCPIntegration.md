@@ -1,6 +1,6 @@
 # Tyk APIM ↔ AI Studio MCP integration — discovery & design spec
 
-Status: proposed design, 2026-09-16, not yet implemented. Reviewed once for codebase and Tyk API consistency. Enterprise Edition only. Target: AI Studio ≥ 2.3, Tyk Dashboard/Gateway ≥ 5.13 (remote MCP proxies), ≥ 5.15 for REST-to-MCP.
+Status: design 2026-09-16; M1–M4 implemented (see §18), M5–M7 pending. Reviewed once for codebase and Tyk API consistency. Enterprise Edition only. Target: AI Studio ≥ 2.3, Tyk Dashboard/Gateway ≥ 5.13 (remote MCP proxies), ≥ 5.15 for REST-to-MCP.
 
 ## 1. Context
 
@@ -505,3 +505,22 @@ Reused: webhooks engine claim/lease shape and backoff (`enterprise/features/webh
 
 1. **Privacy scores are always admin-set.** Imported servers have no score until an administrator assigns one, and `publish` refuses without it. `auto_publish` works only with an administrator-chosen `default_privacy_score` on the connection; there is no platform default. (Decided 2026-09-16.)
 2. **The internal `mcp-registry` plugin is for Tyk Technologies' own use only.** It is not a customer feature, needs no deprecation notice, and is not referenced anywhere in customer-facing docs or UI for this integration. (Decided 2026-09-16.)
+
+## 18. Implementation status
+
+| Milestone | State | Notes |
+|---|---|---|
+| M1 Contract + connection | done | `pkg/netguard` URL policy shared with webhooks; MDCB `/dataplanes` scrape drops `api_key`; audit redaction test per secret column |
+| M2 Discovery sync | done | connection lease + heartbeat; masked definition, unmasked hash; missing/resume |
+| M3 Portal asset class | done | catalogue source, detail page, App binding with visibility + privacy rule, `mcp_access_grants` on activation and every binding change |
+| M4 Bundles + broker | done, one item deferred | insert-first mint, reveal-once (`Cache-Control: no-store`), narrowing applied at once, widening `pending_widen` unless the actor holds `mcp-credentials:execute`, external policy ids preserved and reported, verify-GET revoke with `inactive_only` fallback, rotate, reconciliation, admin ledger + access report (`/admin/mcp-credentials`), portal App page key controls (`POST /common/apps/:id/mcp/credentials`, `…/:cid/{rotate,revoke}`). **Deferred**: the live verification of `per_api` mixing and of the MCP-only policy ACL fields on a 5.13+ Gateway (§8.2, §8.3) has not been run; the minimal policy creator (M5) writes plain `access_rights` until it is. |
+| M5 Registration (admin) | pending | |
+| M6 Community registration | pending | |
+| M7 Docs + polish | pending | |
+
+Broker rules that were settled during M4 and are not obvious from the code:
+
+- A policy id Studio once wrote onto a key stays Studio-managed after the policy is un-pinned; only ids Studio never wrote count as external. Otherwise an un-pin would strand the old policy on the key forever.
+- A server that comes back from `missing` re-runs drift with `forceApply`, so keys suspended for `no_access_policy` are resumed without an approval round-trip: the access was approved before the outage.
+- Policy pins are hard-deleted (`Unscoped`) on re-pin; soft-deleted rows would keep the unique index and refuse the re-pin.
+
