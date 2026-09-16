@@ -66,3 +66,47 @@ func (s *communityService) Status() Status {
 }
 
 func (s *communityService) Stop() {}
+
+func (s *communityService) ListServers(ctx context.Context, f ServerFilter) (*ServerList, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) GetServer(ctx context.Context, id uint) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) UpdateServer(ctx context.Context, actor Actor, id uint, p ServerPatch) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) DeleteServer(ctx context.Context, actor Actor, id uint) error {
+	return ErrEnterpriseFeature
+}
+
+func (s *communityService) PublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) UnpublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) SetServerGroups(ctx context.Context, actor Actor, id uint, groupIDs []uint) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) SetServerBundle(ctx context.Context, actor Actor, id uint, pins []PinInput) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) ListPolicies(ctx context.Context, connectionID uint, f PolicyFilter) ([]models.TykPolicyResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) ListSyncRuns(ctx context.Context, connectionID uint, limit int) ([]models.MCPSyncRun, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) RunSync(ctx context.Context, actor Actor, connectionID uint) (*models.MCPSyncRun, error) {
+	return nil, ErrEnterpriseFeature
+}

@@ -110,7 +110,12 @@ func InitModels(db *gorm.DB) error {
 		&WebhookDelivery{},        // Per (event, target) outbox rows
 		&WebhookDeliveryAttempt{}, // Per-attempt delivery log
 		// Tyk Dashboard MCP integration (Enterprise; tables exist in CE, unused)
-		&TykConnection{}, // Dashboard connections (credentials encrypted)
+		&TykConnection{},       // Dashboard connections (credentials encrypted)
+		&MCPServer{},           // MCP proxies catalogued from a Dashboard
+		&MCPServerGroup{},      // MCP server ↔ team visibility grants
+		&TykPolicy{},           // Cached Tyk security policies
+		&MCPServerPolicyPin{},  // Policy bundles pinned to MCP servers
+		&MCPSyncRun{},          // Discovery sync run log
 	); err != nil {
 		return err
 	}

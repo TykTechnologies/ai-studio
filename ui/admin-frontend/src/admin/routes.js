@@ -89,6 +89,8 @@ import AuditTrail from "./pages/AuditTrail";
 import Webhooks from "./pages/Webhooks";
 import WebhookDeliveries from "./pages/WebhookDeliveries";
 import TykConnections from "./pages/TykConnections";
+import MCPServers from "./pages/MCPServers";
+import MCPServerDetail from "./pages/MCPServerDetail";
 
 import SubmissionReviewQueue from "./pages/SubmissionReviewQueue";
 import SubmissionReview from "./pages/SubmissionReview";
@@ -190,6 +192,8 @@ const mainAdminRoutes = [
   { path: "webhooks/deliveries", element: <WebhookDeliveries />, permission: P.WEBHOOKS_READ },
   // Tyk Dashboard MCP integration (Enterprise only; page self-gates via /tyk-mcp/status)
   { path: "tyk-connections", element: <TykConnections />, permission: P.TYK_CONNECTIONS_READ },
+  { path: "mcp-servers", element: <MCPServers />, permission: P.MCP_SERVERS_READ },
+  { path: "mcp-servers/:id", element: <MCPServerDetail />, permission: P.MCP_SERVERS_READ },
 
   { path: "submissions", element: <SubmissionReviewQueue />, permission: P.SUBMISSIONS_READ },
   { path: "submissions/:id", element: <SubmissionReview />, permission: P.SUBMISSIONS_READ },

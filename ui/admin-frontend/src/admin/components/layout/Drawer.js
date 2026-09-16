@@ -156,6 +156,9 @@ const Drawer = () => {
         ...(features.feature_chat
           ? [{ id: 'tools', text: 'Tools', path: '/admin/tools', permission: P.TOOLS_READ }]
           : []),
+        ...(features.feature_tyk_mcp
+          ? [{ id: 'mcp-servers', text: 'MCP servers', path: '/admin/mcp-servers', permission: P.MCP_SERVERS_READ, exact: true }]
+          : []),
         ...(config?.is_enterprise
           ? [{ id: 'filters', text: 'Filters', path: '/admin/filters', permission: P.FILTERS_READ }]
           : []),

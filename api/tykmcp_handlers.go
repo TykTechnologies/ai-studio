@@ -348,8 +348,10 @@ func (a *API) probeTykConnectionInput(c *gin.Context) {
 
 // syncTykConnection godoc
 // @Summary Request an immediate sync of a connection
+// @Description Schedules the next sync for now; with wait=true the sync runs on this node and the run record is returned
 // @Tags TykMCP
 // @Param id path int true "Connection ID"
+// @Param wait query bool false "run inline"
 // @Success 202
 // @Router /tyk-connections/{id}/sync [post]
 func (a *API) syncTykConnection(c *gin.Context) {
@@ -359,6 +361,19 @@ func (a *API) syncTykConnection(c *gin.Context) {
 	}
 	id, ok := tykMCPIDParam(c, "id")
 	if !ok {
+		return
+	}
+	if c.Query("wait") == "true" {
+		run, err := a.tykMCPService().RunSync(c.Request.Context(), actor, id)
+		if err != nil {
+			if run != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"run": run, "errors": []gin.H{{"title": "Tyk Dashboard Error", "detail": err.Error()}}})
+				return
+			}
+			tykMCPErrorResponse(c, err, "Sync failed")
+			return
+		}
+		c.JSON(http.StatusOK, run)
 		return
 	}
 	if err := a.tykMCPService().TriggerSync(c.Request.Context(), actor, id); err != nil {

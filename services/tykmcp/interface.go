@@ -123,8 +123,81 @@ type Status struct {
 	DegradedConnections int64  `json:"degraded_connections"`
 }
 
+// ServerFilter narrows ListServers. Zero values mean "no filter".
+type ServerFilter struct {
+	ConnectionID uint
+	State        string // dashboard_state
+	Origin       string
+	Kind         string
+	Published    *bool
+	Search       string // case-insensitive substring over name, slug, description, listen path
+	Page         int    // 1-based
+	PageSize     int
+}
+
+// ServerList is one page of servers.
+type ServerList struct {
+	Servers  []models.MCPServerResponse `json:"servers"`
+	Total    int64                      `json:"total"`
+	Page     int                        `json:"page"`
+	PageSize int                        `json:"page_size"`
+}
+
+// ServerPatch edits the Studio-owned presentation and governance fields of
+// a server. Definition-derived fields cannot be edited here.
+type ServerPatch struct {
+	Name              *string   `json:"name"`
+	NameOverridden    *bool     `json:"name_overridden"`
+	Description       *string   `json:"description"`
+	LongDescription   *string   `json:"long_description"`
+	LogoURL           *string   `json:"logo_url"`
+	Tags              *[]string `json:"tags"`
+	PrivacyScore      *int      `json:"privacy_score"`
+	ClearPrivacyScore bool      `json:"clear_privacy_score"`
+	LockVersion       int       `json:"lock_version"`
+}
+
+// PinInput names one policy in a bundle by its Tyk policy id.
+type PinInput struct {
+	TykPolicyID string `json:"tyk_policy_id"`
+	Role        string `json:"role"`
+}
+
+// PolicyFilter narrows ListPolicies.
+type PolicyFilter struct {
+	MCPOnly bool   // only policies whose access rights name an MCP proxy
+	APIID   string // only policies granting this api id
+	Search  string
+}
+
+// Paging bounds.
+const (
+	DefaultPageSize = 25
+	MaxPageSize     = 200
+)
+
 // Service is the Tyk Dashboard MCP integration contract shared by both editions.
 type Service interface {
+	// MCP servers (discovery)
+	ListServers(ctx context.Context, f ServerFilter) (*ServerList, error)
+	GetServer(ctx context.Context, id uint) (*models.MCPServerResponse, error)
+	UpdateServer(ctx context.Context, actor Actor, id uint, p ServerPatch) (*models.MCPServerResponse, error)
+	// DeleteServer removes a record the Dashboard no longer has (missing) or
+	// that never reached it (pending_platform). Studio-origin proxies are
+	// deleted on the Dashboard by the registration milestone.
+	DeleteServer(ctx context.Context, actor Actor, id uint) error
+	PublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
+	UnpublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
+	SetServerGroups(ctx context.Context, actor Actor, id uint, groupIDs []uint) (*models.MCPServerResponse, error)
+	SetServerBundle(ctx context.Context, actor Actor, id uint, pins []PinInput) (*models.MCPServerResponse, error)
+
+	// Policies and sync
+	ListPolicies(ctx context.Context, connectionID uint, f PolicyFilter) ([]models.TykPolicyResponse, error)
+	ListSyncRuns(ctx context.Context, connectionID uint, limit int) ([]models.MCPSyncRun, error)
+	// RunSync performs a discovery sync of one connection on this node and
+	// returns the run record.
+	RunSync(ctx context.Context, actor Actor, connectionID uint) (*models.MCPSyncRun, error)
+
 	// Connections
 	ListConnections(ctx context.Context) ([]models.TykConnectionResponse, error)
 	GetConnection(ctx context.Context, id uint) (*models.TykConnectionResponse, error)
