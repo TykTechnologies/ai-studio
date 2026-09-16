@@ -559,6 +559,7 @@ func (a *API) setupRoutes() {
 	authed.DELETE("/apps/:id", a.deleteUserApp)
 	authed.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
 	authed.GET("/apps/:id/mcp", a.getUserAppMCP)
+	authed.GET("/mcp/connections", a.listPortalMCPConnections)
 	authed.POST("/apps/:id/mcp/credentials", a.mintUserAppMCPCredential)
 	authed.POST("/apps/:id/mcp/credentials/:cid/rotate", a.rotateUserAppMCPCredential)
 	authed.POST("/apps/:id/mcp/credentials/:cid/revoke", a.revokeUserAppMCPCredential)
@@ -1113,6 +1114,8 @@ func (a *API) setupRoutes() {
 	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
 	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
 	v1.POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.pushMCPServer)
+	v1.GET("/mcp-servers/:id/handoff", authz.Read("mcp-servers"), a.getMCPServerHandoff)
+	v1.POST("/mcp-servers/:id/link", authz.Execute("mcp-servers"), a.linkMCPServer)
 	// Minted Tyk keys: minting, rotating, suspending, revoking and applying
 	// widening changes reach the Dashboard, so they are execute permissions.
 	v1.GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)

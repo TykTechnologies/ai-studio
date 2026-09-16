@@ -19,6 +19,7 @@ const (
 	SubmissionResourceTypeDatasource = "datasource"
 	SubmissionResourceTypeTool       = "tool"
 	SubmissionResourceTypePlugin     = "plugin"
+	SubmissionResourceTypeMCPServer  = "mcp_server" // Tyk-managed MCP proxy (Enterprise)
 )
 
 type Submission struct {
@@ -33,6 +34,10 @@ type Submission struct {
 	// PluginInstanceID is the plugin-assigned instance ID created on approval
 	// (plugin instances use string IDs, unlike ResourceID).
 	PluginInstanceID string `json:"plugin_instance_id" gorm:"size:255;index"`
+	// ExternalResourceID is the id of the object created on an external
+	// system in the first phase of a two-phase approval (the Tyk api id of an
+	// MCP proxy), so a retry after a partial failure does not create it twice.
+	ExternalResourceID string `json:"external_resource_id" gorm:"size:255;index"`
 	Status       string `json:"status" gorm:"index"`         // draft | submitted | in_review | approved | rejected | changes_requested
 	LockVersion  int    `json:"lock_version"`                // optimistic concurrency control
 
@@ -80,7 +85,7 @@ func NewSubmission() *Submission {
 }
 
 // payloadCredentialFields are the keys in ResourcePayload that contain secrets
-var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
+var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string", "upstream_auth_token"}
 
 // BeforeSave encrypts credential fields in ResourcePayload before writing to DB
 func (s *Submission) BeforeSave(tx *gorm.DB) error {

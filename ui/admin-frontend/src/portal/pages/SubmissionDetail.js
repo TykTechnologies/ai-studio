@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import pubClient from "../../admin/utils/pubClient";
+import MCPSubmissionSummary from "../components/MCPSubmissionSummary";
 import PrivacyLevelChip from "../../admin/components/common/privacy/PrivacyLevelChip";
 import {
   Container,
@@ -264,6 +265,10 @@ const SubmissionDetail = () => {
                   </Grid>
                 )}
               </Grid>
+            )}
+
+            {submission.resource_type === "mcp_server" && (
+              <MCPSubmissionSummary payload={payload} />
             )}
 
             {submission.resource_type === "tool" && (

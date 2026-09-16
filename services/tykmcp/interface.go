@@ -440,6 +440,26 @@ type Service interface {
 	CreatePolicy(ctx context.Context, actor Actor, connectionID uint, in PolicyInput) (*models.TykPolicyResponse, error)
 	// UpdatePolicy edits a Studio-managed policy (name and limits only).
 	UpdatePolicy(ctx context.Context, actor Actor, connectionID uint, tykPolicyID string, in PolicyInput) (*models.TykPolicyResponse, error)
+
+	// Community registration
+	// SubmissionConnections lists the connections a portal user may submit an
+	// MCP server to, with what each one knows about deployment targets.
+	SubmissionConnections(ctx context.Context) ([]SubmissionConnection, error)
+	// ValidateSubmissionInput checks a submission payload against its
+	// connection without contacting the Dashboard.
+	ValidateSubmissionInput(ctx context.Context, in RegisterInput) error
+	// RegisterFromSubmission is phase one of an approval: on a full-mode
+	// connection it creates the proxy (idempotently: an existing catalogue
+	// row for the submission, or a proxy on the same listen path, is adopted);
+	// otherwise it records a pending_platform server and emits the handoff.
+	RegisterFromSubmission(ctx context.Context, actor Actor, reg SubmissionRegistration) (*models.MCPServerResponse, error)
+	// HandoffPackage renders what the platform team needs for a
+	// pending_platform server. Secrets are included only for an actor who may
+	// execute, and the download is audited.
+	HandoffPackage(ctx context.Context, actor Actor, serverID uint, includeSecrets bool) (*HandoffPackage, error)
+	// LinkServer joins a pending_platform server to the proxy the platform
+	// team created (imported by sync under tykAPIID).
+	LinkServer(ctx context.Context, actor Actor, pendingID uint, tykAPIID string) (*models.MCPServerResponse, error)
 	PublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
 	UnpublishServer(ctx context.Context, actor Actor, id uint) (*models.MCPServerResponse, error)
 	SetServerGroups(ctx context.Context, actor Actor, id uint, groupIDs []uint) (*models.MCPServerResponse, error)

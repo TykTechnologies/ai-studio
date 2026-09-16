@@ -285,6 +285,7 @@ const MCPServerDetail = () => {
   const [groupIds, setGroupIds] = useState([]);
   const [connection, setConnection] = useState(null);
   const [creatorOpen, setCreatorOpen] = useState(false);
+  const [handoff, setHandoff] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteForce, setDeleteForce] = useState(false);
 
@@ -315,6 +316,14 @@ const MCPServerDetail = () => {
           setConnection(conn?.data || null);
         } catch {
           setConnection(null);
+        }
+      }
+      if (s.dashboard_state === "pending_platform") {
+        try {
+          const pkg = await apiClient.get(`/mcp-servers/${s.id}/handoff`);
+          setHandoff(pkg?.data || null);
+        } catch {
+          setHandoff(null);
         }
       }
     } catch (err) {
@@ -378,6 +387,35 @@ const MCPServerDetail = () => {
     } catch (err) {
       setDeleteOpen(false);
       setError(apiErrorDetail(err, "Delete failed"));
+    }
+  };
+
+  const downloadHandoff = async (includeSecrets) => {
+    setError(null);
+    try {
+      const res = await apiClient.get(`/mcp-servers/${server.id}/handoff${includeSecrets ? "?include_secrets=true" : ""}`);
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mcp-handoff-${server.slug || server.id}${includeSecrets ? "-with-credentials" : ""}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setNotice(includeSecrets ? "Handoff package downloaded with the upstream credential; this download is audited." : "Handoff package downloaded");
+    } catch (err) {
+      setError(apiErrorDetail(err, "Download failed"));
+    }
+  };
+
+  const linkTo = async (tykApiId) => {
+    setError(null);
+    try {
+      const res = await apiClient.post(`/mcp-servers/${server.id}/link`, { tyk_api_id: tykApiId });
+      navigate(`/admin/mcp-servers/${res.data.id}`);
+    } catch (err) {
+      setError(apiErrorDetail(err, "Link failed"));
     }
   };
 
@@ -449,6 +487,67 @@ const MCPServerDetail = () => {
             ? "This server is not active on the Tyk Dashboard and cannot be published."
             : "Set a privacy score before publishing this server to the portal."}
         </Alert>
+      )}
+
+      {server.dashboard_state === "pending_platform" && (
+        <Section
+          title="Awaiting the platform team"
+          action={
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button size="small" variant="outlined" onClick={() => downloadHandoff(false)} data-testid="download-handoff">
+                Download handoff package
+              </Button>
+              <Can permission={P.MCP_SERVERS_EXECUTE}>
+                <Button size="small" variant="outlined" color="warning" onClick={() => downloadHandoff(true)} data-testid="download-handoff-secrets">
+                  Download with credential
+                </Button>
+              </Can>
+            </Box>
+          }
+        >
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This server was approved on a connection AI Studio may not write to. The platform team creates the proxy from the
+            handoff package; once a sync has imported it, link it here so the submitter's ownership, privacy score and team
+            visibility carry over.
+          </Typography>
+          {handoff && (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                Submitted by {handoff.submitter?.name || "unknown"} ({handoff.submitter?.email || "no email"})
+                {handoff.submitter?.primary_contact ? `, contact ${handoff.submitter.primary_contact}` : ""}
+                {(handoff.requested_gateway_tags || []).length > 0 ? ` · requested target: ${handoff.requested_gateway_tags.join(", ")}` : ""}
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mt: 1 }}>
+                {(handoff.instructions || []).map((step) => (
+                  <Typography key={step} component="li" variant="body2">
+                    {step}
+                  </Typography>
+                ))}
+              </Box>
+              {(handoff.candidates || []).length > 0 ? (
+                <Box sx={{ mt: 1 }} data-testid="link-candidates">
+                  <Typography variant="subtitle2">Imported proxies that look like this server</Typography>
+                  {handoff.candidates.map((c) => (
+                    <Box key={c.id} sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
+                      <Typography variant="body2">
+                        {c.name} · {c.listen_path} · <code>{c.tyk_api_id}</code>
+                      </Typography>
+                      <Can permission={P.MCP_SERVERS_EXECUTE}>
+                        <Button size="small" variant="contained" onClick={() => linkTo(c.tyk_api_id)} data-testid={`link-${c.tyk_api_id}`}>
+                          Link
+                        </Button>
+                      </Can>
+                    </Box>
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  No imported proxy matches yet. Run a sync after the platform team has created it.
+                </Typography>
+              )}
+            </>
+          )}
+        </Section>
       )}
 
       <Section title="On the Tyk Gateway">

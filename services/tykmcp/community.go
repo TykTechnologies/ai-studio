@@ -100,6 +100,21 @@ func (s *communityService) CreatePolicy(context.Context, Actor, uint, PolicyInpu
 func (s *communityService) UpdatePolicy(context.Context, Actor, uint, string, PolicyInput) (*models.TykPolicyResponse, error) {
 	return nil, ErrEnterpriseFeature
 }
+func (s *communityService) SubmissionConnections(context.Context) ([]SubmissionConnection, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) ValidateSubmissionInput(context.Context, RegisterInput) error {
+	return ErrEnterpriseFeature
+}
+func (s *communityService) RegisterFromSubmission(context.Context, Actor, SubmissionRegistration) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) HandoffPackage(context.Context, Actor, uint, bool) (*HandoffPackage, error) {
+	return nil, ErrEnterpriseFeature
+}
+func (s *communityService) LinkServer(context.Context, Actor, uint, string) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
 func (s *communityService) DeleteServer(ctx context.Context, actor Actor, id uint, force bool) error {
 	return ErrEnterpriseFeature
 }

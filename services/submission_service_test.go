@@ -445,3 +445,17 @@ func TestGetSubmissionStatusCounts(t *testing.T) {
 	assert.Equal(t, int64(1), counts[models.SubmissionStatusDraft])
 	assert.Equal(t, int64(2), counts[models.SubmissionStatusSubmitted])
 }
+
+// MCP server submissions are an Enterprise feature: the Community Edition
+// refuses them at creation with a clear message instead of a generic type error.
+func TestCreateSubmission_MCPServerNeedsEnterprise(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := &Service{DB: db}
+	user := createSubmissionTestUser(t, service, "mcp-sub@example.com")
+
+	_, err := service.CreateSubmission(user.ID, models.SubmissionResourceTypeMCPServer, models.SubmissionStatusDraft,
+		models.JSONMap{"name": "Weather", "description": "d", "kind": "remote", "connection_id": 1},
+		nil, 10, "j", "mcp-sub@example.com", "", "", nil, "", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Enterprise")
+}

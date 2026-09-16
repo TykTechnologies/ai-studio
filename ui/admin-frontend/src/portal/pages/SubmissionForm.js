@@ -49,6 +49,8 @@ import {
   getEmbedderDefaultUrl,
 } from "../../admin/utils/vendorUtils";
 import SchemaFormRenderer from "../../admin/components/plugins/SchemaFormRenderer";
+import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
+import MCPSubmissionFields, { validateMCPPayload } from "../components/MCPSubmissionFields";
 
 // The resource type dropdown carries plugin-provided types as "plugin:<id>" so
 // one control can pick both the built-in kinds and every ResourceProvider type
@@ -109,6 +111,11 @@ const SubmissionForm = () => {
   // The type as returned on an existing submission, so a draft still renders
   // its schema if the type list has not loaded (or the type was deactivated).
   const [loadedPluginType, setLoadedPluginType] = useState(null);
+  // MCP servers behind a Tyk Gateway (Enterprise): offered only when the
+  // integration is on, and only for connections that accept submissions.
+  const { features } = useSystemFeatures();
+  const tykMCPEnabled = !!features?.feature_tyk_mcp;
+  const [mcpConnections, setMcpConnections] = useState([]);
   const [pluginExtraJson, setPluginExtraJson] = useState("");
   const [pluginExtraJsonError, setPluginExtraJsonError] = useState(null);
   const [snackbar, setSnackbar] = useState({
@@ -146,6 +153,22 @@ const SubmissionForm = () => {
       loadSubmission();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!tykMCPEnabled) return;
+    let cancelled = false;
+    pubClient
+      .get("/common/mcp/connections")
+      .then((res) => {
+        if (!cancelled) setMcpConnections(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setMcpConnections([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tykMCPEnabled]);
 
   const loadPluginTypes = async () => {
     try {
@@ -395,6 +418,10 @@ const SubmissionForm = () => {
       }
     }
 
+    if (resourceType === "mcp_server") {
+      Object.assign(newErrors, validateMCPPayload(payload, mcpConnections));
+    }
+
     if (resourceType === "plugin") {
       // The server validates against the same schema and rejects with a 400;
       // catching it here keeps the message next to the field that caused it.
@@ -573,6 +600,7 @@ const SubmissionForm = () => {
             renderValue={(value) => {
               if (value === "datasource") return "Data source";
               if (value === "tool") return "Tool (OpenAPI)";
+              if (value === "mcp_server") return "MCP server (Tyk Gateway)";
               const t = pluginTypes.find(
                 (pt) => `${PLUGIN_TYPE_PREFIX}${pt.id}` === value
               );
@@ -581,6 +609,9 @@ const SubmissionForm = () => {
           >
             <MenuItem value="datasource">Data source</MenuItem>
             <MenuItem value="tool">Tool (OpenAPI)</MenuItem>
+            {tykMCPEnabled && (
+              <MenuItem value="mcp_server">MCP server (Tyk Gateway)</MenuItem>
+            )}
             {pluginTypes.map((t) => (
               <MenuItem key={t.id} value={`${PLUGIN_TYPE_PREFIX}${t.id}`}>
                 <Box>
@@ -759,6 +790,15 @@ const SubmissionForm = () => {
                 )}
               </AccordionDetails>
             </Accordion>
+          )}
+
+          {resourceType === "mcp_server" && (
+            <MCPSubmissionFields
+              payload={payload}
+              onChange={handlePayloadChange}
+              connections={mcpConnections}
+              errors={errors}
+            />
           )}
 
           {/* Datasource-specific fields */}

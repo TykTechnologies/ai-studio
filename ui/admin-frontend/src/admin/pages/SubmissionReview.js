@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
+  Switch,
+  FormControlLabel,
+  Autocomplete,
   Typography,
   Box,
   Paper,
@@ -39,6 +42,7 @@ import StatusChip from "../components/submissions/StatusChip";
 import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import { getResourceTypeLabel } from "../components/submissions/resourceTypeLabel";
 import PluginPayloadView from "../components/submissions/PluginPayloadView";
+import MCPSubmissionSummary from "../../portal/components/MCPSubmissionSummary";
 
 const SubmissionReview = () => {
   const { id } = useParams();
@@ -55,6 +59,11 @@ const SubmissionReview = () => {
 
   // Dialog state
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  // MCP server submissions: the reviewer may change the deployment target
+  // and publish the created server straight away.
+  const [mcpTagOptions, setMcpTagOptions] = useState([]);
+  const [mcpGatewayTags, setMcpGatewayTags] = useState(null);
+  const [mcpPublish, setMcpPublish] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [changesDialogOpen, setChangesDialogOpen] = useState(false);
   const [finalPrivacyScore, setFinalPrivacyScore] = useState(0);
@@ -135,6 +144,27 @@ const SubmissionReview = () => {
     }
   };
 
+  const isMCPSubmission = submission?.resource_type === "mcp_server";
+  const mcpConnectionId = submission?.resource_payload?.connection_id;
+
+  useEffect(() => {
+    if (!approveDialogOpen || !isMCPSubmission || !mcpConnectionId) return;
+    let cancelled = false;
+    if (mcpGatewayTags === null) setMcpGatewayTags(submission.resource_payload.gateway_tags || []);
+    apiClient
+      .get(`/tyk-connections/${mcpConnectionId}/gateway-tags`)
+      .then((res) => {
+        if (!cancelled) setMcpTagOptions(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setMcpTagOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approveDialogOpen, isMCPSubmission, mcpConnectionId]);
+
   const handleApprove = async () => {
     const isPluginSubmission = submission?.resource_type === "plugin";
     try {
@@ -144,6 +174,7 @@ const SubmissionReview = () => {
           attributes: {
             final_privacy_score: finalPrivacyScore,
             review_notes: reviewNotes,
+            ...(isMCPSubmission ? { gateway_tags: mcpGatewayTags || [], publish: mcpPublish } : {}),
             // Plugin resources are governed by group access on the plugin,
             // not by catalogues, so there is nothing to assign.
             // Plugin resources use group access, not catalogues; the API
@@ -160,7 +191,9 @@ const SubmissionReview = () => {
             // resource is not live until an administrator activates it.
             message: isPluginSubmission
               ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's team settings."
-              : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
+              : isMCPSubmission
+                ? "Submission approved. Open the MCP server under Context management: on a full-mode connection the proxy now exists on the Tyk Dashboard, otherwise the handoff package is ready for the platform team."
+                : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
             severity: "success",
           },
         },
@@ -513,7 +546,9 @@ const SubmissionReview = () => {
                         approve a tool whose server block points nowhere. */}
                     {submission.resource_type === "tool"
                       ? "Validate specification"
-                      : "Test connection"}
+                      : submission.resource_type === "mcp_server"
+                        ? "Validate on the Dashboard"
+                        : "Test connection"}
                   </PrimaryOutlineButton>
                       )}
               </Box>
@@ -524,6 +559,10 @@ const SubmissionReview = () => {
                   payload={payload}
                   schema={submission.plugin_resource_type?.submission_schema}
                 />
+              )}
+
+              {submission.resource_type === "mcp_server" && (
+                <MCPSubmissionSummary payload={payload} />
               )}
 
               {submission.resource_type === "datasource" && (
@@ -797,6 +836,26 @@ const SubmissionReview = () => {
               sx={{ width: 96 }}
             />
           </Box>
+          {isMCPSubmission && (
+            <Box sx={{ mt: 2 }} data-testid="mcp-approve-options">
+              {mcpTagOptions.length > 0 && (
+                <Autocomplete
+                  multiple
+                  size="small"
+                  options={mcpTagOptions.map((o) => o.tag)}
+                  value={mcpGatewayTags || []}
+                  onChange={(_, v) => setMcpGatewayTags(v)}
+                  renderTags={(value, getTagProps) => value.map((tag, index) => <Chip {...getTagProps({ index })} key={tag} size="small" label={tag} />)}
+                  renderInput={(params) => <TextField {...params} label="Deployment target (gateway tags)" helperText="The submitter's request is pre-filled; empty means any non-segmented gateway." inputProps={{ ...params.inputProps, "data-testid": "approve-gateway-tags" }} />}
+                  sx={{ mb: 1 }}
+                />
+              )}
+              <FormControlLabel
+                control={<Switch checked={mcpPublish} onChange={(e) => setMcpPublish(e.target.checked)} inputProps={{ "data-testid": "approve-publish" }} />}
+                label="Publish to the portal right away (full-mode connections only)"
+              />
+            </Box>
+          )}
           <TextField
             fullWidth
             label="Review Notes (internal)"

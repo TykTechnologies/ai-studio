@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -170,6 +171,9 @@ func (a *API) adminTestSubmission(c *gin.Context) {
 	}
 
 	switch submission.ResourceType {
+	case models.SubmissionResourceTypeMCPServer:
+		a.testMCPSubmission(c, submission)
+		return
 	case models.SubmissionResourceTypePlugin:
 		// Plugin resources are metadata managed by the owning plugin; there is
 		// no upstream to contact from here.
@@ -488,7 +492,8 @@ func (a *API) adminApproveSubmission(c *gin.Context) {
 		return
 	}
 
-	submission, err := a.service.ApproveSubmission(uint(id), currentUser.ID, attrs.FinalPrivacyScore, attrs.AssignedCatalogues, attrs.ReviewNotes)
+	submission, err := a.service.ApproveSubmissionWithOptions(uint(id), currentUser.ID, attrs.FinalPrivacyScore, attrs.AssignedCatalogues, attrs.ReviewNotes,
+		services.SubmissionApproveOptions{GatewayTags: attrs.GatewayTags, Publish: attrs.Publish})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
