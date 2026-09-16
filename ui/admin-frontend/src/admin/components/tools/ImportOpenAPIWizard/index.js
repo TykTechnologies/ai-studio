@@ -13,50 +13,46 @@ import {
 import { PrimaryButton, SecondaryLinkButton } from "../../../styles/sharedStyles";
 
 import SelectProvider from "./components/SelectProvider";
-import ConfigureProvider from "./components/ConfigureProvider";
+import SelectConnection from "./components/SelectConnection";
 import SelectAPI from "./components/SelectAPI";
 import ConfigureTool from "./components/ConfigureTool";
 import DirectImportSpec from "./components/DirectImportSpec";
-import { useProvider } from "./hooks/useProvider";
+import { useTykImport } from "./hooks/useTykImport";
 import { useToolCreation } from "./hooks/useToolCreation";
 import yaml from "js-yaml";
 import { detectFormat, extractOperations, extractAuthDetails, validateSpec } from "./utils/specUtils";
-import { PROVIDER_TYPES, STEPS, STEP_SEQUENCES, STEP_LABELS } from "./constants";
+import { STEPS, STEP_SEQUENCES, STEP_LABELS, IMPORT_METHODS } from "./constants";
 
+const emptyToolConfig = () => ({
+  name: "",
+  description: "",
+  tool_type: "REST",
+  oas_spec: "",
+  // 25 is the top of the Public band, the same default the quick-start
+  // uses; the create hook falls back to it too.
+  privacy_score: 25,
+  auth_schema_name: "",
+  auth_key: "",
+  auth_key_prefilled: false,
+  operations: [],
+});
+
+/**
+ * ImportOpenAPIWizard creates a tool from an OpenAPI document: pasted,
+ * uploaded, fetched from a URL, or read from a Tyk Dashboard through a saved
+ * Tyk connection (Enterprise).
+ */
 const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
   const [activeStep, setActiveStep] = useState(STEPS.SELECT_PROVIDER);
-  const [providerConfig, setProviderConfig] = useState({
-    url: "",
-    token: "",
-  });
+  const [selectedProvider, setSelectedProvider] = useState(null);
+  const [connection, setConnection] = useState(null);
   const [selectedAPI, setSelectedAPI] = useState(null);
   const [directSpec, setDirectSpec] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [toolConfig, setToolConfig] = useState({
-    name: "",
-    description: "",
-    tool_type: "REST",
-    oas_spec: "",
-    // 25 is the top of the Public band, the same default the quick-start
-    // uses; the create hook falls back to it too.
-    privacy_score: 25,
-    auth_schema_name: "",
-    auth_key: "",
-    auth_key_prefilled: false,
-    operations: [],
-  });
+  const [toolConfig, setToolConfig] = useState(emptyToolConfig());
 
-  const {
-    loading: providerLoading,
-    error: providerError,
-    providers,
-    selectedProvider,
-    apis,
-    configureSelectedProvider,
-    selectProvider,
-    reset: resetProvider
-  } = useProvider();
+  const tyk = useTykImport();
 
   const {
     createTool,
@@ -64,18 +60,22 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
     error: toolError
   } = useToolCreation();
 
-  const getSteps = () => {
-    if (!selectedProvider) return [STEP_LABELS[STEPS.SELECT_PROVIDER]];
-    const sequence = STEP_SEQUENCES[selectedProvider.type] || [STEPS.SELECT_PROVIDER];
-    return sequence.map(step => STEP_LABELS[step]);
+  const sequence = selectedProvider ? STEP_SEQUENCES[selectedProvider.type] : [STEPS.SELECT_PROVIDER];
+
+  const getSteps = () => sequence.map((step) => STEP_LABELS[step]);
+
+  const getNextStep = (currentStep) => sequence[sequence.indexOf(currentStep) + 1];
+
+  const selectProvider = (provider) => {
+    setSelectedProvider(provider);
+    setConnection(null);
+    setSelectedAPI(null);
+    tyk.reset();
   };
 
-  const getNextStep = (currentStep) => {
-    if (!selectedProvider) return currentStep;
-    
-    const sequence = STEP_SEQUENCES[selectedProvider.type];
-    const currentIndex = sequence.indexOf(currentStep);
-    return sequence[currentIndex + 1];
+  const selectConnection = (c) => {
+    setConnection(c);
+    setSelectedAPI(null);
   };
 
   const handleNext = async () => {
@@ -85,41 +85,42 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
           if (!selectedProvider) {
             throw new Error("Please select a provider");
           }
-          const nextStep = selectedProvider.type === PROVIDER_TYPES.TYK_DASHBOARD
-            ? STEPS.CONFIGURE_PROVIDER
-            : STEPS.DIRECT_IMPORT;
-          setActiveStep(nextStep);
+          setActiveStep(getNextStep(STEPS.SELECT_PROVIDER));
           break;
 
-        case STEPS.CONFIGURE_PROVIDER:
-          if (!providerConfig.url || !providerConfig.token) {
-            throw new Error("Please fill in all fields");
+        case STEPS.SELECT_CONNECTION:
+          if (!connection) {
+            throw new Error("Please choose a connection");
           }
-          await configureSelectedProvider(providerConfig);
-          setActiveStep(getNextStep(STEPS.CONFIGURE_PROVIDER));
+          await tyk.loadAPIs(connection.id);
+          setActiveStep(STEPS.SELECT_API);
           break;
 
-        case STEPS.SELECT_API:
+        case STEPS.SELECT_API: {
           if (!selectedAPI) {
             throw new Error("Please select an API");
           }
-
-          // Update tool config with API details
-          const newConfig = {
-            name: selectedAPI.name?.trim() || "",
-            description: selectedAPI.description?.trim() || "",
+          // Fetch the definition (credentials masked server-side) and read
+          // what the tool form needs from it, like the direct import does.
+          const doc = await tyk.loadDocument(connection.id, selectedAPI.api_id);
+          const spec = JSON.stringify(doc.definition, null, 2);
+          const operations = extractOperations(spec, "json");
+          const securityDetails = extractAuthDetails(spec, "json");
+          setSelectedAPI({ ...selectedAPI, security_details: securityDetails });
+          setToolConfig({
+            ...toolConfig,
+            name: doc.name || selectedAPI.name || "",
+            description: doc.definition?.info?.description || "",
             tool_type: "REST",
-            oas_spec: selectedAPI.spec,
-            privacy_score: toolConfig.privacy_score,
-            auth_schema_name: selectedAPI.security_details?.name || "",
-            auth_key: selectedAPI.auth_key || "",
-            auth_key_prefilled: !!selectedAPI.auth_key,
-            operations: selectedAPI.operations || [],
-          };
-
-          setToolConfig(newConfig);
+            oas_spec: spec,
+            auth_schema_name: securityDetails.name || "",
+            auth_key: "",
+            auth_key_prefilled: false,
+            operations,
+          });
           setActiveStep(STEPS.CONFIGURE_TOOL);
           break;
+        }
 
         case STEPS.DIRECT_IMPORT:
           if (!directSpec) {
@@ -234,71 +235,58 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
     }
   };
 
-  const getPreviousStep = (currentStep) => {
-    if (!selectedProvider) return STEPS.SELECT_PROVIDER;
-    
-    const sequence = STEP_SEQUENCES[selectedProvider.type];
-    const currentIndex = sequence.indexOf(currentStep);
-    return sequence[currentIndex - 1] ?? STEPS.SELECT_PROVIDER;
-  };
+  const getPreviousStep = (currentStep) => sequence[sequence.indexOf(currentStep) - 1] ?? STEPS.SELECT_PROVIDER;
 
   const handleBack = () => {
     setActiveStep(getPreviousStep(activeStep));
   };
 
   const handleClose = () => {
-    resetProvider();
+    tyk.reset();
+    setSelectedProvider(null);
     setActiveStep(STEPS.SELECT_PROVIDER);
-    setProviderConfig({ url: "", token: "" });
+    setConnection(null);
     setSelectedAPI(null);
     setDirectSpec(null);
-    setToolConfig({
-      name: "",
-      description: "",
-      tool_type: "REST",
-      oas_spec: "",
-      privacy_score: 25,
-      auth_schema_name: "",
-      auth_key: "",
-      auth_key_prefilled: false,
-      operations: [],
-    });
+    setError("");
+    setToolConfig(emptyToolConfig());
     onClose();
   };
 
   const renderStepContent = () => {
-    console.log('activeStep:', activeStep, STEPS);
     switch (activeStep) {
       case STEPS.SELECT_PROVIDER:
         return (
           <SelectProvider
-            providers={providers}
+            providers={IMPORT_METHODS}
             selectedProvider={selectedProvider}
             onSelect={selectProvider}
-            loading={providerLoading}
-            error={providerError}
+            loading={false}
+            error=""
           />
         );
 
-      case STEPS.CONFIGURE_PROVIDER:
+      case STEPS.SELECT_CONNECTION:
         return (
-          <ConfigureProvider
-            provider={selectedProvider}
-            config={providerConfig}
-            onConfigChange={setProviderConfig}
-            loading={providerLoading}
-            error={providerError}
+          <SelectConnection
+            status={tyk.status}
+            connections={tyk.connections}
+            loading={tyk.loading}
+            error={tyk.error}
+            selected={connection}
+            onSelect={selectConnection}
+            reload={tyk.loadConnections}
           />
         );
 
       case STEPS.SELECT_API:
         return (
           <SelectAPI
-            apis={apis}
+            apis={tyk.apis}
             selectedAPI={selectedAPI}
             onSelect={setSelectedAPI}
-            loading={providerLoading}
-            error={providerError}
+            loading={tyk.loading}
+            error={tyk.error}
           />
         );
 
@@ -328,18 +316,19 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
     }
   };
 
-  const getCurrentStepIndex = () => {
-    if (!selectedProvider) return 0;
-    const sequence = STEP_SEQUENCES[selectedProvider.type];
-    return sequence.findIndex(step => step === activeStep);
-  };
+  const getCurrentStepIndex = () => (selectedProvider ? sequence.indexOf(activeStep) : 0);
+
+  // The connection step cannot advance while the integration is missing or
+  // off; the step itself explains why.
+  const tykBlocked =
+    activeStep === STEPS.SELECT_CONNECTION && tyk.status && (!tyk.status.available || !tyk.status.enabled);
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle>Import OpenAPI Specification</DialogTitle>
       <DialogContent>
         <Stepper activeStep={getCurrentStepIndex()} sx={{ mb: 4 }}>
-          {getSteps().map((label, index) => (
+          {getSteps().map((label) => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
             </Step>
@@ -357,7 +346,8 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
           <PrimaryButton
             variant="contained"
             onClick={handleNext}
-            disabled={providerLoading || toolLoading || loading}
+            disabled={tyk.loading || toolLoading || loading || Boolean(tykBlocked)}
+            data-testid="wizard-next"
           >
             {activeStep === STEPS.CONFIGURE_TOOL ? 'Create Tool' : 'Next'}
           </PrimaryButton>

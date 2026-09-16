@@ -233,10 +233,12 @@ flowchart TD
   * Manages tool dependencies with add/remove functionality.
 
 * **Import OpenAPI Wizard:**
-  * Multi-step wizard for importing tools from OpenAPI specifications.
-  * Steps include: Select Provider, Configure Provider, Select API, Direct Import, Configure Tool.
-  * Supports importing from popular API providers or direct specification upload.
-  * Automatically extracts operations from specifications.
+  * Multi-step wizard for importing tools from OpenAPI specifications; opened from the Tools list (needs `tools:write`).
+  * Two import methods: **Direct Import** (URL, file upload or paste; steps Select Provider → Import Specification → Configure Tool) and **Tyk Dashboard** (Enterprise; steps Select Provider → Choose Connection → Select API → Configure Tool).
+  * The Tyk Dashboard method reads the Dashboard through a saved **Tyk connection** (`tyk_connections`, the same table, Dashboard client, URL policy and capability probe the Tyk MCP integration uses; see `TykMCPIntegration.md`). There is no per-wizard URL/token entry any more: the old process-global `providers/` registry and the `/api/v1/providers/*` routes were removed on 2026-09-17, so the community edition offers Direct Import only and shows the enterprise prompt on the Tyk card.
+  * The connection step lists non-disabled connections with their status and whether the Dashboard user may read APIs, and offers an inline **Add connection** form (name, Dashboard URL, access token, optional organisation id; "Allow internal host" only with `tyk-connections:execute`) with Test connection (`POST /tyk-connections/probe`) and Save (`POST /tyk-connections`, catalogue mode by default). The button is shown only to holders of `tyk-connections:write`; others are told to ask an administrator. A pending (not yet activated) connection is enough to import.
+  * Backend routes, all `tools:write`: `GET /api/v1/tools/import/tyk/connections` (slim projection: id, name, dashboard_url, status, degraded, effective_mode, `apis_read` capability state; never a token hint), `GET …/connections/:id/apis?q=` (Tyk OAS APIs; Classic definitions are filtered out) and `GET …/connections/:id/apis/:api_id` (`tykmcp.SourceAPIDocument`). The definition keeps the `x-tyk-api-gateway` block but every credential under it (`upstream.authentication`, credential-looking request-header transforms) is masked to `***` by the enterprise service before it leaves the server, so a tool never stores an upstream secret.
+  * The wizard derives the tool name from the Dashboard API name, the description from the OAS `info.description`, and extracts operations and the security scheme client-side exactly like Direct Import does; the operator can edit everything on the Configure Tool step before `POST /tools`.
 
 * **Chat Interface Tool Integration:**
   * Sidebar displays available and currently used tools.

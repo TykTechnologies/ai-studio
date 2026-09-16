@@ -28,8 +28,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
-	"github.com/TykTechnologies/midsommar/v2/providers"
-	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
@@ -81,7 +79,6 @@ type API struct {
 	auth                          *auth.AuthService
 	proxy                         *proxy.Proxy
 	staticFiles                   embed.FS
-	providers                     *providers.Registry
 	setupChatRoutesFunc           func(*gin.RouterGroup)
 	ssoService                    sso.Service
 	licensingService              licensing.Service
@@ -119,15 +116,6 @@ func (a *API) SetAuditService(s audit.Service) {
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
 	gin.SetMode(gin.ReleaseMode)
-
-	// Initialize provider registry
-	providerRegistry := providers.NewRegistry()
-
-	// Register the Tyk Dashboard provider by default
-	tykProvider := tyk.NewTykDashboardProvider(providers.ProviderConfig{})
-	if err := providerRegistry.RegisterProvider("tyk", tykProvider); err != nil {
-		log.Printf("Failed to register Tyk provider: %v", err)
-	}
 
 	// Use gin.New() instead of gin.Default() to have control over middleware
 	// gin.Default() adds Logger and Recovery middleware automatically
@@ -191,7 +179,6 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		config:           config,
 		proxy:            proxy,
 		staticFiles:      staticFiles,
-		providers:        providerRegistry,
 		licensingService: licensingService,
 	}
 
@@ -854,9 +841,10 @@ func (a *API) setupRoutes() {
 	v1.GET("/tools/:id/dependents", authz.Read("tools"), a.getToolDependents)
 	v1.HandleFn("POST", "/tools/bulk", bulkActionPermission("tools"), a.bulkTools)
 
-	// Provider routes
-	providerAPI := NewProviderAPI(a)
-	providerAPI.RegisterRoutes(v1)
+	// Tools import from a Tyk Dashboard connection (Enterprise; CE answers 403)
+	v1.GET("/tools/import/tyk/connections", authz.Write("tools"), a.listToolImportConnections)
+	v1.GET("/tools/import/tyk/connections/:id/apis", authz.Write("tools"), a.listToolImportAPIs)
+	v1.GET("/tools/import/tyk/connections/:id/apis/:api_id", authz.Write("tools"), a.getToolImportAPIDocument)
 
 	// Model Price routes
 	v1.POST("/model-prices", authz.Write("model-prices"), a.createModelPrice)

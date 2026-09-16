@@ -73,8 +73,18 @@ func TestTykMCPCommunity_NotAvailable(t *testing.T) {
 		{"POST", "/api/v1/mcp-credentials/x/revoke"},
 		{"POST", "/api/v1/mcp-credentials/x/apply-drift"},
 		{"GET", "/api/v1/mcp-access-report"},
+		// The Tools import reads Dashboard APIs through the same service.
+		{"GET", "/api/v1/tools/import/tyk/connections"},
+		{"GET", "/api/v1/tools/import/tyk/connections/1/apis"},
+		{"GET", "/api/v1/tools/import/tyk/connections/1/apis/x"},
 	} {
 		w := apitest.PerformAuthRequest(r, rq.method, rq.path, body, key)
 		assert.Equal(t, http.StatusForbidden, w.Code, "%s %s", rq.method, rq.path)
+	}
+
+	// A malformed connection id is refused before the service is asked.
+	for _, path := range []string{"/api/v1/tools/import/tyk/connections/abc/apis", "/api/v1/tools/import/tyk/connections/0/apis/x"} {
+		w := apitest.PerformAuthRequest(r, "GET", path, nil, key)
+		assert.Equal(t, http.StatusBadRequest, w.Code, path)
 	}
 }

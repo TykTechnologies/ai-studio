@@ -143,14 +143,14 @@ const ToolList = () => {
       <TitleBox top="64px">
         <Typography variant="headingXLarge">Tools</Typography>
         <Stack direction="row" spacing={2}>
-          <PrimaryOutlineButton
-            variant="contained"
-            startIcon={<DownloadIcon />}
-            onClick={() => setImportWizardOpen(true)}
-          >
-            Import OpenAPI
-          </PrimaryOutlineButton>
           <Can permission={P.TOOLS_WRITE}>
+            <PrimaryOutlineButton
+              variant="contained"
+              startIcon={<DownloadIcon />}
+              onClick={() => setImportWizardOpen(true)}
+            >
+              Import OpenAPI
+            </PrimaryOutlineButton>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -187,13 +187,15 @@ const ToolList = () => {
                     learnMoreLink={getDocsLink("tools")}
                     actions={
                       <>
-                        <PrimaryOutlineButton
-                          variant="contained"
-                          startIcon={<DownloadIcon />}
-                          onClick={() => setImportWizardOpen(true)}
-                        >
-                          Import OpenAPI
-                        </PrimaryOutlineButton>
+                        {canWrite && (
+                          <PrimaryOutlineButton
+                            variant="contained"
+                            startIcon={<DownloadIcon />}
+                            onClick={() => setImportWizardOpen(true)}
+                          >
+                            Import OpenAPI
+                          </PrimaryOutlineButton>
+                        )}
                         {canWrite && (
                           <PrimaryButton
                             variant="contained"

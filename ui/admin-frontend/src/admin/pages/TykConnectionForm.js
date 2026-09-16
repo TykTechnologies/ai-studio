@@ -33,144 +33,16 @@ import {
   CapabilityChips,
   TykUpsell,
   TykDisabledNotice,
+  emptyForm,
+  formToInput,
+  connectionToForm,
+  DataPlanes,
+  ProbePanel,
 } from "./tykShared";
 
-export const emptyForm = {
-  name: "",
-  description: "",
-  dashboard_url: "",
-  dashboard_access_token: "",
-  gateway_base_url: "",
-  org_id: "",
-  declared_mode: "catalogue",
-  sync_interval_seconds: 300,
-  allow_internal_host: false,
-  template_id: "",
-  auto_publish: false,
-  default_privacy_score: "",
-  accept_handoffs: true,
-  alias_prefix: "studio:",
-  expires_in_seconds: 0,
-  mdcb_url: "",
-  mdcb_access_token: "",
-  mdcb_allow_internal_host: false,
-  known_gateway_tags: "",
-  gateway_base_urls: [],
-};
-
-const parseTags = (text) =>
-  text
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((tag) => ({ tag }));
-
-const baseUrlsToMap = (rows) =>
-  rows.reduce((acc, row) => {
-    if (row.tag.trim()) acc[row.tag.trim()] = row.url.trim();
-    return acc;
-  }, {});
-
-/**
- * formToInput turns the form state into the create/patch body. Tokens are
- * only sent when the user typed one; an empty token on edit keeps the stored
- * one. Exported so the test can assert the exact payload.
- */
-export const formToInput = (form, editing) => {
-  const input = {
-    name: form.name,
-    description: form.description,
-    dashboard_url: form.dashboard_url,
-    gateway_base_url: form.gateway_base_url,
-    org_id: form.org_id,
-    declared_mode: form.declared_mode,
-    sync_interval_seconds: Number(form.sync_interval_seconds) || 0,
-    allow_internal_host: Boolean(form.allow_internal_host),
-    template_id: (form.template_id || "").trim(),
-    auto_publish: Boolean(form.auto_publish),
-    accept_handoffs: Boolean(form.accept_handoffs),
-    key_defaults: { alias_prefix: form.alias_prefix || "studio:", expires_in_seconds: Number(form.expires_in_seconds) || 0 },
-    mdcb_url: form.mdcb_url,
-    mdcb_allow_internal_host: Boolean(form.mdcb_allow_internal_host),
-    known_gateway_tags: parseTags(form.known_gateway_tags),
-    gateway_base_urls: baseUrlsToMap(form.gateway_base_urls),
-  };
-  if (form.default_privacy_score !== "" && form.default_privacy_score !== null) {
-    input.default_privacy_score = Number(form.default_privacy_score);
-  } else if (editing) {
-    input.clear_default_privacy_score = true;
-  }
-  if (form.dashboard_access_token) input.dashboard_access_token = form.dashboard_access_token;
-  if (form.mdcb_access_token) input.mdcb_access_token = form.mdcb_access_token;
-  return input;
-};
-
-export const connectionToForm = (connection) => ({
-  ...emptyForm,
-  name: connection.name || "",
-  description: connection.description || "",
-  dashboard_url: connection.dashboard_url || "",
-  gateway_base_url: connection.gateway_base_url || "",
-  org_id: connection.org_id || "",
-  declared_mode: connection.declared_mode || "catalogue",
-  sync_interval_seconds: connection.sync_interval_seconds || 300,
-  allow_internal_host: Boolean(connection.allow_internal_host),
-  template_id: connection.template_id || "",
-  auto_publish: Boolean(connection.auto_publish),
-  default_privacy_score:
-    connection.default_privacy_score === null || connection.default_privacy_score === undefined
-      ? ""
-      : connection.default_privacy_score,
-  accept_handoffs: connection.accept_handoffs !== false,
-  alias_prefix: connection.key_defaults?.alias_prefix || "studio:",
-  expires_in_seconds: connection.key_defaults?.expires_in_seconds || 0,
-  mdcb_url: connection.mdcb_url || "",
-  mdcb_allow_internal_host: Boolean(connection.mdcb_allow_internal_host),
-  known_gateway_tags: (connection.known_gateway_tags || []).map((t) => t.tag).join(", "),
-  gateway_base_urls: Object.entries(connection.gateway_base_urls || {}).map(([tag, url]) => ({ tag, url })),
-});
-
-// DataPlanes lists what MDCB reported, one line per data plane.
-const DataPlanes = ({ planes }) =>
-  (planes || []).length > 0 ? (
-    <Box sx={{ mt: 1 }}>
-      <Typography variant="subtitle2">Data planes (MDCB)</Typography>
-      {planes.map((dp) => (
-        <Typography key={dp.group_id} variant="body2">
-          {dp.group_id}: {dp.node_count} node(s), tags {(dp.tags || []).join(", ") || "none"}
-          {dp.healthy ? "" : " (unhealthy)"}
-        </Typography>
-      ))}
-    </Box>
-  ) : null;
-
-// ProbePanel shows what a probe learned about a Dashboard.
-export const ProbePanel = ({ result }) => {
-  if (!result) return null;
-  return (
-    <Box sx={{ mt: 2 }} data-testid="probe-panel">
-      <Alert severity={result.reachable ? (result.effective_mode ? "success" : "warning") : "error"} sx={{ mb: 1 }}>
-        {result.reachable
-          ? result.effective_mode
-            ? `Dashboard reachable. Effective mode: ${MODE_LABELS[result.effective_mode]}.`
-            : "Dashboard reachable but not usable in any mode."
-          : "Dashboard not reachable with these settings."}
-        {result.org_id ? ` Organisation ${result.org_id}.` : ""}
-      </Alert>
-      <CapabilityChips capabilities={result.capabilities} />
-      {(result.warnings || []).length > 0 && (
-        <Box sx={{ mt: 1 }}>
-          {result.warnings.map((w, i) => (
-            <Typography key={i} variant="body2" color="warning.main">
-              {w}
-            </Typography>
-          ))}
-        </Box>
-      )}
-      <DataPlanes planes={result.data_planes} />
-    </Box>
-  );
-};
+// The form pieces the Tools import wizard shares live in tykShared; they
+// stay exported from here for existing imports and tests.
+export { emptyForm, formToInput, connectionToForm, ProbePanel };
 
 /**
  * TykConnectionForm creates or edits a connection on its own page, like the

@@ -58,6 +58,14 @@ Activating a connection is an `execute` action on the `tyk-connections`
 resource. Set `TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR=true` to require that the
 activator is not the person who created or last edited the connection.
 
+Connections serve more than MCP: the Tools list's **Import OpenAPI** wizard
+imports a Tyk OAS API as a tool through the same connection (see
+[Tools](./tools.md#importing-from-a-tyk-dashboard-enterprise)), and can add a
+connection inline. That import needs only `tools:write` plus a connection
+whose Dashboard user may read APIs; a pending connection is enough, so a
+tool author with `tyk-connections:write` can connect a Dashboard without an
+activator.
+
 ### Dashboard user recipes
 
 Create a dedicated Dashboard user per connection and give it a user group

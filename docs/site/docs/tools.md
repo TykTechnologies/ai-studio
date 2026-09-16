@@ -76,6 +76,16 @@ Administrators define and manage Tools via the UI or API:
 5.  **Add Documentation:** Provide natural language instructions for the LLM.
 6.  **Assign Filters (Optional):** Add request/response filters.
 
+### Importing from a Tyk Dashboard (Enterprise)
+
+The **Import OpenAPI** button on the Tools list opens a wizard with two methods: a direct import (URL, file or pasted document) and, in the Enterprise Edition, an import from a **Tyk Dashboard**. The Dashboard import uses the same [Tyk connections](./tyk-mcp-integration.md#connections-and-trust-modes) the MCP integration uses, so a Dashboard is connected once, with its access token stored encrypted, and reused everywhere.
+
+1.  **Choose a connection.** The wizard lists the saved connections with their status. If none fits, **Add connection** opens an inline form (name, Dashboard URL, access token, optional organisation id) with a **Test connection** button that runs the capability probe; saving creates the connection in `catalogue` mode and selects it. Adding a connection needs the `tyk-connections:write` permission; the import itself needs `tools:write`. Everything else about the connection (trust mode, gateway URLs, MDCB, API template) is edited later under Settings → Tyk Connections.
+2.  **Select an API.** The Tyk OAS APIs on that Dashboard are listed by name and listen path. Classic (non-OAS) definitions cannot be imported as tools.
+3.  **Configure the tool.** Name, description, privacy level and the security scheme are pre-filled from the definition and can be edited before the tool is created.
+
+The imported document keeps its `x-tyk-api-gateway` extension, but every credential under it (upstream authentication, credential-looking request-header transforms) is masked before it reaches AI Studio. Configure the tool's own credentials through a stored [Secret](./secrets.md) as for any other tool.
+
 ## Organizing & Assigning Tools (Admin)
 
 *   **Create Catalogues:** Group related tools into Tool Catalogues (e.g., "CRM Tools", "Search Tools").

@@ -5,8 +5,8 @@ export const PROVIDER_TYPES = {
 
 export const STEPS = {
   SELECT_PROVIDER: "SELECT_PROVIDER",
-  // Tyk Dashboard steps
-  CONFIGURE_PROVIDER: "CONFIGURE_PROVIDER",
+  // Tyk Dashboard steps: pick (or add) a saved Tyk connection, then an API
+  SELECT_CONNECTION: "SELECT_CONNECTION",
   SELECT_API: "SELECT_API",
   // Direct Import steps
   DIRECT_IMPORT: "DIRECT_IMPORT",
@@ -18,7 +18,7 @@ export const STEPS = {
 export const STEP_SEQUENCES = {
   [PROVIDER_TYPES.TYK_DASHBOARD]: [
     STEPS.SELECT_PROVIDER,
-    STEPS.CONFIGURE_PROVIDER,
+    STEPS.SELECT_CONNECTION,
     STEPS.SELECT_API,
     STEPS.CONFIGURE_TOOL,
   ],
@@ -31,8 +31,24 @@ export const STEP_SEQUENCES = {
 
 export const STEP_LABELS = {
   [STEPS.SELECT_PROVIDER]: "Select Provider",
-  [STEPS.CONFIGURE_PROVIDER]: "Configure Provider",
+  [STEPS.SELECT_CONNECTION]: "Choose Connection",
   [STEPS.SELECT_API]: "Select API",
   [STEPS.DIRECT_IMPORT]: "Import Specification",
   [STEPS.CONFIGURE_TOOL]: "Configure Tool",
 };
+
+// The import methods are fixed: the wizard has no server-side registry.
+export const IMPORT_METHODS = [
+  {
+    id: "direct",
+    type: PROVIDER_TYPES.DIRECT_IMPORT,
+    name: "Direct Import",
+    description: "Import from URL or upload OpenAPI specification file",
+  },
+  {
+    id: "tyk",
+    type: PROVIDER_TYPES.TYK_DASHBOARD,
+    name: "Tyk Dashboard",
+    description: "Import an API from a connected Tyk Dashboard (Enterprise)",
+  },
+];

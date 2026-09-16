@@ -41,37 +41,6 @@ export const createTool = async (toolData) => {
 };
 
 /**
- * Get providers list
- * @returns {Promise} Providers list response
- */
-export const getProviders = async () => {
-  try {
-    const response = await apiClient.get('/providers');
-    return response.data.data;
-  } catch (error) {
-    console.error('Error fetching providers:', error);
-    throw error;
-  }
-};
-
-/**
- * Configure provider
- * @param {string} providerId - Provider ID
- * @param {object} config - Provider configuration
- * @returns {Promise} Provider configuration response
- */
-export const configureProvider = async (providerId, config) => {
-  try {
-    await apiClient.post(`/providers/${providerId}/configure`, { config });
-    const response = await apiClient.get(`/providers/${providerId}/specs`);
-    return response.data.data;
-  } catch (error) {
-    console.error('Error configuring provider:', error);
-    throw error;
-  }
-};
-
-/**
  * Create tool with operations
  * @param {object} toolData - Tool data
  * @param {string[]} operations - Array of operation IDs
@@ -92,4 +61,36 @@ export const createToolWithOperations = async (toolData, operations) => {
     console.error('Error creating tool with operations:', error);
     throw error;
   }
+};
+
+// --- Tyk Dashboard import (Enterprise) ---
+// The wizard reads a Dashboard through a saved Tyk connection. These routes
+// are scoped to the tools permission and return no secrets.
+
+/** Whether the Tyk integration is available and switched on. */
+export const getTykStatus = async () => {
+  const response = await apiClient.get('/tyk-mcp/status');
+  return response.data;
+};
+
+/** Non-disabled Tyk connections, as a slim projection. */
+export const listTykConnections = async () => {
+  const response = await apiClient.get('/tools/import/tyk/connections');
+  return response.data || [];
+};
+
+/** Tyk OAS APIs on one connection. */
+export const listTykAPIs = async (connectionId, q = '') => {
+  const response = await apiClient.get(`/tools/import/tyk/connections/${connectionId}/apis`, {
+    params: q ? { q } : undefined,
+  });
+  return response.data || [];
+};
+
+/** One Tyk OAS API definition with upstream credentials masked. */
+export const getTykAPIDocument = async (connectionId, apiId) => {
+  const response = await apiClient.get(
+    `/tools/import/tyk/connections/${connectionId}/apis/${encodeURIComponent(apiId)}`
+  );
+  return response.data;
 };

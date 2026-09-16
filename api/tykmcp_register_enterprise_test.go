@@ -130,7 +130,7 @@ func newWritableFakeDashboard(t *testing.T, token string) *writableFakeDashboard
 		case r.Method == "GET" && path == "/api/apis":
 			_, _ = w.Write([]byte(`{"apis":[{"api_definition":{"api_id":"api-orders","name":"Orders API","active":true,"is_oas":true,"proxy":{"listen_path":"/orders/"}}}],"pages":1}`))
 		case r.Method == "GET" && path == "/api/apis/oas/api-orders":
-			_, _ = w.Write([]byte(`{"openapi":"3.0.3","paths":{"/orders/{id}":{"get":{"operationId":"getOrder","summary":"Get order"}}}}`))
+			_, _ = w.Write([]byte(`{"openapi":"3.0.3","info":{"title":"Orders","description":"Order lookups"},"paths":{"/orders/{id}":{"get":{"operationId":"getOrder","summary":"Get order"}}},"x-tyk-api-gateway":{"info":{"id":"api-orders","name":"Orders API","state":{"active":true}},"server":{"listenPath":{"value":"/orders/","strip":true}},"upstream":{"url":"https://orders.internal","authentication":{"enabled":true,"basic":{"username":"svc","password":"ORDERS-UPSTREAM-SECRET"}}}}}`))
 		case r.Method == "POST" && path == "/api/keys/preview":
 			_, _ = w.Write([]byte(`{"key_id":"","data":{"org_id":"org-1"}}`))
 		default:
