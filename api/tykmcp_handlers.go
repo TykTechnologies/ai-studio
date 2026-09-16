@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -234,6 +235,18 @@ type tykConnectionActionInput struct {
 	Reason string `json:"reason"`
 }
 
+// cleanReason normalises a free-text reason that is stored and later shown
+// to administrators: markup is stripped by the HTML tokenizer (cleanText),
+// surrounding space removed, and the result capped at max characters. The
+// UI renders reasons as text, so this is defence in depth.
+func cleanReason(raw string, max int) (string, bool) {
+	reason := strings.TrimSpace(cleanText(strings.TrimSpace(raw)))
+	if len(reason) > max {
+		return "", false
+	}
+	return reason, true
+}
+
 // activateTykConnection godoc
 // @Summary Activate a Tyk Dashboard connection
 // @Description Probes the Dashboard and makes the connection usable. Recorded in the audit trail.
@@ -283,7 +296,12 @@ func (a *API) disableTykConnection(c *gin.Context) {
 		webhookBadRequest(c, "invalid request body")
 		return
 	}
-	view, err := a.tykMCPService().DisableConnection(c.Request.Context(), actor, id, in.Reason)
+	reason, ok := cleanReason(in.Reason, 255)
+	if !ok {
+		webhookBadRequest(c, "reason is too long")
+		return
+	}
+	view, err := a.tykMCPService().DisableConnection(c.Request.Context(), actor, id, reason)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to disable connection")
 		return

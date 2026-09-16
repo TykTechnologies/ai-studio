@@ -100,6 +100,9 @@ func TestTykMCPEnterprise_PortalAssetClass(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	decodeWebhookJSON(t, w, &page)
 	assert.Len(t, page.Data, 1)
+	if assert.Len(t, page.Data[0].Attributes.Catalogs, 1, "the item lists the tool catalogue it belongs to") {
+		assert.Equal(t, "AI catalogue", page.Data[0].Attributes.Catalogs[0].Name)
+	}
 	w = apitest.PerformAuthRequest(r, "GET", "/common/catalog?type=mcp_server&catalog=tool:9999", nil, member.APIKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	decodeWebhookJSON(t, w, &page)

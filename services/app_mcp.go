@@ -85,25 +85,27 @@ func (s *Service) ValidateMCPServerBindings(userID uint, isAdmin bool, llmIDs []
 	return ordered, nil
 }
 
-// SetAppMCPServers replaces the App's MCP server bindings and reconciles the
-// access-grant ledger. Callers validate with ValidateMCPServerBindings first.
-func (s *Service) SetAppMCPServers(appID uint, serverIDs []uint) error {
+// SetAppMCPServers replaces the App's MCP server bindings, reconciles the
+// access-grant ledger and returns the App reloaded with its associations,
+// so callers answer with the new state without a second fetch. Callers
+// validate with ValidateMCPServerBindings first.
+func (s *Service) SetAppMCPServers(appID uint, serverIDs []uint) (*models.App, error) {
 	var app models.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return err
+		return nil, err
 	}
 	ids := uniqueUintIDs(serverIDs)
 	var servers []models.MCPServer
 	if len(ids) > 0 {
 		if err := s.DB.Where("id IN ?", ids).Find(&servers).Error; err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if err := s.DB.Model(&app).Association("MCPServers").Replace(servers); err != nil {
-		return fmt.Errorf("failed to set app MCP servers: %w", err)
+		return nil, fmt.Errorf("failed to set app MCP servers: %w", err)
 	}
 	s.syncAppMCPGrants(appID)
-	return nil
+	return s.GetAppByID(appID)
 }
 
 // ClearAppMCPServers removes every MCP binding (App deletion).

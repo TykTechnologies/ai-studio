@@ -127,11 +127,12 @@ func (a *API) credentialAction(c *gin.Context, fallback string, fn func(actor ty
 		webhookBadRequest(c, "invalid request body")
 		return
 	}
-	if len(in.Reason) > 255 {
+	reason, ok := cleanReason(in.Reason, 255)
+	if !ok {
 		webhookBadRequest(c, "reason is too long")
 		return
 	}
-	view, err := fn(actor, c.Param("id"), in.Reason)
+	view, err := fn(actor, c.Param("id"), reason)
 	if err != nil {
 		tykMCPErrorResponse(c, err, fallback)
 		return

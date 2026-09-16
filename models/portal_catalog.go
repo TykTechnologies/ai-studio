@@ -49,6 +49,12 @@ func ToolCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint
 	return catalogueMemberships(db, "tool_catalogue_tools", "tool_catalogue_id", "tool_id", catalogueIDs)
 }
 
+// MCPServerCatalogueMemberships maps MCP server ids to the tool catalogues
+// (among catalogueIDs) they belong to.
+func MCPServerCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint, error) {
+	return catalogueMemberships(db, "tool_catalogue_mcp_servers", "tool_catalogue_id", "mcp_server_id", catalogueIDs)
+}
+
 // Base queries for the objects a user can use, one per type. They are the
 // GetAccessible* rules (the user's teams -> their catalogues -> active
 // objects) as composable queries, so the portal catalog can add its filters

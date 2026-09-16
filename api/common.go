@@ -486,13 +486,8 @@ func (a *API) createUserApp(c *gin.Context) {
 
 	// MCP server bindings are validated before the app exists so a refusal
 	// leaves nothing behind.
-	if len(req.MCPServerIDs) > 0 {
-		if _, err := a.service.ValidateMCPServerBindings(currentUser.ID, currentUser.IsAdmin, req.LLMIDs, req.MCPServerIDs); err != nil {
-			if !mcpBindingError(c, err) {
-				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-			}
-			return
-		}
+	if len(req.MCPServerIDs) > 0 && !a.validateAppMCPBindings(c, currentUser.ID, currentUser.IsAdmin, req.LLMIDs, req.MCPServerIDs) {
+		return
 	}
 
 	// Create the app (with plugin resources if any)
@@ -532,12 +527,9 @@ func (a *API) createUserApp(c *gin.Context) {
 	currentAppTools := app.Tools // Explicitly copy/reference before response construction
 
 	if len(req.MCPServerIDs) > 0 {
-		if err := a.service.SetAppMCPServers(app.ID, req.MCPServerIDs); err != nil {
-			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		var ok bool
+		if app, ok = a.applyAppMCPServers(c, app, req.MCPServerIDs); !ok {
 			return
-		}
-		if reloaded, err := a.service.GetAppByID(app.ID); err == nil {
-			app = reloaded
 		}
 	}
 

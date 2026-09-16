@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -63,15 +62,8 @@ func (a *API) createApp(c *gin.Context) {
 	// MCP server bindings are validated before the app exists so a refusal
 	// leaves nothing behind.
 	if input.Data.Attributes.MCPServerIDs != nil {
-		actorUser, _ := c.Get("user")
-		actorID, actorAdmin := uint(0), true
-		if u, ok := actorUser.(*models.User); ok && u != nil {
-			actorID, actorAdmin = u.ID, u.IsAdmin || authz.Can(c, authz.Write("apps"))
-		}
-		if _, err := a.service.ValidateMCPServerBindings(actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs); err != nil {
-			if !mcpBindingError(c, err) {
-				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-			}
+		actorID, actorAdmin := adminAppActor(c)
+		if !a.validateAppMCPBindings(c, actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs) {
 			return
 		}
 	}
@@ -174,12 +166,9 @@ func (a *API) createApp(c *gin.Context) {
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {
-		if err := a.service.SetAppMCPServers(app.ID, *input.Data.Attributes.MCPServerIDs); err != nil {
-			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		var ok bool
+		if app, ok = a.applyAppMCPServers(c, app, *input.Data.Attributes.MCPServerIDs); !ok {
 			return
-		}
-		if reloaded, err := a.service.GetAppByID(app.ID); err == nil {
-			app = reloaded
 		}
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": a.serializeAppWithPluginResources(app)})
@@ -291,15 +280,8 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {
-		actorUser, _ := c.Get("user")
-		actorID, actorAdmin := uint(0), true
-		if u, ok := actorUser.(*models.User); ok && u != nil {
-			actorID, actorAdmin = u.ID, u.IsAdmin || authz.Can(c, authz.Write("apps"))
-		}
-		if _, err := a.service.ValidateMCPServerBindings(actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs); err != nil {
-			if !mcpBindingError(c, err) {
-				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-			}
+		actorID, actorAdmin := adminAppActor(c)
+		if !a.validateAppMCPBindings(c, actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs) {
 			return
 		}
 	}
@@ -383,12 +365,9 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {
-		if err := a.service.SetAppMCPServers(app.ID, *input.Data.Attributes.MCPServerIDs); err != nil {
-			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		var ok bool
+		if app, ok = a.applyAppMCPServers(c, app, *input.Data.Attributes.MCPServerIDs); !ok {
 			return
-		}
-		if reloaded, err := a.service.GetAppByID(app.ID); err == nil {
-			app = reloaded
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})

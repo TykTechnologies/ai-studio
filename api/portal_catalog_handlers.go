@@ -313,7 +313,7 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 			items[i] = mcpServerCatalogItem(&servers[i])
 		}
 		idOf = func(i int) uint { return servers[i].ID }
-		memberships, objectType = nil, models.GovernedObjectTypeMCPServer
+		memberships, objectType = models.MCPServerCatalogueMemberships, models.GovernedObjectTypeMCPServer
 	default:
 		return nil, nil
 	}
@@ -321,7 +321,9 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 		return []CatalogItem{}, nil
 	}
 
-	catalogues, err := a.accessibleCataloguesFor(src.typ, user)
+	// MCP servers live in tool catalogues, so their memberships are labelled
+	// from the same list a tool's are.
+	catalogues, err := a.accessibleCataloguesFor(src.catalogueFamily(), user)
 	if err != nil {
 		return nil, err
 	}

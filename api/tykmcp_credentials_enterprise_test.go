@@ -212,8 +212,14 @@ func TestTykMCPEnterprise_CredentialFlow(t *testing.T) {
 	assert.Equal(t, "revoked", old.Status)
 
 	// Admin suspends and resumes; owner revokes.
-	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-credentials/"+rotated.Credential.ID+"/suspend", map[string]string{"reason": "audit"}, adminKey)
+	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-credentials/"+rotated.Credential.ID+"/suspend", map[string]string{"reason": strings.Repeat("x", 256)}, adminKey)
+	require.Equal(t, http.StatusBadRequest, w.Code, "a reason longer than 255 characters is refused")
+	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-credentials/"+rotated.Credential.ID+"/suspend", map[string]string{"reason": "<script>alert(1)</script>audit <b>Q3</b>"}, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var suspended models.MCPCredentialResponse
+	decodeWebhookJSON(t, w, &suspended)
+	assert.Equal(t, "suspended", suspended.Status)
+	assert.Equal(t, "alert(1)audit Q3", suspended.RevokeReason, "markup is stripped from the stored reason")
 	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-credentials/"+rotated.Credential.ID+"/resume", nil, adminKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	w = apitest.PerformAuthRequest(r, "POST", "/common/apps/"+app.ID+"/mcp/credentials/"+rotated.Credential.ID+"/revoke", nil, member.APIKey)
