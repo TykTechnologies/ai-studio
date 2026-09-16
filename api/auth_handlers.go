@@ -86,6 +86,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["feature_groups"] = group_access.IsFilteringEnabled()
 	featureSet["feature_model_router"] = model_router.IsEnterpriseAvailable()
 	featureSet["feature_webhooks"] = webhooks.IsEnterpriseAvailable()
+	featureSet["feature_tyk_mcp"] = a.tykMCPService().Status().Enabled
 	featureSet["feature_rbac"] = a.service.Authz().Enabled()
 
 	// New assistant-ui chat front end; CHAT_UI_V2_ENABLED=false falls back to the v1 chat UI.

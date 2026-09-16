@@ -345,6 +345,8 @@ func init() {
 		Description: "Publish sets a data source active; only active data sources are served."})
 	Register(Resource{Key: "tools", Label: "Tools", Group: "Context management", Actions: crudxp,
 		Description: "Publish sets a tool active; only active tools are served."})
+	Register(Resource{Key: "mcp-servers", Label: "MCP servers", Group: "Context management", Actions: crudxp,
+		Description: "MCP servers proxied by a Tyk Gateway. Execute registers, pushes and links definitions on the Tyk Dashboard and creates policies; publish makes a server visible in the portal."})
 	Register(Resource{Key: "filters", Label: "Filters", Group: "Context management", Actions: crudx})
 	Register(Resource{Key: "filestores", Label: "File stores", Group: "Context management", Actions: crud})
 	Register(Resource{Key: "tags", Label: "Tags", Group: "Context management", Actions: crud})
@@ -377,6 +379,8 @@ func init() {
 		Description: "Outbound webhook targets and the delivery log. Execute approves, revokes, tests and replays: it sends platform data to an external URL."})
 
 	// Settings
+	Register(Resource{Key: "tyk-connections", Label: "Tyk connections", Group: "Settings", Actions: crudx, Sensitive: true, Privileged: true,
+		Description: "Connections to Tyk Dashboards for MCP proxy discovery, registration and key brokering. Execute activates, disables, probes and syncs a connection, and allows internal Dashboard hosts."})
 	Register(Resource{Key: "secrets", Label: "Secrets", Group: "Settings", Actions: crud,
 		Description: "Secret references. Values are never returned by the API."})
 	Register(Resource{Key: "branding", Label: "Branding", Group: "Settings", Actions: []Action{ActionRead, ActionWrite}})
@@ -386,6 +390,8 @@ func init() {
 		Description: "Publish sets an app active; inactive apps cannot authenticate against the gateway."})
 	Register(Resource{Key: "credentials", Label: "Credentials", Group: "AI Portal", Actions: crud, Sensitive: true,
 		Description: "App credentials. Reading a credential reveals its secret."})
+	Register(Resource{Key: "mcp-credentials", Label: "MCP credentials", Group: "AI Portal", Actions: crudx, Sensitive: true, Privileged: true,
+		Description: "Tyk access keys minted for Apps that use MCP servers. Execute mints, rotates, suspends, revokes and applies widening changes."})
 	Register(Resource{Key: "edges", Label: "Edge gateways", Group: "AI Portal", Actions: crudx,
 		Description: "Edge gateway instances, namespaces and configuration sync."})
 

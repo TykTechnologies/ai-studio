@@ -64,6 +64,7 @@ var catalogTypeNames = map[string]string{
 	CatalogItemDatasource:     "data source",
 	CatalogItemTool:           "tool",
 	CatalogItemPluginResource: "resource",
+	CatalogItemMCPServer:      "MCP server",
 }
 
 type catalogQuery struct {
@@ -158,7 +159,10 @@ type catalogSource struct {
 	communityCol     string // empty when the type has no community submissions
 	catalogueIDCol   string
 	catalogueNameCol string
-	searchCols       []string
+	// catalogueType is the catalogue family the type belongs to when it is
+	// not its own (MCP servers live in tool catalogues). Empty means typ.
+	catalogueType string
+	searchCols    []string
 	// extraSearch is an optional clause with one "?" for the LIKE pattern
 	// (tags live in a join table).
 	extraSearch string
@@ -188,6 +192,14 @@ var catalogSources = []catalogSource{
 		searchCols: []string{"tools.name", "tools.description", "tools.available_operations"},
 		base:       models.AccessibleToolQuery,
 	},
+	{
+		// Tyk-managed MCP servers share the tool catalogues.
+		typ: CatalogItemMCPServer, table: "mcp_servers",
+		kindCol: "mcp_servers.kind", privacyCol: "mcp_servers.privacy_score", communityCol: "mcp_servers.community_submitted",
+		catalogueIDCol: "tool_catalogue_mcp_servers.tool_catalogue_id", catalogueNameCol: "tool_catalogues.name", catalogueType: CatalogItemTool,
+		searchCols: []string{"mcp_servers.name", "mcp_servers.description", "mcp_servers.long_description", "mcp_servers.listen_path", "mcp_servers.primitives", "mcp_servers.tags", "mcp_servers.auth_mode"},
+		base:       models.AccessibleMCPServerQuery,
+	},
 }
 
 func catalogSourceFor(typ string) *catalogSource {
@@ -209,10 +221,19 @@ func (src catalogSource) applies(q catalogQuery) bool {
 	if q.Community && src.communityCol == "" {
 		return false
 	}
-	if t, _ := q.catalogFilter(); t != "" && t != src.typ {
+	if t, _ := q.catalogFilter(); t != "" && (t != src.catalogueFamily() || src.catalogueIDCol == "") {
 		return false
 	}
 	return true
+}
+
+// catalogueFamily is the catalogue type a `catalog=<type>:<id>` filter must
+// name to apply to this source.
+func (src catalogSource) catalogueFamily() string {
+	if src.catalogueType != "" {
+		return src.catalogueType
+	}
+	return src.typ
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
@@ -243,7 +264,7 @@ func (src catalogSource) scope(q catalogQuery) func(*gorm.DB) *gorm.DB {
 		if q.Community {
 			db = db.Where(src.communityCol+" = ?", true)
 		}
-		if _, id := q.catalogFilter(); id != "" {
+		if _, id := q.catalogFilter(); id != "" && src.catalogueIDCol != "" {
 			db = db.Where(src.catalogueIDCol+" = ?", id)
 		}
 		typeName := strings.ToLower(catalogTypeNames[src.typ])
@@ -258,8 +279,10 @@ func (src catalogSource) scope(q catalogQuery) func(*gorm.DB) *gorm.DB {
 				clauses = append(clauses, "LOWER("+col+") LIKE ? ESCAPE '\\'")
 				args = append(args, pattern)
 			}
-			clauses = append(clauses, "LOWER("+src.catalogueNameCol+") LIKE ? ESCAPE '\\'")
-			args = append(args, pattern)
+			if src.catalogueNameCol != "" {
+				clauses = append(clauses, "LOWER("+src.catalogueNameCol+") LIKE ? ESCAPE '\\'")
+				args = append(args, pattern)
+			}
 			if src.extraSearch != "" {
 				clauses = append(clauses, src.extraSearch)
 				args = append(args, pattern)

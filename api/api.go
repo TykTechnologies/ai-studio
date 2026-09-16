@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
+	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
@@ -91,6 +92,9 @@ type API struct {
 	// webhooksFallback answers webhook routes when the service has no
 	// webhooks implementation attached (community stub semantics).
 	webhooksFallback webhooks.Service
+	// tykMCPFallback answers Tyk MCP routes when the service has no
+	// implementation attached (community stub semantics).
+	tykMCPFallback tykmcp.Service
 	auditHandler gin.HandlerFunc
 	// routePerms maps "METHOD /path" to the permission a route requires.
 	// Populated by permRouter at registration; see authz_routes.go.
@@ -179,6 +183,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 
 	api := &API{
 		webhooksFallback: webhooks.NewCommunityService(),
+		tykMCPFallback:   tykmcp.NewCommunityService(),
 		service:          service,
 		router:           router,
 		disableCORS:      disableCORS,
@@ -266,14 +271,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			csrf.Path("/"),
 		}
 		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {
-			// The dev frontend runs on :3000; CSRF_TRUSTED_ORIGINS (comma-separated
-			// host[:port] values) lets a locally served build on another port log in.
-			trusted := []string{"localhost:3000"}
-			for _, origin := range strings.Split(os.Getenv("CSRF_TRUSTED_ORIGINS"), ",") {
-				if origin = strings.TrimSpace(origin); origin != "" {
-					trusted = append(trusted, origin)
-				}
-			}
+			// The dev frontend proxies to the API from another origin (its own
+			// port, or a host-mapped port in Docker), so the browser's Origin never
+			// matches the request Host. Trust the SITE_URL host plus any extra
+			// CSRF_TRUSTED_ORIGINS (comma-separated host[:port] values).
+			trusted := devCSRFTrustedOrigins(os.Getenv("SITE_URL"), os.Getenv("CSRF_TRUSTED_ORIGINS"))
+			logger.Infof("DEVMODE: CSRF trusted origins: %s", strings.Join(trusted, ", "))
 			csrfOpts = append(csrfOpts, csrf.TrustedOrigins(trusted))
 		}
 		csrfMiddleware := csrf.Protect(
@@ -546,6 +549,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/catalog/llms/:id", a.getPortalCatalogLLM)
 	authed.GET("/catalog/datasources/:id", a.getPortalCatalogDatasource)
 	authed.GET("/catalog/tools/:id", a.getPortalCatalogTool)
+	authed.GET("/catalog/mcp-servers/:id", a.getPortalCatalogMCPServer)
 	authed.GET("/catalog/resources/:plugin_id/:slug/:id", a.getPortalCatalogPluginResource)
 	authed.GET("/apps", a.getUserApps)
 	authed.GET("/apps/usage-summary", a.getUserAppsUsageSummary)
@@ -554,6 +558,11 @@ func (a *API) setupRoutes() {
 	authed.GET("/apps/:id", a.getUserAppDetails)
 	authed.DELETE("/apps/:id", a.deleteUserApp)
 	authed.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
+	authed.GET("/apps/:id/mcp", a.getUserAppMCP)
+	authed.GET("/mcp/connections", a.listPortalMCPConnections)
+	authed.POST("/apps/:id/mcp/credentials", a.mintUserAppMCPCredential)
+	authed.POST("/apps/:id/mcp/credentials/:cid/rotate", a.rotateUserAppMCPCredential)
+	authed.POST("/apps/:id/mcp/credentials/:cid/revoke", a.revokeUserAppMCPCredential)
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
@@ -1071,6 +1080,53 @@ func (a *API) setupRoutes() {
 	v1.POST("/webhooks/deliveries/:id/replay", authz.Execute("webhooks"), a.replayWebhookDelivery)
 	v1.POST("/webhooks/deliveries/:id/cancel", authz.Execute("webhooks"), a.cancelWebhookDelivery)
 	v1.GET("/webhooks/stats", authz.Read("webhooks"), a.getWebhookStats)
+
+	// Tyk Dashboard MCP integration (Enterprise feature). Activating,
+	// disabling, probing and syncing a connection reach an external system,
+	// so they are execute permissions.
+	v1.GET("/tyk-mcp/status", authz.AnyAdmin, a.getTykMCPStatus)
+	v1.GET("/tyk-connections", authz.Read("tyk-connections"), a.listTykConnections)
+	v1.POST("/tyk-connections", authz.Write("tyk-connections"), a.createTykConnection)
+	v1.POST("/tyk-connections/probe", authz.Write("tyk-connections"), a.probeTykConnectionInput)
+	v1.GET("/tyk-connections/:id", authz.Read("tyk-connections"), a.getTykConnection)
+	v1.PATCH("/tyk-connections/:id", authz.Write("tyk-connections"), a.updateTykConnection)
+	v1.DELETE("/tyk-connections/:id", authz.Delete("tyk-connections"), a.deleteTykConnection)
+	v1.POST("/tyk-connections/:id/activate", authz.Execute("tyk-connections"), a.activateTykConnection)
+	v1.POST("/tyk-connections/:id/disable", authz.Execute("tyk-connections"), a.disableTykConnection)
+	v1.POST("/tyk-connections/:id/probe", authz.Execute("tyk-connections"), a.probeTykConnection)
+	v1.POST("/tyk-connections/:id/sync", authz.Execute("tyk-connections"), a.syncTykConnection)
+	v1.GET("/tyk-connections/:id/policies", authz.Read("tyk-connections"), a.listTykPolicies)
+	v1.GET("/tyk-connections/:id/sync-runs", authz.Read("tyk-connections"), a.listTykSyncRuns)
+	// Registration helpers and the minimal policy creator: creating policies
+	// writes to the Dashboard, so it is an execute on mcp-servers.
+	v1.GET("/tyk-connections/:id/apis", authz.Read("tyk-connections"), a.listTykSourceAPIs)
+	v1.GET("/tyk-connections/:id/apis/:api_id/operations", authz.Read("tyk-connections"), a.listTykSourceOperations)
+	v1.GET("/tyk-connections/:id/gateway-tags", authz.Read("tyk-connections"), a.listTykGatewayTags)
+	v1.POST("/tyk-connections/:id/policies", authz.Execute("mcp-servers"), a.createTykPolicy)
+	v1.PATCH("/tyk-connections/:id/policies/:pid", authz.Execute("mcp-servers"), a.updateTykPolicy)
+	v1.GET("/mcp-servers", authz.Read("mcp-servers"), a.listMCPServers)
+	v1.GET("/mcp-servers/:id", authz.Read("mcp-servers"), a.getMCPServer)
+	v1.PATCH("/mcp-servers/:id", authz.Write("mcp-servers"), a.updateMCPServer)
+	v1.DELETE("/mcp-servers/:id", authz.Delete("mcp-servers"), a.deleteMCPServer)
+	v1.POST("/mcp-servers/:id/activate", authz.Publish("mcp-servers"), a.publishMCPServer)
+	v1.POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.unpublishMCPServer)
+	v1.PUT("/mcp-servers/:id/catalogues", authz.Write("mcp-servers"), a.setMCPServerCatalogues)
+	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
+	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
+	v1.POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.pushMCPServer)
+	v1.GET("/mcp-servers/:id/handoff", authz.Read("mcp-servers"), a.getMCPServerHandoff)
+	v1.POST("/mcp-servers/:id/link", authz.Execute("mcp-servers"), a.linkMCPServer)
+	// Minted Tyk keys: minting, rotating, suspending, revoking and applying
+	// widening changes reach the Dashboard, so they are execute permissions.
+	v1.GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)
+	v1.POST("/mcp-credentials", authz.Execute("mcp-credentials"), a.mintMCPCredential)
+	v1.GET("/mcp-credentials/:id", authz.Read("mcp-credentials"), a.getMCPCredential)
+	v1.POST("/mcp-credentials/:id/rotate", authz.Execute("mcp-credentials"), a.rotateMCPCredential)
+	v1.POST("/mcp-credentials/:id/suspend", authz.Execute("mcp-credentials"), a.suspendMCPCredential)
+	v1.POST("/mcp-credentials/:id/resume", authz.Execute("mcp-credentials"), a.resumeMCPCredential)
+	v1.POST("/mcp-credentials/:id/revoke", authz.Execute("mcp-credentials"), a.revokeMCPCredential)
+	v1.POST("/mcp-credentials/:id/apply-drift", authz.Execute("mcp-credentials"), a.applyMCPCredentialDrift)
+	v1.GET("/mcp-access-report", authz.Read("mcp-credentials"), a.getMCPAccessReport)
 
 	// RBAC routes (Enterprise feature; the permission catalogue is served in both editions)
 	v1.GET("/rbac/permissions", authz.AnyAdmin, a.getPermissionCatalogue)

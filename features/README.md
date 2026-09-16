@@ -98,6 +98,14 @@ Each feature specification below provides detailed documentation on the individu
 - Searchable, exportable delivery log; audit trail, RBAC and notification integration
 - Admin UI pages under Governance → Webhooks
 
+### [Tyk Dashboard MCP Integration](TykMCPIntegration.md) (Enterprise)
+- Import Tyk-managed MCP proxies from one or more Dashboards and publish them to the portal as an asset class
+- Three connection trust modes (`catalogue`, `broker`, `full`) narrowed by a capability probe; MDCB and gateway-tag awareness
+- Policy bundles pinned per server; Studio-minted Tyk keys per App per connection, shown once, kept in step with the bundles (automatic narrowing, approved widening), external policies preserved
+- Registration wizard (remote MCP and REST-to-MCP) with dry run, push with conflict detection and secret splice, minimal policy creator
+- Community MCP server submissions with two-phase approval, handoff packages for platform-owned Dashboards and linking
+- Credential ledger, access report, audit trail, RBAC (`tyk-connections`, `mcp-servers`, `mcp-credentials`)
+
 ### [Budget Control](Budgeting.md)
 - Monthly spending caps for apps and LLMs
 - Real-time usage tracking and blocking

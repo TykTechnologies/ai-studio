@@ -156,6 +156,9 @@ const Drawer = () => {
         ...(features.feature_chat
           ? [{ id: 'tools', text: 'Tools', path: '/admin/tools', permission: P.TOOLS_READ }]
           : []),
+        ...(features.feature_tyk_mcp
+          ? [{ id: 'mcp-servers', text: 'MCP servers', path: '/admin/mcp-servers', permission: P.MCP_SERVERS_READ, exact: true }]
+          : []),
         ...(config?.is_enterprise
           ? [{ id: 'filters', text: 'Filters', path: '/admin/filters', permission: P.FILTERS_READ }]
           : []),
@@ -187,6 +190,9 @@ const Drawer = () => {
             subItems: [
               { id: 'portal-apps', text: 'Apps', path: '/admin/apps', permission: P.APPS_READ },
               { id: 'edge-gateways', text: 'Edge Gateways', path: '/admin/edge-gateways', permission: P.EDGES_READ },
+              ...(features.feature_tyk_mcp
+                ? [{ id: 'mcp-credentials', text: 'MCP credentials', path: '/admin/mcp-credentials', permission: P.MCP_CREDENTIALS_READ }]
+                : []),
             ],
           },
         ]
@@ -235,6 +241,9 @@ const Drawer = () => {
       subItems: [
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets', permission: P.SECRETS_READ },
         { id: 'branding', text: 'Branding', path: '/admin/branding', permission: P.BRANDING_WRITE },
+        ...(features.feature_tyk_mcp
+          ? [{ id: 'tyk-connections', text: 'Tyk Connections', path: '/admin/tyk-connections', permission: P.TYK_CONNECTIONS_READ }]
+          : []),
       ],
     },
     ...(features.feature_chat

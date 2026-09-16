@@ -40,6 +40,8 @@ const AppBuilder = () => {
   const [selectedDataSources, setSelectedDataSources] = useState([]);
   const [selectedLLMs, setSelectedLLMs] = useState([]);
   const [selectedTools, setSelectedTools] = useState([]);
+  const [mcpServers, setMCPServers] = useState([]);
+  const [selectedMCPServers, setSelectedMCPServers] = useState([]);
   const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
   const [pluginResourceSelections, setPluginResourceSelections] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -60,6 +62,7 @@ const AppBuilder = () => {
       dataSourceIds: selectedDataSources.map((ds) => String(ds.id)),
       llmIds: selectedLLMs.map((llm) => String(llm.id)),
       toolIds: selectedTools.map((tool) => String(tool.id)),
+      mcpServerIds: selectedMCPServers.map((s) => String(s.id)),
       pluginResourceIds: Object.fromEntries(
         Object.entries(pluginResourceSelections).map(([key, items]) => [
           key,
@@ -75,13 +78,29 @@ const AppBuilder = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataSourcesResponse, llmsResponse, toolsResponse, pluginResourcesResponse] =
+        const [dataSourcesResponse, llmsResponse, toolsResponse, pluginResourcesResponse, mcpResponse] =
           await Promise.all([
             pubClient.get("/common/accessible-datasources"),
             pubClient.get("/common/accessible-llms"),
             pubClient.get("/common/accessible-tools"),
             pubClient.get("/common/accessible-plugin-resources").catch(() => ({ data: { data: [] } })),
+            // Tyk-managed MCP servers (Enterprise) come from the unified
+            // catalog; the request fails harmlessly on Community Edition.
+            pubClient
+              .get("/common/catalog", { params: { type: "mcp_server", page_size: 100 } })
+              .catch(() => ({ data: { data: [] } })),
           ]);
+        // Only servers AI Studio brokers (key-backed) belong on an App;
+        // OAuth, mTLS and keyless servers are reached directly and the
+        // server refuses to bind them.
+        const mcpOptions = (mcpResponse.data?.data || [])
+          .filter((item) => item.attributes?.access_granted_via_app !== false)
+          .map((item) => ({
+            id: item.id,
+            name: item.attributes?.name || "",
+            attributes: item.attributes,
+          }));
+        setMCPServers(mcpOptions);
         setDataSources(dataSourcesResponse.data);
         setLLMs(llmsResponse.data);
         setTools(toolsResponse.data);
@@ -108,6 +127,12 @@ const AppBuilder = () => {
         if (toolId) {
           const tool = toolsResponse.data.find((t) => t.id === toolId);
           if (tool) setSelectedTools([tool]);
+        }
+
+        const mcpServerId = params.get("mcp_server");
+        if (mcpServerId) {
+          const server = mcpOptions.find((s) => String(s.id) === mcpServerId);
+          if (server) setSelectedMCPServers([server]);
         }
 
         // ?plugin_resource=<plugin id>:<slug>:<instance id>, from a plugin
@@ -161,6 +186,9 @@ const AppBuilder = () => {
         data_source_ids: selectedDataSources.map((ds) => parseInt(ds.id, 10)),
         llm_ids: selectedLLMs.map((llm) => parseInt(llm.id, 10)),
         tool_ids: selectedTools.map((tool) => parseInt(tool.id, 10)),
+        ...(selectedMCPServers.length > 0 && {
+          mcp_server_ids: selectedMCPServers.map((s) => parseInt(s.id, 10)),
+        }),
         ...(pluginResourcesPayload.length > 0 && {
           plugin_resources: pluginResourcesPayload,
         }),
@@ -191,9 +219,10 @@ const AppBuilder = () => {
       (selectedDataSources.length > 0 ||
         selectedLLMs.length > 0 ||
         selectedTools.length > 0 ||
+        selectedMCPServers.length > 0 ||
         hasPluginResourceSelections)
     );
-  }, [appName, description, selectedDataSources, selectedLLMs, selectedTools, hasPluginResourceSelections]);
+  }, [appName, description, selectedDataSources, selectedLLMs, selectedTools, selectedMCPServers, hasPluginResourceSelections]);
 
   if (isLoading)
     return (
@@ -296,6 +325,18 @@ const AppBuilder = () => {
                 getOptionLabel={jsonApiName}
               />
             </Box>
+            {mcpServers.length > 0 && (
+              <Box sx={{ mt: 3, mb: 2 }}>
+                <RelationshipPicker
+                  label="MCP servers (optional)"
+                  itemLabel="MCP server"
+                  value={selectedMCPServers}
+                  onChange={setSelectedMCPServers}
+                  options={mcpServers}
+                  getOptionLabel={(server) => server?.name ?? ""}
+                />
+              </Box>
+            )}
             {/* Dynamic Plugin Resource Sections: one picker per resource
                 type; selections are the full instance objects. Types whose
                 instances are not granted through an App (informational

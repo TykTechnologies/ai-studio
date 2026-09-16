@@ -111,7 +111,7 @@ type ManifestSchema struct {
 // types and is resolved to the concrete plugin ID when the manifest is loaded.
 func isValidManifestAppliesTo(target string) bool {
 	switch target {
-	case GovernedObjectTypeLLM, GovernedObjectTypeTool, GovernedObjectTypeDatasource, GovernedObjectTypeAll:
+	case GovernedObjectTypeLLM, GovernedObjectTypeTool, GovernedObjectTypeDatasource, GovernedObjectTypeMCPServer, GovernedObjectTypeAll:
 		return true
 	}
 	if !strings.HasPrefix(target, GovernedObjectTypePluginResourcePrefix) {

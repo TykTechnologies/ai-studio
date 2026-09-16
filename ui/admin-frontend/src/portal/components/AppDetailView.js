@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import AppMCPAccess from "./AppMCPAccess";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import {
   Typography,
@@ -606,6 +607,20 @@ const AppDetailView = () => {
               )) : <Typography variant="body2">No tools associated.</Typography>}
             </Box>
           </Grid>
+          {(app.attributes.mcp_servers || []).length > 0 && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>MCP servers:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-mcp-servers">
+                  {app.attributes.mcp_servers.map((server) => (
+                    <Chip key={server.id} label={server.name} />
+                  ))}
+                </Box>
+              </Grid>
+            </>
+          )}
           {/* Plugin Resources */}
           {pluginResources.length > 0 && pluginResources.map((pr) => (
             <React.Fragment key={`pr-${pr.plugin_id || ''}-${pr.resource_type_slug || ''}`}>
@@ -1414,6 +1429,12 @@ const AppDetailView = () => {
       </Paper>
 
       <Paper sx={{ p: 3, mt: 3 }}>
+        {(app.attributes.mcp_servers || []).length > 0 && (
+          <>
+            <SectionTitle>MCP Server Access Details</SectionTitle>
+            <AppMCPAccess appId={id} credentialActive={!!app.attributes.credential?.active} />
+          </>
+        )}
         <SectionTitle>Tool Access Details</SectionTitle>
         {appTools.length > 0 ? (
           appTools.map((tool) => (

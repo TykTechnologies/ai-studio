@@ -105,6 +105,21 @@ export const P = Object.freeze({
   WEBHOOKS_DELETE: p('webhooks', 'delete'),
   WEBHOOKS_EXECUTE: p('webhooks', 'execute'),
 
+  // Tyk Dashboard MCP integration (Enterprise)
+  TYK_CONNECTIONS_READ: p('tyk-connections', 'read'),
+  TYK_CONNECTIONS_WRITE: p('tyk-connections', 'write'),
+  TYK_CONNECTIONS_DELETE: p('tyk-connections', 'delete'),
+  TYK_CONNECTIONS_EXECUTE: p('tyk-connections', 'execute'),
+  MCP_SERVERS_READ: p('mcp-servers', 'read'),
+  MCP_SERVERS_WRITE: p('mcp-servers', 'write'),
+  MCP_SERVERS_DELETE: p('mcp-servers', 'delete'),
+  MCP_SERVERS_EXECUTE: p('mcp-servers', 'execute'),
+  MCP_SERVERS_PUBLISH: p('mcp-servers', 'publish'),
+  MCP_CREDENTIALS_READ: p('mcp-credentials', 'read'),
+  MCP_CREDENTIALS_WRITE: p('mcp-credentials', 'write'),
+  MCP_CREDENTIALS_DELETE: p('mcp-credentials', 'delete'),
+  MCP_CREDENTIALS_EXECUTE: p('mcp-credentials', 'execute'),
+
   // Settings
   SECRETS_READ: p('secrets', 'read'),
   SECRETS_WRITE: p('secrets', 'write'),

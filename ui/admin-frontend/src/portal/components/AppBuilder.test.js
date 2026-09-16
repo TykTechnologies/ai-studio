@@ -37,6 +37,12 @@ const llms = [
 ];
 const dataSources = [{ id: "3", attributes: { name: "Docs" } }];
 const tools = [{ id: "4", attributes: { name: "Weather" } }];
+// Tyk-managed MCP servers from the unified catalog: only key-backed ones
+// can be bound to an App; the OAuth one is reached directly.
+const mcpServers = [
+  { id: "12", type: "mcp_server", attributes: { name: "Weather MCP", brokerable: true, access_granted_via_app: true } },
+  { id: "13", type: "mcp_server", attributes: { name: "Tickets MCP (OAuth)", brokerable: false, access_granted_via_app: false } },
+];
 const resourceTypes = [
   { plugin_id: 3, slug: "vector-db", name: "Vector DBs", instances: [{ id: "i1", name: "Pinecone" }] },
   // Catalog-style type: nothing here is unlocked by an app credential, except
@@ -85,6 +91,7 @@ describe("AppBuilder pickers, name default and commit semantics", () => {
       if (url === "/common/accessible-llms") return Promise.resolve({ data: llms });
       if (url === "/common/accessible-tools") return Promise.resolve({ data: tools });
       if (url === "/common/accessible-plugin-resources") return Promise.resolve({ data: { data: resourceTypes } });
+      if (url === "/common/catalog") return Promise.resolve({ data: { data: mcpServers } });
       return Promise.resolve({ data: [] });
     });
     pubClient.post.mockResolvedValue({ data: { data: { id: "77" } } });
@@ -149,6 +156,15 @@ describe("AppBuilder pickers, name default and commit semantics", () => {
 
     fireEvent.click(within(picker("agents")).getByTestId("relationship-picker-add"));
     expect(pickerItems("agents")).toEqual(["Proxied Agent"]);
+  });
+
+  it("offers only MCP servers AI Studio brokers and ignores deep links to the rest", async () => {
+    renderBuilder({ path: "/portal/apps/new?mcp_server=13" });
+    await waitFor(() => expect(picker("MCP server")).toBeTruthy());
+    expect(within(picker("MCP server")).getByTestId("relationship-picker-options-count")).toHaveTextContent("1");
+    expect(pickerItems("MCP server")).toEqual([]);
+    fireEvent.click(within(picker("MCP server")).getByTestId("relationship-picker-add"));
+    expect(pickerItems("MCP server")).toEqual(["Weather MCP"]);
   });
 
   it("preselects an app-granted instance from a deep link", async () => {

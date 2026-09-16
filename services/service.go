@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
+	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"gorm.io/gorm"
@@ -63,6 +64,9 @@ type Service struct {
 	RBAC rbac.Service
 	// Webhooks (Enterprise; set by InitWebhooks once the event bus is wired)
 	Webhooks webhooks.Service
+	// TykMCP is the Tyk Dashboard MCP integration (Enterprise; set by
+	// InitTykMCP once the event bus is wired)
+	TykMCP tykmcp.Service
 
 	// auditService is the audit trail owned by the API and attached through
 	// SetAuditService so background services (webhooks) can record non-HTTP
@@ -108,6 +112,31 @@ func (s *Service) InitWebhooks(cfg config.WebhooksConfig, version string) {
 	})
 	if webhooks.IsEnterpriseAvailable() {
 		logger.Info("Webhooks service initialized")
+	}
+}
+
+// InitTykMCP builds the Tyk Dashboard MCP integration service (Enterprise
+// implementation when linked in, community stub otherwise). Call after
+// SetEventBus; the audit trail is looked up lazily through Audit().
+func (s *Service) InitTykMCP(cfg config.TykMCPConfig, version string) {
+	if s.TykMCP != nil {
+		s.TykMCP.Stop()
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "studio"
+	}
+	s.TykMCP = tykmcp.NewService(tykmcp.Deps{
+		DB:       s.DB,
+		Bus:      s.EventBus,
+		Notifier: s.NotificationService,
+		Audit:    s.Audit,
+		Config:   cfg,
+		NodeID:   fmt.Sprintf("%s-%d", hostname, os.Getpid()),
+		Version:  version,
+	})
+	if tykmcp.IsEnterpriseAvailable() {
+		logger.Info("Tyk MCP integration service initialized")
 	}
 }
 
@@ -336,8 +365,12 @@ func (s *Service) Cleanup() error {
 
 	var errors []error
 
-	// Stop webhook delivery workers first: they write to the database, which
-	// is closed at the end of this function.
+	// Stop background workers that write to the database first: it is
+	// closed at the end of this function.
+	if s.TykMCP != nil {
+		logger.Info("Stopping Tyk MCP integration service...")
+		s.TykMCP.Stop()
+	}
 	if s.Webhooks != nil {
 		logger.Info("Stopping webhooks service...")
 		s.Webhooks.Stop()

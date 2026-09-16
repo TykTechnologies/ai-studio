@@ -99,7 +99,7 @@ func TestPortalCatalog_RespectsVisibility(t *testing.T) {
 	}, names)
 
 	assert.Equal(t, 3, response.Meta.Total)
-	assert.Equal(t, map[string]int{"llm": 1, "datasource": 1, "tool": 1, "plugin_resource": 0}, response.Meta.Counts)
+	assert.Equal(t, map[string]int{"llm": 1, "datasource": 1, "tool": 1, "mcp_server": 0, "plugin_resource": 0}, response.Meta.Counts)
 
 	// Each item names the catalogs it is reachable through, and the filter
 	// options list only the caller's catalogs.
@@ -386,7 +386,7 @@ func TestPortalCatalog_QuerySortAndPage(t *testing.T) {
 		assert.Equal(t, 1, r.Meta.Page)
 		assert.Equal(t, catalogDefaultPageSize, r.Meta.PageSize)
 		assert.Equal(t, 1, r.Meta.TotalPages)
-		assert.Equal(t, map[string]int{"llm": 3, "datasource": 0, "tool": 1, "plugin_resource": 0}, r.Meta.Counts)
+		assert.Equal(t, map[string]int{"llm": 3, "datasource": 0, "tool": 1, "mcp_server": 0, "plugin_resource": 0}, r.Meta.Counts)
 		kinds := []string{}
 		for _, k := range r.Meta.Kinds {
 			kinds = append(kinds, k.Type+":"+k.Kind+"="+strconv.Itoa(k.Count))

@@ -21,6 +21,7 @@ const (
 	GovernedObjectTypeLLM        = "llm"
 	GovernedObjectTypeTool       = "tool"
 	GovernedObjectTypeDatasource = "datasource"
+	GovernedObjectTypeMCPServer  = "mcp_server"
 
 	// GovernedObjectTypeAll is the wildcard for MetadataSchema.AppliesTo.
 	GovernedObjectTypeAll = "*"

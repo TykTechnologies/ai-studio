@@ -59,6 +59,15 @@ func (a *API) createApp(c *gin.Context) {
 		})
 	}
 
+	// MCP server bindings are validated before the app exists so a refusal
+	// leaves nothing behind.
+	if input.Data.Attributes.MCPServerIDs != nil {
+		actorID, actorAdmin := adminAppActor(c)
+		if !a.validateAppMCPBindings(c, actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs) {
+			return
+		}
+	}
+
 	// Apps default to active. Asking for an active app explicitly needs
 	// apps:publish; a caller without it gets an inactive app unless they
 	// asked for one anyway.
@@ -156,6 +165,12 @@ func (a *API) createApp(c *gin.Context) {
 		}
 	}
 
+	if input.Data.Attributes.MCPServerIDs != nil {
+		var ok bool
+		if app, ok = a.applyAppMCPServers(c, app, *input.Data.Attributes.MCPServerIDs); !ok {
+			return
+		}
+	}
 	c.JSON(http.StatusCreated, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
@@ -264,6 +279,13 @@ func (a *API) updateApp(c *gin.Context) {
 		})
 	}
 
+	if input.Data.Attributes.MCPServerIDs != nil {
+		actorID, actorAdmin := adminAppActor(c)
+		if !a.validateAppMCPBindings(c, actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs) {
+			return
+		}
+	}
+
 	var app *models.App
 	if len(pluginResources) > 0 {
 		app, err = a.service.UpdateAppWithResources(
@@ -342,6 +364,12 @@ func (a *API) updateApp(c *gin.Context) {
 		}
 	}
 
+	if input.Data.Attributes.MCPServerIDs != nil {
+		var ok bool
+		if app, ok = a.applyAppMCPServers(c, app, *input.Data.Attributes.MCPServerIDs); !ok {
+			return
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
@@ -485,6 +513,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.DatasourceIDs = getDatasourceIDs(app.Datasources)
 	resp.Attributes.LLMIDs = getLLMIDs(app.LLMs)
 	resp.Attributes.ToolIDs = getToolIDs(app.Tools)
+	resp.Attributes.MCPServerIDs, resp.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
 	resp.Attributes.IsActive = app.IsActive

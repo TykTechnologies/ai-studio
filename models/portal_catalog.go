@@ -49,6 +49,12 @@ func ToolCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint
 	return catalogueMemberships(db, "tool_catalogue_tools", "tool_catalogue_id", "tool_id", catalogueIDs)
 }
 
+// MCPServerCatalogueMemberships maps MCP server ids to the tool catalogues
+// (among catalogueIDs) they belong to.
+func MCPServerCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint, error) {
+	return catalogueMemberships(db, "tool_catalogue_mcp_servers", "tool_catalogue_id", "mcp_server_id", catalogueIDs)
+}
+
 // Base queries for the objects a user can use, one per type. They are the
 // GetAccessible* rules (the user's teams -> their catalogues -> active
 // objects) as composable queries, so the portal catalog can add its filters
@@ -84,4 +90,17 @@ func AccessibleToolQuery(db *gorm.DB, userID uint) *gorm.DB {
 		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
 		Where("user_groups.user_id = ? AND tools.active = ?", userID, true)
+}
+
+// AccessibleMCPServerQuery is the portal visibility rule for Tyk-managed
+// MCP servers: the user's teams -> direct team grants -> published servers
+// that are active on their Dashboard. There is no catalogue family for
+// this type; grants are per server.
+func AccessibleMCPServerQuery(db *gorm.DB, userID uint) *gorm.DB {
+	return db.Model(&MCPServer{}).
+		Joins("JOIN tool_catalogue_mcp_servers ON tool_catalogue_mcp_servers.mcp_server_id = mcp_servers.id").
+		Joins("JOIN tool_catalogues ON tool_catalogues.id = tool_catalogue_mcp_servers.tool_catalogue_id AND tool_catalogues.deleted_at IS NULL").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
+		Where("user_groups.user_id = ? AND mcp_servers.is_active = ? AND mcp_servers.dashboard_state = ?", userID, true, MCPDashboardActive)
 }

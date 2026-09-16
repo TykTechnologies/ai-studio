@@ -40,6 +40,10 @@ type AdminReviewInput struct {
 			AssignedCatalogues models.JSONMap `json:"assigned_catalogues"`
 			ReviewNotes        string         `json:"review_notes"`
 			Feedback           string         `json:"feedback"` // submitter-facing feedback (for reject/changes_requested)
+			// MCP server submissions only: the reviewer's deployment target and
+			// whether to publish the created server right away.
+			GatewayTags *[]string `json:"gateway_tags"`
+			Publish     bool      `json:"publish"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -645,7 +649,7 @@ func (a *API) adminRollbackVersion(c *gin.Context) {
 
 // secretPayloadFields are credential fields that must be redacted before returning to any client
 var secretPayloadFields = []string{
-	"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string",
+	"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string", "upstream_auth_token",
 }
 
 // redactPayloadSecrets returns a copy of the payload with secret fields replaced by "[redacted]"
@@ -709,6 +713,9 @@ func serializeSubmissionInternal(s *models.Submission, includeInternalNotes bool
 		result["review_notes"] = s.ReviewNotes
 	}
 
+	if s.ResourceType == models.SubmissionResourceTypeMCPServer {
+		result["external_resource_id"] = s.ExternalResourceID
+	}
 	if s.ResourceType == models.SubmissionResourceTypePlugin {
 		result["plugin_resource_type_id"] = s.PluginResourceTypeID
 		result["plugin_instance_id"] = s.PluginInstanceID

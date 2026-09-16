@@ -103,8 +103,14 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 	primaryContact, secondaryContact, slaExpectation string, dataCutoffDate *time.Time,
 	documentationURL, notes string) (*models.Submission, error) {
 
-	if resourceType != models.SubmissionResourceTypeDatasource && resourceType != models.SubmissionResourceTypeTool {
-		return nil, fmt.Errorf("invalid resource type: must be '%s' or '%s'", models.SubmissionResourceTypeDatasource, models.SubmissionResourceTypeTool)
+	switch resourceType {
+	case models.SubmissionResourceTypeDatasource, models.SubmissionResourceTypeTool:
+	case models.SubmissionResourceTypeMCPServer:
+		if err := s.validateMCPSubmissionPayload(payload); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid resource type: must be '%s', '%s' or '%s'", models.SubmissionResourceTypeDatasource, models.SubmissionResourceTypeTool, models.SubmissionResourceTypeMCPServer)
 	}
 
 	return s.createSubmission(submitterID, resourceType, nil, status, payload, attestations, suggestedPrivacy,
@@ -253,7 +259,13 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 	}
 
 	// Preserve original credentials when new payload contains "[redacted]" placeholders
-	submission.ResourcePayload = mergePayloadPreservingCredentials(submission.ResourcePayload, payload)
+	merged := mergePayloadPreservingCredentials(submission.ResourcePayload, payload)
+	if submission.ResourceType == models.SubmissionResourceTypeMCPServer {
+		if err := s.validateMCPSubmissionPayload(merged); err != nil {
+			return nil, err
+		}
+	}
+	submission.ResourcePayload = merged
 	submission.Attestations = attestations
 	submission.SuggestedPrivacy = suggestedPrivacy
 	submission.PrivacyJustification = privacyJustification
@@ -390,6 +402,12 @@ func (s *Service) StartReview(submissionID, reviewerID uint) (*models.Submission
 // ApproveSubmission approves a submission and creates or updates the resource (admin).
 // All operations are wrapped in a DB transaction to prevent orphaned resources.
 func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyScore int, catalogueIDs models.JSONMap, reviewNotes string) (*models.Submission, error) {
+	return s.ApproveSubmissionWithOptions(submissionID, reviewerID, finalPrivacyScore, catalogueIDs, reviewNotes, SubmissionApproveOptions{})
+}
+
+// ApproveSubmissionWithOptions is ApproveSubmission with the reviewer
+// choices that only some resource types take.
+func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, finalPrivacyScore int, catalogueIDs models.JSONMap, reviewNotes string, opts SubmissionApproveOptions) (*models.Submission, error) {
 	submission, err := s.GetSubmissionByID(submissionID)
 	if err != nil {
 		return nil, err
@@ -397,6 +415,10 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 
 	if submission.Status != models.SubmissionStatusInReview && submission.Status != models.SubmissionStatusSubmitted {
 		return nil, fmt.Errorf("can only approve submissions in '%s' or '%s' status", models.SubmissionStatusInReview, models.SubmissionStatusSubmitted)
+	}
+
+	if submission.ResourceType == models.SubmissionResourceTypeMCPServer {
+		return s.approveMCPSubmission(submission, reviewerID, finalPrivacyScore, catalogueIDsFrom(catalogueIDs), reviewNotes, opts)
 	}
 
 	isPluginResource := submission.ResourceType == models.SubmissionResourceTypePlugin

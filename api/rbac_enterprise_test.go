@@ -225,7 +225,7 @@ func TestRBAC_PublishIsSeparateFromWrite(t *testing.T) {
 			offers = offers || a == authz.ActionPublish
 		}
 		switch r.Key {
-		case "llms", "tools", "datasources", "apps", "agents", "model-routers", "plugins", "metadata":
+		case "llms", "tools", "datasources", "apps", "agents", "model-routers", "plugins", "metadata", "mcp-servers":
 			assert.True(t, offers, r.Key)
 		default:
 			assert.False(t, offers, r.Key)

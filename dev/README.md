@@ -24,8 +24,8 @@ This directory contains the Docker Compose-based development environment for Tyk
    ```
 
 3. **Access the application:**
-   - **Frontend (React):** http://localhost:3000
-   - **Backend API:** http://localhost:8080
+   - **Frontend (React):** http://localhost:3000 (or `FRONTEND_PORT`, see below)
+   - **Backend API:** http://localhost:8080 (or `STUDIO_PORT`, see below)
    - **Embedded gateway:** localhost:9090
    - **gRPC Control Server:** localhost:50051
 
@@ -81,8 +81,8 @@ That's it! The environment will automatically:
 | Service | Port(s) | Description |
 |---------|---------|-------------|
 | `postgres` | 55432 → 5432 | PostgreSQL 17 database (host port 55432) |
-| `studio` | 8080, 9090 | AI Studio (control plane) with Air hot reload |
-| `frontend` | 3000 | React development server with HMR |
+| `studio` | 8080 (`STUDIO_PORT`), 9090 | AI Studio (control plane) with Air hot reload |
+| `frontend` | 3000 (`FRONTEND_PORT`) | React development server with HMR |
 | `gateway` | 8081 | Microgateway (data plane) - full mode only |
 | `plugins` | - | Plugin watcher/builder - full mode only |
 
@@ -344,6 +344,21 @@ lsof -i :3000
 # Kill the process or change the port in docker-compose.yml
 ```
 
+If port 3000 or 8080 belongs to something you cannot move (a Tyk Dashboard and
+Gateway, say), remap the host ports instead. Set `FRONTEND_PORT` and/or
+`STUDIO_PORT` in `dev/.env` (or the shell) and start as usual:
+
+```bash
+FRONTEND_PORT=3100 STUDIO_PORT=8090 make dev   # or make dev-start, dev-full, dev-ent, ...
+open http://localhost:3100
+```
+
+`SITE_URL` follows `FRONTEND_PORT`, and in `DEVMODE` the API adds the
+`SITE_URL` host to the CSRF trusted origins, so login works on the new port
+without any other change. Need a further origin trusted (say a production build
+served from another port)? Add it to `CSRF_TRUSTED_ORIGINS` as a
+comma-separated `host[:port]` list.
+
 ### Clean slate
 
 If things are really broken, start fresh:
@@ -357,8 +372,8 @@ make dev
 
 | Port | Service | Protocol | Description |
 |------|---------|----------|-------------|
-| 3000 | Frontend | HTTP | React development server |
-| 8080 | Studio | HTTP | REST API endpoints |
+| 3000 | Frontend | HTTP | React development server (host port; override with `FRONTEND_PORT`) |
+| 8080 | Studio | HTTP | REST API endpoints (host port; override with `STUDIO_PORT`) |
 | 9090 | Studio | HTTP | Embedded AI Gateway |
 | 50051 | Studio | gRPC | Control server (edge sync) |
 | 9898 | Studio | HTTP | API Documentation server |
