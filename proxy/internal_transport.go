@@ -92,6 +92,11 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	for k, v := range t.extra {
 		req.Header[k] = v
 	}
+	// Mark the hop so the inner handler answers a policy block in the
+	// OpenAI error envelope the driver on this side can read (see
+	// respondPolicyBlock). The marker changes only the error body's shape,
+	// never what is enforced, so it needs no trust.
+	req.Header.Set(hdrInternalHop, "1")
 
 	return t.underlying.RoundTrip(req)
 }

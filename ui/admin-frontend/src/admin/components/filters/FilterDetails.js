@@ -8,6 +8,7 @@ import {
   CircularProgress,
   Box,
   Grid,
+  Chip,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -19,6 +20,19 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+
+const ACTION_LABELS = { block: "Block", redact: "Redact", log: "Log only" };
+
+// Connection values are references ($SECRET/name, $ENV/NAME) or plain
+// endpoints. A value that is neither is a credential typed in directly, and
+// is not shown.
+const displayConnectionValue = (field, value) => {
+  if (!value) return "";
+  if (field.startsWith("$")) return value;
+  if (value.startsWith("$SECRET/") || value.startsWith("$ENV/")) return value;
+  if (/key|secret|token/i.test(field)) return "•••••• (stored directly)";
+  return value;
+};
 
 const FilterDetails = () => {
   const [filter, setFilter] = useState(null);
@@ -38,7 +52,7 @@ const FilterDetails = () => {
         ...filterData,
         attributes: {
           ...filterData.attributes,
-          script: atob(filterData.attributes.script), // Decode base64
+          script: filterData.attributes.script ? atob(filterData.attributes.script) : "", // Decode base64
         },
       });
       setLoading(false);
@@ -50,6 +64,21 @@ const FilterDetails = () => {
 
   if (loading) return <CircularProgress />;
   if (!filter) return <Typography>Filter not found</Typography>;
+
+  const attrs = filter.attributes;
+  const isGuardrail = attrs.kind === "guardrail";
+  const config = attrs.config || {};
+
+  const row = (label, value) => (
+    <>
+      <Grid item xs={3}>
+        <FieldLabel>{label}:</FieldLabel>
+      </Grid>
+      <Grid item xs={9}>
+        <FieldValue>{value}</FieldValue>
+      </Grid>
+    </>
+  );
 
   return (
     <>
@@ -66,44 +95,69 @@ const FilterDetails = () => {
       <ContentBox>
         <Section title="Filter Information">
           <Grid container spacing={2}>
-            <Grid item xs={3}>
-              <FieldLabel>Name:</FieldLabel>
-            </Grid>
-            <Grid item xs={9}>
-              <FieldValue>{filter.attributes.name}</FieldValue>
-            </Grid>
-            <Grid item xs={3}>
-              <FieldLabel>Description:</FieldLabel>
-            </Grid>
-            <Grid item xs={9}>
-              <FieldValue>{filter.attributes.description}</FieldValue>
-            </Grid>
-            <Grid item xs={3}>
-              <FieldLabel>Type:</FieldLabel>
-            </Grid>
-            <Grid item xs={9}>
-              <FieldValue>
-                {filter.attributes.response_filter ? "Response Filter" : "Request Filter"}
-              </FieldValue>
-            </Grid>
+            {row("Name", attrs.name)}
+            {row("Description", attrs.description)}
+            {row("Kind", isGuardrail ? "Guardrail" : "Script")}
+            {row("Type", attrs.response_filter ? "Response Filter" : "Request Filter")}
           </Grid>
         </Section>
 
         <UsedBySection resourcePath="filters" id={id} objectLabel="filter" />
 
-        <Section title="Script">
-          <Box
-            sx={{
-              backgroundColor: "#f5f5f5",
-              padding: 2,
-              borderRadius: 1,
-              whiteSpace: "pre-wrap",
-              fontFamily: "monospace",
-            }}
-          >
-            {filter.attributes.script}
-          </Box>
-        </Section>
+        {isGuardrail ? (
+          <Section title="Guardrail">
+            <Grid container spacing={2}>
+              {row("Provider", config.provider)}
+              {row(
+                "Detectors",
+                <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                  {(config.detectors || []).map((d) => (
+                    <Chip
+                      key={d.name}
+                      size="small"
+                      label={d.threshold !== undefined && d.threshold !== null ? `${d.name} ≥ ${d.threshold}` : d.name}
+                    />
+                  ))}
+                </Box>
+              )}
+              {config.exclude && config.exclude.length > 0 && row("Excluded patterns", config.exclude.join(", "))}
+              {row("On detection", ACTION_LABELS[config.on_detect] || config.on_detect)}
+              {config.on_detect === "redact" && config.redaction &&
+                row("Redaction", `${config.redaction.style || "placeholder"}${config.redaction.placeholder ? ` (${config.redaction.placeholder})` : ""}`)}
+              {!attrs.response_filter && row("Messages inspected", config.scope || "all_user")}
+              {row("If the provider fails", config.fail_mode === "open" ? "Let it through" : config.fail_mode === "closed" ? "Block" : "Default")}
+              {row("Timeout", `${config.timeout_ms || 2000} ms`)}
+              {attrs.response_filter && config.stream?.evaluate_every_chars > 0 &&
+                row("Streaming cadence", `every ${config.stream.evaluate_every_chars} characters`)}
+              {row("Block message", config.block_message || "(default)")}
+              {config.connection && Object.keys(config.connection).length > 0 &&
+                row(
+                  "Connection",
+                  <Box component="dl" sx={{ m: 0 }}>
+                    {Object.entries(config.connection).map(([k, v]) => (
+                      <Typography key={k} variant="body2">
+                        {k}: {displayConnectionValue(k, v)}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+            </Grid>
+          </Section>
+        ) : (
+          <Section title="Script">
+            <Box
+              sx={{
+                backgroundColor: "#f5f5f5",
+                padding: 2,
+                borderRadius: 1,
+                whiteSpace: "pre-wrap",
+                fontFamily: "monospace",
+              }}
+            >
+              {attrs.script}
+            </Box>
+          </Section>
+        )}
 
         <Box mt={4} display="flex" justifyContent="flex-end">
           <PrimaryButton

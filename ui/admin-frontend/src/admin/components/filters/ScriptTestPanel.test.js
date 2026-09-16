@@ -117,4 +117,41 @@ describe("ScriptTestPanel", () => {
       ).toBeInTheDocument();
     });
   });
+
+  // The server only resolves $SECRET/ and $ENV/ references for a saved filter
+  // whose connection block is unchanged, so the panel names the filter being
+  // edited and warns when there is nothing saved to name.
+  describe("guardrail secret references", () => {
+    const guardrail = {
+      provider: "lakera",
+      detectors: [{ name: "prompt_attack" }],
+      on_detect: "block",
+      connection: { endpoint: "https://api.lakera.ai/v2/guard", api_key: "$SECRET/LAKERA" },
+    };
+
+    it("sends the saved filter id with a guardrail test", async () => {
+      const { container } = renderPanel({ kind: "guardrail", config: guardrail, filterId: "42" });
+
+      const sent = await runTest(container);
+      expect(sent.kind).toBe("guardrail");
+      expect(sent.filter_id).toBe(42);
+      expect(screen.queryByText(/Save the filter first/)).not.toBeInTheDocument();
+    });
+
+    it("warns that an unsaved filter cannot resolve references, and sends no id", async () => {
+      const { container } = renderPanel({ kind: "guardrail", config: guardrail });
+
+      expect(screen.getByText(/Save the filter first/)).toBeInTheDocument();
+      const sent = await runTest(container);
+      expect(sent.filter_id).toBeUndefined();
+    });
+
+    it("does not warn when the connection holds literal values", () => {
+      renderPanel({
+        kind: "guardrail",
+        config: { ...guardrail, connection: { endpoint: "https://api.lakera.ai/v2/guard", api_key: "literal" } },
+      });
+      expect(screen.queryByText(/Save the filter first/)).not.toBeInTheDocument();
+    });
+  });
 });

@@ -11,6 +11,8 @@ weight: 40
 
 # Filters and Middleware
 
+A filter is either a **script** (Tengo code, described on this page) or a **guardrail** (a detection provider such as the built-in pattern library, Lakera, Azure Content Safety, Presidio or Bedrock Guardrails, with a block, redact or log action and no code). Both kinds attach, run and audit identically; see [Guardrails](/docs/guardrails) for the provider kind.
+
 The **Filters List View** allows administrators to manage filters and middleware applied to prompts or data sent to Large Language Models (LLMs) via the AI Gateway or Chat Rooms. Filters and middleware ensure data governance, compliance, and security by processing or controlling the flow of information. Below is an enhanced description with the distinction between **Filters** and **Middleware**:
 
 ---
@@ -605,6 +607,25 @@ output := {
 
 ---
 
+## Runtime Limits and Outbound Calls (Enterprise)
+
+Filter scripts run on the goroutine that is serving the request, so every script is bounded. Each limit is an environment variable with a safe default and takes effect on the next execution without a restart.
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `FILTER_SCRIPT_TIMEOUT` | `5s` | Wall time for one script execution. The script is aborted and the filter reports `script timed out`. Request-side filters then fail closed, response-side filters fail open, exactly as for any other script error. `0` disables the bound. A bare integer is read as seconds. |
+| `FILTER_SCRIPT_MAX_ALLOCS` | `10000000` | Objects one execution may allocate in the script VM. `0` disables the bound. |
+| `FILTER_SCRIPT_ALLOW_OS` | `false` | Exposes Tengo's `os` module (environment variables, file system, process execution) to scripts. Off by default: a filter has no reason to read the process environment, which holds the secrets master key. Set to `true` only for scripts written against the old behaviour. |
+| `FILTER_HTTP_TIMEOUT` | `10s` | End-to-end time for one `tyk.makeHTTPRequest` call. |
+| `FILTER_HTTP_MAX_RESPONSE_BYTES` | `1048576` | Largest response body `tyk.makeHTTPRequest` will return. A larger body is an error, never a truncation, so a script never parses half a document. |
+| `FILTER_LLM_TIMEOUT` | `30s` | Time for one `tyk.llm` call. |
+
+`tyk.makeHTTPRequest` follows the same outbound policy as LLM upstreams: only `http` and `https`, the `LLM_UPSTREAM_ALLOWED_HOSTS` allowlist when set, and internal-address blocking at dial time when `LLM_UPSTREAM_BLOCK_INTERNAL=true` (with `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` for in-cluster classifiers). Redirects are checked against the same policy.
+
+`tyk.llm` resolves the target LLM's credential the way the gateway does, so an LLM whose key is stored as a `$SECRET/...` or `$ENV/...` reference works from a script.
+
+Scripts are compiled once and cached; each execution runs on its own copy, so runs never share state. The script's `input` is passed to the cached program at run time. The script-scoped context is also tied to the request or chat session that triggered the filter, so a caller that disconnects does not leave a script running.
+
 ---
 
 ## Tool Response Filters
@@ -963,6 +984,7 @@ input := {
     raw_input: "current chunk text",
     is_response: true,
     is_chunk: true,
+    is_final: false,        // true on the extra run after the last chunk: raw_input is "" and current_buffer is the whole response
     chunk_index: 5,
     current_buffer: "accumulated response text so far",
     vendor_name: "openai",
@@ -1106,9 +1128,9 @@ if !input.is_chunk || len(response_text) >= 200 {
 - If blocked: Error returned to client instead of response
 
 **Proxy (Streaming)**:
-- Executes on every chunk
+- Executes on every chunk, and once more when the stream completes with `is_final: true`, `raw_input` empty and `current_buffer` holding the whole response, so a short response that never reached a script's buffer threshold is still evaluated once
 - Access to both `raw_input` (current chunk) and `current_buffer` (accumulated text)
-- If blocked: Streaming stops, error sent to client
+- If blocked: Streaming stops, error sent to client. A block on the final run ends the stream with an error event and is logged as a blocked response; chunks already sent have reached the client
 
 **Chat (Non-Streaming)**:
 - Executes before adding to chat history

@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
@@ -1467,6 +1468,22 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		filterLLMMap[assoc.FilterID] = append(filterLLMMap[assoc.FilterID], uint32(assoc.LLMID))
 	}
 
+	// Guardrail connection references are resolved once per distinct
+	// reference for the whole snapshot, not once per filter field: GetValue
+	// reads the secret store on every call.
+	resolvedRefs := map[string]string{}
+	resolveRef := func(v string) string {
+		if !strings.HasPrefix(v, "$") {
+			return v
+		}
+		if r, ok := resolvedRefs[v]; ok {
+			return r
+		}
+		r := secrets.GetValue(v, false)
+		resolvedRefs[v] = r
+		return r
+	}
+
 	// Convert Filters to protobuf
 	for _, filter := range filters {
 		llmIDs := filterLLMMap[filter.ID]
@@ -1482,6 +1499,17 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			LlmIds:         llmIDs, // Populated from llm_filters join table
 			CreatedAt:      timestamppb.New(filter.CreatedAt),
 			UpdatedAt:      timestamppb.New(filter.UpdatedAt),
+			Kind:           filter.Kind,
+		}
+		if filter.IsGuardrail() {
+			// Edges have no secret store: resolve connection references here,
+			// as the LLM API keys above are.
+			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef)
+			if err != nil {
+				log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
+				continue
+			}
+			pbFilter.Config = configJSON
 		}
 		snapshot.Filters = append(snapshot.Filters, pbFilter)
 

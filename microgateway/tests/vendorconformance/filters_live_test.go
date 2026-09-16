@@ -207,10 +207,20 @@ func newNonce() string {
 // the response is written, so it is polled rather than read once.
 func waitForLoggedRequest(t *testing.T, h *harness, nonce string) mgwdb.AnalyticsEvent {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	return waitForLoggedRequestOn(t, h, h.filteredBedrock.ID, nonce)
+}
+
+// waitForLoggedRequestOn is waitForLoggedRequest for any route.
+func waitForLoggedRequestOn(t *testing.T, h *harness, llmID uint, nonce string) mgwdb.AnalyticsEvent {
+	t.Helper()
+	// On the /ai/ loopback path the request body lands on the event when the
+	// outer hop's chat record is merged into the inner hop's proxy log, which
+	// can trail the response by well over ten seconds; the Bedrock direct
+	// paths log in one step and were the only users of this before.
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		var events []mgwdb.AnalyticsEvent
-		err := h.db.Where("llm_id = ? AND request_body LIKE ?", h.filteredBedrock.ID, "%"+nonce+"%").
+		err := h.db.Where("llm_id = ? AND request_body LIKE ?", llmID, "%"+nonce+"%").
 			Order("id desc").Limit(1).Find(&events).Error
 		// The gateway writes the event on another connection of the same
 		// shared-cache SQLite; a lock while it does so is a reason to poll
@@ -222,7 +232,14 @@ func waitForLoggedRequest(t *testing.T, h *harness, nonce string) mgwdb.Analytic
 			return events[0]
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no analytics event logged for request %s on llm %d", nonce, h.filteredBedrock.ID)
+			// Say what was logged instead, so a lookup miss can be told apart
+			// from a request that was never logged at all.
+			var recent []mgwdb.AnalyticsEvent
+			h.db.Where("llm_id = ?", llmID).Order("id desc").Limit(5).Find(&recent)
+			for _, ev := range recent {
+				t.Logf("  event %d status=%d request_body[%d]=%q", ev.ID, ev.StatusCode, len(ev.RequestBody), bodyExcerpt([]byte(ev.RequestBody)))
+			}
+			t.Fatalf("no analytics event logged for request %s on llm %d (%d recent events listed above)", nonce, llmID, len(recent))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

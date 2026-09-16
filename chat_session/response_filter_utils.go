@@ -58,13 +58,14 @@ func ExecuteResponseFilters(
 		ChunkIndex:    chunkIndex,
 		CurrentBuffer: currentBuffer,
 		StatusCode:    200, // Chat responses don't have HTTP status codes
+		Ctx:           ctx,
 	}
 
 	// Execute response filters in chain
 	for _, filter := range responseFilters {
 		slog.Debug("executing chat response filter", "filter_name", filter.Name, "is_chunk", isChunk, "chunk_index", chunkIndex)
 
-		runner := scripting.NewScriptRunner(filter.Script)
+		runner := scripting.NewFilterRunner(filter)
 		output, err := runner.RunScript(scriptInput, service)
 		if err != nil {
 			slog.Error("chat response filter execution error", "filter_name", filter.Name, "error", err)

@@ -46,7 +46,8 @@ export default defineConfig({
           { text: 'Model Router (Enterprise)', link: '/docs/model-router' }, // Enterprise model routing
           { text: 'Tools & Extensibility', link: '/docs/tools' },
           { text: 'Data Sources & RAG', link: '/docs/datasources-rag' },
-          { text: 'Filters & Policies', link: '/docs/filters' }
+          { text: 'Filters & Policies', link: '/docs/filters' },
+          { text: 'Guardrails', link: '/docs/guardrails' }
         ]
       },
       {

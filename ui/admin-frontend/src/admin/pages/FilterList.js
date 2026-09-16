@@ -86,6 +86,14 @@ const FilterList = memo(() => {
     { field: "name", headerName: "Name", sortable: true, renderCell: (filter) => filter.attributes.name },
     { field: "description", headerName: "Description", renderCell: (filter) => filter.attributes.description },
     {
+      field: "kind",
+      headerName: "Kind",
+      renderCell: (filter) =>
+        filter.attributes.kind === "guardrail"
+          ? `Guardrail (${filter.attributes.config?.provider || "provider"})`
+          : "Script",
+    },
+    {
       field: "response_filter",
       headerName: "Type",
       renderCell: (filter) => (filter.attributes.response_filter ? "Response" : "Request"),

@@ -871,6 +871,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/filters/:id", authz.Delete("filters"), a.deleteFilter)
 	v1.GET("/filters", authz.Read("filters"), a.listFilters)
 	v1.POST("/filters/test", authz.Execute("filters"), a.testFilter)
+	v1.GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
 	v1.GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
 	v1.HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
 

@@ -61,6 +61,12 @@ type harness struct {
 	// (see seedFilteredBedrock); nil when Bedrock has no credentials. It is
 	// deliberately not in cfg.Vendors so the conformance matrix never sees it.
 	filteredBedrock *mgwdb.LLM
+	// guardrails is the guardrail-provider half of the configuration, and
+	// guardrailed the extra route on the first configured vendor that carries
+	// one guardrail filter per configured provider (see seedGuardrailed).
+	guardrails       *vc.GuardrailsConfig
+	guardrailed      *mgwdb.LLM
+	guardrailedModel string
 }
 
 // filteredBedrockSlug is the route slug of the filter-bearing Bedrock LLM.
@@ -360,6 +366,25 @@ func (h *harness) boot() error {
 			return err
 		}
 		h.filteredBedrock = llm
+	}
+
+	// Guardrail filters ride on the first configured vendor: the provider
+	// verdict is what is under test, the LLM only has to answer.
+	guardrails, err := vc.LoadGuardrails()
+	if err != nil {
+		return fmt.Errorf("loading guardrail config: %w", err)
+	}
+	h.guardrails = guardrails
+	if len(h.cfg.Vendors) > 0 {
+		llm, model, err := seedGuardrailed(db, container, h.cfg.Vendors[0], guardrails, h.cfg.MaxTokens)
+		if err != nil {
+			return fmt.Errorf("seeding guardrailed route: %w", err)
+		}
+		if err := db.Create(&mgwdb.AppLLM{AppID: app.ID, LLMID: llm.ID, IsActive: true}).Error; err != nil {
+			return err
+		}
+		h.guardrailed = llm
+		h.guardrailedModel = model
 	}
 	h.db = db
 

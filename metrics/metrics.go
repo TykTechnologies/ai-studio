@@ -27,10 +27,12 @@ var (
 	policyBlockTotal      otelmetric.Int64Counter
 	complianceEventsTotal otelmetric.Int64Counter
 	failoverTotal         otelmetric.Int64Counter
+	guardrailErrorsTotal  otelmetric.Int64Counter
 
 	// Histograms
 	requestDuration  otelmetric.Float64Histogram
 	toolExecDuration otelmetric.Float64Histogram
+	guardrailLatency otelmetric.Float64Histogram
 
 	// Gauges (UpDownCounter)
 	inflightRequests otelmetric.Int64UpDownCounter
@@ -105,6 +107,21 @@ func Init() http.Handler {
 	)
 	if err != nil {
 		panic("failed to create failoverTotal counter: " + err.Error())
+	}
+
+	guardrailErrorsTotal, err = meter.Int64Counter("aistudio_guardrail_errors_total",
+		otelmetric.WithDescription("Guardrail provider calls that failed or timed out, by provider and the fail mode applied"),
+	)
+	if err != nil {
+		panic("failed to create guardrailErrorsTotal counter: " + err.Error())
+	}
+
+	guardrailLatency, err = meter.Float64Histogram("aistudio_guardrail_latency_seconds",
+		otelmetric.WithDescription("Guardrail provider call latency"),
+		otelmetric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
+	)
+	if err != nil {
+		panic("failed to create guardrailLatency histogram: " + err.Error())
 	}
 
 	// Register histograms
@@ -244,6 +261,36 @@ func RecordComplianceEvent(ctx context.Context, eventType, severity, filterName 
 			attribute.String("event_type", eventType),
 			attribute.String("severity", severity),
 			attribute.String("filter_name", filterName),
+		),
+	)
+}
+
+// RecordGuardrail records one guardrail provider call. outcome is "flagged",
+// "clean" or "error" and action the filter's configured action, so the
+// series stays bounded.
+func RecordGuardrail(ctx context.Context, provider, outcome, action string, durationSeconds float64) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailLatency.Record(ctx, durationSeconds,
+		otelmetric.WithAttributes(
+			attribute.String("provider", provider),
+			attribute.String("outcome", outcome),
+			attribute.String("action", action),
+		),
+	)
+}
+
+// RecordGuardrailError counts a guardrail provider failure and the fail mode
+// that decided the request's fate ("open" or "closed").
+func RecordGuardrailError(ctx context.Context, provider, failMode string) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailErrorsTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(
+			attribute.String("provider", provider),
+			attribute.String("fail_mode", failMode),
 		),
 	)
 }

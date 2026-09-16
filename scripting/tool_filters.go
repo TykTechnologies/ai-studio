@@ -203,11 +203,12 @@ func runToolFilter(
 		Context:    id.scriptContext(),
 		IsChat:     id.IsChat,
 		IsResponse: isResponse,
+		Ctx:        ctx,
 	}
 
 	// RunScript recovers panics from the Tengo VM and returns them as errors,
 	// which the fail-closed handling below then treats as a refusal.
-	output, err := NewScriptRunner(filter.Script).RunScript(input, service)
+	output, err := NewFilterRunner(&filter).RunScript(input, service)
 	if err != nil {
 		slog.Error("tool filter execution error",
 			"filter_name", filter.Name, "scope", scope, "tool_id", id.ToolID, "error", err)
