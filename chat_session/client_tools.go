@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/llms"
 )
@@ -79,6 +80,30 @@ func (cs *ChatSession) PendingClientCallIDs() []string {
 		ids = append(ids, p.id)
 	}
 	return ids
+}
+
+// DecodeToolSpec replaces the tool's stored spec (base64, the API contract)
+// with its plain text before the tool joins a session. Every path that
+// attaches a tool goes through here: default tools, dependencies and tools
+// picked in the chat window. A client tool parses its own definition and
+// accepts either form (see Tool.ClientDefinition), so one stored as raw JSON
+// is left as it is instead of failing the add. On error the spec is untouched.
+func DecodeToolSpec(t *models.Tool) error {
+	decoded, err := helpers.DecodeToUTF8(t.OASSpec)
+	if err != nil {
+		if t.ToolType == models.ToolTypeClient {
+			_, defErr := t.ClientDefinition()
+			if defErr == nil {
+				return nil
+			}
+			// Name the real problem: the definition is neither base64 nor
+			// readable JSON, which the bare base64 error does not say.
+			return fmt.Errorf("client tool %q: %w", t.Name, defErr)
+		}
+		return fmt.Errorf("tool %q: spec is not base64-encoded: %w", t.Name, err)
+	}
+	t.OASSpec = decoded
+	return nil
 }
 
 // clientToolDefinition converts a client tool into the function definition

@@ -146,13 +146,23 @@ func sessionResponse(cs *chat_session.ChatSession, chat *models.Chat) V2SessionR
 	for _, ds := range cs.GetCurrentDatasources() {
 		resp.Datasources = append(resp.Datasources, V2SourceSummary{ID: ds.ID, Name: ds.Name, ShortDescription: ds.ShortDescription})
 	}
+	resp.ClientTools = clientToolInfos(cs)
+	resp.PendingToolCallIDs = cs.PendingClientCallIDs()
+	return resp
+}
+
+// clientToolInfos describes the session's client tools to the browser. It is
+// part of the session response and of every tool / datasource mutation
+// reply, so a client tool picked in the chat window gets its renderer
+// without a new session.
+func clientToolInfos(cs *chat_session.ChatSession) []V2ClientToolInfo {
+	out := []V2ClientToolInfo{}
 	for _, ct := range cs.ClientTools() {
 		schema, _ := json.Marshal(ct.Schema)
 		ui, _ := json.Marshal(ct.UI)
-		resp.ClientTools = append(resp.ClientTools, V2ClientToolInfo{Name: ct.Name, Description: ct.Description, Schema: schema, UI: ui})
+		out = append(out, V2ClientToolInfo{Name: ct.Name, Description: ct.Description, Schema: schema, UI: ui})
 	}
-	resp.PendingToolCallIDs = cs.PendingClientCallIDs()
-	return resp
+	return out
 }
 
 // assertSessionOwner rejects access to a persisted session that belongs to

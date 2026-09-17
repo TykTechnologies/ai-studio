@@ -29,6 +29,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import pubClient from "../../admin/utils/pubClient";
 import AppStatusChip, { getAppStatus } from "./AppStatusChip";
+import { listAll } from "../../admin/utils/listAll";
 
 const AppListView = () => {
   const [apps, setApps] = useState([]);
@@ -49,7 +50,7 @@ const AppListView = () => {
 
   const fetchApps = async () => {
     try {
-      const response = await pubClient.get("/common/apps");
+      const response = await listAll(pubClient, "/common/apps");
       const fetchedApps = response.data.data || [];
       setApps(fetchedApps);
       setCredentialActiveById(await loadCredentialStates(fetchedApps));

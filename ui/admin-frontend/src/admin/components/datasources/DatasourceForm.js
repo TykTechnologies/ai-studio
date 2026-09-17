@@ -64,6 +64,7 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
+import { listAll } from "../../utils/listAll";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -221,7 +222,7 @@ const DatasourceForm = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get("/users");
+      const response = await listAll(apiClient, "/users");
       setUsers(response.data.data || []);
     } catch (error) {
       console.error("Error fetching users", error);

@@ -2,6 +2,7 @@ package chat_session
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -210,4 +211,117 @@ func TestClientTools_AbandonedOnNextMessage(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rows[3].Content, &toolRow))
 	assert.Equal(t, llms.ChatMessageTypeTool, toolRow.Role, "the parked call was closed with an error result before the new turn")
 	assert.Contains(t, toolRow.Parts[0].(llms.ToolCallResponse).Content, "did not respond")
+}
+
+// A tool picked in the chat window goes through DecodeToolSpec, like default
+// tools. Client definitions are accepted base64-encoded (the API contract)
+// and as raw JSON (how the built-in generative UI tool was first seeded);
+// anything else still fails loudly.
+func TestDecodeToolSpec(t *testing.T) {
+	raw := `{"ui":{"kind":"present","title":"Generative UI"}}`
+
+	t.Run("base64 client definition is decoded", func(t *testing.T) {
+		tool := &models.Tool{ToolType: models.ToolTypeClient, OASSpec: base64.StdEncoding.EncodeToString([]byte(raw))}
+		require.NoError(t, DecodeToolSpec(tool))
+		assert.Equal(t, raw, tool.OASSpec)
+	})
+
+	t.Run("raw JSON client definition is kept", func(t *testing.T) {
+		tool := &models.Tool{ToolType: models.ToolTypeClient, OASSpec: raw}
+		require.NoError(t, DecodeToolSpec(tool))
+		def, err := tool.ClientDefinition()
+		require.NoError(t, err)
+		assert.Equal(t, models.ClientToolKindPresent, def.UI.Kind)
+	})
+
+	t.Run("unreadable client definition fails", func(t *testing.T) {
+		tool := &models.Tool{Name: "Ask", ToolType: models.ToolTypeClient, OASSpec: "{not json"}
+		err := DecodeToolSpec(tool)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `client tool "Ask": invalid client tool definition`)
+	})
+
+	t.Run("REST spec must be base64", func(t *testing.T) {
+		tool := &models.Tool{ToolType: models.ToolTypeREST, OASSpec: `{"openapi":"3.0.0"}`}
+		assert.Error(t, DecodeToolSpec(tool))
+		assert.Equal(t, `{"openapi":"3.0.0"}`, tool.OASSpec)
+	})
+}
+
+// A default tool with a raw JSON client definition used to lose it: the
+// base64 error was swallowed and the blanked spec fell back to an approval
+// tool with no parameters, so generative UI never rendered.
+func TestClientTools_DefaultToolKeepsRawDefinition(t *testing.T) {
+	db := setupSharedDB(t, "hitl-default-raw")
+	svc := services.NewService(db)
+	owner := &models.User{Email: "raw@test.com", Name: "Raw", IsAdmin: true}
+	require.NoError(t, owner.Create(db))
+	_, err := models.GetOrCreateDefaultToolCatalogue(db)
+	require.NoError(t, err)
+	require.NoError(t, models.GetOrCreateDefaultClientTools(db))
+	var present models.Tool
+	require.NoError(t, db.Where("tool_type = ?", models.ToolTypeClient).First(&present).Error)
+	raw := `{"parameters":null,"ui":{"kind":"present","title":"Generative UI"}}`
+	require.NoError(t, db.Model(&models.Tool{}).Where("id = ?", present.ID).UpdateColumn("oas_spec", raw).Error)
+
+	chat := &models.Chat{
+		Name:          "Raw default",
+		LLM:           &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5},
+		LLMSettings:   &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
+		SupportsTools: true,
+		DefaultTools:  []*models.Tool{&present},
+	}
+	require.NoError(t, chat.Create(db))
+	sessionID := "hitl-default-raw-session"
+
+	cs, err := NewChatSession(chat, ChatStream, db, svc, nil, &owner.ID, &sessionID)
+	require.NoError(t, err)
+	cs.SetOutputMode(OutputModeEvents)
+	require.NoError(t, cs.Start())
+	t.Cleanup(cs.Stop)
+
+	infos := cs.ClientTools()
+	require.Len(t, infos, 1)
+	assert.Equal(t, models.PresentToolOperation, infos[0].Name)
+	assert.Equal(t, models.ClientToolKindPresent, infos[0].UI.Kind)
+	assert.Contains(t, infos[0].Schema["properties"], "component")
+}
+
+// A default tool whose spec cannot be decoded is left out; the chat room
+// still starts with the tools that are sound.
+func TestDefaultToolWithUndecodableSpecIsLeftOut(t *testing.T) {
+	db := setupSharedDB(t, "default-tool-bad-spec")
+	svc := services.NewService(db)
+	owner := &models.User{Email: "badspec@test.com", Name: "Bad spec", IsAdmin: true}
+	require.NoError(t, owner.Create(db))
+	catalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
+	require.NoError(t, err)
+	require.NoError(t, models.GetOrCreateDefaultClientTools(db))
+	var present models.Tool
+	require.NoError(t, db.Where("tool_type = ?", models.ToolTypeClient).First(&present).Error)
+
+	broken := models.Tool{Name: "Broken REST", ToolType: models.ToolTypeREST, OASSpec: `{"openapi":"3.0.0"}`, Active: true}
+	require.NoError(t, broken.Create(db))
+	require.NoError(t, catalogue.AddTool(db, &broken))
+
+	chat := &models.Chat{
+		Name:          "Bad default",
+		LLM:           &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5},
+		LLMSettings:   &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
+		SupportsTools: true,
+		DefaultTools:  []*models.Tool{&broken, &present},
+	}
+	require.NoError(t, chat.Create(db))
+	sessionID := "default-tool-bad-spec-session"
+
+	cs, err := NewChatSession(chat, ChatStream, db, svc, nil, &owner.ID, &sessionID)
+	require.NoError(t, err)
+	cs.SetOutputMode(OutputModeEvents)
+	require.NoError(t, cs.Start())
+	t.Cleanup(cs.Stop)
+
+	attached := cs.CurrentTools()
+	require.Len(t, attached, 1)
+	assert.Contains(t, attached, present.Name)
+	assert.NotContains(t, attached, broken.Name)
 }

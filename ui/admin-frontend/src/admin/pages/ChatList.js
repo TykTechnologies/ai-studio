@@ -31,6 +31,7 @@ import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import { listAll } from "../utils/listAll";
 
 const ChatList = () => {
   const navigate = useNavigate();
@@ -92,7 +93,7 @@ const ChatList = () => {
 
   const fetchLLMs = async () => {
     try {
-      const response = await apiClient.get("/llms");
+      const response = await listAll(apiClient, "/llms");
       const llmMap = {};
       response.data.data.forEach((llm) => {
         llmMap[llm.id] = llm.attributes.name;
@@ -105,7 +106,7 @@ const ChatList = () => {
 
   const fetchLLMSettings = async () => {
     try {
-      const response = await apiClient.get("/llm-settings");
+      const response = await listAll(apiClient, "/llm-settings");
       const settingsMap = {};
       response.data.data.forEach((setting) => {
         settingsMap[setting.id] = setting.attributes.model_name;

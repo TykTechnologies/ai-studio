@@ -22,6 +22,7 @@ import {
   useUnsavedForm,
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
+import { listAll } from "../../utils/listAll";
 
 const ToolCatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({
@@ -100,8 +101,8 @@ const ToolCatalogueForm = () => {
   const fetchAvailableToolsAndTags = async () => {
     try {
       const [toolsResponse, tagsResponse] = await Promise.all([
-        apiClient.get("/tools", { params: { all: true } }),
-        apiClient.get("/tags"),
+        listAll(apiClient, "/tools"),
+        listAll(apiClient, "/tags"),
       ]);
       setAvailableTools(toolsResponse.data.data || []);
       setAvailableTags(tagsResponse.data.data || []);

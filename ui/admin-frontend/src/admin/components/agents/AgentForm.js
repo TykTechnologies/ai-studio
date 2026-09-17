@@ -18,6 +18,7 @@ import agentService from '../../services/agentService';
 import pluginService from '../../services/pluginService';
 import apiClient from '../../utils/apiClient';
 import AgentFormFields from './AgentFormFields';
+import { listAll } from '../../utils/listAll';
 
 const AgentForm = () => {
   const navigate = useNavigate();
@@ -66,15 +67,11 @@ const AgentForm = () => {
       setPlugins(agentPlugins);
 
       // Load apps
-      const appsResponse = await apiClient.get('/apps', {
-        params: { page: 1, page_size: 100 },
-      });
+      const appsResponse = await listAll(apiClient, '/apps');
       setApps(appsResponse.data.data || []);
 
       // Load groups
-      const groupsResponse = await apiClient.get('/groups', {
-        params: { page: 1, page_size: 100 },
-      });
+      const groupsResponse = await listAll(apiClient, '/groups');
       setGroups(groupsResponse.data.data || []);
     } catch (err) {
       console.error('Error loading dropdown data:', err);

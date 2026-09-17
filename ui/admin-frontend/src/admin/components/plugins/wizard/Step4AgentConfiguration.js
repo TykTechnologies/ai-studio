@@ -16,6 +16,7 @@ import { PrimaryButton, SecondaryOutlineButton } from '../../../styles/sharedSty
 import AgentFormFields from '../../agents/AgentFormFields';
 import apiClient from '../../../utils/apiClient';
 import pluginService from '../../../services/pluginService';
+import { listAll } from '../../../utils/listAll';
 
 const Step4AgentConfiguration = ({
   pluginId,
@@ -61,15 +62,11 @@ const Step4AgentConfiguration = ({
     try {
       setLoadingData(true);
       // Load apps
-      const appsResponse = await apiClient.get('/apps', {
-        params: { page: 1, page_size: 100 },
-      });
+      const appsResponse = await listAll(apiClient, '/apps');
       setApps(appsResponse.data.data || []);
 
       // Load groups
-      const groupsResponse = await apiClient.get('/groups', {
-        params: { page: 1, page_size: 100 },
-      });
+      const groupsResponse = await listAll(apiClient, '/groups');
       setGroups(groupsResponse.data.data || []);
     } catch (err) {
       console.error('Error loading dropdown data:', err);

@@ -15,7 +15,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
-	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
@@ -269,7 +268,11 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 				return fmt.Errorf("error getting tool dependency: %v", err)
 			}
 
-			dep.OASSpec, err = helpers.DecodeToUTF8(dep.OASSpec)
+			// Same rule as a tool picked in the chat window: a tool whose
+			// spec cannot be decoded never joins the session.
+			if err := DecodeToolSpec(dep); err != nil {
+				return fmt.Errorf("error decoding spec of tool dependency %s: %v", dep.Name, err)
+			}
 			err = cs.AddTool(
 				dep.Name,
 				*dep)
@@ -793,7 +796,13 @@ func (cs *ChatSession) handleDefaults() error {
 				return fmt.Errorf("error getting default tool definition: %v", err)
 			}
 
-			toolDef.OASSpec, err = helpers.DecodeToUTF8(toolDef.OASSpec)
+			// A misconfigured default tool must not take the whole chat room
+			// down, and must not join half-working either: leave it out and
+			// say so.
+			if err := DecodeToolSpec(toolDef); err != nil {
+				slog.Error("default tool left out of chat session: spec could not be decoded", "tool", toolDef.Name, "chat_id", cs.chatRef.ID, "error", err)
+				continue
+			}
 			err = cs.AddTool(
 				toolDef.Name,
 				*toolDef)
