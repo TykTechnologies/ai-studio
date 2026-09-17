@@ -1,5 +1,6 @@
 import apiClient from '../utils/apiClient';
 import { handleApiError } from './utils/errorHandler';
+import { listAll } from '../utils/listAll';
 
 export const createLLM = async (llmData) => {
   try {
@@ -61,7 +62,7 @@ export const updateLLM = async (llmId, llmData) => {
 
 export const getAllLLMs = async () => {
   try {
-    const response = await apiClient.get('/llms', { params: { all: true } });
+    const response = await listAll(apiClient, '/llms');
     return response.data?.data || [];
   } catch (error) {
     throw handleApiError(error);

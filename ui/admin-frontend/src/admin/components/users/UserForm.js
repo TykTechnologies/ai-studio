@@ -28,6 +28,7 @@ import {
   useUnsavedForm,
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
+import { listAll } from "../../utils/listAll";
 
 const WILDCARD_ROLE_SLUGS = ["owner", "administrator"];
 
@@ -108,7 +109,7 @@ const UserForm = () => {
 
   const fetchGroups = async () => {
     try {
-      const response = await apiClient.get("/groups", { params: { all: true } });
+      const response = await listAll(apiClient, "/groups");
       setGroups(response.data.data || []);
     } catch (error) {
       console.error("Error fetching teams", error);

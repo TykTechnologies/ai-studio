@@ -65,6 +65,7 @@ import Stack from "@mui/material/Stack";
 import AddIcon from "@mui/icons-material/Add";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LLMFailoverSection, { validateFailover } from "./LLMFailoverSection";
+import { listAll } from "../../utils/listAll";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -172,7 +173,7 @@ const LLMForm = () => {
 
   const fetchAvailableLLMs = async () => {
     try {
-      const response = await apiClient.get("/llms", { params: { all: true } });
+      const response = await listAll(apiClient, "/llms");
       const items = response?.data?.data || [];
       setAvailableLLMs(
         items.map((item) => ({
@@ -213,7 +214,7 @@ const LLMForm = () => {
   const fetchFilters = async () => {
     setFiltersLoading(true);
     try {
-      const response = await apiClient.get("/filters", { params: { all: true } });
+      const response = await listAll(apiClient, "/filters");
       if (Array.isArray(response.data)) {
         setFilters(response.data);
       } else {

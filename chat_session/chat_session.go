@@ -268,8 +268,10 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 				return fmt.Errorf("error getting tool dependency: %v", err)
 			}
 
+			// Same rule as a tool picked in the chat window: a tool whose
+			// spec cannot be decoded never joins the session.
 			if err := DecodeToolSpec(dep); err != nil {
-				slog.Warn("tool dependency spec could not be decoded", "tool", dep.Name, "error", err)
+				return fmt.Errorf("error decoding spec of tool dependency %s: %v", dep.Name, err)
 			}
 			err = cs.AddTool(
 				dep.Name,
@@ -794,8 +796,12 @@ func (cs *ChatSession) handleDefaults() error {
 				return fmt.Errorf("error getting default tool definition: %v", err)
 			}
 
+			// A misconfigured default tool must not take the whole chat room
+			// down, and must not join half-working either: leave it out and
+			// say so.
 			if err := DecodeToolSpec(toolDef); err != nil {
-				slog.Warn("default tool spec could not be decoded", "tool", toolDef.Name, "error", err)
+				slog.Error("default tool left out of chat session: spec could not be decoded", "tool", toolDef.Name, "chat_id", cs.chatRef.ID, "error", err)
+				continue
 			}
 			err = cs.AddTool(
 				toolDef.Name,

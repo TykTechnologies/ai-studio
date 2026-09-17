@@ -106,14 +106,22 @@ func encodeRawClientToolSpecs(db *gorm.DB) error {
 	if err := db.Select("id", "oas_spec").Where("tool_type = ? AND oas_spec LIKE ?", ToolTypeClient, "{%").Find(&tools).Error; err != nil {
 		return err
 	}
-	for _, t := range tools {
-		if !json.Valid([]byte(t.OASSpec)) {
-			continue
-		}
-		encoded := base64.StdEncoding.EncodeToString([]byte(t.OASSpec))
-		if err := db.Model(&Tool{}).Where("id = ?", t.ID).UpdateColumn("oas_spec", encoded).Error; err != nil {
-			return fmt.Errorf("encode client tool %d definition: %w", t.ID, err)
-		}
+	if len(tools) == 0 {
+		return nil
 	}
-	return nil
+	// One-off repair of the handful of rows written by the old seed (base64
+	// cannot be computed portably in SQL); a single transaction keeps it to
+	// one commit and leaves nothing half-encoded.
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, t := range tools {
+			if !json.Valid([]byte(t.OASSpec)) {
+				continue
+			}
+			encoded := base64.StdEncoding.EncodeToString([]byte(t.OASSpec))
+			if err := tx.Model(&Tool{}).Where("id = ?", t.ID).UpdateColumn("oas_spec", encoded).Error; err != nil {
+				return fmt.Errorf("encode client tool %d definition: %w", t.ID, err)
+			}
+		}
+		return nil
+	})
 }

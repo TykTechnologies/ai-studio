@@ -38,6 +38,7 @@ import {
   getVendorCodes,
 } from "../../utils/vendorLogos";
 import Decimal from "decimal.js";
+import { listAll } from "../../utils/listAll";
 
 const TooltipTextField = ({ tooltip, ...props }) => (
   <Tooltip title={tooltip} placement="top-start" arrow>
@@ -150,7 +151,7 @@ const LLMSettingsForm = () => {
 
   const checkModelPrice = async (modelName) => {
     try {
-      const response = await apiClient.get("/model-prices", { params: { all: true } });
+      const response = await listAll(apiClient, "/model-prices");
       const existingPrice = response.data.data.find(
         (price) => price.attributes.model_name === modelName,
       );

@@ -37,6 +37,7 @@ import useSystemFeatures from "../hooks/useSystemFeatures";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 import { authSourceLabel, setUserDisabled } from "../services/userService";
+import { listAll } from "../utils/listAll";
 
 const ORIGIN_OPTIONS = [
   { value: "", label: "Any origin" },
@@ -119,7 +120,7 @@ const Users = memo(() => {
 
   const fetchGroups = useCallback(async () => {
     try {
-      const response = await apiClient.get("/groups", { params: { all: true } });
+      const response = await listAll(apiClient, "/groups");
       setGroups(response.data.data || []);
     } catch (error) {
       console.error("Error fetching groups", error);

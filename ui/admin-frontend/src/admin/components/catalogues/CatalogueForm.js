@@ -22,6 +22,7 @@ import {
   useUnsavedForm,
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
+import { listAll } from "../../utils/listAll";
 
 const CatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({ name: "" });
@@ -49,7 +50,7 @@ const CatalogueForm = () => {
       try {
         const [catalogueResponse, llmsResponse] = await Promise.all([
           id ? apiClient.get(`/catalogues/${id}`) : Promise.resolve(null),
-          apiClient.get("/llms", { params: { all: true } }),
+          listAll(apiClient, "/llms"),
         ]);
 
         if (catalogueResponse) {

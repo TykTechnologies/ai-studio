@@ -22,6 +22,7 @@ import {
   useUnsavedForm,
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
+import { listAll } from "../../utils/listAll";
 
 const DataCatalogForm = () => {
   const [catalog, setCatalog] = useState({
@@ -67,8 +68,8 @@ const DataCatalogForm = () => {
           availableTagsResponse,
         ] = await Promise.all([
           id ? apiClient.get(`/data-catalogues/${id}`) : Promise.resolve(null),
-          apiClient.get("/datasources", { params: { all: true } }),
-          apiClient.get("/tags", { params: { all: true } }),
+          listAll(apiClient, "/datasources"),
+          listAll(apiClient, "/tags"),
         ]);
 
         if (catalogResponse) {

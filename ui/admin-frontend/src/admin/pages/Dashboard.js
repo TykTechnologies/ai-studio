@@ -47,6 +47,7 @@ import {
   Filler,
 } from "chart.js";
 import IconButton from "@mui/material/IconButton";
+import { listAll } from "../utils/listAll";
 
 ChartJS.register(
   CategoryScale,
@@ -179,8 +180,8 @@ const Dashboard = () => {
   const fetchData = async () => {
     try {
       const [llmResponse, chatResponse] = await Promise.all([
-        apiClient.get("/llms", { params: { all: true } }),
-        apiClient.get("/chats", { params: { all: true } }),
+        listAll(apiClient, "/llms"),
+        listAll(apiClient, "/chats"),
       ]);
       setLLMs(llmResponse.data.data || []);
       setChats(chatResponse.data.data || []);

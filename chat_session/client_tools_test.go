@@ -284,3 +284,42 @@ func TestClientTools_DefaultToolKeepsRawDefinition(t *testing.T) {
 	assert.Equal(t, models.ClientToolKindPresent, infos[0].UI.Kind)
 	assert.Contains(t, infos[0].Schema["properties"], "component")
 }
+
+// A default tool whose spec cannot be decoded is left out; the chat room
+// still starts with the tools that are sound.
+func TestDefaultToolWithUndecodableSpecIsLeftOut(t *testing.T) {
+	db := setupSharedDB(t, "default-tool-bad-spec")
+	svc := services.NewService(db)
+	owner := &models.User{Email: "badspec@test.com", Name: "Bad spec", IsAdmin: true}
+	require.NoError(t, owner.Create(db))
+	catalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
+	require.NoError(t, err)
+	require.NoError(t, models.GetOrCreateDefaultClientTools(db))
+	var present models.Tool
+	require.NoError(t, db.Where("tool_type = ?", models.ToolTypeClient).First(&present).Error)
+
+	broken := models.Tool{Name: "Broken REST", ToolType: models.ToolTypeREST, OASSpec: `{"openapi":"3.0.0"}`, Active: true}
+	require.NoError(t, broken.Create(db))
+	require.NoError(t, catalogue.AddTool(db, &broken))
+
+	chat := &models.Chat{
+		Name:          "Bad default",
+		LLM:           &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5},
+		LLMSettings:   &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
+		SupportsTools: true,
+		DefaultTools:  []*models.Tool{&broken, &present},
+	}
+	require.NoError(t, chat.Create(db))
+	sessionID := "default-tool-bad-spec-session"
+
+	cs, err := NewChatSession(chat, ChatStream, db, svc, nil, &owner.ID, &sessionID)
+	require.NoError(t, err)
+	cs.SetOutputMode(OutputModeEvents)
+	require.NoError(t, cs.Start())
+	t.Cleanup(cs.Stop)
+
+	attached := cs.CurrentTools()
+	require.Len(t, attached, 1)
+	assert.Contains(t, attached, present.Name)
+	assert.NotContains(t, attached, broken.Name)
+}

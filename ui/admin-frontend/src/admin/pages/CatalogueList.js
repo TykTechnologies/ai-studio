@@ -31,6 +31,7 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import { listAll } from "../utils/listAll";
 
 const CatalogueList = memo(() => {
   const navigate = useNavigate();
@@ -126,7 +127,7 @@ const CatalogueList = memo(() => {
     setModalType(type);
     if (type === "add") {
       try {
-        const response = await apiClient.get("/llms", { params: { all: true } });
+        const response = await listAll(apiClient, "/llms");
         setAvailableLLMs(
           response.data.data.filter((llm) => llm.attributes.active),
         );
