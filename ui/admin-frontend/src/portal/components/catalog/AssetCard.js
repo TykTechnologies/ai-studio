@@ -16,8 +16,7 @@ import {
   itemKey,
   kindLabel,
   kindLogo,
-  secondaryActionLabel,
-  secondaryActionPath,
+  opensInPlugin,
 } from "../../utils/catalog";
 
 const CardRoot = styled(Box)(({ theme }) => ({
@@ -67,8 +66,10 @@ const Clamp = styled(Typography)({
 
 /**
  * One card for every asset type in the portal (LLM provider, data source,
- * tool, plugin resource). The whole card opens the detail page; the primary
- * action goes straight to the app builder with the asset preselected.
+ * tool, plugin resource). The whole card opens the detail page (the providing
+ * plugin's own page for a plugin resource whose access the plugin manages);
+ * the primary action goes straight to the app builder with the asset
+ * preselected.
  */
 const AssetCard = ({ item, showType = true, compact = false }) => {
   const navigate = useNavigate();
@@ -158,12 +159,13 @@ const AssetCard = ({ item, showType = true, compact = false }) => {
       </CardBody>
 
       <CardFooter onClick={(event) => event.stopPropagation()}>
+        {/* When the providing plugin's page is the detail view, the card and
+            this button both open it, so one button says so plainly. */}
         <SecondaryOutlineButton size="small" onClick={open} data-testid="asset-card-details">
-          Details
+          {opensInPlugin(item) ? "View details" : "Details"}
         </SecondaryOutlineButton>
-        {/* "Build app" only when an App credential is what grants access;
-            otherwise the providing plugin's own page is the way in. */}
-        {isAppGranted(item) ? (
+        {/* "Build app" only when an App credential is what grants access. */}
+        {isAppGranted(item) && (
           <PrimaryButton
             size="small"
             sx={{ padding: "2px 12px" }}
@@ -172,16 +174,6 @@ const AssetCard = ({ item, showType = true, compact = false }) => {
           >
             {buildActionLabel(item)}
           </PrimaryButton>
-        ) : (
-          secondaryActionPath(item) && (
-            <SecondaryOutlineButton
-              size="small"
-              onClick={() => navigate(secondaryActionPath(item))}
-              data-testid="asset-card-view"
-            >
-              {secondaryActionLabel(item)}
-            </SecondaryOutlineButton>
-          )
         )}
       </CardFooter>
     </CardRoot>

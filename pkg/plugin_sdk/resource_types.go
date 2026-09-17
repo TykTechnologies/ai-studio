@@ -63,11 +63,13 @@ type ResourceTypeRegistration struct {
 	AccessGrantedViaApp *bool
 
 	// PortalDetailPath is an optional path template to an instance's page in
-	// the portal, used by the unified catalog to link users to the plugin's
-	// own page when access is not granted through an App. "{id}" is replaced
-	// with the URL-escaped instance ID, e.g.
+	// the portal. When access is not granted through an App the unified
+	// catalog opens it as the item's detail view, in place of the built-in
+	// detail page; otherwise the built-in page links to it. "{id}" is
+	// replaced with the URL-escaped instance ID, e.g.
 	// "/portal/plugins/asset-catalog#/assets/{id}". Must be a same-origin
-	// path starting with "/".
+	// path starting with "/"; portal plugin routes match the pathname
+	// exactly, so carry the ID in the hash of a registered portal route.
 	PortalDetailPath string
 }
 

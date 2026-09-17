@@ -288,7 +288,7 @@ Resource types declared in the manifest are automatically registered when the pl
 | `supports_metadata` | No | Whether instances can carry governed metadata (Enterprise); registers the object type `plugin_resource:<plugin_id>:<slug>` (default: `false`) |
 | `submission_schema` | No | JSON Schema (`"type": "object"`) for community submissions; inline object or JSON string. Drives the portal submission form and server-side validation. |
 | `access_granted_via_app` | No | Whether an App credential grants access to instances of this type. Only such types are offered in the App forms, show **Build app** in the portal catalog and travel in the gateway snapshot. Omitted: `true` when the plugin's hooks include both `resource_provider` and `custom_endpoint`, otherwise `false`. |
-| `portal_detail_path` | No | Same-origin path template to an instance's portal page, `{id}` replaced with the escaped instance ID (for example `/portal/plugins/asset-catalog#/assets/{id}`). The catalog links there when access is not granted via an App. |
+| `portal_detail_path` | No | Same-origin path template to an instance's portal page, `{id}` replaced with the escaped instance ID (for example `/portal/plugins/asset-catalog#/assets/{id}`). Catalog cards open it as the item's detail view when access is not granted via an App; otherwise it is a secondary link on the built-in detail page. |
 | `form_component` | No | Custom Web Component for the App form selector |
 
 Types that are only known at runtime can be registered with `plugin_sdk.SyncResourceTypes` instead of (or in addition to) the manifest; this needs the `resource-types.manage` scope.
