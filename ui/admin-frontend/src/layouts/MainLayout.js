@@ -4,6 +4,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { Box, Container } from "@mui/material";
 import TopNavigation from "../components/common/TopNavigation";
 import RouteSnackbar from "../components/common/RouteSnackbar";
+import ListTruncatedToaster from "../components/common/ListTruncatedToaster";
 import AdminLayout from "../admin/components/layout/MainLayout";
 import ChatDrawer from "../admin/components/layout/ChatDrawer";
 import PortalDrawer from "../admin/components/layout/PortalDrawer";
@@ -168,6 +169,7 @@ const MainLayoutContent = () => {
     <>
       {/* Success toasts handed over by forms that navigate right after saving */}
       <RouteSnackbar />
+      <ListTruncatedToaster />
       {currentTab === "admin" ? (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           {topNav}
