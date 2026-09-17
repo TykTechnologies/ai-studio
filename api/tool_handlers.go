@@ -119,27 +119,8 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
-	// Create the tool via service layer (includes auto-assignment to Default catalogue)
-	tool, err := a.service.CreateTool(
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.ToolType,
-		input.Data.Attributes.OASSpec,
-		input.Data.Attributes.PrivacyScore,
-		input.Data.Attributes.AuthSchemaName,
-		input.Data.Attributes.AuthKey,
-	)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	// Set namespace (requires admin authorization for non-empty namespace)
+	// Set namespace (requires admin authorization for non-empty namespace).
+	// Checked before the create so a refusal leaves no tool behind.
 	if input.Data.Attributes.Namespace != "" {
 		user, exists := c.Get("user")
 		if !exists {
@@ -156,24 +137,30 @@ func (a *API) createTool(c *gin.Context) {
 			}{{Title: "Forbidden", Detail: "Assigning a namespace requires write access"}}})
 			return
 		}
-		tool.Namespace = input.Data.Attributes.Namespace
 	}
 
-	// The column defaults to true on insert; the follow-up Update below
-	// writes the value decided above.
-	tool.Active = wantActive
-
-	// Access methods: the service created the tool chat only; turn on what
-	// the caller asked for. The combination was validated before the create.
-	_ = applyToolAccessInput(tool, input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled)
-
-	// Add operations (after tool is created and has an ID)
-	for _, op := range input.Data.Attributes.Operations {
-		tool.AddOperation(op)
-	}
-
-	// Update tool with operations + namespace
-	if err := tool.Update(a.config.DB); err != nil {
+	// Create the tool via the service layer, fully configured in one step
+	// (operations, namespace, live state and access methods), so its hooks
+	// and the single created event describe the tool as it will be served.
+	// Includes auto-assignment to the Default catalogue.
+	tool, err := a.service.CreateToolWithOptions(
+		a.config.DB,
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Description,
+		input.Data.Attributes.ToolType,
+		input.Data.Attributes.OASSpec,
+		input.Data.Attributes.PrivacyScore,
+		input.Data.Attributes.AuthSchemaName,
+		input.Data.Attributes.AuthKey,
+		services.ToolCreateOptions{
+			Operations:        input.Data.Attributes.Operations,
+			Namespace:         input.Data.Attributes.Namespace,
+			Active:            &wantActive,
+			RESTAccessEnabled: input.Data.Attributes.RESTAccessEnabled,
+			MCPAccessEnabled:  input.Data.Attributes.MCPAccessEnabled,
+		},
+	)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -182,12 +169,9 @@ func (a *API) createTool(c *gin.Context) {
 		})
 		return
 	}
-	// The created event fired inside CreateTool, before the operations,
-	// namespace and switches above were written.
-	a.emitToolUpdated(tool)
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)
-	c.JSON(http.StatusCreated,dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
+	c.JSON(http.StatusCreated, dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
 }
 
 // validateOASSpecEncoding checks that an oas_spec attribute is the base64 the

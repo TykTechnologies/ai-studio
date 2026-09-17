@@ -99,8 +99,11 @@ func AccessibleToolQuery(db *gorm.DB, userID uint) *gorm.DB {
 
 // AppGrantableToolScope is Tool.AppGrantable in SQL: a gateway-served tool
 // with REST or MCP access switched on. Keep the two in step.
+//
+// The tool type is compared without wrapping the column in a function, so the
+// predicate stays usable by an index; a row with no type is a REST tool.
 func AppGrantableToolScope(db *gorm.DB) *gorm.DB {
-	return db.Where("COALESCE(tools.tool_type, '') <> ? AND (tools.rest_access_disabled = ? OR tools.mcp_access_disabled = ?)",
+	return db.Where("(tools.tool_type IS NULL OR tools.tool_type <> ?) AND (tools.rest_access_disabled = ? OR tools.mcp_access_disabled = ?)",
 		ToolTypeClient, false, false)
 }
 

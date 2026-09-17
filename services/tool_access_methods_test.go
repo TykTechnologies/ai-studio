@@ -24,6 +24,35 @@ func TestCreateTool_NewToolIsChatOnly(t *testing.T) {
 	assert.False(t, stored.AppGrantable())
 }
 
+// The admin API creates a tool in one step, so hooks and the created event see
+// it as it will be served, not bare and then corrected by a second save.
+func TestCreateToolWithOptions_CreatesTheToolFullyConfigured(t *testing.T) {
+	service := NewService(setupTestDBForTools(t))
+	on, off := true, false
+
+	tool, err := service.CreateToolWithOptions(service.DB, "Configured", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "",
+		ToolCreateOptions{Operations: []string{"getThing", "listThings"}, Namespace: "team-a", Active: &off, MCPAccessEnabled: &on})
+	require.NoError(t, err)
+
+	stored, err := service.GetToolByID(tool.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"getThing", "listThings"}, stored.GetOperations())
+	assert.Equal(t, "team-a", stored.Namespace)
+	assert.False(t, stored.Active, "an explicit draft must survive the column's default of true")
+	assert.False(t, tool.Active, "and the returned tool must say so too")
+	assert.False(t, stored.RESTAccessEnabled(), "a method that was not asked for keeps the default")
+	assert.True(t, stored.MCPAccessEnabled())
+
+	// No options at all: active, chat only, nothing whitelisted.
+	plain, err := service.CreateToolWithOptions(service.DB, "Plain", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "", ToolCreateOptions{})
+	require.NoError(t, err)
+	stored, err = service.GetToolByID(plain.ID)
+	require.NoError(t, err)
+	assert.True(t, stored.Active)
+	assert.False(t, stored.AppGrantable())
+	assert.Empty(t, stored.GetOperations())
+}
+
 // Rows written before the switches existed carry the column default. They
 // must keep both methods on, or an upgrade would cut off every tool in use.
 func TestTool_RowWithoutSwitchesStaysEnabled(t *testing.T) {
