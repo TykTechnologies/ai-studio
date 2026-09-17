@@ -135,8 +135,8 @@ export const browsePath = (type, item) => {
   return `/portal/catalog/${typeSlug(type)}`;
 };
 
-/** The detail page for an item. */
-export const detailPath = (item) => {
+/** The built-in catalog detail page for an item. */
+export const builtInDetailPath = (item) => {
   const a = attrs(item);
   switch (item?.type) {
     case CATALOG_TYPES.LLM:
@@ -190,15 +190,29 @@ export const buildActionLabel = (item) =>
 export const isAppGranted = (item) => attrs(item).access_granted_via_app !== false;
 
 /**
- * Where to send a developer instead of the app builder when access is not
- * granted through an App: the providing plugin's own page, if it declared
- * one. Null when there is nowhere to go.
+ * The providing plugin's own page for a plugin resource, if its type
+ * declared one (portal_detail_path). Null when there is nowhere to go.
  */
 export const secondaryActionPath = (item) => attrs(item).portal_detail_url || null;
 
 /** Wording for the secondary action, e.g. "View in Agent". */
 export const secondaryActionLabel = (item) =>
   `View in ${attrs(item).resource_type?.name || "plugin"}`;
+
+/**
+ * Whether the providing plugin's page is the item's detail view: access is
+ * managed by the plugin, not an App, and the plugin declared a page. The
+ * built-in page has nothing to offer for these (no fields, no way to request
+ * access), so the catalog links past it.
+ */
+export const opensInPlugin = (item) => !isAppGranted(item) && Boolean(secondaryActionPath(item));
+
+/**
+ * Where a catalog card leads: the plugin's page when it is the detail view
+ * (see opensInPlugin), otherwise the built-in detail page.
+ */
+export const detailPath = (item) =>
+  opensInPlugin(item) ? secondaryActionPath(item) : builtInDetailPath(item);
 
 /** Stable React key across types. */
 export const itemKey = (item) => `${item?.type}:${item?.id}`;

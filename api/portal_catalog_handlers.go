@@ -96,8 +96,13 @@ type CatalogItemAttributes struct {
 	// gets to use this item. Always true for LLM providers, data sources and
 	// tools; for plugin resources it is the type's resolved value with any
 	// per-instance override applied. When false the portal shows no
-	// "Build app" action and, if PortalDetailURL is set, links to the
-	// providing plugin's own page instead.
+	// "Build app" action.
+	//
+	// PortalDetailURL is the providing plugin's own page for the item, set
+	// whenever the type declared portal_detail_path. When access is not
+	// granted through an App it replaces the built-in detail page as the
+	// item's detail view; otherwise it is a secondary link next to
+	// "Build app".
 	AccessGrantedViaApp bool   `json:"access_granted_via_app"`
 	PortalDetailURL     string `json:"portal_detail_url,omitempty"`
 
@@ -436,6 +441,16 @@ func portalDetailURL(template, instanceID string) string {
 	return strings.ReplaceAll(template, "{id}", url.PathEscape(instanceID))
 }
 
+// applyPluginResourceAccess sets a plugin resource item's access class (the
+// type's resolved value with the instance override applied) and its link to
+// the providing plugin's page. The link is set for both access classes: a
+// plugin page can show what the built-in detail page cannot (schema fields,
+// gated values, request flows) whether or not an App is the way in.
+func applyPluginResourceAccess(attrs *CatalogItemAttributes, t *models.PluginResourceType, instanceID string, instanceOverride *bool) {
+	attrs.AccessGrantedViaApp = models.EffectiveInstanceAccessGrantedViaApp(t.AccessGrantedViaApp, instanceOverride)
+	attrs.PortalDetailURL = portalDetailURL(t.PortalDetailPath, instanceID)
+}
+
 // countCatalogItems counts the type's matching objects.
 func (a *API) countCatalogItems(user *models.User, src *catalogSource, scope func(*gorm.DB) *gorm.DB) (int, error) {
 	var n int64
@@ -511,10 +526,7 @@ func (a *API) pluginResourceItems(c *gin.Context, user *models.User, only *servi
 			if rt.Type.HasPrivacyScore {
 				item.Attributes.PrivacyScore = intPtr(int(inst.PrivacyScore))
 			}
-			item.Attributes.AccessGrantedViaApp = models.EffectiveInstanceAccessGrantedViaApp(rt.Type.AccessGrantedViaApp, inst.AccessGrantedViaApp)
-			if !item.Attributes.AccessGrantedViaApp {
-				item.Attributes.PortalDetailURL = portalDetailURL(rt.Type.PortalDetailPath, inst.Id)
-			}
+			applyPluginResourceAccess(&item.Attributes, &rt.Type, inst.Id, inst.AccessGrantedViaApp)
 			if governed != nil {
 				item.GovernedMetadata = a.portalGovernedView(objectType, governed[inst.Id])
 			}

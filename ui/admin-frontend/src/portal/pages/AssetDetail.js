@@ -294,10 +294,11 @@ const PluginResourceSections = ({ item }) => {
         {granted
           ? `${rt.name} resources are attached to apps like any other asset; an app credential is what grants access to them.`
           : `Access to ${rt.name} resources is managed by the plugin that provides them, not through an app.`}
-        {!granted && external && (
+        {external && (
           <>
             {" "}
-            <RouterLink to={external}>Open it there</RouterLink> to see the details and request access.
+            <RouterLink to={external}>Open it there</RouterLink>
+            {granted ? " to see the full details." : " to see the details and request access."}
           </>
         )}
       </Typography>
@@ -498,19 +499,21 @@ const AssetDetail = ({ type }) => {
           <SecondaryLinkButton startIcon={<ArrowBackIcon />} component={RouterLink} to={browsePath(type, item)}>
             Back to browse
           </SecondaryLinkButton>
-          {isAppGranted(item) ? (
+          {/* The providing plugin's page, when it declared one: the only way
+              onward when the plugin manages access, a second view of the
+              item when an App credential does. */}
+          {secondaryActionPath(item) && (
+            <SecondaryOutlineButton
+              onClick={() => navigate(secondaryActionPath(item))}
+              data-testid="asset-view-external"
+            >
+              {secondaryActionLabel(item)}
+            </SecondaryOutlineButton>
+          )}
+          {isAppGranted(item) && (
             <PrimaryButton onClick={() => navigate(buildAppPath(item))} data-testid="asset-build-app">
               {buildActionLabel(item)}
             </PrimaryButton>
-          ) : (
-            secondaryActionPath(item) && (
-              <SecondaryOutlineButton
-                onClick={() => navigate(secondaryActionPath(item))}
-                data-testid="asset-view-external"
-              >
-                {secondaryActionLabel(item)}
-              </SecondaryOutlineButton>
-            )
           )}
         </Box>
       </TitleBox>

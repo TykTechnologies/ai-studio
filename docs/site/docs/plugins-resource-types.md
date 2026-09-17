@@ -161,7 +161,7 @@ Not every resource a plugin registers is something an App credential unlocks. An
 - show the **Build app** action in the portal catalog;
 - travel in the gateway config snapshot (`plugin_resources`).
 
-Types where it is `false` are still listed in the portal catalog and assigned to teams for visibility; the catalog shows a **View in ...** link to the plugin's own page instead of Build app when the type sets `portal_detail_path`.
+Types where it is `false` are still listed in the portal catalog and assigned to teams for visibility; when the type sets `portal_detail_path`, the plugin's own page becomes the item's detail view: the catalog card opens it directly instead of the built-in detail page. Types where it is `true` can set `portal_detail_path` too; their items keep the built-in page and Build app, and the built-in page adds a **View in ...** link to the plugin's page.
 
 When the key is omitted the platform decides from the plugin's hooks: `true` when the plugin declares both `resource_provider` and `custom_endpoint` (it serves its resources through the gateway), `false` otherwise. Existing plugins therefore need no change. A resource instance may override its type through `ResourceInstance.AccessGrantedViaApp` (nil inherits).
 
@@ -442,7 +442,7 @@ Manifest `resource_types` are registered at load time. When the set of types is 
 | `has_privacy_score` | No | `false` | Whether instances carry privacy scores |
 | `supports_submissions` | No | `false` | Whether community submissions are enabled |
 | `access_granted_via_app` | No | hooks-based | Whether an App credential grants access to instances. Omitted: `true` when the plugin declares both `resource_provider` and `custom_endpoint`, else `false`. Gates the App forms, the catalog's Build app action and the gateway snapshot. |
-| `portal_detail_path` | No | `""` | Same-origin path template to an instance's page in the portal; `{id}` is replaced with the escaped instance ID. Shown as the catalog's action when access is not granted via an App. |
+| `portal_detail_path` | No | `""` | Same-origin path template to an instance's page in the portal; `{id}` is replaced with the escaped instance ID. When access is not granted via an App, catalog cards open this page instead of the built-in detail page; otherwise it is a secondary link on the built-in page. Portal plugin routes match the pathname exactly, so put the instance ID in the hash of a registered portal route. |
 | `form_component` | No | `null` | Custom Web Component for the App form (null = standard multi-select) |
 
 ## API Endpoints

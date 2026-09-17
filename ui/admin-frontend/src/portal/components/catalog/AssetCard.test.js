@@ -46,7 +46,7 @@ describe("AssetCard primary action", () => {
     expect(screen.getByTestId("asset-card-build")).toHaveTextContent("Build app");
   });
 
-  it("links a plugin-gated resource to the plugin's page instead", () => {
+  it("opens a plugin-gated resource in the plugin's page, from the button and the card", () => {
     renderCard({
       type: "plugin_resource",
       id: "ast_9",
@@ -59,10 +59,33 @@ describe("AssetCard primary action", () => {
       },
     });
     expect(screen.queryByTestId("asset-card-build")).not.toBeInTheDocument();
-    const view = screen.getByTestId("asset-card-view");
-    expect(view).toHaveTextContent("View in Agent");
-    fireEvent.click(view);
-    expect(mockNavigate).toHaveBeenCalledWith("/portal/plugins/asset-catalog#/assets/ast_9");
+    expect(screen.queryByTestId("asset-card-view")).not.toBeInTheDocument();
+    const details = screen.getByTestId("asset-card-details");
+    expect(details).toHaveTextContent("View details");
+    fireEvent.click(details);
+    expect(mockNavigate).toHaveBeenLastCalledWith("/portal/plugins/asset-catalog#/assets/ast_9");
+    mockNavigate.mockClear();
+    fireEvent.click(screen.getByTestId("asset-card"));
+    expect(mockNavigate).toHaveBeenLastCalledWith("/portal/plugins/asset-catalog#/assets/ast_9");
+  });
+
+  it("keeps the built-in page for an app-granted resource that also has a plugin page", () => {
+    renderCard({
+      type: "plugin_resource",
+      id: "ast_11",
+      attributes: {
+        ...base,
+        name: "Proxied Agent",
+        access_granted_via_app: true,
+        portal_detail_url: "/portal/plugins/asset-catalog#/assets/ast_11",
+        resource_type: { plugin_id: 7, slug: "agent", name: "Agent" },
+      },
+    });
+    expect(screen.getByTestId("asset-card-build")).toBeInTheDocument();
+    const details = screen.getByTestId("asset-card-details");
+    expect(details).toHaveTextContent("Details");
+    fireEvent.click(details);
+    expect(mockNavigate).toHaveBeenLastCalledWith("/portal/catalog/resources/7/agent/ast_11");
   });
 
   it("shows only Details when there is nowhere else to go", () => {
@@ -73,6 +96,9 @@ describe("AssetCard primary action", () => {
     });
     expect(screen.queryByTestId("asset-card-build")).not.toBeInTheDocument();
     expect(screen.queryByTestId("asset-card-view")).not.toBeInTheDocument();
-    expect(screen.getByTestId("asset-card-details")).toBeInTheDocument();
+    const details = screen.getByTestId("asset-card-details");
+    expect(details).toHaveTextContent("Details");
+    fireEvent.click(details);
+    expect(mockNavigate).toHaveBeenLastCalledWith("/portal/catalog/resources/7/prompt/ast_10");
   });
 });

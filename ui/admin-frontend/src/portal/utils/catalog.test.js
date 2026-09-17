@@ -1,6 +1,7 @@
 import {
   avatarColor,
   buildAppPath,
+  builtInDetailPath,
   detailPath,
   hashString,
   initialsFor,
@@ -8,6 +9,7 @@ import {
   kindFacetLabel,
   kindLabel,
   openAICompatibleBaseUrl,
+  opensInPlugin,
   secondaryActionLabel,
   secondaryActionPath,
 } from "./catalog";
@@ -71,6 +73,29 @@ describe("catalog utils", () => {
     const nowhere = item("plugin_resource", "ast_10", { access_granted_via_app: false });
     expect(secondaryActionPath(nowhere)).toBeNull();
     expect(secondaryActionLabel(nowhere)).toBe("View in plugin");
+  });
+
+  // The built-in page has nothing to show for a resource whose access the
+  // plugin manages, so the card goes straight to the plugin's page. An
+  // app-granted resource keeps the built-in page: "Build app" lives there.
+  it("makes the plugin's page the detail view only for plugin-gated items that declare one", () => {
+    const rt = { plugin_id: 7, slug: "prompt", name: "Prompt" };
+    const url = "/portal/plugins/asset-catalog#/assets/ast_9";
+    const gated = item("plugin_resource", "ast_9", { access_granted_via_app: false, portal_detail_url: url, resource_type: rt });
+    expect(opensInPlugin(gated)).toBe(true);
+    expect(detailPath(gated)).toBe(url);
+    expect(builtInDetailPath(gated)).toBe("/portal/catalog/resources/7/prompt/ast_9");
+
+    const granted = item("plugin_resource", "ast_9", { access_granted_via_app: true, portal_detail_url: url, resource_type: rt });
+    expect(opensInPlugin(granted)).toBe(false);
+    expect(detailPath(granted)).toBe("/portal/catalog/resources/7/prompt/ast_9");
+    expect(secondaryActionPath(granted)).toBe(url);
+
+    const nowhere = item("plugin_resource", "ast_9", { access_granted_via_app: false, resource_type: rt });
+    expect(opensInPlugin(nowhere)).toBe(false);
+    expect(detailPath(nowhere)).toBe("/portal/catalog/resources/7/prompt/ast_9");
+
+    expect(opensInPlugin(items[0])).toBe(false);
   });
 
   it("labels kind facets from the server label or the UI's vendor map", () => {

@@ -85,6 +85,35 @@ func TestPortalDetailURL(t *testing.T) {
 	assert.Equal(t, "/portal/plugins/x", portalDetailURL("/portal/plugins/x", "ignored"), "template without placeholder is returned as is")
 }
 
+// The link to the providing plugin's page travels with both access classes:
+// it is the detail view when the plugin manages access itself, and a
+// secondary link when an App credential is the way in.
+func TestApplyPluginResourceAccess(t *testing.T) {
+	yes, no := true, false
+	const tmpl = "/portal/plugins/asset-catalog#/assets/{id}"
+	cases := []struct {
+		name        string
+		typ         models.PluginResourceType
+		override    *bool
+		wantGranted bool
+		wantURL     string
+	}{
+		{"plugin-managed access with a page", models.PluginResourceType{PortalDetailPath: tmpl}, nil, false, "/portal/plugins/asset-catalog#/assets/ast_1"},
+		{"app-granted with a page keeps the link", models.PluginResourceType{AccessGrantedViaApp: true, PortalDetailPath: tmpl}, nil, true, "/portal/plugins/asset-catalog#/assets/ast_1"},
+		{"instance override to app-granted keeps the link", models.PluginResourceType{PortalDetailPath: tmpl}, &yes, true, "/portal/plugins/asset-catalog#/assets/ast_1"},
+		{"instance override to plugin-managed", models.PluginResourceType{AccessGrantedViaApp: true, PortalDetailPath: tmpl}, &no, false, "/portal/plugins/asset-catalog#/assets/ast_1"},
+		{"no page declared", models.PluginResourceType{AccessGrantedViaApp: true}, nil, true, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			attrs := CatalogItemAttributes{}
+			applyPluginResourceAccess(&attrs, &tc.typ, "ast_1", tc.override)
+			assert.Equal(t, tc.wantGranted, attrs.AccessGrantedViaApp)
+			assert.Equal(t, tc.wantURL, attrs.PortalDetailURL)
+		})
+	}
+}
+
 // Built-in catalog items are always reachable through an App credential.
 func TestCatalogItems_BuiltInsAreAppGranted(t *testing.T) {
 	assert.True(t, llmCatalogItem(&models.LLM{Name: "L"}).Attributes.AccessGrantedViaApp)

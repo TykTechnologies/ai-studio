@@ -114,6 +114,27 @@ describe("AssetDetail", () => {
           },
         });
       }
+      if (url === "/common/catalog/resources/7/agent/ast_11") {
+        return Promise.resolve({
+          data: {
+            data: {
+              type: "plugin_resource",
+              id: "ast_11",
+              attributes: {
+                name: "Proxied Agent",
+                kind: "7:agent",
+                kind_label: "Agent",
+                privacy_score: 20,
+                catalogs: [],
+                tags: [],
+                access_granted_via_app: true,
+                portal_detail_url: "/portal/plugins/asset-catalog#/assets/ast_11",
+                resource_type: { plugin_id: 7, slug: "agent", name: "Agent", access_granted_via_app: false },
+              },
+            },
+          },
+        });
+      }
       return Promise.reject(new Error(`unexpected ${url}`));
     });
   });
@@ -169,6 +190,19 @@ describe("AssetDetail", () => {
     expect(screen.getByTestId("asset-build-app")).toHaveTextContent("Build app");
     expect(screen.queryByTestId("asset-view-external")).not.toBeInTheDocument();
     expect(screen.getByTestId("plugin-resource-access-note")).toHaveTextContent("an app credential is what grants access");
+  });
+
+  // An app-granted resource whose plugin declared a page keeps Build app and
+  // gains the plugin's page as a second view of the same item.
+  it("offers the plugin's page next to Build app for an app-granted resource that has one", async () => {
+    renderDetail("/portal/catalog/resources/7/agent/ast_11", "plugin_resource");
+    expect(await screen.findByRole("heading", { level: 1, name: "Proxied Agent" })).toBeInTheDocument();
+    expect(screen.getByTestId("asset-build-app")).toHaveTextContent("Build app");
+    expect(screen.getByTestId("asset-view-external")).toHaveTextContent("View in Agent");
+    const note = screen.getByTestId("plugin-resource-access-note");
+    expect(note).toHaveTextContent("an app credential is what grants access");
+    expect(note).toHaveTextContent("to see the full details");
+    expect(screen.getByRole("link", { name: "Open it there" })).toHaveAttribute("href", "/portal/plugins/asset-catalog#/assets/ast_11");
   });
 
   it("shows tool operations and links to the API documentation", async () => {
