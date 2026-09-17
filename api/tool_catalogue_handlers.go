@@ -5,6 +5,7 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -136,7 +137,13 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 	// catalogue rather than among its attributes, and only for a caller who
 	// may read MCP servers.
 	if authz.Can(c, authz.Read("mcp-servers")) {
-		if servers, err := a.toolCatalogueMCPServers(uint(id)); err == nil {
+		servers, err := a.toolCatalogueMCPServers(uint(id))
+		if err != nil {
+			// The list is supplementary: the catalogue itself loaded, so the
+			// page still renders, without the section. The failure is logged
+			// rather than swallowed.
+			slog.Error("failed to list the MCP servers of a tool catalogue", "tool_catalogue_id", id, "error", err)
+		} else {
 			response["mcp_servers"] = servers
 		}
 	}
