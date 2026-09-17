@@ -235,8 +235,10 @@ func TestDecodeToolSpec(t *testing.T) {
 	})
 
 	t.Run("unreadable client definition fails", func(t *testing.T) {
-		tool := &models.Tool{ToolType: models.ToolTypeClient, OASSpec: "{not json"}
-		assert.Error(t, DecodeToolSpec(tool))
+		tool := &models.Tool{Name: "Ask", ToolType: models.ToolTypeClient, OASSpec: "{not json"}
+		err := DecodeToolSpec(tool)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `client tool "Ask": invalid client tool definition`)
 	})
 
 	t.Run("REST spec must be base64", func(t *testing.T) {

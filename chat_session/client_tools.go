@@ -92,11 +92,15 @@ func DecodeToolSpec(t *models.Tool) error {
 	decoded, err := helpers.DecodeToUTF8(t.OASSpec)
 	if err != nil {
 		if t.ToolType == models.ToolTypeClient {
-			if _, defErr := t.ClientDefinition(); defErr == nil {
+			_, defErr := t.ClientDefinition()
+			if defErr == nil {
 				return nil
 			}
+			// Name the real problem: the definition is neither base64 nor
+			// readable JSON, which the bare base64 error does not say.
+			return fmt.Errorf("client tool %q: %w", t.Name, defErr)
 		}
-		return err
+		return fmt.Errorf("tool %q: spec is not base64-encoded: %w", t.Name, err)
 	}
 	t.OASSpec = decoded
 	return nil
