@@ -233,35 +233,27 @@ func (a *API) getCommonToolCatalogueTools(c *gin.Context) {
 		return
 	}
 
-	response := make([]ToolResponse, len(toolCatalogue.Tools))
-	for i, tool := range toolCatalogue.Tools {
-		response[i] = ToolResponse{
+	// This is a portal page: a chat-only tool is not listed (see
+	// models.AccessibleToolQuery).
+	response := make([]ToolResponse, 0, len(toolCatalogue.Tools))
+	for _, tool := range toolCatalogue.Tools {
+		if !tool.AppGrantable() {
+			continue
+		}
+		response = append(response, ToolResponse{
 			Type: "tool",
 			ID:   strconv.FormatUint(uint64(tool.ID), 10),
-			Attributes: struct {
-				Name           string              `json:"name"`
-				Description    string              `json:"description"`
-				ToolType       string              `json:"tool_type"`
-				OASSpec        string              `json:"oas_spec"`
-				PrivacyScore   int                 `json:"privacy_score"`
-				Operations     []string            `json:"operations"`
-				AuthKey        string              `json:"auth_key"`
-				HasAuthKey     bool                `json:"has_auth_key"`
-				AuthSchemaName string              `json:"auth_schema_name"`
-				Active         bool                `json:"active"`
-				Namespace      string              `json:"namespace"`
-				FileStores     []FileStoreResponse `json:"file_stores"`
-				Filters        []FilterResponse    `json:"filters"`
-				Dependencies   []ToolResponse      `json:"dependencies"`
-			}{
+			Attributes: ToolResponseAttributes{
 				Name:         tool.Name,
 				Description:  tool.Description,
 				ToolType:     tool.ToolType,
 				PrivacyScore: tool.PrivacyScore,
 				Operations:   tool.GetOperations(),
 				Active:       tool.Active,
+
+				ToolGatewayAccess: toolGatewayAccess(&tool),
 			},
-		}
+		})
 	}
 
 	response = a.withToolGovernedMetadata(response, true)
@@ -962,6 +954,7 @@ func (a *API) listChatHistoryRecordsForMe(c *gin.Context) {
 // @Tags common
 // @Accept json
 // @Produce json
+// @Param app_grantable query bool false "Only tools an App can reach (REST or MCP access on); omits chat-only tools"
 // @Success 200 {array} ToolResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -978,7 +971,15 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 	}
 	currentUser := user.(*models.User)
 
-	tools, err := a.service.GetAccessibleToolsForUser(currentUser.ID)
+	// The chat tool picker and the portal's App builder both read this list.
+	// Chat offers every tool; the App builder asks for app_grantable=true so a
+	// chat-only tool, which an App credential cannot reach, is left out. The
+	// filter runs in SQL (models.AppGrantableToolScope).
+	listTools := a.service.GetAccessibleToolsForUser
+	if c.Query("app_grantable") == "true" {
+		listTools = a.service.GetAppGrantableToolsForUser
+	}
+	tools, err := listTools(currentUser.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -987,27 +988,12 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 		return
 	}
 
-	response := make([]ToolResponse, len(tools))
-	for i, tool := range tools {
-		response[i] = ToolResponse{
+	response := make([]ToolResponse, 0, len(tools))
+	for _, tool := range tools {
+		response = append(response, ToolResponse{
 			Type: "tool",
 			ID:   strconv.FormatUint(uint64(tool.ID), 10),
-			Attributes: struct {
-				Name           string              `json:"name"`
-				Description    string              `json:"description"`
-				ToolType       string              `json:"tool_type"`
-				OASSpec        string              `json:"oas_spec"`
-				PrivacyScore   int                 `json:"privacy_score"`
-				Operations     []string            `json:"operations"`
-				AuthKey        string              `json:"auth_key"`
-				HasAuthKey     bool                `json:"has_auth_key"`
-				AuthSchemaName string              `json:"auth_schema_name"`
-				Active         bool                `json:"active"`
-				Namespace      string              `json:"namespace"`
-				FileStores     []FileStoreResponse `json:"file_stores"`
-				Filters        []FilterResponse    `json:"filters"`
-				Dependencies   []ToolResponse      `json:"dependencies"`
-			}{
+			Attributes: ToolResponseAttributes{
 				Name:         tool.Name,
 				Description:  tool.Description,
 				ToolType:     tool.ToolType,
@@ -1015,8 +1001,10 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 				Operations:   tool.GetOperations(),
 				Active:       tool.Active,
 				// Note: We're not including OASSpec and AuthKey for security reasons
+
+				ToolGatewayAccess: toolGatewayAccess(&tool),
 			},
-		}
+		})
 	}
 
 	response = a.withToolGovernedMetadata(response, true)

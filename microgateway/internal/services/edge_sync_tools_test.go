@@ -99,7 +99,10 @@ func createFullSnapshot(namespace string) *pb.ConfigurationSnapshot {
 				OasSpec:             base64.StdEncoding.EncodeToString([]byte(`{"openapi":"3.0.0","info":{"title":"Search","version":"1.0"},"paths":{"/search":{"get":{"operationId":"search","parameters":[{"name":"q","in":"query","schema":{"type":"string"}}],"responses":{"200":{"description":"OK"}}}}}}`)),
 				AvailableOperations: "search",
 				IsActive:            true,
-				Namespace:           namespace,
+				// REST only. The Weather API above sets neither switch, as a hub
+				// that predates them would: both methods stay on.
+				McpAccessDisabled: true,
+				Namespace:         namespace,
 				AppIds:              []uint32{1},
 				CreatedAt:           timestamppb.New(now),
 				UpdatedAt:           timestamppb.New(now),
@@ -421,6 +424,25 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 	t.Run("GetToolBySlug_NotFound", func(t *testing.T) {
 		_, err := adapter.GetToolBySlug("nonexistent-tool")
 		assert.Error(t, err)
+	})
+
+	// The access-method switches travel hub -> snapshot -> edge DB -> the
+	// models.Tool the shared proxy handlers read. A hub that does not send
+	// them must leave both methods on.
+	t.Run("AccessMethodSwitchesReachTheGateway", func(t *testing.T) {
+		weather, err := adapter.GetToolBySlug("weather-api")
+		require.NoError(t, err)
+		assert.True(t, weather.RESTAccessEnabled(), "switches absent from the snapshot mean enabled")
+		assert.True(t, weather.MCPAccessEnabled(), "switches absent from the snapshot mean enabled")
+
+		search, err := adapter.GetToolBySlug("search-api")
+		require.NoError(t, err)
+		assert.True(t, search.RESTAccessEnabled())
+		assert.False(t, search.MCPAccessEnabled())
+
+		byID, err := adapter.GetToolByID(2)
+		require.NoError(t, err)
+		assert.False(t, byID.MCPAccessEnabled())
 	})
 
 	t.Run("GetToolByID", func(t *testing.T) {

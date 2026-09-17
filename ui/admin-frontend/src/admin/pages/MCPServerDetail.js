@@ -735,10 +735,11 @@ const MCPServerDetail = () => {
           />
         </Section>
 
-        <Section title={`Primitives (${(server.primitives || []).length})`}>
+        {/* "MCP tools", not "tools": Tools are a different object in AI Studio. */}
+        <Section title={`MCP tools, resources and prompts (${(server.primitives || []).length})`}>
           {(server.primitives || []).length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              No tools, resources or prompts are declared in the definition.
+              No MCP tools, resources or prompts are declared in the definition.
             </Typography>
           ) : (
             <Table size="small">

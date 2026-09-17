@@ -6,17 +6,14 @@ import {
   Chip,
   CircularProgress,
   Grid,
-  IconButton,
   Link,
   Table,
   TableBody,
   TableHead,
   TableRow,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DescriptionIcon from "@mui/icons-material/Description";
 import { format } from "date-fns";
 import pubClient from "../../admin/utils/pubClient";
@@ -27,6 +24,8 @@ import GovernedMetadataBadges from "../components/GovernedMetadataBadges";
 import AssetAvatar from "../components/catalog/AssetAvatar";
 import AssetTypeChip from "../components/catalog/AssetTypeChip";
 import AppStatusChip, { getAppStatus } from "../components/AppStatusChip";
+import CopyableCode from "../components/connect/CopyableCode";
+import { toolMcpEnabled, toolRestEnabled } from "../utils/toolEndpoints";
 import {
   TitleBox,
   ContentBox,
@@ -96,38 +95,6 @@ const Field = ({ label, children, xs = 12, sm = 6, md = 3 }) => (
     </FieldValue>
   </Grid>
 );
-
-const CopyableCode = ({ value, label }) => {
-  const copy = () => {
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(value).catch(() => undefined);
-    }
-  };
-  return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography
-        component="code"
-        variant="body2"
-        sx={{
-          fontFamily: "monospace",
-          bgcolor: "action.hover",
-          px: 1.5,
-          py: 1,
-          borderRadius: 1,
-          flexGrow: 1,
-          wordBreak: "break-all",
-        }}
-      >
-        {value}
-      </Typography>
-      <Tooltip title={`Copy ${label}`}>
-        <IconButton aria-label={`Copy ${label}`} size="small" onClick={copy}>
-          <ContentCopyIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
-    </Box>
-  );
-};
 
 const LLMSections = ({ item }) => {
   const attrs = item.attributes || {};
@@ -251,7 +218,41 @@ const DatasourceSections = ({ item }) => {
 const ToolSections = ({ item }) => {
   const attrs = item.attributes || {};
   const operations = attrs.operations || [];
+  const rest = toolRestEnabled(attrs);
+  const mcp = toolMcpEnabled(attrs);
   return (
+    <>
+    {/* Mirrors the MCP server page: who serves it, how you get in, where. A
+        tool is listed here only if at least one method is on. */}
+    <Section
+      title="How to connect"
+      description="This tool is served by AI Studio. Your app reaches it with its own credential."
+    >
+      <Grid container spacing={2}>
+        <Field label="Access methods" md={4}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }} data-testid="asset-tool-access">
+            {rest && <Chip size="small" label="REST API" color="primary" />}
+            {mcp && <Chip size="small" label="MCP" color="primary" />}
+          </Box>
+        </Field>
+        <Field label="Authentication" md={8}>
+          App credential as a bearer token{mcp ? ", or OAuth sign-in from an MCP client" : ""}
+        </Field>
+        {rest && attrs.rest_endpoint_url && (
+          <Field label="REST endpoint" md={12}>
+            <CopyableCode value={attrs.rest_endpoint_url} label="REST endpoint" />
+          </Field>
+        )}
+        {mcp && attrs.mcp_endpoint_url && (
+          <Field label="MCP endpoint" md={12}>
+            <CopyableCode value={attrs.mcp_endpoint_url} label="MCP endpoint" />
+          </Field>
+        )}
+      </Grid>
+      <Typography variant="bodyMediumDefault" color="text.defaultSubdued" sx={{ mt: 2 }} data-testid="tool-access-note">
+        Build an app with this tool. Once it is approved, the app page shows the credential and a ready-made MCP client configuration.
+      </Typography>
+    </Section>
     <Section
       title="Operations"
       description="What the tool exposes to your apps."
@@ -278,6 +279,7 @@ const ToolSections = ({ item }) => {
         </Typography>
       )}
     </Section>
+    </>
   );
 };
 
@@ -365,7 +367,8 @@ const MCPServerSections = ({ item }) => {
               : "AI Studio does not broker access to this server: obtain a token from the authentication method above and point your MCP client at the endpoint."}
         </Typography>
       </Section>
-      <Section title="Tools, resources and prompts" description="What the server offers, as declared on the Tyk Gateway.">
+      {/* "MCP tools": Tools are a different asset type in this catalog. */}
+      <Section title="MCP tools, resources and prompts" description="What the server offers, as declared on the Tyk Gateway.">
         {primitives.length > 0 ? (
           <Box component="ul" sx={{ m: 0, pl: 2 }} data-testid="asset-primitives">
             {primitives.map((p) => (

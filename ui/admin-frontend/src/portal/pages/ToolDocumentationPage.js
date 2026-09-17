@@ -27,6 +27,15 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
 import pubClient from '../../admin/utils/pubClient';
 import { getConfig } from '../../config';
+import { mcpClientConfig, toolEntry } from '../components/connect/mcpConfig';
+import { toolMcpEnabled, toolMcpEndpoint, toolRestEnabled, toolRestEndpoint } from '../utils/toolEndpoints';
+
+// Where the gateway serves tools when the API did not send the tool's URLs:
+// the configured display URL, else the proxy URL, else this host on :9090.
+const gatewayBaseUrl = () => {
+  const config = getConfig();
+  return config.toolDisplayURL || config.proxyURL || `${window.location.protocol}//${window.location.hostname}:9090`;
+};
 
 // Helper function to generate example curl commands
 //
@@ -37,8 +46,6 @@ import { getConfig } from '../../config';
 export const generateCurlExample = (operation, toolDetails, selectedApiToken = null) => {
   if (!operation || !toolDetails) return 'curl example not available';
 
-  // Generate slug from tool name for the URL
-  const toolSlug = toolDetails.attributes.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const operationId = operation.operation_id;
 
   // Build parts of the curl command as separate lines. Every tool call is a
@@ -51,13 +58,9 @@ export const generateCurlExample = (operation, toolDetails, selectedApiToken = n
   const apiKey = selectedApiToken || 'YOUR_API_KEY';
   parts.push(`  -H "Authorization: Bearer ${apiKey}"`);
 
-  // Build the URL with the proper gateway URL
-  const config = getConfig();
-  const currentHost = window.location.hostname;
-  const protocol = window.location.protocol; // Get the current protocol (http: or https:)
-  // Use toolDisplayURL from config if available, otherwise fall back to proxyURL, then default gateway
-  const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-  parts.push(`  ${baseUrl}/tools/${toolSlug}`);
+  // The REST endpoint comes from the API when it sends one (the slug is
+  // computed server-side); the gateway base URL is only a fallback.
+  parts.push(`  ${toolRestEndpoint(toolDetails.attributes, gatewayBaseUrl())}`);
 
   // Generate an example request body with only the required operation_id
   const exampleBody = {
@@ -295,6 +298,12 @@ const ToolDocumentationPage = () => {
     );
   }
 
+  // Only the access methods an administrator has switched on are documented.
+  const toolAttrs = toolDetails?.attributes || {};
+  const restOn = toolRestEnabled(toolAttrs);
+  const mcpOn = toolMcpEnabled(toolAttrs);
+  const mcpUrl = toolMcpEndpoint(toolAttrs, gatewayBaseUrl());
+
   return (
     <Box sx={{ p: 3, maxWidth: '1400px' }}>
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 1 }}>
@@ -364,14 +373,15 @@ const ToolDocumentationPage = () => {
         </Box>
       )}
 
-      {/* MCP Support Section */}
-      <Paper sx={{ p: 3, mb: 3, backgroundColor: '#f8f9fa', border: '1px solid #e9ecef' }} elevation={1}>
+      {/* MCP access, when an administrator has switched it on for this tool */}
+      {mcpOn && (
+      <Paper data-testid="tool-docs-mcp" sx={{ p: 3, mb: 3, backgroundColor: '#f8f9fa', border: '1px solid #e9ecef' }} elevation={1}>
         <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-          🔗 MCP (Model Context Protocol) Support
+          🔗 Connect over MCP
         </Typography>
         <Typography variant="body1" sx={{ mb: 2 }}>
-          This tool is available through the Model Context Protocol (MCP), enabling seamless integration with MCP-compatible clients 
-          such as Claude Desktop, Zed, and other AI applications.
+          This tool has an MCP endpoint, served by AI Studio, for MCP clients such as Claude Desktop and Zed. It takes your
+          app's credential. It is not one of the MCP servers in the catalog: those are served by a Tyk Gateway and use a Tyk access key.
         </Typography>
         
         <Box sx={{ mb: 3 }}>
@@ -379,14 +389,7 @@ const ToolDocumentationPage = () => {
             MCP Connection Endpoint
           </Typography>
           <CodeBlock index="mcp-endpoint">
-            {(() => {
-              const config = getConfig();
-              const currentHost = window.location.hostname;
-              const protocol = window.location.protocol;
-              const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-              const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
-              return `${baseUrl}/tools/${toolSlug}/mcp`;
-            })()}
+            {mcpUrl}
           </CodeBlock>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             This is the default MCP endpoint using StreamableHTTP format. Use this URL with Bearer token authentication in the Authorization header. For older clients that require SSE transport, use <code>/mcp/sse</code> instead.
@@ -424,33 +427,7 @@ const ToolDocumentationPage = () => {
                 Add this tool to your Claude Desktop configuration using the mcp-remote library with Bearer authentication:
               </Typography>
               <CodeBlock index="claude-desktop-config" fontSize="0.85rem">
-{(() => {
-  const config = getConfig();
-  const currentHost = window.location.hostname;
-  const protocol = window.location.protocol;
-  const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-  const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
-  const toolName = toolDetails?.attributes?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'tool_name';
-  const envVarName = toolName.toUpperCase() + '_API_TOKEN';
-  const apiToken = getSelectedApiToken() || 'YOUR_API_TOKEN_HERE';
-
-  return `{
-  "mcpServers": {
-    "${toolName}": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "${baseUrl}/tools/${toolSlug}/mcp",
-        "--header",
-        "Authorization: Bearer \${${envVarName}}"
-      ],
-      "env": {
-        "${envVarName}": "${apiToken}"
-      }
-    }
-  }
-}`;
-})()}
+{mcpClientConfig([toolEntry({ ...toolDetails?.attributes, mcp_endpoint_url: mcpUrl }, getSelectedApiToken() || 'YOUR_API_TOKEN_HERE')])}
               </CodeBlock>
               <Alert severity="success" sx={{ mt: 2 }}>
                 <Typography variant="body2">
@@ -480,14 +457,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 // Create StreamableHTTP transport (default endpoint)
 const transport = new StreamableHTTPClientTransport(
-  new URL('${(() => {
-    const config = getConfig();
-    const currentHost = window.location.hostname;
-    const protocol = window.location.protocol;
-    const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-    const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
-    return `${baseUrl}/tools/${toolSlug}/mcp`;
-  })()}'),
+  new URL('${mcpUrl}'),
   {
     headers: {
       'Authorization': 'Bearer ${getSelectedApiToken() || 'YOUR_API_TOKEN_HERE'}'
@@ -528,22 +498,8 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 
 // Create SSE transport (for older clients that don't support StreamableHTTP)
 const transport = new SSEClientTransport(
-  new URL('${(() => {
-    const config = getConfig();
-    const currentHost = window.location.hostname;
-    const protocol = window.location.protocol;
-    const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-    const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
-    return `${baseUrl}/tools/${toolSlug}/mcp/sse`;
-  })()}'),
-  new URL('${(() => {
-    const config = getConfig();
-    const currentHost = window.location.hostname;
-    const protocol = window.location.protocol;
-    const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-    const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
-    return `${baseUrl}/tools/${toolSlug}/mcp/message`;
-  })()}'),
+  new URL('${`${mcpUrl}/sse`}'),
+  new URL('${`${mcpUrl}/message`}'),
   {
     headers: {
       'Authorization': 'Bearer ${getSelectedApiToken() || 'YOUR_API_TOKEN_HERE'}'
@@ -573,10 +529,17 @@ await client.connect(transport);`}
           </Typography>
         </Alert>
       </Paper>
+      )}
 
       <Typography variant="h5" component="h2" gutterBottom sx={{ mb: 2, mt: 4 }}>
         📋 API Operations
       </Typography>
+      {!restOn && (
+        <Alert severity="info" variant="outlined" sx={{ mb: 2 }} data-testid="tool-docs-rest-off">
+          REST API access is not switched on for this tool. The operations below are what it offers over MCP; they cannot be
+          called over HTTP.
+        </Alert>
+      )}
       {documentationData.map((operation, index) => (
         <Accordion
           key={operation.operation_id || index}
@@ -768,7 +731,8 @@ await client.connect(transport);`}
                   </Paper>
                 </Box>
               )}
-              {/* Example curl command */}
+              {/* Example curl command: only when the tool can be called over REST */}
+              {restOn && (
               <Box sx={{ mt: 3 }}>
                 <Typography variant="h6" gutterBottom component="div">
                   Example Request
@@ -794,6 +758,7 @@ await client.connect(transport);`}
                   </IconButton>
                 </Paper>
               </Box>
+              )}
             </Box>
           </AccordionDetails>
         </Accordion>

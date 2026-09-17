@@ -24,6 +24,10 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
 		return nil, err
 	}
+	// A chat-only tool has no endpoint an App credential could unlock.
+	if err := s.rejectChatOnlyTools(nil, toolIDs); err != nil {
+		return nil, err
+	}
 
 	// Apply default budget if not set and default is configured
 	budgetNotSet := monthlyBudget == nil
@@ -147,6 +151,10 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
 		return nil, err
 	}
+	// A chat-only tool has no endpoint an App credential could unlock.
+	if err := s.rejectChatOnlyTools(nil, toolIDs); err != nil {
+		return nil, err
+	}
 
 	// Apply default budget if not set and default is configured
 	budgetNotSet := monthlyBudget == nil
@@ -234,6 +242,11 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
+		return nil, err
+	}
+	// New bindings to a chat-only tool are refused; ones the App already has
+	// are kept (see rejectChatOnlyTools).
+	if err := s.rejectChatOnlyTools(&app.ID, toolIDs); err != nil {
 		return nil, err
 	}
 
@@ -798,6 +811,9 @@ func (s *Service) AddToolToApp(appID, toolID uint) (*models.App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
 	}
+	if err := s.rejectChatOnlyTools(&app.ID, []uint{toolID}); err != nil {
+		return nil, err
+	}
 
 	// Check if the tool is already associated to prevent duplicates if necessary,
 	// though GORM's Append usually handles this for many2many.
@@ -1004,6 +1020,41 @@ func (s *Service) rejectNonAppGranted(appID *uint, prt *models.PluginResourceTyp
 			continue
 		}
 		return fmt.Errorf("%w: %s/%s instance %s", ErrResourceNotAppGranted, prt.Slug, prt.Name, id)
+	}
+	return nil
+}
+
+// rejectChatOnlyTools refuses tools an App credential cannot reach: a tool with
+// both gateway access methods (REST and MCP) switched off is chat only, and
+// binding it to an App grants nothing. Tools already bound to appID (when
+// given) are exempt, as in rejectNonAppGranted: an update resends the App's
+// whole tool list, and a tool an admin switched off later must not block every
+// other edit of the App. The gateway refuses such a tool at request time.
+func (s *Service) rejectChatOnlyTools(appID *uint, toolIDs []uint) error {
+	ids := uniqueUintIDs(toolIDs)
+	if len(ids) == 0 {
+		return nil
+	}
+	existing := map[uint]bool{}
+	if appID != nil {
+		var bound []uint
+		if err := s.DB.Table("app_tools").Where("app_id = ?", *appID).Pluck("tool_id", &bound).Error; err != nil {
+			return fmt.Errorf("load existing tools for app %d: %w", *appID, err)
+		}
+		for _, id := range bound {
+			existing[id] = true
+		}
+	}
+	var tools []models.Tool
+	if err := s.DB.Select("id", "name", "tool_type", "rest_access_disabled", "mcp_access_disabled").
+		Where("id IN ?", ids).Find(&tools).Error; err != nil {
+		return err
+	}
+	for i := range tools {
+		if existing[tools[i].ID] || tools[i].AppGrantable() {
+			continue
+		}
+		return fmt.Errorf("%w: tool %q is chat only (REST and MCP access are off)", ErrResourceNotAppGranted, tools[i].Name)
 	}
 	return nil
 }

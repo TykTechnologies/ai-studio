@@ -56,6 +56,10 @@ const toolPayload = (active) => ({
       attributes: {
         name: "weather", description: "Forecasts", tool_type: "REST", oas_spec: "",
         privacy_score: 40, active, operations: [], file_stores: [], filters: [], namespace: "",
+        // REST is off and MCP is on, so the two switches can be told apart.
+        rest_access_enabled: false, mcp_access_enabled: true, app_grantable: true,
+        rest_endpoint_url: "https://gw.example.com/tools/weather",
+        mcp_endpoint_url: "https://gw.example.com/tools/weather/mcp",
       },
     },
   },
@@ -104,10 +108,55 @@ describe("ToolForm Active switch and privacy level", () => {
     renderForm();
     await screen.findByDisplayValue("weather");
     expect(screen.getByRole("checkbox", { name: "Active" })).toBeChecked();
-    expect(screen.getByText("Available to the portal and gateway when on")).toBeInTheDocument();
+    expect(screen.getByText("Available to chats, the portal and the gateway when on")).toBeInTheDocument();
     // 40 sits in the Internal band.
     expect(screen.getByTestId("privacy-level-select")).toHaveValue("internal");
     expect(screen.getByRole("spinbutton", { name: "Privacy level score" })).toHaveValue(40);
+  });
+
+  // A tool is a chat capability first; REST and MCP on the gateway are opt-in.
+  it("starts a new tool chat only and sends both access methods off", async () => {
+    renderForm();
+    await screen.findByRole("button", { name: "Add tool" });
+    expect(screen.getByRole("checkbox", { name: "REST API access" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "MCP access" })).not.toBeChecked();
+    expect(screen.getByTestId("tool-chat-only")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Time" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "Clock" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
+    expect(lastPostAttributes().rest_access_enabled).toBe(false);
+    expect(lastPostAttributes().mcp_access_enabled).toBe(false);
+  });
+
+  it("sends an access method that was switched on, and drops the chat-only note", async () => {
+    renderForm();
+    await screen.findByRole("button", { name: "Add tool" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "MCP access" }));
+    expect(screen.queryByTestId("tool-chat-only")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Time" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "Clock" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
+    expect(lastPostAttributes().rest_access_enabled).toBe(false);
+    expect(lastPostAttributes().mcp_access_enabled).toBe(true);
+  });
+
+  it("shows an existing tool's switches and the endpoint of the method that is on", async () => {
+    mockParams = { id: "7" };
+    renderForm();
+    await screen.findByDisplayValue("weather");
+    expect(screen.getByRole("checkbox", { name: "REST API access" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "MCP access" })).toBeChecked();
+    // The URL comes from the API; the form never builds it from the name.
+    expect(screen.getByText("https://gw.example.com/tools/weather/mcp")).toBeInTheDocument();
+    expect(screen.queryByText("https://gw.example.com/tools/weather")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "MCP access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update tool" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith("/tools/7", expect.anything()));
+    expect(lastPatchAttributes().mcp_access_enabled).toBe(false);
+    expect(lastPatchAttributes().rest_access_enabled).toBe(false);
   });
 
   it("PATCHes active=false when the switch is turned off on an existing tool", async () => {

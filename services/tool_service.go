@@ -31,6 +31,12 @@ func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType stri
 		PrivacyScore:   privacyScore,
 		AuthSchemaName: schemaName,
 		AuthKey:        APIKey,
+		// Every creator of a tool comes through here (admin API, submission
+		// approval, plugin gRPC), so this is the one place the access-method
+		// default for new tools is applied. A caller that was asked for a
+		// method sets it on the returned tool and saves it.
+		RESTAccessDisabled: !models.DefaultToolRESTAccessEnabled,
+		MCPAccessDisabled:  !models.DefaultToolMCPAccessEnabled,
 	}
 
 	// Execute "before_create" hooks
@@ -258,11 +264,15 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 }
 
 // GetToolBySlug retrieves a tool by its slug (pre-computed from name using slug.Make)
+//
+// This is the gateway's lookup, so it resolves active tools only. An inactive
+// tool is never shipped to an edge gateway; the embedded gateway has to agree,
+// or deactivating a tool only takes effect at the edge.
 func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 	var tool models.Tool
 
 	// Use the pre-computed slug column for efficient indexed lookup
-	err := s.DB.Where("slug = ?", slug).
+	err := s.DB.Where("slug = ? AND active = ?", slug, true).
 		Preload("FileStores").
 		Preload("Filters").
 		Preload("Dependencies").
@@ -344,7 +354,20 @@ func (s *Service) AddOperationToTool(toolID uint, operation string) error {
 	}
 
 	tool.AddOperation(operation)
-	return tool.Update(s.DB)
+	if err := tool.Update(s.DB); err != nil {
+		return err
+	}
+	s.emitToolWhitelistChanged(tool)
+	return nil
+}
+
+// emitToolWhitelistChanged announces a change to a tool's operation whitelist.
+// The whitelist decides what the gateway will call, on the edge as well, so
+// edge gateways have to be told their configuration is out of date.
+func (s *Service) emitToolWhitelistChanged(tool *models.Tool) {
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitToolUpdated(tool, tool.ID, 0)
+	}
 }
 
 // RemoveOperationFromTool removes an operation from a tool
@@ -355,7 +378,11 @@ func (s *Service) RemoveOperationFromTool(toolID uint, operation string) error {
 	}
 
 	tool.RemoveOperation(operation)
-	return tool.Update(s.DB)
+	if err := tool.Update(s.DB); err != nil {
+		return err
+	}
+	s.emitToolWhitelistChanged(tool)
+	return nil
 }
 
 // GetToolOperations retrieves all operations associated with a tool

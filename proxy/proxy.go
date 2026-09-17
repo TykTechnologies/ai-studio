@@ -1052,9 +1052,27 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "invalid tool type in context", nil, false)
 		return
 	}
+	// REST is an optional access method of a tool; see authorizedMCPTool for
+	// why a switched-off method is a 403.
+	if !tool.RESTAccessEnabled() {
+		respondWithError(w, http.StatusForbidden, toolRESTAccessDisabledMessage, nil, false)
+		return
+	}
 	var input scripting.ToolCallArgs
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		respondWithError(w, http.StatusBadRequest, "invalid request body", err, false)
+		return
+	}
+	if input.OperationID == "" {
+		respondWithError(w, http.StatusBadRequest, "operation_id is required", nil, false)
+		return
+	}
+	// Only whitelisted operations may be called, as on the MCP endpoint and in
+	// chat. Checked before the filters so a refused call never reaches them;
+	// the filters cannot change the operation afterwards (RunToolInputFilters
+	// takes back only parameters, payload and headers).
+	if !tool.AllowsOperation(input.OperationID) {
+		respondWithError(w, http.StatusForbidden, toolOperationNotPermittedMessage, nil, false)
 		return
 	}
 
@@ -2652,6 +2670,16 @@ func (p *Proxy) authorizedMCPTool(w http.ResponseWriter, r *http.Request) *model
 	if toolSlug := mux.Vars(r)["toolSlug"]; toolSlug != "" && toolSlug != tool.Slug {
 		logger.Debugf("MCP request for tool slug %q authorized only for %q", toolSlug, tool.Slug)
 		respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+		return nil
+	}
+
+	// The access-method switch is read from the tool loaded for this request,
+	// not from the cached MCP server, so turning MCP off takes effect on the
+	// next request. It answers 403 rather than the uniform 401: the caller has
+	// already passed the App ACL, a 401 would send an MCP client into an OAuth
+	// re-authorisation loop, and a 404 makes clients probe the SSE transport.
+	if !tool.MCPAccessEnabled() {
+		respondWithError(w, http.StatusForbidden, toolMCPAccessDisabledMessage, nil, false)
 		return nil
 	}
 

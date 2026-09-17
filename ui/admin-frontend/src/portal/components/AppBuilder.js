@@ -82,7 +82,10 @@ const AppBuilder = () => {
           await Promise.all([
             pubClient.get("/common/accessible-datasources"),
             pubClient.get("/common/accessible-llms"),
-            pubClient.get("/common/accessible-tools"),
+            // Only tools an App can reach (REST or MCP access on). Chat-only
+            // tools, the built-in Generative UI tool among them, are left
+            // out; the same endpoint without the flag feeds the chat picker.
+            pubClient.get("/common/accessible-tools", { params: { app_grantable: true } }),
             pubClient.get("/common/accessible-plugin-resources").catch(() => ({ data: { data: [] } })),
             // Tyk-managed MCP servers (Enterprise) come from the unified
             // catalog; the request fails harmlessly on Community Edition.
@@ -323,6 +326,7 @@ const AppBuilder = () => {
                 onChange={setSelectedTools}
                 options={tools}
                 getOptionLabel={jsonApiName}
+                helperText="Served by AI Studio. Your app calls them over REST or MCP with its own credential."
               />
             </Box>
             {mcpServers.length > 0 && (
@@ -334,6 +338,7 @@ const AppBuilder = () => {
                   onChange={setSelectedMCPServers}
                   options={mcpServers}
                   getOptionLabel={(server) => server?.name ?? ""}
+                  helperText="Served by a Tyk Gateway. Once the app is approved you request a Tyk access key for them on the app page."
                 />
               </Box>
             )}

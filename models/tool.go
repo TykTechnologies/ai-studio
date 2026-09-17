@@ -26,7 +26,17 @@ type Tool struct {
 	Active              bool   `json:"active" gorm:"default:true"`
 	Namespace           string `json:"namespace" gorm:"default:'';index:idx_tool_namespace"`
 
-	FileStores   []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
+	// Access methods. A tool is first of all a chat capability; reaching it
+	// from an App over REST or MCP on the gateway is optional and switched per
+	// tool. The columns are stored inverted so the zero value means "enabled":
+	// rows that predate the switches, and config pushed by a hub that does not
+	// know them, keep today's behaviour. New tools get their default in
+	// services.CreateToolWithDB (see DefaultToolRESTAccessEnabled). Read them
+	// through RESTAccessEnabled / MCPAccessEnabled, never directly.
+	RESTAccessDisabled bool `json:"rest_access_disabled" gorm:"not null;default:false"`
+	MCPAccessDisabled  bool `json:"mcp_access_disabled" gorm:"not null;default:false"`
+
+	FileStores  []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
 	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
 	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
 	Apps         []*App      `gorm:"many2many:app_tools;" json:"apps"`
@@ -51,6 +61,14 @@ const (
 	// approval) rather than by the server. Its definition lives in OASSpec as
 	// a ClientToolDefinition JSON document.
 	ToolTypeClient = "CLIENT"
+)
+
+// Defaults for the access methods of a newly created tool. Tools that existed
+// before the switches stay enabled (see Tool.RESTAccessDisabled); a new tool is
+// chat only until an admin turns a method on.
+const (
+	DefaultToolRESTAccessEnabled = false
+	DefaultToolMCPAccessEnabled  = false
 )
 
 const (
@@ -252,6 +270,44 @@ func (t *Tool) GetOperations() []string {
 		return []string{}
 	}
 	return strings.Split(t.AvailableOperations, ",")
+}
+
+// AllowsOperation reports whether operationID is on the tool's whitelist. An
+// empty whitelist allows nothing, which is what chat and the MCP endpoint
+// already do.
+func (t *Tool) AllowsOperation(operationID string) bool {
+	if operationID == "" {
+		return false
+	}
+	for _, op := range t.GetOperations() {
+		if strings.TrimSpace(op) == operationID {
+			return true
+		}
+	}
+	return false
+}
+
+// servedByGateway reports whether the gateway can serve the tool at all. A
+// client tool runs in the chat UI and has no gateway endpoint.
+func (t *Tool) servedByGateway() bool {
+	return t.ToolType != ToolTypeClient
+}
+
+// RESTAccessEnabled reports whether Apps may call the tool on /tools/{slug}.
+func (t *Tool) RESTAccessEnabled() bool {
+	return t.servedByGateway() && !t.RESTAccessDisabled
+}
+
+// MCPAccessEnabled reports whether Apps may reach the tool's MCP endpoint
+// (/tools/{slug}/mcp and its SSE transport).
+func (t *Tool) MCPAccessEnabled() bool {
+	return t.servedByGateway() && !t.MCPAccessDisabled
+}
+
+// AppGrantable reports whether binding the tool to an App gives the App
+// anything: a chat-only tool has no endpoint an App credential could unlock.
+func (t *Tool) AppGrantable() bool {
+	return t.RESTAccessEnabled() || t.MCPAccessEnabled()
 }
 
 // AddFileStore adds a FileStore to the Tool

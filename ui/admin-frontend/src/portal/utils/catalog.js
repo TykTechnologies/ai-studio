@@ -76,12 +76,21 @@ export const kindLabel = (item) => {
     case CATALOG_TYPES.DATASOURCE:
       return getVectorStoreName(a.kind) || a.kind || "";
     case CATALOG_TYPES.TOOL:
-      return a.kind ? a.kind.toUpperCase() : "";
+      // Every tool in the portal is a REST (OpenAPI) tool, so the type says
+      // nothing. What differs is how an app may reach it: over REST, over
+      // MCP, or both. A server that does not send the flags gets the type.
+      return toolAccessLabel(a) || (a.kind ? a.kind.toUpperCase() : "");
     case CATALOG_TYPES.MCP_SERVER:
       return MCP_KIND_LABELS[a.kind] || a.kind || "";
     default:
       return a.kind || "";
   }
+};
+
+/** "REST API · MCP", from a tool's access-method flags; "" when absent. */
+export const toolAccessLabel = (a = {}) => {
+  if (a.rest_access_enabled === undefined && a.mcp_access_enabled === undefined) return "";
+  return [a.rest_access_enabled && "REST API", a.mcp_access_enabled && "MCP"].filter(Boolean).join(" · ");
 };
 
 export const MCP_KIND_LABELS = { remote: "Remote MCP server", rest_to_mcp: "REST API to MCP" };

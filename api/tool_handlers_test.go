@@ -35,6 +35,8 @@ func TestToolEndpoints(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
@@ -50,6 +52,8 @@ func TestToolEndpoints(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "Test Tool",
@@ -91,6 +95,8 @@ func TestToolEndpoints(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
@@ -106,6 +112,8 @@ func TestToolEndpoints(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "Updated Tool",
@@ -178,6 +186,8 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					Operations     []string `json:"operations"`
 					Namespace      string   `json:"namespace"`
 					Active         *bool    `json:"active,omitempty"`
+					RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+					MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 					GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 				} `json:"attributes"`
 			}{
@@ -193,6 +203,8 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					Operations     []string `json:"operations"`
 					Namespace      string   `json:"namespace"`
 					Active         *bool    `json:"active,omitempty"`
+					RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+					MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 					GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 				}{
 					Name:     name,
@@ -274,6 +286,8 @@ func TestToolEndpointsErrors(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
@@ -289,6 +303,8 @@ func TestToolEndpointsErrors(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "Updated Tool",
@@ -322,6 +338,8 @@ func TestToolEndpointsErrors(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
@@ -337,6 +355,8 @@ func TestToolEndpointsErrors(t *testing.T) {
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
 				Active         *bool    `json:"active,omitempty"`
+				RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "",

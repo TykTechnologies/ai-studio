@@ -91,6 +91,18 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	// Refuse an impossible access-method request before anything is written.
+	if err := applyToolAccessInput(&models.Tool{ToolType: input.Data.Attributes.ToolType},
+		input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Tools default to active. Asking for an active tool explicitly needs
 	// tools:publish; a caller without it gets a draft (inactive) tool unless
 	// they asked for one anyway.
@@ -151,6 +163,10 @@ func (a *API) createTool(c *gin.Context) {
 	// writes the value decided above.
 	tool.Active = wantActive
 
+	// Access methods: the service created the tool chat only; turn on what
+	// the caller asked for. The combination was validated before the create.
+	_ = applyToolAccessInput(tool, input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled)
+
 	// Add operations (after tool is created and has an ID)
 	for _, op := range input.Data.Attributes.Operations {
 		tool.AddOperation(op)
@@ -166,9 +182,12 @@ func (a *API) createTool(c *gin.Context) {
 		})
 		return
 	}
+	// The created event fired inside CreateTool, before the operations,
+	// namespace and switches above were written.
+	a.emitToolUpdated(tool)
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)
-	c.JSON(http.StatusCreated, dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
+	c.JSON(http.StatusCreated,dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
 }
 
 // validateOASSpecEncoding checks that an oas_spec attribute is the base64 the
@@ -323,6 +342,17 @@ func (a *API) updateTool(c *gin.Context) {
 	}
 	tool.Namespace = input.Data.Attributes.Namespace
 
+	// Access methods; an omitted switch keeps its value.
+	if err := applyToolAccessInput(tool, input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Update operations
 	tool.AvailableOperations = ""
 	for _, op := range input.Data.Attributes.Operations {
@@ -339,6 +369,7 @@ func (a *API) updateTool(c *gin.Context) {
 		})
 		return
 	}
+	a.emitToolUpdated(tool)
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)
 	c.JSON(http.StatusOK, dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
@@ -1157,22 +1188,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 	response := ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
-		Attributes: struct {
-			Name           string              `json:"name"`
-			Description    string              `json:"description"`
-			ToolType       string              `json:"tool_type"`
-			OASSpec        string              `json:"oas_spec"`
-			PrivacyScore   int                 `json:"privacy_score"`
-			Operations     []string            `json:"operations"`
-			AuthKey        string              `json:"auth_key"`
-			HasAuthKey     bool                `json:"has_auth_key"`
-			AuthSchemaName string              `json:"auth_schema_name"`
-			Active         bool                `json:"active"`
-			Namespace      string              `json:"namespace"`
-			FileStores     []FileStoreResponse `json:"file_stores"`
-			Filters        []FilterResponse    `json:"filters"`
-			Dependencies   []ToolResponse      `json:"dependencies"`
-		}{
+		Attributes: ToolResponseAttributes{
 			Name:           tool.Name,
 			Description:    tool.Description,
 			ToolType:       tool.ToolType,
@@ -1187,6 +1203,8 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointers(dependencies, db),
+
+			ToolGatewayAccess: toolGatewayAccess(tool),
 		},
 	}
 
@@ -1219,22 +1237,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 	response := ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
-		Attributes: struct {
-			Name           string              `json:"name"`
-			Description    string              `json:"description"`
-			ToolType       string              `json:"tool_type"`
-			OASSpec        string              `json:"oas_spec"`
-			PrivacyScore   int                 `json:"privacy_score"`
-			Operations     []string            `json:"operations"`
-			AuthKey        string              `json:"auth_key"`
-			HasAuthKey     bool                `json:"has_auth_key"`
-			AuthSchemaName string              `json:"auth_schema_name"`
-			Active         bool                `json:"active"`
-			Namespace      string              `json:"namespace"`
-			FileStores     []FileStoreResponse `json:"file_stores"`
-			Filters        []FilterResponse    `json:"filters"`
-			Dependencies   []ToolResponse      `json:"dependencies"`
-		}{
+		Attributes: ToolResponseAttributes{
 			Name:           tool.Name,
 			Description:    tool.Description,
 			ToolType:       tool.ToolType,
@@ -1249,6 +1252,8 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointersSlim(dependencies, db),
+
+			ToolGatewayAccess: toolGatewayAccess(tool),
 		},
 	}
 

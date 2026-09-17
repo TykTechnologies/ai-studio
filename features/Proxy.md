@@ -158,6 +158,7 @@ graph TD
             *   `POST /tools/{toolSlug}/mcp`: StreamableHTTP transport for modern MCP clients.
             *   `GET /tools/{toolSlug}/mcp/sse`: SSE transport endpoint for legacy MCP clients.
             *   `POST /tools/{toolSlug}/mcp/message`: Message endpoint for legacy MCP clients.
+        *   REST and MCP are per-tool **access methods** (`features/Tools.md` section 5a). A method that is switched off answers 403 after the App ACL has passed; REST enforces the tool's operation whitelist as MCP does; the lookup by slug resolves active tools only.
 *   **Configuration:** LLM endpoints, credentials (API keys, often App-specific), allowed models, filters, and vendor types are stored in the `llms` table, managed via **LLM Management** API/UI. Active LLMs are loaded into the proxy's memory map (`p.llms`) by `loadResources`. Filters are stored in the `filters` table. Pricing in `model_prices`.
 *   **Authentication:** Relies on `CredentialValidator` middleware. Expects credentials in the format required by the *target vendor* (e.g., `Authorization: Bearer <app_key>` for OpenAI-like vendors, `x-api-key: <app_key>` for Anthropic). The validator checks this `<app_key>` against the `apps` table via the `service`.
 *   **Model Validation:** `ModelValidator` checks the `model` field within the request *body* against the `llm.AllowedModels` string array. Vendor-specific extractors handle different request body structures.

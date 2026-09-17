@@ -902,13 +902,23 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 	if err != nil {
 		log.Printf("Error fetching user apps for consent: %v", err)
 	} else {
-		// Filter apps that have active credentials AND at least one tool
+		// Filter apps that have active credentials AND at least one tool an
+		// MCP client can use. This flow is started by an MCP client, so an app
+		// whose tools all have MCP access switched off has nothing to offer it.
+		// The tools listed are everything the token will reach: the mcp scope
+		// covers a tool's REST endpoint as well, so a REST-only tool is named
+		// too, while a chat-only tool (unreachable either way) is not.
 		for _, app := range apps {
-			if app.Credential.Active && len(app.Tools) > 0 {
-				toolNames := make([]string, len(app.Tools))
-				for i, tool := range app.Tools {
-					toolNames[i] = tool.Name
+			toolNames := make([]string, 0, len(app.Tools))
+			mcpReachable := false
+			for i := range app.Tools {
+				if !app.Tools[i].AppGrantable() {
+					continue
 				}
+				toolNames = append(toolNames, app.Tools[i].Name)
+				mcpReachable = mcpReachable || app.Tools[i].MCPAccessEnabled()
+			}
+			if app.Credential.Active && mcpReachable {
 				availableApps = append(availableApps, AppWithTools{
 					ID:          app.ID,
 					Name:        app.Name,
@@ -920,7 +930,7 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 	}
 
 	if len(availableApps) == 0 {
-		noAppsMessage = "No approved apps with tools found. Please create an app in the developer portal and add tools to it before using OAuth access."
+		noAppsMessage = "No approved apps with MCP-enabled tools found. Please create an app in the developer portal and add a tool with MCP access to it before using OAuth access."
 	}
 
 	resp := ConsentDetailsResponse{

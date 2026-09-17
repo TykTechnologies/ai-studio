@@ -17,6 +17,7 @@ import { usePermissions } from "../../../../context/PermissionsContext";
 import { P } from "../../../../rbac/permissions";
 import { ConnectionStatusChip, TykUpsell, TykDisabledNotice } from "../../../../pages/tykShared";
 import QuickConnectForm from "./QuickConnectForm";
+import { TOOL_VS_MCP_SERVER } from "../../toolsVsMcpServers";
 
 /**
  * SelectConnection is the wizard step that picks the Tyk connection to
@@ -65,6 +66,11 @@ const SelectConnection = ({ status, connections, loading, error, selected, onSel
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         The Dashboard whose OAS APIs you want to import. The same connections serve the MCP server catalogue.
+      </Typography>
+      {/* The same Tyk API can become either; say what each choice means. */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} data-testid="import-tool-or-mcp-server">
+        Importing here makes the API a tool. {TOOL_VS_MCP_SERVER.tool} To publish it as an MCP server on the Tyk Gateway
+        instead, register it under MCP servers as a REST API to MCP proxy.
       </Typography>
 
       {error && (

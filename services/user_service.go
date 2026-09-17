@@ -589,6 +589,14 @@ func (s *Service) GetAccessibleToolsForUser(userID uint) ([]models.Tool, error) 
 	return user.GetAccessibleTools(s.DB)
 }
 
+// GetAppGrantableToolsForUser is GetAccessibleToolsForUser without chat-only
+// tools: what the portal's App builder may offer. The chat tool picker uses
+// the unfiltered list.
+func (s *Service) GetAppGrantableToolsForUser(userID uint) ([]models.Tool, error) {
+	user := &models.User{ID: userID}
+	return user.GetAccessibleTools(s.DB, models.AppGrantableToolScope)
+}
+
 type UserEntitlements struct {
 	User           *models.User
 	Catalogues     []models.Catalogue

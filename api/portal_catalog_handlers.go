@@ -113,8 +113,15 @@ type CatalogItemAttributes struct {
 	EmbedVendor string `json:"embed_vendor,omitempty"`
 	EmbedModel  string `json:"embed_model,omitempty"`
 
-	// Tools
-	Operations []string `json:"operations,omitempty"`
+	// Tools. A tool is served by the AI Studio gateway; the access methods say
+	// how an App may reach it, and each URL is present only when its method is
+	// switched on. A tool with neither method on is chat only and is not in
+	// the catalog at all.
+	Operations        []string `json:"operations,omitempty"`
+	RESTAccessEnabled *bool    `json:"rest_access_enabled,omitempty"`
+	MCPAccessEnabled  *bool    `json:"mcp_access_enabled,omitempty"`
+	RESTEndpointURL   string   `json:"rest_endpoint_url,omitempty"`
+	MCPEndpointURL    string   `json:"mcp_endpoint_url,omitempty"`
 
 	// Plugin resources
 	ResourceType *CatalogResourceType `json:"resource_type,omitempty"`
@@ -389,19 +396,31 @@ func datasourceCatalogItem(ds *models.Datasource) CatalogItem {
 }
 
 func toolCatalogItem(tool *models.Tool) CatalogItem {
-	return CatalogItem{Type: CatalogItemTool, ID: uintID(tool.ID), Attributes: CatalogItemAttributes{
-		Name:                cleanText(tool.Name),
-		ShortDescription:    cleanText(tool.Description),
-		Kind:                tool.ToolType,
-		PrivacyScore:        intPtr(tool.PrivacyScore),
-		CommunitySubmitted:  tool.CommunitySubmitted,
-		Tags:                []string{},
-		Catalogs:            []CatalogRef{},
-		CreatedAt:           timePtr(tool.CreatedAt),
-		UpdatedAt:           timePtr(tool.UpdatedAt),
-		AccessGrantedViaApp: true,
+	access := toolGatewayAccess(tool)
+	item := CatalogItem{Type: CatalogItemTool, ID: uintID(tool.ID), Attributes: CatalogItemAttributes{
+		Name:               cleanText(tool.Name),
+		ShortDescription:   cleanText(tool.Description),
+		Kind:               tool.ToolType,
+		PrivacyScore:       intPtr(tool.PrivacyScore),
+		CommunitySubmitted: tool.CommunitySubmitted,
+		Tags:               []string{},
+		Catalogs:           []CatalogRef{},
+		CreatedAt:          timePtr(tool.CreatedAt),
+		UpdatedAt:          timePtr(tool.UpdatedAt),
+		// Always true for a listed tool: the catalog only lists tools an App
+		// can reach (models.AccessibleToolQuery).
+		AccessGrantedViaApp: access.AppGrantable,
 		Operations:          cleanTexts(tool.GetOperations()),
+		RESTAccessEnabled:   &access.RESTAccessEnabled,
+		MCPAccessEnabled:    &access.MCPAccessEnabled,
 	}}
+	if access.RESTAccessEnabled {
+		item.Attributes.RESTEndpointURL = access.RESTEndpointURL
+	}
+	if access.MCPAccessEnabled {
+		item.Attributes.MCPEndpointURL = access.MCPEndpointURL
+	}
+	return item
 }
 
 // portalDetailURL expands a resource type's portal detail path template for

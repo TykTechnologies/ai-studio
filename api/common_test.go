@@ -290,6 +290,12 @@ func createTestDatasource(t *testing.T, service *services.Service, name string) 
 func createTestTool(t *testing.T, service *services.Service, name string) *models.Tool {
 	tool, err := service.CreateTool(name, "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
 	assert.NoError(t, err)
+	// A new tool is chat only. These tests use tools as portal assets that are
+	// bound to Apps, which needs a gateway access method switched on.
+	tool.RESTAccessDisabled = false
+	tool.MCPAccessDisabled = false
+	assert.NoError(t, service.DB.Model(&models.Tool{}).Where("id = ?", tool.ID).
+		Updates(map[string]interface{}{"rest_access_disabled": false, "mcp_access_disabled": false}).Error)
 	return tool
 }
 

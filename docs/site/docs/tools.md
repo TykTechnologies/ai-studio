@@ -44,11 +44,41 @@ Tools bridge the gap between conversational AI and external functionalities. By 
 
 Tools are available on both **AI Studio** (embedded gateway) and **Microgateway** (edge gateways). Tool configurations, OpenAPI specs, auth credentials, and app access associations are synced to edge gateways via the hub-spoke configuration system. Tools support namespace filtering for enterprise multi-tenant deployments.
 
-Tools are accessible in three ways:
+## Access methods
 
-1. **Chat Interface** — LLMs invoke tools automatically during conversations (the primary use case).
-2. **REST API** — Each tool is also available as a direct REST API endpoint for developers to call programmatically, independent of LLM interactions.
-3. **MCP Interface** — An MCP-compliant shim wraps the OpenAPI-generated tools, providing an MCP-API compatible interface. This works with tools that require authentication and provides MCP compatibility without a separate MCP proxy server.
+A tool is a chat capability first. It can also be opened to [Apps](./apps.md) on the AI Studio gateway, and each way of doing so is an **access method** that an administrator switches on per tool:
+
+| Access method | What it gives you | Default |
+|---|---|---|
+| **Chat** | LLMs invoke the tool's operations during conversations. This is the primary use case. | Always on |
+| **REST API** | Developers call the tool's operations over HTTP at `/tools/{slug}`, with their App credential. | Off for a new tool |
+| **MCP** | MCP clients such as Claude Desktop connect to the tool at `/tools/{slug}/mcp`, with the App credential or by signing in with OAuth. The tool's operations become MCP tools. | Off for a new tool |
+
+The switches are on the tool form and in the last step of the import wizard, under **Access methods**, together with the gateway URL of each method that is on. The Tools list shows them in its **Access** column. Tools that existed before the switches were introduced keep both methods on.
+
+A tool with both methods off is **chat only**:
+
+*   It is offered in the chat tool picker as before.
+*   It is not shown in the AI Portal: not in Browse, not on an asset or documentation page, and not in the App builder.
+*   It cannot be added to an App. If an administrator switches both methods off on a tool that Apps already use, those Apps keep the tool, the gateway refuses their calls with `403`, and the App page tells the owner why.
+
+Client (human-in-the-loop) tools, including the built-in **Generative UI** tool, run in the chat interface and are always chat only.
+
+Both methods enforce the same rules: the calling App must hold the tool, only the operations selected on the tool may be called, and the tool's [Filters](./filters.md) run on the way in and on the way out. A call over a method that is switched off is refused with `403`.
+
+### Tools and MCP servers
+
+In the Enterprise Edition the admin console also has an **MCP servers** section. The two are different things, even though a tool can be reached over MCP:
+
+| | Tool | [MCP server](./tyk-mcp-integration.md) |
+|---|---|---|
+| Served by | AI Studio (embedded gateway and edge gateways) | A Tyk Gateway. AI Studio catalogues it; its traffic never passes through AI Studio. |
+| Built from | An OpenAPI specification | An MCP proxy on a Tyk Dashboard (a remote MCP server, or a REST API converted to MCP) |
+| Used by | Chats and agents, and Apps over REST or MCP | Apps, over MCP |
+| Credential | The App's own credential | A Tyk access key that AI Studio issues for the App |
+| Governed by | AI Studio filters, privacy levels and tool analytics | Tyk policies, rate limits and quotas |
+
+Choose a **tool** when chats and agents in AI Studio should use the API, or when AI Studio filters should apply to it. Choose an **MCP server** when the MCP traffic should be served and governed by your Tyk Gateway. The portal labels every endpoint with who serves it, and the App page gives a developer one MCP client configuration that covers both.
 
 ## How it Works
 
@@ -75,6 +105,9 @@ Administrators define and manage Tools via the UI or API:
 4.  **Configure Authentication:** Select the OAS security scheme and link to a stored [Secret](./secrets.md) for credentials.
 5.  **Add Documentation:** Provide natural language instructions for the LLM.
 6.  **Assign Filters (Optional):** Add request/response filters.
+7.  **Choose Access Methods (Optional):** Switch on **REST API** or **MCP** if Apps should reach the tool on the gateway. A new tool is chat only. See [Access methods](#access-methods).
+
+Over the API the two switches are the `rest_access_enabled` and `mcp_access_enabled` attributes of a tool. Leaving them out of a create request gives a chat-only tool; leaving them out of an update keeps their current values. Tool responses also carry `slug`, `app_grantable`, `rest_endpoint_url` and `mcp_endpoint_url`.
 
 ### Importing from a Tyk Dashboard (Enterprise)
 

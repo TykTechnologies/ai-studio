@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
-import AppMCPAccess from "./AppMCPAccess";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import AppMCPConnect from "./AppMCPConnect";
+import AppToolAccess from "./AppToolAccess";
+import { toolMcpEnabled } from "../utils/toolEndpoints";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Typography,
   CircularProgress,
@@ -27,7 +29,6 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import DescriptionIcon from "@mui/icons-material/Description";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
@@ -234,11 +235,8 @@ const AppDetailView = () => {
     return `${proxyUrl}${path}${slug}`;
   };
 
-  const generateToolEndpointUrl = (path, name) => {
-    const slug = generateSlug(name);
-    // Use toolDisplayUrl for tool endpoints
-    return `${toolDisplayUrl}${path}${slug}`;
-  };
+  // Tool endpoints come from the API (portal/utils/toolEndpoints.js): the
+  // slug is computed server-side and cannot be rebuilt from the name here.
 
   const generateDatasourceEndpointUrl = (path, name) => {
     const slug = generateSlug(name);
@@ -1429,91 +1427,24 @@ const AppDetailView = () => {
       </Paper>
 
       <Paper sx={{ p: 3, mt: 3 }}>
-        {(app.attributes.mcp_servers || []).length > 0 && (
+        {/* Tools reached over MCP and Tyk-served MCP servers go into the same
+            MCP client, so they are described together, each labelled with who
+            serves it and which credential it takes. */}
+        {(appTools.some((tool) => toolMcpEnabled(tool.attributes)) || (app.attributes.mcp_servers || []).length > 0) && (
           <>
-            <SectionTitle>MCP Server Access Details</SectionTitle>
-            <AppMCPAccess appId={id} credentialActive={!!app.attributes.credential?.active} />
+            <SectionTitle>Connect via MCP</SectionTitle>
+            <AppMCPConnect
+              appId={id}
+              credential={app.attributes.credential}
+              showSecret={showSecret}
+              tools={appTools}
+              mcpServers={app.attributes.mcp_servers || []}
+              toolBaseUrl={toolDisplayUrl}
+            />
           </>
         )}
         <SectionTitle>Tool Access Details</SectionTitle>
-        {appTools.length > 0 ? (
-          appTools.map((tool) => (
-            <Card key={tool.id} sx={{ mb: 3 }}>
-              <CardContent>
-                <Typography variant="h6">{tool.attributes.name}</Typography>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  {/* A Tool is serialised with `description`; only datasources
-                      carry `short_description`, so every tool showed the
-                      placeholder even when it had a description. */}
-                  {tool.attributes.short_description || tool.attributes.description || "No description available"}
-                </Typography>
-
-                <Typography
-                  variant="subtitle1"
-                  sx={{
-                    fontWeight: "bold",
-                    mt: 2,
-                    mb: 1,
-                  }}
-                >
-                  Endpoint
-                </Typography>
-                <Typography variant="body2" sx={{ mb: 2 }}>
-                  Use the following URL to interact with this tool.
-                </Typography>
-
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <FieldLabel sx={{ minWidth: "100px" }}>Tool API:</FieldLabel>
-                  <Box>
-                    <Tooltip title="Use this endpoint to interact with the tool. Refer to the tool's specific documentation for API details.">
-                      <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
-                    </Tooltip>
-                  </Box>
-                  <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
-                    <Typography
-                      variant="body2"
-                      component="code"
-                      sx={{
-                        fontFamily: "monospace",
-                        bgcolor: "background.paper",
-                        p: 1,
-                        borderRadius: 1,
-                        flexGrow: 1,
-                      }}
-                    >
-                      {generateToolEndpointUrl("/tools/", tool.attributes.name)}
-                    </Typography>
-                    <IconButton
-                      onClick={() =>
-                        copyToClipboard(
-                          generateToolEndpointUrl("/tools/", tool.attributes.name)
-                        )
-                      }
-                      size="small"
-                    >
-                      <ContentCopyIcon />
-                    </IconButton>
-                  </Box>
-                </Box>
-                
-                <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
-                  <Button
-                    component={Link}
-                    to={`/portal/tools/${tool.id}/docs`}
-                    variant="outlined"
-                    color="primary"
-                    size="small"
-                    startIcon={<DescriptionIcon />}
-                  >
-                    View Documentation
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <Typography variant="body1">No tools associated with this app.</Typography>
-        )}
+        <AppToolAccess tools={appTools} toolBaseUrl={toolDisplayUrl} />
       </Paper>
 
       <Dialog
