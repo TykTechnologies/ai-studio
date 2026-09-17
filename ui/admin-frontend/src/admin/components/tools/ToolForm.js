@@ -339,7 +339,7 @@ const ToolForm = () => {
 
   const fetchAvailableTools = async () => {
     try {
-      const response = await apiClient.get("/tools");
+      const response = await apiClient.get("/tools", { params: { all: true } });
       // Filter out the current tool from available dependencies
       const tools = response.data.data.filter((tool) => tool.id !== id);
       setAvailableTools(tools);
@@ -476,7 +476,7 @@ const ToolForm = () => {
 
   const fetchAvailableFilters = async () => {
     try {
-      const response = await apiClient.get("/filters");
+      const response = await apiClient.get("/filters", { params: { all: true } });
       // Make sure we're accessing the correct part of the response
       setAvailableFilters(response.data || []); // Add fallback to empty array
     } catch (error) {

@@ -126,7 +126,7 @@ const CatalogueList = memo(() => {
     setModalType(type);
     if (type === "add") {
       try {
-        const response = await apiClient.get("/llms");
+        const response = await apiClient.get("/llms", { params: { all: true } });
         setAvailableLLMs(
           response.data.data.filter((llm) => llm.attributes.active),
         );

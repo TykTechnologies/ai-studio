@@ -179,8 +179,8 @@ const Dashboard = () => {
   const fetchData = async () => {
     try {
       const [llmResponse, chatResponse] = await Promise.all([
-        apiClient.get("/llms"),
-        apiClient.get("/chats"),
+        apiClient.get("/llms", { params: { all: true } }),
+        apiClient.get("/chats", { params: { all: true } }),
       ]);
       setLLMs(llmResponse.data.data || []);
       setChats(chatResponse.data.data || []);

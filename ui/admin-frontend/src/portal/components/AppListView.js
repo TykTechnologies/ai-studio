@@ -49,7 +49,7 @@ const AppListView = () => {
 
   const fetchApps = async () => {
     try {
-      const response = await pubClient.get("/common/apps");
+      const response = await pubClient.get("/common/apps", { params: { all: true } });
       const fetchedApps = response.data.data || [];
       setApps(fetchedApps);
       setCredentialActiveById(await loadCredentialStates(fetchedApps));

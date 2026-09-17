@@ -139,8 +139,14 @@ const ChatViewV2 = () => {
       if (!session) return;
       try {
         if (item.type === 'tool') {
-          await (selected ? addTool(session.session_id, item.id) : removeTool(session.session_id, item.id));
+          const res = await (selected ? addTool(session.session_id, item.id) : removeTool(session.session_id, item.id));
           setTools((prev) => prev.map((t) => (t.id === item.id ? { ...t, isSelected: selected } : t)));
+          // A client tool (generative UI, form, approval) needs its renderer
+          // and its human-tool registration as soon as it joins the session.
+          const clientTools = res?.data?.client_tools;
+          if (Array.isArray(clientTools)) {
+            setSession((prev) => (prev && prev.session_id === session.session_id ? { ...prev, client_tools: clientTools } : prev));
+          }
         } else {
           await (selected ? addDatasource(session.session_id, item.id) : removeDatasource(session.session_id, item.id));
           setDatabases((prev) => prev.map((d) => (d.id === item.id ? { ...d, isSelected: selected } : d)));

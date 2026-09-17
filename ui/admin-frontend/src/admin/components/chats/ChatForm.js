@@ -102,7 +102,7 @@ const ChatForm = () => {
 
   const fetchTools = async () => {
     try {
-      const response = await apiClient.get("/tools");
+      const response = await apiClient.get("/tools", { params: { all: true } });
       setAllTools(response.data.data || []);
     } catch (error) {
       console.error("Error fetching tools", error);
@@ -183,7 +183,7 @@ const ChatForm = () => {
 
   const fetchDatasources = async () => {
     try {
-      const response = await apiClient.get("/datasources");
+      const response = await apiClient.get("/datasources", { params: { all: true } });
       setDatasources(response.data.data || []);
     } catch (error) {
       console.error("Error fetching datasources", error);
@@ -223,7 +223,7 @@ const ChatForm = () => {
 
   const fetchLLMs = async () => {
     try {
-      const response = await apiClient.get("/llms");
+      const response = await apiClient.get("/llms", { params: { all: true } });
       setLLMs(response.data.data);
     } catch (error) {
       console.error("Error fetching LLMs", error);
@@ -233,7 +233,7 @@ const ChatForm = () => {
 
   const fetchLLMSettings = async () => {
     try {
-      const response = await apiClient.get("/llm-settings");
+      const response = await apiClient.get("/llm-settings", { params: { all: true } });
       setLLMSettings(response.data.data);
     } catch (error) {
       console.error("Error fetching LLM settings", error);
@@ -243,7 +243,7 @@ const ChatForm = () => {
 
   const fetchGroups = async () => {
     try {
-      const response = await apiClient.get("/groups");
+      const response = await apiClient.get("/groups", { params: { all: true } });
       setAllGroups(response.data.data);
     } catch (error) {
       console.error("Error fetching groups", error);
@@ -253,7 +253,7 @@ const ChatForm = () => {
 
   const fetchFilters = async () => {
     try {
-      const response = await apiClient.get("/filters");
+      const response = await apiClient.get("/filters", { params: { all: true } });
       setAllFilters(response.data || []);
       console.log("Fetched filters:", response.data);
     } catch (error) {

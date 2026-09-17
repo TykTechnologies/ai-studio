@@ -213,7 +213,7 @@ const LLMForm = () => {
   const fetchFilters = async () => {
     setFiltersLoading(true);
     try {
-      const response = await apiClient.get("/filters");
+      const response = await apiClient.get("/filters", { params: { all: true } });
       if (Array.isArray(response.data)) {
         setFilters(response.data);
       } else {

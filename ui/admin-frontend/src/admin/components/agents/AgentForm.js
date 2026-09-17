@@ -67,13 +67,13 @@ const AgentForm = () => {
 
       // Load apps
       const appsResponse = await apiClient.get('/apps', {
-        params: { page: 1, page_size: 100 },
+        params: { all: true },
       });
       setApps(appsResponse.data.data || []);
 
       // Load groups
       const groupsResponse = await apiClient.get('/groups', {
-        params: { page: 1, page_size: 100 },
+        params: { all: true },
       });
       setGroups(groupsResponse.data.data || []);
     } catch (err) {

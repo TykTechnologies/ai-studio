@@ -92,7 +92,7 @@ const ChatList = () => {
 
   const fetchLLMs = async () => {
     try {
-      const response = await apiClient.get("/llms");
+      const response = await apiClient.get("/llms", { params: { all: true } });
       const llmMap = {};
       response.data.data.forEach((llm) => {
         llmMap[llm.id] = llm.attributes.name;
@@ -105,7 +105,7 @@ const ChatList = () => {
 
   const fetchLLMSettings = async () => {
     try {
-      const response = await apiClient.get("/llm-settings");
+      const response = await apiClient.get("/llm-settings", { params: { all: true } });
       const settingsMap = {};
       response.data.data.forEach((setting) => {
         settingsMap[setting.id] = setting.attributes.model_name;

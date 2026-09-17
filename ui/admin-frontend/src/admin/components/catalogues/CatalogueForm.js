@@ -49,7 +49,7 @@ const CatalogueForm = () => {
       try {
         const [catalogueResponse, llmsResponse] = await Promise.all([
           id ? apiClient.get(`/catalogues/${id}`) : Promise.resolve(null),
-          apiClient.get("/llms"),
+          apiClient.get("/llms", { params: { all: true } }),
         ]);
 
         if (catalogueResponse) {

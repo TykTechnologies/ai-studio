@@ -18,7 +18,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/filereader"
-	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/tmc/langchaingo/llms"
@@ -450,7 +449,7 @@ func (a *API) withChatSession(c *gin.Context, sessionID string, mutate func(*cha
 		jsonError(c, http.StatusInternalServerError, failTitle, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": msg})
+	c.JSON(http.StatusOK, gin.H{"message": msg, "client_tools": clientToolInfos(session)})
 }
 
 func (a *API) addDatasourceToChatSession(c *gin.Context) {
@@ -506,8 +505,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		jsonError(c, http.StatusInternalServerError, "Error retrieving tool", err.Error())
 		return
 	}
-	tool.OASSpec, err = helpers.DecodeToUTF8(tool.OASSpec)
-	if err != nil {
+	if err := chat_session.DecodeToolSpec(tool); err != nil {
 		jsonError(c, http.StatusInternalServerError, "Error decoding OAS spec", err.Error())
 		return
 	}

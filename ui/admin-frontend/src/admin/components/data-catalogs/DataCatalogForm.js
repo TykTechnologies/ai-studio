@@ -67,8 +67,8 @@ const DataCatalogForm = () => {
           availableTagsResponse,
         ] = await Promise.all([
           id ? apiClient.get(`/data-catalogues/${id}`) : Promise.resolve(null),
-          apiClient.get("/datasources"),
-          apiClient.get("/tags"),
+          apiClient.get("/datasources", { params: { all: true } }),
+          apiClient.get("/tags", { params: { all: true } }),
         ]);
 
         if (catalogResponse) {

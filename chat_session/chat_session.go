@@ -15,7 +15,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
-	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
@@ -269,7 +268,9 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 				return fmt.Errorf("error getting tool dependency: %v", err)
 			}
 
-			dep.OASSpec, err = helpers.DecodeToUTF8(dep.OASSpec)
+			if err := DecodeToolSpec(dep); err != nil {
+				slog.Warn("tool dependency spec could not be decoded", "tool", dep.Name, "error", err)
+			}
 			err = cs.AddTool(
 				dep.Name,
 				*dep)
@@ -793,7 +794,9 @@ func (cs *ChatSession) handleDefaults() error {
 				return fmt.Errorf("error getting default tool definition: %v", err)
 			}
 
-			toolDef.OASSpec, err = helpers.DecodeToUTF8(toolDef.OASSpec)
+			if err := DecodeToolSpec(toolDef); err != nil {
+				slog.Warn("default tool spec could not be decoded", "tool", toolDef.Name, "error", err)
+			}
 			err = cs.AddTool(
 				toolDef.Name,
 				*toolDef)

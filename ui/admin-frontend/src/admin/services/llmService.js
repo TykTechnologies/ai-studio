@@ -61,7 +61,7 @@ export const updateLLM = async (llmId, llmData) => {
 
 export const getAllLLMs = async () => {
   try {
-    const response = await apiClient.get('/llms');
+    const response = await apiClient.get('/llms', { params: { all: true } });
     return response.data?.data || [];
   } catch (error) {
     throw handleApiError(error);

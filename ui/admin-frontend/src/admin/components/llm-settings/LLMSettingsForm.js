@@ -150,7 +150,7 @@ const LLMSettingsForm = () => {
 
   const checkModelPrice = async (modelName) => {
     try {
-      const response = await apiClient.get("/model-prices");
+      const response = await apiClient.get("/model-prices", { params: { all: true } });
       const existingPrice = response.data.data.find(
         (price) => price.attributes.model_name === modelName,
       );

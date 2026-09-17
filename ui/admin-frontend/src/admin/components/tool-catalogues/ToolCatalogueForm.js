@@ -101,7 +101,7 @@ const ToolCatalogueForm = () => {
     try {
       const [toolsResponse, tagsResponse] = await Promise.all([
         apiClient.get("/tools", { params: { all: true } }),
-        apiClient.get("/tags"),
+        apiClient.get("/tags", { params: { all: true } }),
       ]);
       setAvailableTools(toolsResponse.data.data || []);
       setAvailableTags(tagsResponse.data.data || []);

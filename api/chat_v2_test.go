@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/api"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -239,6 +240,37 @@ func TestChatV2(t *gotest.T) {
 	// not a "different API version" 409.
 	w = apitest.PerformRequest(router, "DELETE", fmt.Sprintf("/common/chat-sessions/%s/tools/999", sess.SessionID), nil)
 	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// 10b. A client tool picked in the chat window: the built-in generative
+	// UI tool was first seeded with a raw JSON definition (not base64), which
+	// used to fail with "illegal base64 data at input byte 0". Either form
+	// attaches, and the reply carries the session's client tools so the
+	// browser can register the renderer without a new session.
+	service.GroupAccessService = group_access.NewService(db) // AddTool checks entitlements
+	require.NoError(t, models.GetOrCreateDefaultClientTools(db))
+	var present models.Tool
+	require.NoError(t, db.Where("tool_type = ?", models.ToolTypeClient).First(&present).Error)
+	catalogue := &models.ToolCatalogue{Name: "V2 tools"}
+	require.NoError(t, db.Create(catalogue).Error)
+	require.NoError(t, catalogue.AddTool(db, &present))
+	require.NoError(t, db.Model(group).Association("ToolCatalogues").Append(catalogue))
+	for _, spec := range []string{present.OASSpec, `{"ui":{"kind":"present","title":"Generative UI"}}`} {
+		require.NoError(t, db.Model(&models.Tool{}).Where("id = ?", present.ID).UpdateColumn("oas_spec", spec).Error)
+		w = apitest.PerformRequest(router, "POST", fmt.Sprintf("/common/chat-sessions/%s/tools", sess.SessionID), map[string]any{"tool_id": fmt.Sprint(present.ID)})
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var added struct {
+			ClientTools []api.V2ClientToolInfo `json:"client_tools"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &added))
+		require.Len(t, added.ClientTools, 1)
+		assert.Equal(t, models.PresentToolOperation, added.ClientTools[0].Name)
+		assert.Contains(t, string(added.ClientTools[0].UI), `"kind":"present"`)
+		assert.Contains(t, string(added.ClientTools[0].Schema), `"component"`)
+
+		w = apitest.PerformRequest(router, "DELETE", fmt.Sprintf("/common/chat-sessions/%s/tools/%d", sess.SessionID, present.ID), nil)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"client_tools":[]`)
+	}
 
 	// 11. History pages backwards from the newest row.
 	w = apitest.PerformRequest(router, "GET", fmt.Sprintf("/common/chat-sessions/%s/messages/v2?limit=1", sess.SessionID), nil)

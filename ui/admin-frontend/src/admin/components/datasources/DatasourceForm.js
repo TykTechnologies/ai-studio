@@ -221,7 +221,7 @@ const DatasourceForm = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get("/users");
+      const response = await apiClient.get("/users", { params: { all: true } });
       setUsers(response.data.data || []);
     } catch (error) {
       console.error("Error fetching users", error);

@@ -108,7 +108,7 @@ const UserForm = () => {
 
   const fetchGroups = async () => {
     try {
-      const response = await apiClient.get("/groups");
+      const response = await apiClient.get("/groups", { params: { all: true } });
       setGroups(response.data.data || []);
     } catch (error) {
       console.error("Error fetching teams", error);

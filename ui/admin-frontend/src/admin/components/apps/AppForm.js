@@ -236,7 +236,7 @@ const AppForm = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get("/users");
+      const response = await apiClient.get("/users", { params: { all: true } });
       setUsers(response.data.data || []);
     } catch (error) {
       console.error("Error fetching users", error);
@@ -245,7 +245,7 @@ const AppForm = () => {
 
   const fetchLLMs = async () => {
     try {
-      const response = await apiClient.get("/llms");
+      const response = await apiClient.get("/llms", { params: { all: true } });
       setLLMs(response.data.data || []);
     } catch (error) {
       console.error("Error fetching LLMs", error);
@@ -254,7 +254,7 @@ const AppForm = () => {
 
   const fetchDatasources = async () => {
     try {
-      const response = await apiClient.get("/datasources");
+      const response = await apiClient.get("/datasources", { params: { all: true } });
       setDatasources(response.data.data || []);
     } catch (error) {
       console.error("Error fetching datasources", error);
