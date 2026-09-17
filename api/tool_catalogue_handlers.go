@@ -137,7 +137,7 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 	// catalogue rather than among its attributes, and only for a caller who
 	// may read MCP servers.
 	if authz.Can(c, authz.Read("mcp-servers")) {
-		servers, err := a.toolCatalogueMCPServers(uint(id))
+		servers, truncated, err := a.toolCatalogueMCPServers(uint(id))
 		if err != nil {
 			// The list is supplementary: the catalogue itself loaded, so the
 			// page still renders, without the section. The failure is logged
@@ -145,6 +145,9 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 			slog.Error("failed to list the MCP servers of a tool catalogue", "tool_catalogue_id", id, "error", err)
 		} else {
 			response["mcp_servers"] = servers
+			// Says so when the list was cut at the limit, so the page never
+			// presents a partial list as the whole.
+			response["mcp_servers_truncated"] = truncated
 		}
 	}
 	c.JSON(http.StatusOK, response)
@@ -161,24 +164,32 @@ type ToolCatalogueMCPServer struct {
 
 // toolCatalogueMCPServerLimit bounds the list on the catalogue page. It is a
 // reference list; the MCP servers page is where they are searched and paged.
-const toolCatalogueMCPServerLimit = 200
+// A variable so a test can lower it.
+var toolCatalogueMCPServerLimit = 200
 
-func (a *API) toolCatalogueMCPServers(catalogueID uint) ([]ToolCatalogueMCPServer, error) {
+// toolCatalogueMCPServers lists the catalogue's MCP servers by name, at most
+// toolCatalogueMCPServerLimit of them. It asks for one more than the limit so
+// it can report, without a second query, whether the list was cut short.
+func (a *API) toolCatalogueMCPServers(catalogueID uint) ([]ToolCatalogueMCPServer, bool, error) {
 	var servers []models.MCPServer
 	err := a.service.DB.
 		Joins("JOIN tool_catalogue_mcp_servers tcm ON tcm.mcp_server_id = mcp_servers.id").
 		Where("tcm.tool_catalogue_id = ?", catalogueID).
 		Order("mcp_servers.name").
-		Limit(toolCatalogueMCPServerLimit).
+		Limit(toolCatalogueMCPServerLimit + 1).
 		Find(&servers).Error
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	truncated := len(servers) > toolCatalogueMCPServerLimit
+	if truncated {
+		servers = servers[:toolCatalogueMCPServerLimit]
 	}
 	out := make([]ToolCatalogueMCPServer, 0, len(servers))
 	for _, srv := range servers {
 		out = append(out, ToolCatalogueMCPServer{ID: srv.ID, Name: srv.Name, Kind: srv.Kind, Published: srv.IsActive})
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 // @Summary Update a tool catalogue

@@ -31,6 +31,7 @@ const ToolCatalogueDetails = () => {
   const [catalogue, setCatalogue] = useState(null);
   // null = the API did not send the list (integration off, or no permission).
   const [mcpServers, setMcpServers] = useState(null);
+  const [mcpServersTruncated, setMcpServersTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { id } = useParams();
@@ -45,6 +46,7 @@ const ToolCatalogueDetails = () => {
       const response = await apiClient.get(`/tool-catalogues/${id}`);
       setCatalogue(response.data?.data);
       setMcpServers(response.data?.mcp_servers ?? null);
+      setMcpServersTruncated(Boolean(response.data?.mcp_servers_truncated));
       setLoading(false);
     } catch (error) {
       console.error("Error fetching tool catalogue details", error);
@@ -135,6 +137,7 @@ const ToolCatalogueDetails = () => {
           <Section title="MCP servers">
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               Served by a Tyk Gateway and published in this catalog. Manage them under MCP servers.
+              {mcpServersTruncated && ` Showing the first ${mcpServers.length}; the MCP servers page has the full list.`}
             </Typography>
             <List data-testid="catalogue-mcp-servers">
               {mcpServers.length > 0 ? (
