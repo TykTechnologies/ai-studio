@@ -896,7 +896,9 @@ func (a *API) handleGetConsentDetails(c *gin.Context) {
 	var availableApps []AppWithTools
 	var noAppsMessage string
 
-	// Always require app selection for OAuth flows
+	// Always require app selection for OAuth flows. GetByUserID preloads each
+	// app's Credential and Tools, so the loop below reads loaded slices and
+	// issues no query per app.
 	appModel := &models.App{}
 	apps, err := appModel.GetByUserID(a.config.DB, currentUser.ID)
 	if err != nil {
