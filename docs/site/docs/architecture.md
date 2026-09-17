@@ -15,7 +15,7 @@ AI Studio is the central management application. It is a single-page web app (Re
 
 1. **Administration** — Where all CRUD management happens. Only available to users where `IsAdmin` is true. Admins configure LLMs, tools, data sources, filters, plugins, users, groups, and budgets.
 
-2. **AI Portal** — A self-service developer portal. Non-admin users browse available LLMs, MCP Servers, and Data Sources, then request access by creating an App. Apps go through an admin-approval step before credentials are activated. Each App can have a budget, and the portal provides analytics.
+2. **AI Portal** — A self-service developer portal. Non-admin users browse available LLMs, Tools, Data Sources and (Enterprise) MCP Servers, then request access by creating an App. Apps go through an admin-approval step before credentials are activated. Each App can have a budget, and the portal provides analytics.
 
 3. **Chat** — A managed chat interface for non-technical users. Instead of running ChatGPT locally, users interact with LLMs through a monitored interface. Chats can include tools (for API calls) and data sources (for RAG). These can be "templated" as Chat Experiences to pre-configure tools and RAG, reducing cognitive load.
 
@@ -24,8 +24,8 @@ AI Studio is the central management application. It is a single-page web app (Re
 | Service | Description |
 |---------|-------------|
 | **Embedded Gateway** | A lightweight AI Gateway for testing LLM proxying. No filters, no middleware, no plugins — just basic proxying to verify an LLM works as expected. Also used by the Chat interface. |
-| **API-based Tool Access** | Each Tool defined via OpenAPI spec is also available as a REST API endpoint for developers to call directly. |
-| **MCP Tool Access** | An MCP-compliant interface (shim) for tools generated from OpenAPI specs. Provides MCP-API compatibility without a separate MCP proxy. |
+| **API-based Tool Access** | A Tool defined via OpenAPI spec can also be called by Apps as a REST API endpoint. It is an [access method](./tools.md#access-methods) an administrator switches on per tool; a new tool is chat only. |
+| **MCP Tool Access** | The same, over MCP: a tool with MCP access on has an MCP endpoint served by AI Studio, without a separate MCP proxy. This is separate from the Enterprise [MCP servers](./tyk-mcp-integration.md), which a Tyk Gateway serves. |
 | **Datasource API** | A unified REST endpoint for performing vector searches against registered data sources. |
 | **Documentation Server** | A bundled Vitepress documentation site, accessible from the docs icon in the UI header. Configurable via `DOCS_PORT`, `DOCS_DISABLED`, and `DOCS_URL_OVERRIDE` environment variables. |
 

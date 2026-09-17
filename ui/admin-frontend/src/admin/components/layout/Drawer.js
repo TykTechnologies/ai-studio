@@ -123,13 +123,17 @@ const Drawer = () => {
             id: 'catalogs',
             text: 'Catalogs',
             icon: <Icon name="rectangle-history" />,
+            // Named after the pages they open ("LLM catalogs", "Data catalogs",
+            // "Tool catalogs"). They used to repeat the labels of the
+            // management pages below, so the menu had two items called
+            // "Tools", one of them next to "MCP servers".
             subItems: [
               ...(features.feature_portal
-                ? [{ id: 'catalog-llms', text: 'LLM providers', path: '/admin/catalogs/llms', permission: P.CATALOGUES_READ }]
+                ? [{ id: 'catalog-llms', text: 'LLM catalogs', path: '/admin/catalogs/llms', permission: P.CATALOGUES_READ }]
                 : []),
-              { id: 'catalog-data', text: 'Data sources', path: '/admin/catalogs/data', permission: P.DATA_CATALOGUES_READ },
+              { id: 'catalog-data', text: 'Data catalogs', path: '/admin/catalogs/data', permission: P.DATA_CATALOGUES_READ },
               ...(features.feature_chat
-                ? [{ id: 'catalog-tools', text: 'Tools', path: '/admin/catalogs/tools', permission: P.TOOL_CATALOGUES_READ }]
+                ? [{ id: 'catalog-tools', text: 'Tool catalogs', path: '/admin/catalogs/tools', permission: P.TOOL_CATALOGUES_READ }]
                 : []),
             ],
           },

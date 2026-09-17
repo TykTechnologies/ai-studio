@@ -31,6 +31,10 @@ export const useToolCreation = () => {
           : Number(toolConfig.privacy_score),
         auth_schema_name: authDetails.name || toolConfig.auth_schema_name,
         auth_key: toolConfig.auth_key || '',
+        // Access methods: an imported tool is chat only unless the admin
+        // turned REST or MCP on in the last step.
+        rest_access_enabled: Boolean(toolConfig.rest_access_enabled),
+        mcp_access_enabled: Boolean(toolConfig.mcp_access_enabled),
         file_stores: [],
         filters: [],
         dependencies: []

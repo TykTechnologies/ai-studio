@@ -31,6 +31,14 @@ The Tyk Gateway stays the only data plane. Clients call the proxy's listen
 path on the gateway with the key (or token) they hold; AI Studio is never on
 that path.
 
+An MCP server is not the same thing as a [Tool](./tools.md) that has MCP
+switched on as an access method. A tool's MCP endpoint is served by AI Studio
+itself, runs the tool's filters and takes the App's own credential. See
+[Tools and MCP servers](./tools.md#tools-and-mcp-servers) for when to use
+which. In the portal both are labelled with who serves them, and an App page
+gives one MCP client configuration that covers the App's tools and its MCP
+servers.
+
 ## Connections and trust modes
 
 A **connection** is one Tyk Dashboard URL and one Dashboard user access

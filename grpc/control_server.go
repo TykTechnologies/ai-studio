@@ -1866,6 +1866,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			AuthKeyEncrypted:    encryptedAuthKey,
 			AuthSchemaName:      tool.AuthSchemaName,
 			IsActive:            tool.Active,
+			RestAccessDisabled:  tool.RESTAccessDisabled,
+			McpAccessDisabled:   tool.MCPAccessDisabled,
 			Namespace:           tool.Namespace,
 			Metadata:            metadataJSON,
 			GovernedMetadata:    s.governedMetadataJSON(models.GovernedObjectTypeTool, governedTools[models.BuiltinObjectID(tool.ID)]),
@@ -2369,7 +2371,9 @@ func (s *ControlServer) cleanupStaleConnections() {
 
 // Config change event topics (defined locally to avoid import cycle with services package)
 // Note: Only objects included in the microgateway ConfigurationSnapshot trigger sync.
-// Tools, Datasources, Users, and Groups are AI Studio-only and don't affect edge sync.
+// Users and Groups are AI Studio-only and don't affect edge sync. Tools are in
+// the snapshot (edges serve /tools/{slug} and its MCP endpoint), so a tool edit
+// such as flipping an access-method switch has to mark edges as pending.
 const (
 	topicLLMCreated         = "system.llm.created"
 	topicLLMUpdated         = "system.llm.updated"
@@ -2389,6 +2393,9 @@ const (
 	topicModelRouterCreated = "system.model_router.created"
 	topicModelRouterUpdated = "system.model_router.updated"
 	topicModelRouterDeleted = "system.model_router.deleted"
+	topicToolCreated        = "system.tool.created"
+	topicToolUpdated        = "system.tool.updated"
+	topicToolDeleted        = "system.tool.deleted"
 
 	// Governed metadata (Enterprise): gateway-visible fields are part of the snapshot.
 	topicGovernedMetadataUpdated = "system.governed_metadata.updated"
@@ -2410,6 +2417,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicPluginCreated, topicPluginUpdated, topicPluginDeleted,
 		topicModelPriceCreated, topicModelPriceUpdated, topicModelPriceDeleted,
 		topicModelRouterCreated, topicModelRouterUpdated, topicModelRouterDeleted,
+		topicToolCreated, topicToolUpdated, topicToolDeleted,
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 	}
 

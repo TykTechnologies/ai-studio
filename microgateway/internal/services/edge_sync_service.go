@@ -708,6 +708,8 @@ func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 			AuthKeyEncrypted:    pbTool.AuthKeyEncrypted,
 			AuthSchemaName:      pbTool.AuthSchemaName,
 			Active:              pbTool.IsActive,
+			RESTAccessDisabled:  pbTool.RestAccessDisabled,
+			MCPAccessDisabled:   pbTool.McpAccessDisabled,
 			Namespace:           pbTool.Namespace,
 			GovernedMetadata:    database.GovernedMetadataJSON(pbTool.GovernedMetadata),
 		})

@@ -113,6 +113,9 @@ func createACLTool(t *testing.T, service *services.Service, name, upstreamURL st
 	require.NotNil(t, tool)
 
 	tool.AddOperation("getTestData")
+	// A new tool is chat only; these tests reach it over REST and MCP.
+	tool.RESTAccessDisabled = false
+	tool.MCPAccessDisabled = false
 	require.NoError(t, service.DB.Save(tool).Error)
 
 	// Re-read so the caller gets the slug the BeforeSave hook derived.

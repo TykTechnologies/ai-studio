@@ -288,7 +288,11 @@ func createTestDatasource(t *testing.T, service *services.Service, name string) 
 }
 
 func createTestTool(t *testing.T, service *services.Service, name string) *models.Tool {
-	tool, err := service.CreateTool(name, "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
+	// A new tool is chat only by default. These tests use tools as portal
+	// assets that are bound to Apps, which needs a gateway access method on.
+	on := true
+	tool, err := service.CreateToolWithOptions(service.DB, name, "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret",
+		services.ToolCreateOptions{RESTAccessEnabled: &on, MCPAccessEnabled: &on})
 	assert.NoError(t, err)
 	return tool
 }

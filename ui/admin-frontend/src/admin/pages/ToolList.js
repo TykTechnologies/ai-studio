@@ -13,6 +13,9 @@ import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirm
 import BulkResultAlert from "../components/common/BulkResultAlert";
 import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import ImportOpenAPIWizard from "../components/tools/ImportOpenAPIWizard";
+import { AccessMethodChips } from "../components/tools/ToolAccessMethods";
+import { TOOLS_BLURB, TOOLS_SEE_MCP_SERVERS } from "../components/tools/toolsVsMcpServers";
+import useSystemFeatures from "../hooks/useSystemFeatures";
 import {
   TitleBox,
   ContentBox,
@@ -28,6 +31,7 @@ import { P } from "../rbac/permissions";
 const ToolList = () => {
   const navigate = useNavigate();
   const { getDocsLink } = useConfig();
+  const { features } = useSystemFeatures();
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -109,6 +113,13 @@ const ToolList = () => {
       renderCell: (tool) => <PrivacyLevelChip score={tool.attributes.privacy_score} />,
     },
     {
+      // How the tool can be reached: always chat, optionally REST and MCP on
+      // the gateway. A tool showing only "Chat" is not in the portal.
+      field: "access",
+      headerName: "Access",
+      renderCell: (tool) => <AccessMethodChips attributes={tool.attributes} />,
+    },
+    {
       field: "active",
       headerName: "Active",
       sortable: true,
@@ -162,7 +173,13 @@ const ToolList = () => {
         </Stack>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools are external services that enhance the AI's capabilities by providing access to additional data and functions within chat rooms. Defined by the OpenAPI specification, you can specify which operations the LLM can use to fulfill user requests effectively.</Typography>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">{TOOLS_BLURB}</Typography>
+        {/* Only worth saying where the other thing exists. */}
+        {features?.feature_tyk_mcp && (
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued" component="p" sx={{ mt: 1, mb: 0 }} data-testid="tools-vs-mcp-servers">
+            {TOOLS_SEE_MCP_SERVERS}
+          </Typography>
+        )}
       </Box>
       <ContentBox>
         <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />

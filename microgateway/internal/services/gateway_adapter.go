@@ -1128,6 +1128,8 @@ func (a *GatewayServiceAdapter) convertDatabaseToolToModel(dbTool *database.Tool
 		AuthKey:             authKey,
 		AuthSchemaName:      dbTool.AuthSchemaName,
 		Active:              dbTool.Active,
+		RESTAccessDisabled:  dbTool.RESTAccessDisabled,
+		MCPAccessDisabled:   dbTool.MCPAccessDisabled,
 		Namespace:           dbTool.Namespace,
 		Filters:             filters,
 	}

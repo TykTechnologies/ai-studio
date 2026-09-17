@@ -486,6 +486,11 @@ type Tool struct {
 	AuthSchemaName      string `json:"auth_schema_name"`
 	Active              bool   `gorm:"default:true" json:"active"`
 	Namespace           string `gorm:"default:'';index:idx_tool_namespace" json:"namespace"`
+	// Access methods, stored inverted as on the control plane (models.Tool):
+	// the zero value leaves a method on, so a hub that does not send the
+	// switches keeps today's behaviour.
+	RESTAccessDisabled bool `gorm:"not null;default:false" json:"rest_access_disabled"`
+	MCPAccessDisabled  bool `gorm:"not null;default:false" json:"mcp_access_disabled"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
 	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
 

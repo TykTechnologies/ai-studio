@@ -304,6 +304,10 @@ const AppForm = () => {
     () => itemsForIds(app.datasource_ids, datasources, (d) => d.id, (id) => ({ id, attributes: { name: String(id) } })),
     [app.datasource_ids, datasources],
   );
+  const grantableTools = useMemo(
+    () => availableTools.filter((t) => t.attributes?.app_grantable !== false),
+    [availableTools],
+  );
   const selectedTools = useMemo(
     () => itemsForIds(app.tool_ids, availableTools, (t) => t.id, (id) => ({ id, attributes: { name: String(id) } })),
     [app.tool_ids, availableTools],
@@ -547,13 +551,19 @@ const AppForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
+              {/* Only tools an App credential can reach are offered: a tool
+                  with REST and MCP access both off is chat only. One that was
+                  bound before it was switched off still shows as a chip (the
+                  selection is resolved against the full list) and is sent
+                  back unchanged, which the server accepts. */}
               <RelationshipPicker
                 label="Tools"
                 itemLabel="tool"
                 value={selectedTools}
                 onChange={handleRelationshipChange("tool_ids")}
-                options={availableTools}
+                options={grantableTools}
                 getOptionLabel={jsonApiName}
+                helperText="Tools with REST API or MCP access on. Chat-only tools cannot be added to an App."
               />
             </Grid>
 

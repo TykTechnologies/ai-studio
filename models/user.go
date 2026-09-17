@@ -335,7 +335,9 @@ func (u *User) GetAccessibleLLMs(db *gorm.DB) ([]LLM, error) {
 	return llms, err
 }
 
-func (u *User) GetAccessibleTools(db *gorm.DB) ([]Tool, error) {
+// GetAccessibleTools lists the tools the user's teams grant. Optional scopes
+// narrow it in SQL, e.g. AppGrantableToolScope for the portal's App builder.
+func (u *User) GetAccessibleTools(db *gorm.DB, scopes ...func(*gorm.DB) *gorm.DB) ([]Tool, error) {
 	var tools []Tool
 	err := db.Table("tools").
 		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_id = tools.id").
@@ -343,6 +345,7 @@ func (u *User) GetAccessibleTools(db *gorm.DB) ([]Tool, error) {
 		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
 		Where("user_groups.user_id = ?", u.ID).
+		Scopes(scopes...).
 		Group("tools.id").
 		Find(&tools).Error
 	return tools, err

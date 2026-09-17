@@ -97,13 +97,13 @@ func newToolFilterFixtureWithService(t *testing.T, upstreamBody string, wrap fun
 		toolDef.OASSpec, toolDef.PrivacyScore, "", "")
 	require.NoError(t, err)
 
-	// CreateTool does not carry the operation whitelist, which the MCP
-	// transport requires before it will expose any tool.
-	require.NoError(t, service.DB.Model(&models.Tool{}).
-		Where("slug = ?", testToolSlug).
-		Update("available_operations", toolDef.AvailableOperations).Error)
-
 	tool, err := service.GetToolBySlug(testToolSlug)
+	require.NoError(t, err)
+
+	// CreateTool carries neither the operation whitelist nor the access
+	// methods: a new tool is chat only until both are set.
+	exposeTestTool(t, service, tool.ID, toolDef.AvailableOperations)
+	tool, err = service.GetToolBySlug(testToolSlug)
 	require.NoError(t, err)
 
 	app, err := service.CreateApp("Tool Filter App", "governance test", user.ID,

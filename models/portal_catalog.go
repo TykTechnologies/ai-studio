@@ -83,19 +83,35 @@ func AccessibleDatasourceQuery(db *gorm.DB, userID uint) *gorm.DB {
 
 // AccessibleToolQuery filters on tools.active, which the per-catalogue portal
 // page also applies (GetAccessibleTools itself does not).
+//
+// It is the portal catalogue's view of tools, so it lists only tools an App
+// can reach (see AppGrantableToolScope). A chat-only tool is offered in the
+// chat tool picker, which reads GetAccessibleTools, and nowhere in the portal.
 func AccessibleToolQuery(db *gorm.DB, userID uint) *gorm.DB {
 	return db.Model(&Tool{}).
 		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_id = tools.id").
 		Joins("JOIN tool_catalogues ON tool_catalogues.id = tool_catalogue_tools.tool_catalogue_id").
 		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
-		Where("user_groups.user_id = ? AND tools.active = ?", userID, true)
+		Where("user_groups.user_id = ? AND tools.active = ?", userID, true).
+		Scopes(AppGrantableToolScope)
+}
+
+// AppGrantableToolScope is Tool.AppGrantable in SQL: a gateway-served tool
+// with REST or MCP access switched on. Keep the two in step.
+//
+// The tool type is compared without wrapping the column in a function, so the
+// predicate stays usable by an index; a row with no type is a REST tool.
+func AppGrantableToolScope(db *gorm.DB) *gorm.DB {
+	return db.Where("(tools.tool_type IS NULL OR tools.tool_type <> ?) AND (tools.rest_access_disabled = ? OR tools.mcp_access_disabled = ?)",
+		ToolTypeClient, false, false)
 }
 
 // AccessibleMCPServerQuery is the portal visibility rule for Tyk-managed
-// MCP servers: the user's teams -> direct team grants -> published servers
-// that are active on their Dashboard. There is no catalogue family for
-// this type; grants are per server.
+// MCP servers: the user's teams -> the tool catalogues granted to them ->
+// published servers in those catalogues that are active on their Dashboard.
+// MCP servers have no catalogue family of their own; they share the tool
+// catalogues.
 func AccessibleMCPServerQuery(db *gorm.DB, userID uint) *gorm.DB {
 	return db.Model(&MCPServer{}).
 		Joins("JOIN tool_catalogue_mcp_servers ON tool_catalogue_mcp_servers.mcp_server_id = mcp_servers.id").

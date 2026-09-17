@@ -15,6 +15,7 @@ import useConfig from "../hooks/useConfig";
 import { TitleBox, ContentBox, PrimaryButton, PrimaryOutlineButton } from "../styles/sharedStyles";
 import { apiErrorDetail, formatTime } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
+import { MCP_SERVERS_SEE_TOOLS } from "../components/tools/toolsVsMcpServers";
 
 export const AUTH_MODE_LABELS = {
   keyless: "Keyless",
@@ -225,6 +226,10 @@ const MCPServers = () => {
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
           {INTRO}
+        </Typography>
+        {/* Tools can be reached over MCP too; say which is which. */}
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued" component="p" sx={{ mt: 1, mb: 0 }} data-testid="mcp-servers-vs-tools">
+          {MCP_SERVERS_SEE_TOOLS}
         </Typography>
       </Box>
       <ContentBox>

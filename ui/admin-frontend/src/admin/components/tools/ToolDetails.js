@@ -2,6 +2,7 @@ import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import Section from "../common/Section";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
+import ToolAccessMethods from "./ToolAccessMethods";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
@@ -264,7 +265,9 @@ const ToolDetails = () => {
               <FieldLabel>Tool Type:</FieldLabel>
             </Grid>
             <Grid item xs={9}>
-              <FieldValue>REST</FieldValue>
+              <FieldValue data-testid="tool-type">
+                {tool.attributes.tool_type === "CLIENT" ? "Client (human-in-the-loop)" : "REST API (OpenAPI)"}
+              </FieldValue>
             </Grid>
             <Grid item xs={3}>
               <FieldLabel>Active:</FieldLabel>
@@ -284,6 +287,18 @@ const ToolDetails = () => {
             </Grid>
           </Grid>
         </Section>
+
+        {/* A client tool runs in the chat UI and has no gateway endpoint. */}
+        {tool.attributes.tool_type !== "CLIENT" && (
+          <Section title="Access methods">
+            <ToolAccessMethods
+              restEnabled={Boolean(tool.attributes.rest_access_enabled)}
+              mcpEnabled={Boolean(tool.attributes.mcp_access_enabled)}
+              restUrl={tool.attributes.rest_endpoint_url}
+              mcpUrl={tool.attributes.mcp_endpoint_url}
+            />
+          </Section>
+        )}
 
         <UsedBySection resourcePath="tools" id={id} objectLabel="tool" />
 

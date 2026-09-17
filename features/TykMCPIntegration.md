@@ -8,7 +8,7 @@ Tyk Gateway now natively terminates MCP (Streamable HTTP, JSON-RPC 2.0, spec 202
 
 AI Studio's own MCP surfaces are the wrong tool for that job:
 
-- The embedded gateway serves MCP only as a shim *over Studio Tools* (`proxy/proxy.go` `handleMCPTool*`); it never consumes remote MCP servers.
+- The embedded gateway serves MCP only as a shim *over Studio Tools* (`proxy/proxy.go` `handleMCPTool*`); it never consumes remote MCP servers. Since 2026-09-18 that shim is a per-tool **access method**, off for new tools (`features/Tools.md` section 5a), and the product uses one vocabulary to keep the two apart: a *Tool* is served by AI Studio and may have an MCP endpoint; an *MCP server* (this spec) is served by a Tyk Gateway. User-facing text never calls a tool's endpoint an "MCP server", calls a server's primitives "MCP tools", and the portal labels each endpoint `Served by AI Studio` or `Served by Tyk Gateway`. A tool catalog page lists the MCP servers published in it.
 - The internal `mcp-registry` plugin (`tyk-internal/plugins/mcp-registry`, KV-backed, proxies through the microgateway) exists for Tyk Technologies' own use only; it is not a customer feature and is not part of this integration.
 - Yet the platform was designed for an "MCP servers" asset class: `mcp_servers` is the canonical example in `docs/site/docs/plugins-resource-types.md`, `docs/site/docs/architecture.md:18` already promises portal users can browse MCP servers, and nothing implements it.
 

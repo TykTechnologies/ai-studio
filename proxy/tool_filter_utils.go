@@ -13,6 +13,14 @@ import (
 // refusal a caller sees cannot drift between them.
 const toolBlockedMessage = scripting.ToolBlockedMessage
 
+// Refusals for a tool the caller's App is entitled to but may not reach this
+// way. They are only ever sent after the App ACL has passed.
+const (
+	toolRESTAccessDisabledMessage    = "REST API access is not enabled for this tool"
+	toolMCPAccessDisabledMessage     = "MCP access is not enabled for this tool"
+	toolOperationNotPermittedMessage = "operation not permitted for this tool"
+)
+
 // resolvedToolCtxKey carries the tool loaded for the current MCP request.
 //
 // The per-tool MCP server is cached and its handler closures capture the tool

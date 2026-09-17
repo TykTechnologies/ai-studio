@@ -5,12 +5,14 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gin-gonic/gin"
@@ -129,7 +131,65 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
+	response := gin.H{"data": toToolCatalogueResponse(toolCatalogue)}
+	// Tyk-managed MCP servers are published into tool catalogues too. They
+	// are edited from their own page, so they are listed beside the
+	// catalogue rather than among its attributes, and only for a caller who
+	// may read MCP servers.
+	if authz.Can(c, authz.Read("mcp-servers")) {
+		servers, truncated, err := a.toolCatalogueMCPServers(uint(id))
+		if err != nil {
+			// The list is supplementary: the catalogue itself loaded, so the
+			// page still renders, without the section. The failure is logged
+			// rather than swallowed.
+			slog.Error("failed to list the MCP servers of a tool catalogue", "tool_catalogue_id", id, "error", err)
+		} else {
+			response["mcp_servers"] = servers
+			// Says so when the list was cut at the limit, so the page never
+			// presents a partial list as the whole.
+			response["mcp_servers_truncated"] = truncated
+		}
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+// ToolCatalogueMCPServer is the slim projection of an MCP server published in
+// a tool catalogue.
+type ToolCatalogueMCPServer struct {
+	ID        uint   `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Published bool   `json:"published"`
+}
+
+// toolCatalogueMCPServerLimit bounds the list on the catalogue page. It is a
+// reference list; the MCP servers page is where they are searched and paged.
+// A variable so a test can lower it.
+var toolCatalogueMCPServerLimit = 200
+
+// toolCatalogueMCPServers lists the catalogue's MCP servers by name, at most
+// toolCatalogueMCPServerLimit of them. It asks for one more than the limit so
+// it can report, without a second query, whether the list was cut short.
+func (a *API) toolCatalogueMCPServers(catalogueID uint) ([]ToolCatalogueMCPServer, bool, error) {
+	var servers []models.MCPServer
+	err := a.service.DB.
+		Joins("JOIN tool_catalogue_mcp_servers tcm ON tcm.mcp_server_id = mcp_servers.id").
+		Where("tcm.tool_catalogue_id = ?", catalogueID).
+		Order("mcp_servers.name").
+		Limit(toolCatalogueMCPServerLimit + 1).
+		Find(&servers).Error
+	if err != nil {
+		return nil, false, err
+	}
+	truncated := len(servers) > toolCatalogueMCPServerLimit
+	if truncated {
+		servers = servers[:toolCatalogueMCPServerLimit]
+	}
+	out := make([]ToolCatalogueMCPServer, 0, len(servers))
+	for _, srv := range servers {
+		out = append(out, ToolCatalogueMCPServer{ID: srv.ID, Name: srv.Name, Kind: srv.Kind, Published: srv.IsActive})
+	}
+	return out, truncated, nil
 }
 
 // @Summary Update a tool catalogue
@@ -357,22 +417,7 @@ func toSecureToolResponse(tool *models.Tool) ToolResponse {
 	return ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
-		Attributes: struct {
-			Name           string              `json:"name"`
-			Description    string              `json:"description"`
-			ToolType       string              `json:"tool_type"`
-			OASSpec        string              `json:"oas_spec"`
-			PrivacyScore   int                 `json:"privacy_score"`
-			Operations     []string            `json:"operations"`
-			AuthKey        string              `json:"auth_key"`
-			HasAuthKey     bool                `json:"has_auth_key"`
-			AuthSchemaName string              `json:"auth_schema_name"`
-			Active         bool                `json:"active"`
-			Namespace      string              `json:"namespace"`
-			FileStores     []FileStoreResponse `json:"file_stores"`
-			Filters        []FilterResponse    `json:"filters"`
-			Dependencies   []ToolResponse      `json:"dependencies"`
-		}{
+		Attributes: ToolResponseAttributes{
 			Name:           tool.Name,
 			Description:    tool.Description,
 			ToolType:       tool.ToolType,
@@ -383,6 +428,8 @@ func toSecureToolResponse(tool *models.Tool) ToolResponse {
 			HasAuthKey:     tool.AuthKey != "",
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
+
+			ToolGatewayAccess: toolGatewayAccess(tool),
 		},
 	}
 }
@@ -392,22 +439,7 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 	return ToolResponse{
 		Type: "tools",
 		ID:   strconv.FormatUint(uint64(tool.ID), 10),
-		Attributes: struct {
-			Name           string              `json:"name"`
-			Description    string              `json:"description"`
-			ToolType       string              `json:"tool_type"`
-			OASSpec        string              `json:"oas_spec"`
-			PrivacyScore   int                 `json:"privacy_score"`
-			Operations     []string            `json:"operations"`
-			AuthKey        string              `json:"auth_key"`
-			HasAuthKey     bool                `json:"has_auth_key"`
-			AuthSchemaName string              `json:"auth_schema_name"`
-			Active         bool                `json:"active"`
-			Namespace      string              `json:"namespace"`
-			FileStores     []FileStoreResponse `json:"file_stores"`
-			Filters        []FilterResponse    `json:"filters"`
-			Dependencies   []ToolResponse      `json:"dependencies"`
-		}{
+		Attributes: ToolResponseAttributes{
 			Name:           tool.Name,
 			Description:    tool.Description,
 			ToolType:       tool.ToolType,
@@ -418,6 +450,8 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 			HasAuthKey:     tool.AuthKey != "",
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
+
+			ToolGatewayAccess: toolGatewayAccess(tool),
 		},
 	}
 }
@@ -648,6 +682,16 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Internal Server Error", "Failed to fetch tool: " + err.Error()}}})
+		return
+	}
+
+	// The page documents how an App calls the tool on the gateway. A chat-only
+	// tool has no such endpoint and is not shown anywhere in the portal.
+	if !tool.AppGrantable() {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Not Found", "Tool not found: " + toolID}}})
 		return
 	}
 

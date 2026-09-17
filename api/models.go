@@ -623,10 +623,55 @@ type ToolInput struct {
 			// create (unless the caller lacks tools:publish, in which case the
 			// tool is created inactive). Setting it needs tools:publish.
 			Active *bool `json:"active,omitempty"`
+			// Access methods. Omitted = unchanged on update; on create a new
+			// tool is chat only (both off). Not accepted on client tools.
+			RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
+			MCPAccessEnabled  *bool `json:"mcp_access_enabled,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
+}
+
+// ToolResponseAttributes is the attribute block of a ToolResponse.
+type ToolResponseAttributes struct {
+	Name           string              `json:"name"`
+	Description    string              `json:"description"`
+	ToolType       string              `json:"tool_type"`
+	OASSpec        string              `json:"oas_spec"`
+	PrivacyScore   int                 `json:"privacy_score"`
+	Operations     []string            `json:"operations"`
+	AuthKey        string              `json:"auth_key"`
+	HasAuthKey     bool                `json:"has_auth_key"`
+	AuthSchemaName string              `json:"auth_schema_name"`
+	Active         bool                `json:"active"`
+	Namespace      string              `json:"namespace"`
+	FileStores     []FileStoreResponse `json:"file_stores"`
+	Filters        []FilterResponse    `json:"filters"`
+	Dependencies   []ToolResponse      `json:"dependencies"`
+
+	// Flattened into the attributes; see toolGatewayAccess.
+	ToolGatewayAccess
+}
+
+// ToolGatewayAccess describes how an App may reach a tool on the gateway. It
+// is embedded, so its fields appear directly among the tool's attributes.
+type ToolGatewayAccess struct {
+	// Slug is the path segment the gateway serves the tool under. It is
+	// computed server-side (with transliteration), so clients must not derive
+	// it from the name.
+	Slug string `json:"slug"`
+	// Access methods. Chat is always available and is not listed.
+	// AppGrantable is false for a chat-only tool, which cannot be bound to an
+	// App.
+	RESTAccessEnabled bool `json:"rest_access_enabled"`
+	MCPAccessEnabled  bool `json:"mcp_access_enabled"`
+	AppGrantable      bool `json:"app_grantable"`
+	// Gateway URLs of the two access methods, built from TOOL_DISPLAY_URL (or
+	// PROXY_URL) and the slug. Empty for client tools and when no base URL is
+	// configured. They say where a method is served, not whether it is on.
+	RESTEndpointURL string `json:"rest_endpoint_url"`
+	MCPEndpointURL  string `json:"mcp_endpoint_url"`
 }
 
 // ToolResponse represents the response for tool-related operations
@@ -637,22 +682,7 @@ type ToolResponse struct {
 	// Governed metadata (Enterprise); see LLMResponse.
 	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
 	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
-	Attributes             struct {
-		Name           string              `json:"name"`
-		Description    string              `json:"description"`
-		ToolType       string              `json:"tool_type"`
-		OASSpec        string              `json:"oas_spec"`
-		PrivacyScore   int                 `json:"privacy_score"`
-		Operations     []string            `json:"operations"`
-		AuthKey        string              `json:"auth_key"`
-		HasAuthKey     bool                `json:"has_auth_key"`
-		AuthSchemaName string              `json:"auth_schema_name"`
-		Active         bool                `json:"active"`
-		Namespace      string              `json:"namespace"`
-		FileStores     []FileStoreResponse `json:"file_stores"`
-		Filters        []FilterResponse    `json:"filters"`
-		Dependencies   []ToolResponse      `json:"dependencies"`
-	} `json:"attributes"`
+	Attributes             ToolResponseAttributes `json:"attributes"`
 }
 
 // OperationsResponse represents the response for tool operations

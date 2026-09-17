@@ -30,6 +30,7 @@ import RelationshipPicker from "../components/common/relationship-picker";
 import { TitleBox, ContentBox, PrimaryButton, SecondaryLinkButton, SecondaryOutlineButton } from "../styles/sharedStyles";
 import { apiErrorDetail, preStyle } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
+import { TOOL_VS_MCP_SERVER } from "../components/tools/toolsVsMcpServers";
 
 const STEPS = ["Connection and kind", "Proxy details", "Access and governance", "Review and create"];
 
@@ -366,6 +367,13 @@ const MCPServerRegister = () => {
                 </>
               ) : (
                 <>
+                  {/* The same Tyk API could also be imported as a tool. */}
+                  <Grid item xs={12}>
+                    <Alert severity="info" data-testid="rest-to-mcp-or-tool">
+                      {TOOL_VS_MCP_SERVER.mcpServer} If chats and agents in AI Studio should use this API, or AI Studio
+                      filters should apply to it, import it under Tools instead.
+                    </Alert>
+                  </Grid>
                   <Grid item xs={12}>
                     <TextField select fullWidth label="Source API (Tyk OAS)" value={form.source_api_id} onChange={(e) => loadOperations(e.target.value)} inputProps={{ "data-testid": "source-api" }}>
                       {sourceAPIs.map((a) => (
@@ -384,7 +392,7 @@ const MCPServerRegister = () => {
                           <TableRow>
                             <TableCell>Expose</TableCell>
                             <TableCell>Operation</TableCell>
-                            <TableCell>Tool name</TableCell>
+                            <TableCell>MCP tool name</TableCell>
                             <TableCell>Description</TableCell>
                           </TableRow>
                         </TableHead>

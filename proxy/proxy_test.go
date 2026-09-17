@@ -71,6 +71,7 @@ func registerTestTool(t *testing.T, service *services.Service, mockServerURL str
 		"",
 	)
 	assert.NoError(t, err, "Failed to register test tool")
+	exposeTestTool(t, service, tool.ID, toolDef.AvailableOperations)
 	return tool
 }
 
@@ -260,6 +261,7 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 		"",
 	)
 	require.NoError(t, err)
+	exposeTestTool(t, service, createdTool.ID, toolDefForApp.AvailableOperations)
 	require.NotNil(t, createdTool)
 	// Ensure the tool is found by slug for unregistration
 	registeredToolDef, err := service.GetToolBySlug(testToolSlug)
@@ -377,6 +379,7 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 		"",
 	)
 	require.NoError(t, err)
+	exposeTestTool(t, service, createdTool.ID, toolDefForApp.AvailableOperations)
 	require.NotNil(t, createdTool)
 	registeredToolDef, err := service.GetToolBySlug(testToolSlug) // Fetch full def for ID and correct slug
 	require.NoError(t, err)
@@ -479,6 +482,7 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 		"", // API key
 	)
 	require.NoError(t, err)
+	exposeTestTool(t, service, registeredToolDef.ID, toolDefForApp.AvailableOperations)
 	require.NotNil(t, registeredToolDef)
 
 	app, err := service.CreateApp("Test App InvalidBody", "App for InvalidBody testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
@@ -516,8 +520,8 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 		{
 			name:         "Missing operation_id",
 			body:         `{"payload": {"key": "value"}}`,
-			expectedCode: http.StatusInternalServerError,  // From the error logs, missing operation_id causes a 500 error
-			expectedMsg:  "failed to call tool operation", // Based on error logs
+			expectedCode: http.StatusBadRequest,
+			expectedMsg:  "operation_id is required",
 		},
 		{
 			name:         "Wrong type for operation_id",
@@ -547,7 +551,8 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 		})
 	}
 
-	// Test case for missing operation_id specifically, which should lead to 500 as CallToolOperation fails
+	// A missing operation_id is the caller's mistake and is refused before the
+	// tool is contacted.
 	t.Run("Missing operation_id field", func(t *testing.T) {
 		body := `{"payload": {"key": "value"}}` // operation_id field is completely missing
 		reqPath := "/tools/" + testToolSlug
@@ -559,15 +564,11 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 		rr := httptest.NewRecorder()
 		proxyRouter.ServeHTTP(rr, proxyReq) // proxyRouter is from outer scope
 
-		assert.Equal(t, http.StatusInternalServerError, rr.Code, "Proxy should return 500 if operation_id field is missing")
+		assert.Equal(t, http.StatusBadRequest, rr.Code, "Proxy should return 400 if operation_id field is missing")
 		var errorResponse ErrorResponse
 		err = json.Unmarshal(rr.Body.Bytes(), &errorResponse)
 		require.NoError(t, err)
-		assert.Contains(t, errorResponse.Message, "failed to call tool operation")
-		// This assertion depends on the exact error message from the service layer when operation_id is missing from input to CallToolOperation.
-		// Assuming it might error out earlier due to unmarshalling or a direct check.
-		// If CallToolOperation is called with an empty operationID, it should return an error like "operation not found".
-		assert.Contains(t, errorResponse.Error, "operation not found")
+		assert.Contains(t, errorResponse.Message, "operation_id is required")
 	})
 
 	// 5. Cleanup
@@ -699,6 +700,7 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 		"", // API key
 	)
 	require.NoError(t, err)
+	exposeTestTool(t, service, registeredTool.ID, toolDef.AvailableOperations)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testnotfound@example.com",
@@ -804,6 +806,7 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 		"", // API key
 	)
 	require.NoError(t, err)
+	exposeTestTool(t, service, registeredToolDef.ID, toolDefForApp.AvailableOperations)
 	require.NotNil(t, registeredToolDef)
 
 	app, err := service.CreateApp("Test App OpNotFound", "App for OpNotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
@@ -845,15 +848,14 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 	proxyRouter.ServeHTTP(rr, proxyReq)
 
-	assert.Equal(t, http.StatusInternalServerError, rr.Code, "HTTP status code should be 500 Internal Server Error")
+	// An operation that is not on the tool's whitelist is refused before the
+	// upstream is contacted, whether or not the spec declares it.
+	assert.Equal(t, http.StatusForbidden, rr.Code, "HTTP status code should be 403 Forbidden")
 
 	var errorResponse ErrorResponse
 	err = json.Unmarshal(rr.Body.Bytes(), &errorResponse)
 	require.NoError(t, err, "Should be able to unmarshal error response")
-	// Check key error fields
-	assert.Contains(t, errorResponse.Message, "failed to call tool operation", "Error message mismatch")
-	require.NotEmpty(t, errorResponse.Error, "Detailed error should be present")
-	assert.Contains(t, errorResponse.Error, "operation not found", "Detailed error should mention operation not found")
+	assert.Contains(t, errorResponse.Message, toolOperationNotPermittedMessage, "Error message mismatch")
 
 	// 7. Cleanup
 	unregisterTestTool(t, service, slug.Make(registeredToolDef.Name))
@@ -903,6 +905,7 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 		"", // API key
 	)
 	require.NoError(t, err)
+	exposeTestTool(t, service, registeredToolDef.ID, toolDefForApp.AvailableOperations)
 	require.NotNil(t, registeredToolDef)
 
 	app, err := service.CreateApp("Test App ServerError", "App for ServerError testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)

@@ -170,7 +170,7 @@ function OAuthConsentPage() {
           )) : (
             <ListItem sx={{ py: 0.5, px: 0 }}>
               <ListItemText 
-                primary="Access selected MCP tools" 
+                primary="Use the tools of the app you select, over MCP"
                 primaryTypographyProps={{ 
                   color: theme.palette.text.primary,
                   variant: 'bodyMediumDefault'

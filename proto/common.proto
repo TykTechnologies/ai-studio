@@ -203,6 +203,11 @@ message ToolConfig {
   repeated uint32 filter_ids = 16;      // From tool_filters join table
   repeated uint32 app_ids = 17;         // From app_tools join table
   string governed_metadata = 18;        // JSON object of gateway-visible governed metadata (Enterprise); empty when none
+
+  // Access methods. Inverted so that a hub that predates them (fields absent,
+  // false) leaves both methods on, which is what such a hub's tools expect.
+  bool rest_access_disabled = 19;       // true: /tools/{slug} is refused
+  bool mcp_access_disabled = 20;        // true: /tools/{slug}/mcp is refused
 }
 
 // DatasourceConfig represents a datasource configuration

@@ -58,6 +58,7 @@ import { P } from "../../rbac/permissions";
 import { usePermissions } from "../../context/PermissionsContext";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
 import ClientToolEditor from "./client/ClientToolEditor";
+import ToolAccessMethods from "./ToolAccessMethods";
 import { listAll } from "../../utils/listAll";
 
 const SectionTitle = ({ children, tooltip }) => (
@@ -288,6 +289,9 @@ const ToolForm = () => {
     tool_type: "REST",
     operations: [], // the API expects a string array; "" was rejected on create
     namespace: "",
+    // A new tool is chat only; REST and MCP access are opt-in.
+    rest_access_enabled: false,
+    mcp_access_enabled: false,
   });
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -633,6 +637,9 @@ const ToolForm = () => {
           privacy_score: Number(tool.privacy_score),
           active: Boolean(tool.active),
           tool_type: tool.tool_type || "REST",
+          // The API refuses a gateway access method on a client tool.
+          rest_access_enabled: !isClient && Boolean(tool.rest_access_enabled),
+          mcp_access_enabled: !isClient && Boolean(tool.mcp_access_enabled),
           // Client tools store their JSON definition in the spec field.
           oas_spec: isClient
             ? btoa(unescape(encodeURIComponent(JSON.stringify(buildClientDefinition().definition))))
@@ -803,7 +810,7 @@ const ToolForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools are external services that enhance the AI's capabilities by providing access to additional data and functions within chat rooms. Defined by the OpenAPI specification, you can specify which operations the LLM can use to fulfill user requests effectively.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools give chats and agents access to external services. A tool is built from an OpenAPI specification, and you choose which operations the LLM may use. A tool can also be opened to Apps over REST or MCP on the AI Studio gateway, under Access methods below.</Typography>
       </Box>
       <ContentBox sx={{ pt: 0 }}>
         <Box component="form" onSubmit={handleSubmit}>
@@ -882,10 +889,27 @@ const ToolForm = () => {
                 label="Active"
               />
               <Typography variant="caption" color="text.secondary" display="block">
-                Available to the portal and gateway when on
+                Available to chats, the portal and the gateway when on
               </Typography>
             </Grid>
           </Grid>
+
+          {/* A client tool runs in the chat UI and has no gateway endpoint. */}
+          {!isClient && (
+            <>
+              <SectionTitle tooltip="How this tool can be reached. Chat is always on; REST API and MCP expose it to Apps on the AI Studio gateway.">
+                Access methods
+              </SectionTitle>
+              <ToolAccessMethods
+                restEnabled={Boolean(tool.rest_access_enabled)}
+                mcpEnabled={Boolean(tool.mcp_access_enabled)}
+                onChange={(name, value) => setTool((prev) => ({ ...prev, [name]: value }))}
+                restUrl={id ? tool.rest_endpoint_url : ""}
+                mcpUrl={id ? tool.mcp_endpoint_url : ""}
+                existing={Boolean(id)}
+              />
+            </>
+          )}
 
           {isClient && (
             <>

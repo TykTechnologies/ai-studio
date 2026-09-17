@@ -19,6 +19,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import KeyIcon from "@mui/icons-material/VpnKey";
 import pubClient from "../../admin/utils/pubClient";
 import { MCP_AUTH_LABELS } from "../utils/catalog";
+import { mcpClientConfig, mcpServerEntry } from "./connect/mcpConfig";
 
 const STATUS_LABELS = {
   minting: "Minting",
@@ -54,19 +55,9 @@ const copy = (text) => {
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
 };
 
-const mcpRemoteSnippet = (server, key) =>
-  JSON.stringify(
-    {
-      mcpServers: {
-        [server.slug || server.name]: {
-          command: "npx",
-          args: ["mcp-remote", server.endpoint_url, "--header", `${server.header_name || "Authorization"}: ${key}`],
-        },
-      },
-    },
-    null,
-    2
-  );
+// Built by the shared connect module, so a Tyk MCP server and a Tool that is
+// reached over MCP produce entries of the same shape.
+const mcpRemoteSnippet = (server, key) => mcpClientConfig([mcpServerEntry(server, key)]);
 
 /**
  * RevealKeyDialog shows a freshly minted Tyk key exactly once. The platform
@@ -157,21 +148,25 @@ const ServerInstructions = ({ server }) => {
  * MCP servers the App reaches, grouped by Dashboard connection, with the
  * access key controls for the connections that broker keys.
  */
-const AppMCPAccess = ({ appId, credentialActive }) => {
+const AppMCPAccess = ({ appId, credentialActive, onSummary }) => {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [minted, setMinted] = useState(null);
   const [confirm, setConfirm] = useState(null); // {kind, credential}
 
+  // onSummary lets the App page build one MCP client configuration for the
+  // App's tools and these servers; only this call knows each proxy's header.
   const load = useCallback(async () => {
     try {
       const res = await pubClient.get(`/common/apps/${appId}/mcp`);
-      setSummary(res.data || { servers: [], credentials: [], connections: [] });
+      const next = res.data || { servers: [], credentials: [], connections: [] };
+      setSummary(next);
+      if (onSummary) onSummary(next);
     } catch (err) {
       setError(errorDetail(err, "Failed to load MCP access"));
     }
-  }, [appId]);
+  }, [appId, onSummary]);
 
   useEffect(() => {
     load();

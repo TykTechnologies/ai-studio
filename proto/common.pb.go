@@ -1566,8 +1566,12 @@ type ToolConfig struct {
 	FilterIds        []uint32 `protobuf:"varint,16,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"`              // From tool_filters join table
 	AppIds           []uint32 `protobuf:"varint,17,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                       // From app_tools join table
 	GovernedMetadata string   `protobuf:"bytes,18,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Access methods. Inverted so that a hub that predates them (fields absent,
+	// false) leaves both methods on, which is what such a hub's tools expect.
+	RestAccessDisabled bool `protobuf:"varint,19,opt,name=rest_access_disabled,json=restAccessDisabled,proto3" json:"rest_access_disabled,omitempty"` // true: /tools/{slug} is refused
+	McpAccessDisabled  bool `protobuf:"varint,20,opt,name=mcp_access_disabled,json=mcpAccessDisabled,proto3" json:"mcp_access_disabled,omitempty"`    // true: /tools/{slug}/mcp is refused
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ToolConfig) Reset() {
@@ -1724,6 +1728,20 @@ func (x *ToolConfig) GetGovernedMetadata() string {
 		return x.GovernedMetadata
 	}
 	return ""
+}
+
+func (x *ToolConfig) GetRestAccessDisabled() bool {
+	if x != nil {
+		return x.RestAccessDisabled
+	}
+	return false
+}
+
+func (x *ToolConfig) GetMcpAccessDisabled() bool {
+	if x != nil {
+		return x.McpAccessDisabled
+	}
+	return false
 }
 
 // DatasourceConfig represents a datasource configuration
@@ -2782,7 +2800,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
-	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\x80\x05\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xe2\x05\n" +
 	"\n" +
 	"ToolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -2806,7 +2824,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"filter_ids\x18\x10 \x03(\rR\tfilterIds\x12\x17\n" +
 	"\aapp_ids\x18\x11 \x03(\rR\x06appIds\x12+\n" +
-	"\x11governed_metadata\x18\x12 \x01(\tR\x10governedMetadata\"\xb6\x06\n" +
+	"\x11governed_metadata\x18\x12 \x01(\tR\x10governedMetadata\x120\n" +
+	"\x14rest_access_disabled\x18\x13 \x01(\bR\x12restAccessDisabled\x12.\n" +
+	"\x13mcp_access_disabled\x18\x14 \x01(\bR\x11mcpAccessDisabled\"\xb6\x06\n" +
 	"\x10DatasourceConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12+\n" +

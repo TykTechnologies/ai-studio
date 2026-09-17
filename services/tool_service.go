@@ -23,14 +23,54 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec string,
 
 // CreateToolWithDB creates a new tool using the provided DB connection (supports transactions).
 func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
+	return s.CreateToolWithOptions(db, name, description, toolType, oasSpec, privacyScore, schemaName, APIKey, ToolCreateOptions{})
+}
+
+// ToolCreateOptions is what a creator may decide about a new tool beyond its
+// basic fields. The zero value gives the defaults: no operations whitelisted,
+// the global namespace, active, and chat only.
+type ToolCreateOptions struct {
+	Operations []string
+	Namespace  string
+	// Active nil means active, the column default.
+	Active *bool
+	// Access methods; nil means the default for new tools
+	// (models.DefaultToolRESTAccessEnabled / DefaultToolMCPAccessEnabled).
+	RESTAccessEnabled *bool
+	MCPAccessEnabled  *bool
+}
+
+// CreateToolWithOptions creates a tool fully configured in one step, so the
+// before/after-create hooks and the created event all see the tool as it will
+// be served. Creating it bare and saving the rest afterwards announced a tool
+// with no operations first, and needed a second event to correct it.
+//
+// Every creator of a tool comes through here (admin API, submission approval,
+// plugin gRPC), so this is the one place the access-method default for new
+// tools is applied.
+func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string, opts ToolCreateOptions) (*models.Tool, error) {
+	restEnabled, mcpEnabled := models.DefaultToolRESTAccessEnabled, models.DefaultToolMCPAccessEnabled
+	if opts.RESTAccessEnabled != nil {
+		restEnabled = *opts.RESTAccessEnabled
+	}
+	if opts.MCPAccessEnabled != nil {
+		mcpEnabled = *opts.MCPAccessEnabled
+	}
 	tool := &models.Tool{
-		Name:           name,
-		Description:    description,
-		ToolType:       toolType,
-		OASSpec:        oasSpec,
-		PrivacyScore:   privacyScore,
-		AuthSchemaName: schemaName,
-		AuthKey:        APIKey,
+		Name:               name,
+		Description:        description,
+		ToolType:           toolType,
+		OASSpec:            oasSpec,
+		PrivacyScore:       privacyScore,
+		AuthSchemaName:     schemaName,
+		AuthKey:            APIKey,
+		Namespace:          opts.Namespace,
+		Active:             opts.Active == nil || *opts.Active,
+		RESTAccessDisabled: !restEnabled,
+		MCPAccessDisabled:  !mcpEnabled,
+	}
+	for _, op := range opts.Operations {
+		tool.AddOperation(op)
 	}
 
 	// Execute "before_create" hooks
@@ -67,6 +107,15 @@ func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType stri
 	if err := tool.Create(db); err != nil {
 		return nil, err
 	}
+	// The active column has a database default of true, which GORM applies
+	// to an explicit false on insert. Write the draft state before anything
+	// (hooks, the created event, the edge snapshot) can see the tool as live.
+	if opts.Active != nil && !*opts.Active {
+		if err := db.Model(&models.Tool{}).Where("id = ?", tool.ID).Update("active", false).Error; err != nil {
+			return nil, err
+		}
+		tool.Active = false
+	}
 
 	// Auto-assign to Default tool catalogue if not in any catalogue (Community
 	// Edition only; Enterprise leaves catalogue membership to the admin).
@@ -84,6 +133,12 @@ func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType stri
 	// aborted" on whatever the caller does next.
 	if err := s.ensureToolInDefaultCatalogueTx(db, tool); err != nil {
 		return nil, err
+	}
+	// Appending to the catalogue leaves the row alone but back-fills column
+	// defaults onto the struct, turning a draft's Active back to true in
+	// memory. The hooks, the event and the caller must see the stored value.
+	if opts.Active != nil {
+		tool.Active = *opts.Active
 	}
 
 	// Execute "after_create" hooks
@@ -258,11 +313,15 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 }
 
 // GetToolBySlug retrieves a tool by its slug (pre-computed from name using slug.Make)
+//
+// This is the gateway's lookup, so it resolves active tools only. An inactive
+// tool is never shipped to an edge gateway; the embedded gateway has to agree,
+// or deactivating a tool only takes effect at the edge.
 func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 	var tool models.Tool
 
 	// Use the pre-computed slug column for efficient indexed lookup
-	err := s.DB.Where("slug = ?", slug).
+	err := s.DB.Where("slug = ? AND active = ?", slug, true).
 		Preload("FileStores").
 		Preload("Filters").
 		Preload("Dependencies").
@@ -344,7 +403,20 @@ func (s *Service) AddOperationToTool(toolID uint, operation string) error {
 	}
 
 	tool.AddOperation(operation)
-	return tool.Update(s.DB)
+	if err := tool.Update(s.DB); err != nil {
+		return err
+	}
+	s.emitToolWhitelistChanged(tool)
+	return nil
+}
+
+// emitToolWhitelistChanged announces a change to a tool's operation whitelist.
+// The whitelist decides what the gateway will call, on the edge as well, so
+// edge gateways have to be told their configuration is out of date.
+func (s *Service) emitToolWhitelistChanged(tool *models.Tool) {
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitToolUpdated(tool, tool.ID, 0)
+	}
 }
 
 // RemoveOperationFromTool removes an operation from a tool
@@ -355,7 +427,11 @@ func (s *Service) RemoveOperationFromTool(toolID uint, operation string) error {
 	}
 
 	tool.RemoveOperation(operation)
-	return tool.Update(s.DB)
+	if err := tool.Update(s.DB); err != nil {
+		return err
+	}
+	s.emitToolWhitelistChanged(tool)
+	return nil
 }
 
 // GetToolOperations retrieves all operations associated with a tool

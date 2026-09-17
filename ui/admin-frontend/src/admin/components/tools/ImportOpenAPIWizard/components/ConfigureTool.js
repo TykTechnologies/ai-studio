@@ -1,6 +1,7 @@
 import React from 'react';
 import { PROVIDER_TYPES } from '../constants';
 import PrivacyLevelInput from '../../../common/privacy/PrivacyLevelInput';
+import ToolAccessMethods from '../../ToolAccessMethods';
 import {
   Box,
   Typography,
@@ -76,6 +77,18 @@ const ConfigureTool = ({
         <PrivacyLevelInput
           value={toolConfig.privacy_score}
           onChange={handlePrivacyChange}
+        />
+      </Box>
+
+      {/* Same block as the tool form: chat always, REST and MCP opt-in. */}
+      <Box sx={{ mt: 2, mb: 2 }}>
+        <Typography variant="subtitle2" gutterBottom>
+          Access methods
+        </Typography>
+        <ToolAccessMethods
+          restEnabled={Boolean(toolConfig.rest_access_enabled)}
+          mcpEnabled={Boolean(toolConfig.mcp_access_enabled)}
+          onChange={(name, value) => onConfigChange({ ...toolConfig, [name]: value })}
         />
       </Box>
 
