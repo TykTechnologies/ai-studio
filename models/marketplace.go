@@ -98,6 +98,7 @@ type MarketplacePlugin struct {
 
 	// Full manifest data (for reference)
 	ManifestData    string    `json:"manifest_data" gorm:"type:text"` // Full YAML/JSON manifest
+	ManifestURL     string    `json:"manifest_url" gorm:"size:500"`   // URL of this version's manifest.yaml; its directory also holds CHANGELOG.md
 
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`

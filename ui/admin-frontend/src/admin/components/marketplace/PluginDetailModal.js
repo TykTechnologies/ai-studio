@@ -36,7 +36,9 @@ function TabPanel({ children, value, index }) {
   );
 }
 
-const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
+const PluginDetailModal = ({ open, plugin, installed = [], canUpgrade = false, onClose, onInstall, onUpgrade }) => {
+  // The installed copy to act on: one with an update pending, else the first.
+  const installedEntry = installed.find((entry) => entry.update_available) || installed[0];
   const { isEnterprise, loading: editionLoading } = useEdition();
   const [tabValue, setTabValue] = useState(0);
   const [versions, setVersions] = useState([]);
@@ -116,6 +118,14 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
           <Typography variant="body1" paragraph>
             {plugin.description}
           </Typography>
+
+          {installedEntry && (
+            <Alert severity={installedEntry.update_available ? 'info' : 'success'} sx={{ mb: 2 }}>
+              {installedEntry.update_available
+                ? `Installed${installedEntry.installed_version ? ` at v${installedEntry.installed_version}` : ''}. Version ${installedEntry.available_version} is available; upgrading keeps the plugin's configuration and data.`
+                : `Already installed${installedEntry.installed_version ? ` at v${installedEntry.installed_version}` : ''}.`}
+            </Alert>
+          )}
 
           {plugin.enterprise_only && isInstallDisabled && (
             <Alert severity="info" icon={<StarIcon />} sx={{ mb: 2 }}>
@@ -320,9 +330,18 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
 
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
-        {!plugin.deprecated && (
+        {installedEntry?.update_available && canUpgrade && (
           <Button
             variant="contained"
+            onClick={() => onUpgrade?.(plugin, installedEntry)}
+            disabled={isInstallDisabled}
+          >
+            Upgrade Installed Plugin
+          </Button>
+        )}
+        {!plugin.deprecated && (
+          <Button
+            variant={installedEntry ? 'outlined' : 'contained'}
             startIcon={<DownloadIcon />}
             onClick={() => {
               onInstall(plugin);
@@ -330,7 +349,9 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
             }}
             disabled={isInstallDisabled}
           >
-            {isInstallDisabled && plugin.enterprise_only ? 'Enterprise Required' : 'Install Plugin'}
+            {isInstallDisabled && plugin.enterprise_only
+              ? 'Enterprise Required'
+              : installedEntry ? 'Install Another Copy' : 'Install Plugin'}
           </Button>
         )}
       </DialogActions>

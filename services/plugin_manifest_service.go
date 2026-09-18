@@ -198,7 +198,11 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 
 	// Keep the manifest on the plugin row too: the permission key
 	// ("plugin:<manifest id>") and the sidebar defaults derive from it.
-	if currentID, _ := dbPlugin.Manifest["id"].(string); currentID != manifest.ID {
+	// A new version of the same plugin refreshes it as well: it can declare
+	// new RBAC resources, and the row is where the installed version is read from.
+	currentID, _ := dbPlugin.Manifest["id"].(string)
+	currentVersion, _ := dbPlugin.Manifest["version"].(string)
+	if currentID != manifest.ID || currentVersion != manifest.Version {
 		dbPlugin.Manifest = parsedManifest
 		// Select+Updates goes through the field's JSON serializer; a bare
 		// Update("manifest", map) does not.

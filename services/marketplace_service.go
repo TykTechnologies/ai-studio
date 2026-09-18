@@ -161,6 +161,12 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 	// For first-time sync (no ETag), always fetch and process
 	isFirstSync := idx.ETag == ""
 
+	// Rows synced before manifest_url was stored have none, and an unmodified
+	// index is never reprocessed - so refetch once to fill them in.
+	if !forceRefresh && !isFirstSync && s.sourceNeedsManifestURLBackfill(idx.SourceURL) {
+		forceRefresh = true
+	}
+
 	index, metadata, modified, err := s.fetcher.FetchIndexConditional(
 		ctx,
 		idx.SourceURL,
@@ -222,6 +228,19 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 		Msg("Marketplace index synced successfully")
 
 	return nil
+}
+
+// sourceNeedsManifestURLBackfill reports whether a source has synced plugins
+// but none of them carries a manifest URL yet.
+func (s *MarketplaceService) sourceNeedsManifestURLBackfill(sourceURL string) bool {
+	var total, withURL int64
+	if err := s.db.Model(&models.MarketplacePlugin{}).Where("synced_from_url = ?", sourceURL).Count(&total).Error; err != nil || total == 0 {
+		return false
+	}
+	if err := s.db.Model(&models.MarketplacePlugin{}).Where("synced_from_url = ? AND manifest_url <> ?", sourceURL, "").Count(&withURL).Error; err != nil {
+		return false
+	}
+	return withURL == 0
 }
 
 // processIndex processes the marketplace index and updates database
@@ -367,6 +386,7 @@ func (s *MarketplaceService) indexedPluginToModel(indexed *marketplace.IndexedPl
 		DeprecatedMessage: indexed.DeprecatedMessage,
 		ReplacementPlugin: indexed.Replacement,
 		EnterpriseOnly:    indexed.EnterpriseOnly,
+		ManifestURL:       indexed.ManifestURL,
 	}
 }
 
@@ -384,11 +404,7 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 	}
 
 	// Build OCI reference
-	ociRef := fmt.Sprintf("oci://%s/%s@%s",
-		marketplacePlugin.OCIRegistry,
-		marketplacePlugin.OCIRepository,
-		marketplacePlugin.OCIDigest,
-	)
+	ociRef := marketplacePlugin.OCIReference()
 
 	// Use existing PluginService to create and load the plugin
 	pluginName := req.Name
@@ -453,53 +469,11 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 	}, nil
 }
 
-// CheckForUpdates checks for available updates for installed plugins
+// CheckForUpdates refreshes the installed-version tracking for every plugin
+// against the synced marketplace index.
 func (s *MarketplaceService) CheckForUpdates(ctx context.Context) error {
 	log.Debug().Msg("Checking for plugin updates")
-
-	// Get all installed plugin versions
-	var installedVersions []models.InstalledPluginVersion
-	if err := s.db.Preload("Plugin").Find(&installedVersions).Error; err != nil {
-		return fmt.Errorf("failed to get installed versions: %w", err)
-	}
-
-	for _, installed := range installedVersions {
-		if installed.MarketplacePluginID == "" {
-			continue // Not from marketplace
-		}
-
-		// Get latest version from marketplace
-		var latestPlugin models.MarketplacePlugin
-		if err := latestPlugin.GetLatestVersion(s.db, installed.MarketplacePluginID); err != nil {
-			if err == gorm.ErrRecordNotFound {
-				continue // Plugin removed from marketplace
-			}
-			log.Error().Err(err).Str("plugin_id", installed.MarketplacePluginID).Msg("Failed to get latest version")
-			continue
-		}
-
-		// Compare versions
-		updateAvailable := latestPlugin.Version != installed.InstalledVersion
-
-		// Update tracking
-		installed.AvailableVersion = latestPlugin.Version
-		installed.UpdateAvailable = updateAvailable
-		installed.LastChecked = time.Now()
-
-		if err := s.db.Save(&installed).Error; err != nil {
-			log.Error().Err(err).Uint("id", installed.ID).Msg("Failed to update version tracking")
-		}
-
-		if updateAvailable {
-			log.Info().
-				Str("plugin", installed.Plugin.Name).
-				Str("installed", installed.InstalledVersion).
-				Str("available", latestPlugin.Version).
-				Msg("Update available for plugin")
-		}
-	}
-
-	return nil
+	return s.ReconcileInstalledVersions(ctx)
 }
 
 // SearchPlugins searches marketplace plugins

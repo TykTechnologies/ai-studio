@@ -1,5 +1,27 @@
 import apiClient from '../utils/apiClient';
 
+// The marketplace link of an installed plugin; null when it did not come from one.
+const mapMarketplaceInfo = (info) => {
+  if (!info) return null;
+  return {
+    marketplaceId: info.marketplace_id,
+    installedVersion: info.installed_version || '',
+    availableVersion: info.available_version || '',
+    updateAvailable: Boolean(info.update_available),
+  };
+};
+
+// Keeps what the dialog needs to tell failures apart: a rollback, or scopes
+// that still need approval.
+const upgradeError = (error, fallback) => {
+  const body = error.response?.data || {};
+  const err = new Error(body.errors?.[0]?.detail || fallback);
+  err.status = error.response?.status;
+  err.rolledBack = body.rolled_back === true;
+  err.missingScopes = body.missing_scopes || [];
+  return err;
+};
+
 class PluginService {
   // Hook type constants matching backend
   static HOOK_TYPES = {
@@ -58,10 +80,13 @@ class PluginService {
             pluginType: plugin.attributes.plugin_type || 'gateway',
             ociReference: plugin.attributes.oci_reference || '',
             manifest: plugin.attributes.manifest || {},
+            version: plugin.version || '',
+            marketplace: mapMarketplaceInfo(plugin.marketplace),
             createdAt: plugin.attributes.created_at,
             updatedAt: plugin.attributes.updated_at,
           })),
           meta: response.data.meta || {},
+          updatesAvailable: response.data.updates_available || 0,
         };
       }
       
@@ -91,6 +116,8 @@ class PluginService {
           pluginType: plugin.attributes.plugin_type || 'gateway',
           ociReference: plugin.attributes.oci_reference || '',
           manifest: plugin.attributes.manifest || {},
+          version: plugin.version || '',
+          marketplace: mapMarketplaceInfo(plugin.marketplace),
           createdAt: plugin.attributes.created_at,
           updatedAt: plugin.attributes.updated_at,
           // Include associated LLMs if present with full data
@@ -516,6 +543,32 @@ class PluginService {
     } catch (error) {
       console.error('Error getting plugin workflow status:', error);
       throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to get plugin workflow status');
+    }
+  }
+
+  // Marketplace upgrades. The preview pulls and probes the target version and
+  // reports what would change; nothing is written until upgradePlugin.
+  async previewPluginUpgrade(pluginId, version = '') {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/upgrade/preview`, version ? { version } : {});
+      return response.data?.data;
+    } catch (error) {
+      console.error('Error previewing plugin upgrade:', error);
+      throw upgradeError(error, 'Failed to preview the plugin upgrade');
+    }
+  }
+
+  async upgradePlugin(pluginId, { version, approvedScopes = [], allowDowngrade = false }) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/upgrade`, {
+        version,
+        approved_scopes: approvedScopes,
+        allow_downgrade: allowDowngrade,
+      });
+      return response.data?.upgrade;
+    } catch (error) {
+      console.error('Error upgrading plugin:', error);
+      throw upgradeError(error, 'Failed to upgrade the plugin');
     }
   }
 }

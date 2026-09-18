@@ -17,8 +17,20 @@ import {
 } from '@mui/icons-material';
 import { useEdition } from '../../context/EditionContext';
 
-const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
+const PluginCard = ({
+  plugin,
+  installed = [],
+  canUpgrade = false,
+  onViewDetails,
+  onInstall,
+  onUpgrade,
+  onViewInstalled,
+}) => {
   const { isEnterprise, loading } = useEdition();
+
+  // The installed copy to act on: one with an update pending, else the first.
+  const installedEntry = installed.find((entry) => entry.update_available) || installed[0];
+  const updateAvailable = Boolean(installedEntry?.update_available);
 
   // Disable install for enterprise-only plugins when not running enterprise binary
   // Also disable while loading to prevent flash of enabled state
@@ -169,6 +181,16 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
           <Typography variant="caption" color="text.secondary">
             v{plugin.version}
           </Typography>
+          {installedEntry && (
+            <Chip
+              label={updateAvailable
+                ? `Update available${installedEntry.installed_version ? ` (installed v${installedEntry.installed_version})` : ''}`
+                : `Installed${installedEntry.installed_version ? ` v${installedEntry.installed_version}` : ''}`}
+              size="small"
+              color={updateAvailable ? 'info' : 'success'}
+              variant="outlined"
+            />
+          )}
           {plugin.license && (
             <Typography variant="caption" color="text.secondary">
               {plugin.license}
@@ -186,7 +208,28 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
         >
           View Details
         </Button>
-        {!plugin.deprecated && (
+        {installedEntry && updateAvailable && canUpgrade && (
+          <Button
+            size="small"
+            onClick={() => onUpgrade?.(plugin, installedEntry)}
+            fullWidth
+            variant="contained"
+            disabled={isInstallDisabled}
+          >
+            Upgrade
+          </Button>
+        )}
+        {installedEntry && !(updateAvailable && canUpgrade) && (
+          <Button
+            size="small"
+            onClick={() => onViewInstalled?.(installedEntry)}
+            fullWidth
+            variant="contained"
+          >
+            View Installed
+          </Button>
+        )}
+        {!installedEntry && !plugin.deprecated && (
           <Button
             size="small"
             onClick={() => onInstall(plugin)}

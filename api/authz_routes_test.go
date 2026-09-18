@@ -118,6 +118,8 @@ func TestAuthzRoutes_RegistryLookup(t *testing.T) {
 	assert.Equal(t, authz.Publish("model-routers"), get("PATCH", "/api/v1/model-routers/:id/toggle").perm)
 	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/enable").perm)
 	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/disable").perm)
+	assert.Equal(t, authz.Write("plugins"), get("POST", "/api/v1/plugins/:id/upgrade").perm)
+	assert.Equal(t, authz.Write("plugins"), get("POST", "/api/v1/plugins/:id/upgrade/preview").perm, "the preview pulls and starts the target artifact")
 	assert.Equal(t, authz.Publish("metadata"), get("POST", "/api/v1/metadata/schemas/:id/activate").perm)
 }
 

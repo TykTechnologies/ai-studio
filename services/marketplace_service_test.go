@@ -480,9 +480,10 @@ func TestMarketplaceService_CheckForUpdates(t *testing.T) {
 	ms, db := setupMarketplaceTest(t)
 
 	// Create a plugin
+	// The link to the marketplace is derived from the plugin's OCI command.
 	plugin := &models.Plugin{
 		Name:     "Update Check Plugin",
-		Command:  "/bin/test",
+		Command:  "oci://ghcr.io/tyk/updatecheck@sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		HookType: "post_auth",
 		IsActive: true,
 	}
@@ -498,6 +499,7 @@ func TestMarketplaceService_CheckForUpdates(t *testing.T) {
 		Name:            "Update Check Plugin",
 		OCIRegistry:     "ghcr.io",
 		OCIRepository:   "tyk/updatecheck",
+		OCIDigest:       "sha256:1111111111111111111111111111111111111111111111111111111111111111",
 		PluginUpdatedAt: oldTime,
 	}
 	db.Create(oldVersion)
@@ -508,6 +510,7 @@ func TestMarketplaceService_CheckForUpdates(t *testing.T) {
 		Name:            "Update Check Plugin",
 		OCIRegistry:     "ghcr.io",
 		OCIRepository:   "tyk/updatecheck",
+		OCIDigest:       "sha256:2222222222222222222222222222222222222222222222222222222222222222",
 		PluginUpdatedAt: newTime,
 	}
 	db.Create(newVersion)
@@ -537,8 +540,9 @@ func TestMarketplaceService_CheckForUpdates(t *testing.T) {
 		// Verify LastChecked was updated
 		assert.WithinDuration(t, time.Now(), updated.LastChecked, 5*time.Second)
 
-		// Note: The actual version comparison logic depends on GORM ordering
-		// We verify the function runs without error and updates LastChecked
+		assert.Equal(t, "1.0.0", updated.InstalledVersion)
+		assert.Equal(t, "2.0.0", updated.AvailableVersion)
+		assert.True(t, updated.UpdateAvailable)
 	})
 
 	t.Run("Check for updates with no installed plugins", func(t *testing.T) {

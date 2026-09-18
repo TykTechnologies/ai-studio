@@ -46,6 +46,8 @@ type Service struct {
 	PluginResourceRPC    ResourceInstanceCreator
 	PluginMetadataLoader *PluginMetadataLoader
 	MarketplaceService    *MarketplaceService
+	// PluginUpgradeService is built on first use by the API; tests inject their own.
+	PluginUpgradeService *PluginUpgradeService
 	// Object Hooks
 	HookRegistry *HookRegistry
 	HookManager  *HookManager

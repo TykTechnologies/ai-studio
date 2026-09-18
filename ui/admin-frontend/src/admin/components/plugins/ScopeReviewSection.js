@@ -66,7 +66,7 @@ const SCOPE_CATEGORIES = {
   },
 };
 
-const SCOPE_DESCRIPTIONS = {
+export const SCOPE_DESCRIPTIONS = {
   // Analytics scopes
   'analytics.read': 'View analytics data and metrics',
   'analytics.detailed': 'Access detailed analytics reports',
