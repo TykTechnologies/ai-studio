@@ -22,16 +22,20 @@ type PluginUpgradeResponse struct {
 	Upgrade *services.PluginUpgradeResult `json:"upgrade"`
 }
 
+// pluginUpgradeService builds the upgrade service on first use. Tests may
+// have set one already; concurrent first requests build it exactly once.
 func (a *API) pluginUpgradeService() *services.PluginUpgradeService {
-	if a.service.PluginUpgradeService == nil {
-		a.service.PluginUpgradeService = services.NewPluginUpgradeService(
-			a.service.DB,
-			a.service.PluginService,
-			a.service.MarketplaceService,
-			a.service.AIStudioPluginManager,
-			a.service.PluginManifestService,
-		)
-	}
+	a.pluginUpgradeOnce.Do(func() {
+		if a.service.PluginUpgradeService == nil {
+			a.service.PluginUpgradeService = services.NewPluginUpgradeService(
+				a.service.DB,
+				a.service.PluginService,
+				a.service.MarketplaceService,
+				a.service.AIStudioPluginManager,
+				a.service.PluginManifestService,
+			)
+		}
+	})
 	return a.service.PluginUpgradeService
 }
 

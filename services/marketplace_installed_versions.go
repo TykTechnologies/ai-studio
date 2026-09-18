@@ -101,8 +101,14 @@ func latestUpgradeCandidate(versions []*models.MarketplacePlugin) *models.Market
 // creation wizard - and installs that predate this tracking - are picked up
 // without any install-time bookkeeping.
 func (s *MarketplaceService) ReconcileInstalledVersions(ctx context.Context, pluginIDs ...uint) error {
-	db := s.db.WithContext(ctx)
+	// One transaction, and every statement on the tx handle: the rows are
+	// written together or not at all.
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return reconcileInstalledVersions(tx, pluginIDs)
+	})
+}
 
+func reconcileInstalledVersions(db *gorm.DB, pluginIDs []uint) error {
 	pluginQuery := db.Model(&models.Plugin{}).Where("command LIKE ?", "oci://%")
 	if len(pluginIDs) > 0 {
 		pluginQuery = pluginQuery.Where("id IN ?", pluginIDs)
@@ -112,8 +118,11 @@ func (s *MarketplaceService) ReconcileInstalledVersions(ctx context.Context, plu
 		return fmt.Errorf("failed to list OCI plugins: %w", err)
 	}
 
+	// Only the columns the match needs; the manifest blob is not one of them.
 	var marketplacePlugins []*models.MarketplacePlugin
-	if err := db.Find(&marketplacePlugins).Error; err != nil {
+	if err := db.Model(&models.MarketplacePlugin{}).
+		Select("ID", "PluginID", "Version", "OCIRegistry", "OCIRepository", "OCITag", "OCIDigest", "Deprecated", "EnterpriseOnly").
+		Find(&marketplacePlugins).Error; err != nil {
 		return fmt.Errorf("failed to list marketplace plugins: %w", err)
 	}
 	byRepo := make(map[string][]*models.MarketplacePlugin)
@@ -189,7 +198,7 @@ func (s *MarketplaceService) ReconcileInstalledVersions(ctx context.Context, plu
 
 		// Save writes every column, so a cleared update_available is persisted too.
 		if err := db.Omit("Plugin").Save(row).Error; err != nil {
-			log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to save installed plugin version")
+			return fmt.Errorf("failed to save installed plugin version for plugin %d: %w", plugin.ID, err)
 		}
 	}
 
@@ -198,7 +207,7 @@ func (s *MarketplaceService) ReconcileInstalledVersions(ctx context.Context, plu
 			continue
 		}
 		if err := models.DeleteInstalledPluginVersion(db, pluginID); err != nil {
-			log.Error().Err(err).Uint("plugin_id", pluginID).Msg("Failed to remove stale installed plugin version")
+			return fmt.Errorf("failed to remove stale installed plugin version for plugin %d: %w", pluginID, err)
 		}
 	}
 

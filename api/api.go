@@ -15,6 +15,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
@@ -93,6 +94,9 @@ type API struct {
 	// implementation attached (community stub semantics).
 	tykMCPFallback tykmcp.Service
 	auditHandler gin.HandlerFunc
+	// pluginUpgradeOnce guards the first-use construction of the plugin
+	// upgrade service (see plugin_upgrade_handlers.go).
+	pluginUpgradeOnce sync.Once
 	// routePerms maps "METHOD /path" to the permission a route requires.
 	// Populated by permRouter at registration; see authz_routes.go.
 	routePerms map[string]permEntry
