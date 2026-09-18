@@ -89,8 +89,43 @@ describe('PluginService', () => {
         pluginType: 'gateway',
         ociReference: '',
         manifest: {},
+        version: '',
+        marketplace: null,
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-02T00:00:00Z',
+      });
+      expect(result.updatesAvailable).toBe(0);
+    });
+
+    test('should map the marketplace link and the update count', async () => {
+      apiClient.get.mockResolvedValueOnce({
+        data: {
+          data: [
+            {
+              ...mockPluginResponse.data.data[0],
+              version: '1.0.0',
+              marketplace: {
+                marketplace_id: 'com.tyk.test',
+                installed_version: '1.0.0',
+                available_version: '1.2.0',
+                update_available: true,
+              },
+            },
+          ],
+          meta: { total: 1, page: 1 },
+          updates_available: 1,
+        },
+      });
+
+      const result = await pluginService.listPlugins();
+
+      expect(result.updatesAvailable).toBe(1);
+      expect(result.data[0].version).toBe('1.0.0');
+      expect(result.data[0].marketplace).toEqual({
+        marketplaceId: 'com.tyk.test',
+        installedVersion: '1.0.0',
+        availableVersion: '1.2.0',
+        updateAvailable: true,
       });
     });
 
@@ -890,6 +925,63 @@ describe('PluginService', () => {
 
         expect(apiClient.post).toHaveBeenCalledWith('/plugins/1/manifest/parse');
         expect(result).toEqual({ manifest: { version: '1.0' } });
+      });
+    });
+
+    describe('marketplace upgrades', () => {
+      test('should preview the latest version by default', async () => {
+        apiClient.post.mockResolvedValueOnce({ data: { data: { target_version: '1.2.0' } } });
+
+        const result = await pluginService.previewPluginUpgrade('1');
+
+        expect(apiClient.post).toHaveBeenCalledWith('/plugins/1/upgrade/preview', {});
+        expect(result).toEqual({ target_version: '1.2.0' });
+      });
+
+      test('should preview a chosen version', async () => {
+        apiClient.post.mockResolvedValueOnce({ data: { data: { target_version: '1.0.0' } } });
+
+        await pluginService.previewPluginUpgrade('1', '1.0.0');
+
+        expect(apiClient.post).toHaveBeenCalledWith('/plugins/1/upgrade/preview', { version: '1.0.0' });
+      });
+
+      test('should upgrade with the approved scopes', async () => {
+        apiClient.post.mockResolvedValueOnce({ data: { data: {}, upgrade: { to_version: '1.2.0' } } });
+
+        const result = await pluginService.upgradePlugin('1', { version: '1.2.0', approvedScopes: ['llms.proxy'] });
+
+        expect(apiClient.post).toHaveBeenCalledWith('/plugins/1/upgrade', {
+          version: '1.2.0',
+          approved_scopes: ['llms.proxy'],
+          allow_downgrade: false,
+        });
+        expect(result).toEqual({ to_version: '1.2.0' });
+      });
+
+      test('should surface a rollback and missing scopes on the error', async () => {
+        apiClient.post.mockRejectedValueOnce({
+          response: {
+            status: 422,
+            data: { errors: [{ title: 'Upgrade Rolled Back', detail: 'new version failed to start' }], rolled_back: true },
+          },
+        });
+        await expect(pluginService.upgradePlugin('1', { version: '1.2.0' })).rejects.toMatchObject({
+          message: 'new version failed to start',
+          status: 422,
+          rolledBack: true,
+        });
+
+        apiClient.post.mockRejectedValueOnce({
+          response: {
+            status: 409,
+            data: { errors: [{ title: 'Scopes Not Approved', detail: 'not approved' }], missing_scopes: ['llms.proxy'] },
+          },
+        });
+        await expect(pluginService.upgradePlugin('1', { version: '1.2.0' })).rejects.toMatchObject({
+          rolledBack: false,
+          missingScopes: ['llms.proxy'],
+        });
       });
     });
   });

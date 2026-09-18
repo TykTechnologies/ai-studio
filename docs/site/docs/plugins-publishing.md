@@ -41,6 +41,12 @@ forgotten bump fails loudly instead of overwriting a release.
    `plugins/<name>/<version>/manifest.yaml`, carries the README, icon and
    changelog across, commits and pushes to `main` so the index CI fires.
 
+The `CHANGELOG.md` next to the version's `manifest.yaml` is what administrators read when they upgrade an
+installed plugin: AI Studio shows it in the upgrade dialog. The publish tool carries the previous version's
+changelog forward and warns you, so add the entry for the new version before the release ships. Releasing a
+higher version is also all it takes for existing installs to be offered the update after their next
+marketplace sync; see [Upgrading Installed Plugins](./plugins-overview.md#upgrading-installed-plugins).
+
 Two properties are deliberate, because both were sources of broken releases:
 
 - **The version is the tag.** It comes from `manifest.json` and is used verbatim

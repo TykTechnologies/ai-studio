@@ -420,6 +420,35 @@ oci://registry.example.com/plugins/my-plugin:v1.0.0
 
 [Learn more about deployment →]([plugins-deployment](https://docs.claude.com/en/docs/plugins-deployment))
 
+## Upgrading Installed Plugins
+
+When a plugin was installed from the marketplace, AI Studio keeps track of which marketplace version it is
+running. After each marketplace sync the **Plugins** page shows the installed version, and an
+**Update** chip on every plugin that has a newer version published. Plugins installed before this tracking
+existed are recognised automatically from their OCI reference; nothing has to be reinstalled.
+
+Choose **Upgrade** (on the chip, the row menu, the plugin's detail page, or the plugin's marketplace card) to
+review the change before applying it:
+
+- the version you are moving to, with a picker for any other published version, including older ones;
+- the changelog published with that version;
+- permissions the new version asks for that you have not approved yet. These must be approved to continue.
+  Permissions the new version no longer uses are removed;
+- a warning if your current configuration does not fit the new version's settings. This does not block the
+  upgrade.
+
+An upgrade replaces the plugin's binary and nothing else. **The plugin keeps its configuration and its
+data**: stored key-value data, agents, LLM associations, schedules, Apps that use its resources, and
+permissions granted on it. The new version is started with your existing configuration; if it fails to start,
+AI Studio puts the previous version back and tells you why.
+
+If the plugin also runs on edge gateways, they are marked as pending after the upgrade and pick up the new
+version with the next configuration push.
+
+Upgrading requires the permission to manage plugins (`plugins:write`). Plugins that were added by hand from a
+local file or a private registry that is not a marketplace source are not tracked and are upgraded by editing
+their command.
+
 ## Permissions and Scopes
 
 AI Studio plugins declare required permissions in their manifest:

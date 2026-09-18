@@ -42,6 +42,9 @@ type PluginResponse struct {
 	// Top level rather than inside Attributes so the many hand-written
 	// Attributes literals in this package stay untouched.
 	PermissionKey string `json:"permission_key,omitempty"`
+	// Version and Marketplace are top level for the same reason.
+	Version     string                 `json:"version,omitempty"`
+	Marketplace *PluginMarketplaceInfo `json:"marketplace,omitempty"`
 	Relationships *struct {
 		LLMs struct {
 			Data []struct {
@@ -66,6 +69,8 @@ type PluginListResponse struct {
 		PageSize   int   `json:"page_size"`
 		PageNumber int   `json:"page_number"`
 	} `json:"meta"`
+	// UpdatesAvailable counts installed plugins (across all pages) with a newer marketplace version.
+	UpdatesAvailable int64 `json:"updates_available"`
 }
 
 // @Summary List plugins
@@ -156,6 +161,19 @@ func (a *API) listPlugins(c *gin.Context) {
 		},
 	}
 
+	// One query for the marketplace links of the whole page
+	pluginIDs := make([]uint, len(plugins))
+	for i := range plugins {
+		pluginIDs[i] = plugins[i].ID
+	}
+	tracked, trackedErr := models.GetInstalledPluginVersions(a.service.DB, pluginIDs)
+	if trackedErr != nil {
+		log.Printf("Warning: failed to load marketplace links for plugins: %v", trackedErr)
+	}
+	if count, countErr := models.CountPluginUpdatesAvailable(a.service.DB); countErr == nil {
+		response.UpdatesAvailable = count
+	}
+
 	// Serialize plugins inline to avoid N+1 queries from function calls
 	for i, plugin := range plugins {
 		pluginResponse := PluginResponse{
@@ -243,6 +261,7 @@ func (a *API) listPlugins(c *gin.Context) {
 			}
 		}
 
+		decoratePluginResponse(&pluginResponse, &plugin, tracked[plugin.ID])
 		response.Data[i] = pluginResponse
 	}
 
@@ -376,7 +395,9 @@ func (a *API) createPlugin(c *gin.Context) {
 		a.service.SystemEvents.EmitPluginCreated(plugin, plugin.ID, 0)
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializePlugin(plugin)})
+	a.notifyMarketplacePluginChanged(plugin.ID)
+
+	c.JSON(http.StatusCreated, gin.H{"data": a.serializePluginWithMarketplace(plugin)})
 }
 
 // @Summary Get plugin
@@ -423,7 +444,7 @@ func (a *API) getPlugin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializePluginWithMarketplace(plugin)})
 }
 
 // @Summary Update plugin
@@ -587,7 +608,13 @@ func (a *API) updatePlugin(c *gin.Context) {
 		a.service.SystemEvents.EmitPluginUpdated(plugin, plugin.ID, 0)
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
+	// A hand-edited command can move the plugin to another marketplace
+	// version (or away from the marketplace altogether).
+	if req.Command != nil || req.OCIReference != nil {
+		a.notifyMarketplacePluginChanged(plugin.ID)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": a.serializePluginWithMarketplace(plugin)})
 }
 
 // pluginSelfServiceFields are the PATCH /plugins/:id body keys a caller holding
@@ -726,6 +753,10 @@ func (a *API) deletePlugin(c *gin.Context) {
 	// Emit system event for plugin deletion
 	if a.service.SystemEvents != nil {
 		a.service.SystemEvents.EmitPluginDeleted(plugin.ID, 0)
+	}
+
+	if err := models.DeleteInstalledPluginVersion(a.service.DB, plugin.ID); err != nil {
+		log.Printf("Warning: failed to remove marketplace tracking for plugin %d: %v", plugin.ID, err)
 	}
 
 	log.Printf("✅ Plugin deleted successfully: %s (ID: %d)", plugin.Name, plugin.ID)
@@ -1208,7 +1239,9 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializePlugin(plugin)})
+	a.notifyMarketplacePluginChanged(plugin.ID)
+
+	c.JSON(http.StatusCreated, gin.H{"data": a.serializePluginWithMarketplace(plugin)})
 }
 
 // @Summary List cached OCI plugins

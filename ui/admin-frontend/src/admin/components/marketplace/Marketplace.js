@@ -17,6 +17,7 @@ import {
   Switch,
   Paper,
   Chip,
+  Snackbar,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -25,13 +26,22 @@ import {
 import marketplaceService from '../../services/marketplaceService';
 import PluginCard from './PluginCard';
 import PluginDetailModal from './PluginDetailModal';
+import PluginUpgradeDialog from '../plugins/PluginUpgradeDialog';
+import { usePermissions } from '../../context/PermissionsContext';
+import { P } from '../../rbac/permissions';
 import { useNavigate } from 'react-router-dom';
 import useAdminData from '../../hooks/useAdminData';
 
 const Marketplace = () => {
   const navigate = useNavigate();
   const { config } = useAdminData();
+  const { can } = usePermissions();
+  const canUpgrade = can(P.PLUGINS_WRITE);
   const [plugins, setPlugins] = useState([]);
+  // Installed copies per marketplace plugin ID: [{ plugin_id, installed_version, update_available, ... }]
+  const [installed, setInstalled] = useState({});
+  const [upgradeTarget, setUpgradeTarget] = useState(null);
+  const [notice, setNotice] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedPlugin, setSelectedPlugin] = useState(null);
@@ -94,6 +104,7 @@ const Marketplace = () => {
       });
 
       setPlugins(data.plugins || []);
+      setInstalled(data.installed || {});
       setTotal(data.total || 0);
       setTotalPages(data.total_pages || 0);
     } catch (err) {
@@ -137,6 +148,24 @@ const Marketplace = () => {
     } catch (err) {
       setError(`Failed to prepare installation: ${err.message}`);
     }
+  };
+
+  // Upgrades the installed copy in place rather than installing a second one.
+  const handleUpgrade = (plugin, installedEntry) => {
+    setDetailModalOpen(false);
+    setSelectedPlugin(null);
+    setUpgradeTarget({ id: installedEntry.plugin_id, name: plugin.name });
+  };
+
+  const handleUpgraded = (result) => {
+    const name = upgradeTarget?.name;
+    setUpgradeTarget(null);
+    setNotice(`${name} is now on v${result?.to_version}.`);
+    loadPlugins();
+  };
+
+  const handleViewInstalled = (installedEntry) => {
+    navigate(`/admin/plugins/${installedEntry.plugin_id}`);
   };
 
   const handleSync = async () => {
@@ -312,8 +341,12 @@ const Marketplace = () => {
               <Grid item xs={12} sm={6} md={4} lg={3} key={`${plugin.plugin_id}-${plugin.version}`}>
                 <PluginCard
                   plugin={plugin}
+                  installed={installed[plugin.plugin_id] || []}
+                  canUpgrade={canUpgrade}
                   onViewDetails={handleViewDetails}
                   onInstall={handleInstall}
+                  onUpgrade={handleUpgrade}
+                  onViewInstalled={handleViewInstalled}
                 />
               </Grid>
             ))}
@@ -337,13 +370,34 @@ const Marketplace = () => {
         <PluginDetailModal
           open={detailModalOpen}
           plugin={selectedPlugin}
+          installed={installed[selectedPlugin.plugin_id] || []}
+          canUpgrade={canUpgrade}
           onClose={() => {
             setDetailModalOpen(false);
             setSelectedPlugin(null);
           }}
           onInstall={handleInstall}
+          onUpgrade={handleUpgrade}
         />
       )}
+
+      <PluginUpgradeDialog
+        open={Boolean(upgradeTarget)}
+        plugin={upgradeTarget}
+        onClose={() => setUpgradeTarget(null)}
+        onUpgraded={handleUpgraded}
+      />
+
+      <Snackbar
+        open={Boolean(notice)}
+        autoHideDuration={6000}
+        onClose={() => setNotice(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ width: '100%' }}>
+          {notice}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

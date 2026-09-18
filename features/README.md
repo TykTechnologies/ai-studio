@@ -98,6 +98,14 @@ Each feature specification below provides detailed documentation on the individu
 - Searchable, exportable delivery log; audit trail, RBAC and notification integration
 - Admin UI pages under Governance → Webhooks
 
+### [Plugin Marketplace: update detection and upgrades](PluginMarketplace.md)
+- Installed OCI plugins are linked back to their marketplace entry from their command, with no install-time bookkeeping
+- Semver update detection after every marketplace sync; version and "Update" chip on the Plugins page
+- In-place upgrade that keeps the plugin row, configuration and all ID-keyed data
+- New scopes must be approved, removed scopes are dropped; failed starts roll back to the previous version
+- Version picker (including rollback to older versions) and the version's changelog in the upgrade dialog
+- Edge gateways reload the upgraded plugin on the next configuration push
+
 ### [Tyk Dashboard MCP Integration](TykMCPIntegration.md) (Enterprise)
 - Import Tyk-managed MCP proxies from one or more Dashboards and publish them to the portal as an asset class
 - Three connection trust modes (`catalogue`, `broker`, `full`) narrowed by a capability probe; MDCB and gateway-tag awareness

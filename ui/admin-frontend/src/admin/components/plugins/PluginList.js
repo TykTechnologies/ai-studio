@@ -32,9 +32,13 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   MoreVert as MoreVertIcon,
+  Upgrade as UpgradeIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import pluginService from '../../services/pluginService';
+import PluginUpgradeDialog from './PluginUpgradeDialog';
+import { usePermissions } from '../../context/PermissionsContext';
+import { P } from '../../rbac/permissions';
 import {
   TitleBox,
   ContentBox,
@@ -49,7 +53,12 @@ import {
 const PluginList = () => {
   const navigate = useNavigate();
   
+  const { can } = usePermissions();
+  const canUpgrade = can(P.PLUGINS_WRITE);
+
   const [plugins, setPlugins] = useState([]);
+  const [updatesAvailable, setUpdatesAvailable] = useState(0);
+  const [upgradeTarget, setUpgradeTarget] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,6 +93,7 @@ const PluginList = () => {
       
       setPlugins(result.data || []);
       setTotalCount(result.meta?.total_count || 0);
+      setUpdatesAvailable(result.updatesAvailable || 0);
     } catch (err) {
       console.error('Error fetching plugins:', err);
       setError(err.message);
@@ -168,6 +178,25 @@ const PluginList = () => {
       }
     }
     handleMenuClose();
+  };
+
+  const handleOpenUpgrade = (event, plugin) => {
+    event?.stopPropagation();
+    setUpgradeTarget(plugin);
+    handleMenuClose();
+  };
+
+  const handleUpgraded = (result) => {
+    const name = upgradeTarget?.name;
+    setUpgradeTarget(null);
+    setSnackbar({
+      open: true,
+      message: result?.affects_edges
+        ? `Plugin "${name}" is now on v${result?.to_version}. Push the configuration to update edge gateways.`
+        : `Plugin "${name}" is now on v${result?.to_version}`,
+      severity: 'success',
+    });
+    fetchPlugins();
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -272,6 +301,15 @@ const PluginList = () => {
           </Alert>
         )}
 
+        {updatesAvailable > 0 && (
+          <Alert severity="info" icon={<UpgradeIcon fontSize="inherit" />} sx={{ mb: 2 }}>
+            {updatesAvailable === 1
+              ? '1 plugin has a newer version in the marketplace.'
+              : `${updatesAvailable} plugins have newer versions in the marketplace.`}
+            {' '}Upgrading keeps the plugin&apos;s configuration and data.
+          </Alert>
+        )}
+
         {loading ? (
           <Box display="flex" justifyContent="center" p={4}>
             <CircularProgress />
@@ -283,6 +321,7 @@ const PluginList = () => {
                 <TableHead>
                   <TableRow>
                     <StyledTableHeaderCell>Name</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Version</StyledTableHeaderCell>
                     <StyledTableHeaderCell>Hook Type</StyledTableHeaderCell>
                     <StyledTableHeaderCell>Namespace</StyledTableHeaderCell>
                     <StyledTableHeaderCell>Status</StyledTableHeaderCell>
@@ -293,7 +332,7 @@ const PluginList = () => {
                 <TableBody>
                   {filteredPlugins.length === 0 ? (
                     <TableRow>
-                      <StyledTableCell colSpan={6} align="center">
+                      <StyledTableCell colSpan={7} align="center">
                         <Typography variant="body2" color="textSecondary" py={4}>
                           {searchTerm ? 'No plugins match your search criteria' : 'No plugins found'}
                         </Typography>
@@ -314,6 +353,30 @@ const PluginList = () => {
                             <Typography variant="caption" color="textSecondary">
                               {plugin.slug}
                             </Typography>
+                          </Box>
+                        </StyledTableCell>
+                        <StyledTableCell>
+                          <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                            <Typography variant="body2" color={plugin.version ? 'textPrimary' : 'textSecondary'}>
+                              {plugin.version ? `v${plugin.version}` : '—'}
+                            </Typography>
+                            {plugin.marketplace?.updateAvailable && (
+                              <Tooltip
+                                title={canUpgrade
+                                  ? 'A newer version is in the marketplace. Upgrading keeps your configuration.'
+                                  : 'A newer version is in the marketplace. You need permission to manage plugins to upgrade.'}
+                              >
+                                <Chip
+                                  icon={<UpgradeIcon />}
+                                  label={`Update: v${plugin.marketplace.availableVersion}`}
+                                  size="small"
+                                  color="info"
+                                  variant="outlined"
+                                  clickable={canUpgrade}
+                                  onClick={canUpgrade ? (event) => handleOpenUpgrade(event, plugin) : undefined}
+                                />
+                              </Tooltip>
+                            )}
                           </Box>
                         </StyledTableCell>
                         <StyledTableCell>
@@ -413,12 +476,26 @@ const PluginList = () => {
               Reload Plugin
             </MenuItem>
           )}
+          {canUpgrade && selectedPlugin?.marketplace && (
+            <MenuItem onClick={(event) => handleOpenUpgrade(event, selectedPlugin)}>
+              {selectedPlugin.marketplace.updateAvailable
+                ? `Upgrade to v${selectedPlugin.marketplace.availableVersion}`
+                : 'Change Version'}
+            </MenuItem>
+          )}
           <MenuItem
             onClick={() => handleDelete(selectedPlugin?.id, selectedPlugin?.name)}
           >
             Delete Plugin
           </MenuItem>
         </Menu>
+
+        <PluginUpgradeDialog
+          open={Boolean(upgradeTarget)}
+          plugin={upgradeTarget}
+          onClose={() => setUpgradeTarget(null)}
+          onUpgraded={handleUpgraded}
+        />
 
         <Snackbar
           open={snackbar.open}

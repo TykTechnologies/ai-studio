@@ -64,8 +64,34 @@ func (h *MarketplaceHandlers) ListPlugins(c *gin.Context) {
 		return
 	}
 
+	// Which of these are already installed, and at what version - one query
+	// for the page. Keyed by marketplace plugin ID; a plugin can be installed
+	// more than once.
+	marketplaceIDs := make([]string, 0, len(plugins))
+	for _, p := range plugins {
+		marketplaceIDs = append(marketplaceIDs, p.PluginID)
+	}
+	installed := gin.H{}
+	tracked, err := models.ListInstalledPluginVersionsByMarketplaceIDs(h.marketplaceService.GetDB(), marketplaceIDs)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load installed versions for marketplace plugins")
+	}
+	for marketplaceID, rows := range tracked {
+		entries := make([]gin.H, 0, len(rows))
+		for _, row := range rows {
+			entries = append(entries, gin.H{
+				"plugin_id":         row.PluginID,
+				"installed_version": row.InstalledVersion,
+				"available_version": row.AvailableVersion,
+				"update_available":  row.UpdateAvailable,
+			})
+		}
+		installed[marketplaceID] = entries
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"plugins":     plugins,
+		"installed":   installed,
 		"total":       total,
 		"total_pages": totalPages,
 		"page":        pageNumber,
@@ -161,12 +187,7 @@ func (h *MarketplaceHandlers) GetInstallMetadata(c *gin.Context) {
 	}
 
 	// Build OCI reference
-	ociReference := ""
-	if plugin.OCIDigest != "" {
-		ociReference = "oci://" + plugin.OCIRegistry + "/" + plugin.OCIRepository + "@" + plugin.OCIDigest
-	} else if plugin.OCITag != "" {
-		ociReference = "oci://" + plugin.OCIRegistry + "/" + plugin.OCIRepository + ":" + plugin.OCITag
-	}
+	ociReference := plugin.OCIReference()
 
 	// Determine if this is an agent plugin
 	isAgent := plugin.PrimaryHook == "agent" || plugin.PrimaryHook == models.HookTypeAgent

@@ -210,14 +210,17 @@ describe('MarketplaceService', () => {
   });
 
   describe('getAvailableUpdates', () => {
+    // The shape GET /marketplace/updates serves (marketplace.UpdateCheckResponse).
     const mockUpdatesResponse = {
       data: {
-        updates: [
+        updates_available: 1,
+        plugins: [
           {
-            plugin_id: 'com.tyk.echo-agent',
-            current_version: '0.9.0',
-            latest_version: '1.0.0',
-            release_notes: 'Bug fixes and improvements',
+            plugin_id: 7,
+            name: 'Echo Agent',
+            marketplace_id: 'com.tyk.echo-agent',
+            installed_version: '0.9.0',
+            available_version: '1.0.0',
           },
         ],
       },

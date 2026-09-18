@@ -919,6 +919,11 @@ func (a *API) setupRoutes() {
 	v1.POST("/plugins/:id/approve-scopes", authz.Write("plugins"), a.approvePluginScopes)
 	v1.GET("/plugins/:id/workflow-status", authz.Read("plugins"), a.getPluginWorkflowStatus)
 
+	// Marketplace upgrades of an installed plugin. The preview is a write too:
+	// it pulls and starts the target artifact.
+	v1.POST("/plugins/:id/upgrade/preview", authz.Write("plugins"), a.previewPluginUpgrade)
+	v1.POST("/plugins/:id/upgrade", authz.Write("plugins"), a.upgradePlugin)
+
 	// Plugin cleanup routes
 	v1.POST("/plugins/cleanup-orphaned-registry", authz.Write("plugins"), a.cleanupOrphanedUIRegistry)
 

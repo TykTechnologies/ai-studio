@@ -203,3 +203,7 @@ export const useSyncStatus = () => {
   }
   return context;
 };
+
+// For components that also render outside the provider (dialogs reused across
+// pages, isolated tests): null instead of throwing.
+export const useOptionalSyncStatus = () => useContext(SyncStatusContext) || null;

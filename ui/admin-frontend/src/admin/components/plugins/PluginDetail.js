@@ -26,12 +26,16 @@ import {
   Delete as DeleteIcon,
   Star as StarIcon,
   Warning as WarningIcon,
+  Upgrade as UpgradeIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import pluginService, { PluginService } from '../../services/pluginService';
 import agentService from '../../services/agentService';
 import { isAgentPlugin } from '../../constants/agentTypes';
 import PluginSchedules from './PluginSchedules';
+import PluginUpgradeDialog from './PluginUpgradeDialog';
+import { usePermissions } from '../../context/PermissionsContext';
+import { P } from '../../rbac/permissions';
 import {
   TitleBox,
   ContentBox,
@@ -49,10 +53,24 @@ const PluginDetail = () => {
   const [loading, setLoading] = useState(true);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeNotice, setUpgradeNotice] = useState(null);
+  const { can } = usePermissions();
+  const canUpgrade = can(P.PLUGINS_WRITE);
 
   useEffect(() => {
     fetchPlugin();
   }, [id]);
+
+  const handleUpgraded = (result) => {
+    setUpgradeOpen(false);
+    setUpgradeNotice(
+      result?.affects_edges
+        ? `Now on v${result?.to_version}. Push the configuration to update edge gateways.`
+        : `Now on v${result?.to_version}.`
+    );
+    fetchPlugin();
+  };
 
   const fetchPlugin = async () => {
     setLoading(true);
@@ -393,6 +411,29 @@ const PluginDetail = () => {
           </Alert>
         )}
 
+        {upgradeNotice && (
+          <Alert severity="success" sx={{ mb: 3 }} onClose={() => setUpgradeNotice(null)}>
+            {upgradeNotice}
+          </Alert>
+        )}
+
+        {plugin.marketplace?.updateAvailable && (
+          <Alert
+            severity="info"
+            icon={<UpgradeIcon fontSize="inherit" />}
+            sx={{ mb: 3 }}
+            action={canUpgrade ? (
+              <Button color="inherit" size="small" onClick={() => setUpgradeOpen(true)}>
+                Upgrade
+              </Button>
+            ) : null}
+          >
+            Version {plugin.marketplace.availableVersion} is available in the marketplace
+            {plugin.version ? ` (installed: ${plugin.version})` : ''}. Upgrading keeps this plugin&apos;s
+            configuration and data.
+          </Alert>
+        )}
+
         <Grid container spacing={3}>
           {/* Basic Information */}
           <Grid item xs={12} md={6}>
@@ -509,6 +550,25 @@ const PluginDetail = () => {
 
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">
+                    Version
+                  </Typography>
+                  <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                    <Typography variant="body1">
+                      {plugin.version ? `v${plugin.version}` : 'Unknown'}
+                    </Typography>
+                    {plugin.marketplace && (
+                      <Chip label={`Marketplace: ${plugin.marketplace.marketplaceId}`} size="small" variant="outlined" />
+                    )}
+                    {plugin.marketplace && canUpgrade && (
+                      <Button size="small" onClick={() => setUpgradeOpen(true)}>
+                        {plugin.marketplace.updateAvailable ? 'Upgrade' : 'Change version'}
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
+
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
                     Created At
                   </Typography>
                   <Typography variant="body1">
@@ -605,6 +665,13 @@ const PluginDetail = () => {
           </DangerButton>
         </Box>
       </Box>
+
+      <PluginUpgradeDialog
+        open={upgradeOpen}
+        plugin={plugin}
+        onClose={() => setUpgradeOpen(false)}
+        onUpgraded={handleUpgraded}
+      />
     </Box>
   );
 };
