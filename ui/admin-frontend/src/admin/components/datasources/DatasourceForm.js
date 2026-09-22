@@ -1,5 +1,5 @@
 import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
-import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
+import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
@@ -395,21 +395,25 @@ const DatasourceForm = () => {
     };
 
     try {
+      let dsResponse;
       if (id) {
-        await apiClient.patch(`/datasources/${id}`, datasourceData);
+        dsResponse = await apiClient.patch(`/datasources/${id}`, datasourceData);
       } else {
-        await apiClient.post("/datasources", datasourceData);
+        dsResponse = await apiClient.post("/datasources", datasourceData);
       }
 
       markSaved();
+      const metadataWarning = governedMetadataSaveWarning(dsResponse);
       navigate("/admin/datasources", {
         state: {
-          snackbar: {
-            message: id
-              ? "Data source updated successfully"
-              : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
-            severity: "success",
-          },
+          snackbar: metadataWarning
+            ? { message: `${id ? "Data source updated" : "Data source created"}, but ${metadataWarning}`, severity: "warning" }
+            : {
+                message: id
+                  ? "Data source updated successfully"
+                  : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
+                severity: "success",
+              },
         },
       });
     } catch (error) {

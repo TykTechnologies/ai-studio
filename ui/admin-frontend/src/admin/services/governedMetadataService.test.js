@@ -88,6 +88,21 @@ describe('governedMetadataService', () => {
     expect(await svc.getObjectMetadata('llm', '1')).toBeNull();
   });
 
+  test('governedMetadataSaveWarning reads meta.governed_metadata_error from a 2xx response', () => {
+    expect(svc.governedMetadataSaveWarning({ data: { data: { id: 1 } } })).toBeNull();
+    expect(svc.governedMetadataSaveWarning(undefined)).toBeNull();
+    expect(
+      svc.governedMetadataSaveWarning({
+        data: { data: { id: 1 }, meta: { governed_metadata_error: { code: 'metadata_write_failed', detail: 'UNIQUE constraint failed' } } },
+      }),
+    ).toBe('Governance metadata was not saved: UNIQUE constraint failed');
+    expect(
+      svc.governedMetadataSaveWarning({
+        data: { data: { id: 1 }, meta: { governed_metadata_error: { code: 'hook_rejected', detail: 'owner must be a team' } } },
+      }),
+    ).toBe('Governance metadata was rejected by a plugin: owner must be a team');
+  });
+
   test('getMetadataUsers asks for every user', async () => {
     apiClient.get.mockResolvedValueOnce({ data: { data: [{ id: 1 }] } });
     expect(await svc.getMetadataUsers()).toEqual([{ id: 1 }]);

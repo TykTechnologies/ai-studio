@@ -99,6 +99,24 @@ describe("LLMForm governed metadata embedding", () => {
     expect(body.data.attributes.governed_metadata).toEqual({ risk_tier: "high" });
   });
 
+  it("reports a warning, not success, when the LLM saved but its metadata did not", async () => {
+    apiClient.post.mockResolvedValue({
+      data: {
+        data: { id: "9" },
+        meta: { governed_metadata_error: { code: "metadata_write_failed", detail: "UNIQUE constraint failed" } },
+      },
+    });
+    renderForm();
+    await screen.findByText("Governance Metadata");
+    await fillRequired();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const [, opts] = mockNavigate.mock.calls[0];
+    expect(opts.state.snackbar.severity).toBe("warning");
+    expect(opts.state.snackbar.message).toMatch(/LLM provider created, but Governance metadata was not saved: UNIQUE constraint failed/);
+  });
+
   it("maps a 422 to the field and suppresses the generic failure message", async () => {
     apiClient.post.mockRejectedValue({
       response: {
