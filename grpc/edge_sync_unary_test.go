@@ -184,3 +184,34 @@ func TestControlServer_getConfigurationSnapshot_IsDeterministic(t *testing.T) {
 	require.NotEmpty(t, first.Checksum)
 	assert.Equal(t, first.Checksum, second.Checksum)
 }
+
+// An OAuth access token expiring, or a new one being issued, between two
+// snapshots must not change the expected checksum: tokens live 10-15 minutes
+// and the edge enforces expiry itself, so hashing them flipped every edge to
+// pending on a timer.
+func TestControlServer_getConfigurationSnapshot_TokenChurnKeepsChecksum(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	createTestLLMs(db, "default")
+
+	appID := uint(1)
+	require.NoError(t, db.Create(&models.AccessToken{
+		Token: "expires-soon", ClientID: "c1", UserID: 1, AppID: &appID,
+		ExpiresAt: time.Now().Add(700 * time.Millisecond),
+	}).Error)
+
+	first, err := server.getConfigurationSnapshot("default")
+	require.NoError(t, err)
+	require.Len(t, first.AccessTokens, 1, "a live token ships in the snapshot")
+
+	time.Sleep(900 * time.Millisecond)
+	require.NoError(t, db.Create(&models.AccessToken{
+		Token: "fresh", ClientID: "c1", UserID: 1, AppID: &appID,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}).Error)
+
+	second, err := server.getConfigurationSnapshot("default")
+	require.NoError(t, err)
+	require.Len(t, second.AccessTokens, 1, "the expired token is dropped and the fresh one shipped")
+	assert.NotEqual(t, first.AccessTokens[0].Id, second.AccessTokens[0].Id)
+	assert.Equal(t, first.Checksum, second.Checksum, "token churn must not flip edges to pending")
+}

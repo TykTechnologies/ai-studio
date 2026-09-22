@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
@@ -142,6 +143,7 @@ func (a *API) attachTeamRoles(c *gin.Context, users []UserResponse, ids []uint) 
 	var memberships []userGroupRow
 	if err := a.service.DB.WithContext(ctx).Table("user_groups").
 		Where("user_id IN ?", ids).Order("group_id ASC").Find(&memberships).Error; err != nil {
+		logger.Warnf("users list: team roles omitted, membership lookup failed: %v", err)
 		return
 	}
 	if len(memberships) == 0 {
@@ -158,12 +160,18 @@ func (a *API) attachTeamRoles(c *gin.Context, users []UserResponse, ids []uint) 
 		}
 	}
 	byGroup, err := a.service.Authz().RolesForSubjects(ctx, models.RoleBindingSubjectGroup, groupIDs)
-	if err != nil || len(byGroup) == 0 {
+	if err != nil {
+		logger.Warnf("users list: team roles omitted, role lookup failed: %v", err)
+		return
+	}
+	if len(byGroup) == 0 {
 		return
 	}
 	var groups []models.Group
 	names := make(map[uint]string, len(groupIDs))
-	if err := a.service.DB.WithContext(ctx).Select("id", "name").Where("id IN ?", groupIDs).Find(&groups).Error; err == nil {
+	if err := a.service.DB.WithContext(ctx).Select("id", "name").Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		logger.Warnf("users list: team names omitted, group lookup failed: %v", err)
+	} else {
 		for _, g := range groups {
 			names[g.ID] = g.Name
 		}
