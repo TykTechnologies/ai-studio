@@ -17,13 +17,25 @@ async function apiHeaders(page: Page): Promise<Record<string, string>> {
     return { ...originHeaders, 'X-CSRF-Token': csrf.headers()['x-csrf-token'] || '' };
 }
 
-/** The page title sits clear of the fixed top bar, as on the other portal pages. */
-async function expectTitleClearOfTopBar(page: Page, title: Locator) {
+/** Distance from the bottom of the fixed top bar to the top of a page title. */
+async function titleGapBelowTopBar(page: Page, title: Locator): Promise<number> {
+    await title.waitFor();
     const bar = await page.locator('header.MuiAppBar-root').boundingBox();
     const heading = await title.boundingBox();
     expect(bar).not.toBeNull();
     expect(heading).not.toBeNull();
-    expect(heading!.y - (bar!.y + bar!.height)).toBeGreaterThanOrEqual(16);
+    return heading!.y - (bar!.y + bar!.height);
+}
+
+/**
+ * The builder's titles must sit where other portal pages put theirs (the
+ * submitted page's title used to touch the top bar). My Apps is the
+ * reference, so a theme-wide spacing change moves all of them together.
+ */
+async function expectTitleSpacedLikeMyApps(page: Page, title: Locator, referenceGap: number) {
+    const gap = await titleGapBelowTopBar(page, title);
+    expect(gap).toBeGreaterThan(0);
+    expect(Math.abs(gap - referenceGap)).toBeLessThanOrEqual(1);
 }
 
 async function deleteApp(page: Page, appId: string | undefined) {
@@ -40,13 +52,19 @@ test.describe('Portal app builder', () => {
     test('builds a multi-asset app from scratch and summarises the request', async ({ page, aiPortalPage }) => {
         const appName = `Builder app ${generateRandomString(4)}`;
         let appId: string | undefined;
+        let referenceGap = 0;
 
         try {
+            await test.step('Measure the title spacing on My Apps', async () => {
+                await page.goto(`${config.base_url}/portal/apps`);
+                referenceGap = await titleGapBelowTopBar(page, page.getByRole('heading', { name: 'My Apps', level: 1 }));
+            });
+
             await test.step('Open an empty form', async () => {
                 await page.goto(`${config.base_url}/portal/app/new`);
                 const title = page.getByRole('heading', { name: 'Create New App', level: 1 });
                 await expect(title).toBeVisible();
-                await expectTitleClearOfTopBar(page, title);
+                await expectTitleSpacedLikeMyApps(page, title, referenceGap);
                 await expect(page.getByTestId('requested-access-empty')).toBeVisible();
                 await expect(aiPortalPage.accessTab('LLM providers')).toHaveAttribute('aria-selected', 'true');
                 await expect(aiPortalPage.CreateAppButton).toBeDisabled();
@@ -80,7 +98,7 @@ test.describe('Portal app builder', () => {
 
                 const title = page.getByRole('heading', { name: 'App Submitted', level: 1 });
                 await expect(title).toBeVisible();
-                await expectTitleClearOfTopBar(page, title);
+                await expectTitleSpacedLikeMyApps(page, title, referenceGap);
 
                 const summary = page.getByTestId('app-submitted-summary');
                 await expect(summary.getByRole('heading', { name: appName })).toBeVisible();
