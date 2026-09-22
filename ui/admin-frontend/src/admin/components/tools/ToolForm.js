@@ -1,5 +1,5 @@
 import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
-import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
+import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import apiClient from "../../utils/apiClient";
 import {
@@ -654,14 +654,15 @@ const ToolForm = () => {
     // Set once the tool record itself is saved, so a failure in the
     // relationship calls that follow can be reported as what it is.
     let savedToolId = null;
+    let toolResponse = null;
     try {
       if (id) {
-        await apiClient.patch(`/tools/${id}`, toolData);
+        toolResponse = await apiClient.patch(`/tools/${id}`, toolData);
         savedToolId = id;
         await updateToolOperations();
       } else {
-        const response = await apiClient.post("/tools", toolData);
-        const newToolId = response.data.data.id;
+        toolResponse = await apiClient.post("/tools", toolData);
+        const newToolId = toolResponse.data.data.id;
         savedToolId = newToolId;
         await updateToolOperations(newToolId);
       }
@@ -670,8 +671,13 @@ const ToolForm = () => {
       await syncFilters(savedToolId);
 
       markSaved();
+      const metadataWarning = governedMetadataSaveWarning(toolResponse);
       navigate("/admin/tools", {
-        state: { snackbar: { message: id ? "Tool updated successfully" : "Tool created successfully", severity: "success" } },
+        state: {
+          snackbar: metadataWarning
+            ? { message: `${id ? "Tool updated" : "Tool created"}, but ${metadataWarning}`, severity: "warning" }
+            : { message: id ? "Tool updated successfully" : "Tool created successfully", severity: "success" },
+        },
       });
     } catch (error) {
       if (savedToolId && !error.response) {

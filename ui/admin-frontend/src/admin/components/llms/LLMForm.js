@@ -1,5 +1,5 @@
 import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
-import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
+import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import { generateSlug } from "../../components/wizards/quick-start/utils";
@@ -462,8 +462,13 @@ const LLMForm = () => {
       }
 
       markSaved();
+      const metadataWarning = governedMetadataSaveWarning(llmResponse);
       navigate("/admin/llms", {
-        state: { snackbar: { message: id ? "LLM provider updated successfully" : "LLM provider created successfully", severity: "success" } },
+        state: {
+          snackbar: metadataWarning
+            ? { message: `${id ? "LLM provider updated" : "LLM provider created"}, but ${metadataWarning}`, severity: "warning" }
+            : { message: id ? "LLM provider updated successfully" : "LLM provider created successfully", severity: "success" },
+        },
       });
     } catch (error) {
       if (error.response?.status === 422) {

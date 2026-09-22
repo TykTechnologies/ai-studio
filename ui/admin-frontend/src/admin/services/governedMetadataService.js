@@ -225,6 +225,23 @@ export const extractGovernedMetadataErrors = (error) => {
   return out;
 };
 
+/**
+ * The object write succeeded but its governed metadata did not: the API
+ * reports this in `meta.governed_metadata_error` on a 2xx response rather
+ * than failing the request. Returns a user-facing message, or null when the
+ * metadata was saved.
+ */
+export const governedMetadataSaveWarning = (response) => {
+  const err = response?.data?.meta?.governed_metadata_error;
+  if (!err) {
+    return null;
+  }
+  if (err.code === 'hook_rejected') {
+    return `Governance metadata was rejected by a plugin: ${err.detail || 'no reason given'}`;
+  }
+  return `Governance metadata was not saved: ${err.detail || 'unknown error'}`;
+};
+
 /** Converts a ValidationResult into { errors: {field: msg}, warnings: {field: msg} }. */
 export const validationResultToFieldMessages = (result) => {
   const collect = (issues) => {
