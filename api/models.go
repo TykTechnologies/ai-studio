@@ -1145,6 +1145,10 @@ type AppDetailResponse struct {
 		IsOrphaned      bool             `json:"is_orphaned"`
 		IsActive        bool             `json:"is_active"`
 		Credential      CredentialDetail `json:"credential"`
+		// MCPServerIDs / MCPServers mirror the list endpoint (serializeApp):
+		// the portal app page mounts its "MCP access" section from them.
+		MCPServerIDs []uint               `json:"mcp_server_ids"`
+		MCPServers   []AppMCPServerOutput `json:"mcp_servers,omitempty"`
 	} `json:"attributes"`
 }
 

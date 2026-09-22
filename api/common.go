@@ -781,6 +781,8 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			IsOrphaned      bool             `json:"is_orphaned"`
 			IsActive        bool             `json:"is_active"`
 			Credential      CredentialDetail `json:"credential"`
+			MCPServerIDs    []uint               `json:"mcp_server_ids"`
+			MCPServers      []AppMCPServerOutput `json:"mcp_servers,omitempty"`
 		}{
 			Name:         app.Name,
 			Description:  app.Description,
@@ -820,6 +822,9 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			IsOrphaned:      app.IsOrphaned,
 		},
 	}
+	// Same shape as the list endpoint, so the portal app page can mount the
+	// MCP access section (and its key minting) from the detail response.
+	response.Attributes.MCPServerIDs, response.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
 
 	c.JSON(http.StatusOK, response)
 }
