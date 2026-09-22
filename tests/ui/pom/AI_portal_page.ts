@@ -21,12 +21,12 @@ export class AIPortalPage extends PageTemplate {
     readonly CreateappButton: Locator;
     readonly NameInput: Locator;
     readonly DescriptionInput: Locator;
-    // The builder's resources are RelationshipPickers (compact): the add
-    // control is the Autocomplete labelled "Add LLM provider" / "Add data source" /
-    // "Add tool", selected items are chips with a "Remove {name}" icon.
-    readonly AddLlmInput: Locator;
-    readonly AddDataSourceInput: Locator;
-    readonly AddToolInput: Locator;
+    // The builder's "Add access" picker: a tab per asset type and a list with
+    // an "Add {name}" row per item. What has been added is listed under
+    // "Access requested" in the details column, grouped by type.
+    readonly AccessPicker: Locator;
+    readonly AccessOptions: Locator;
+    readonly RequestedAccess: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly CreateAppButton: Locator;
     readonly CancelButton: Locator;
@@ -61,9 +61,9 @@ export class AIPortalPage extends PageTemplate {
         this.CreateappButton = this.page.getByRole('button', { name: 'Create app' });
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
-        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add LLM provider' });
-        this.AddDataSourceInput = this.page.getByRole('combobox', { name: 'Add data source' });
-        this.AddToolInput = this.page.getByRole('combobox', { name: 'Add tool' });
+        this.AccessPicker = this.page.getByTestId('app-access-picker');
+        this.AccessOptions = this.page.getByTestId('app-access-options');
+        this.RequestedAccess = this.page.getByTestId('requested-access');
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.CreateAppButton = this.page.getByRole('button', { name: 'Create app' });
         this.CancelButton = this.page.getByRole('button', { name: 'Cancel' });
@@ -95,35 +95,41 @@ export class AIPortalPage extends PageTemplate {
         await expect(this.page.locator('a[aria-current="page"][data-nav-id]')).toHaveCount(1);
     }
 
-    /** Chip for a resource currently selected in any of the builder's pickers. */
-    relationshipChip(name: string): Locator {
-        return this.page.getByTestId('relationship-picker').locator('.MuiChip-root').filter({ hasText: name });
+    /** A row under "Access requested" (the details column or the summary). */
+    requestedItem(name: string): Locator {
+        return this.RequestedAccess.getByTestId('requested-access-item').filter({ hasText: name });
     }
 
-    /** Type into a picker's Autocomplete and pick the option; it becomes a chip at once. */
-    private async pickRelationship(input: Locator, name: string) {
-        await input.click();
-        await input.fill(name);
-        await this.page.getByRole('option', { name, exact: true }).click();
-        await this.relationshipChip(name).waitFor();
+    /** The picker's tab for an asset type ("LLM providers", "Tools", ...). */
+    accessTab(typeLabel: string): Locator {
+        return this.AccessPicker.getByRole('tab').filter({
+            has: this.page.getByTestId('app-access-tab-label').getByText(typeLabel, { exact: true }),
+        });
+    }
+
+    /** Open the type's tab and add the item; it is listed as requested at once. */
+    async addAccess(typeLabel: string, name: string) {
+        await this.accessTab(typeLabel).click();
+        await this.AccessOptions.getByRole('button', { name: `Add ${name}`, exact: true }).click();
+        await this.requestedItem(name).waitFor();
     }
 
     async addLlm(name: string) {
-        await this.pickRelationship(this.AddLlmInput, name);
+        await this.addAccess('LLM providers', name);
     }
 
     async addDataSource(name: string) {
-        await this.pickRelationship(this.AddDataSourceInput, name);
+        await this.addAccess('Data sources', name);
     }
 
     async addTool(name: string) {
-        await this.pickRelationship(this.AddToolInput, name);
+        await this.addAccess('Tools', name);
     }
 
-    /** Remove a resource via its chip's delete icon. */
-    async removeRelationship(name: string) {
-        await this.page.getByLabel(`Remove ${name}`).click();
-        await this.relationshipChip(name).waitFor({ state: 'detached' });
+    /** Remove a requested item from the details column. */
+    async removeRequested(name: string) {
+        await this.RequestedAccess.getByRole('button', { name: `Remove ${name}`, exact: true }).click();
+        await this.requestedItem(name).waitFor({ state: 'detached' });
     }
 
     async createApp(params: AppParams) {

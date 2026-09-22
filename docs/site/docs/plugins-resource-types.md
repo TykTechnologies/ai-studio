@@ -6,7 +6,7 @@ Resource Provider plugins allow you to **register custom resource types** that i
 
 By default, Apps in AI Studio bundle three built-in resource types: LLMs, Datasources, and Tools. The Resource Provider capability lets plugins register additional resource types that:
 
-- **Appear in the Create App form** as selectable resources (via a plugin-provided Web Component or a platform-rendered multi-select)
+- **Appear in the Create App form** as selectable resources (in the portal, as their own tab in the "Add access" picker; in the admin App form, via a plugin-provided Web Component or a platform-rendered multi-select)
 - **Participate in privacy scoring** with the generalized rule: no resource privacy score may exceed the maximum LLM privacy score in the app
 - **Integrate with group-based access control** so admins can assign resource instances to groups, and users only see resources available to their groups
 - **Support the community submission workflow** so end-users can submit new resource instances for admin review
