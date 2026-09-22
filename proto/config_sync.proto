@@ -58,6 +58,7 @@ message EdgeRegistrationResponse {
 message ConfigurationRequest {
   string edge_namespace = 1;   // Namespace to filter for (empty = global only)
   google.protobuf.Timestamp last_sync_time = 2; // Optional: only get changes since this time
+  string edge_id = 3;          // Requesting edge (unary GetFullConfiguration); lets control mark it in sync
 }
 
 // EdgeMessage is sent from edge to control

@@ -178,10 +178,12 @@ func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy 
 		dbNamespace = ""
 	}
 
-	// Check if namespace has any active edges
+	// Check if namespace has any active edges. Edges register under the
+	// normalised spelling ("default" for a global/unset namespace), so match
+	// every spelling of the requested namespace.
 	var edgeCount int64
 	if err := s.db.Model(&models.EdgeInstance{}).
-		Where("namespace = ? AND status IN ?", dbNamespace, []string{models.EdgeStatusConnected, models.EdgeStatusRegistered}).
+		Where("namespace IN ? AND status IN ?", models.NamespaceAliases(namespace), []string{models.EdgeStatusConnected, models.EdgeStatusRegistered}).
 		Count(&edgeCount).Error; err != nil {
 		return nil, fmt.Errorf("failed to check namespace edges: %w", err)
 	}

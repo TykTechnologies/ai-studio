@@ -31,6 +31,9 @@ func (r *Repository) GetLLM(id uint) (*LLM, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := OrderLLMFilters(r.db, &llm); err != nil {
+		return nil, err
+	}
 	return &llm, nil
 }
 
@@ -39,6 +42,9 @@ func (r *Repository) GetLLMBySlug(slug string) (*LLM, error) {
 	var llm LLM
 	err := r.db.Preload("Apps").Preload("Filters").Where("slug = ? AND is_active = ?", slug, true).First(&llm).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := OrderLLMFilters(r.db, &llm); err != nil {
 		return nil, err
 	}
 	return &llm, nil
@@ -64,7 +70,10 @@ func (r *Repository) ListLLMs(page, limit int, vendor string, isActive bool) ([]
 	// Get paginated results
 	offset := (page - 1) * limit
 	err := query.Offset(offset).Limit(limit).Preload("Apps").Preload("Filters").Find(&llms).Error
-	
+	if err == nil {
+		err = OrderLLMFilterList(r.db, llms)
+	}
+
 	return llms, total, err
 }
 
@@ -82,6 +91,9 @@ func (r *Repository) DeleteLLM(id uint) error {
 func (r *Repository) GetActiveLLMs() ([]LLM, error) {
 	var llms []LLM
 	err := r.db.Where("is_active = ?", true).Preload("Filters").Find(&llms).Error
+	if err == nil {
+		err = OrderLLMFilterList(r.db, llms)
+	}
 	return llms, err
 }
 

@@ -196,6 +196,8 @@ Returns sync status for all namespaces:
 
 Each namespace summary also carries `last_push_at` (null until the first push).
 
+The global/default namespace has one row whatever it is called: `""`, `global` and `default` are the same namespace to every sync endpoint (edges register under `default`; an unset `EDGE_NAMESPACE` on the microgateway means the same thing). A database from before this used `""`; its row is folded into `default` on startup.
+
 ### Get Namespace Sync Status
 
 ```
@@ -218,6 +220,7 @@ Returns what has changed in a namespace since its last push, as shown in the pus
     "namespace": "default",
     "since": "2024-01-15T10:30:00Z",
     "last_push_at": "2024-01-15T10:30:00Z",
+    "baseline": "push",
     "total": 2,
     "changes": [
       { "type": "llm", "id": 3, "name": "OpenAI", "change": "updated", "at": "2024-01-15T11:02:00Z" },
@@ -227,7 +230,9 @@ Returns what has changed in a namespace since its last push, as shown in the pus
 }
 ```
 
-`changes` is capped at 200 entries; `total` is the real count.
+`changes` is capped at 200 entries; `total` is the real count. `baseline` says what `since` was taken from: `push` (the recorded last push), `edge_ack` (no push was ever recorded, for example on a database upgraded from before pushes were stamped, but an edge is in sync with the namespace checksum, so its acknowledgement is used and the UI says "since the last sync") or `none` (nothing to measure from; every object is listed as created).
+
+A reload makes each edge pull the snapshot through `GetFullConfiguration`, which marks that edge in sync immediately rather than waiting for its next heartbeat; the other edges in the namespace stay pending until they pull.
 
 ### Trigger Configuration Reload
 

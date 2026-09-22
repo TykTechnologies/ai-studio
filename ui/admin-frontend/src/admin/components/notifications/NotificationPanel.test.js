@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import NotificationPanel, { PANEL_SIZE } from "./NotificationPanel";
+import NotificationPanel, { PANEL_SIZE, openNotificationLink } from "./NotificationPanel";
 import { useNotifications } from "../../context/NotificationContext";
 
 jest.mock("../../context/NotificationContext", () => ({
@@ -102,5 +102,47 @@ describe("NotificationPanel", () => {
     expect(screen.getByText("You're all caught up.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark all as read" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "View all" })).toBeInTheDocument();
+  });
+});
+
+describe("openNotificationLink", () => {
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("routes an /admin link through the router, hash included", () => {
+    const navigate = jest.fn();
+    openNotificationLink("/admin/enterprise/asset-catalog/requests#req_1", navigate);
+    expect(navigate).toHaveBeenCalledWith("/admin/enterprise/asset-catalog/requests#req_1");
+  });
+
+  it("also fires popstate when the link only changes the hash of the current page", () => {
+    // Plugin web components read the hash on popstate; react-router's
+    // navigate alone would leave them on the old sub-route.
+    window.history.replaceState({}, "", "/admin/enterprise/asset-catalog/requests#req_0");
+    const navigate = jest.fn();
+    const onPop = jest.fn();
+    window.addEventListener("popstate", onPop);
+    try {
+      openNotificationLink("/admin/enterprise/asset-catalog/requests#req_1", navigate);
+      expect(navigate).toHaveBeenCalledWith("/admin/enterprise/asset-catalog/requests#req_1");
+      expect(onPop).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("popstate", onPop);
+    }
+  });
+
+  it("does not fire popstate for a link to another page", () => {
+    window.history.replaceState({}, "", "/admin/apps");
+    const navigate = jest.fn();
+    const onPop = jest.fn();
+    window.addEventListener("popstate", onPop);
+    try {
+      openNotificationLink("/admin/enterprise/asset-catalog/requests#req_1", navigate);
+      expect(navigate).toHaveBeenCalledWith("/admin/enterprise/asset-catalog/requests#req_1");
+      expect(onPop).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("popstate", onPop);
+    }
   });
 });

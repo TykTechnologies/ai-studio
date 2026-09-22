@@ -30,14 +30,25 @@ type PendingChange struct {
 
 // PendingChanges is the response of GET /api/v1/sync/pending-changes.
 type PendingChanges struct {
+	// Namespace is the canonical spelling (models.CanonicalNamespace).
 	Namespace string `json:"namespace"`
-	// Since is the reference point (the namespace's last push); nil when
-	// nothing has been pushed yet, in which case every object is "created".
+	// Since is the reference point: the namespace's last push, or -- when
+	// no push was ever recorded but an edge is in sync with the namespace
+	// checksum -- that edge's ack. Nil when there is neither, in which case
+	// every object is "created". Baseline says which.
 	Since      *time.Time      `json:"since"`
 	LastPushAt *time.Time      `json:"last_push_at"`
+	Baseline   string          `json:"baseline"` // push | edge_ack | none
 	Total      int             `json:"total"`
 	Changes    []PendingChange `json:"changes"`
 }
+
+// Baseline values: what Since was taken from.
+const (
+	PendingBaselinePush    = "push"     // the namespace's recorded last push
+	PendingBaselineEdgeAck = "edge_ack" // an in-sync edge's ack; no push recorded (pre-upgrade database)
+	PendingBaselineNone    = "none"     // nothing to measure from
+)
 
 const (
 	PendingChangeCreated = "created"
@@ -144,20 +155,40 @@ func (t *changeTime) parse(s string) error {
 }
 
 // GetPendingChanges lists what changed in the namespace since its last
-// push. namespace "" and "global" both mean the global namespace, whose
-// objects also ship to every other namespace; a named namespace sees its
-// own objects plus the global ones.
+// push. "", "global" and "default" all mean the default namespace
+// (models.CanonicalNamespace), which ships the global objects plus those
+// filed under "default"; a named namespace sees its own objects plus the
+// global ones. This mirrors grpc.ControlServer.getConfigurationSnapshot.
+//
+// When the namespace has a checksum but no recorded push (a database from
+// before last_push_at existed) and an edge is in sync with that checksum,
+// the edge's ack is the reference point (Baseline edge_ack) rather than
+// reporting everything as never pushed.
 func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges, error) {
-	if namespace == "global" {
-		namespace = ""
-	}
+	namespace = models.CanonicalNamespace(namespace)
 
-	result := &PendingChanges{Namespace: namespace, Changes: []PendingChange{}}
+	result := &PendingChanges{Namespace: namespace, Baseline: PendingBaselineNone, Changes: []PendingChange{}}
 
 	var status models.NamespaceSyncStatus
 	if err := status.GetByNamespace(s.db, namespace); err == nil {
 		result.LastPushAt = status.LastPushAt
 		result.Since = status.LastPushAt
+		if status.LastPushAt != nil {
+			result.Baseline = PendingBaselinePush
+		} else if status.ExpectedChecksum != "" {
+			acked, err := (&models.EdgeInstance{}).FirstInSyncWithChecksum(s.db, namespace, status.ExpectedChecksum)
+			if err != nil {
+				return nil, err
+			}
+			if acked != nil {
+				since := status.LastConfigChange
+				if acked.LastSyncAck != nil {
+					since = *acked.LastSyncAck
+				}
+				result.Since = &since
+				result.Baseline = PendingBaselineEdgeAck
+			}
+		}
 	} else if err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
@@ -220,12 +251,11 @@ func (s *SyncStatusService) pendingRows(namespace string, since *time.Time) ([]p
 		args = append(args, src.typ)
 		where := make([]string, 0, 2)
 		if src.namespaced {
-			if namespace == "" {
-				where = append(where, "namespace = ''")
-			} else {
-				where = append(where, "(namespace = '' OR namespace = ?)")
-				args = append(args, namespace)
-			}
+			// Same filter as the configuration snapshot: global objects
+			// plus the namespace's own (the default namespace's own are
+			// those filed under "default").
+			where = append(where, "(namespace = '' OR namespace = ?)")
+			args = append(args, models.CanonicalNamespace(namespace))
 		}
 		if since == nil {
 			where = append(where, "deleted_at IS NULL")

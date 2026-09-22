@@ -4,6 +4,7 @@ import edgeGatewayService from '../services/edgeGatewayService';
 import { registerSyncStatusRefresh } from '../utils/configSyncNotifier';
 import { hasPermissionNow, subscribe } from '../utils/identityStore';
 import { P } from '../rbac/permissions';
+import { canonicalNamespace, sameNamespace } from '../components/edge-gateways/pendingChanges';
 
 const SyncStatusContext = createContext();
 
@@ -42,7 +43,7 @@ export const SyncStatusProvider = ({ children }) => {
   const fetchPendingChanges = useCallback(async (status) => {
     const pendingNamespaces = (status?.data || [])
       .filter((ns) => (ns.pending_count || 0) > 0 || (ns.stale_count || 0) > 0)
-      .map((ns) => ns.namespace || 'default');
+      .map((ns) => canonicalNamespace(ns.namespace));
     if (pendingNamespaces.length === 0) {
       setPendingChanges({});
       return {};
@@ -53,7 +54,12 @@ export const SyncStatusProvider = ({ children }) => {
       );
       const next = {};
       results.forEach((result, i) => {
-        next[pendingNamespaces[i]] = { total: result.total, lastPushAt: result.lastPushAt };
+        next[pendingNamespaces[i]] = {
+          total: result.total,
+          lastPushAt: result.lastPushAt,
+          since: result.since,
+          baseline: result.baseline,
+        };
       });
       setPendingChanges(next);
       return next;
@@ -166,8 +172,8 @@ export const SyncStatusProvider = ({ children }) => {
    */
   const getLastPushAt = useCallback(
     (namespace) => {
-      const ns = namespace || 'default';
-      const summary = syncStatus?.data?.find((s) => (s.namespace || 'default') === ns);
+      const ns = canonicalNamespace(namespace);
+      const summary = syncStatus?.data?.find((s) => sameNamespace(s.namespace, ns));
       if (summary && 'last_push_at' in summary) {
         return summary.last_push_at || null;
       }

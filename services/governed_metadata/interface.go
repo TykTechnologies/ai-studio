@@ -186,6 +186,10 @@ type ComplianceEntry struct {
 	Status          string       `json:"status"` // missing | invalid | warnings | expired | valid
 	Issues          []FieldIssue `json:"issues"`
 	LastValidatedAt *time.Time   `json:"last_validated_at,omitempty"`
+	// DetailPath is where the object can be opened when the UI has no route
+	// of its own for it: plugin resource instances resolve their resource
+	// type's PortalDetailPath template here. Empty for built-in objects.
+	DetailPath string `json:"detail_path,omitempty"`
 }
 
 // ComplianceReport aggregates compliance entries.

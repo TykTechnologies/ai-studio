@@ -1042,27 +1042,7 @@ func (a *API) getProxyLogsForLLM(c *gin.Context) {
 	}
 
 	for i, log := range logs {
-		response.Data[i] = models.ProxyLogResponse{
-			Type: "proxy_log",
-			ID:   strconv.FormatUint(uint64(log.ID), 10),
-			Attributes: struct {
-				AppID        uint      `json:"app_id"`
-				UserID       uint      `json:"user_id"`
-				TimeStamp    time.Time `json:"time_stamp"`
-				Vendor       string    `json:"vendor"`
-				RequestBody  string    `json:"request_body"`
-				ResponseBody string    `json:"response_body"`
-				ResponseCode int       `json:"response_code"`
-			}{
-				AppID:        log.AppID,
-				UserID:       log.UserID,
-				TimeStamp:    log.TimeStamp,
-				Vendor:       log.Vendor,
-				RequestBody:  log.RequestBody,
-				ResponseBody: log.ResponseBody,
-				ResponseCode: log.ResponseCode,
-			},
-		}
+		response.Data[i] = models.NewProxyLogResponse(log)
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -1148,27 +1128,7 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 	}
 
 	for i, log := range logs {
-		response.Data[i] = models.ProxyLogResponse{
-			Type: "proxy_log",
-			ID:   strconv.FormatUint(uint64(log.ID), 10),
-			Attributes: struct {
-				AppID        uint      `json:"app_id"`
-				UserID       uint      `json:"user_id"`
-				TimeStamp    time.Time `json:"time_stamp"`
-				Vendor       string    `json:"vendor"`
-				RequestBody  string    `json:"request_body"`
-				ResponseBody string    `json:"response_body"`
-				ResponseCode int       `json:"response_code"`
-			}{
-				AppID:        log.AppID,
-				UserID:       log.UserID,
-				TimeStamp:    log.TimeStamp,
-				Vendor:       log.Vendor,
-				RequestBody:  log.RequestBody,
-				ResponseBody: log.ResponseBody,
-				ResponseCode: log.ResponseCode,
-			},
-		}
+		response.Data[i] = models.NewProxyLogResponse(log)
 	}
 
 	c.JSON(http.StatusOK, response)

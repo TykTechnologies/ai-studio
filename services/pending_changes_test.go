@@ -109,7 +109,7 @@ func TestPendingChanges(t *testing.T) {
 		require.NoError(t, models.MarkNamespacePushed(db, "", push))
 		pc, err := svc.GetPendingChanges("global")
 		require.NoError(t, err)
-		assert.Equal(t, "", pc.Namespace)
+		assert.Equal(t, models.DefaultNamespace, pc.Namespace, "one canonical spelling on the wire")
 		assert.Equal(t, map[string]string{"datasource:Global": services.PendingChangeCreated}, changeKeys(pc))
 	})
 

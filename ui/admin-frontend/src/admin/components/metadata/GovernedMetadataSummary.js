@@ -3,12 +3,12 @@ import { Box, Chip, Grid } from '@mui/material';
 import { FieldLabel, FieldValue } from '../../styles/sharedStyles';
 import Section from '../common/Section';
 import useResolvedMetadataSchema from '../../hooks/useResolvedMetadataSchema';
-
-const STATUS_COLOR = { valid: 'success', warnings: 'warning', invalid: 'error' };
+import { statusMeta } from './metadataStatus';
 
 export const MetadataStatusChip = ({ status }) => {
   if (!status) return null;
-  return <Chip size="small" label={status} color={STATUS_COLOR[status] || 'default'} variant="outlined" />;
+  const meta = statusMeta(status);
+  return <Chip size="small" label={meta.label} color={meta.color} variant="outlined" />;
 };
 
 const renderValue = (field, raw, vocabulary, usersById) => {

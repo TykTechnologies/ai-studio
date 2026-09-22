@@ -114,10 +114,80 @@ func (a *API) finishUsers(c *gin.Context, users []UserResponse) []UserResponse {
 		if byUser, err := svc.RolesForSubjects(c.Request.Context(), models.RoleBindingSubjectUser, ids); err == nil {
 			for i := range users {
 				users[i].Attributes.Roles = roleSummaries(byUser[ids[i]])
+				for j := range users[i].Attributes.Roles {
+					users[i].Attributes.Roles[j].Via = "direct"
+				}
+			}
+		}
+		a.attachTeamRoles(c, users, ids)
+	}
+	return users
+}
+
+// userGroupRow is one user→team membership from the join table.
+type userGroupRow struct {
+	UserID  uint
+	GroupID uint
+}
+
+// attachTeamRoles folds the roles bound to each user's teams into the users'
+// role lists, so the list shows effective roles rather than direct bindings
+// only. Three queries cover every user: the memberships, the team bindings
+// and the team names. A role already held directly is left as is.
+func (a *API) attachTeamRoles(c *gin.Context, users []UserResponse, ids []uint) {
+	if len(ids) == 0 {
+		return
+	}
+	ctx := c.Request.Context()
+	var memberships []userGroupRow
+	if err := a.service.DB.WithContext(ctx).Table("user_groups").
+		Where("user_id IN ?", ids).Order("group_id ASC").Find(&memberships).Error; err != nil {
+		return
+	}
+	if len(memberships) == 0 {
+		return
+	}
+	groupsOf := make(map[uint][]uint, len(ids))
+	seenGroup := map[uint]bool{}
+	groupIDs := make([]uint, 0)
+	for _, m := range memberships {
+		groupsOf[m.UserID] = append(groupsOf[m.UserID], m.GroupID)
+		if !seenGroup[m.GroupID] {
+			seenGroup[m.GroupID] = true
+			groupIDs = append(groupIDs, m.GroupID)
+		}
+	}
+	byGroup, err := a.service.Authz().RolesForSubjects(ctx, models.RoleBindingSubjectGroup, groupIDs)
+	if err != nil || len(byGroup) == 0 {
+		return
+	}
+	var groups []models.Group
+	names := make(map[uint]string, len(groupIDs))
+	if err := a.service.DB.WithContext(ctx).Select("id", "name").Where("id IN ?", groupIDs).Find(&groups).Error; err == nil {
+		for _, g := range groups {
+			names[g.ID] = g.Name
+		}
+	}
+	for i := range users {
+		held := make(map[uint]bool, len(users[i].Attributes.Roles))
+		for _, r := range users[i].Attributes.Roles {
+			held[r.ID] = true
+		}
+		for _, gid := range groupsOf[ids[i]] {
+			for j := range byGroup[gid] {
+				role := &byGroup[gid][j]
+				if held[role.ID] {
+					continue
+				}
+				held[role.ID] = true
+				summary := roleSummaryOf(role)
+				summary.Via = "group"
+				summary.GroupID = gid
+				summary.GroupName = names[gid]
+				users[i].Attributes.Roles = append(users[i].Attributes.Roles, *summary)
 			}
 		}
 	}
-	return users
 }
 
 func (a *API) finishUser(c *gin.Context, user UserResponse) UserResponse {

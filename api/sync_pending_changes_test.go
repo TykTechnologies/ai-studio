@@ -59,6 +59,17 @@ func TestSyncPendingChanges_RouteAndReloadAll(t *testing.T) {
 	resp = get("?namespace=default")
 	require.NotNil(t, resp.Data.Since, "the push is now the reference point")
 	assert.Equal(t, 0, resp.Data.Total)
+	assert.Equal(t, services.PendingBaselinePush, resp.Data.Baseline)
+
+	// The UI asks with "default"; the API doc says "global" or nothing. All
+	// three are the namespace the edge registered under.
+	for _, query := range []string{"?namespace=global", ""} {
+		alias := get(query)
+		require.NotNil(t, alias.Data.Since, query)
+		assert.Equal(t, resp.Data.LastPushAt.Unix(), alias.Data.LastPushAt.Unix(), query)
+		assert.Equal(t, "default", alias.Data.Namespace, query)
+		assert.Equal(t, 0, alias.Data.Total, query)
+	}
 
 	w = apitest.PerformAuthRequest(f.router, "GET", "/api/v1/sync/status", nil, f.admin.APIKey)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -100,17 +101,50 @@ type AppBudgetUsageResponse struct {
 
 // ProxyLogResponse represents a proxy log response in JSON API format
 type ProxyLogResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
-		AppID        uint      `json:"app_id"`
-		UserID       uint      `json:"user_id"`
-		TimeStamp    time.Time `json:"time_stamp"`
-		Vendor       string    `json:"vendor"`
-		RequestBody  string    `json:"request_body"`
-		ResponseBody string    `json:"response_body"`
-		ResponseCode int       `json:"response_code"`
-	} `json:"attributes"`
+	Type       string             `json:"type"`
+	ID         string             `json:"id"`
+	Attributes ProxyLogAttributes `json:"attributes"`
+}
+
+// ProxyLogAttributes is the serialised form of a ProxyLog row. The failover
+// marker is carried so a fallback row can be told from a primary one:
+// FailoverAttempt is the 1-based rung index (0 = primary) and
+// FailoverFromLLMID the primary the request failed over from, absent for a
+// primary attempt.
+type ProxyLogAttributes struct {
+	AppID             uint      `json:"app_id"`
+	UserID            uint      `json:"user_id"`
+	LLMID             uint      `json:"llm_id"`
+	ModelName         string    `json:"model_name"`
+	TimeStamp         time.Time `json:"time_stamp"`
+	Vendor            string    `json:"vendor"`
+	RequestBody       string    `json:"request_body"`
+	ResponseBody      string    `json:"response_body"`
+	ResponseCode      int       `json:"response_code"`
+	FailoverAttempt   int       `json:"failover_attempt"`
+	FailoverFromLLMID *uint     `json:"failover_from_llm_id,omitempty"`
+}
+
+// NewProxyLogResponse serialises one ProxyLog row for the proxy-log
+// endpoints.
+func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
+	return ProxyLogResponse{
+		Type: "proxy_log",
+		ID:   strconv.FormatUint(uint64(log.ID), 10),
+		Attributes: ProxyLogAttributes{
+			AppID:             log.AppID,
+			UserID:            log.UserID,
+			LLMID:             log.LLMID,
+			ModelName:         log.ModelName,
+			TimeStamp:         log.TimeStamp,
+			Vendor:            log.Vendor,
+			RequestBody:       log.RequestBody,
+			ResponseBody:      log.ResponseBody,
+			ResponseCode:      log.ResponseCode,
+			FailoverAttempt:   log.FailoverAttempt,
+			FailoverFromLLMID: log.FailoverFromLLMID,
+		},
+	}
 }
 
 // PaginatedProxyLogs represents a paginated list of proxy logs

@@ -258,7 +258,10 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	if !config.TestMode {
 		// Add CSRF middleware
 		csrfOpts := []csrf.Option{
-			csrf.Secure(false), // Allow HTTP in development
+			// Only unsets the cookie's Secure flag. What lets HTTP dev/test
+			// setups through is csrfGuard marking plain-HTTP requests
+			// plaintext, so gorilla does not demand an Origin/Referer.
+			csrf.Secure(false),
 			csrf.Path("/"),
 		}
 		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {

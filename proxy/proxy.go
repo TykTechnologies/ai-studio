@@ -512,7 +512,7 @@ func (p *Proxy) createHandler() http.Handler {
 // resumed SSE stream says where it left off.
 const (
 	mcpCORSAllowHeaders  = corsutil.DefaultAllowHeaders + ", Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID"
-	mcpCORSExposeHeaders = "Mcp-Session-Id, MCP-Protocol-Version, WWW-Authenticate"
+	mcpCORSExposeHeaders = "Mcp-Session-Id, MCP-Protocol-Version, WWW-Authenticate, " + servedCORSExposeHeaders
 	mcpCORSAllowMethods  = "GET, POST, DELETE, OPTIONS"
 )
 
@@ -701,6 +701,33 @@ func respondWithOAIError(w http.ResponseWriter, status int, message string, err 
 	json.NewEncoder(w).Encode(response)
 }
 
+// respondRelayingOAIError is respondWithOAIError for an error that came back
+// from another hop. When err quotes an OpenAI envelope (the loopback hop's
+// own policy_violation, or a vendor refusal it passed through) that envelope
+// is written at status as it is, so the caller sees the original message,
+// type and code once, not nested inside "failed to generate content" and the
+// driver's "API returned unexpected status code" text. Anything else keeps
+// the usual wrapper.
+func respondRelayingOAIError(w http.ResponseWriter, status int, message string, err error) {
+	inner, ok := innerOAIError(err)
+	if !ok {
+		respondWithOAIError(w, status, message, err, false)
+		return
+	}
+	if inner.Type == "" {
+		inner.Type = oaiErrorType(status)
+	}
+	if inner.Code == nil || inner.Code == "" {
+		inner.Code = oaiErrorCode(status)
+	}
+	inner.HTTPStatus = http.StatusText(status)
+	inner.HTTPStatusCode = status
+	slog.Error("api client error", "message", inner.Message, "status", status)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(OAIErrorResponse{Error: inner})
+}
+
 func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	llmSlug := vars["llmSlug"]
@@ -767,7 +794,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
 		p.goAnalyze(func() {
-			p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
+			p.analyzeResponse(llm, app, http.StatusBadRequest, policyViolationBody(err), reqBody, r)
 		})
 		respondPolicyBlock(w, r, err)
 		return
@@ -1491,7 +1518,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
 		p.goAnalyze(func() {
-			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
+			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, policyViolationBody(err), reqBody, nil, time.Now(), "")
 		})
 		respondPolicyBlock(w, r, err)
 		return

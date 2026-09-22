@@ -308,7 +308,11 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 	}
 
 	ctx := context.Background()
+	// EdgeId lets control resolve the namespace this edge registered under
+	// and mark it in sync once the snapshot is handed over, instead of
+	// waiting for the next heartbeat.
 	req := &pb.ConfigurationRequest{
+		EdgeId:        c.config.HubSpoke.EdgeID,
 		EdgeNamespace: c.config.HubSpoke.EdgeNamespace,
 	}
 

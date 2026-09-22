@@ -1,10 +1,12 @@
 package proxy
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/tmc/langchaingo/llms"
 )
@@ -129,4 +131,54 @@ func bedrockErrorStatus(err error, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+// driverEnvelopeMessage matches the langchaingo OpenAI and Anthropic clients'
+// rendering of an upstream error whose body was an OpenAI envelope: they
+// decode the envelope, keep only its message and append it to the status
+// text. The suffix is therefore the inner envelope's message, verbatim.
+var driverEnvelopeMessage = regexp.MustCompile(`API returned unexpected status code: \d{3}: (.+)$`)
+
+// innerOAIError recovers the OpenAI error envelope behind a driver error.
+// The loopback hop answers a policy block (and any other refusal) with a
+// full envelope; the drivers keep its message only, as "API returned
+// unexpected status code: 400: <message>", and re-wrapping that as our own
+// error gave the caller the reason twice, nested in two prefixes. The
+// returned APIError carries the message (and type/code when a driver
+// quotes the whole envelope, which is tried first); anything that carries
+// neither reports false and the caller keeps its own text.
+func innerOAIError(err error) (*APIError, bool) {
+	if err == nil {
+		return nil, false
+	}
+	msg := err.Error()
+	if start := strings.IndexByte(msg, '{'); start >= 0 {
+		var envelope OAIErrorResponse
+		if json.Unmarshal([]byte(strings.TrimSpace(msg[start:])), &envelope) == nil &&
+			envelope.Error != nil && envelope.Error.Message != "" {
+			return envelope.Error, true
+		}
+	}
+	if m := driverEnvelopeMessage.FindStringSubmatch(strings.TrimSpace(msg)); m != nil {
+		if inner := strings.TrimSpace(m[1]); inner != "" {
+			return &APIError{Message: inner}, true
+		}
+	}
+	return nil, false
+}
+
+// policyViolationBody is the proxy-log body for a request-filter block. The
+// enterprise compliance service matches on the "policy_violation" substring,
+// so the keys are fixed; the detail is marshalled, not printf'd, because a
+// filter message may contain quotes.
+func policyViolationBody(err error) []byte {
+	detail := ""
+	if err != nil {
+		detail = err.Error()
+	}
+	body, marshalErr := json.Marshal(map[string]string{"error": "policy_violation", "detail": detail})
+	if marshalErr != nil {
+		return []byte(`{"error":"policy_violation"}`)
+	}
+	return body
 }

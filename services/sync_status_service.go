@@ -73,6 +73,8 @@ func (s *SyncStatusService) GetNamespaceSyncSummary() ([]NamespaceSyncSummary, e
 
 // GetNamespaceSyncStatus returns detailed sync status for a specific namespace
 func (s *SyncStatusService) GetNamespaceSyncStatus(namespace string) (*NamespaceSyncSummary, []models.EdgeInstance, error) {
+	namespace = models.CanonicalNamespace(namespace)
+
 	// Get namespace sync status
 	var status models.NamespaceSyncStatus
 	if err := status.GetByNamespace(s.db, namespace); err != nil {
@@ -80,7 +82,7 @@ func (s *SyncStatusService) GetNamespaceSyncStatus(namespace string) (*Namespace
 	}
 
 	summary := &NamespaceSyncSummary{
-		Namespace:        status.Namespace,
+		Namespace:        namespace,
 		ExpectedChecksum: status.ExpectedChecksum,
 		ConfigVersion:    status.ConfigVersion,
 		LastConfigChange: status.LastConfigChange,

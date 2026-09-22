@@ -50,6 +50,8 @@ Filters in Midsommar provide comprehensive request/response processing with both
   - LLM Proxy Responses (REST and streaming)
   - Chat Session Responses (regular and streaming)
 
+When several filters are attached to an LLM they run top to bottom in the order arranged on the LLM form, the first block wins, and that order is persisted and sent to edge gateways as the filter's `order_index`.
+
 ---
 
 #### **Table Overview**

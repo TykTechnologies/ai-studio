@@ -66,13 +66,10 @@ const MainLayoutContent = () => {
       }
 
       try {
-        // If we're a full admin and either at root or portal dashboard,
-        // force redirect to admin dashboard
-        if (
-          isFullAdmin &&
-          (location.pathname === "/" ||
-            location.pathname === "/portal/dashboard")
-        ) {
+        // A full admin landing on the bare root goes to their last admin
+        // page. Only "/" bounces: a direct load of /portal/dashboard (a
+        // bookmark, a refresh) is an explicit destination and stays put.
+        if (isFullAdmin && location.pathname === "/") {
           const storedAdminPath = getStoredPath('admin');
           setCurrentTab("admin");
           navigate(storedAdminPath || "/admin", { replace: true });

@@ -100,9 +100,10 @@ func (e *EdgeInstance) IsHealthy(maxAge time.Duration) bool {
 	return time.Since(*e.LastHeartbeat) <= maxAge
 }
 
-// ListEdgesInNamespace returns all edges in a specific namespace
+// ListEdgesInNamespace returns all edges in a specific namespace, under
+// any spelling of it (see NamespaceAliases).
 func (edges *EdgeInstances) ListEdgesInNamespace(db *gorm.DB, namespace string) error {
-	return db.Where("namespace = ?", namespace).Order("created_at DESC").Find(edges).Error
+	return db.Where("namespace IN ?", NamespaceAliases(namespace)).Order("created_at DESC").Find(edges).Error
 }
 
 // ListActiveEdges returns all active (connected/registered) edges
@@ -161,8 +162,30 @@ func (e *EdgeInstance) UpdateSyncStatus(db *gorm.DB, checksum, version, status s
 // MarkEdgesAsPendingInNamespace marks all active edges in a namespace as pending sync
 func (e *EdgeInstance) MarkEdgesAsPendingInNamespace(db *gorm.DB, namespace string) error {
 	return db.Model(&EdgeInstance{}).
-		Where("namespace = ? AND status IN ?", namespace, []string{EdgeStatusConnected, EdgeStatusRegistered}).
+		Where("namespace IN ? AND status IN ?", NamespaceAliases(namespace), []string{EdgeStatusConnected, EdgeStatusRegistered}).
 		Update("sync_status", EdgeSyncStatusPending).Error
+}
+
+// FirstInSyncWithChecksum returns an active edge in the namespace that
+// reports the given checksum as loaded and in sync, or nil when there is
+// none. The pending-changes preview uses its LastSyncAck as the reference
+// point when the namespace has a checksum but no recorded push.
+func (e *EdgeInstance) FirstInSyncWithChecksum(db *gorm.DB, namespace, checksum string) (*EdgeInstance, error) {
+	if checksum == "" {
+		return nil, nil
+	}
+	var edge EdgeInstance
+	err := db.Where("namespace IN ? AND status IN ? AND sync_status = ? AND loaded_checksum = ?",
+		NamespaceAliases(namespace), []string{EdgeStatusConnected, EdgeStatusRegistered},
+		EdgeSyncStatusInSync, checksum).
+		Order("last_sync_ack DESC").First(&edge).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &edge, nil
 }
 
 // MarkStaleEdges marks edges that have been pending sync for too long as stale
@@ -187,7 +210,7 @@ func (e *EdgeInstance) CountEdgesBySyncStatus(db *gorm.DB, namespace string) (ma
 		Where("status IN ?", []string{EdgeStatusConnected, EdgeStatusRegistered})
 
 	if namespace != "" {
-		query = query.Where("namespace = ?", namespace)
+		query = query.Where("namespace IN ?", NamespaceAliases(namespace))
 	}
 
 	err := query.Group("sync_status").Scan(&results).Error

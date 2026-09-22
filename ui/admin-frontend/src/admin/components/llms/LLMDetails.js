@@ -7,6 +7,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 import apiClient from "../../utils/apiClient";
 import SearchInput from "../common/SearchInput";
+import FailoverCell from "../common/FailoverCell";
 import {
   Typography,
   CircularProgress,
@@ -32,6 +33,8 @@ import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import DownloadIcon from "@mui/icons-material/Download";
 import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
 import { useEdition } from "../../context/EditionContext";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -149,6 +152,8 @@ const LLMDetails = () => {
   const [llm, setLLM] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
+  const [toggleError, setToggleError] = useState("");
+  const [toggling, setToggling] = useState(false);
   const [vendorUsageData, setVendorUsageData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [vendorModelCostData, setVendorModelCostData] = useState([]);
@@ -281,6 +286,24 @@ const LLMDetails = () => {
     } catch (error) {
       console.error("Error fetching LLM details", error);
       setLoading(false);
+    }
+  };
+
+  // Activate/deactivate are publish-gated endpoints (llms:publish), separate
+  // from the write-gated edit form, so a publish-only role can flip the
+  // switch from here.
+  const handleToggleActive = async () => {
+    const activating = !llm?.attributes?.active;
+    setToggling(true);
+    setToggleError("");
+    try {
+      await apiClient.post(`/llms/${id}/${activating ? "activate" : "deactivate"}`);
+      await fetchLLMDetails();
+    } catch (error) {
+      console.error("Error toggling LLM active state", error);
+      setToggleError(`Failed to ${activating ? "activate" : "deactivate"} the LLM provider`);
+    } finally {
+      setToggling(false);
     }
   };
 
@@ -832,10 +855,13 @@ const LLMDetails = () => {
                   <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "10%" }}>
                     Response Code
                   </StyledTableHeaderCell>
-                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "32.5%" }}>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "12%" }}>
+                    Failover
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "26.5%" }}>
                     Request
                   </StyledTableHeaderCell>
-                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "32.5%" }}>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "26.5%" }}>
                     Response
                   </StyledTableHeaderCell>
                 </TableRow>
@@ -843,7 +869,7 @@ const LLMDetails = () => {
             <TableBody>
               {proxyLogs?.length === 0 && debouncedProxyLogSearch ? (
                 <TableRow>
-                  <StyledTableCell colSpan={5} align="center">
+                  <StyledTableCell colSpan={6} align="center">
                     No proxy logs found matching "{debouncedProxyLogSearch}"
                   </StyledTableCell>
                 </TableRow>
@@ -858,6 +884,9 @@ const LLMDetails = () => {
                     </StyledTableCell>
                     <StyledTableCell sx={{ verticalAlign: "top" }}>
                       {log.attributes.response_code}
+                    </StyledTableCell>
+                    <StyledTableCell sx={{ verticalAlign: "top" }}>
+                      <FailoverCell attributes={log.attributes} />
                     </StyledTableCell>
                     <StyledTableCell sx={{ verticalAlign: "top", overflow: "hidden" }}>
                       <Box sx={{ overflow: "auto", maxHeight: 200 }}>
@@ -902,14 +931,30 @@ const LLMDetails = () => {
           justifyContent="space-between"
           alignItems="center"
         >
-          <Typography color="success.main">{copySuccess}</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/llms/edit/${id}`)}
-          >
-            Edit LLM
-          </PrimaryButton>
+          <Box>
+            <Typography color="success.main">{copySuccess}</Typography>
+            {toggleError && <Typography color="error.main">{toggleError}</Typography>}
+          </Box>
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <Can permission={P.LLMS_PUBLISH}>
+              <PrimaryButton
+                variant="outlined"
+                onClick={handleToggleActive}
+                disabled={toggling}
+              >
+                {llm.attributes.active ? "Deactivate LLM provider" : "Activate LLM provider"}
+              </PrimaryButton>
+            </Can>
+            <Can permission={P.LLMS_WRITE}>
+              <PrimaryButton
+                variant="contained"
+                startIcon={<EditIcon />}
+                onClick={() => navigate(`/admin/llms/edit/${id}`)}
+              >
+                Edit LLM
+              </PrimaryButton>
+            </Can>
+          </Box>
         </Box>
       </ContentBox>
 

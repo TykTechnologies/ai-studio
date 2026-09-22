@@ -89,18 +89,55 @@ export const relativeTime = (iso, now = new Date()) => {
 };
 
 /**
+ * The global/default namespace has three spellings across the APIs: "" (the
+ * sync status and object tables), "global" (the push endpoint) and "default"
+ * (edge registration). Compare namespaces through these so a lookup never
+ * misses its own row.
+ */
+export const canonicalNamespace = (ns) => {
+  const trimmed = (ns == null ? '' : String(ns)).trim();
+  const lower = trimmed.toLowerCase();
+  return lower === '' || lower === 'global' || lower === 'default' ? 'default' : trimmed;
+};
+
+export const sameNamespace = (a, b) => canonicalNamespace(a) === canonicalNamespace(b);
+
+/**
+ * What the preview measured from (mirrors the API's `baseline`): a recorded
+ * push, an in-sync edge's ack when no push was ever recorded (a Studio
+ * upgraded from before pushes were stamped), or nothing.
+ */
+const pendingBaseline = ({ baseline, lastPushAt } = {}) => {
+  if (baseline === 'push' || baseline === 'edge_ack' || baseline === 'none') return baseline;
+  return lastPushAt ? 'push' : 'none';
+};
+
+/**
  * The one-line summary above the list:
  *   "12 changes since the last push at 13:12"
  *   "Nothing has changed since the last push (13:12)"
+ * when the reference point is an edge's ack rather than a recorded push,
+ *   "12 changes since the last sync at 13:12"
  * and, when nothing was ever pushed, "12 changes (never pushed)".
  */
-export const summarizePending = ({ total = 0, lastPushAt = null } = {}, now = new Date()) => {
-  const pushed = formatPushTime(lastPushAt, now);
+export const summarizePending = (data = {}, now = new Date()) => {
+  const { total = 0, lastPushAt = null, since = null } = data;
+  const baseline = pendingBaseline(data);
+  const count = `${total} change${total === 1 ? '' : 's'}`;
+
+  if (baseline === 'edge_ack') {
+    const synced = formatPushTime(since, now);
+    if (total === 0) {
+      return synced ? `Nothing has changed since the last sync (${synced})` : 'Nothing has changed since the last sync';
+    }
+    return synced ? `${count} since the last sync at ${synced}` : `${count} since the last sync`;
+  }
+
+  const pushed = baseline === 'push' ? formatPushTime(lastPushAt || since, now) : null;
   if (total === 0) {
     return pushed
       ? `Nothing has changed since the last push (${pushed})`
       : 'Nothing has changed (no push recorded yet)';
   }
-  const count = `${total} change${total === 1 ? '' : 's'}`;
   return pushed ? `${count} since the last push at ${pushed}` : `${count} (never pushed)`;
 };

@@ -63,6 +63,25 @@ jest.mock('../../utils/featureUtils', () => ({
   })
 }));
 
+// RBAC is on for these tests so the roles section renders.
+jest.mock('../../context/PermissionsContext', () => ({
+  usePermissions: () => ({ rbacEnabled: true, can: () => true, canAny: () => true, canAll: () => true }),
+}));
+
+// The roles section renders for real (it carries the Default-team warning);
+// only its picker and the collapsible chrome are stubbed.
+jest.mock('../roles/RoleSelect', () => ({
+  __esModule: true,
+  default: props => <div data-testid="mock-role-select" data-label={props.label} />
+}));
+
+jest.mock('../common/CollapsibleSection', () => ({
+  __esModule: true,
+  default: ({ title, children }) => (
+    <section data-testid="mock-collapsible-section" data-title={title}>{children}</section>
+  )
+}));
+
 // Mock the child components
 jest.mock('./components/GroupFormBasicInfo', () => ({
   __esModule: true,
@@ -591,6 +610,44 @@ describe('GroupForm Component', () => {
     fireEvent.click(screen.getByTestId('mock-change-plugin-resources'));
 
     expect(mockSetPluginResourceSelections).toHaveBeenCalledWith({ '7:vector-store': ['vs-1'] });
+  });
+
+  describe('Default team role warning', () => {
+    const warningText =
+      'Every new user joins the Default team automatically. Any role you attach here is granted to all users, including the Administration tab if the role carries admin permissions.';
+
+    test('editing the Default team (id 1) warns that roles apply to every user', () => {
+      require('react-router-dom').useParams.mockImplementation(() => ({ id: '1' }));
+      useGroupForm.mockImplementation(() => ({ ...defaultGroupFormValues, name: 'Default', selectedRoleIds: [], setSelectedRoleIds: jest.fn() }));
+
+      render(<GroupForm />);
+
+      const warning = screen.getByTestId('default-team-role-warning');
+      expect(warning).toHaveAttribute('data-severity', 'warning');
+      expect(warning).toHaveTextContent(warningText);
+      // The warning sits above the picker.
+      const picker = screen.getByTestId('mock-role-select');
+      expect(warning.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    test('a team loaded with the name Default warns even when its id is not 1', () => {
+      require('react-router-dom').useParams.mockImplementation(() => ({ id: '42' }));
+      useGroupForm.mockImplementation(() => ({ ...defaultGroupFormValues, name: 'Default', selectedRoleIds: [], setSelectedRoleIds: jest.fn() }));
+
+      render(<GroupForm />);
+
+      expect(screen.getByTestId('default-team-role-warning')).toHaveTextContent(warningText);
+    });
+
+    test('editing another team (id 5) shows no warning', () => {
+      require('react-router-dom').useParams.mockImplementation(() => ({ id: '5' }));
+      useGroupForm.mockImplementation(() => ({ ...defaultGroupFormValues, name: 'Engineering', selectedRoleIds: [], setSelectedRoleIds: jest.fn() }));
+
+      render(<GroupForm />);
+
+      expect(screen.getByTestId('mock-role-select')).toBeInTheDocument();
+      expect(screen.queryByTestId('default-team-role-warning')).not.toBeInTheDocument();
+    });
   });
 
   test('handles tool catalog selection changes', () => {

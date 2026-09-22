@@ -63,6 +63,9 @@ func (p *DatabaseProvider) GetLLM(id uint) (*database.LLM, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := database.OrderLLMFilters(p.db, &llm); err != nil {
+		return nil, err
+	}
 	
 	// Additional check with namespace filter
 	if !p.namespaceFilter.MatchesNamespace(llm.Namespace, p.namespace) {
@@ -85,6 +88,9 @@ func (p *DatabaseProvider) GetLLMBySlug(slug string) (*database.LLM, error) {
 	
 	err := query.Preload("Filters").Preload("Plugins").First(&llm).Error
 	if err != nil {
+		return nil, err
+	}
+	if err := database.OrderLLMFilters(p.db, &llm); err != nil {
 		return nil, err
 	}
 	
@@ -120,6 +126,9 @@ func (p *DatabaseProvider) ListLLMs(namespace string, active bool) ([]database.L
 	}
 	
 	err := query.Preload("Filters").Preload("Plugins").Find(&llms).Error
+	if err == nil {
+		err = database.OrderLLMFilterList(p.db, llms)
+	}
 	return llms, err
 }
 

@@ -191,13 +191,16 @@ func TestLLMService_GetLLMsByNameStub_PreventN1Queries(t *testing.T) {
 		assert.Len(t, llm.Filters, 2, "Each LLM should have 2 filters preloaded")
 	}
 
-	// Should be ≤5 queries with proper preloading (LLMs + 2 many2many preloads)
+	// Should be ≤6 queries with proper preloading (LLMs + 2 many2many preloads
+	// + one batched chain-order lookup)
 	// 1. LLMs query
 	// 2. llm_filters junction table
 	// 3. filters table
 	// 4. llm_plugins junction table
 	// 5. plugins table
-	assert.LessOrEqual(t, queryLogger.QueryCount, 5,
+	// 6. llm_filters order_index for every listed LLM (one query, see
+	//    models.OrderLLMFilters), only issued when an LLM has 2+ filters
+	assert.LessOrEqual(t, queryLogger.QueryCount, 6,
 		"Query count should be minimal with proper preloading (got %d queries)", queryLogger.QueryCount)
 }
 

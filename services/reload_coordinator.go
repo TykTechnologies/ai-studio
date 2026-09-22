@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -364,10 +365,8 @@ func (rc *ReloadCoordinator) getTargetEdgesByNamespace(namespace string) []strin
 		shouldInclude := false
 		if namespace == "all" {
 			shouldInclude = true
-		} else if namespace == "global" && edgeNamespace == "" {
-			shouldInclude = true // Global namespace match
-		} else if namespace == edgeNamespace {
-			shouldInclude = true // Exact match
+		} else if models.CanonicalNamespace(namespace) == models.CanonicalNamespace(edgeNamespace) {
+			shouldInclude = true // Same namespace under any spelling ("global", "", "default")
 		}
 
 		if shouldInclude {

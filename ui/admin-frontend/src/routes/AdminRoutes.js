@@ -4,6 +4,7 @@ import { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRout
 import { usePluginRoutes } from "../admin/components/plugins/DynamicPluginRoute";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 import { withPermission } from "../admin/components/rbac/RequirePermission";
+import NotFound from "../admin/pages/NotFound";
 
 // Turns route descriptors ({ path | index, element, permission }) into
 // <Route>s, wrapping each page in its permission guard.
@@ -136,6 +137,9 @@ const AdminRoutes = ({ uiOptions }) => {
           />
         );
       })}
+
+      {/* Anything else under /admin: say so instead of rendering a blank page */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };

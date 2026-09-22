@@ -21,7 +21,11 @@ The **Catalogs View** provides administrators with a centralized interface to gr
    - Catalogs group similar resources (LLMs, Data Sources, or Tools) for streamlined management.
    - Access to these resources is controlled by assigning catalogs to specific user groups.
 
-2. **Use Cases**:
+2. **Edition difference (new objects and the Default catalog)**:
+   - **Community Edition** puts every newly saved LLM provider, data source and tool that is in no catalog into the Default catalog, so it is visible to everyone at once.
+   - **Enterprise Edition does not.** Catalogs are the access control there, so a new provider, data source or tool is invisible in the portal and in Browse until an administrator adds it to a catalog that one of the user's teams holds. If a newly created LLM "does not show up", check its catalogs first.
+
+3. **Use Cases**:
    - Simplify resource management by categorizing related LLMs, Data Sources, or Tools into a single catalog.
    - Apply consistent access control policies by assigning catalogs to groups.
    - Manage large quantities of resources efficiently in a growing environment.

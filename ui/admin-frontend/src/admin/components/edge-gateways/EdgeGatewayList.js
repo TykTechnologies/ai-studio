@@ -41,7 +41,7 @@ import useSystemFeatures from '../../hooks/useSystemFeatures';
 import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
-import { formatPushTime } from './pendingChanges';
+import { formatPushTime, sameNamespace } from './pendingChanges';
 import {
   TitleBox,
   ContentBox,
@@ -158,9 +158,11 @@ const EdgeGatewayList = () => {
     return edgeGatewayService.formatLastHeartbeat(lastHeartbeat);
   };
 
-  // Get expected checksum for a namespace from the global sync status
+  // Get expected checksum for a namespace from the global sync status. The
+  // sync status may spell the global namespace "" while edges are serialised
+  // with "default"; compare canonically.
   const getExpectedChecksum = (namespace) => {
-    const nsStatus = globalSyncStatus?.data?.find(ns => ns.namespace === (namespace || 'default'));
+    const nsStatus = globalSyncStatus?.data?.find(ns => sameNamespace(ns.namespace, namespace));
     return nsStatus?.expected_checksum || null;
   };
 

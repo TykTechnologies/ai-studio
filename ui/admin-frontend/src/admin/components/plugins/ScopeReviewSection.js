@@ -43,6 +43,21 @@ const SCOPE_CATEGORIES = {
     description: 'Access to application configurations',
     color: 'secondary',
   },
+  'kv': {
+    label: 'Key-value storage',
+    description: "The plugin's own key-value store in AI Studio, for state it keeps between calls",
+    color: 'info',
+  },
+  'rbac': {
+    label: 'Roles & permissions',
+    description: 'Registering permission resources of its own, so roles can grant access to the plugin',
+    color: 'error',
+  },
+  'resource-types': {
+    label: 'Resource types',
+    description: 'Registering custom resource types that Apps can be given access to (ResourceProvider plugins)',
+    color: 'secondary',
+  },
   // Object hook categories
   'llm': {
     label: 'LLM Object Hooks',
@@ -90,6 +105,15 @@ export const SCOPE_DESCRIPTIONS = {
   'apps.read': 'View application configurations',
   'apps.write': 'Create, update, and delete applications',
 
+  // Plugin KV storage
+  'kv.readwrite': "Read and write the plugin's own key-value storage",
+
+  // Resource type management (ResourceProvider plugins)
+  'resource-types.manage': 'Register and manage custom resource types that Apps can be granted access to',
+
+  // RBAC
+  'rbac.register': "Register the plugin's own permission resources with the role system",
+
   // LLM object hooks
   'llm.before_create': 'Hook called before creating a new LLM configuration',
   'llm.after_create': 'Hook called after creating a new LLM configuration',
@@ -122,6 +146,15 @@ export const SCOPE_DESCRIPTIONS = {
   'user.before_delete': 'Hook called before deleting a user',
   'user.after_delete': 'Hook called after deleting a user',
 };
+
+// "resource-types" -> "Resource Types": the fallback heading for a category
+// that has no entry in SCOPE_CATEGORIES.
+const formatCategoryLabel = (category) =>
+  String(category || '')
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 
 const ScopeReviewSection = ({ scopes = [], onApprove, onDeny, loading = false, disabled = false }) => {
   if (!scopes || scopes.length === 0) {
@@ -246,8 +279,8 @@ const ScopeReviewSection = ({ scopes = [], onApprove, onDeny, loading = false, d
       <Box sx={{ mb: 3 }}>
         {Object.entries(groupedScopes).map(([category, categoryScopes]) => {
           const categoryInfo = SCOPE_CATEGORIES[category] || {
-            label: category.charAt(0).toUpperCase() + category.slice(1),
-            description: `Access to ${category} related functionality`,
+            label: formatCategoryLabel(category),
+            description: `Access to ${formatCategoryLabel(category).toLowerCase()} related functionality`,
             color: 'default',
           };
 

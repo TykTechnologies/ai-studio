@@ -59,6 +59,12 @@ const (
 	hdrServedModel = "X-Tyk-Served-Model" // model that answered
 )
 
+// servedCORSExposeHeaders lists the served headers for
+// Access-Control-Expose-Headers: a browser client cannot read a response
+// header the server has not exposed, so without this the failover headers
+// were invisible to exactly the clients that read them from JavaScript.
+const servedCORSExposeHeaders = hdrServedLLM + ", " + hdrServedModel + ", " + hdrFailover
+
 // llmAttempt is one rung of the waterfall as the loop sees it: the LLM config
 // to call and the model to ask it for. Index 0 is the primary.
 type llmAttempt struct {
@@ -387,9 +393,16 @@ func applyFailoverMarker(l *models.ProxyLog, ctx context.Context) {
 
 // setServedHeaders tells the client which LLM and model actually answered.
 // Called before anything is written so the streaming path can still set them.
+//
+// The served-LLM key is assigned directly rather than through Header.Set:
+// Set canonicalises "X-Tyk-Served-LLM" to "X-Tyk-Served-Llm", which is what
+// went on the wire and not what the documentation promises. Go writes map
+// keys as they are, so the direct assignment keeps the documented case. Any
+// canonical copy is removed first so the two spellings never coexist.
 func setServedHeaders(w http.ResponseWriter, a llmAttempt) {
 	h := w.Header()
-	h.Set(hdrServedLLM, a.slug)
+	deleteServedLLMHeader(h)
+	h[hdrServedLLM] = []string{a.slug}
 	h.Set(hdrServedModel, a.model)
 	if a.index > 0 {
 		h.Set(hdrFailover, "true")
@@ -402,9 +415,17 @@ func setServedHeaders(w http.ResponseWriter, a llmAttempt) {
 // all, so an error response does not claim an LLM served it.
 func clearServedHeaders(w http.ResponseWriter) {
 	h := w.Header()
-	h.Del(hdrServedLLM)
+	deleteServedLLMHeader(h)
 	h.Del(hdrServedModel)
 	h.Del(hdrFailover)
+}
+
+// deleteServedLLMHeader removes both spellings of the served-LLM header: the
+// exact key setServedHeaders writes and the canonical one Header.Del looks
+// for, so a stale copy under either cannot survive.
+func deleteServedLLMHeader(h http.Header) {
+	delete(h, hdrServedLLM)
+	h.Del(hdrServedLLM)
 }
 
 // GetLLMByID looks a loaded LLM up by its database id. Waterfall rungs are

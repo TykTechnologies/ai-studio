@@ -415,6 +415,36 @@ describe('PluginService', () => {
       expect(result.hookTypesCustomized).toBe(true);
     });
 
+    test('a partial update sends only the keys it was given (the API leaves the rest untouched)', async () => {
+      apiClient.patch.mockResolvedValueOnce(mockResponse);
+
+      await pluginService.updatePlugin('1', { config: { ttl: 5 }, isActive: true });
+
+      const payload = apiClient.patch.mock.calls[0][1];
+      expect(payload).toEqual({ config: { ttl: 5 }, is_active: true });
+      for (const key of ['name', 'description', 'command', 'checksum', 'namespace', 'oci_reference', 'plugin_type', 'load_immediately', 'hook_type', 'hook_types']) {
+        expect(payload).not.toHaveProperty(key);
+      }
+    });
+
+    test('a full update still sends every field, and an explicit empty description is kept', async () => {
+      apiClient.patch.mockResolvedValueOnce(mockResponse);
+
+      await pluginService.updatePlugin('1', { ...mockPluginData, description: '', namespace: 'global', ociReference: 'ghcr.io/x/y:1' });
+
+      expect(apiClient.patch).toHaveBeenCalledWith('/plugins/1', {
+        name: 'Updated Plugin',
+        description: '',
+        command: './updated-plugin',
+        hook_type: 'on_response',
+        hook_types: ['on_response', 'data_collection'],
+        hook_types_customized: true,
+        is_active: false,
+        namespace: 'global',
+        oci_reference: 'ghcr.io/x/y:1',
+      });
+    });
+
     test('should return null when response has no data', async () => {
       apiClient.patch.mockResolvedValueOnce({ data: {} });
 

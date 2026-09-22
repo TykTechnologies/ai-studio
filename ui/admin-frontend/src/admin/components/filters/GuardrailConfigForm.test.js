@@ -132,4 +132,31 @@ describe("GuardrailConfigForm", () => {
     expect(screen.getByText(/responses are block-only/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/messages to inspect/i)).not.toBeInTheDocument();
   });
+
+  // Both selects used to render blank until a value was chosen: the default
+  // option has value "" and MUI hides that without displayEmpty.
+  it("shows the default scope and fail-mode labels for an empty request-filter config", async () => {
+    render(<Harness initial={emptyGuardrailConfig()} />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    expect(screen.getByText("All user messages (default)")).toBeInTheDocument();
+    expect(screen.getByText("Block the request (default)")).toBeInTheDocument();
+    expect(screen.getByText(/Fail closed blocks every request while the provider is unreachable/)).toBeInTheDocument();
+  });
+
+  it("names the response-filter fail-mode default as letting the response through", async () => {
+    render(<Harness initial={emptyGuardrailConfig()} responseFilter />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    expect(screen.getByText("Let the response through (default)")).toBeInTheDocument();
+  });
+
+  it("explains that connection URLs resolve from the gateway's network, not the browser", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety" }} />);
+    await screen.findByTestId("guardrail-connection-endpoint");
+    const endpointHelp = screen.getByTestId("guardrail-connection-endpoint").closest(".MuiFormControl-root");
+    expect(endpointHelp).toHaveTextContent(
+      "Resolved from the gateway's network, not your browser: localhost means the gateway container itself."
+    );
+    const keyHelp = screen.getByTestId("guardrail-connection-api_key").closest(".MuiFormControl-root");
+    expect(keyHelp).not.toHaveTextContent("Resolved from the gateway's network");
+  });
 });

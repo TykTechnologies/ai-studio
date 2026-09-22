@@ -164,6 +164,8 @@ message CreateNotificationRequest {
     string content = 5;           // Markdown body (max 10000 chars)
     bool notify_admins = 6;       // Deliver to every admin with notifications enabled
     uint32 user_id = 7;           // Deliver to this specific user (0 = none)
+    string link = 8;              // Path the notification opens ("/admin/..." or https://...). Optional.
+    map<string, string> links = 9; // Per-audience links: "admin" for the admin fan-out, "portal" for user_id. Override link.
 }
 
 message CreateNotificationResponse {

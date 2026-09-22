@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Typography,
   Box,
@@ -33,16 +33,7 @@ import {
   getMetadataComplianceReport,
   getMetadataObjectTypes,
 } from "../services/governedMetadataService";
-
-const STATUSES = [
-  { value: "missing", label: "Missing", color: "error" },
-  { value: "invalid", label: "Invalid", color: "error" },
-  { value: "expired", label: "Expired", color: "warning" },
-  { value: "warnings", label: "Warnings", color: "warning" },
-  { value: "valid", label: "Valid", color: "success" },
-];
-
-const statusMeta = (status) => STATUSES.find((s) => s.value === status) || { label: status, color: "default" };
+import { STATUSES, statusMeta } from "../components/metadata/metadataStatus";
 
 export const objectEditPath = (objectType, objectId) => {
   switch (objectType) {
@@ -52,6 +43,9 @@ export const objectEditPath = (objectType, objectId) => {
       return `/admin/tools/edit/${objectId}`;
     case "datasource":
       return `/admin/datasources/edit/${objectId}`;
+    case "mcp_server":
+      // MCP servers are edited on their detail page; there is no edit route.
+      return `/admin/mcp-servers/${objectId}`;
     default:
       return null;
   }
@@ -65,12 +59,36 @@ export const objectViewPath = (objectType, objectId) => {
       return `/admin/tools/${objectId}`;
     case "datasource":
       return `/admin/datasources/${objectId}`;
+    case "mcp_server":
+      return `/admin/mcp-servers/${objectId}`;
     default:
       return null;
   }
 };
 
+/**
+ * Opens an entry's `detail_path` (a plugin resource type's portal detail page,
+ * e.g. "/portal/plugins/asset-catalog#/assets/{id}"). In-app paths go through
+ * the router; when only the hash of the current page changes, popstate is
+ * fired as well so a plugin web component re-reads its hash route. Anything
+ * else (an absolute URL) is a full load.
+ */
+export const openDetailPath = (path, navigate) => {
+  if (!path) return;
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    window.location.assign(path);
+    return;
+  }
+  const [beforeHash] = path.split("#");
+  const current = `${window.location.pathname}${window.location.search}`;
+  navigate(path);
+  if (beforeHash === current) {
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+};
+
 const MetadataCompliance = () => {
+  const navigate = useNavigate();
   const [available, setAvailable] = useState(null);
   const [objectTypes, setObjectTypes] = useState([]);
   const [objectType, setObjectType] = useState("");
@@ -248,6 +266,11 @@ const MetadataCompliance = () => {
                               {editPath && (
                                 <Button component={Link} to={editPath} size="small">
                                   Edit
+                                </Button>
+                              )}
+                              {!editPath && entry.detail_path && (
+                                <Button size="small" onClick={() => openDetailPath(entry.detail_path, navigate)}>
+                                  Open
                                 </Button>
                               )}
                             </StyledTableCell>

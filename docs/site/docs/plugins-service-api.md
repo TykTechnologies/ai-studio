@@ -130,6 +130,8 @@ Key-value storage for plugin data:
 - **Studio**: PostgreSQL-backed, shared across hosts, durable
 - **Gateway**: Local database, per-instance, ephemeral
 
+The namespace belongs to the plugin record: KV data is removed when the plugin is deleted in Studio and does not survive a delete + reinstall (the reinstalled plugin starts with an empty store).
+
 #### Write Data
 
 ```go
@@ -654,6 +656,10 @@ err := ctx.Services.Studio().CreateNotification(ctx.Context, plugin_sdk.Notifica
     Content:      "**alice@acme.com** asked for access.\n\n[Review](/admin/enterprise/asset-catalog/requests)",
     NotifyAdmins: true,                         // every admin with notifications enabled
     UserID:       0,                            // or a specific user ID (both may be set)
+    Links: map[string]string{                   // what clicking the bell entry opens
+        "admin":  "/admin/enterprise/asset-catalog/requests#req_" + request.ID,
+        "portal": "/portal/plugins/asset-catalog#/assets/" + asset.ID,
+    },
 })
 ```
 
@@ -663,6 +669,8 @@ err := ctx.Services.Studio().CreateNotification(ctx.Context, plugin_sdk.Notifica
 | `Title` | Required, max 255 characters. |
 | `Content` | Markdown, max 10000 characters. Rendered in the admin UI's notification list. |
 | `NotifyAdmins` / `UserID` | At least one is required. |
+| `Link` | Optional. What the notification opens when clicked: a same-origin path (`/admin/...`, `/portal/...`) or an `http(s)` URL. Anything else (`javascript:`, protocol-relative) is dropped. Without a link the bell entry is informational only and clicking it does not navigate. |
+| `Links` | Optional, overrides `Link` per audience: `"admin"` for the admin fan-out, `"portal"` for the user named by `UserID` (each falls back to the other, then to `Link`). |
 
 ### Resource Type Registration (runtime)
 

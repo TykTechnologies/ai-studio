@@ -70,6 +70,10 @@ const GroupForm = () => {
 
   const { isGatewayOnly } = getFeatureFlags(features);
 
+  // The built-in Default team (models.DefaultGroupID) is joined by every new
+  // user, so roles bound to it apply to everyone; the roles section warns.
+  const isDefaultTeam = Boolean(id) && (String(id) === "1" || name === "Default");
+
   if (formLoading || catalogsLoading) return <CircularProgress />;
 
   return (
@@ -112,7 +116,11 @@ const GroupForm = () => {
           />
 
           {rbacEnabled && (
-            <GroupRolesSection value={selectedRoleIds} onChange={setSelectedRoleIds} />
+            <GroupRolesSection
+              value={selectedRoleIds}
+              onChange={setSelectedRoleIds}
+              isDefaultTeam={isDefaultTeam}
+            />
           )}
 
           {!isGatewayOnly && (

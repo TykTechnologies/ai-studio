@@ -86,6 +86,50 @@ describe("DatasourceForm governed metadata embedding", () => {
     expect(attrs.governed_metadata_status).toBeUndefined();
   });
 
+  it("reports success when the data source and its metadata both saved", async () => {
+    renderForm();
+    await screen.findByLabelText(/Team/);
+    fireEvent.click(await screen.findByRole("button", { name: "Update data source" }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const [, opts] = mockNavigate.mock.calls[0];
+    expect(opts.state.snackbar).toEqual({ message: "Data source updated successfully", severity: "success" });
+  });
+
+  it("reports a warning, not success, when the data source saved but a plugin rejected its metadata", async () => {
+    apiClient.patch.mockResolvedValue({
+      data: {
+        data: { id: "4" },
+        meta: { governed_metadata_error: { code: "hook_rejected", detail: "policy says no" } },
+      },
+    });
+    renderForm();
+    await screen.findByLabelText(/Team/);
+    fireEvent.click(await screen.findByRole("button", { name: "Update data source" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith("/datasources/4", expect.anything()));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const [, opts] = mockNavigate.mock.calls[0];
+    expect(opts.state.snackbar.severity).toBe("warning");
+    expect(opts.state.snackbar.message).toMatch(/Data source updated, but Governance metadata was rejected by a plugin: policy says no/);
+    expect(opts.state.snackbar.message).not.toMatch(/updated successfully/);
+  });
+
+  it("reports a warning when the metadata write itself failed", async () => {
+    apiClient.patch.mockResolvedValue({
+      data: {
+        data: { id: "4" },
+        meta: { governed_metadata_error: { code: "metadata_write_failed", detail: "UNIQUE constraint failed" } },
+      },
+    });
+    renderForm();
+    await screen.findByLabelText(/Team/);
+    fireEvent.click(await screen.findByRole("button", { name: "Update data source" }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const [, opts] = mockNavigate.mock.calls[0];
+    expect(opts.state.snackbar.severity).toBe("warning");
+    expect(opts.state.snackbar.message).toMatch(/Governance metadata was not saved: UNIQUE constraint failed/);
+    expect(opts.state.snackbar.message).not.toMatch(/updated successfully/);
+  });
+
   it("maps a 422 onto the field and scrolls to the section", async () => {
     apiClient.patch.mockRejectedValue({ response: { status: 422, data: { errors: [
       { detail: "Team is required", source: { pointer: "/data/attributes/governed_metadata/team" } },

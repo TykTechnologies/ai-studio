@@ -2,7 +2,9 @@ package api
 
 import (
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
@@ -28,6 +30,20 @@ func (a *API) validateAdminPermissions(c *gin.Context) error {
 }
 
 func (a *API) validateUserInput(userInput UserInput, userId uint) error {
+	// The user payload is a JSON:API envelope. A flat body ({"email": ...})
+	// binds cleanly into an empty envelope, so without these checks it used to
+	// create a user with no email and no name.
+	attrs := userInput.Data.Attributes
+	if strings.TrimSpace(attrs.Email) == "" {
+		return helpers.NewBadRequestError("Email is required (send data.attributes.email)")
+	}
+	if _, err := mail.ParseAddress(attrs.Email); err != nil {
+		return helpers.NewBadRequestError("Email is not a valid address")
+	}
+	if strings.TrimSpace(attrs.Name) == "" {
+		return helpers.NewBadRequestError("Name is required (send data.attributes.name)")
+	}
+
 	isUnique, err := models.IsEmailUnique(a.service.DB, userInput.Data.Attributes.Email, userId)
 	if err != nil {
 		return err

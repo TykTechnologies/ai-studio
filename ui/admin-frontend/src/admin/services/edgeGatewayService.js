@@ -157,8 +157,10 @@ class EdgeGatewayService {
   /**
    * What has changed in a namespace since its configuration was last pushed
    * to the edge gateways, so the push dialog can say what it is about to do.
-   * Returns { namespace, since, lastPushAt, total, changes } where `changes`
-   * is capped by the server (see `total` for the real count).
+   * Returns { namespace, since, lastPushAt, baseline, total, changes } where
+   * `changes` is capped by the server (see `total` for the real count) and
+   * `baseline` says what `since` is: 'push' (a recorded push), 'edge_ack'
+   * (an in-sync edge's ack, no push recorded) or 'none'.
    */
   async getPendingChanges(namespace) {
     try {
@@ -169,6 +171,7 @@ class EdgeGatewayService {
         namespace: data.namespace ?? namespace ?? '',
         since: data.since || null,
         lastPushAt: data.last_push_at || null,
+        baseline: data.baseline || (data.last_push_at ? 'push' : 'none'),
         total: typeof data.total === 'number' ? data.total : (data.changes || []).length,
         changes: (data.changes || []).map(change => ({
           type: change.type,

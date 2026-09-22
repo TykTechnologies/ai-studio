@@ -33,6 +33,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import {
   SecondaryLinkButton,
   SecondaryOutlineButton,
@@ -159,6 +161,17 @@ const LLMForm = () => {
   );
   const handleFiltersChange = (items) => {
     setLLM((prev) => ({ ...prev, filters: items.map((f) => String(f.id)) }));
+  };
+  // The chain order is persisted and executed top to bottom, so the list
+  // above the picker has explicit move controls (same pattern as failover).
+  const moveFilter = (index, delta) => {
+    setLLM((prev) => {
+      const next = [...(prev.filters || [])];
+      const to = index + delta;
+      if (to < 0 || to >= next.length) return prev;
+      [next[index], next[to]] = [next[to], next[index]];
+      return { ...prev, filters: next };
+    });
   };
 
   useEffect(() => {
@@ -579,7 +592,7 @@ const LLMForm = () => {
                       <Box sx={{ display: "flex", alignItems: "center" }}>
                         <img
                           src={getVendorLogo(vendorCode)}
-                          alt={getVendorName(vendorCode)}
+                          alt=""
                           style={{
                             width: 24,
                             height: 24,
@@ -897,8 +910,43 @@ const LLMForm = () => {
               <AccordionDetails>
                 <Typography variant="body2" color="text.secondary" paragraph>
                   Filters added here are executed in the AI Gateway when a request
-                  flows through the REST endpoint.
+                  flows through the REST endpoint. Filters run top to bottom; the
+                  first block wins.
                 </Typography>
+                {selectedFilters.length > 1 && (
+                  <Box data-testid="llm-filter-order" sx={{ mb: 2 }}>
+                    {selectedFilters.map((filter, index) => (
+                      <Box
+                        key={String(filter.id)}
+                        data-testid="llm-filter-order-item"
+                        sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                      >
+                        <Typography variant="body2" sx={{ minWidth: 24 }}>
+                          {index + 1}.
+                        </Typography>
+                        <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                          {filter?.attributes?.name ?? "Unknown Filter"}
+                        </Typography>
+                        <IconButton
+                          size="small"
+                          aria-label={`move filter ${index + 1} up`}
+                          disabled={index === 0}
+                          onClick={() => moveFilter(index, -1)}
+                        >
+                          <ArrowUpwardIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          aria-label={`move filter ${index + 1} down`}
+                          disabled={index === selectedFilters.length - 1}
+                          onClick={() => moveFilter(index, 1)}
+                        >
+                          <ArrowDownwardIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
                 {filtersLoading ? (
                   <Typography>Loading filters...</Typography>
                 ) : filters === null ? (

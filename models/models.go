@@ -29,6 +29,12 @@ func InitModels(db *gorm.DB) error {
 		}
 	}
 
+	// The llm_filters join carries the chain order; registering the join
+	// model makes AutoMigrate add order_index to existing installs.
+	if err := setupLLMFilterJoin(db); err != nil {
+		return err
+	}
+
 	if err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done
@@ -123,6 +129,12 @@ func InitModels(db *gorm.DB) error {
 
 	// Migration: classify users created before auth_source existed.
 	if err := BackfillAuthSource(db); err != nil {
+		return err
+	}
+
+	// Migration: one namespace_sync_status row per logical namespace
+	// (legacy "" / "global" rows fold into "default").
+	if err := MergeLegacyNamespaceSyncStatus(db); err != nil {
 		return err
 	}
 

@@ -23,12 +23,24 @@ import {
 /** How many notifications the bell panel shows before "View all". */
 export const PANEL_SIZE = 8;
 
+/**
+ * Opens a notification's link: external URLs in a new tab, in-app paths via
+ * the router. When the link only changes the hash of the page already shown
+ * (a plugin page's sub-route, e.g. ".../asset-catalog/requests#req_1"),
+ * react-router updates the location but a plugin web component only re-reads
+ * its hash on popstate, so that is fired too.
+ */
 export const openNotificationLink = (link, navigate) => {
 	if (!link) return;
 	if (isExternalLink(link)) {
 		window.open(link, '_blank', 'noopener');
-	} else {
-		navigate(link);
+		return;
+	}
+	const [beforeHash] = link.split('#');
+	const current = `${window.location.pathname}${window.location.search}`;
+	navigate(link);
+	if (beforeHash === current) {
+		window.dispatchEvent(new PopStateEvent('popstate'));
 	}
 };
 

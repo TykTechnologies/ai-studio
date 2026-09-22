@@ -121,7 +121,7 @@ Settings that determine how the LLM appears in the portal for end-users and deve
 
 ##### **Filters**
 - **Filters** *(Optional)*:
-  A field to add or manage filters that are executed in the AI Gateway when a request flows through the REST endpoint.
+  A field to add or manage filters that are executed in the AI Gateway when a request flows through the REST endpoint. Use the arrows to arrange the chain: filters run top to bottom, the first block wins, and the order is saved with the LLM.
   - Example: Adding preprocessing steps to modify user queries before they reach the LLM.
 
 ---

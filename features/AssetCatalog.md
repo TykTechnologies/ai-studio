@@ -19,7 +19,7 @@ The plugin bundles two example asset types, **Agent** and **Prompt**, plus two s
 | Storage | Plugin KV (document per record + index keys) with an in-memory cache hydrated at session start. |
 | Creation path | Portal users create assets only through the platform Submission form; admins create directly; owners edit and version their own assets. |
 | Access model | Assets (or their type) may require approval. Approval records a grant and unlocks the asset's gated fields for that user. Visibility of the catalog itself is open to all portal users. |
-| Platform integration | Every asset type is registered as a plugin resource type at runtime, so assets can be attached to Apps, assigned to groups, appear in the portal sidebar and reach gateways in the config snapshot. |
+| Platform integration | Every asset type is registered as a plugin resource type at runtime, so assets appear in the Teams plugin-resource sections and in the portal's unified catalog. Assets are not offered in App forms and are not shipped to gateways in the config snapshot; access to gated fields comes only from the catalog's own access requests (see Platform under Status). |
 | Events | Published locally on the bus as `asset_catalog.<kind>` with a full payload (never gated values). Exact topic matching. |
 | Governance | Assets of governed types (default: all) carry the platform's Governed Metadata. Governance fields are never duplicated into the type schema; Studio validates and stores them keyed by asset ID (`plugin_resource:<plugin id>:<slug>`), an enforcing schema blocks the save, and the assets appear in the compliance report. Community submissions create the asset without a record. |
 

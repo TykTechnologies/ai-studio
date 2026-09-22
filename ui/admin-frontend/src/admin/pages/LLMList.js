@@ -16,10 +16,12 @@ import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
+import { usePermissions } from "../context/PermissionsContext";
 import { P } from "../rbac/permissions";
 
 const LLMList = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const [llms, setLLMs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,14 +71,13 @@ const LLMList = () => {
     }
   };
 
+  // Activate/deactivate are publish-gated endpoints, so a publish-only role
+  // can flip the switch without the write permission PATCH /llms/:id needs.
   const handleToggleActive = useCallback(async (llm) => {
+    const activating = !llm.attributes.active;
     try {
-      const updatedLLM = {
-        ...llm,
-        attributes: { ...llm.attributes, active: !llm.attributes.active },
-      };
-      await apiClient.patch(`/llms/${llm.id}`, { data: updatedLLM });
-      notify(`LLM ${updatedLLM.attributes.active ? "activated" : "deactivated"} successfully`);
+      await apiClient.post(`/llms/${llm.id}/${activating ? "activate" : "deactivate"}`);
+      notify(`LLM ${activating ? "activated" : "deactivated"} successfully`);
       fetchLLMs();
     } catch (error) {
       console.error("Error toggling LLM active state", error);
@@ -103,7 +104,7 @@ const LLMList = () => {
         <Box sx={{ display: "flex", alignItems: "center" }}>
           <img
             src={getVendorLogo(llm.attributes.vendor)}
-            alt={getVendorName(llm.attributes.vendor)}
+            alt=""
             style={{
               width: 24,
               height: 24,
@@ -144,19 +145,29 @@ const LLMList = () => {
     },
   ], []);
 
+  // Edit/delete need llms:write; the active toggle needs llms:publish, which
+  // never implies write. Either permission earns the actions column.
+  const canWrite = can(P.LLMS_WRITE);
+  const canPublish = can(P.LLMS_PUBLISH);
+  const canManage = canWrite || canPublish;
+
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit LLM provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`) },
-    { key: "delete", label: "Delete LLM provider", onClick: (llm) => setDeleteTarget(llm) },
+    { key: "edit", label: "Edit LLM provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`), hidden: () => !canWrite },
+    { key: "delete", label: "Delete LLM provider", onClick: (llm) => setDeleteTarget(llm), hidden: () => !canWrite },
     {
       key: "toggle",
       label: (llm) => `${llm?.attributes?.active ? "Deactivate" : "Activate"} LLM provider`,
       onClick: handleToggleActive,
+      hidden: () => !canPublish,
     },
-  ], [navigate, handleToggleActive]);
+  ], [navigate, handleToggleActive, canWrite, canPublish]);
 
   const bulkActions = useMemo(
-    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
-    [bulk.run, bulk.requestDelete],
+    () =>
+      standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
+        (action) => canWrite || action.key !== "delete",
+      ),
+    [bulk.run, bulk.requestDelete, canWrite, canPublish],
   );
 
   if (error && llms.length === 0) {
@@ -183,33 +194,29 @@ const LLMList = () => {
         </Box>
         <Box sx={{ p: 3 }}>
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.LLMS_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="LLM providers"
-                searchPlaceholder="Search LLM providers by name..."
-                columns={columns}
-                data={llms}
-                loading={loading}
-                onRowClick={handleLLMClick}
-                actions={canWrite ? rowActions : undefined}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="Want to start working with your favourite LLM?"
-                      description="Click the button below to add a new LLM configuration to use in your chat room."
-                      buttonText="Add LLM provider"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={canWrite ? handleAddLLM : undefined}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="LLM providers"
+            searchPlaceholder="Search LLM providers by name..."
+            columns={columns}
+            data={llms}
+            loading={loading}
+            onRowClick={handleLLMClick}
+            actions={canManage ? rowActions : undefined}
+            {...(canManage ? bulk.selectionProps : {})}
+            bulkActions={canManage ? bulkActions : undefined}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="Want to start working with your favourite LLM?"
+                  description="Click the button below to add a new LLM configuration to use in your chat room."
+                  buttonText="Add LLM provider"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddLLM : undefined}
+                />
+              ) : undefined
+            }
+          />
         </Box>
       </>
 

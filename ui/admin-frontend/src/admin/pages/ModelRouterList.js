@@ -115,21 +115,29 @@ const ModelRouterList = () => {
     },
   ], []);
 
+  // Edit/delete need model-routers:write; the active toggle needs
+  // model-routers:publish, which never implies write. Either permission
+  // earns the actions column and bulk selection.
+  const canWrite = can(P.MODEL_ROUTERS_WRITE);
   const canPublish = can(P.MODEL_ROUTERS_PUBLISH);
+  const canManage = canWrite || canPublish;
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/model-routers/edit/${router.id}`) },
-    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router) },
+    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/model-routers/edit/${router.id}`), hidden: () => !canWrite },
+    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: () => !canWrite },
     {
       key: "toggle",
       label: (router) => `${router?.attributes?.active ? "Deactivate" : "Activate"} Router`,
       onClick: handleToggleActive,
       hidden: () => !canPublish,
     },
-  ], [navigate, handleToggleActive, canPublish]);
+  ], [navigate, handleToggleActive, canWrite, canPublish]);
 
   const bulkActions = useMemo(
-    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
-    [bulk.run, bulk.requestDelete],
+    () =>
+      standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
+        (action) => canWrite || action.key !== "delete",
+      ),
+    [bulk.run, bulk.requestDelete, canWrite, canPublish],
   );
 
   if (error && routers.length === 0) {
@@ -141,13 +149,15 @@ const ModelRouterList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Model Routers</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddRouter}
-          >
-            Add Router
-          </PrimaryButton>
+          <Can permission={P.MODEL_ROUTERS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddRouter}
+            >
+              Add Router
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
@@ -158,33 +168,29 @@ const ModelRouterList = () => {
         </Box>
         <Box sx={{ p: 3 }}>
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.MODEL_ROUTERS_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="Model routers"
-                searchPlaceholder="Search model routers by name..."
-                columns={columns}
-                data={routers}
-                loading={loading}
-                onRowClick={handleRouterClick}
-                actions={rowActions}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="Create your first Model Router"
-                      description="Model Routers let you define pools of LLM vendors and route requests based on model name patterns. Great for load balancing and failover."
-                      buttonText="Add Router"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={handleAddRouter}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="Model routers"
+            searchPlaceholder="Search model routers by name..."
+            columns={columns}
+            data={routers}
+            loading={loading}
+            onRowClick={handleRouterClick}
+            actions={canManage ? rowActions : undefined}
+            {...(canManage ? bulk.selectionProps : {})}
+            bulkActions={canManage ? bulkActions : undefined}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="Create your first Model Router"
+                  description="Model Routers let you define pools of LLM vendors and route requests based on model name patterns. Great for load balancing and failover."
+                  buttonText="Add Router"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddRouter : undefined}
+                />
+              ) : undefined
+            }
+          />
         </Box>
       </>
 

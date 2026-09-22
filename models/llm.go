@@ -61,7 +61,7 @@ func NewLLM() *LLM {
 }
 
 func (l *LLM) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Filters").Preload("Plugins").First(l, id).Error
+	return withFilterOrder(db, db.Preload("Filters").Preload("Plugins").First(l, id).Error, l)
 }
 
 func (l *LLM) Create(db *gorm.DB) error {
@@ -83,6 +83,10 @@ func (l *LLM) Create(db *gorm.DB) error {
 			tx.Rollback()
 			return err
 		}
+		if err := writeLLMFilterOrder(tx, l); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 	return tx.Commit().Error
 }
@@ -91,7 +95,10 @@ func (l *LLM) Update(db *gorm.DB) error {
 	if err := db.Save(l).Error; err != nil {
 		return err
 	}
-	return db.Model(l).Association("Filters").Replace(l.Filters)
+	if err := db.Model(l).Association("Filters").Replace(l.Filters); err != nil {
+		return err
+	}
+	return writeLLMFilterOrder(db, l)
 }
 
 func (l *LLM) Delete(db *gorm.DB) error {
@@ -99,7 +106,7 @@ func (l *LLM) Delete(db *gorm.DB) error {
 }
 
 func (l *LLM) GetByName(db *gorm.DB, name string) error {
-	return db.Preload("Filters").Preload("Plugins").Where("name = ?", name).First(l).Error
+	return withFilterOrder(db, db.Preload("Filters").Preload("Plugins").Where("name = ?", name).First(l).Error, l)
 }
 
 func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (int64, int, error) {
@@ -124,29 +131,29 @@ func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scope
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
 	}
-	err := query.Find(l).Error
+	err := withFilterListOrder(db, query.Find(l).Error, l)
 	return totalCount, totalPages, err
 }
 
 func (l *LLMs) GetByNameStub(db *gorm.DB, stub string) error {
 	// Use single query with preloading for better performance
-	return db.Preload("Filters").Preload("Plugins").Where("name LIKE ?", stub+"%").Find(l).Error
+	return withFilterListOrder(db, db.Preload("Filters").Preload("Plugins").Where("name LIKE ?", stub+"%").Find(l).Error, l)
 }
 
 func (l *LLMs) GetByMaxPrivacyScore(db *gorm.DB, score int) error {
-	return db.Preload("Filters").Preload("Plugins").Where("privacy_score <= ?", score).Find(l).Error
+	return withFilterListOrder(db, db.Preload("Filters").Preload("Plugins").Where("privacy_score <= ?", score).Find(l).Error, l)
 }
 
 func (l *LLMs) GetByMinPrivacyScore(db *gorm.DB, score int) error {
-	return db.Preload("Filters").Preload("Plugins").Where("privacy_score >= ?", score).Find(l).Error
+	return withFilterListOrder(db, db.Preload("Filters").Preload("Plugins").Where("privacy_score >= ?", score).Find(l).Error, l)
 }
 
 func (l *LLMs) GetByPrivacyScoreRange(db *gorm.DB, min, max int) error {
-	return db.Preload("Filters").Preload("Plugins").Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error
+	return withFilterListOrder(db, db.Preload("Filters").Preload("Plugins").Where("privacy_score BETWEEN ? AND ?", min, max).Find(l).Error, l)
 }
 
 func (l *LLMs) GetActiveLLMs(db *gorm.DB) error {
-	return db.Preload("Filters").Preload("Plugins").Where("active = ?", true).Find(l).Error
+	return withFilterListOrder(db, db.Preload("Filters").Preload("Plugins").Where("active = ?", true).Find(l).Error, l)
 }
 
 func (l *LLMs) GetLLMCount(db *gorm.DB) (int64, error) {
