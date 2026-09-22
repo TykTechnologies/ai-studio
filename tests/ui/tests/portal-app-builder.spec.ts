@@ -2,6 +2,7 @@ import { test } from '@fixtures';
 import { expect, Locator, Page } from '@playwright/test';
 import { config } from '@config';
 import { generateRandomString } from '@utils/utils';
+import { LoginPage } from '@pom/Login_page';
 
 /**
  * Portal "Create New App" form: pick an asset type, add items with "+",
@@ -38,12 +39,120 @@ async function expectTitleSpacedLikeMyApps(page: Page, title: Locator, reference
     expect(Math.abs(gap - referenceGap)).toBeLessThanOrEqual(1);
 }
 
+/**
+ * A fresh CI database has the default LLM providers but no tool an app can be
+ * granted, so the spec brings its own: a REST tool in a tool catalogue, given
+ * to the dev user through a group. Created and removed as the admin.
+ */
+const TOOL_OAS = Buffer.from(JSON.stringify({
+    openapi: '3.0.0',
+    info: { title: 'Builder E2E', version: '1.0.0' },
+    servers: [{ url: 'https://example.com' }],
+    paths: {
+        '/forecast': {
+            get: { operationId: 'getForecast', summary: 'Forecast', responses: { '200': { description: 'OK' } } },
+        },
+    },
+})).toString('base64');
+
+interface ToolFixture {
+    toolName: string;
+    toolId?: string;
+    catalogueId?: string;
+    groupId?: string;
+}
+
+async function asAdmin<T>(browser: import('@playwright/test').Browser, fn: (page: Page) => Promise<T>): Promise<T> {
+    const context = await browser.newContext();
+    try {
+        const page = await context.newPage();
+        const loginPage = new LoginPage(page);
+        await loginPage.goto();
+        await loginPage.login(config.admin_email, config.password);
+        return await fn(page);
+    } finally {
+        await context.close();
+    }
+}
+
+async function createToolFixture(page: Page, fixture: ToolFixture) {
+    const headers = await apiHeaders(page);
+    const post = async (path: string, data: unknown) => {
+        const response = await page.request.post(`${config.api_url}/api/v1${path}`, { headers, data });
+        expect(response.ok(), `POST ${path}: ${response.status()} ${await response.text()}`).toBeTruthy();
+        return response.json();
+    };
+
+    const users = await page.request.get(
+        `${config.api_url}/api/v1/users?search=${encodeURIComponent(config.dev_user_email)}`,
+        { headers },
+    );
+    const devUser = (await users.json()).data?.find(
+        (u: { attributes?: { email?: string } }) => u.attributes?.email === config.dev_user_email,
+    );
+    expect(devUser, 'dev user exists').toBeTruthy();
+
+    const tool = await post('/tools', {
+        data: {
+            type: 'tools',
+            attributes: {
+                name: fixture.toolName,
+                description: 'Forecasts for the app builder spec',
+                tool_type: 'REST',
+                oas_spec: TOOL_OAS,
+                privacy_score: 0,
+                operations: ['getForecast'],
+                rest_access_enabled: true,
+            },
+        },
+    });
+    fixture.toolId = tool.data.id;
+
+    const catalogue = await post('/tool-catalogues', {
+        data: { type: 'tool-catalogues', attributes: { name: `${fixture.toolName} catalogue` } },
+    });
+    fixture.catalogueId = catalogue.data.id;
+    await post(`/tool-catalogues/${fixture.catalogueId}/tools`, { data: { type: 'tools', id: String(fixture.toolId) } });
+
+    const group = await post('/groups', {
+        data: {
+            type: 'groups',
+            attributes: {
+                name: `${fixture.toolName} team`,
+                members: [Number(devUser.id)],
+                catalogues: [],
+                data_catalogues: [],
+                tool_catalogues: [Number(fixture.catalogueId)],
+            },
+        },
+    });
+    fixture.groupId = group.data.id;
+}
+
+async function removeToolFixture(page: Page, fixture: ToolFixture) {
+    const headers = await apiHeaders(page);
+    const del = (path: string) => page.request.delete(`${config.api_url}/api/v1${path}`, { headers });
+    if (fixture.groupId) await del(`/groups/${fixture.groupId}`);
+    if (fixture.catalogueId) await del(`/tool-catalogues/${fixture.catalogueId}`);
+    if (fixture.toolId) await del(`/tools/${fixture.toolId}`);
+}
+
 async function deleteApp(page: Page, appId: string | undefined) {
     if (!appId) return;
     await page.request.delete(`${config.api_url}/common/apps/${appId}`, { headers: await apiHeaders(page) });
 }
 
 test.describe('Portal app builder', () => {
+    const fixture: ToolFixture = { toolName: `Forecast ${generateRandomString(4)}` };
+
+    test.beforeAll(async ({ browser }) => {
+        await asAdmin(browser, (page) => createToolFixture(page, fixture));
+    });
+
+    test.afterAll(async ({ browser }) => {
+        await asAdmin(browser, (page) => removeToolFixture(page, fixture));
+    });
+
     test.beforeEach(async ({ loginPage }) => {
         await loginPage.goto();
         await loginPage.login(config.dev_user_email, config.password);
@@ -72,10 +181,10 @@ test.describe('Portal app builder', () => {
 
             await test.step('Add items of two types and remove one', async () => {
                 await aiPortalPage.NameInput.fill(appName);
-                await aiPortalPage.DescriptionInput.fill('Answers weather questions');
+                await aiPortalPage.DescriptionInput.fill('Answers forecast questions');
                 await aiPortalPage.addLlm('Anthropic');
                 await aiPortalPage.addLlm('OpenAI');
-                await aiPortalPage.addTool('Weather');
+                await aiPortalPage.addTool(fixture.toolName);
                 await expect(page.getByText('Access requested (3)')).toBeVisible();
                 // The tab shows how many of its items were added.
                 await expect(aiPortalPage.accessTab('LLM providers')).toContainText('2');
@@ -102,10 +211,10 @@ test.describe('Portal app builder', () => {
 
                 const summary = page.getByTestId('app-submitted-summary');
                 await expect(summary.getByRole('heading', { name: appName })).toBeVisible();
-                await expect(summary).toContainText('Answers weather questions');
+                await expect(summary).toContainText('Answers forecast questions');
                 await expect(summary.getByTestId('requested-access-llm')).toContainText('Anthropic');
                 await expect(summary.getByTestId('requested-access-llm')).not.toContainText('OpenAI');
-                await expect(summary.getByTestId('requested-access-tool')).toContainText('Weather');
+                await expect(summary.getByTestId('requested-access-tool')).toContainText(fixture.toolName);
                 await expect(summary.getByRole('button', { name: /Remove/ })).toHaveCount(0);
                 await expect(page.getByText(/You must select at least one resource/)).toHaveCount(0);
             });
