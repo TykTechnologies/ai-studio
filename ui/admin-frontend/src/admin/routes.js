@@ -1,4 +1,5 @@
 import React from "react";
+import { Navigate, useParams } from "react-router-dom";
 import Users from "./pages/Users";
 import UserDetails from "./components/users/UserDetails";
 import UserForm from "./components/users/UserForm";
@@ -106,6 +107,16 @@ import RoleForm from "./components/roles/RoleForm";
 import { P, hasPluginGrant } from "./rbac/permissions";
 
 /**
+ * Edit forms live at "<resource>/edit/:id", but "<resource>/:id/edit" is the
+ * shape people (and older links) guess, and it used to render a blank page.
+ * These descriptors forward it to the real route.
+ */
+const EditRedirect = ({ to }) => {
+  const { id } = useParams();
+  return <Navigate to={`/admin/${to}/${id}`} replace />;
+};
+
+/**
  * Admin route descriptors: { path | index, element, permission? }.
  * `permission` is the catalogue permission the page needs; list/detail pages
  * need read, new/edit forms need write. AdminRoutes.js wraps each element in
@@ -126,6 +137,7 @@ const mainAdminRoutes = [
   { path: "llms/:id", element: <LLMDetails />, permission: P.LLMS_READ },
   { path: "llms/:id/models", element: <LLMModelDetails />, permission: P.LLMS_READ },
   { path: "llms/edit/:id", element: <LLMForm />, permission: P.LLMS_WRITE },
+  { path: "llms/:id/edit", element: <EditRedirect to="llms/edit" /> },
   { path: "llms/new", element: <LLMForm />, permission: P.LLMS_WRITE },
 
   { path: "llm-settings", element: <LLMSettingsList />, permission: P.LLM_SETTINGS_READ },
@@ -154,16 +166,19 @@ const mainAdminRoutes = [
   { path: "datasources", element: <DatasourceList />, permission: P.DATASOURCES_READ },
   { path: "datasources/:id", element: <DatasourceDetails />, permission: P.DATASOURCES_READ },
   { path: "datasources/edit/:id", element: <DatasourceForm />, permission: P.DATASOURCES_WRITE },
+  { path: "datasources/:id/edit", element: <EditRedirect to="datasources/edit" /> },
   { path: "datasources/new", element: <DatasourceForm />, permission: P.DATASOURCES_WRITE },
 
   { path: "tools", element: <ToolList />, permission: P.TOOLS_READ },
   { path: "tools/:id", element: <ToolDetails />, permission: P.TOOLS_READ },
   { path: "tools/edit/:id", element: <ToolForm />, permission: P.TOOLS_WRITE },
+  { path: "tools/:id/edit", element: <EditRedirect to="tools/edit" /> },
   { path: "tools/new", element: <ToolForm />, permission: P.TOOLS_WRITE },
 
   { path: "apps", element: <AppList />, permission: P.APPS_READ },
   { path: "apps/:id", element: <AppDetails />, permission: P.APPS_READ },
   { path: "apps/edit/:id", element: <AppForm />, permission: P.APPS_WRITE },
+  { path: "apps/:id/edit", element: <EditRedirect to="apps/edit" /> },
   { path: "apps/new", element: <AppForm />, permission: P.APPS_WRITE },
 
   { path: "edge-gateways/*", element: <EdgeGatewaysPage />, permission: P.EDGES_READ },
@@ -211,7 +226,10 @@ const mainAdminRoutes = [
   { path: "metadata/schemas/new", element: <MetadataSchemaForm />, permission: P.METADATA_WRITE },
   { path: "metadata/schemas/edit/:id", element: <MetadataSchemaForm />, permission: P.METADATA_WRITE },
   { path: "metadata/vocabularies", element: <MetadataVocabularies />, permission: P.METADATA_READ },
-  { path: "metadata/compliance", element: <MetadataCompliance />, permission: P.METADATA_READ },
+  { path: "metadata/coverage", element: <MetadataCompliance />, permission: P.METADATA_READ },
+  // The page was renamed from "compliance" to "coverage" to match the nav
+  // label; the old path keeps working for bookmarks.
+  { path: "metadata/compliance", element: <Navigate to="/admin/metadata/coverage" replace /> },
 ];
 
 // SSO profile routes that will be conditionally rendered based on uiOptions.show_sso_config
@@ -251,6 +269,7 @@ const modelRouterRoutes = [
   { path: "model-routers", element: <ModelRouterList />, permission: P.MODEL_ROUTERS_READ },
   { path: "model-routers/:id", element: <ModelRouterDetails />, permission: P.MODEL_ROUTERS_READ },
   { path: "model-routers/edit/:id", element: <ModelRouterForm />, permission: P.MODEL_ROUTERS_WRITE },
+  { path: "model-routers/:id/edit", element: <EditRedirect to="model-routers/edit" /> },
   { path: "model-routers/new", element: <ModelRouterForm />, permission: P.MODEL_ROUTERS_WRITE },
 ];
 

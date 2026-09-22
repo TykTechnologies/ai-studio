@@ -436,7 +436,10 @@ const UserDetails = () => {
           <Box mb={4}>
             <CollapsibleSection title="Effective permissions" defaultExpanded={false}>
               <Box sx={{ px: 2, pb: 2 }}>
-                <EffectivePermissionsList permissions={effectiveAccess.permissions || []} />
+                <EffectivePermissionsList
+                  permissions={effectiveAccess.permissions || []}
+                  sources={effectiveAccess.sources || {}}
+                />
               </Box>
             </CollapsibleSection>
           </Box>

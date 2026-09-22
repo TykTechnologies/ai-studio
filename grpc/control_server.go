@@ -357,18 +357,64 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	}, nil
 }
 
-// GetFullConfiguration retrieves a complete configuration snapshot for an edge
+// GetFullConfiguration retrieves a complete configuration snapshot for an edge.
+// This is the path a reload uses (microgateway RequestFullSync). The namespace
+// is resolved the way registration resolved it -- the registered edge's stored
+// namespace when the edge is known, else the normalised request namespace --
+// so an edge whose EDGE_NAMESPACE is unset ("") pulls the same snapshot its
+// heartbeat is compared against. The pulling edge is marked in sync at once,
+// as the stream ConfigRequest path does, rather than waiting for a heartbeat.
 func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.ConfigurationRequest) (*pb.ConfigurationSnapshot, error) {
+	namespace := s.edgeManagementService.GetNamespaceForEdge(req.EdgeNamespace)
+	edgeKnown := false
+	if req.EdgeId != "" {
+		var edgeInstance models.EdgeInstance
+		if err := edgeInstance.GetByEdgeID(s.db, req.EdgeId); err == nil {
+			namespace = edgeInstance.Namespace
+			edgeKnown = true
+		}
+	}
+
 	log.Debug().
-		Str("namespace", req.EdgeNamespace).
+		Str("edge_id", req.EdgeId).
+		Str("requested_namespace", req.EdgeNamespace).
+		Str("namespace", namespace).
 		Msg("AI Studio control server: full configuration request")
 
-	snapshot, err := s.getConfigurationSnapshot(req.EdgeNamespace)
+	snapshot, err := s.getConfigurationSnapshot(namespace)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get configuration: %v", err))
 	}
 
+	// After the snapshot: getConfigurationSnapshot may have marked every edge
+	// in the namespace pending (checksum changed); this edge now holds it.
+	if edgeKnown {
+		s.markEdgeInSync(req.EdgeId, snapshot)
+	}
+
 	return snapshot, nil
+}
+
+// markEdgeInSync records that the edge has just been handed the snapshot:
+// sync status in_sync, loaded checksum/version and the ack time. Shared by
+// the unary GetFullConfiguration and the stream ConfigRequest paths.
+func (s *ControlServer) markEdgeInSync(edgeID string, snapshot *pb.ConfigurationSnapshot) {
+	if snapshot == nil || snapshot.Checksum == "" {
+		return
+	}
+	var edgeInstance models.EdgeInstance
+	if err := edgeInstance.GetByEdgeID(s.db, edgeID); err != nil {
+		log.Debug().Err(err).Str("edge_id", edgeID).Msg("Edge not found; sync status not updated after config delivery")
+		return
+	}
+	if err := edgeInstance.UpdateSyncStatus(s.db, snapshot.Checksum, snapshot.Version, models.EdgeSyncStatusInSync); err != nil {
+		log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to update edge sync status after config delivery")
+		return
+	}
+	log.Debug().
+		Str("edge_id", edgeID).
+		Str("checksum", snapshot.Checksum).
+		Msg("Updated edge sync status to in_sync after config delivery")
 }
 
 // SubscribeToChanges handles bidirectional streaming for real-time updates
@@ -570,19 +616,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						stream.Send(response)
 
 						// Update edge sync status immediately since it's receiving the latest config
-						if snapshot.Checksum != "" {
-							var edgeInstance models.EdgeInstance
-							if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
-								now := time.Now()
-								edgeInstance.UpdateSyncStatus(s.db, snapshot.Checksum, snapshot.Version, models.EdgeSyncStatusInSync)
-								edgeInstance.LastSyncAck = &now
-								edgeInstance.Update(s.db)
-								log.Debug().
-									Str("edge_id", edgeID).
-									Str("checksum", snapshot.Checksum).
-									Msg("Updated edge sync status to in_sync after config request")
-							}
-						}
+						s.markEdgeInSync(edgeID, snapshot)
 					}
 				}
 
@@ -836,9 +870,13 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				TimeStamp:    event.Timestamp.AsTime(),
 			}
 			// Failover marker: which primary this rung was failing over from.
+			// The attempt index is copied on its own so a rung reported
+			// without a from-id is still not counted as a primary request.
 			if event.FailoverFromLlmId != 0 {
 				from := uint(event.FailoverFromLlmId)
 				proxyLogs[i].FailoverFromLLMID = &from
+			}
+			if event.FailoverAttempt != 0 {
 				proxyLogs[i].FailoverAttempt = int(event.FailoverAttempt)
 			}
 
@@ -1163,6 +1201,10 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 
 // getConfigurationSnapshot generates a complete configuration snapshot for an edge namespace
 func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.ConfigurationSnapshot, error) {
+	// "", "global" and "default" are one namespace: same object set (global
+	// objects plus those filed under "default"), same checksum, same sync row.
+	namespace = models.CanonicalNamespace(namespace)
+
 	snapshot := &pb.ConfigurationSnapshot{
 		Version:      fmt.Sprintf("%d", time.Now().Unix()),
 		Llms:         []*pb.LLMConfig{},
@@ -1184,11 +1226,21 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		llmQuery = llmQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 
-	if err := llmQuery.Find(&llms).Error; err != nil {
+	if err := llmQuery.Order("id ASC").Find(&llms).Error; err != nil {
 		return nil, fmt.Errorf("failed to get LLMs: %w", err)
+	}
+	// Filters run top to bottom in the arranged order; the edge stores the
+	// FilterIds position as llm_filters.order_index.
+	if err := models.OrderLLMFilterList(s.db, llms); err != nil {
+		return nil, fmt.Errorf("failed to order LLM filters: %w", err)
 	}
 
 	governedLLMs := s.loadGovernedMetadata(models.GovernedObjectTypeLLM)
+
+	// A filter's position in its chain; when it sits in several chains the
+	// lowest position is reported on the FilterConfig (the per-LLM order is
+	// what FilterIds carries).
+	filterOrderIndex := map[uint]int32{}
 
 	// Convert LLMs to protobuf with complete configuration
 	for _, llm := range llms {
@@ -1199,6 +1251,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		filterIDs := make([]uint32, len(llm.Filters))
 		for i, filter := range llm.Filters {
 			filterIDs[i] = uint32(filter.ID)
+			if cur, seen := filterOrderIndex[filter.ID]; !seen || int32(i) < cur {
+				filterOrderIndex[filter.ID] = int32(i)
+			}
 		}
 
 		// Handle optional monthly budget
@@ -1289,7 +1344,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		appQuery = appQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 
-	if err := appQuery.Find(&apps).Error; err != nil {
+	if err := appQuery.Order("id ASC").Find(&apps).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Apps: %w", err)
 	}
 
@@ -1438,7 +1493,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		filterQuery = filterQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 
-	if err := filterQuery.Find(&filters).Error; err != nil {
+	if err := filterQuery.Order("id ASC").Find(&filters).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Filters: %w", err)
 	}
 
@@ -1458,7 +1513,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		llmFilterQuery = llmFilterQuery.Where("(llms.namespace = '' OR llms.namespace = ?)", namespace)
 	}
 
-	if err := llmFilterQuery.Find(&llmFilterAssociations).Error; err != nil {
+	if err := llmFilterQuery.Order("llm_filters.llm_id ASC, llm_filters.filter_id ASC").Find(&llmFilterAssociations).Error; err != nil {
 		log.Warn().Err(err).Msg("Failed to query llm_filters associations for filters")
 	}
 
@@ -1494,7 +1549,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Script:         string(filter.Script),
 			ResponseFilter: filter.ResponseFilter,
 			IsActive:       true, // AI Studio Filter model doesn't have IsActive field yet
-			OrderIndex:     0,    // AI Studio doesn't have OrderIndex field yet
+			OrderIndex:     filterOrderIndex[filter.ID], // Position in the LLM chain (lowest across LLMs)
 			Namespace:      filter.Namespace,
 			LlmIds:         llmIDs, // Populated from llm_filters join table
 			CreatedAt:      timestamppb.New(filter.CreatedAt),
@@ -1524,7 +1579,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	var modelPrices []models.ModelPrice
 	priceQuery := s.db
 	// ModelPrice doesn't have namespace field in AI Studio yet, so get all for now
-	if err := priceQuery.Find(&modelPrices).Error; err != nil {
+	if err := priceQuery.Order("id ASC").Find(&modelPrices).Error; err != nil {
 		return nil, fmt.Errorf("failed to get ModelPrices: %w", err)
 	}
 
@@ -1563,7 +1618,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?) AND is_active = ?", namespace, true)
 	}
 
-	if err := pluginQuery.Find(&plugins).Error; err != nil {
+	if err := pluginQuery.Order("id ASC").Find(&plugins).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Plugins: %w", err)
 	}
 
@@ -1702,7 +1757,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		routerQuery = routerQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 
-	if err := routerQuery.Find(&modelRouters).Error; err != nil {
+	if err := routerQuery.Order("id ASC").Find(&modelRouters).Error; err != nil {
 		log.Warn().Err(err).Msg("Failed to get Model Routers (Enterprise feature may not be enabled)")
 		// Don't fail - model routers are optional Enterprise feature
 	}
@@ -1779,7 +1834,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		toolQuery = toolQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 
-	if err := toolQuery.Find(&tools).Error; err != nil {
+	if err := toolQuery.Order("id ASC").Find(&tools).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Tools: %w", err)
 	}
 
@@ -1888,7 +1943,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		dsQuery = dsQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 
-	if err := dsQuery.Find(&datasources).Error; err != nil {
+	if err := dsQuery.Order("id ASC").Find(&datasources).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Datasources: %w", err)
 	}
 
@@ -1990,7 +2045,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get OAuth Clients for MCP authentication on edges
 	var oauthClients []models.OAuthClient
-	if err := s.db.Find(&oauthClients).Error; err != nil {
+	if err := s.db.Order("id ASC").Find(&oauthClients).Error; err != nil {
 		log.Warn().Err(err).Msg("Failed to get OAuth clients for edge sync")
 		// Don't fail - OAuth is optional
 	}
@@ -2016,7 +2071,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get non-expired Access Tokens for MCP authentication on edges
 	var accessTokens []models.AccessToken
-	if err := s.db.Where("expires_at > ?", time.Now()).Find(&accessTokens).Error; err != nil {
+	if err := s.db.Where("expires_at > ?", time.Now()).Order("id ASC").Find(&accessTokens).Error; err != nil {
 		log.Warn().Err(err).Msg("Failed to get access tokens for edge sync")
 		// Don't fail - OAuth is optional
 	}
@@ -2101,15 +2156,24 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 // hold has not changed, so nothing is written and no edge is marked pending. This
 // keeps snapshot regeneration (edge fetches, no-op edits, governed metadata that
 // is not gateway-visible) from churning sync status.
+//
+// A row that exists with an empty checksum was created by a push issued
+// before any snapshot (models.MarkNamespacePushed); filling it in is the
+// first computation, not a change, so edges are left alone and nothing is
+// audited.
 func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version string) error {
+	namespace = models.CanonicalNamespace(namespace)
+
 	var previous models.NamespaceSyncStatus
-	if err := previous.GetByNamespace(s.db, namespace); err == nil && previous.ExpectedChecksum == checksum {
+	previousErr := previous.GetByNamespace(s.db, namespace)
+	if previousErr == nil && previous.ExpectedChecksum == checksum {
 		log.Debug().
 			Str("namespace", namespace).
 			Str("checksum", checksum).
 			Msg("Namespace snapshot unchanged; sync status left as is")
 		return nil
 	}
+	firstFill := previousErr == nil && previous.ExpectedChecksum == ""
 
 	status := &models.NamespaceSyncStatus{
 		Namespace:        namespace,
@@ -2120,6 +2184,14 @@ func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version s
 
 	if err := status.Upsert(s.db); err != nil {
 		return fmt.Errorf("failed to upsert namespace sync status: %w", err)
+	}
+
+	if firstFill {
+		log.Debug().
+			Str("namespace", namespace).
+			Str("checksum", checksum).
+			Msg("Recorded first namespace checksum on a row created by a push; edges left as is")
+		return nil
 	}
 
 	// Log audit event for config change

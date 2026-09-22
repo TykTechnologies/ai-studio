@@ -1776,12 +1776,14 @@ func ValidateObjectMetadataForPublish(ctx context.Context, objectType, objectID,
 
 // NotificationRequest describes an in-app notification raised by a plugin.
 type NotificationRequest struct {
-	ID           string // optional dedupe key (scoped to the plugin by the server)
-	Type         string // free-form label stored on the notification
-	Title        string // required, max 255 chars
-	Content      string // markdown body, max 10000 chars
-	NotifyAdmins bool   // deliver to all admins with notifications enabled
-	UserID       uint32 // deliver to a specific user (0 = none)
+	ID           string            // optional dedupe key (scoped to the plugin by the server)
+	Type         string            // free-form label stored on the notification
+	Title        string            // required, max 255 chars
+	Content      string            // markdown body, max 10000 chars
+	NotifyAdmins bool              // deliver to all admins with notifications enabled
+	UserID       uint32            // deliver to a specific user (0 = none)
+	Link         string            // what the notification opens: same-origin path or http(s) URL (optional)
+	Links        map[string]string // per-audience links ("admin", "portal"); override Link
 }
 
 // CreateNotification raises an in-app notification for admins and/or a user.
@@ -1800,6 +1802,8 @@ func CreateNotification(ctx context.Context, n NotificationRequest) (*mgmtpb.Cre
 		Content:        n.Content,
 		NotifyAdmins:   n.NotifyAdmins,
 		UserId:         n.UserID,
+		Link:           n.Link,
+		Links:          n.Links,
 	})
 }
 

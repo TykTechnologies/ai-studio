@@ -318,7 +318,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		// Surface the vendor's own status. An unknown model is a 404 upstream;
 		// reporting it as our 500 tells the caller to retry a request that can
 		// never succeed, and hides a client error as a server one.
-		respondWithOAIError(w, last.status, "failed to generate content", last.err, false)
+		respondRelayingOAIError(w, last.status, "failed to generate content", last.err)
 		return
 	}
 	setServedHeaders(w, served)
@@ -706,14 +706,21 @@ func (p *Proxy) failStream(w http.ResponseWriter, flusher http.Flusher, framesSe
 	if framesSent == 0 {
 		w.Header().Del("Content-Type")
 		clearServedHeaders(w) // nobody served this request after all
-		respondWithOAIError(w, status, message, err, false)
+		respondRelayingOAIError(w, status, message, err)
 		return
 	}
 	detail := message
-	if err != nil {
+	errType := oaiErrorType(status)
+	if inner, ok := innerOAIError(err); ok {
+		// The inner hop already said what went wrong; relay it as it is.
+		detail = inner.Message
+		if inner.Type != "" {
+			errType = inner.Type
+		}
+	} else if err != nil {
 		detail = fmt.Sprintf("%s: %s", message, err.Error())
 	}
-	p.sendStreamError(w, flusher, detail, oaiErrorType(status))
+	p.sendStreamError(w, flusher, detail, errType)
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }

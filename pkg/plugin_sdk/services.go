@@ -341,6 +341,8 @@ func (s *studioServicesImpl) CreateNotification(ctx context.Context, n Notificat
 		Content:      n.Content,
 		NotifyAdmins: n.NotifyAdmins,
 		UserID:       n.UserID,
+		Link:         n.Link,
+		Links:        n.Links,
 	})
 	if err != nil {
 		return err

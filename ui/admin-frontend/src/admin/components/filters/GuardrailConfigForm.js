@@ -47,6 +47,25 @@ const SCOPES = [
   { value: "all_messages", label: "Every message, including assistant and tool turns" },
 ];
 
+// A connection field that names a URL is dialled by the gateway, not the
+// browser, so "localhost" in it does not mean the admin's machine.
+const isUrlField = (f) =>
+  !f.secret &&
+  (f.name === "endpoint" || /url$/i.test(f.name || "") || /^https?:\/\//i.test(f.example || ""));
+
+const URL_FIELD_HELP =
+  "Resolved from the gateway's network, not your browser: localhost means the gateway container itself.";
+
+const connectionFieldHelp = (f) => {
+  if (f.secret) {
+    return `${f.description || ""} Reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME.`.trim();
+  }
+  if (isUrlField(f)) {
+    return `${f.description || ""} ${URL_FIELD_HELP}`.trim();
+  }
+  return f.description;
+};
+
 const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {} }) => {
   const [providers, setProviders] = useState([]);
   const [loadError, setLoadError] = useState("");
@@ -190,12 +209,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                     onChange={(e) => update({ connection: { ...config.connection, [f.name]: e.target.value } })}
                     placeholder={f.example || ""}
                     error={!!(errors.connection && errors.connection[f.name])}
-                    helperText={
-                      (errors.connection && errors.connection[f.name]) ||
-                      (f.secret
-                        ? `${f.description || ""} Reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME.`.trim()
-                        : f.description)
-                    }
+                    helperText={(errors.connection && errors.connection[f.name]) || connectionFieldHelp(f)}
                     inputProps={{ "data-testid": `guardrail-connection-${f.name}` }}
                   />
                 </Grid>
@@ -332,10 +346,12 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
         {!responseFilter && (
           <Grid item xs={12} md={6}>
             <FormControl fullWidth>
-              <InputLabel id="guardrail-scope-label">Messages to inspect</InputLabel>
+              <InputLabel id="guardrail-scope-label" shrink>Messages to inspect</InputLabel>
               <Select
                 labelId="guardrail-scope-label"
                 label="Messages to inspect"
+                displayEmpty
+                notched
                 value={config.scope || ""}
                 onChange={(e) => update({ scope: e.target.value })}
               >
@@ -352,19 +368,24 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
 
         <Grid item xs={12} md={6}>
           <FormControl fullWidth>
-            <InputLabel id="guardrail-fail-mode-label">If the provider fails</InputLabel>
+            <InputLabel id="guardrail-fail-mode-label" shrink>If the provider fails</InputLabel>
             <Select
               labelId="guardrail-fail-mode-label"
               label="If the provider fails"
+              displayEmpty
+              notched
               value={config.fail_mode || ""}
               onChange={(e) => update({ fail_mode: e.target.value })}
               inputProps={{ "data-testid": "guardrail-fail-mode" }}
             >
-              <MenuItem value="">{responseFilter ? "Let it through (default for responses)" : "Block (default for requests)"}</MenuItem>
-              <MenuItem value="closed">Block</MenuItem>
-              <MenuItem value="open">Let it through</MenuItem>
+              {/* Server default: closed for request filters, open for response filters. */}
+              <MenuItem value="">{responseFilter ? "Let the response through (default)" : "Block the request (default)"}</MenuItem>
+              <MenuItem value="closed">{responseFilter ? "Block the response" : "Block the request"}</MenuItem>
+              <MenuItem value="open">{responseFilter ? "Let the response through" : "Let the request through"}</MenuItem>
             </Select>
-            <FormHelperText>A timeout or error records a compliance event either way.</FormHelperText>
+            <FormHelperText>
+              Fail closed blocks every request while the provider is unreachable. A timeout or error records a compliance event either way.
+            </FormHelperText>
           </FormControl>
         </Grid>
 

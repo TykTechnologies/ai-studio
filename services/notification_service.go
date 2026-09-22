@@ -241,6 +241,62 @@ func stripEmailFraming(content string) string {
 	return strings.TrimSpace(out)
 }
 
+// legacyAdminGreeting marks the one greeting the old email templates used
+// on every administrator notification, wherever it sits in the body.
+var legacyAdminGreeting = regexp.MustCompile(`(?m)^\s*Dear Administrator\b`)
+
+// hasEmailFraming reports whether a stored body still carries the email
+// shape that NotifyWithOptions now strips at write time: it opens with a
+// "Subject:" or greeting line, or contains a "Dear Administrator" line.
+func hasEmailFraming(content string) bool {
+	first := ""
+	for _, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		if strings.TrimSpace(line) != "" {
+			first = line
+			break
+		}
+	}
+	return emailSubjectLine.MatchString(first) || emailGreetingLine.MatchString(first) || legacyAdminGreeting.MatchString(content)
+}
+
+// BackfillLegacyBodies rewrites in-app notifications recorded before email
+// framing was stripped at write time, so the bell stops showing
+// "Subject: ... Dear Administrator ...". It pages through the table in id
+// order and matches in Go, which works the same on SQLite and Postgres, and
+// is idempotent: a rewritten body no longer matches. Returns the number of
+// rows changed.
+func (s *NotificationService) BackfillLegacyBodies() (int64, error) {
+	const pageSize = 500
+	var changed int64
+	var lastID uint
+	for {
+		var page []models.Notification
+		if err := s.db.Model(&models.Notification{}).Select("id", "content").
+			Where("id > ?", lastID).Order("id").Limit(pageSize).Find(&page).Error; err != nil {
+			return changed, fmt.Errorf("error scanning notifications: %w", err)
+		}
+		if len(page) == 0 {
+			return changed, nil
+		}
+		for _, n := range page {
+			lastID = n.ID
+			if !hasEmailFraming(n.Content) {
+				continue
+			}
+			clean := stripMarkup(stripEmailFraming(n.Content))
+			// Never blank a row: a body that is nothing but framing is left
+			// for a human rather than replaced with an empty notification.
+			if clean == "" || clean == n.Content {
+				continue
+			}
+			if err := s.db.Model(&models.Notification{}).Where("id = ?", n.ID).Update("content", clean).Error; err != nil {
+				return changed, fmt.Errorf("error rewriting notification %d: %w", n.ID, err)
+			}
+			changed++
+		}
+	}
+}
+
 // NewNotificationService creates a new notification service
 func NewNotificationService(db *gorm.DB, fromEmail, smtpHost string, smtpPort int, smtpUser, smtpPass string, mailer notifications.Mailer) *NotificationService {
 	ns := &NotificationService{

@@ -168,6 +168,33 @@ func TestComputeSnapshotChecksum(t *testing.T) {
 		assert.Equal(t, checksum1, checksum2, "Nested timestamps should be excluded from checksum")
 	})
 
+	t.Run("access tokens are excluded from checksum", func(t *testing.T) {
+		// OAuth access tokens live 10-15 minutes and the edge enforces expiry
+		// itself, so a token expiring or being issued must not flip edges to
+		// pending.
+		snapshot1 := &pb.ConfigurationSnapshot{
+			Llms:         []*pb.LLMConfig{{Id: 1, Name: "test-llm", Vendor: "openai"}},
+			AccessTokens: []*pb.AccessTokenConfig{{Id: 1, ClientId: "c1"}, {Id: 2, ClientId: "c2"}},
+		}
+		snapshot2 := &pb.ConfigurationSnapshot{
+			Llms:         []*pb.LLMConfig{{Id: 1, Name: "test-llm", Vendor: "openai"}},
+			AccessTokens: []*pb.AccessTokenConfig{{Id: 2, ClientId: "c2"}},
+		}
+		snapshot3 := &pb.ConfigurationSnapshot{
+			Llms: []*pb.LLMConfig{{Id: 1, Name: "test-llm", Vendor: "openai"}},
+		}
+
+		checksum1, err := ComputeSnapshotChecksum(snapshot1)
+		require.NoError(t, err)
+		checksum2, err := ComputeSnapshotChecksum(snapshot2)
+		require.NoError(t, err)
+		checksum3, err := ComputeSnapshotChecksum(snapshot3)
+		require.NoError(t, err)
+
+		assert.Equal(t, checksum1, checksum2, "an expired token must not change the checksum")
+		assert.Equal(t, checksum1, checksum3, "the token set must not be part of the checksum")
+	})
+
 	t.Run("apps are excluded entirely from checksum for pull-on-miss sync", func(t *testing.T) {
 		// Apps are excluded from checksum because they can be synced via pull-on-miss
 		// which is out-of-band from the normal snapshot sync mechanism

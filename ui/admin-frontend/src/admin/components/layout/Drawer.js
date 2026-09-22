@@ -227,7 +227,7 @@ const Drawer = () => {
               { id: 'audit', text: 'Audit trail', path: '/admin/audit', permission: P.AUDIT_READ },
               { id: 'metadata-schemas', text: 'Metadata schemas', path: '/admin/metadata/schemas', permission: P.METADATA_READ },
               { id: 'metadata-vocabularies', text: 'Metadata vocabularies', path: '/admin/metadata/vocabularies', permission: P.METADATA_READ },
-              { id: 'metadata-compliance', text: 'Metadata coverage', path: '/admin/metadata/compliance', permission: P.METADATA_READ },
+              { id: 'metadata-compliance', text: 'Metadata coverage', path: '/admin/metadata/coverage', permission: P.METADATA_READ },
               ...(features.feature_webhooks
                 ? [{ id: 'webhooks', text: 'Webhooks', path: '/admin/webhooks', permission: P.WEBHOOKS_READ }]
                 : []),

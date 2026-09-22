@@ -28,6 +28,8 @@ import {
   PrimaryButton,
   SecondaryLinkButton,
 } from "../../styles/sharedStyles";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
 
 const ModelRouterDetails = () => {
   const { id } = useParams();
@@ -122,19 +124,25 @@ const ModelRouterDetails = () => {
           />
         </Box>
         <Box sx={{ display: "flex", gap: 2 }}>
-          <PrimaryButton
-            variant="outlined"
-            onClick={handleToggleActive}
-          >
-            {attributes.active ? "Deactivate" : "Activate"}
-          </PrimaryButton>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/model-routers/edit/${id}`)}
-          >
-            Edit
-          </PrimaryButton>
+          {/* The toggle is publish-gated (PATCH /model-routers/:id/toggle);
+              the edit form is write-gated, and publish never implies write. */}
+          <Can permission={P.MODEL_ROUTERS_PUBLISH}>
+            <PrimaryButton
+              variant="outlined"
+              onClick={handleToggleActive}
+            >
+              {attributes.active ? "Deactivate" : "Activate"}
+            </PrimaryButton>
+          </Can>
+          <Can permission={P.MODEL_ROUTERS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/model-routers/edit/${id}`)}
+            >
+              Edit
+            </PrimaryButton>
+          </Can>
         </Box>
       </TitleBox>
 

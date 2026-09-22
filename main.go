@@ -249,6 +249,17 @@ func main() {
 		appConf.SMTPPass,
 		mailer,
 	)
+	// Rows recorded before email framing was stripped at write time still
+	// read "Subject: ... Dear Administrator ..." in the bell. Rewrite them
+	// once, off the startup path; a second run finds nothing to change.
+	go func() {
+		changed, err := notificationService.BackfillLegacyBodies()
+		if err != nil {
+			logger.Warnf("Notification body backfill stopped after %d rows: %v", changed, err)
+		} else if changed > 0 {
+			logger.Infof("Rewrote %d legacy notification bodies", changed)
+		}
+	}()
 
 	// Initialize auth config and service
 	config := &auth.Config{

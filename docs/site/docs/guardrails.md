@@ -118,6 +118,8 @@ and expects:
 
 Self-hosted named-entity PII detection. Detectors are Presidio entity types (`PERSON`, `EMAIL_ADDRESS`, `CREDIT_CARD`, `US_SSN`, `IBAN_CODE`, ...) with the 0..1 recogniser score as threshold (default 0.5). Connection: `analyzer_url` (required), `anonymizer_url` (optional: when set, the anonymizer produces the redacted text; otherwise redaction is applied from the analyzer's spans), `language` (default `en`).
 
+Presidio's stock `PHONE_NUMBER` recogniser is tuned for North American formats and misses some international spellings (a UK mobile written `+44 7700 900123`, for example). Add a custom recogniser on the Presidio side, or pair it with the built-in `pii` provider's `phone_international` detector, when international numbers matter.
+
 ### Lakera Guard {#lakera}
 
 Lakera Guard v2. Detectors: `prompt_attack`, `pii` (or a subtype such as `pii/email`), `moderated_content` (or a subtype), `unknown_links`, `custom`. Which of these actually run is decided by the policy of the Lakera project. Connection: `api_key` (SaaS), `endpoint` (an EU or Asia host, or a self-hosted Guard, which needs no key), `project_id`. PII findings carry spans, so `redact` is available for them.

@@ -1437,6 +1437,28 @@ const (
 	maxNotificationContentLen = 10000
 )
 
+// pluginNotificationLink picks the first usable link among the candidates.
+// A usable link is a same-origin path (a single leading "/", no scheme or
+// whitespace) or an http(s) URL; anything else, such as a javascript: or
+// protocol-relative target, is dropped so a plugin cannot turn the bell
+// into a redirect.
+func pluginNotificationLink(candidates ...string) string {
+	for _, c := range candidates {
+		c = strings.TrimSpace(c)
+		if c == "" || strings.ContainsAny(c, " \t\r\n") {
+			continue
+		}
+		lower := strings.ToLower(c)
+		if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+			return c
+		}
+		if strings.HasPrefix(c, "/") && !strings.HasPrefix(c, "//") && !strings.Contains(c, "://") {
+			return c
+		}
+	}
+	return ""
+}
+
 // CreateNotification lets a plugin raise an in-app notification for admins
 // and/or a specific user. Requires the notifications.write scope. The
 // notification ID is scoped to the calling plugin so plugins cannot
@@ -1468,11 +1490,6 @@ func (s *AIStudioManagementServer) CreateNotification(ctx context.Context, req *
 		return nil, status.Errorf(codes.InvalidArgument, "user_id out of range")
 	}
 
-	flags := uint(req.UserId)
-	if req.NotifyAdmins {
-		flags |= models.NotifyAdmins
-	}
-
 	dedupeKey := strings.TrimSpace(req.NotificationId)
 	if dedupeKey == "" {
 		dedupeKey = uuid.NewString()
@@ -1492,9 +1509,25 @@ func (s *AIStudioManagementServer) CreateNotification(ctx context.Context, req *
 		return nil, status.Errorf(codes.InvalidArgument, "title must contain text, not only markup")
 	}
 
-	if err := s.service.NotificationService.NotifyDirect(notificationID, notifType, title, content, flags); err != nil {
-		log.Warn().Err(err).Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Msg("Plugin notification failed")
-		return &pb.CreateNotificationResponse{Success: false, Message: err.Error()}, nil
+	// Each audience gets its own link: the admin fan-out opens the admin
+	// page, the named user their portal page. The two deliveries carry
+	// distinct dedupe suffixes (_admin_<id> / _owner), so splitting them is
+	// safe; a single call would force one link on both.
+	adminLink := pluginNotificationLink(req.Links["admin"], req.Link, req.Links["portal"])
+	userLink := pluginNotificationLink(req.Links["portal"], req.Link, req.Links["admin"])
+	if req.NotifyAdmins {
+		opts := services.NotifyOptions{Type: notifType, Link: adminLink}
+		if err := s.service.NotificationService.NotifyWithOptions(notificationID, title, content, models.NotifyAdmins, opts); err != nil {
+			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Msg("Plugin notification failed")
+			return &pb.CreateNotificationResponse{Success: false, Message: err.Error()}, nil
+		}
+	}
+	if req.UserId != 0 {
+		opts := services.NotifyOptions{Type: notifType, Link: userLink}
+		if err := s.service.NotificationService.NotifyWithOptions(notificationID, title, content, uint(req.UserId), opts); err != nil {
+			log.Warn().Err(err).Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Msg("Plugin notification failed")
+			return &pb.CreateNotificationResponse{Success: false, Message: err.Error()}, nil
+		}
 	}
 
 	log.Debug().Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Bool("admins", req.NotifyAdmins).Uint32("user_id", req.UserId).Msg("Plugin notification created")

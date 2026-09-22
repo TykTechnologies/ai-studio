@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/csrf"
 )
 
 // devCSRFTrustedOrigins builds the DEVMODE-only CSRF trusted-origin list.
@@ -78,6 +79,18 @@ func csrfGuard(csrfMiddleware func(http.Handler) http.Handler) gin.HandlerFunc {
 			return
 		}
 
+		// gorilla assumes HTTPS unless told otherwise: with no Origin header it
+		// then demands a Referer, and it compares an Origin against an https
+		// URL, so a same-host "http://" Origin fails. Both are wrong on plain
+		// HTTP (dev, tests, a stack with no TLS in front), where browsers may
+		// legitimately send neither header. Mark the request plaintext when
+		// nothing says it was HTTPS to the browser: no TLS on the socket, no
+		// X-Forwarded-Proto: https from a TLS-terminating proxy, and no https
+		// Origin (a proxy that terminates TLS without setting the header).
+		if c.Request.TLS == nil && !forwardedHTTPS(c.Request) && !strings.HasPrefix(strings.ToLower(c.GetHeader("Origin")), "https://") {
+			c.Request = csrf.PlaintextHTTPRequest(c.Request)
+		}
+
 		passed := false
 		csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			passed = true
@@ -91,4 +104,12 @@ func csrfGuard(csrfMiddleware func(http.Handler) http.Handler) gin.HandlerFunc {
 			c.Abort()
 		}
 	}
+}
+
+// forwardedHTTPS reports whether a proxy in front of us terminated TLS: the
+// first X-Forwarded-Proto value (the header may list one hop per entry) is
+// "https", case-insensitively.
+func forwardedHTTPS(r *http.Request) bool {
+	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
+	return strings.EqualFold(strings.TrimSpace(proto), "https")
 }

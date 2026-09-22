@@ -240,6 +240,7 @@ type ConfigurationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EdgeNamespace string                 `protobuf:"bytes,1,opt,name=edge_namespace,json=edgeNamespace,proto3" json:"edge_namespace,omitempty"` // Namespace to filter for (empty = global only)
 	LastSyncTime  *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=last_sync_time,json=lastSyncTime,proto3" json:"last_sync_time,omitempty"`  // Optional: only get changes since this time
+	EdgeId        string                 `protobuf:"bytes,3,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`                      // Requesting edge (unary GetFullConfiguration); lets control mark it in sync
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -286,6 +287,13 @@ func (x *ConfigurationRequest) GetLastSyncTime() *timestamppb.Timestamp {
 		return x.LastSyncTime
 	}
 	return nil
+}
+
+func (x *ConfigurationRequest) GetEdgeId() string {
+	if x != nil {
+		return x.EdgeId
+	}
+	return ""
 }
 
 // EdgeMessage is sent from edge to control
@@ -2975,10 +2983,11 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12J\n" +
-	"\x0einitial_config\x18\x04 \x01(\v2#.microgateway.ConfigurationSnapshotR\rinitialConfig\"\x7f\n" +
+	"\x0einitial_config\x18\x04 \x01(\v2#.microgateway.ConfigurationSnapshotR\rinitialConfig\"\x98\x01\n" +
 	"\x14ConfigurationRequest\x12%\n" +
 	"\x0eedge_namespace\x18\x01 \x01(\tR\redgeNamespace\x12@\n" +
-	"\x0elast_sync_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSyncTime\"\xcd\x03\n" +
+	"\x0elast_sync_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSyncTime\x12\x17\n" +
+	"\aedge_id\x18\x03 \x01(\tR\x06edgeId\"\xcd\x03\n" +
 	"\vEdgeMessage\x12K\n" +
 	"\fregistration\x18\x01 \x01(\v2%.microgateway.EdgeRegistrationRequestH\x00R\fregistration\x12>\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x1e.microgateway.HeartbeatRequestH\x00R\theartbeat\x12K\n" +

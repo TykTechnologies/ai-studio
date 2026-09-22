@@ -148,6 +148,34 @@ describe("LLMForm filters picker and commit semantics", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/admin/llms", expect.anything());
   });
 
+  it("moves a filter up the chain and submits the new order", async () => {
+    renderForm();
+    await screen.findByDisplayValue("Primary");
+    await waitFor(() => expect(filterItems()).toEqual(["PII"]));
+    // A single filter has nothing to reorder.
+    expect(screen.queryByTestId("llm-filter-order")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.click(within(filterPicker()).getByTestId("relationship-picker-add"));
+    expect(filterItems()).toEqual(["PII", "Redact"]);
+    expect(screen.getByText(/Filters run top to bottom; the first block wins/)).toBeInTheDocument();
+
+    const rows = () => screen.getAllByTestId("llm-filter-order-item").map((el) => el.textContent);
+    expect(rows()).toEqual(["1.PII", "2.Redact"]);
+    expect(screen.getByRole("button", { name: "move filter 1 up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "move filter 2 down" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "move filter 2 up" }));
+    expect(rows()).toEqual(["1.Redact", "2.PII"]);
+    expect(filterItems()).toEqual(["Redact", "PII"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Update LLM provider" }));
+
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const [, body] = apiClient.patch.mock.calls[0];
+    expect(body.data.attributes.filters).toEqual([4, 3]);
+  });
+
   it("has a Cancel that returns to the list when clean, and registers picker changes with the guard", async () => {
     renderForm({ withGuard: true });
     await screen.findByDisplayValue("Primary");

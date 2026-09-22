@@ -64,19 +64,32 @@ type BindingFilter struct {
 // RoleSummary is the compact role shape returned alongside users, groups and
 // the caller's own identity. Via and GroupID say how a user came to hold it.
 type RoleSummary struct {
-	ID       uint   `json:"id"`
-	Name     string `json:"name"`
-	Slug     string `json:"slug"`
-	IsSystem bool   `json:"is_system"`
-	Via      string `json:"via,omitempty"`      // "direct" | "group"
-	GroupID  uint   `json:"group_id,omitempty"` // when Via == "group"
+	ID        uint   `json:"id"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	IsSystem  bool   `json:"is_system"`
+	Via       string `json:"via,omitempty"`        // "direct" | "group"
+	GroupID   uint   `json:"group_id,omitempty"`   // when Via == "group"
+	GroupName string `json:"group_name,omitempty"` // when Via == "group"
 }
 
-// Effective is a user's resolved access: the permission set plus the roles
-// that produced it.
+// PermissionSource says which binding granted a permission: the role, whether
+// the user holds it directly or through a team, and that team's name.
+type PermissionSource struct {
+	RoleID    uint   `json:"role_id"`
+	RoleName  string `json:"role_name"`
+	Via       string `json:"via"`                  // "direct" | "group"
+	GroupID   uint   `json:"group_id,omitempty"`   // when Via == "group"
+	GroupName string `json:"group_name,omitempty"` // when Via == "group"
+}
+
+// Effective is a user's resolved access: the permission set, the roles that
+// produced it, and per permission (as listed by Permissions.List()) the
+// bindings that granted it.
 type Effective struct {
 	Permissions authz.Set
 	Roles       []RoleSummary
+	Sources     map[string][]PermissionSource
 }
 
 // RoleCounts is how many users and groups hold a role directly.

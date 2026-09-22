@@ -60,7 +60,7 @@ describe('GovernedMetadataSummary', () => {
       values: { owner: 42, tier: 'high', regs: ['gdpr', 'hipaa'], consumers: ['billing'], approved: false, notes: 'hello' },
     });
     expect(await screen.findByText('Governance Metadata')).toBeInTheDocument();
-    expect(screen.getByText('warnings')).toBeInTheDocument();
+    expect(screen.getByText('Warnings')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
     expect(screen.getByText('GDPR')).toBeInTheDocument();
@@ -81,6 +81,23 @@ describe('GovernedMetadataSummary', () => {
     const { container } = render(<MetadataStatusChip status="" />);
     expect(container).toBeEmptyDOMElement();
     render(<MetadataStatusChip status="invalid" />);
-    expect(screen.getByText('invalid').closest('.MuiChip-root')).toHaveClass('MuiChip-colorError');
+    expect(screen.getByText('Invalid').closest('.MuiChip-root')).toHaveClass('MuiChip-colorError');
+  });
+
+  // The chip used to print the raw status ("valid", "missing") and had no
+  // colour for missing/expired; it now shares the labels and colours of the
+  // Metadata coverage page.
+  it('status chip uses the shared labels and colours for every status', () => {
+    render(
+      <>
+        <MetadataStatusChip status="valid" />
+        <MetadataStatusChip status="missing" />
+        <MetadataStatusChip status="expired" />
+      </>
+    );
+    expect(screen.getByText('Valid').closest('.MuiChip-root')).toHaveClass('MuiChip-colorSuccess');
+    expect(screen.getByText('Missing').closest('.MuiChip-root')).toHaveClass('MuiChip-colorError');
+    expect(screen.getByText('Expired').closest('.MuiChip-root')).toHaveClass('MuiChip-colorWarning');
+    expect(screen.queryByText('valid')).not.toBeInTheDocument();
   });
 });

@@ -49,3 +49,33 @@ func TestSendAnalyticsPulse_FailoverMarkerPersisted(t *testing.T) {
 	assert.Equal(t, uint(1), *logs[1].FailoverFromLLMID)
 	assert.Equal(t, 1, logs[1].FailoverAttempt)
 }
+
+// A rung index without a from-id (an edge whose marker lost the primary id,
+// or a future producer that only counts attempts) must still be recorded as
+// an attempt: the guard used to copy failover_attempt only inside the
+// from-id branch, so such a row landed as attempt 0 and was counted as a
+// primary request.
+func TestSendAnalyticsPulse_FailoverAttemptWithoutFromID(t *testing.T) {
+	db := setupPulseTestDB(t)
+	server := setupControlServer(t, db)
+
+	now := time.Now()
+	pulse := &pb.AnalyticsPulse{
+		EdgeId: "edge-1", EdgeNamespace: "test", SequenceNumber: 1, TotalRecords: 1,
+		AnalyticsEvents: []*pb.AnalyticsEvent{
+			{RequestId: "r1", AppId: 1, LlmId: 2, ModelName: "gpt-4o", Vendor: "openai", StatusCode: 200,
+				Timestamp: timestamppb.New(now), FailoverAttempt: 2},
+		},
+	}
+
+	resp, err := server.SendAnalyticsPulse(context.Background(), pulse)
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	time.Sleep(200 * time.Millisecond) // async analytics
+
+	var logs []models.ProxyLog
+	require.NoError(t, db.Find(&logs).Error)
+	require.Len(t, logs, 1)
+	assert.Nil(t, logs[0].FailoverFromLLMID, "no from-id was sent, none is invented")
+	assert.Equal(t, 2, logs[0].FailoverAttempt)
+}

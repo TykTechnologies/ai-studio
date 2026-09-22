@@ -29,7 +29,7 @@ Recording happens after the handler completes, off the request path: records are
 | `req_id` | Request identifier. An inbound `X-Request-ID` header is honoured; otherwise one is minted. It is always echoed back on the response so a client can quote it. |
 | `timestamp` | When the request started (UTC). |
 | `ip` | Client IP (respects `X-Forwarded-For` from trusted proxies). |
-| `user`, `user_id`, `user_name` | The authenticated user. For a failed login the attempted email is recorded with `user_id` 0. |
+| `user`, `user_id`, `user_name` | The authenticated user. For a failed login the attempted email is recorded with `user_id` 0. It is the string the visitor typed (bounded to 255 characters), not a resolved account, so typos and probes for non-existent addresses appear verbatim; treat it as untrusted input in privacy reviews and exports. |
 | `user_agent` | The client's user agent. |
 | `action` | Human-readable action, e.g. `Update LLM`, `Delete User`, `Add User To Group`, `Roll User API Key`, `Login Failed`, `SSO Login`. |
 | `method`, `url`, `route` | HTTP method, the full request URI, and the matched route template (`/api/v1/llms/:id`). |

@@ -7,7 +7,7 @@ The Filters feature allows administrators to define and apply custom logic to in
 **Key Objectives:**
 
 *   **Policy Enforcement:** Implement custom rules based on request content (payload). Examples include data loss prevention (DLP), content moderation, prompt injection detection, or enforcing specific formatting.
-*   **Request Blocking:** Prevent non-compliant requests from reaching the LLM vendor, returning an error (HTTP 403 Forbidden) to the client.
+*   **Request Blocking:** Prevent non-compliant requests from reaching the LLM vendor, returning an error (HTTP 400 Bad Request with a `Policy error: <filter> - <message>` reason) to the client. Tool filters on `/tools/` block with HTTP 403 instead: the two codes distinguish a request the caller can fix (an LLM prompt the policy rejected) from an action the caller is not permitted to take.
 *   **Flexibility:** Allow administrators to write custom logic using a scripting language (Tengo) to address diverse policy needs.
 *   **Granular Application:** Apply filters globally (via proxy configuration, though less explicit in current findings) or specifically to individual LLMs or Chats.
 
@@ -15,7 +15,7 @@ The Filters feature allows administrators to define and apply custom logic to in
 
 *   **Administrator:** Creates, manages, and assigns Filters via API/UI. Defines the script logic for policy enforcement.
 *   **AI Developer/App Owner:** Associates existing Filters with their Chats or uses LLMs that have Filters applied.
-*   **End User (Chat):** Interacts indirectly; may encounter a "Policy error" (HTTP 403) if their request violates a Filter's rules.
+*   **End User (Chat):** Interacts indirectly; may encounter a "Policy error" (HTTP 400) if their request violates a Filter's rules.
 
 **2. Architecture & Data Flow**
 
@@ -60,7 +60,7 @@ flowchart LR
         D -- "10: Execute Script (Tengo)" --> ScriptExec;
         ScriptExec -- "11: Get 'result' variable" --> D;
         D -- "12a: result == true" --> E{Forward Request};
-        D -- "12b: result == false" --> F["Return HTTP 403 Policy Error"];
+        D -- "12b: result == false" --> F["Return HTTP 400 Policy Error"];
         E --> G["LLM Vendor API"];
         G --> B;
         B --> H["Client Response"];
@@ -83,7 +83,7 @@ flowchart LR
 9.  The Tengo script is executed.
 10. The `Scripting Engine` retrieves the value of the `result` variable set by the script.
 11. If `result` is `true`, the filter passes, and the `Proxy` proceeds (either to the next filter or to forwarding the request).
-12. If `result` is `false` (or not set), the filter fails. The `Proxy` immediately stops processing and returns an HTTP 403 Forbidden error ("Policy error: {Filter Name}") to the client.
+12. If `result` is `false` (or not set), the filter fails. The `Proxy` immediately stops processing and returns an HTTP 400 Bad Request error ("Policy error: {Filter Name}") to the client. The block is written to the proxy log as a 400 with a `policy_violation` body (`filter_blocked` for a response filter); the Compliance overview recognises those bodies, so filter and guardrail blocks count as policy violations alongside 403s.
 13. If all filters pass, the `Proxy` forwards the request to the upstream LLM Vendor.
 
 **3. Implementation Details**
@@ -150,7 +150,8 @@ itself rather than the model call.
     On the input side only `parameters`, `payload` and `headers` are taken back:
     a filter cannot change `operation_id` and so cannot redirect the call to a
     different operation.
-*   **Blocking:** the caller receives a generic refusal - HTTP 403
+*   **Blocking:** the caller receives a generic refusal - HTTP 403 (a tool
+    call block is a permission refusal; an LLM request block is HTTP 400) -
     `blocked by policy` on REST, an MCP tool error with the same text on MCP.
     The filter's own message is written to the logs and to the compliance
     event, never to the caller, and the input and output refusals are identical
@@ -180,7 +181,7 @@ Implemented in `scripting/tool_filters.go`, called from `proxy/proxy.go`
 
 *   **Creating a DLP Filter:** Admin creates a Filter via `POST /filters` with a Tengo script that searches the `payload` for keywords or patterns (e.g., credit card numbers) and sets `result = false` if found.
 *   **Applying Filter to LLM:** Admin updates an LLM via `PATCH /llms/{id}`, including the DLP Filter's ID in the list of associated filters.
-*   **Blocking Request:** A user sends a request containing sensitive data through the `Proxy` targeting the filtered LLM. The `Proxy` executes the DLP Filter script. The script finds the pattern, sets `result = false`. The `Proxy` returns HTTP 403.
+*   **Blocking Request:** A user sends a request containing sensitive data through the `Proxy` targeting the filtered LLM. The `Proxy` executes the DLP Filter script. The script finds the pattern, sets `result = false`. The `Proxy` returns HTTP 400 (`Policy error: <filter> - <message>`); the same block on a tool call under `/tools/` returns HTTP 403.
 *   **Allowing Request:** A user sends a compliant request. The DLP Filter script runs, doesn't find patterns, sets `result = true`. The `Proxy` forwards the request to the LLM vendor.
 *   **Using LLM Filter:** A script uses `tyk.llm()` to call a moderation model to check the `payload` content, setting `result` based on the moderation model's response.
 
@@ -191,7 +192,7 @@ Implemented in `scripting/tool_filters.go`, called from `proxy/proxy.go`
 *   **Error Reporting:** Clearer error messages from failed scripts back to the client or admin logs would be helpful.
 *   **Script Complexity:** Managing complex logic in Tengo scripts might become difficult. Versioning or testing frameworks for scripts could be beneficial.
 *   **Compliance Event Reporting:** Implemented in `models/compliance_event.go` and `scripting/compliance_recorder.go`. Scripts can emit governance events (PII redaction, policy violations, etc.) that are stored for compliance auditing. Events flow through the analytics pipeline and are queryable via `GET /compliance/events`. Prometheus metrics are tracked via `aistudio_compliance_events_total`.
-*   **Filter Ordering:** If multiple filters are applied, their execution order might matter but isn't explicitly defined in the findings.
+*   **Filter Ordering:** The order an admin arranges filters on an LLM is persisted as `llm_filters.order_index` (join model `models.LLMFilter`, written by slice position in `LLM.Create`/`LLM.Update`; every read re-sorts through `models.OrderLLMFilters` because GORM's many2many preload returns id order). Filters run top to bottom and the first block wins. The configuration snapshot sends `FilterIds` in that order and `FilterConfig.OrderIndex` as the chain position; the edge stores the position in its own `llm_filters.order_index` and re-sorts on read (`database.OrderLLMFilters`). Rows from installs that predate the column carry 0 and fall back to id order. Tool and chat filter joins (`tool_filters`, `chat_filters`) have no persisted order yet.
 *   **Request/Response Filtering:** Implemented in both directions. LLM request filtering runs in `screenProxyRequestByVendor`; LLM response filtering in `proxy/response_filter_utils.go` (block-only - payload edits are ignored there). Tool filtering runs in both directions with payload rewriting supported, see section 3a.
 *   **Middleware Scripting:** The `scripting` package also contains `RunMiddleware`, suggesting scripts might also be usable for modifying requests/responses, not just filtering/blocking. This wasn't the focus but is related.
 

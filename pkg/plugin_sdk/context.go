@@ -500,4 +500,10 @@ type Notification struct {
 	NotifyAdmins bool
 	// UserID delivers the notification to a specific user (0 = none).
 	UserID uint32
+	// Link is what the notification opens when clicked: a same-origin path
+	// ("/admin/...", "/portal/...") or an http(s) URL. Optional.
+	Link string
+	// Links gives each audience its own target and overrides Link: "admin"
+	// for the admin fan-out, "portal" for the user named by UserID.
+	Links map[string]string
 }

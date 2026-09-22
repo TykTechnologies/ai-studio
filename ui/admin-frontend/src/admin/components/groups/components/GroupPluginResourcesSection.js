@@ -16,6 +16,20 @@ import RelationshipPicker from "../../common/relationship-picker";
  * (PUT /groups/:id/plugin-resources). It is only reported once the resource
  * types have loaded, so a save never clears assignments the user never saw.
  */
+export const APP_GRANTED_HELPER_TEXT =
+  "Members will only be able to select these resources when creating apps.";
+export const PLUGIN_GRANTED_HELPER_TEXT =
+  "Members can see these resources in the portal. They are not selectable when creating apps; access is granted by the plugin itself.";
+
+/**
+ * What a team assignment means for one resource type. Types that grant
+ * access through apps (the default, and the legacy rows without the flag)
+ * become pickable in the app form; the others are visible in the portal and
+ * the plugin decides access on its own.
+ */
+export const resourceTypeHelperText = (rt) =>
+  rt?.access_granted_via_app === false ? PLUGIN_GRANTED_HELPER_TEXT : APP_GRANTED_HELPER_TEXT;
+
 const GroupPluginResourcesSection = ({ groupId, onChange }) => {
   const [resourceTypes, setResourceTypes] = useState([]);
   const [instances, setInstances] = useState({}); // { "pluginId:slug": [...] }
@@ -99,8 +113,7 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
         Plugin Resources
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Assign plugin resource instances to this team. Members will only be
-        able to select these resources when creating apps.
+        Assign plugin resource instances to this team.
       </Typography>
 
       {resourceTypes.map((rt) => {
@@ -118,6 +131,7 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
             <RelationshipPicker
               label={rt.name}
               itemLabel={rt.name}
+              helperText={resourceTypeHelperText(rt)}
               value={selectedInstances}
               options={typeInstances}
               onChange={(items) => {

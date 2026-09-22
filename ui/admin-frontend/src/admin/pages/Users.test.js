@@ -15,8 +15,11 @@ jest.mock("../utils/apiClient", () => ({
 jest.mock("../components/rbac/Can", () => ({ children }) => (
   <>{typeof children === "function" ? children(true) : children}</>
 ));
+// Toggled per describe: the list swaps its Account type column for Roles
+// when fine-grained RBAC is on.
+let mockRbacEnabled = false;
 jest.mock("../context/PermissionsContext", () => ({
-  usePermissions: () => ({ rbacEnabled: false, can: () => true, canAny: () => true, canAll: () => true }),
+  usePermissions: () => ({ rbacEnabled: mockRbacEnabled, can: () => true, canAny: () => true, canAll: () => true }),
 }));
 jest.mock("../hooks/useSystemFeatures", () => ({
   __esModule: true,
@@ -63,5 +66,64 @@ describe("Users list account type column (RBAC off)", () => {
     expect(within(screen.getByText("Dana").closest("tr")).getByText("Developer")).toBeInTheDocument();
     // A user the API returned without a role falls back to the lowest tier.
     expect(within(screen.getByText("Chatty").closest("tr")).getByText("Chat user")).toBeInTheDocument();
+  });
+});
+
+// With RBAC on, the Roles column shows effective roles: a role a user holds
+// only through a team is badged with the team it comes from.
+describe("Users list Roles column (RBAC on)", () => {
+  const rbacUsers = [
+    {
+      id: "5",
+      attributes: {
+        name: "Teammate",
+        email: "teammate@example.com",
+        is_admin: false,
+        email_verified: true,
+        auth_source: "local",
+        roles: [{ id: 3, name: "Editor", slug: "editor", is_system: true, via: "group", group_id: 4, group_name: "Platform" }],
+      },
+    },
+    {
+      id: "6",
+      attributes: {
+        name: "Direct",
+        email: "direct@example.com",
+        is_admin: false,
+        email_verified: true,
+        auth_source: "local",
+        roles: [{ id: 2, name: "Viewer", slug: "viewer", is_system: true, via: "direct" }],
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRbacEnabled = true;
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/users") return Promise.resolve({ data: { data: rbacUsers }, headers: { "x-total-count": "2", "x-total-pages": "1" } });
+      return Promise.resolve({ data: { data: [] }, headers: {} });
+    });
+  });
+
+  afterEach(() => {
+    mockRbacEnabled = false;
+  });
+
+  it("badges a team-inherited role with the team it comes from", async () => {
+    renderPage();
+    const row = (await screen.findByText("Teammate")).closest("tr");
+    expect(screen.getByRole("columnheader", { name: /Roles/ })).toBeInTheDocument();
+    const badge = within(row).getByTestId("role-badge-editor");
+    expect(badge).toHaveTextContent("Editor");
+    expect(badge).toHaveTextContent("via team Platform");
+    expect(badge).toHaveAttribute("data-via", "group");
+    expect(badge.className).toMatch(/MuiChip-outlined/);
+
+    const directRow = screen.getByText("Direct").closest("tr");
+    const directBadge = within(directRow).getByTestId("role-badge-viewer");
+    expect(directBadge).toHaveTextContent("Viewer");
+    expect(directBadge).not.toHaveTextContent("via team");
+    expect(directBadge.className).toMatch(/MuiChip-filled/);
   });
 });

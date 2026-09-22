@@ -185,6 +185,69 @@ func TestGovernedMetadataHandlers_HookRejection(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 }
 
+// The update path has the same contract as create: when the object saved but
+// a plugin hook refused its metadata, the handler answers 200 with
+// meta.governed_metadata_error rather than failing the request, and the
+// object's own change is kept. The three admin forms rely on this to show a
+// warning instead of "updated successfully".
+func TestGovernedMetadataHandlers_HookRejectionOnUpdate(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "test-key")
+	r, api, db := setupGovernedMetadataRouter(t)
+	v1 := r.Group("/api/v1")
+	v1.PATCH("/llms/:id", api.updateLLM)
+	v1.PATCH("/tools/:id", api.updateTool)
+	v1.PATCH("/datasources/:id", api.updateDatasource)
+
+	api.service.GovernedMetadataService = governed_metadata.NewService(db, governed_metadata.Deps{Hooks: &rejectingHooks{reason: "policy says no"}})
+	require.NoError(t, api.governedMetadata().CreateSchema(&models.MetadataSchema{Name: "Core", Slug: "core", AppliesTo: []string{"*"}, Active: true,
+		Fields: []models.MetadataFieldDef{{Key: "owner", Type: "string"}}}))
+
+	llm := &models.LLM{Name: "old-llm", Vendor: "openai", APIEndpoint: "https://api.openai.com/v1", DefaultModel: "gpt-4", PrivacyScore: 10}
+	require.NoError(t, db.Create(llm).Error)
+	tool := &models.Tool{Name: "old-tool", Description: "d", ToolType: "REST", OASSpec: `{"openapi": "3.0.0"}`, PrivacyScore: 10}
+	require.NoError(t, db.Create(tool).Error)
+	ds := &models.Datasource{Name: "old-ds", ShortDescription: "d", DBSourceType: "qdrant", EmbedVendor: "openai", EmbedModel: "m", PrivacyScore: 10}
+	require.NoError(t, db.Create(ds).Error)
+
+	governed := map[string]interface{}{"owner": "me"}
+	cases := []struct {
+		name string
+		path string
+		body map[string]interface{}
+		load func() string
+	}{
+		{"llm", fmt.Sprintf("/api/v1/llms/%d", llm.ID),
+			map[string]interface{}{"data": map[string]interface{}{"type": "LLM", "attributes": map[string]interface{}{
+				"name": "new-llm", "governed_metadata": governed}}},
+			func() string { var m models.LLM; require.NoError(t, db.First(&m, llm.ID).Error); return m.Name }},
+		{"tool", fmt.Sprintf("/api/v1/tools/%d", tool.ID),
+			map[string]interface{}{"data": map[string]interface{}{"type": "tool", "attributes": map[string]interface{}{
+				"name": "new-tool", "tool_type": "REST", "description": "d", "privacy_score": 10,
+				"oas_spec": testOASSpec(`{"openapi": "3.0.0"}`), "governed_metadata": governed}}},
+			func() string { var m models.Tool; require.NoError(t, db.First(&m, tool.ID).Error); return m.Name }},
+		{"datasource", fmt.Sprintf("/api/v1/datasources/%d", ds.ID),
+			map[string]interface{}{"data": map[string]interface{}{"type": "datasource", "attributes": map[string]interface{}{
+				"name": "new-ds", "short_description": "d", "db_source_type": "qdrant", "embed_vendor": "openai", "embed_model": "m",
+				"privacy_score": 10, "governed_metadata": governed}}},
+			func() string { var m models.Datasource; require.NoError(t, db.First(&m, ds.ID).Error); return m.Name }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := apitest.PerformRequest(r, "PATCH", tc.path, tc.body)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			resp := parseObjectResponse(t, w.Body.Bytes())
+			require.NotNil(t, resp.Meta, "the metadata failure is reported in meta")
+			gmErr, ok := resp.Meta["governed_metadata_error"].(map[string]interface{})
+			require.True(t, ok, "%v", resp.Meta)
+			assert.Equal(t, "hook_rejected", gmErr["code"])
+			assert.Contains(t, gmErr["detail"], "policy says no")
+			assert.Nil(t, resp.Data.GovernedMetadata, "nothing stored")
+			assert.Equal(t, tc.body["data"].(map[string]interface{})["attributes"].(map[string]interface{})["name"], tc.load(),
+				"the object's own change was persisted")
+		})
+	}
+}
+
 func TestGovernedMetadataEnforcement_ToolUpdateAndDatasourceDelete(t *testing.T) {
 	t.Setenv("TYK_AI_SECRET_KEY", "test-key")
 	r, api, _ := setupGovernedMetadataRouter(t)

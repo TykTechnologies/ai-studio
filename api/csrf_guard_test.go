@@ -37,12 +37,142 @@ func newCSRFTestRouter(t *testing.T) (*gin.Engine, *bool) {
 		mutated = true
 		c.JSON(http.StatusCreated, gin.H{"data": gin.H{"type": "thing", "id": "1"}})
 	})
+	// A second method on a second path: the guard is one global middleware,
+	// so its verdict must not depend on the route.
+	r.PATCH("/other/1", func(c *gin.Context) {
+		mutated = true
+		c.JSON(http.StatusCreated, gin.H{"data": gin.H{"type": "other", "id": "1"}})
+	})
 	r.GET("/token", func(c *gin.Context) {
 		c.Header("X-CSRF-Token", csrf.Token(c.Request))
 		c.Status(http.StatusOK)
 	})
 
 	return r, &mutated
+}
+
+// csrfTokenDance fetches a token and its cookie, the way the admin UI does.
+func csrfTokenDance(t *testing.T, r *gin.Engine) (string, []*http.Cookie) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/token", nil))
+	token := rec.Header().Get("X-CSRF-Token")
+	assert.NotEmpty(t, token)
+	return token, rec.Result().Cookies()
+}
+
+// tokenisedWrite performs a cookie-authenticated write carrying a valid
+// token and cookie plus the given extra headers.
+func tokenisedWrite(r *gin.Engine, token string, cookies []*http.Cookie, method, path string, headers map[string]string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(method, path, nil)
+	req.Header.Set("X-CSRF-Token", token)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// The review saw "403 referer not supplied" on POST /users and on metadata
+// PUT/PATCH while an LLM PATCH went through. That is not per-endpoint
+// behaviour: the guard is one middleware, so for a given header set every
+// method and path must get the same verdict.
+func TestCSRFGuard_VerdictIsUniformAcrossMethodsAndPaths(t *testing.T) {
+	cases := []struct {
+		name    string
+		headers map[string]string
+		want    int
+	}{
+		// Behind a TLS-terminating proxy the request is HTTPS to the browser,
+		// so a write with neither Origin nor Referer is rejected.
+		{"https via proxy, no origin or referer", map[string]string{"X-Forwarded-Proto": "https"}, http.StatusForbidden},
+		{"https via proxy, matching origin", map[string]string{"X-Forwarded-Proto": "https", "Origin": "https://example.com"}, http.StatusCreated},
+		// Plain HTTP: a browser is not required to send either header.
+		{"plain http, no origin or referer", nil, http.StatusCreated},
+		{"plain http, matching origin", map[string]string{"Origin": "http://example.com"}, http.StatusCreated},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r, mutated := newCSRFTestRouter(t)
+			token, cookies := csrfTokenDance(t, r)
+
+			post := tokenisedWrite(r, token, cookies, "POST", "/thing", tc.headers)
+			postMutated := *mutated
+			*mutated = false
+			patch := tokenisedWrite(r, token, cookies, "PATCH", "/other/1", tc.headers)
+
+			assert.Equal(t, tc.want, post.Code, "POST: %s", post.Body.String())
+			assert.Equal(t, post.Code, patch.Code, "PATCH on another path must get the same verdict as POST: %s", patch.Body.String())
+			assert.Equal(t, postMutated, *mutated)
+		})
+	}
+}
+
+// A plain-HTTP deployment (dev, tests, a stack with no TLS in front) cannot
+// require Origin or Referer: browsers legitimately omit both on same-origin
+// requests, and gorilla's Referer check exists only to defeat HTTP
+// machine-in-the-middle injection against an HTTPS site.
+func TestCSRFGuard_PlainHTTPNeedsNoOriginOrReferer(t *testing.T) {
+	r, mutated := newCSRFTestRouter(t)
+	token, cookies := csrfTokenDance(t, r)
+
+	w := tokenisedWrite(r, token, cookies, "POST", "/thing", nil)
+
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.True(t, *mutated, "a tokenised write over plain HTTP must go through without Origin or Referer")
+}
+
+// When a proxy terminates TLS the browser is talking HTTPS, so the strict
+// Referer check must stay in force even though r.TLS is nil here.
+func TestCSRFGuard_ForwardedHTTPSStillRequiresReferer(t *testing.T) {
+	for _, proto := range []string{"https", "HTTPS", "https, http"} {
+		t.Run(proto, func(t *testing.T) {
+			r, mutated := newCSRFTestRouter(t)
+			token, cookies := csrfTokenDance(t, r)
+
+			w := tokenisedWrite(r, token, cookies, "POST", "/thing", map[string]string{"X-Forwarded-Proto": proto})
+
+			assert.Equal(t, http.StatusForbidden, w.Code)
+			assert.Contains(t, w.Body.String(), "referer not supplied")
+			assert.False(t, *mutated)
+
+			// With a same-origin HTTPS referer the same request passes.
+			w = tokenisedWrite(r, token, cookies, "POST", "/thing", map[string]string{
+				"X-Forwarded-Proto": proto, "Referer": "https://example.com/admin",
+			})
+			assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		})
+	}
+}
+
+// On plain HTTP the browser's Origin is http://<host>. gorilla compares it
+// against a URL whose scheme defaults to https, so without the plaintext
+// marker a same-host http Origin is rejected unless it is in TrustedOrigins.
+func TestCSRFGuard_SameHostHTTPOriginOnPlainHTTP(t *testing.T) {
+	r, mutated := newCSRFTestRouter(t)
+	token, cookies := csrfTokenDance(t, r)
+
+	w := tokenisedWrite(r, token, cookies, "POST", "/thing", map[string]string{"Origin": "http://example.com"})
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.True(t, *mutated)
+
+	// A cross-site Origin is still rejected on plain HTTP.
+	*mutated = false
+	w = tokenisedWrite(r, token, cookies, "POST", "/thing", map[string]string{"Origin": "http://evil.example"})
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.False(t, *mutated)
+
+	// A same-host https Origin over a plain-http socket is what a
+	// TLS-terminating proxy that does not set X-Forwarded-Proto produces. It
+	// passed before plaintext marking existed and must keep passing.
+	*mutated = false
+	w = tokenisedWrite(r, token, cookies, "POST", "/thing", map[string]string{"Origin": "https://example.com"})
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.True(t, *mutated)
 }
 
 func TestCSRFGuard_RejectedWriteDoesNotMutate(t *testing.T) {

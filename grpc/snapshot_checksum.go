@@ -37,6 +37,14 @@ func ComputeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot) (string, error)
 	// Apps are still included in the snapshot for initial sync, but don't affect the checksum.
 	checksumSnapshot.Apps = nil
 
+	// Exclude OAuth access tokens from the checksum as well. They are session
+	// credentials with minute-scale lifetimes (10-15 min), the snapshot query
+	// filters them by wall clock, and the edge enforces expiry itself on
+	// lookup. Hashing them made the expected checksum drift every time a token
+	// expired or was issued, flipping every edge to "pending" without any
+	// administrator action. Tokens still travel in the snapshot.
+	checksumSnapshot.AccessTokens = nil
+
 	// Clear volatile fields from nested FilterConfig messages
 	for _, filter := range checksumSnapshot.Filters {
 		filter.CreatedAt = nil

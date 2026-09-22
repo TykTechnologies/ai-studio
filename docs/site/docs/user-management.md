@@ -53,6 +53,7 @@ Groups are central to managing permissions:
 ## Authentication Methods
 
 *   **UI Login:** Users access the web interface by logging in with their credentials (username/password) or via a configured [SSO Provider](./sso.md). This establishes a browser session.
+    *   A user has **one browser session at a time**. Logging in from a second browser, device or private window (with a password or through SSO) replaces the session token, so the first browser is signed out on its next request. Tabs in the same browser share the session and are unaffected. Session length is `SESSION_DURATION` (default 6h).
 *   **API Key Authentication:**
     1.  An administrator issues an API Key on the user's detail page (self-registered users receive one automatically).
     2.  The user securely provides this key to their application or script.

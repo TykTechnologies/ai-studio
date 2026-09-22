@@ -8,6 +8,7 @@ import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 import agentService from "../../services/agentService";
 import { resetAppBudget } from "../../services/appService";
 import SearchInput from "../common/SearchInput";
+import FailoverCell from "../common/FailoverCell";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import {
   Alert,
@@ -919,10 +920,13 @@ const AppDetails = () => {
                   <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "10%" }}>
                     Response Code
                   </StyledTableHeaderCell>
-                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "32.5%" }}>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "12%" }}>
+                    Failover
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "26.5%" }}>
                     Request
                   </StyledTableHeaderCell>
-                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "32.5%" }}>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "26.5%" }}>
                     Response
                   </StyledTableHeaderCell>
                 </TableRow>
@@ -930,7 +934,7 @@ const AppDetails = () => {
               <TableBody>
                 {proxyLogs?.length === 0 && debouncedProxyLogSearch ? (
                   <TableRow>
-                    <StyledTableCell colSpan={5} align="center">
+                    <StyledTableCell colSpan={6} align="center">
                       No proxy logs found matching "{debouncedProxyLogSearch}"
                     </StyledTableCell>
                   </TableRow>
@@ -945,6 +949,9 @@ const AppDetails = () => {
                       </StyledTableCell>
                       <StyledTableCell sx={{ verticalAlign: "top" }}>
                         {log.attributes.response_code}
+                      </StyledTableCell>
+                      <StyledTableCell sx={{ verticalAlign: "top" }}>
+                        <FailoverCell attributes={log.attributes} />
                       </StyledTableCell>
                       <StyledTableCell sx={{ verticalAlign: "top", overflow: "hidden" }}>
                         <Box sx={{ overflow: "auto", maxHeight: 200 }}>
@@ -972,7 +979,7 @@ const AppDetails = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <StyledTableCell colSpan={5} align="center">
+                    <StyledTableCell colSpan={6} align="center">
                       No proxy logs available for the selected period.
                     </StyledTableCell>
                   </TableRow>

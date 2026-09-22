@@ -64,7 +64,7 @@ Rules enforced when you save:
 
 **Access is inherited.** Apps that are allowed to use a provider are automatically routed to its fallbacks when it fails, even if they were never granted those fallbacks directly. Budgets are still enforced on the fallback provider. The edit form shows this note beside the waterfall.
 
-**When failover triggers.** By default a request moves to the next rung when the upstream answers 408, 429, 500, 502, 503 or 504, when the attempt times out, or when the upstream cannot be reached. Under **Failover Triggers (advanced)** you can narrow the status list (only 5xx, 408 and 429 are accepted: other 4xx responses are caller or configuration errors that every fallback would repeat), switch off the timeout and connection-error triggers, and set a per-attempt timeout in seconds so a hung primary does not consume the whole request budget.
+**When failover triggers.** By default a request moves to the next rung when the upstream answers 408, 429, 500, 502, 503 or 504, when the attempt times out, or when the upstream cannot be reached. Under **Failover Triggers (advanced)** you can narrow the status list (only 5xx, 408 and 429 are accepted: other 4xx responses are caller or configuration errors that every fallback would repeat), switch off the timeout and connection-error triggers, and set a per-attempt timeout in seconds so a hung primary does not consume the whole request budget. A 401 or 403 from the upstream never triggers failover: it means the provider's credentials or configuration are wrong, and every fallback would repeat the same request, so the error is returned to the caller as it is.
 
 **What the caller sees.** The response carries `X-Tyk-Served-LLM` and `X-Tyk-Served-Model`, plus `X-Tyk-Failover: true` when a fallback answered. The `model` field in the body is the model that actually answered. If every rung fails, the error from the last rung is returned.
 
@@ -73,8 +73,12 @@ Rules enforced when you save:
 - Failover applies to the OpenAI-compatible chat endpoints: `/ai/{provider}/v1/chat/completions`, the unified `/v1/chat/completions` router and the Enterprise model router. The vendor-native pass-through endpoints, the Anthropic Messages bridge and chat sessions are not covered.
 - A streamed response can only fail over before its first token has been sent. After that the request is committed to the provider that started streaming.
 - Only the provider's own waterfall is consulted; a fallback's waterfall is not followed.
-- Every attempt is recorded in the proxy logs, so a request that failed over leaves one failed row for the provider and one row for the fallback that served it; fallback rows are marked with the provider they failed over from. The `aistudio_llm_failover_total` metric counts each hop by source, target and reason.
+- Every attempt that gets an answer from its upstream is recorded in the proxy logs, so a request that failed over on a status code leaves one failed row for the provider and one row for the fallback that served it. A rung abandoned on the per-attempt timeout or on a connection error writes no row of its own, because its attempt is cancelled before anything is logged; only the fallback's row appears. Fallback rows are marked with the provider they failed over from: the proxy-log endpoints (`/analytics/proxy-logs-for-llm`, `/analytics/proxy-logs-for-app`) return `failover_attempt` (the 1-based rung index, `0` for the primary attempt) and `failover_from_llm_id` (the provider the request failed over from, absent on primary rows), and the LLM and App detail pages show them in a **Failover** column. The `aistudio_llm_failover_total` metric counts each hop by source, target and reason.
 - Edge gateways receive the waterfall with their configuration and fail over the same way.
+
+## Portal visibility
+
+In Community Edition a newly saved provider is added to the Default catalog automatically. In Enterprise Edition it is not: the provider stays out of the portal and of Browse until you add it to a catalog held by the teams that should use it (see [Catalogs](./catalogs.md)).
 
 ## Model Pricing
 

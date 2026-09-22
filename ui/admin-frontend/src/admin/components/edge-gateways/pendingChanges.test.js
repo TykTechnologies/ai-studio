@@ -1,9 +1,11 @@
 import {
+  canonicalNamespace,
   changeLink,
   changeTypeLabel,
   formatPushTime,
   groupChanges,
   relativeTime,
+  sameNamespace,
   summarizePending,
 } from './pendingChanges';
 
@@ -60,5 +62,34 @@ describe('pendingChanges helpers', () => {
     expect(summarizePending({ total: 0, lastPushAt: at }, now)).toBe(`Nothing has changed since the last push (${time})`);
     expect(summarizePending({ total: 3, lastPushAt: null }, now)).toBe('3 changes (never pushed)');
     expect(summarizePending({ total: 0, lastPushAt: null }, now)).toBe('Nothing has changed (no push recorded yet)');
+    expect(summarizePending({ total: 3, lastPushAt: null, baseline: 'none' }, now)).toBe('3 changes (never pushed)');
+  });
+
+  it('measures from the edge ack when no push was recorded but an edge is in sync', () => {
+    const at = '2026-09-14T13:12:00Z';
+    const time = formatPushTime(at, now);
+    const acked = { total: 3, lastPushAt: null, since: at, baseline: 'edge_ack' };
+    expect(summarizePending(acked, now)).toBe(`3 changes since the last sync at ${time}`);
+    expect(summarizePending({ ...acked, total: 1 }, now)).toBe(`1 change since the last sync at ${time}`);
+    expect(summarizePending({ ...acked, total: 0 }, now)).toBe(`Nothing has changed since the last sync (${time})`);
+    // A recorded push still reads as a push.
+    expect(summarizePending({ total: 2, lastPushAt: at, since: at, baseline: 'push' }, now)).toBe(
+      `2 changes since the last push at ${time}`
+    );
+  });
+
+  it('treats "", "global" and "default" as the same namespace', () => {
+    expect(canonicalNamespace('')).toBe('default');
+    expect(canonicalNamespace(undefined)).toBe('default');
+    expect(canonicalNamespace(null)).toBe('default');
+    expect(canonicalNamespace('global')).toBe('default');
+    expect(canonicalNamespace('default')).toBe('default');
+    expect(canonicalNamespace(' eu-west ')).toBe('eu-west');
+    expect(sameNamespace('', 'default')).toBe(true);
+    expect(sameNamespace('global', 'default')).toBe(true);
+    expect(sameNamespace(undefined, 'global')).toBe(true);
+    expect(sameNamespace('eu-west', 'eu-west')).toBe(true);
+    expect(sameNamespace('eu-west', 'default')).toBe(false);
+    expect(sameNamespace('eu-west', '')).toBe(false);
   });
 });

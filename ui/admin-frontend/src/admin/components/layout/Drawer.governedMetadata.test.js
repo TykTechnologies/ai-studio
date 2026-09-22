@@ -76,7 +76,7 @@ describe('Drawer admin navigation groups', () => {
       ['Audit trail', '/admin/audit'],
       ['Metadata schemas', '/admin/metadata/schemas'],
       ['Metadata vocabularies', '/admin/metadata/vocabularies'],
-      ['Metadata coverage', '/admin/metadata/compliance'],
+      ['Metadata coverage', '/admin/metadata/coverage'],
     ]);
     // Access and Settings pages no longer live under Governance.
     expect(screen.queryByText('Users')).not.toBeInTheDocument();

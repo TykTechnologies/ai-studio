@@ -181,21 +181,30 @@ class PluginService {
 
   async updatePlugin(id, pluginData) {
     try {
-      const payload = {
-        name: pluginData.name,
-        description: pluginData.description || '',
-        command: pluginData.command,
-        checksum: pluginData.checksum || '',
-        config: pluginData.config || {},
-        hook_type: pluginData.hookType,
-        hook_types: pluginData.hookTypes,
-        hook_types_customized: pluginData.hookTypesCustomized,
-        is_active: pluginData.isActive !== undefined ? pluginData.isActive : true,
-        namespace: pluginData.namespace || '',
-        plugin_type: pluginData.pluginType || 'gateway',
-        oci_reference: pluginData.ociReference || '',
-        load_immediately: pluginData.loadImmediately || false,
+      // PATCH semantics: the API leaves out any field that is absent from the
+      // body, so only the keys the caller set are sent. Filling in defaults
+      // here (description: '', checksum: '', ...) used to blank the
+      // marketplace description, checksum and OCI reference whenever the
+      // install wizard saved just the config. An explicit '' still clears.
+      const fieldMap = {
+        name: 'name',
+        description: 'description',
+        command: 'command',
+        checksum: 'checksum',
+        config: 'config',
+        hookType: 'hook_type',
+        hookTypes: 'hook_types',
+        hookTypesCustomized: 'hook_types_customized',
+        isActive: 'is_active',
+        namespace: 'namespace',
+        pluginType: 'plugin_type',
+        ociReference: 'oci_reference',
+        loadImmediately: 'load_immediately',
       };
+      const payload = {};
+      for (const [from, to] of Object.entries(fieldMap)) {
+        if (pluginData?.[from] !== undefined) payload[to] = pluginData[from];
+      }
 
       const response = await apiClient.patch(`/plugins/${id}`, payload);
 

@@ -1,13 +1,33 @@
 import React, { useMemo } from 'react';
-import { Box, Chip, Typography } from '@mui/material';
+import { Box, Chip, Tooltip, Typography } from '@mui/material';
 import usePermissionCatalogue from '../../hooks/usePermissionCatalogue';
 import { FULL_ADMIN, resourceOf, actionOf } from '../../rbac/permissions';
 
 /**
+ * Describes where a permission came from, e.g. "from Editor via team Platform"
+ * or "from Viewer (direct)"; several sources are joined with "; ".
+ */
+export const describeSources = (list) => {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  return list
+    .map((s) => {
+      const role = s.role_name || `role #${s.role_id}`;
+      if (s.via === 'group') {
+        const team = s.group_name || (s.group_id ? `#${s.group_id}` : '');
+        return team ? `from ${role} via team ${team}` : `from ${role} via team`;
+      }
+      return `from ${role} (direct)`;
+    })
+    .join('; ');
+};
+
+/**
  * Renders a permission list grouped by catalogue group and resource, e.g.
  * "LLM providers: read, write". A wildcard renders as a single line.
+ * `sources` (permission -> [{role_name, via, group_name}]) is shown as a
+ * tooltip on each action chip.
  */
-const EffectivePermissionsList = ({ permissions = [] }) => {
+const EffectivePermissionsList = ({ permissions = [], sources = {} }) => {
   const { grouped, byKey } = usePermissionCatalogue();
 
   const rows = useMemo(() => {
@@ -16,7 +36,7 @@ const EffectivePermissionsList = ({ permissions = [] }) => {
     permissions.forEach((p) => {
       const res = resourceOf(p);
       if (!byResource.has(res)) byResource.set(res, []);
-      byResource.get(res).push(actionOf(p));
+      byResource.get(res).push({ action: actionOf(p), from: describeSources(sources?.[p]) });
     });
     const out = [];
     grouped.forEach(({ group, resources }) => {
@@ -32,7 +52,7 @@ const EffectivePermissionsList = ({ permissions = [] }) => {
       out.push({ group: 'Other', items: other.map(([k, actions]) => ({ key: k, label: k, actions })) });
     }
     return out;
-  }, [permissions, grouped, byKey]);
+  }, [permissions, sources, grouped, byKey]);
 
   if (rows === null) {
     return <Typography>Full administrator access (all permissions).</Typography>;
@@ -48,9 +68,15 @@ const EffectivePermissionsList = ({ permissions = [] }) => {
           {items.map((item) => (
             <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
               <Typography variant="body2" sx={{ minWidth: 180 }}>{item.label}</Typography>
-              {item.actions.map((a) => (
-                <Chip key={a} label={a} size="small" variant="outlined" />
-              ))}
+              {item.actions.map(({ action, from }) =>
+                from ? (
+                  <Tooltip key={action} title={from} arrow>
+                    <Chip label={action} size="small" variant="outlined" />
+                  </Tooltip>
+                ) : (
+                  <Chip key={action} label={action} size="small" variant="outlined" />
+                )
+              )}
             </Box>
           ))}
         </Box>

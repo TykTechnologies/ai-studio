@@ -119,6 +119,9 @@ func (h *CORSResponseHook) OnBeforeWriteHeaders(ctx context.Context, req *Header
 	}
 	modifiedHeaders["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
 	modifiedHeaders["Access-Control-Allow-Headers"] = "Origin, Content-Type, Accept, Authorization"
+	// The served-LLM headers are read from JavaScript by browser clients; a
+	// header that is not exposed is invisible to them.
+	modifiedHeaders["Access-Control-Expose-Headers"] = servedCORSExposeHeaders
 	
 	return &HeadersResponse{
 		Modified: true,

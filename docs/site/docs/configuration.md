@@ -71,6 +71,9 @@ Remember that fundamental system parameters are typically set via environment va
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
 
+### CSRF protection
+Cookie-authenticated writes (anything the admin UI or portal does while signed in) carry a CSRF token, and when the site is served over HTTPS the request must also carry an `Origin` or `Referer` header naming the site; a request with neither is refused with `403 - referer not supplied`. On plain HTTP neither header is required. Calls authenticated with an API token in the `Authorization` header are exempt from CSRF checks entirely. Behind a TLS-terminating proxy, forward `X-Forwarded-Proto: https` so the HTTPS rules apply. In `DEVMODE` the `SITE_URL` host is trusted as an origin automatically; add further `host[:port]` values with `CSRF_TRUSTED_ORIGINS` (comma-separated).
+
 ### Unified Endpoint (Main Ingress)
 The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) sits at `/v1` by default. Move it when embedding the gateway in a host that already owns `/v1`, or remove it entirely; the per-LLM endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected either way.
 

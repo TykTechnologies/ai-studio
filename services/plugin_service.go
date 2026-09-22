@@ -322,6 +322,14 @@ func (s *PluginService) DeletePlugin(id uint) error {
 		log.Info().Uint("plugin_id", id).Msg("Cleaned up plugin schedules for deleted plugin")
 	}
 
+	// Clean up KV data. A reinstall gets a new id, so rows under this id are
+	// unreachable afterwards; remove them outright rather than tombstoning.
+	if err := s.db.Unscoped().Where("plugin_id = ?", id).Delete(&models.PluginData{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up plugin KV data")
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up plugin KV data for deleted plugin")
+	}
+
 	if err := plugin.Delete(s.db); err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
 	}

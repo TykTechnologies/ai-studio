@@ -81,7 +81,7 @@ GET /api/v1/metadata/compliance?object_type=llm&status=missing
 | Edge gateways | Only fields marked *Sent to gateways*, in the configuration snapshot (`governed_metadata` on the LLM, tool and datasource configs). Gateway plugins read them from the plugin context: `ctx.Metadata["governed_metadata"]` (JSON) or `ctx.Metadata["governed_metadata.data_classification"]`. |
 | Events | `system.governed_metadata.updated` and `.deleted` |
 
-Because only gateway-visible fields enter the snapshot, changing an owner or a support contact never triggers an edge resync; changing a classification does.
+Because only gateway-visible fields enter the snapshot, changing an owner or a support contact never triggers an edge resync; changing a classification does: saving a *Sent to gateways* field such as `data_classification` flips every edge in the namespace to **Pending** and shows the configuration-sync banner until the change is pushed, exactly as editing the LLM itself would.
 
 ## Plugins
 

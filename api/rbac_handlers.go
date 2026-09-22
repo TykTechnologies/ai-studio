@@ -95,15 +95,17 @@ type RoleBindingResponse struct {
 	Attributes RoleBindingAttributes `json:"attributes"`
 }
 
-// EffectiveAccessResponse is a user's resolved access.
+// EffectiveAccessResponse is a user's resolved access. Sources maps each
+// entry of Permissions to the bindings (role, direct or via team) that grant it.
 // @Description Effective permissions for a user
 type EffectiveAccessResponse struct {
-	UserID         uint               `json:"user_id"`
-	Permissions    []string           `json:"permissions"`
-	Roles          []rbac.RoleSummary `json:"roles"`
-	IsFullAdmin    bool               `json:"is_full_admin"`
-	HasAdminAccess bool               `json:"has_admin_access"`
-	Enabled        bool               `json:"enabled"`
+	UserID         uint                               `json:"user_id"`
+	Permissions    []string                           `json:"permissions"`
+	Roles          []rbac.RoleSummary                 `json:"roles"`
+	Sources        map[string][]rbac.PermissionSource `json:"sources"`
+	IsFullAdmin    bool                               `json:"is_full_admin"`
+	HasAdminAccess bool                               `json:"has_admin_access"`
+	Enabled        bool                               `json:"enabled"`
 }
 
 func serializeRole(r *models.Role, counts rbac.RoleCounts) RoleResponse {
@@ -163,10 +165,15 @@ func effectiveResponse(userID uint, eff *rbac.Effective, enabled bool) Effective
 	if roles == nil {
 		roles = []rbac.RoleSummary{}
 	}
+	sources := eff.Sources
+	if sources == nil {
+		sources = map[string][]rbac.PermissionSource{}
+	}
 	return EffectiveAccessResponse{
 		UserID:         userID,
 		Permissions:    eff.Permissions.List(),
 		Roles:          roles,
+		Sources:        sources,
 		IsFullAdmin:    eff.Permissions.IsFullAdmin(),
 		HasAdminAccess: !eff.Permissions.IsEmpty(),
 		Enabled:        enabled,
