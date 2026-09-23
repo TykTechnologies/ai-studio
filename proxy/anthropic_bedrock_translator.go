@@ -135,7 +135,12 @@ func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Re
 	}
 
 	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		respondWithAnthropicError(w, http.StatusForbidden, "permission_error", fmt.Sprintf("budget exceeded: %s", err.Error()))
+		status, msg := budgetDenial(err, "budget exceeded")
+		errType := "permission_error"
+		if status == http.StatusServiceUnavailable {
+			errType = "overloaded_error"
+		}
+		respondWithAnthropicError(w, status, errType, fmt.Sprintf("%s: %s", msg, err.Error()))
 		return
 	}
 
@@ -209,7 +214,12 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	}
 
 	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		respondWithAnthropicError(w, http.StatusForbidden, "permission_error", fmt.Sprintf("budget exceeded: %s", err.Error()))
+		status, msg := budgetDenial(err, "budget exceeded")
+		errType := "permission_error"
+		if status == http.StatusServiceUnavailable {
+			errType = "overloaded_error"
+		}
+		respondWithAnthropicError(w, status, errType, fmt.Sprintf("%s: %s", msg, err.Error()))
 		return
 	}
 

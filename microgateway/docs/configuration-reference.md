@@ -84,7 +84,7 @@ TLS_KEY_PATH=/etc/certs/server.key
 ```bash
 # File-based SQLite
 DATABASE_TYPE=sqlite
-DATABASE_DSN="file:./data/microgateway.db?cache=shared&mode=rwc"
+DATABASE_DSN="file:./data/microgateway.db?mode=rwc"
 
 # In-memory SQLite (testing only)
 DATABASE_DSN="file::memory:?cache=shared"

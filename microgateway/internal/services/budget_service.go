@@ -6,12 +6,14 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -79,16 +81,33 @@ func (s *DatabaseBudgetService) calculateBudgetPeriod(budgetStartDate *time.Time
 
 // CheckBudget validates if the request is within budget limits
 func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCost float64) error {
+	_, _, err := s.CheckBudgetStatus(appID, llmID, estimatedCost)
+	return err
+}
+
+// CheckBudgetStatus is CheckBudget that also returns the current spend and the
+// monthly limit (both in dollars; limit 0 means none), from the same two
+// lookups. The proxy's budget adapter uses it instead of CheckBudget followed
+// by GetBudgetStatus, which read the app and the usage row a second time on
+// every request.
+//
+// A failed lookup is wrapped in services.ErrBudgetCheckUnavailable, so the
+// gateway refuses the request as a 503 instead of reporting a spent budget.
+// An app that does not exist or is inactive is a real refusal.
+func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estimatedCost float64) (float64, float64, error) {
 	// Get app's monthly budget and budget_start_date
 	var app database.App
 	err := s.db.Where("id = ? AND is_active = ?", appID, true).First(&app).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, 0, fmt.Errorf("app not found or inactive: %w", err)
+	}
 	if err != nil {
-		return fmt.Errorf("app not found or inactive: %w", err)
+		return 0, 0, fmt.Errorf("%w: reading app %d: %v", services.ErrBudgetCheckUnavailable, appID, err)
 	}
 
 	monthlyBudget := app.MonthlyBudget
 	if monthlyBudget <= 0 {
-		return nil // No budget limit set
+		return 0, 0, nil // No budget limit set
 	}
 
 	// Calculate budget period using app's custom budget_start_date
@@ -97,8 +116,8 @@ func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCo
 
 	// Get current usage for this period
 	usage, err := s.repo.GetBudgetUsage(appID, llmID, periodStart, periodEnd)
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return fmt.Errorf("failed to get budget usage: %w", err)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, monthlyBudget, fmt.Errorf("%w: reading budget usage: %v", services.ErrBudgetCheckUnavailable, err)
 	}
 
 	currentCost := 0.0
@@ -109,11 +128,11 @@ func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCo
 
 	// Check if request would exceed budget
 	if currentCost+estimatedCost > monthlyBudget {
-		return fmt.Errorf("budget exceeded: current=%.2f, estimated=%.2f, limit=%.2f",
+		return currentCost, monthlyBudget, fmt.Errorf("budget exceeded: current=%.2f, estimated=%.2f, limit=%.2f",
 			currentCost, estimatedCost, monthlyBudget)
 	}
 
-	return nil
+	return currentCost, monthlyBudget, nil
 }
 
 // RecordUsage records usage for budget tracking

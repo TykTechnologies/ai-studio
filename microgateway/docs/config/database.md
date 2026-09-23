@@ -18,14 +18,19 @@ Database configuration features:
 ```bash
 # SQLite configuration
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/microgateway.db?mode=rwc
 
 # SQLite connection string options:
-# - cache=shared: Allow multiple connections
 # - mode=rwc: Read-write-create mode
-# - _journal_mode=WAL: Write-ahead logging
 # - _foreign_keys=on: Enable foreign key constraints
 ```
+
+For a file database the gateway adds `_journal_mode=WAL`, `_busy_timeout=5000`,
+`_synchronous=NORMAL` and `_txlock=immediate` unless the DSN already sets them,
+and ignores `cache=shared`. The gateway reads configuration on every request
+while analytics and budget writes run alongside. Shared-cache mode turned that
+into "database table is locked" errors under load, and those reached clients as
+authentication and budget failures. In-memory DSNs are left unchanged.
 
 #### SQLite Pros and Cons
 **Pros:**
@@ -108,7 +113,7 @@ statement_timeout=30000
 # Database file created automatically
 mkdir -p data
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/microgateway.db?mode=rwc
 
 # Run migrations
 ./microgateway -migrate
@@ -372,7 +377,7 @@ SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1;
 ```bash
 # SQLite for development
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/dev.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/dev.db?mode=rwc
 DB_AUTO_MIGRATE=true
 DB_LOG_LEVEL=info
 ```

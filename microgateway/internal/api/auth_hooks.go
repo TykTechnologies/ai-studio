@@ -22,10 +22,11 @@ import (
 
 // CreateAuthHooks creates authentication lifecycle hooks for microgateway plugins
 func CreateAuthHooks(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager) *proxy.AuthHooks {
+	llms := newHookLLMLookup(serviceContainer)
 	return &proxy.AuthHooks{
-		PreAuth:    createPreAuthHook(serviceContainer, pluginManager),
-		CustomAuth: createCustomAuthHook(serviceContainer, pluginManager),
-		PostAuth:   createPostAuthHook(serviceContainer, pluginManager),
+		PreAuth:    createPreAuthHook(serviceContainer, pluginManager, llms),
+		CustomAuth: createCustomAuthHook(serviceContainer, pluginManager, llms),
+		PostAuth:   createPostAuthHook(serviceContainer, pluginManager, llms),
 	}
 }
 
@@ -34,7 +35,7 @@ func CreateAuthHooks(serviceContainer *services.ServiceContainer, pluginManager 
 // ===================================
 // Executes BEFORE authentication, NO access to user/app data
 
-func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager) func(http.ResponseWriter, *http.Request) bool {
+func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request) bool {
 	return func(w http.ResponseWriter, r *http.Request) bool {
 		// Only process LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -48,7 +49,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		}
 
 		// Get LLM by slug
-		llmInterface, err := serviceContainer.GatewayService.GetLLMBySlug(llmSlug)
+		llmInterface, err := llms.get(llmSlug)
 		if err != nil {
 			return false // Let normal flow handle 404
 		}
@@ -176,7 +177,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 // ===================================
 // Allows plugins to REPLACE the validation step (extraction still happens in CredentialValidator)
 
-func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager) func(string, *http.Request) (uint, bool, error) {
+func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(string, *http.Request) (uint, bool, error) {
 	return func(credential string, r *http.Request) (uint, bool, error) {
 		// Only for LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -188,7 +189,7 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 			return 0, false, nil
 		}
 
-		llmInterface, err := serviceContainer.GatewayService.GetLLMBySlug(llmSlug)
+		llmInterface, err := llms.get(llmSlug)
 		if err != nil {
 			return 0, false, nil
 		}
@@ -305,7 +306,7 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 // ===================================
 // Executes AFTER successful authentication, HAS access to authenticated user/app data
 
-func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager) func(http.ResponseWriter, *http.Request, uint) bool {
+func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
 	return func(w http.ResponseWriter, r *http.Request, appID uint) bool {
 		// Only for LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -317,7 +318,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			return false
 		}
 
-		llmInterface, err := serviceContainer.GatewayService.GetLLMBySlug(llmSlug)
+		llmInterface, err := llms.get(llmSlug)
 		if err != nil {
 			return false
 		}
@@ -497,6 +498,49 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 // ===================================
 // HELPER FUNCTIONS
 // ===================================
+
+// hookLLMLookup resolves the LLM that the three auth hooks look up on every
+// /llm/ request. Each hook needs it only for the LLM's ID, vendor and
+// governed metadata, and usually only to find that the LLM has no plugins,
+// yet each lookup preloaded every app linked to the LLM: about a dozen
+// queries per request between the three hooks. Entries are invalidated by
+// any configuration write (database.GenCache).
+//
+// The cached LLM is stored without its Apps and Filters relations, which the
+// hooks do not use, and every caller gets its own deep copy.
+type hookLLMLookup struct {
+	gateway services.GatewayServiceInterface
+	cache   *database.GenCache[string, *database.LLM]
+}
+
+func newHookLLMLookup(sc *services.ServiceContainer) *hookLLMLookup {
+	if err := database.EnsureConfigGenerationCallbacks(sc.DB); err != nil {
+		log.Warn().Err(err).Msg("Could not register config generation callbacks; auth hook LLM lookups fall back to a short TTL")
+	}
+	return &hookLLMLookup{gateway: sc.GatewayService, cache: database.NewGenCache[string, *database.LLM]()}
+}
+
+// get returns the LLM as the hooks expect it from GetLLMBySlug: an
+// interface{} holding a *database.LLM.
+func (l *hookLLMLookup) get(slug string) (interface{}, error) {
+	llm, err := l.cache.Load(slug, func() (*database.LLM, error) {
+		v, err := l.gateway.GetLLMBySlug(slug)
+		if err != nil {
+			return nil, err
+		}
+		found, ok := v.(*database.LLM)
+		if !ok {
+			return nil, fmt.Errorf("unexpected LLM type %T for %q", v, slug)
+		}
+		trimmed := *found
+		trimmed.Apps, trimmed.Filters = nil, nil
+		return &trimmed, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return database.DeepCopy(llm), nil
+}
 
 func extractLLMSlugFromPath(path string) string {
 	// /llm/{mode}/{slug}/...

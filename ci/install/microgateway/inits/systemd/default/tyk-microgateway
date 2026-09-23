@@ -23,7 +23,7 @@ SHUTDOWN_TIMEOUT=30s
 # -----------------------------------------------------------------------------
 # SQLite is the default for edge deployments (no external dependencies).
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:/opt/tyk-microgateway/data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:/opt/tyk-microgateway/data/microgateway.db?mode=rwc
 DB_AUTO_MIGRATE=true
 DB_MAX_OPEN_CONNS=25
 DB_MAX_IDLE_CONNS=25
