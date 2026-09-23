@@ -399,17 +399,26 @@ func TestFailover_PrimaryFailsFallbackServes(t *testing.T) {
 	// One ProxyLog per attempt: the failed primary and the fallback that served.
 	waitForProxyLog(t, h.db, h.app.ID, http.StatusServiceUnavailable)
 	waitForProxyLog(t, h.db, h.app.ID, http.StatusOK)
+	// The rows are written asynchronously (goAnalyze), so id order is not
+	// attempt order: the fallback's row can land first. Match them by LLM.
 	logs := h.proxyLogs()
 	require.Len(t, logs, 2)
-	assert.Equal(t, h.primary.ID, logs[0].LLMID)
-	assert.Equal(t, http.StatusServiceUnavailable, logs[0].ResponseCode)
-	assert.Nil(t, logs[0].FailoverFromLLMID)
-	assert.Equal(t, 0, logs[0].FailoverAttempt)
-	assert.Equal(t, h.fallback.ID, logs[1].LLMID)
-	assert.Equal(t, http.StatusOK, logs[1].ResponseCode)
-	require.NotNil(t, logs[1].FailoverFromLLMID)
-	assert.Equal(t, h.primary.ID, *logs[1].FailoverFromLLMID)
-	assert.Equal(t, 1, logs[1].FailoverAttempt)
+	byLLM := map[uint]models.ProxyLog{}
+	for _, l := range logs {
+		byLLM[l.LLMID] = l
+	}
+	primaryLog, ok := byLLM[h.primary.ID]
+	require.True(t, ok, "no ProxyLog for the primary: %+v", logs)
+	fallbackLog, ok := byLLM[h.fallback.ID]
+	require.True(t, ok, "no ProxyLog for the fallback: %+v", logs)
+
+	assert.Equal(t, http.StatusServiceUnavailable, primaryLog.ResponseCode)
+	assert.Nil(t, primaryLog.FailoverFromLLMID)
+	assert.Equal(t, 0, primaryLog.FailoverAttempt)
+	assert.Equal(t, http.StatusOK, fallbackLog.ResponseCode)
+	require.NotNil(t, fallbackLog.FailoverFromLLMID)
+	assert.Equal(t, h.primary.ID, *fallbackLog.FailoverFromLLMID)
+	assert.Equal(t, 1, fallbackLog.FailoverAttempt)
 }
 
 func TestFailover_CallerErrorsDoNotFailOver(t *testing.T) {
