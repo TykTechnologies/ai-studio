@@ -284,6 +284,8 @@ func (a *API) setUserBudgetTeam(c *gin.Context) {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError("malformed request body: "+err.Error()))
 		return
 	}
+	// SetUserBudgetTeam refuses (400) a team the user is not a member of,
+	// so this cannot attribute a user's spend to someone else's team.
 	if err := a.service.SetUserBudgetTeam(id, body.TeamID); err != nil {
 		teamBudgetErrorResponse(c, err)
 		return
