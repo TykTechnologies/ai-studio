@@ -69,6 +69,9 @@ type BudgetSyncHandler struct {
 	mu                 sync.Mutex
 	// blocks receives budget blocks; nil means the shared edge set.
 	blocks *BudgetBlocks
+	// blocksUnsaved is set when persisting the blocks failed, so the next
+	// sync writes them even if the set is unchanged.
+	blocksUnsaved bool
 }
 
 func (h *BudgetSyncHandler) budgetBlocks() *BudgetBlocks {
@@ -157,9 +160,15 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		for appID, reason := range payload.Blocks {
 			blocks[uint(appID)] = reason
 		}
-		h.budgetBlocks().Replace(blocks)
-		if err := persistBudgetBlocks(h.db, blocks); err != nil {
-			log.Error().Err(err).Msg("Failed to persist budget blocks")
+		// The set is sent every sync; only a change (or a write that
+		// failed last time) is written.
+		if h.budgetBlocks().Replace(blocks) || h.blocksUnsaved {
+			if err := persistBudgetBlocks(h.db, blocks); err != nil {
+				h.blocksUnsaved = true
+				log.Error().Err(err).Msg("Failed to persist budget blocks")
+			} else {
+				h.blocksUnsaved = false
+			}
 		}
 	}
 

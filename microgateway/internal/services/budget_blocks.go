@@ -29,14 +29,25 @@ type BudgetBlocks struct {
 var edgeBudgetBlocks = &BudgetBlocks{blocks: map[uint]string{}}
 
 // Replace swaps in a complete set of blocks.
-func (b *BudgetBlocks) Replace(blocks map[uint]string) {
+// It reports whether the set differs from the one it replaced.
+func (b *BudgetBlocks) Replace(blocks map[uint]string) bool {
 	next := make(map[uint]string, len(blocks))
 	for id, reason := range blocks {
 		next[id] = reason
 	}
 	b.mu.Lock()
+	changed := len(next) != len(b.blocks)
+	if !changed {
+		for id, reason := range next {
+			if cur, ok := b.blocks[id]; !ok || cur != reason {
+				changed = true
+				break
+			}
+		}
+	}
 	b.blocks = next
 	b.mu.Unlock()
+	return changed
 }
 
 // Reason returns why an App is blocked, and whether it is.
@@ -61,18 +72,25 @@ func loadBudgetBlocks(db *gorm.DB, into *BudgetBlocks) {
 	into.Replace(blocks)
 }
 
-// persistBudgetBlocks replaces the persisted table with the given set.
+// budgetBlockBatch bounds one multi-row INSERT (SQLite allows 999 variables;
+// a row binds 3).
+const budgetBlockBatch = 200
+
+// persistBudgetBlocks replaces the persisted table with the given set, in
+// one transaction with batched inserts.
 func persistBudgetBlocks(db *gorm.DB, blocks map[uint]string) error {
+	now := time.Now()
+	rows := make([]database.BudgetBlock, 0, len(blocks))
+	for id, reason := range blocks {
+		rows = append(rows, database.BudgetBlock{AppID: id, Reason: reason, UpdatedAt: now})
+	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("1 = 1").Delete(&database.BudgetBlock{}).Error; err != nil {
 			return err
 		}
-		now := time.Now()
-		for id, reason := range blocks {
-			if err := tx.Create(&database.BudgetBlock{AppID: id, Reason: reason, UpdatedAt: now}).Error; err != nil {
-				return err
-			}
+		if len(rows) == 0 {
+			return nil
 		}
-		return nil
+		return tx.CreateInBatches(rows, budgetBlockBatch).Error
 	})
 }
