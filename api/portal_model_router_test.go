@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -112,6 +113,43 @@ func TestPortal_ModelRouterAsAsset(t *testing.T) {
 	var n int64
 	require.NoError(t, db.Model(&models.App{}).Where("name = ?", "Sneaky").Count(&n).Error)
 	assert.Zero(t, n)
+}
+
+// Routers are paged by the database like every other catalog type, in the
+// single-type view and in the mixed (UNION ALL) view.
+func TestPortal_ModelRoutersArePagedInSQL(t *testing.T) {
+	api, db, service := setupTestAPIForCommonTests(t)
+	user := createTestUser(t, service)
+	llmCat := createTestCatalogue(t, service)
+	giveUserTeam(t, service, "Platform", user.ID, []uint{llmCat.ID}, nil, nil)
+	llm := createTestLLM(t, service, "Router Target")
+	for _, s := range []string{"r-one", "r-two", "r-three"} {
+		r := createPortalRouter(t, db, "Router "+s, s, llm)
+		_, err := service.SetModelRouterCatalogues(r.ID, []uint{llmCat.ID})
+		require.NoError(t, err)
+	}
+
+	seen := map[string]bool{}
+	for page := 1; page <= 3; page++ {
+		w := portalGetQuery(t, api.getPortalCatalog, user, "type=model_router&sort=name&page_size=1&page="+strconv.Itoa(page))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var list CatalogListResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+		require.Len(t, list.Data, 1, "page %d", page)
+		assert.Equal(t, 3, list.Meta.Total)
+		assert.Equal(t, 3, list.Meta.TotalPages)
+		seen[list.Data[0].Attributes.Name] = true
+	}
+	assert.Len(t, seen, 3, "each page returns a different router")
+
+	// Mixed view: one LLM plus three routers, two per page.
+	require.NoError(t, service.AddLLMToCatalogue(llm.ID, llmCat.ID))
+	w := portalGetQuery(t, api.getPortalCatalog, user, "sort=name&page_size=2&page=2")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var mixed CatalogListResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &mixed))
+	assert.Len(t, mixed.Data, 2)
+	assert.Equal(t, 4, mixed.Meta.Total)
 }
 
 func TestModelRouterCataloguesEndpoint(t *testing.T) {
