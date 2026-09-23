@@ -1,0 +1,91 @@
+name: s3-real-vendors
+title: "S3 · Real-world overhead against OpenAI and Anthropic"
+description: >
+  The end-user view: the same request sent straight to the vendor, and through
+  the gateway to the same vendor, from the same host. Vendor latency varies by
+  hundreds of milliseconds from one request to the next, far more than the
+  gateway adds, so requests are sent in ABBA blocks (direct, gateway, gateway,
+  direct, or the reverse, chosen at random) and the overhead is the median of the
+  within-block differences. Both arms see the same vendor conditions within a
+  block. The prompt makes every reply run to max_tokens, so output length is the
+  same in both arms. Compare the paired overhead with the gateway's own
+  Server-Timing: they should agree to within the network hop to the gateway.
+  Needs test-secrets/vendors.env and `--vendors` on both seed and run.
+mode: paired
+baseline: direct
+timeout: 120s
+paired:
+  blocks: 200
+  warmup_blocks: 5
+  workers: 2
+cells:
+  - name: openai-stream-64
+    requires: [openai]
+    body: &openai64
+      format: openai
+      stream: true
+      model: "{model:openai}"
+      prompt: "Count from 1 to 2000 in words, separated by commas. Output only the numbers."
+      extra: {max_tokens: null, max_completion_tokens: 64, reasoning_effort: none}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/bench-openai/v1/chat/completions}
+      - {name: direct, target: openai, path: /chat/completions}
+  - name: openai-rest-64
+    requires: [openai]
+    body:
+      <<: *openai64
+      stream: false
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/bench-openai/v1/chat/completions}
+      - {name: direct, target: openai, path: /chat/completions}
+  - name: openai-stream-512
+    requires: [openai]
+    body:
+      <<: *openai64
+      extra: {max_tokens: null, max_completion_tokens: 512, reasoning_effort: none}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/bench-openai/v1/chat/completions}
+      - {name: direct, target: openai, path: /chat/completions}
+  # The unified /v1 endpoint translates requests through the OpenAI-compatible
+  # layer, which does not forward reasoning_effort: the model reasons at its
+  # default effort. To compare like with like, neither arm sends it here, and
+  # the budget is large enough for reasoning plus visible output. TTFT in this
+  # cell includes the model's reasoning time in both arms.
+  - name: openai-unified-stream
+    requires: [openai]
+    body:
+      <<: *openai64
+      extra: {max_tokens: null, max_completion_tokens: 1024}
+    arms:
+      - {name: gateway, target: gateway, path: /v1/chat/completions, model: "bench-openai/{model:openai}"}
+      - {name: direct, target: openai, path: /chat/completions}
+  - name: anthropic-stream-64
+    requires: [anthropic]
+    body: &anthropic64
+      format: anthropic
+      stream: true
+      model: "{model:anthropic}"
+      max_tokens: 64
+      prompt: "Count from 1 to 2000 in words, separated by commas. Output only the numbers."
+      # Current Claude models think by default; thinking would consume the
+      # token budget and make output length vary between arms.
+      extra: {thinking: {type: disabled}}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/bench-anthropic/v1/messages, headers: {anthropic-version: "2023-06-01"}}
+      - {name: direct, target: anthropic, path: /messages}
+  - name: anthropic-rest-64
+    requires: [anthropic]
+    body:
+      <<: *anthropic64
+      stream: false
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/bench-anthropic/v1/messages, headers: {anthropic-version: "2023-06-01"}}
+      - {name: direct, target: anthropic, path: /messages}
+  - name: anthropic-stream-512
+    requires: [anthropic]
+    body:
+      <<: *anthropic64
+      max_tokens: 512
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/bench-anthropic/v1/messages, headers: {anthropic-version: "2023-06-01"}}
+      - {name: direct, target: anthropic, path: /messages}

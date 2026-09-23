@@ -1,0 +1,3 @@
+# Run output and the seed state file (it holds the benchmark app's secret).
+results/
+.state/

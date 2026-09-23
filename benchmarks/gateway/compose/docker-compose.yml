@@ -1,0 +1,169 @@
+# Gateway latency benchmark stack: Studio (control plane) + one edge
+# microgateway (data plane) + a mock LLM upstream + the load generator.
+#
+# Everything is built from this checkout with the production Dockerfiles (no
+# hot-reload dev images) and runs with explicit CPU and memory limits, so a run
+# can be reproduced. Ports are offset (18xxx) so the stack can run next to the
+# dev environment.
+#
+#   make bench-up        build and start (needs TYK_AI_LICENSE, see README)
+#   make bench-seed      configure Studio + edge for the benchmark
+#   make bench-smoke     quick end-to-end run (not publishable)
+#   make bench-down      stop and remove everything, including data
+#
+# The load generator runs inside the compose network, so neither arm goes
+# through Docker Desktop's host port forwarding.
+name: gwbench
+
+# CPU and memory limits are set per service; override them with the *_CPUS
+# and *_MEM variables (see README) and keep them identical between runs you
+# compare.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: midsommar
+    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=256MB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    cpus: ${POSTGRES_CPUS:-2}
+    mem_limit: ${POSTGRES_MEM:-2g}
+
+  studio:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      args:
+        EDITION: ${EDITION:-ent}
+    image: gwbench-studio:${EDITION:-ent}
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/midsommar?sslmode=disable
+      TYK_AI_SECRET_KEY: ${BENCH_SECRET_KEY:-822d3d1e0e2d849263e45fc7bb842364}
+      # Must equal the edge's ENCRYPTION_KEY: LLM credentials are encrypted
+      # with it for the edge.
+      MICROGATEWAY_ENCRYPTION_KEY: ${BENCH_SECRET_KEY:-822d3d1e0e2d849263e45fc7bb842364}
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      GATEWAY_MODE: control
+      GRPC_PORT: "50051"
+      GRPC_HOST: 0.0.0.0
+      # Plaintext hub-edge link on the private benchmark network. It carries
+      # config and analytics, not client requests, so it does not affect the
+      # latencies measured.
+      GRPC_TLS_INSECURE: "true"
+      GRPC_AUTH_TOKEN: ${BENCH_GRPC_TOKEN:-bench-grpc-token-0123456789abcdef}
+      ALLOW_REGISTRATIONS: "true"
+      SITE_URL: http://localhost:18080
+      LOG_LEVEL: info
+      ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      MARKETPLACE_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "18080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    cpus: ${STUDIO_CPUS:-2}
+    mem_limit: ${STUDIO_MEM:-2g}
+
+  gateway:
+    build:
+      context: ../../..
+      dockerfile: microgateway/deployments/Dockerfile
+      args:
+        EDITION: ${EDITION:-ent}
+    # GATEWAY_IMAGE runs the edge from another build (make bench-swap).
+    image: ${GATEWAY_IMAGE:-gwbench-microgateway:${EDITION:-ent}}
+    environment:
+      GATEWAY_MODE: edge
+      CONTROL_ENDPOINT: studio:50051
+      EDGE_ID: bench-edge-1
+      EDGE_NAMESPACE: default
+      EDGE_AUTH_TOKEN: ${BENCH_GRPC_TOKEN:-bench-grpc-token-0123456789abcdef}
+      EDGE_ALLOW_INSECURE: "true"
+      EDGE_TLS_ENABLED: "false"
+      # Short heartbeats so config pushes are confirmed quickly when seeding.
+      EDGE_HEARTBEAT_INTERVAL: 5s
+      # The production default; the S8 variant turns it off to show the cold path.
+      EDGE_TOKEN_CACHE_ENABLED: ${EDGE_TOKEN_CACHE_ENABLED:-true}
+      ENCRYPTION_KEY: ${BENCH_SECRET_KEY:-822d3d1e0e2d849263e45fc7bb842364}
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      PORT: "8080"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      # The mock upstream lives on the compose network (a private address).
+      ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      # Analytics go to Studio on the analytics pulse, as in production.
+      PLUGINS_CONFIG_PATH: /bench/analytics-pulse.yaml
+      ENABLE_METRICS: "true"
+      METRICS_ALLOW_UNAUTHENTICATED: "true"
+      GATEWAY_SERVER_TIMING: "true"
+      ENABLE_TRACING: ${ENABLE_TRACING:-false}
+    volumes:
+      - ./analytics-pulse.yaml:/bench/analytics-pulse.yaml:ro
+    ports:
+      - "18081:8080"
+    # The image's own healthcheck uses `wget --spider` (a HEAD request), which
+    # /health does not answer, so it always reports unhealthy.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      studio:
+        condition: service_healthy
+    ulimits:
+      nofile: {soft: 1048576, hard: 1048576}
+    cpus: ${GATEWAY_CPUS:-2}
+    mem_limit: ${GATEWAY_MEM:-2g}
+
+  mockllm:
+    build:
+      context: ../../..
+      dockerfile: benchmarks/gateway/docker/Dockerfile.tools
+    image: gwbench-tools
+    entrypoint: ["mockllm", "-addr", ":9999"]
+    ports:
+      - "18099:9999"
+    ulimits:
+      nofile: {soft: 1048576, hard: 1048576}
+    cpus: ${MOCK_CPUS:-2}
+    mem_limit: ${MOCK_MEM:-2g}
+
+  # Run with `docker compose run --rm gwbench <subcommand> ...` (the Makefile
+  # targets do this). Not started by `up`.
+  gwbench:
+    profiles: ["tools"]
+    image: gwbench-tools
+    depends_on: [mockllm]
+    environment:
+      GWBENCH_STUDIO_URL: http://studio:8080
+      GWBENCH_GATEWAY_URL: http://gateway:8080
+      GWBENCH_MOCK_URL: http://mockllm:9999
+      GWBENCH_MOCK_UPSTREAM_URL: http://mockllm:9999
+      GWBENCH_STATE: /bench/benchmarks/gateway/.state/state.json
+      GWBENCH_OUT: /bench/benchmarks/gateway/results
+      GWBENCH_LABEL: ${GWBENCH_LABEL:-local docker compose}
+      GWBENCH_GIT_SHA: ${GWBENCH_GIT_SHA:-}
+      GWBENCH_GIT_DIRTY: ${GWBENCH_GIT_DIRTY:-}
+      VENDOR_TESTS_ENV_FILE: /bench/test-secrets/vendors.env
+    volumes:
+      - ../scenarios:/bench/benchmarks/gateway/scenarios:ro
+      - ../results:/bench/benchmarks/gateway/results
+      - ../.state:/bench/benchmarks/gateway/.state
+      - ${VENDORS_ENV_DIR:-../../../test-secrets}:/bench/test-secrets:ro
+    ulimits:
+      nofile: {soft: 1048576, hard: 1048576}
+    cpus: ${LOADGEN_CPUS:-2}
+    mem_limit: ${LOADGEN_MEM:-2g}

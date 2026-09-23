@@ -1,0 +1,26 @@
+name: s0-aa-calibration
+title: "S0 · A/A calibration: direct vs direct"
+description: >
+  Both arms send the same request straight to the mock upstream. Any difference
+  between them is measurement noise, so this run sets the noise floor for every
+  other scenario. The run is INVALID unless the 95% confidence interval for the
+  median difference contains zero. Run it first, on the same hosts, every time.
+mode: closed
+baseline: direct-a
+calibration: true
+timeout: 30s
+closed:
+  concurrency: 1
+  requests: 3000
+  warmup_requests: 200
+cells:
+  - name: rest
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: direct-a, target: mock, path: "{mock:fast}/v1/chat/completions"}
+      - {name: direct-b, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: stream
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: direct-a, target: mock, path: "{mock:fast}/v1/chat/completions"}
+      - {name: direct-b, target: mock, path: "{mock:fast}/v1/chat/completions"}

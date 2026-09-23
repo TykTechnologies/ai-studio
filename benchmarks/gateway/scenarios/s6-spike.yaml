@@ -1,0 +1,24 @@
+name: s6-spike
+title: "S6 · Burst to three times the base rate"
+description: >
+  Steady traffic at a base rate, a 30-second burst to three times that, then back
+  to base. It shows whether the gateway absorbs a burst (latency rises, then
+  recovers) or falters (errors, or latency that stays high after the burst). The
+  rates below assume a knee of about 200 req/s. Scale them from your S4 result:
+  --rate-scale <sustained_rps / 200>.
+mode: open
+baseline: direct
+timeout: 60s
+open:
+  arrival: poisson
+  rate: {kind: spike, base: 70, peak: 210, at: 60s, width: 30s, duration: 180s}
+  warmup: 10s
+  report_window: 5s
+  max_in_flight: 30000
+  max_lag_ms: 5
+cells:
+  - name: stream-realistic
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 2048, max_tokens: 200}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-realistic/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:realistic}/v1/chat/completions", weight: 0.1}

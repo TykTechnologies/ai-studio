@@ -1026,6 +1026,71 @@ perf-clean:
 	rm -rf performance/reports/*
 	@echo "Performance artifacts cleaned"
 
+# Gateway latency benchmarks (benchmarks/gateway/README.md).
+# The stack reads TYK_AI_LICENSE from BENCH_ENV_FILE; vendor keys for the
+# real-upstream scenario come from $(BENCH_VENDORS_DIR)/vendors.env.
+BENCH_DIR          := benchmarks/gateway
+BENCH_ENV_FILE     ?= dev/.env.secrets
+BENCH_VENDORS_DIR  ?= $(CURDIR)/test-secrets
+BENCH_COMPOSE       = GWBENCH_GIT_SHA=$$(git rev-parse HEAD) \
+	GWBENCH_GIT_DIRTY=$$(test -n "$$(git status --porcelain --untracked-files=no)" && echo true || echo false) \
+	VENDORS_ENV_DIR=$(BENCH_VENDORS_DIR) \
+	docker compose --env-file $(BENCH_ENV_FILE) -f $(BENCH_DIR)/compose/docker-compose.yml
+BENCH_RUN           = $(BENCH_COMPOSE) run --rm gwbench
+BENCH_SCENARIOS     = /bench/$(BENCH_DIR)/scenarios
+
+bench-up: ## Build and start the benchmark stack (Studio + edge + mock)
+	@test -f $(BENCH_ENV_FILE) || { echo "$(BENCH_ENV_FILE) not found: set BENCH_ENV_FILE to a file with TYK_AI_LICENSE"; exit 1; }
+	@mkdir -p $(BENCH_DIR)/results $(BENCH_DIR)/.state
+	$(BENCH_COMPOSE) --profile tools build
+	$(BENCH_COMPOSE) up -d --wait
+
+bench-down: ## Stop the benchmark stack and delete its data
+	$(BENCH_COMPOSE) --profile tools down -v
+
+bench-seed: ## Configure Studio + edge for benchmarking (mock LLMs only)
+	$(BENCH_RUN) seed
+
+bench-seed-vendors: ## Configure Studio + edge including real OpenAI/Anthropic LLMs
+	$(BENCH_RUN) seed -vendors
+
+bench-smoke: ## Quick end-to-end run of S0, S1 and S4 (not publishable)
+	$(BENCH_RUN) run -quick $(BENCH_SCENARIOS)/s0-aa-calibration.yaml $(BENCH_SCENARIOS)/s1-overhead-floor.yaml $(BENCH_SCENARIOS)/s4-capacity-ramp.yaml
+
+bench-overhead: ## S0 calibration, S1 overhead floor, S2 payload sensitivity
+	$(BENCH_RUN) run $(BENCH_SCENARIOS)/s0-aa-calibration.yaml $(BENCH_SCENARIOS)/s1-overhead-floor.yaml $(BENCH_SCENARIOS)/s2-payload-size.yaml
+
+bench-real: ## S3 against real vendors (needs bench-seed-vendors and vendors.env)
+	$(BENCH_RUN) run -vendors $(BENCH_SCENARIOS)/s0-aa-calibration.yaml $(BENCH_SCENARIOS)/s3-real-vendors.yaml
+
+bench-stress: ## S4 capacity ramp and S5 throughput ceiling
+	$(BENCH_RUN) run $(BENCH_SCENARIOS)/s4-capacity-ramp.yaml $(BENCH_SCENARIOS)/s5-throughput-ceiling.yaml
+
+bench-spike: ## S6 burst (size with BENCH_RATE_SCALE=<S4 sustained rps / 200>)
+	$(BENCH_RUN) run -rate-scale $(or $(BENCH_RATE_SCALE),1) $(BENCH_SCENARIOS)/s6-spike.yaml
+
+bench-soak: ## S7 one-hour soak (size with BENCH_RATE_SCALE=<S4 sustained rps / 200>)
+	$(BENCH_RUN) run -rate-scale $(or $(BENCH_RATE_SCALE),1) $(BENCH_SCENARIOS)/s7-soak.yaml
+
+bench-build-gateway: ## Build an edge image from another checkout: make bench-build-gateway SRC=<path> TAG=<tag>
+	@test -n "$(SRC)" && test -n "$(TAG)" || { echo "usage: make bench-build-gateway SRC=<checkout path> TAG=<tag>"; exit 1; }
+	docker build -f $(SRC)/microgateway/deployments/Dockerfile --build-arg EDITION=$(or $(EDITION),ent) -t gwbench-microgateway:$(TAG) $(SRC)
+
+bench-swap: ## Run the edge from another image and re-seed: make bench-swap TAG=<tag>
+	@test -n "$(TAG)" || { echo "usage: make bench-swap TAG=<tag> (an image gwbench-microgateway:<tag>)"; exit 1; }
+	GATEWAY_IMAGE=gwbench-microgateway:$(TAG) $(BENCH_COMPOSE) up -d --no-build --force-recreate --wait gateway
+	$(BENCH_RUN) seed
+
+bench-report: ## Regenerate reports: make bench-report RUN=<results dir name>
+	$(BENCH_RUN) report /bench/$(BENCH_DIR)/results/$(RUN)
+
+.PHONY: bench-up bench-down bench-seed bench-seed-vendors bench-smoke bench-overhead bench-real \
+	bench-stress bench-spike bench-soak bench-report bench-unit bench-build-gateway bench-swap
+
+bench-unit: ## Unit tests for the benchmark tooling and Server-Timing
+	go test ./benchmarks/... ./pkg/testinfra/mockllm/ ./metrics/
+	go test ./proxy/ -run 'ServerTiming|InnerTiming'
+
 # Clean target
 clean:
 	rm -f midsommar*

@@ -1,0 +1,28 @@
+# Benchmark tools image: the mock upstream (mockllm) and the load generator
+# (gwbench). Build from the repository root:
+#
+#   docker build -f benchmarks/gateway/docker/Dockerfile.tools -t gwbench-tools .
+FROM golang:1.26-alpine@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS builder
+
+RUN apk add --no-cache git ca-certificates
+WORKDIR /build
+COPY go.mod go.sum ./
+COPY microgateway/go.mod microgateway/go.sum ./microgateway/
+# The module's replace directive points at the enterprise submodule, so its
+# go.mod must be present for `go mod download`, even for a CE-only build.
+COPY enterprise/go.mod ./enterprise/
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mockllm ./benchmarks/gateway/cmd/mockllm && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gwbench ./benchmarks/gateway/cmd/gwbench
+
+FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /out/mockllm /out/gwbench /usr/local/bin/
+# gwbench loads vendor credentials the way the conformance suite does, which
+# locates test-secrets/ relative to the repository root, found by walking up to
+# this module's go.mod. /bench stands in for the repository root: scenarios,
+# results and test-secrets are mounted beneath it.
+WORKDIR /bench
+COPY go.mod /bench/go.mod
+ENTRYPOINT ["gwbench"]
