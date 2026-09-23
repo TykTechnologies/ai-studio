@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"sort"
 	"strings"
 
@@ -80,4 +81,34 @@ func (r *ModelRouter) AdvertisedModels() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ErrUnsafeLogoURL is returned for a logo URL a browser could be tricked by
+// (javascript:, data:, protocol-relative and the like).
+var ErrUnsafeLogoURL = errors.New("logo_url must be an http(s) URL or a same-origin path")
+
+// SafeLogoURL returns u when it is safe to put in an <img src> the portal
+// renders: an http(s) URL or a same-origin path (a single leading "/", no
+// scheme). Anything else, such as a javascript: URL, becomes "".
+func SafeLogoURL(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" || strings.ContainsAny(u, " \t\r\n") {
+		return ""
+	}
+	lower := strings.ToLower(u)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		return u
+	}
+	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") && !strings.Contains(u, "://") {
+		return u
+	}
+	return ""
+}
+
+// CheckLogoURL refuses a non-empty logo URL SafeLogoURL would drop.
+func CheckLogoURL(u string) error {
+	if strings.TrimSpace(u) != "" && SafeLogoURL(u) == "" {
+		return ErrUnsafeLogoURL
+	}
+	return nil
 }

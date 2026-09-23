@@ -41,7 +41,7 @@ func modelRouterCatalogItem(r *models.ModelRouter, privacy map[uint]int) Catalog
 		Name:                cleanText(r.Name),
 		ShortDescription:    cleanText(short),
 		LongDescription:     cleanText(r.LongDescription),
-		LogoURL:             r.LogoURL,
+		LogoURL:             models.SafeLogoURL(r.LogoURL),
 		Kind:                r.APICompat,
 		KindLabel:           "Model Router",
 		PrivacyScore:        score,

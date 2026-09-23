@@ -141,3 +141,52 @@ func TestModelRouterCataloguesEndpoint(t *testing.T) {
 	require.NoError(t, r.Get(db, router.ID))
 	require.Len(t, r.Catalogues, 1, "a refused update leaves the publication as it was")
 }
+
+// The portal renders a router's logo_url in an <img src>: an unsafe URL is
+// refused when the router is saved, and dropped if one is already stored.
+func TestModelRouter_UnsafeLogoURL(t *testing.T) {
+	api, db, service := setupTestAPIForCommonTests(t)
+
+	for _, bad := range []string{"javascript:alert(1)", "data:text/html,<script>", "//evil.example/x.png", "JaVaScRiPt:alert(1)"} {
+		body, _ := json.Marshal(map[string]interface{}{"data": map[string]interface{}{"type": "model-routers",
+			"attributes": map[string]interface{}{"name": "R", "slug": "r", "logo_url": bad}}})
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request, _ = http.NewRequest(http.MethodPost, "/model-routers", bytes.NewBuffer(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		api.createModelRouter(c)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "%s: %s", bad, w.Body.String())
+	}
+
+	user := createTestUser(t, service)
+	llmCat := createTestCatalogue(t, service)
+	giveUserTeam(t, service, "Platform", user.ID, []uint{llmCat.ID}, nil, nil)
+	llm := createTestLLM(t, service, "Router Target")
+	router := createPortalRouter(t, db, "Prod Router", "prod", llm)
+	require.NoError(t, db.Model(router).Update("logo_url", "javascript:alert(1)").Error)
+	_, err := service.SetModelRouterCatalogues(router.ID, []uint{llmCat.ID})
+	require.NoError(t, err)
+
+	w := portalGet(t, api.getPortalCatalogModelRouter, user, gin.Param{Key: "id", Value: idOf(router.ID)})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "javascript:")
+}
+
+func TestSafeLogoURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://cdn.example/logo.png": "https://cdn.example/logo.png",
+		"http://cdn.example/logo.png":  "http://cdn.example/logo.png",
+		"/api/v1/branding/logo":        "/api/v1/branding/logo",
+		"":                             "",
+		"javascript:alert(1)":          "",
+		"data:image/svg+xml,<svg/>":    "",
+		"//evil.example/x.png":         "",
+		"/redirect?to=https://x":       "",
+		"https://x/ y.png":             "",
+	} {
+		assert.Equal(t, want, models.SafeLogoURL(in), in)
+		if in != "" {
+			assert.Equal(t, want == "", models.CheckLogoURL(in) != nil, in)
+		}
+	}
+}

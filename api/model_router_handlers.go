@@ -81,6 +81,10 @@ func (a *API) createModelRouter(c *gin.Context) {
 	}
 
 	router := a.inputToModelRouter(&input)
+	if err := models.CheckLogoURL(router.LogoURL); err != nil {
+		respondModelRouterError(c, err)
+		return
+	}
 
 	// Creating a router already active is the publish action on model-routers.
 	if !a.requirePublishToCreateLive(c, "model-routers", router.Active) {
@@ -88,18 +92,7 @@ func (a *API) createModelRouter(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.CreateRouter(router); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		} else if errors.Is(err, models.ErrRouteSlugTaken) {
-			statusCode = http.StatusBadRequest
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -191,6 +184,10 @@ func (a *API) updateModelRouter(c *gin.Context) {
 
 	router := a.inputToModelRouter(&input)
 	router.ID = uint(id)
+	if err := models.CheckLogoURL(router.LogoURL); err != nil {
+		respondModelRouterError(c, err)
+		return
+	}
 
 	// Flipping the active switch is the publish action on model-routers; an
 	// omitted switch keeps the stored value rather than deactivating.
@@ -204,18 +201,7 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.UpdateRouter(router); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		} else if errors.Is(err, models.ErrRouteSlugTaken) {
-			statusCode = http.StatusBadRequest
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -259,18 +245,7 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.DeleteRouter(uint(id)); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		} else if errors.Is(err, models.ErrRouteSlugTaken) {
-			statusCode = http.StatusBadRequest
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -313,18 +288,7 @@ func (a *API) listModelRouters(c *gin.Context) {
 
 	routers, totalCount, totalPages, err := a.service.ListModelRouters(pageSize, pageNumber, all, opts)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		} else if errors.Is(err, models.ErrRouteSlugTaken) {
-			statusCode = http.StatusBadRequest
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -383,18 +347,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), input.Active); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		} else if errors.Is(err, models.ErrRouteSlugTaken) {
-			statusCode = http.StatusBadRequest
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -533,4 +486,23 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 			"catalogues":        routerCatalogueRefs(router.Catalogues),
 		},
 	}
+}
+
+// respondModelRouterError maps a model router service error to its response:
+// 402 in the Community Edition, 400 for a caller's mistake (a slug another
+// route already answers to, an unsafe logo URL), 500 otherwise.
+func respondModelRouterError(c *gin.Context, err error) {
+	statusCode := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, model_router.ErrEnterpriseFeature):
+		statusCode = http.StatusPaymentRequired
+	case errors.Is(err, models.ErrRouteSlugTaken), errors.Is(err, models.ErrUnsafeLogoURL):
+		statusCode = http.StatusBadRequest
+	}
+	c.JSON(statusCode, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error", Detail: err.Error()}},
+	})
 }
