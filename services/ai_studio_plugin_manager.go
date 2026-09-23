@@ -1755,6 +1755,14 @@ func (m *AIStudioPluginManager) PingPlugin(pluginID uint) error {
 
 // LoadAllUIAndAgentPlugins loads all active plugins that support studio_ui or agent hooks
 func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
+	// Retire resource types left active by plugins deleted before
+	// DeletePlugin deactivated them.
+	if n, err := models.DeactivateOrphanedPluginResourceTypes(m.db); err != nil {
+		log.Warn().Err(err).Msg("Failed to deactivate resource types of deleted plugins")
+	} else if n > 0 {
+		log.Info().Int64("count", n).Msg("Deactivated resource types of deleted plugins")
+	}
+
 	// Get all active plugins
 	var plugins []models.Plugin
 	err := m.db.Where("is_active = ?", true).Find(&plugins).Error

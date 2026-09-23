@@ -62,9 +62,20 @@ const TeamCostsTable = ({ startDate, endDate }) => {
               {rows.map((row) => (
                 <TableRow key={row.team_id}>
                   <TableCell>
-                    <Link component={RouterLink} to={`/admin/groups/${row.team_id}`}>
-                      {row.team_name}
-                    </Link>
+                    {row.deleted ? (
+                      // A deleted team has no page, and a new team may carry
+                      // its name.
+                      <span data-testid={`team-costs-deleted-${row.team_id}`}>
+                        {row.team_name}{" "}
+                        <Typography component="span" variant="body2" color="text.secondary">
+                          (deleted)
+                        </Typography>
+                      </span>
+                    ) : (
+                      <Link component={RouterLink} to={`/admin/groups/${row.team_id}`}>
+                        {row.team_name}
+                      </Link>
+                    )}
                   </TableCell>
                   <TableCell align="right">{formatMoney(row.cost)}</TableCell>
                   <TableCell align="right">{total > 0 ? `${((row.cost / total) * 100).toFixed(1)}%` : "—"}</TableCell>

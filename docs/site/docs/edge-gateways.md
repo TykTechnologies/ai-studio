@@ -257,6 +257,7 @@ Triggers a configuration reload for all edges or a specific namespace:
 - Verify the edge gateway is running and healthy
 - Check edge gateway logs for connection errors
 - Ensure firewall rules allow gRPC traffic (default port 50051)
+- After a control plane restart or outage, edges reconnect on their own, retrying with exponential backoff (5 seconds doubling to at most 5 minutes). Edges older than the fix of 2026-09-24 stopped retrying after the first failed attempt and needed a restart once the outage lasted longer than about 5 seconds.
 
 ### Edge Shows "Pending" After Push
 

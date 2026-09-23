@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	// "github.com/gin-gonic/gin" // Not directly used in this file
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Dummy assignments to satisfy "imported and not used" error for packages
@@ -470,3 +471,41 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 // 	} `json:"errors"`
 // }
 // performRequest is defined in api_test.go
+
+// A PATCH that leaves monthly_budget out keeps the App's budget. With null
+// meaning "no limit", reading an omitted key as null silently lifted the
+// App's spending limit. An explicit null still clears it.
+func TestUpdateApp_OmittedBudgetIsKept(t *testing.T) {
+	api, db := setupTestAPI(t)
+	user := &models.User{Email: "budgetkeep@example.com", Name: "Budget Keep", IsAdmin: true, EmailVerified: true}
+	require.NoError(t, user.Create(db))
+
+	budget := 50.0
+	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	app := &models.App{Name: "Budgeted", UserID: user.ID, MonthlyBudget: &budget, BudgetStartDate: &start}
+	require.NoError(t, db.Create(app).Error)
+
+	patch := func(attrs map[string]interface{}) {
+		t.Helper()
+		body := map[string]interface{}{"data": map[string]interface{}{"type": "app", "attributes": attrs}}
+		w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/apps/%d", app.ID), body)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+	reload := func() *models.App {
+		t.Helper()
+		var got models.App
+		require.NoError(t, db.First(&got, app.ID).Error)
+		return &got
+	}
+
+	patch(map[string]interface{}{"name": "Renamed", "user_id": user.ID})
+	got := reload()
+	assert.Equal(t, "Renamed", got.Name)
+	require.NotNil(t, got.MonthlyBudget, "an omitted monthly_budget must not become no limit")
+	assert.Equal(t, 50.0, *got.MonthlyBudget)
+	require.NotNil(t, got.BudgetStartDate, "an omitted budget must keep its start date")
+	assert.True(t, start.Equal(*got.BudgetStartDate))
+
+	patch(map[string]interface{}{"name": "Renamed", "user_id": user.ID, "monthly_budget": nil})
+	assert.Nil(t, reload().MonthlyBudget, "an explicit null clears the budget")
+}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"gorm.io/gorm"
 )
 
@@ -257,7 +259,7 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	var input AppInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -265,6 +267,27 @@ func (a *API) updateApp(c *gin.Context) {
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// A budget key left out keeps its value. A nil MonthlyBudget means "no
+	// limit", so reading an omitted key as nil lifted the App's limit.
+	if omitted := omittedAppAttributes(c, "monthly_budget", "budget_start_date"); len(omitted) > 0 {
+		existing, err := a.service.GetAppByID(uint(id))
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
+		if omitted["monthly_budget"] {
+			input.Data.Attributes.MonthlyBudget = existing.MonthlyBudget
+		}
+		if omitted["budget_start_date"] {
+			input.Data.Attributes.BudgetStartDate = existing.BudgetStartDate
+		}
 	}
 
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
@@ -1037,4 +1060,30 @@ func (a *API) getAppTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// omittedAppAttributes reports which of keys are absent from the request's
+// data.attributes, telling an omitted key from an explicit null. The body must
+// have been bound with ShouldBindBodyWith.
+func omittedAppAttributes(c *gin.Context, keys ...string) map[string]bool {
+	raw, ok := c.Get(gin.BodyBytesKey)
+	body, _ := raw.([]byte)
+	if !ok || body == nil {
+		return nil
+	}
+	var probe struct {
+		Data struct {
+			Attributes map[string]json.RawMessage `json:"attributes"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return nil
+	}
+	omitted := map[string]bool{}
+	for _, k := range keys {
+		if _, present := probe.Data.Attributes[k]; !present {
+			omitted[k] = true
+		}
+	}
+	return omitted
 }

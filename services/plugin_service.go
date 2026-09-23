@@ -307,6 +307,15 @@ func (s *PluginService) DeletePlugin(id uint) error {
 			Msg("Keeping config schema - other plugins still use this command")
 	}
 
+	// Retire the plugin's resource types. Unload does this for a loaded
+	// plugin, but a plugin deleted while not loaded left them active: the App
+	// form then failed on them and portal Browse showed their tab twice.
+	if err := s.db.Model(&models.PluginResourceType{}).
+		Where("plugin_id = ?", id).
+		Update("is_active", false).Error; err != nil {
+		return fmt.Errorf("failed to deactivate plugin resource types: %w", err)
+	}
+
 	// Clean up plugin schedules and executions (CASCADE should handle this, but be explicit for SQLite)
 	// Delete executions first (child records)
 	if err := s.db.Where("plugin_id = ?", id).Delete(&models.PluginScheduleExecution{}).Error; err != nil {
