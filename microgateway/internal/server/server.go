@@ -93,6 +93,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 			LLMTimeout:            cfg.Gateway.Timeout,
 			UnifiedRouterBasePath: cfg.Gateway.UnifiedRouterPath,
 			DisableUnifiedRouter:  cfg.Gateway.UnifiedRouterDisabled,
+			ServerTiming:          cfg.Gateway.ServerTiming,
 		},
 	)
 	

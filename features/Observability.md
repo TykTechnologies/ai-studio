@@ -181,6 +181,35 @@ allocations and nothing leaves the process.
 | `METRICS_LEGACY_NAMES` | `true` | Also emit the pre-conventions `aistudio_*` series |
 | `ENABLE_TRACING` | `false` | Export spans over OTLP |
 | `TRACING_ENDPOINT` | — | Collector address; `host:port` is dialled insecurely, an `https://` URL uses TLS |
+| `GATEWAY_SERVER_TIMING` | `false` | Add a `Server-Timing` header and trailer splitting each LLM request into gateway and upstream time |
+
+The Prometheus registry also carries the standard Go runtime and process
+collectors (`go_goroutines`, `process_resident_memory_bytes`,
+`process_open_fds`, `process_cpu_seconds_total`), which the benchmark suite's
+soak test samples to detect leaks.
+
+### Server-Timing
+
+`proxy/server_timing.go`. When `proxy.Config.ServerTiming` is set, the
+outermost proxy middleware starts a per-request recorder and puts it on the
+context:
+- `timedTransport`, which wraps the shared upstream transport, fills it in with
+  `httptrace` hooks (connection reuse, first response byte) and a body wrapper
+  (first body byte, end of body).
+- The response writer wrapper stamps a `Server-Timing` header when headers go
+  out. After the handler returns, it adds a `Server-Timing` trailer, which is
+  sent on chunked responses only; a buffered response already has everything
+  in its header.
+
+The `/ai/` and unified-router endpoints reach the vendor through a loopback
+call to `/llm/call/`. Their attempt context is detached from the request, so
+`runDriverAttempt` copies the recorder across explicitly. The inner hop
+returns absolute vendor timestamps in the internal `X-Tyk-Internal-Timing`
+header and trailer. That works because both hops share a process clock. The
+outer hop adopts them and strips the header, so `upstream` is always the
+vendor, never the loopback. One limitation: when the driver closes the
+loopback body before reading the inner trailer, the vendor's end time falls
+back to the loopback's end, which slightly under-reports `gw`.
 
 Both runtimes read the same variable names, so one set of settings configures
 either side of the hub-spoke pair. Studio equivalents live on
@@ -217,6 +246,7 @@ Envoy AI Gateway and other inference gateways.
 | Exporter setup, endpoint parsing, propagation | `pkg/tracing/tracing_test.go` |
 | End-to-end streaming metrics through an assembled gateway | `microgateway/tests/integration/streaming_metrics_test.go` |
 | Helm chart invariants | `tests/helm_chart_test.go` |
+| Server-Timing header, trailer, loopback merge, off by default | `proxy/server_timing_test.go` |
 
 Two assertions are worth preserving deliberately, because both were arrived at
 after a weaker version failed to catch a seeded regression:
@@ -233,5 +263,6 @@ after a weaker version failed to catch a seeded regression:
 
 - [Telemetry.md](Telemetry.md) — anonymised product usage statistics, a separate system
 - [Proxy.md](Proxy.md) — the request path these instruments measure
+- `benchmarks/gateway/README.md` — the latency benchmark suite that consumes Server-Timing
 - `docs/site/docs/observability.md` — operator-facing guide
 - `docs/site/docs/deployment-kubernetes-inference-gateway.md` — running alongside the Kubernetes Inference Gateway

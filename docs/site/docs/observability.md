@@ -183,6 +183,40 @@ unconditionally, so enabling tracing changes whether the gateway *records* spans
 not whether it *propagates* them. If you already trace either side of the
 gateway, you get an unbroken trace without turning anything on here.
 
+## Per-request gateway timing (Server-Timing)
+
+To see how much of a single request's latency the gateway itself added, set
+`GATEWAY_SERVER_TIMING=true` on the Microgateway (or on Studio for its embedded
+gateway). LLM responses then carry a standard `Server-Timing` header, which
+browser developer tools and most HTTP clients display:
+
+```text
+Server-Timing: gw-pre;dur=0.812, upstream-ttfb;dur=287.340, elapsed;dur=288.402, conn;desc="reused"
+```
+
+Streaming responses also carry a `Server-Timing` trailer after the last chunk,
+with the complete breakdown:
+
+| Metric | Meaning |
+|---|---|
+| `gw-pre` | Request received to upstream request sent (authentication, policy, request handling) |
+| `upstream-ttfb` | Upstream request sent to upstream response headers |
+| `upstream` | Upstream request sent to upstream body fully read |
+| `gw` | All gateway time outside the upstream call: `total - upstream` |
+| `gw-ttfb` | The gateway's share of time to the first body byte |
+| `total` | Request received to response complete (trailer only) |
+| `elapsed` | Request received to response headers written (header only) |
+| `conn` | `reused` or `new`: whether the upstream connection came from the pool |
+
+For the OpenAI-compatible endpoints (`/ai/...` and the unified `/v1` endpoint),
+`upstream` is the vendor call itself, not the gateway's internal second hop, so
+`gw-pre` includes that hop.
+
+The header is off by default: it reveals internal timing to every client. Turn
+it on for benchmarking or diagnosis. The benchmark suite in
+`benchmarks/gateway/` uses it to split gateway overhead from vendor latency on
+every request.
+
 ## Kubernetes
 
 The Helm chart ships the pieces needed for a standard monitoring stack:

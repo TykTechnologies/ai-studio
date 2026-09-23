@@ -207,6 +207,11 @@ type Config struct {
 	// /anthropic/) are unaffected. Hosts that expose their own single endpoint,
 	// or that must not have the proxy claim a shared path prefix, set this.
 	DisableUnifiedRouter bool
+
+	// ServerTiming adds a Server-Timing header and trailer to LLM responses that
+	// split each request into gateway time and upstream time (see
+	// server_timing.go). Off by default; meant for benchmarking and diagnosis.
+	ServerTiming bool
 }
 
 // unifiedRouterBasePath returns the normalized ingress base path, or "" when the
@@ -506,7 +511,12 @@ func (p *Proxy) createHandler() http.Handler {
 	// 1. combinedHandler - Route /ai/ separately from authenticated routes
 	// 2. toolCORSMiddleware - CORS + preflight for /tools/, ahead of auth
 	// 3. cloudflareHeadersMiddleware - Add Cloudflare headers
-	return p.cloudflareHeadersMiddleware(toolCORSMiddleware(combinedHandler))
+	// 4. serverTimingMiddleware - Opt-in; outermost so it times the whole chain
+	h := p.cloudflareHeadersMiddleware(toolCORSMiddleware(combinedHandler))
+	if p.config != nil && p.config.ServerTiming {
+		h = serverTimingMiddleware(h)
+	}
+	return h
 }
 
 // Header names the MCP StreamableHTTP transport relies on. A browser client
@@ -566,6 +576,11 @@ func budgetDenial(err error, exceededMsg string) (int, string) {
 // and connection cannot bypass the SSRF protection. Shared so connection
 // pooling behaves like the default transport it replaces.
 var upstreamGuardedTransport = newUpstreamTransport()
+
+// upstreamTransport is what upstream requests are sent through: the guarded
+// pool wrapped in timedTransport, a passthrough unless Server-Timing is on for
+// the request.
+var upstreamTransport http.RoundTripper = &timedTransport{base: upstreamGuardedTransport}
 
 // Idle connection limits for the upstream and loopback pools. The default
 // transport keeps 2 idle connections per host, so a gateway with more than
@@ -896,7 +911,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	// time (post-DNS), closing the DNS-rebinding TOCTOU window.
 	httpProxy := &httputil.ReverseProxy{
 		Director:  proxyDirector,
-		Transport: upstreamGuardedTransport,
+		Transport: upstreamTransport,
 		// ModifyResponse runs on this goroutine, before the deferred duration
 		// observation, so recording the upstream status here is race-free.
 		ModifyResponse: func(resp *http.Response) error {
@@ -1636,7 +1651,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 
 	client := &http.Client{
 		Timeout:   p.config.llmTimeout(),
-		Transport: upstreamGuardedTransport,
+		Transport: upstreamTransport,
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {

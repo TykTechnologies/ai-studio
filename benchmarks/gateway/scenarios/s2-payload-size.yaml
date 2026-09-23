@@ -1,0 +1,36 @@
+name: s2-payload-size
+title: "S2 · Sensitivity to request and response size"
+description: >
+  The gateway reads and inspects request bodies (model validation, filters,
+  analytics) and relays every streamed chunk. This scenario checks how its
+  overhead grows with a large prompt (long context) and with a long stream of
+  small chunks. It uses the native /llm/call/ route, unloaded, one request at a
+  time.
+mode: closed
+baseline: direct
+timeout: 60s
+closed:
+  concurrency: 1
+  requests: 2000
+  warmup_requests: 100
+cells:
+  - name: prompt-1kb
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: prompt-32kb
+    body: {format: openai, model: mock-model, prompt_bytes: 32768, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: prompt-256kb
+    body: {format: openai, model: mock-model, prompt_bytes: 262144, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: stream-1000-chunks
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 1000}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-long/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:long}/v1/chat/completions"}

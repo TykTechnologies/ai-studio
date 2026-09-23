@@ -12,6 +12,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -42,6 +43,12 @@ var (
 // and returns an http.Handler that serves the /metrics endpoint.
 func Init() http.Handler {
 	registry := prometheus.NewRegistry()
+	// Standard Go runtime and process metrics (goroutines, heap, RSS, open
+	// FDs, CPU), so capacity and soak runs can watch for leaks.
+	registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
 
 	exporter, err := otelprometheus.New(
 		otelprometheus.WithRegisterer(registry),

@@ -74,6 +74,10 @@ type Config struct {
 	// DisableUnifiedRouter turns the unified ingress off entirely. The per-route
 	// endpoints (/ai/, /llm/, /anthropic/) are unaffected.
 	DisableUnifiedRouter bool
+
+	// ServerTiming adds Server-Timing headers/trailers splitting each LLM
+	// request into gateway and upstream time. Off by default.
+	ServerTiming bool
 }
 
 // New creates a new Gateway instance using the unified services interface with default database analytics.
@@ -147,6 +151,7 @@ func NewWithAnalytics(
 		LLMTimeout:            config.LLMTimeout,
 		UnifiedRouterBasePath: config.UnifiedRouterBasePath,
 		DisableUnifiedRouter:  config.DisableUnifiedRouter,
+		ServerTiming:          config.ServerTiming,
 	}
 	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{

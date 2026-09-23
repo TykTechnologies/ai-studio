@@ -93,6 +93,9 @@ type GatewayConfig struct {
 	// UnifiedRouterDisabled removes the endpoint entirely.
 	UnifiedRouterPath         string        `env:"GATEWAY_UNIFIED_ROUTER_PATH" envDefault:"/v1"`
 	UnifiedRouterDisabled     bool          `env:"GATEWAY_UNIFIED_ROUTER_DISABLED" envDefault:"false"`
+	// ServerTiming adds Server-Timing headers/trailers to LLM responses that
+	// split each request into gateway and upstream time (for benchmarking).
+	ServerTiming bool `env:"GATEWAY_SERVER_TIMING" envDefault:"false"`
 	PluginEndpointMaxBodySize    int64         `env:"PLUGIN_ENDPOINT_MAX_BODY_SIZE" envDefault:"1048576"`    // 1MB max request body for custom plugin endpoints
 	PluginEndpointStreamTimeout time.Duration `env:"PLUGIN_ENDPOINT_STREAM_TIMEOUT" envDefault:"5m"`       // Timeout for streaming plugin endpoints
 }
