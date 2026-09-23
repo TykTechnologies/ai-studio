@@ -153,7 +153,7 @@ config:
 
   # Database (SQLite for edge)
   databaseType: "sqlite"
-  databaseDsn: "file:./data/edge.db?cache=shared&mode=rwc"
+  databaseDsn: "file:./data/edge.db?mode=rwc"
   dbAutoMigrate: "true"
 
   # Plugins

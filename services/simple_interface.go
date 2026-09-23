@@ -1,8 +1,17 @@
 package services
 
 import (
+	"errors"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
+
+// ErrBudgetCheckUnavailable marks a CheckBudget error that is not a budget
+// decision: the check itself could not run (for example the store was busy).
+// The request is still refused, but the gateway answers 503 rather than a 403
+// "Budget limit exceeded" that would send the client looking at a budget with
+// room to spare. Wrap it with %w.
+var ErrBudgetCheckUnavailable = errors.New("budget check unavailable")
 
 // BudgetServiceInterface defines budget operations needed by the application.
 // This interface allows implementations to use databases, files, or other storage backends.

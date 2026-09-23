@@ -22,13 +22,22 @@ import (
 type PluginService struct {
 	db   *gorm.DB
 	repo *database.Repository
+
+	// llmPlugins caches GetPluginsForLLM. The auth and response hooks call it
+	// several times per proxied request, almost always to learn that the LLM
+	// has no plugins; it is invalidated by any configuration write.
+	llmPlugins *database.GenCache[uint, []database.Plugin]
 }
 
 // NewPluginService creates a new plugin service
 func NewPluginService(db *gorm.DB, repo *database.Repository) PluginServiceInterface {
+	if err := database.EnsureConfigGenerationCallbacks(db); err != nil {
+		log.Warn().Err(err).Msg("Could not register config generation callbacks; plugin lookups fall back to a short TTL")
+	}
 	return &PluginService{
-		db:   db,
-		repo: repo,
+		db:         db,
+		repo:       repo,
+		llmPlugins: database.NewGenCache[uint, []database.Plugin](),
 	}
 }
 
@@ -183,6 +192,20 @@ func (s *PluginService) DeletePlugin(id uint) error {
 
 // GetPluginsForLLM returns plugins associated with an LLM with merged configurations, ordered by execution order
 func (s *PluginService) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) {
+	plugins, err := s.llmPlugins.Load(llmID, func() ([]database.Plugin, error) {
+		return s.loadPluginsForLLM(llmID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Callers get their own copy: the cached slice is shared.
+	if len(plugins) == 0 {
+		return []database.Plugin{}, nil
+	}
+	return database.DeepCopy(plugins), nil
+}
+
+func (s *PluginService) loadPluginsForLLM(llmID uint) ([]database.Plugin, error) {
 	// Get LLM-plugin associations first
 	var llmPlugins []database.LLMPlugin
 	err := s.db.Where("llm_id = ? AND is_active = ?", llmID, true).

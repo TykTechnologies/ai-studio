@@ -33,6 +33,11 @@ type HybridGatewayService struct {
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
+
+	// apps caches GetAppByTokenID, which runs on every authenticated request
+	// (the app with its LLMs, tools and datasources: five or more queries).
+	// Invalidated by any configuration write; see database.GenCache.
+	apps *database.GenCache[uint, *database.App]
 }
 
 // NewHybridGatewayService creates a hybrid gateway service for edge instances
@@ -45,6 +50,10 @@ func NewHybridGatewayService(db *gorm.DB, repo *database.Repository, edgeNamespa
 		tokenCache:           make(map[string]*TokenCacheEntry),
 		cacheConfig:          cacheConfig,
 		stopCleanup:          make(chan bool),
+		apps:                 database.NewGenCache[uint, *database.App](),
+	}
+	if err := database.EnsureConfigGenerationCallbacks(db); err != nil {
+		log.Warn().Err(err).Msg("Could not register config generation callbacks; app lookups fall back to a short TTL")
 	}
 	
 	// Start cache cleanup goroutine if caching is enabled
@@ -174,6 +183,15 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 
 // GetAppByTokenID overrides to handle pseudo token IDs from on-demand validation
 func (h *HybridGatewayService) GetAppByTokenID(tokenID uint) (*database.App, error) {
+	app, err := h.apps.Load(tokenID, func() (*database.App, error) { return h.loadAppByTokenID(tokenID) })
+	if err != nil {
+		return nil, err
+	}
+	// Each caller gets its own copy, so none can change the cached app.
+	return database.DeepCopy(app), nil
+}
+
+func (h *HybridGatewayService) loadAppByTokenID(tokenID uint) (*database.App, error) {
 	log.Debug().Uint("token_id", tokenID).Msg("HybridGatewayService.GetAppByTokenID called")
 
 	// For on-demand validation, token_id equals app_id

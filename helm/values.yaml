@@ -168,7 +168,7 @@ microgateway:
     analyticsFlushInterval: "10s"
     analyticsRetentionDays: "90"
     databaseType: "sqlite"
-    databaseDsn: "file:./data/edge.db?cache=shared&mode=rwc"
+    databaseDsn: "file:./data/edge.db?mode=rwc"
     dbAutoMigrate: "true"
     pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
     ociPluginsCacheDir: "/var/lib/microgateway/plugins"

@@ -40,13 +40,21 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 	case "postgres":
 		db, err = gorm.Open(postgres.Open(config.DSN), gormConfig)
 	case "sqlite":
-		db, err = gorm.Open(sqlite.Open(config.DSN), gormConfig)
+		dsn, removedShared := normalizeSQLiteDSN(config.DSN)
+		if removedShared {
+			log.Printf("SQLite: ignoring cache=shared in DATABASE_DSN for a file database; it causes table-level lock errors under concurrent load")
+		}
+		db, err = gorm.Open(sqlite.Open(dsn), gormConfig)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", config.Type)
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	if err := EnsureConfigGenerationCallbacks(db); err != nil {
+		return nil, fmt.Errorf("failed to register config generation callbacks: %w", err)
 	}
 
 	// Configure connection pool

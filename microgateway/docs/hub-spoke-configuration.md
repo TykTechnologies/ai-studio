@@ -139,7 +139,7 @@ DATABASE_DSN=postgres://mgw_user:secure_password@localhost:5432/microgateway_con
 
 ```bash
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/control.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/control.db?mode=rwc
 ```
 
 ### TLS Configuration

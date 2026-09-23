@@ -8,7 +8,7 @@ LOG_FORMAT=text
 
 # Database - SQLite for simplicity
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:/opt/tyk-microgateway/data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:/opt/tyk-microgateway/data/microgateway.db?mode=rwc
 DB_AUTO_MIGRATE=true
 
 # Edge mode - connect to local AI Studio
