@@ -469,6 +469,11 @@ func (a *API) setupRoutes() {
 
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
+		// Files at the root of the build (manifest.json, robots.txt, ...)
+		if serveBuildRootFile(c, a.staticFiles) {
+			return
+		}
+
 		// Check if it's a static file request
 		if strings.HasPrefix(c.Request.URL.Path, "/static/") ||
 			strings.HasPrefix(c.Request.URL.Path, "/logos/") ||

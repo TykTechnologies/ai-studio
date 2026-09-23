@@ -43,6 +43,23 @@ describe("TeamCostsTable", () => {
     expect(within(screen.getByTestId("team-costs-unattributed")).getByText("25.0%")).toBeInTheDocument();
   });
 
+  it("marks a deleted team and does not link to it", async () => {
+    teamBudgetsService.getTeamCosts.mockResolvedValue({
+      teams: [
+        { team_id: 4, team_name: "Research", cost: 10, tokens: 1, requests: 1, deleted: true },
+        { team_id: 9, team_name: "Research", cost: 5, tokens: 1, requests: 1 },
+      ],
+      unattributed: { cost: 0, tokens: 0, requests: 0 },
+    });
+    renderTable();
+    const deleted = await screen.findByTestId("team-costs-deleted-4");
+    expect(deleted).toHaveTextContent("Research (deleted)");
+    expect(within(deleted).queryByRole("link")).toBeNull();
+    const live = screen.getAllByRole("link");
+    expect(live).toHaveLength(1);
+    expect(live[0]).toHaveAttribute("href", "/admin/groups/9");
+  });
+
   it("renders nothing in Community Edition", async () => {
     useEdition.mockReturnValue({ isEnterprise: false });
     const { container } = renderTable();

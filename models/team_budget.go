@@ -355,4 +355,7 @@ type TeamCostRow struct {
 	Cost     float64 `json:"cost"`
 	Tokens   int64   `json:"tokens"`
 	Requests int64   `json:"requests"`
+	// Deleted marks a team deleted since it spent: its name may since have
+	// been reused, and it has no page to link to.
+	Deleted bool `json:"deleted,omitempty"`
 }

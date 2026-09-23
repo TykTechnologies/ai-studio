@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"gorm.io/gorm"
 )
 
@@ -257,7 +259,7 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	var input AppInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -265,6 +267,40 @@ func (a *API) updateApp(c *gin.Context) {
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// A budget key left out keeps its value. A nil MonthlyBudget means "no
+	// limit", so reading an omitted key as nil lifted the App's limit. If the
+	// keys cannot be read, refuse the request rather than guess.
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	_, hasBudget := present["monthly_budget"]
+	_, hasStart := present["budget_start_date"]
+	if !hasBudget || !hasStart {
+		existing, err := a.service.GetAppByID(uint(id))
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
+		if !hasBudget {
+			input.Data.Attributes.MonthlyBudget = existing.MonthlyBudget
+		}
+		if !hasStart {
+			input.Data.Attributes.BudgetStartDate = existing.BudgetStartDate
+		}
 	}
 
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
@@ -1037,4 +1073,21 @@ func (a *API) getAppTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// boundAttributeKeys returns the data.attributes keys of a body bound with
+// ShouldBindBodyWith, so an omitted key can be told from an explicit null.
+// It fails rather than report "nothing present" when the body is unavailable,
+// since callers read absence as "keep the stored value".
+func boundAttributeKeys(c *gin.Context) (map[string]json.RawMessage, error) {
+	raw, _ := c.Get(gin.BodyBytesKey)
+	body, ok := raw.([]byte)
+	if !ok {
+		return nil, errors.New("request body is unavailable")
+	}
+	present := llmPatchAttributeKeys(body)
+	if present == nil {
+		return nil, errors.New("request body has no data.attributes object")
+	}
+	return present, nil
 }
