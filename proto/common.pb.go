@@ -68,23 +68,24 @@ func (x ConfigurationChange_ChangeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigurationChange_ChangeType.Descriptor instead.
 func (ConfigurationChange_ChangeType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{15, 0}
+	return file_proto_common_proto_rawDescGZIP(), []int{16, 0}
 }
 
 type ConfigurationChange_EntityType int32
 
 const (
-	ConfigurationChange_LLM          ConfigurationChange_EntityType = 0
-	ConfigurationChange_APP          ConfigurationChange_EntityType = 1
-	ConfigurationChange_TOKEN        ConfigurationChange_EntityType = 2
-	ConfigurationChange_MODEL_PRICE  ConfigurationChange_EntityType = 3
-	ConfigurationChange_FILTER       ConfigurationChange_EntityType = 4
-	ConfigurationChange_PLUGIN       ConfigurationChange_EntityType = 5
-	ConfigurationChange_MODEL_ROUTER ConfigurationChange_EntityType = 6
-	ConfigurationChange_TOOL         ConfigurationChange_EntityType = 7
-	ConfigurationChange_DATASOURCE   ConfigurationChange_EntityType = 8
-	ConfigurationChange_OAUTH_CLIENT ConfigurationChange_EntityType = 9
-	ConfigurationChange_ACCESS_TOKEN ConfigurationChange_EntityType = 10
+	ConfigurationChange_LLM             ConfigurationChange_EntityType = 0
+	ConfigurationChange_APP             ConfigurationChange_EntityType = 1
+	ConfigurationChange_TOKEN           ConfigurationChange_EntityType = 2
+	ConfigurationChange_MODEL_PRICE     ConfigurationChange_EntityType = 3
+	ConfigurationChange_FILTER          ConfigurationChange_EntityType = 4
+	ConfigurationChange_PLUGIN          ConfigurationChange_EntityType = 5
+	ConfigurationChange_MODEL_ROUTER    ConfigurationChange_EntityType = 6
+	ConfigurationChange_TOOL            ConfigurationChange_EntityType = 7
+	ConfigurationChange_DATASOURCE      ConfigurationChange_EntityType = 8
+	ConfigurationChange_OAUTH_CLIENT    ConfigurationChange_EntityType = 9
+	ConfigurationChange_ACCESS_TOKEN    ConfigurationChange_EntityType = 10
+	ConfigurationChange_SEMANTIC_ROUTER ConfigurationChange_EntityType = 11
 )
 
 // Enum value maps for ConfigurationChange_EntityType.
@@ -101,19 +102,21 @@ var (
 		8:  "DATASOURCE",
 		9:  "OAUTH_CLIENT",
 		10: "ACCESS_TOKEN",
+		11: "SEMANTIC_ROUTER",
 	}
 	ConfigurationChange_EntityType_value = map[string]int32{
-		"LLM":          0,
-		"APP":          1,
-		"TOKEN":        2,
-		"MODEL_PRICE":  3,
-		"FILTER":       4,
-		"PLUGIN":       5,
-		"MODEL_ROUTER": 6,
-		"TOOL":         7,
-		"DATASOURCE":   8,
-		"OAUTH_CLIENT": 9,
-		"ACCESS_TOKEN": 10,
+		"LLM":             0,
+		"APP":             1,
+		"TOKEN":           2,
+		"MODEL_PRICE":     3,
+		"FILTER":          4,
+		"PLUGIN":          5,
+		"MODEL_ROUTER":    6,
+		"TOOL":            7,
+		"DATASOURCE":      8,
+		"OAUTH_CLIENT":    9,
+		"ACCESS_TOKEN":    10,
+		"SEMANTIC_ROUTER": 11,
 	}
 )
 
@@ -141,7 +144,7 @@ func (x ConfigurationChange_EntityType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigurationChange_EntityType.Descriptor instead.
 func (ConfigurationChange_EntityType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{15, 1}
+	return file_proto_common_proto_rawDescGZIP(), []int{16, 1}
 }
 
 type HealthStatus_Status int32
@@ -190,7 +193,7 @@ func (x HealthStatus_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HealthStatus_Status.Descriptor instead.
 func (HealthStatus_Status) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{16, 0}
+	return file_proto_common_proto_rawDescGZIP(), []int{17, 0}
 }
 
 // LLMConfig represents an LLM configuration with embedded relationships
@@ -471,8 +474,10 @@ type AppConfig struct {
 	// Router grants (Enterprise): from the app_model_routers join table. A
 	// router grant lets the App reach the router's LLMs, through the router.
 	ModelRouterIds []uint32 `protobuf:"varint,23,rep,packed,name=model_router_ids,json=modelRouterIds,proto3" json:"model_router_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Semantic Router grants (Enterprise): from app_semantic_routers.
+	SemanticRouterIds []uint32 `protobuf:"varint,24,rep,packed,name=semantic_router_ids,json=semanticRouterIds,proto3" json:"semantic_router_ids,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AppConfig) Reset() {
@@ -662,6 +667,13 @@ func (x *AppConfig) GetPluginResources() []*PluginResourceAssociation {
 func (x *AppConfig) GetModelRouterIds() []uint32 {
 	if x != nil {
 		return x.ModelRouterIds
+	}
+	return nil
+}
+
+func (x *AppConfig) GetSemanticRouterIds() []uint32 {
+	if x != nil {
+		return x.SemanticRouterIds
 	}
 	return nil
 }
@@ -1323,6 +1335,110 @@ func (x *ModelRouterConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// SemanticRouterConfig is a Semantic Router (Enterprise). Its routes and
+// settings travel as the JSON of pkg/semanticrouting.Config, which the edge
+// compiles with the engine; example vectors are computed on the edge and
+// never travel, so the snapshot checksum only changes with the configuration.
+type SemanticRouterConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	ConfigJson    string                 `protobuf:"bytes,6,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SemanticRouterConfig) Reset() {
+	*x = SemanticRouterConfig{}
+	mi := &file_proto_common_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SemanticRouterConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SemanticRouterConfig) ProtoMessage() {}
+
+func (x *SemanticRouterConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SemanticRouterConfig.ProtoReflect.Descriptor instead.
+func (*SemanticRouterConfig) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SemanticRouterConfig) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *SemanticRouterConfig) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SemanticRouterConfig) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *SemanticRouterConfig) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *SemanticRouterConfig) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *SemanticRouterConfig) GetConfigJson() string {
+	if x != nil {
+		return x.ConfigJson
+	}
+	return ""
+}
+
+func (x *SemanticRouterConfig) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *SemanticRouterConfig) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 // ModelPoolConfig represents a pool within a model router
 type ModelPoolConfig struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
@@ -1338,7 +1454,7 @@ type ModelPoolConfig struct {
 
 func (x *ModelPoolConfig) Reset() {
 	*x = ModelPoolConfig{}
-	mi := &file_proto_common_proto_msgTypes[7]
+	mi := &file_proto_common_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1350,7 +1466,7 @@ func (x *ModelPoolConfig) String() string {
 func (*ModelPoolConfig) ProtoMessage() {}
 
 func (x *ModelPoolConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[7]
+	mi := &file_proto_common_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1363,7 +1479,7 @@ func (x *ModelPoolConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelPoolConfig.ProtoReflect.Descriptor instead.
 func (*ModelPoolConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{7}
+	return file_proto_common_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ModelPoolConfig) GetId() uint32 {
@@ -1423,7 +1539,7 @@ type PoolVendorConfig struct {
 
 func (x *PoolVendorConfig) Reset() {
 	*x = PoolVendorConfig{}
-	mi := &file_proto_common_proto_msgTypes[8]
+	mi := &file_proto_common_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1551,7 @@ func (x *PoolVendorConfig) String() string {
 func (*PoolVendorConfig) ProtoMessage() {}
 
 func (x *PoolVendorConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[8]
+	mi := &file_proto_common_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1564,7 @@ func (x *PoolVendorConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PoolVendorConfig.ProtoReflect.Descriptor instead.
 func (*PoolVendorConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{8}
+	return file_proto_common_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PoolVendorConfig) GetId() uint32 {
@@ -1505,7 +1621,7 @@ type ModelMappingConfig struct {
 
 func (x *ModelMappingConfig) Reset() {
 	*x = ModelMappingConfig{}
-	mi := &file_proto_common_proto_msgTypes[9]
+	mi := &file_proto_common_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1517,7 +1633,7 @@ func (x *ModelMappingConfig) String() string {
 func (*ModelMappingConfig) ProtoMessage() {}
 
 func (x *ModelMappingConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[9]
+	mi := &file_proto_common_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1530,7 +1646,7 @@ func (x *ModelMappingConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelMappingConfig.ProtoReflect.Descriptor instead.
 func (*ModelMappingConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{9}
+	return file_proto_common_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ModelMappingConfig) GetId() uint32 {
@@ -1586,7 +1702,7 @@ type ToolConfig struct {
 
 func (x *ToolConfig) Reset() {
 	*x = ToolConfig{}
-	mi := &file_proto_common_proto_msgTypes[10]
+	mi := &file_proto_common_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1598,7 +1714,7 @@ func (x *ToolConfig) String() string {
 func (*ToolConfig) ProtoMessage() {}
 
 func (x *ToolConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[10]
+	mi := &file_proto_common_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1611,7 +1727,7 @@ func (x *ToolConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolConfig.ProtoReflect.Descriptor instead.
 func (*ToolConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{10}
+	return file_proto_common_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ToolConfig) GetId() uint32 {
@@ -1786,7 +1902,7 @@ type DatasourceConfig struct {
 
 func (x *DatasourceConfig) Reset() {
 	*x = DatasourceConfig{}
-	mi := &file_proto_common_proto_msgTypes[11]
+	mi := &file_proto_common_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1798,7 +1914,7 @@ func (x *DatasourceConfig) String() string {
 func (*DatasourceConfig) ProtoMessage() {}
 
 func (x *DatasourceConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[11]
+	mi := &file_proto_common_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1811,7 +1927,7 @@ func (x *DatasourceConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatasourceConfig.ProtoReflect.Descriptor instead.
 func (*DatasourceConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{11}
+	return file_proto_common_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DatasourceConfig) GetId() uint32 {
@@ -1986,7 +2102,7 @@ type OAuthClientConfig struct {
 
 func (x *OAuthClientConfig) Reset() {
 	*x = OAuthClientConfig{}
-	mi := &file_proto_common_proto_msgTypes[12]
+	mi := &file_proto_common_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1998,7 +2114,7 @@ func (x *OAuthClientConfig) String() string {
 func (*OAuthClientConfig) ProtoMessage() {}
 
 func (x *OAuthClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[12]
+	mi := &file_proto_common_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2011,7 +2127,7 @@ func (x *OAuthClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuthClientConfig.ProtoReflect.Descriptor instead.
 func (*OAuthClientConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{12}
+	return file_proto_common_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *OAuthClientConfig) GetId() uint32 {
@@ -2096,7 +2212,7 @@ type AccessTokenConfig struct {
 
 func (x *AccessTokenConfig) Reset() {
 	*x = AccessTokenConfig{}
-	mi := &file_proto_common_proto_msgTypes[13]
+	mi := &file_proto_common_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2108,7 +2224,7 @@ func (x *AccessTokenConfig) String() string {
 func (*AccessTokenConfig) ProtoMessage() {}
 
 func (x *AccessTokenConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[13]
+	mi := &file_proto_common_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2121,7 +2237,7 @@ func (x *AccessTokenConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessTokenConfig.ProtoReflect.Descriptor instead.
 func (*AccessTokenConfig) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{13}
+	return file_proto_common_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AccessTokenConfig) GetId() uint32 {
@@ -2212,15 +2328,16 @@ type ConfigurationSnapshot struct {
 	Tools       []*ToolConfig       `protobuf:"bytes,11,rep,name=tools,proto3" json:"tools,omitempty"`
 	Datasources []*DatasourceConfig `protobuf:"bytes,12,rep,name=datasources,proto3" json:"datasources,omitempty"`
 	// OAuth state for MCP authentication on edges
-	OauthClients  []*OAuthClientConfig `protobuf:"bytes,13,rep,name=oauth_clients,json=oauthClients,proto3" json:"oauth_clients,omitempty"`
-	AccessTokens  []*AccessTokenConfig `protobuf:"bytes,14,rep,name=access_tokens,json=accessTokens,proto3" json:"access_tokens,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OauthClients    []*OAuthClientConfig    `protobuf:"bytes,13,rep,name=oauth_clients,json=oauthClients,proto3" json:"oauth_clients,omitempty"`
+	AccessTokens    []*AccessTokenConfig    `protobuf:"bytes,14,rep,name=access_tokens,json=accessTokens,proto3" json:"access_tokens,omitempty"`
+	SemanticRouters []*SemanticRouterConfig `protobuf:"bytes,15,rep,name=semantic_routers,json=semanticRouters,proto3" json:"semantic_routers,omitempty"` // Enterprise: Semantic routers
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ConfigurationSnapshot) Reset() {
 	*x = ConfigurationSnapshot{}
-	mi := &file_proto_common_proto_msgTypes[14]
+	mi := &file_proto_common_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2232,7 +2349,7 @@ func (x *ConfigurationSnapshot) String() string {
 func (*ConfigurationSnapshot) ProtoMessage() {}
 
 func (x *ConfigurationSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[14]
+	mi := &file_proto_common_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2245,7 +2362,7 @@ func (x *ConfigurationSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationSnapshot.ProtoReflect.Descriptor instead.
 func (*ConfigurationSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{14}
+	return file_proto_common_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ConfigurationSnapshot) GetVersion() string {
@@ -2346,6 +2463,13 @@ func (x *ConfigurationSnapshot) GetAccessTokens() []*AccessTokenConfig {
 	return nil
 }
 
+func (x *ConfigurationSnapshot) GetSemanticRouters() []*SemanticRouterConfig {
+	if x != nil {
+		return x.SemanticRouters
+	}
+	return nil
+}
+
 // ConfigurationChange represents a single configuration change
 type ConfigurationChange struct {
 	state         protoimpl.MessageState         `protogen:"open.v1"`
@@ -2361,7 +2485,7 @@ type ConfigurationChange struct {
 
 func (x *ConfigurationChange) Reset() {
 	*x = ConfigurationChange{}
-	mi := &file_proto_common_proto_msgTypes[15]
+	mi := &file_proto_common_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2373,7 +2497,7 @@ func (x *ConfigurationChange) String() string {
 func (*ConfigurationChange) ProtoMessage() {}
 
 func (x *ConfigurationChange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[15]
+	mi := &file_proto_common_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2386,7 +2510,7 @@ func (x *ConfigurationChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationChange.ProtoReflect.Descriptor instead.
 func (*ConfigurationChange) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{15}
+	return file_proto_common_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ConfigurationChange) GetChangeType() ConfigurationChange_ChangeType {
@@ -2444,7 +2568,7 @@ type HealthStatus struct {
 
 func (x *HealthStatus) Reset() {
 	*x = HealthStatus{}
-	mi := &file_proto_common_proto_msgTypes[16]
+	mi := &file_proto_common_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2456,7 +2580,7 @@ func (x *HealthStatus) String() string {
 func (*HealthStatus) ProtoMessage() {}
 
 func (x *HealthStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[16]
+	mi := &file_proto_common_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2469,7 +2593,7 @@ func (x *HealthStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthStatus.ProtoReflect.Descriptor instead.
 func (*HealthStatus) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{16}
+	return file_proto_common_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *HealthStatus) GetStatus() HealthStatus_Status {
@@ -2514,7 +2638,7 @@ type PluginResourceAssociation struct {
 
 func (x *PluginResourceAssociation) Reset() {
 	*x = PluginResourceAssociation{}
-	mi := &file_proto_common_proto_msgTypes[17]
+	mi := &file_proto_common_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2526,7 +2650,7 @@ func (x *PluginResourceAssociation) String() string {
 func (*PluginResourceAssociation) ProtoMessage() {}
 
 func (x *PluginResourceAssociation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[17]
+	mi := &file_proto_common_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2539,7 +2663,7 @@ func (x *PluginResourceAssociation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginResourceAssociation.ProtoReflect.Descriptor instead.
 func (*PluginResourceAssociation) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{17}
+	return file_proto_common_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PluginResourceAssociation) GetPluginId() uint32 {
@@ -2584,7 +2708,7 @@ type ResourceInstanceSnapshot struct {
 
 func (x *ResourceInstanceSnapshot) Reset() {
 	*x = ResourceInstanceSnapshot{}
-	mi := &file_proto_common_proto_msgTypes[18]
+	mi := &file_proto_common_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2596,7 +2720,7 @@ func (x *ResourceInstanceSnapshot) String() string {
 func (*ResourceInstanceSnapshot) ProtoMessage() {}
 
 func (x *ResourceInstanceSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[18]
+	mi := &file_proto_common_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2609,7 +2733,7 @@ func (x *ResourceInstanceSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceInstanceSnapshot.ProtoReflect.Descriptor instead.
 func (*ResourceInstanceSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{18}
+	return file_proto_common_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResourceInstanceSnapshot) GetId() string {
@@ -2679,7 +2803,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\x12&\n" +
 	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\x12+\n" +
 	"\x11governed_metadata\x18\x19 \x01(\tR\x10governedMetadata\x12\x1a\n" +
-	"\bfailover\x18\x1a \x01(\tR\bfailover\"\xeb\x06\n" +
+	"\bfailover\x18\x1a \x01(\tR\bfailover\"\x9b\a\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2708,7 +2832,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\btool_ids\x18\x14 \x03(\rR\atoolIds\x12%\n" +
 	"\x0edatasource_ids\x18\x15 \x03(\rR\rdatasourceIds\x12R\n" +
 	"\x10plugin_resources\x18\x16 \x03(\v2'.microgateway.PluginResourceAssociationR\x0fpluginResources\x12(\n" +
-	"\x10model_router_ids\x18\x17 \x03(\rR\x0emodelRouterIds\"\xe8\x02\n" +
+	"\x10model_router_ids\x18\x17 \x03(\rR\x0emodelRouterIds\x12.\n" +
+	"\x13semantic_router_ids\x18\x18 \x03(\rR\x11semanticRouterIds\"\xe8\x02\n" +
 	"\vTokenConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x12\n" +
@@ -2793,7 +2918,19 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe7\x01\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa0\x02\n" +
+	"\x14SemanticRouterConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12\x1b\n" +
+	"\tis_active\x18\x05 \x01(\bR\bisActive\x12\x1f\n" +
+	"\vconfig_json\x18\x06 \x01(\tR\n" +
+	"configJson\x129\n" +
+	"\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe7\x01\n" +
 	"\x0fModelPoolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
@@ -2893,7 +3030,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"token_hash\x18\t \x01(\tR\ttokenHash\x12\x15\n" +
 	"\x06app_id\x18\n" +
-	" \x01(\rR\x05appId\"\x82\x06\n" +
+	" \x01(\rR\x05appId\"\xd1\x06\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
@@ -2909,7 +3046,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x05tools\x18\v \x03(\v2\x18.microgateway.ToolConfigR\x05tools\x12@\n" +
 	"\vdatasources\x18\f \x03(\v2\x1e.microgateway.DatasourceConfigR\vdatasources\x12D\n" +
 	"\roauth_clients\x18\r \x03(\v2\x1f.microgateway.OAuthClientConfigR\foauthClients\x12D\n" +
-	"\raccess_tokens\x18\x0e \x03(\v2\x1f.microgateway.AccessTokenConfigR\faccessTokens\"\xa0\x04\n" +
+	"\raccess_tokens\x18\x0e \x03(\v2\x1f.microgateway.AccessTokenConfigR\faccessTokens\x12M\n" +
+	"\x10semantic_routers\x18\x0f \x03(\v2\".microgateway.SemanticRouterConfigR\x0fsemanticRouters\"\xb5\x04\n" +
 	"\x13ConfigurationChange\x12M\n" +
 	"\vchange_type\x18\x01 \x01(\x0e2,.microgateway.ConfigurationChange.ChangeTypeR\n" +
 	"changeType\x12M\n" +
@@ -2927,7 +3065,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"\x06UPDATE\x10\x01\x12\n" +
 	"\n" +
-	"\x06DELETE\x10\x02\"\xa2\x01\n" +
+	"\x06DELETE\x10\x02\"\xb7\x01\n" +
 	"\n" +
 	"EntityType\x12\a\n" +
 	"\x03LLM\x10\x00\x12\a\n" +
@@ -2944,7 +3082,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"DATASOURCE\x10\b\x12\x10\n" +
 	"\fOAUTH_CLIENT\x10\t\x12\x10\n" +
 	"\fACCESS_TOKEN\x10\n" +
-	"\"\xd0\x02\n" +
+	"\x12\x13\n" +
+	"\x0fSEMANTIC_ROUTER\x10\v\"\xd0\x02\n" +
 	"\fHealthStatus\x129\n" +
 	"\x06status\x18\x01 \x01(\x0e2!.microgateway.HealthStatus.StatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x128\n" +
@@ -2981,7 +3120,7 @@ func file_proto_common_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_proto_common_proto_goTypes = []any{
 	(ConfigurationChange_ChangeType)(0), // 0: microgateway.ConfigurationChange.ChangeType
 	(ConfigurationChange_EntityType)(0), // 1: microgateway.ConfigurationChange.EntityType
@@ -2993,72 +3132,76 @@ var file_proto_common_proto_goTypes = []any{
 	(*FilterConfig)(nil),                // 7: microgateway.FilterConfig
 	(*PluginConfig)(nil),                // 8: microgateway.PluginConfig
 	(*ModelRouterConfig)(nil),           // 9: microgateway.ModelRouterConfig
-	(*ModelPoolConfig)(nil),             // 10: microgateway.ModelPoolConfig
-	(*PoolVendorConfig)(nil),            // 11: microgateway.PoolVendorConfig
-	(*ModelMappingConfig)(nil),          // 12: microgateway.ModelMappingConfig
-	(*ToolConfig)(nil),                  // 13: microgateway.ToolConfig
-	(*DatasourceConfig)(nil),            // 14: microgateway.DatasourceConfig
-	(*OAuthClientConfig)(nil),           // 15: microgateway.OAuthClientConfig
-	(*AccessTokenConfig)(nil),           // 16: microgateway.AccessTokenConfig
-	(*ConfigurationSnapshot)(nil),       // 17: microgateway.ConfigurationSnapshot
-	(*ConfigurationChange)(nil),         // 18: microgateway.ConfigurationChange
-	(*HealthStatus)(nil),                // 19: microgateway.HealthStatus
-	(*PluginResourceAssociation)(nil),   // 20: microgateway.PluginResourceAssociation
-	(*ResourceInstanceSnapshot)(nil),    // 21: microgateway.ResourceInstanceSnapshot
-	nil,                                 // 22: microgateway.HealthStatus.MetricsEntry
-	(*timestamppb.Timestamp)(nil),       // 23: google.protobuf.Timestamp
+	(*SemanticRouterConfig)(nil),        // 10: microgateway.SemanticRouterConfig
+	(*ModelPoolConfig)(nil),             // 11: microgateway.ModelPoolConfig
+	(*PoolVendorConfig)(nil),            // 12: microgateway.PoolVendorConfig
+	(*ModelMappingConfig)(nil),          // 13: microgateway.ModelMappingConfig
+	(*ToolConfig)(nil),                  // 14: microgateway.ToolConfig
+	(*DatasourceConfig)(nil),            // 15: microgateway.DatasourceConfig
+	(*OAuthClientConfig)(nil),           // 16: microgateway.OAuthClientConfig
+	(*AccessTokenConfig)(nil),           // 17: microgateway.AccessTokenConfig
+	(*ConfigurationSnapshot)(nil),       // 18: microgateway.ConfigurationSnapshot
+	(*ConfigurationChange)(nil),         // 19: microgateway.ConfigurationChange
+	(*HealthStatus)(nil),                // 20: microgateway.HealthStatus
+	(*PluginResourceAssociation)(nil),   // 21: microgateway.PluginResourceAssociation
+	(*ResourceInstanceSnapshot)(nil),    // 22: microgateway.ResourceInstanceSnapshot
+	nil,                                 // 23: microgateway.HealthStatus.MetricsEntry
+	(*timestamppb.Timestamp)(nil),       // 24: google.protobuf.Timestamp
 }
 var file_proto_common_proto_depIdxs = []int32{
-	23, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 2: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 3: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
-	20, // 4: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
-	23, // 5: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 6: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 7: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 8: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 9: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 10: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 11: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 12: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
-	10, // 13: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
-	23, // 14: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 15: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 16: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
-	12, // 17: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
-	23, // 18: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 19: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 20: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 21: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 22: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 23: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
-	23, // 24: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
-	23, // 25: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	23, // 26: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 27: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
-	4,  // 28: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
-	6,  // 29: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
-	7,  // 30: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
-	8,  // 31: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
-	23, // 32: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	9,  // 33: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
-	13, // 34: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
-	14, // 35: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
-	15, // 36: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
-	16, // 37: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
-	0,  // 38: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
-	1,  // 39: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
-	23, // 40: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 41: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
-	23, // 42: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
-	22, // 43: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
-	21, // 44: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
-	45, // [45:45] is the sub-list for method output_type
-	45, // [45:45] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	24, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 2: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 3: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 4: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
+	24, // 5: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 6: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 7: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 8: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 9: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 10: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 11: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 12: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 13: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
+	24, // 14: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 15: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 16: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 17: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 18: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
+	13, // 19: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
+	24, // 20: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 21: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 22: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 23: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 24: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 25: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 26: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
+	24, // 27: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 28: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 29: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
+	4,  // 30: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
+	6,  // 31: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
+	7,  // 32: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
+	8,  // 33: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
+	24, // 34: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	9,  // 35: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
+	14, // 36: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
+	15, // 37: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
+	16, // 38: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
+	17, // 39: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
+	10, // 40: microgateway.ConfigurationSnapshot.semantic_routers:type_name -> microgateway.SemanticRouterConfig
+	0,  // 41: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
+	1,  // 42: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
+	24, // 43: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
+	2,  // 44: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
+	24, // 45: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
+	23, // 46: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
+	22, // 47: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
+	48, // [48:48] is the sub-list for method output_type
+	48, // [48:48] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_proto_init() }
@@ -3072,7 +3215,7 @@ func file_proto_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_proto_rawDesc), len(file_proto_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

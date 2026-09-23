@@ -1929,14 +1929,16 @@ type AnalyticsEvent struct {
 	FailoverFromLlmId uint32 `protobuf:"varint,28,opt,name=failover_from_llm_id,json=failoverFromLlmId,proto3" json:"failover_from_llm_id,omitempty"` // Primary LLM the request failed over from (0 = primary attempt)
 	FailoverAttempt   uint32 `protobuf:"varint,29,opt,name=failover_attempt,json=failoverAttempt,proto3" json:"failover_attempt,omitempty"`           // 1-based rung index (0 = primary attempt)
 	// Routing decision, set when the request was addressed to a router.
-	RouterKind       string `protobuf:"bytes,30,opt,name=router_kind,json=routerKind,proto3" json:"router_kind,omitempty"` // "model_router"
-	RouterSlug       string `protobuf:"bytes,31,opt,name=router_slug,json=routerSlug,proto3" json:"router_slug,omitempty"`
-	RouterPool       string `protobuf:"bytes,32,opt,name=router_pool,json=routerPool,proto3" json:"router_pool,omitempty"`                     // Model Router pool that matched
-	Route            string `protobuf:"bytes,33,opt,name=route,proto3" json:"route,omitempty"`                                                 // named route chosen, for routers that have them
-	RouteReason      string `protobuf:"bytes,34,opt,name=route_reason,json=routeReason,proto3" json:"route_reason,omitempty"`                  // why the target was chosen ("model_pattern", ...)
-	RouteSourceModel string `protobuf:"bytes,35,opt,name=route_source_model,json=routeSourceModel,proto3" json:"route_source_model,omitempty"` // model the caller asked the router for
-	RouteTargetModel string `protobuf:"bytes,36,opt,name=route_target_model,json=routeTargetModel,proto3" json:"route_target_model,omitempty"` // model the chosen LLM was asked for (after mapping)
-	RouteSelection   string `protobuf:"bytes,37,opt,name=route_selection,json=routeSelection,proto3" json:"route_selection,omitempty"`         // how the target was selected ("round_robin", "weighted")
+	RouterKind       string  `protobuf:"bytes,30,opt,name=router_kind,json=routerKind,proto3" json:"router_kind,omitempty"` // "model_router" or "semantic_router"
+	RouterSlug       string  `protobuf:"bytes,31,opt,name=router_slug,json=routerSlug,proto3" json:"router_slug,omitempty"`
+	RouterPool       string  `protobuf:"bytes,32,opt,name=router_pool,json=routerPool,proto3" json:"router_pool,omitempty"`                     // Model Router pool that matched
+	Route            string  `protobuf:"bytes,33,opt,name=route,proto3" json:"route,omitempty"`                                                 // named route chosen, for routers that have them
+	RouteReason      string  `protobuf:"bytes,34,opt,name=route_reason,json=routeReason,proto3" json:"route_reason,omitempty"`                  // why the target was chosen ("model_pattern", ...)
+	RouteSourceModel string  `protobuf:"bytes,35,opt,name=route_source_model,json=routeSourceModel,proto3" json:"route_source_model,omitempty"` // model the caller asked the router for
+	RouteTargetModel string  `protobuf:"bytes,36,opt,name=route_target_model,json=routeTargetModel,proto3" json:"route_target_model,omitempty"` // model the chosen LLM was asked for (after mapping)
+	RouteSelection   string  `protobuf:"bytes,37,opt,name=route_selection,json=routeSelection,proto3" json:"route_selection,omitempty"`         // how the target was selected ("round_robin", "weighted")
+	RouteScore       float64 `protobuf:"fixed64,38,opt,name=route_score,json=routeScore,proto3" json:"route_score,omitempty"`                   // Semantic Router: similarity that decided an embedding match
+	ShadowRoute      string  `protobuf:"bytes,39,opt,name=shadow_route,json=shadowRoute,proto3" json:"shadow_route,omitempty"`                  // Semantic Router shadow mode: the route the classifier picked
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2226,6 +2228,20 @@ func (x *AnalyticsEvent) GetRouteTargetModel() string {
 func (x *AnalyticsEvent) GetRouteSelection() string {
 	if x != nil {
 		return x.RouteSelection
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetRouteScore() float64 {
+	if x != nil {
+		return x.RouteScore
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetShadowRoute() string {
+	if x != nil {
+		return x.ShadowRoute
 	}
 	return ""
 }
@@ -3185,7 +3201,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xb7\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xfb\n" +
 	"\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
@@ -3233,7 +3249,10 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\froute_reason\x18\" \x01(\tR\vrouteReason\x12,\n" +
 	"\x12route_source_model\x18# \x01(\tR\x10routeSourceModel\x12,\n" +
 	"\x12route_target_model\x18$ \x01(\tR\x10routeTargetModel\x12'\n" +
-	"\x0froute_selection\x18% \x01(\tR\x0erouteSelection\"\xa2\x03\n" +
+	"\x0froute_selection\x18% \x01(\tR\x0erouteSelection\x12\x1f\n" +
+	"\vroute_score\x18& \x01(\x01R\n" +
+	"routeScore\x12!\n" +
+	"\fshadow_route\x18' \x01(\tR\vshadowRoute\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

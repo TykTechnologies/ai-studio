@@ -294,6 +294,41 @@ func (s *ModelRouterService) Reaches(routerSlug string, routerID uint, llmID uin
 	return false
 }
 
+// GetRouterByID returns a loaded router by id (a Semantic Router hands off to
+// a Model Router by id).
+func (s *ModelRouterService) GetRouterByID(id uint) (*CompiledRouter, bool) {
+	s.routerMutex.RLock()
+	defer s.routerMutex.RUnlock()
+	for _, r := range s.routers {
+		if r.Router.ID == id {
+			return r, true
+		}
+	}
+	return nil, false
+}
+
+// ReachesModel reports whether the router, asked for model, can pick the
+// LLM: an active vendor of the pool that model matches.
+func (s *ModelRouterService) ReachesModel(routerID uint, model string, llmID uint) bool {
+	router, ok := s.GetRouterByID(routerID)
+	if !ok {
+		return false
+	}
+	for _, pool := range router.CompiledPools {
+		matched, err := matchModelPattern(pool.Pattern, model)
+		if err != nil || !matched {
+			continue
+		}
+		for _, v := range pool.Pool.Vendors {
+			if v.IsActive && v.LLMID == llmID {
+				return true
+			}
+		}
+		return false // the first matching pool is the one SelectVendorFor uses
+	}
+	return false
+}
+
 // AdvertisedModels lists the model names a router can be asked for by name:
 // the literal (glob-free) entries of its pool patterns and the source models
 // of its vendor mappings. Pure wildcard pools advertise nothing.

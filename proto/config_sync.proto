@@ -307,7 +307,7 @@ message AnalyticsEvent {
   uint32 failover_attempt = 29;     // 1-based rung index (0 = primary attempt)
 
   // Routing decision, set when the request was addressed to a router.
-  string router_kind = 30;          // "model_router"
+  string router_kind = 30;          // "model_router" or "semantic_router"
   string router_slug = 31;
   string router_pool = 32;          // Model Router pool that matched
   string route = 33;                // named route chosen, for routers that have them
@@ -315,6 +315,8 @@ message AnalyticsEvent {
   string route_source_model = 35;   // model the caller asked the router for
   string route_target_model = 36;   // model the chosen LLM was asked for (after mapping)
   string route_selection = 37;      // how the target was selected ("round_robin", "weighted")
+  double route_score = 38;          // Semantic Router: similarity that decided an embedding match
+  string shadow_route = 39;         // Semantic Router shadow mode: the route the classifier picked
 }
 
 // Budget usage event for pulse batching

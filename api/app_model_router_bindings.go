@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -56,25 +57,70 @@ func modelRouterBindingError(c *gin.Context, err error) bool {
 	return false
 }
 
-// appRouterOptions turns an optional list of router ids into service options.
-func appRouterOptions(ids *[]uint) []services.AppOption {
-	if ids == nil {
-		return nil
+// appRouterOptions turns optional lists of Model and Semantic Router ids
+// into service options (nil: leave that kind alone).
+func appRouterOptions(modelIDs, semanticIDs *[]uint) []services.AppOption {
+	var opts []services.AppOption
+	if modelIDs != nil {
+		opts = append(opts, services.WithModelRouters(*modelIDs))
 	}
-	return []services.AppOption{services.WithModelRouters(*ids)}
+	if semanticIDs != nil {
+		opts = append(opts, services.WithSemanticRouters(*semanticIDs))
+	}
+	return opts
+}
+
+// validateAppRouterBindings checks both kinds of router grant for this
+// actor. It writes the error response itself and reports whether the caller
+// may go on.
+func (a *API) validateAppRouterBindings(c *gin.Context, actorID uint, actorAdmin bool, modelIDs, semanticIDs *[]uint) bool {
+	if modelIDs != nil && !a.validateAppModelRouterBindings(c, actorID, actorAdmin, *modelIDs) {
+		return false
+	}
+	if semanticIDs != nil {
+		if _, err := a.service.ValidateSemanticRouterBindings(actorID, actorAdmin, *semanticIDs); err != nil {
+			if errors.Is(err, services.ErrSemanticRouterNotVisible) {
+				simpleError(c, http.StatusForbidden, "Forbidden", "User does not have access to one or more specified semantic routers")
+			} else {
+				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			}
+			return false
+		}
+	}
+	return true
 }
 
 // adminAppRouterOptions validates the router grants an admin App create or
-// update asks for (nil: the request leaves them alone) and returns them as
-// service options. It writes the error response itself and reports whether
+// update asks for (nil: the request leaves that kind alone) and returns them
+// as service options. It writes the error response itself and reports whether
 // the caller may go on.
-func (a *API) adminAppRouterOptions(c *gin.Context, ids *[]uint) ([]services.AppOption, bool) {
-	if ids == nil {
+func (a *API) adminAppRouterOptions(c *gin.Context, modelIDs, semanticIDs *[]uint) ([]services.AppOption, bool) {
+	if modelIDs == nil && semanticIDs == nil {
 		return nil, true
 	}
 	actorID, actorAdmin := adminAppActor(c)
-	if !a.validateAppModelRouterBindings(c, actorID, actorAdmin, *ids) {
+	if !a.validateAppRouterBindings(c, actorID, actorAdmin, modelIDs, semanticIDs) {
 		return nil, false
 	}
-	return appRouterOptions(ids), true
+	return appRouterOptions(modelIDs, semanticIDs), true
+}
+
+// AppSemanticRouterOutput is the slim projection of a granted Semantic Router
+// in App responses. Models are what a client sends to the unified ingress.
+type AppSemanticRouterOutput struct {
+	ID     uint     `json:"id"`
+	Name   string   `json:"name"`
+	Slug   string   `json:"slug"`
+	Models []string `json:"models"`
+}
+
+func appSemanticRouterOutputs(routers []models.SemanticRouter) ([]uint, []AppSemanticRouterOutput) {
+	ids := make([]uint, 0, len(routers))
+	out := make([]AppSemanticRouterOutput, 0, len(routers))
+	for _, r := range routers {
+		ids = append(ids, r.ID)
+		out = append(out, AppSemanticRouterOutput{ID: r.ID, Name: r.Name, Slug: r.Slug,
+			Models: sr.ModelsFor(r.Slug, r.Config())})
+	}
+	return ids, out
 }

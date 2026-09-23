@@ -16,6 +16,7 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/model_router"              // Register enterprise model router service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"           // Register enterprise plugin security service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/rbac"                      // Register enterprise role-based access control service
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/semantic_router"           // Register enterprise semantic router service and engine
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"                       // Register enterprise SSO service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/team_budget"               // Register enterprise team budget service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/tykmcp"                    // Register enterprise Tyk MCP integration service

@@ -813,6 +813,8 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			RouteSourceModel:  event.RouterSourceModel,
 			RouteTargetModel:  event.RouterTargetModel,
 			RouteSelection:    event.RouterSelectionAlgo,
+			RouteScore:        event.RouteScore,
+			ShadowRoute:       event.ShadowRoute,
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

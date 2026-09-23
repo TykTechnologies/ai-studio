@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -40,6 +41,9 @@ const (
 	// RouterKindModel is the Enterprise Model Router: pools matched on the
 	// requested model name, vendors picked by round robin or weight.
 	RouterKindModel RouterKind = "model_router"
+	// RouterKindSemantic is the Enterprise Semantic Router: named routes
+	// picked by classifying the prompt (keywords, embeddings, an LLM judge).
+	RouterKindSemantic RouterKind = "semantic_router"
 )
 
 // RouterRef identifies a router.
@@ -84,6 +88,12 @@ type RouteDecision struct {
 	// SourceModel is the model the caller asked the router for; Model is what
 	// the chosen LLM is asked for. Set by resolveRoute.
 	SourceModel string
+	// Score is the similarity that decided a Semantic Router's embedding
+	// match, 0 otherwise.
+	Score float64
+	// ShadowRoute is, for a Semantic Router in shadow mode, the route the
+	// classifier picked while the default route served the request.
+	ShadowRoute string
 }
 
 // RouteResolver resolves router slugs. Implementations must be safe for
@@ -143,6 +153,12 @@ func appHoldsRouter(app *models.App, ref RouterRef) bool {
 	switch ref.Kind {
 	case RouterKindModel:
 		for _, r := range app.ModelRouters {
+			if r.ID == ref.ID {
+				return true
+			}
+		}
+	case RouterKindSemantic:
+		for _, r := range app.SemanticRouters {
 			if r.ID == ref.ID {
 				return true
 			}
@@ -235,6 +251,8 @@ func (p *Proxy) routeBridgeRequest(w http.ResponseWriter, r *http.Request, ref R
 		Str("pool", d.Pool).
 		Str("route", d.Route).
 		Str("reason", d.Reason).
+		Float64("score", d.Score).
+		Str("shadow_route", d.ShadowRoute).
 		Msg("router resolved request")
 	*model = d.Model
 	setRouteHeaders(w, d)
@@ -273,6 +291,9 @@ const (
 	hdrRouterSourceModel = "X-Tyk-Router-Source-Model"
 	hdrRouterTargetModel = "X-Tyk-Router-Target-Model"
 	hdrRouterSelection   = "X-Tyk-Router-Selection"
+	// Semantic Router: the deciding similarity and the shadow-mode route.
+	hdrRouterScore  = "X-Tyk-Router-Score"
+	hdrRouterShadow = "X-Tyk-Router-Shadow"
 )
 
 // Client-facing response headers naming the routing decision.
@@ -323,6 +344,10 @@ func (p *Proxy) routerHeaders(ctx context.Context, h http.Header) http.Header {
 	setIfNotEmpty(h, hdrRouterSourceModel, d.SourceModel)
 	setIfNotEmpty(h, hdrRouterTargetModel, d.Model)
 	setIfNotEmpty(h, hdrRouterSelection, d.Selection)
+	if d.Score != 0 {
+		h.Set(hdrRouterScore, strconv.FormatFloat(d.Score, 'f', 4, 64))
+	}
+	setIfNotEmpty(h, hdrRouterShadow, d.ShadowRoute)
 	h.Set(hdrFailoverToken, p.failoverToken)
 	return h
 }
@@ -347,6 +372,8 @@ type routerMarker struct {
 	SourceModel string
 	TargetModel string
 	Selection   string
+	Score       float64
+	ShadowRoute string
 }
 
 type routerMarkerKey struct{}
@@ -370,6 +397,7 @@ func (p *Proxy) parseRouterMarker(r *http.Request) (routerMarker, bool) {
 	if !ok || string(ref.Kind) != r.Header.Get(hdrRouterKind) {
 		return routerMarker{}, false
 	}
+	score, _ := strconv.ParseFloat(r.Header.Get(hdrRouterScore), 64)
 	return routerMarker{
 		Ref:    ref,
 		Pool:   r.Header.Get(hdrRouterPool),
@@ -379,6 +407,8 @@ func (p *Proxy) parseRouterMarker(r *http.Request) (routerMarker, bool) {
 		SourceModel: r.Header.Get(hdrRouterSourceModel),
 		TargetModel: r.Header.Get(hdrRouterTargetModel),
 		Selection:   r.Header.Get(hdrRouterSelection),
+		Score:       score,
+		ShadowRoute: r.Header.Get(hdrRouterShadow),
 	}, true
 }
 
@@ -414,6 +444,8 @@ func stripRouterHeaders(h http.Header) {
 	h.Del(hdrRouterSourceModel)
 	h.Del(hdrRouterTargetModel)
 	h.Del(hdrRouterSelection)
+	h.Del(hdrRouterScore)
+	h.Del(hdrRouterShadow)
 }
 
 // setRouteHeaders tells the client which router served the request and why.
@@ -448,6 +480,8 @@ func applyRouterMarker(l *models.ProxyLog, ctx context.Context) {
 		l.RouteSourceModel = m.SourceModel
 		l.RouteTargetModel = m.TargetModel
 		l.RouteSelection = m.Selection
+		l.RouteScore = m.Score
+		l.ShadowRoute = m.ShadowRoute
 		return
 	}
 	if d, ok := routeDecisionFromContext(ctx); ok {
@@ -459,5 +493,7 @@ func applyRouterMarker(l *models.ProxyLog, ctx context.Context) {
 		l.RouteSourceModel = d.SourceModel
 		l.RouteTargetModel = d.Model
 		l.RouteSelection = d.Selection
+		l.RouteScore = d.Score
+		l.ShadowRoute = d.ShadowRoute
 	}
 }

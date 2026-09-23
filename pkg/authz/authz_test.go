@@ -72,7 +72,7 @@ func TestPermission_ParseAndLookup(t *testing.T) {
 }
 
 func TestPublish_OnlyOnPublishableResources(t *testing.T) {
-	want := []string{"agents", "apps", "datasources", "llms", "mcp-servers", "metadata", "model-routers", "plugins", "tools"}
+	want := []string{"agents", "apps", "datasources", "llms", "mcp-servers", "metadata", "model-routers", "plugins", "semantic-routers", "tools"}
 	assert.ElementsMatch(t, want, Publishable())
 	for _, r := range Catalogue() {
 		offers := false

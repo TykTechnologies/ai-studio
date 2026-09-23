@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
@@ -85,6 +86,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["hub_spoke_multi_tenant"] = edge_management.IsEnterpriseAvailable()
 	featureSet["feature_groups"] = group_access.IsFilteringEnabled()
 	featureSet["feature_model_router"] = model_router.IsEnterpriseAvailable()
+	featureSet["feature_semantic_router"] = semantic_router.IsEnterpriseAvailable()
 	featureSet["feature_webhooks"] = webhooks.IsEnterpriseAvailable()
 	featureSet["feature_tyk_mcp"] = a.tykMCPService().Status().Enabled
 	featureSet["feature_rbac"] = a.service.Authz().Enabled()

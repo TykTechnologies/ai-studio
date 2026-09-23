@@ -258,6 +258,13 @@ type Router interface {
 	Classify(ctx context.Context, req Request) Decision
 }
 
+// Warmer is implemented by a Router that embeds its examples in the
+// background: Warm embeds them now and reports the error, so a caller that
+// can wait (the hub's test panel) sees the embedding stage at work.
+type Warmer interface {
+	Warm(ctx context.Context) error
+}
+
 // Engine compiles routers.
 type Engine interface {
 	Compile(cfg Config) (Router, error)

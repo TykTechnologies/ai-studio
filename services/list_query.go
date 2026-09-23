@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
 	"gorm.io/gorm"
 )
 
@@ -109,4 +110,13 @@ func (s *Service) ListModelRouters(pageSize int, pageNumber int, all bool, opts 
 		return nil, 0, 0, err
 	}
 	return routers, totalCount, totalPages, nil
+}
+
+// ListSemanticRouters is the searchable, sortable router list.
+func (s *Service) ListSemanticRouters(pageSize int, pageNumber int, all bool, opts ...ListOptions) ([]models.SemanticRouter, int64, int, error) {
+	svc := s.SemanticRouterService
+	if svc == nil {
+		svc = semantic_router.NewService(s.DB)
+	}
+	return svc.ListRouters(pageSize, pageNumber, all, firstListOptions(opts).Scopes("name", "description")...)
 }

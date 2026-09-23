@@ -29,26 +29,29 @@ type Dependents struct {
 	Datasources  []DependentRef `json:"datasources"`
 	Agents       []DependentRef `json:"agents"`
 	ModelRouters []DependentRef `json:"model_routers"`
-	Chats        []DependentRef `json:"chats"`
-	Total        int            `json:"total"`
+	// SemanticRouters that route to, hand off to, or classify with the object.
+	SemanticRouters []DependentRef `json:"semantic_routers"`
+	Chats           []DependentRef `json:"chats"`
+	Total           int            `json:"total"`
 }
 
 func newDependents() *Dependents {
 	return &Dependents{
-		Apps:         []DependentRef{},
-		Catalogues:   []DependentRef{},
-		LLMs:         []DependentRef{},
-		Tools:        []DependentRef{},
-		Datasources:  []DependentRef{},
-		Agents:       []DependentRef{},
-		ModelRouters: []DependentRef{},
-		Chats:        []DependentRef{},
+		Apps:            []DependentRef{},
+		Catalogues:      []DependentRef{},
+		LLMs:            []DependentRef{},
+		Tools:           []DependentRef{},
+		Datasources:     []DependentRef{},
+		Agents:          []DependentRef{},
+		ModelRouters:    []DependentRef{},
+		SemanticRouters: []DependentRef{},
+		Chats:           []DependentRef{},
 	}
 }
 
 func (d *Dependents) finalize() *Dependents {
 	d.Total = len(d.Apps) + len(d.Catalogues) + len(d.LLMs) + len(d.Tools) +
-		len(d.Datasources) + len(d.Agents) + len(d.ModelRouters) + len(d.Chats)
+		len(d.Datasources) + len(d.Agents) + len(d.ModelRouters) + len(d.SemanticRouters) + len(d.Chats)
 	return d
 }
 
@@ -110,6 +113,11 @@ func (s *Service) GetLLMDependents(llmID uint) (*Dependents, error) {
 		"JOIN model_pools ON model_pools.router_id = model_routers.id AND model_pools.deleted_at IS NULL "+
 			"JOIN pool_vendors ON pool_vendors.pool_id = model_pools.id AND pool_vendors.deleted_at IS NULL",
 		"pool_vendors.llm_id = ?", llmID); err != nil {
+		return nil, err
+	}
+	if d.SemanticRouters, err = dependentRefs(s.DB, &models.SemanticRouter{}, "semantic_routers",
+		"JOIN semantic_router_targets ON semantic_router_targets.router_id = semantic_routers.id",
+		"semantic_router_targets.llm_id = ?", llmID); err != nil {
 		return nil, err
 	}
 	if d.Chats, err = dependentRefs(s.DB, &models.Chat{}, "chats", "",
@@ -252,6 +260,31 @@ func (s *Service) GetModelRouterDependents(routerID uint) (*Dependents, error) {
 	if d.Catalogues, err = dependentRefs(s.DB, &models.Catalogue{}, "catalogues",
 		"JOIN catalogue_model_routers ON catalogue_model_routers.catalogue_id = catalogues.id",
 		"catalogue_model_routers.model_router_id = ?", routerID); err != nil {
+		return nil, err
+	}
+	if d.SemanticRouters, err = dependentRefs(s.DB, &models.SemanticRouter{}, "semantic_routers",
+		"JOIN semantic_router_targets ON semantic_router_targets.router_id = semantic_routers.id",
+		"semantic_router_targets.model_router_id = ?", routerID); err != nil {
+		return nil, err
+	}
+	return d.finalize(), nil
+}
+
+// GetSemanticRouterDependents lists what references a semantic router: the
+// apps granted it and the LLM catalogues it is published in. Deleting the
+// router withdraws both (SemanticRouter.Delete).
+func (s *Service) GetSemanticRouterDependents(routerID uint) (*Dependents, error) {
+	d := newDependents()
+	var err error
+
+	if d.Apps, err = dependentRefs(s.DB, &models.App{}, "apps",
+		"JOIN app_semantic_routers ON app_semantic_routers.app_id = apps.id",
+		"app_semantic_routers.semantic_router_id = ?", routerID); err != nil {
+		return nil, err
+	}
+	if d.Catalogues, err = dependentRefs(s.DB, &models.Catalogue{}, "catalogues",
+		"JOIN catalogue_semantic_routers ON catalogue_semantic_routers.catalogue_id = catalogues.id",
+		"catalogue_semantic_routers.semantic_router_id = ?", routerID); err != nil {
 		return nil, err
 	}
 	return d.finalize(), nil

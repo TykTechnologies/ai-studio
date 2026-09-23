@@ -339,6 +339,8 @@ func init() {
 	Register(Resource{Key: "model-prices", Label: "Model prices", Group: "LLM management", Actions: crud})
 	Register(Resource{Key: "model-routers", Label: "Model routers", Group: "LLM management", Actions: crudp,
 		Description: "Publish sets a router active; only active routers are served."})
+	Register(Resource{Key: "semantic-routers", Label: "Semantic routers", Group: "LLM management", Actions: crudp,
+		Description: "Routers that pick a model from what the prompt says. Publish sets a router active; only active routers are served."})
 
 	// Context management
 	Register(Resource{Key: "datasources", Label: "Data sources", Group: "Context management", Actions: crudxp,

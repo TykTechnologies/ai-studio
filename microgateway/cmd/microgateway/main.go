@@ -192,6 +192,11 @@ func main() {
 								log.Debug().Msg("Model routers reloaded after configuration sync")
 							}
 						}
+						if serviceContainer.SemanticRouterService != nil {
+							if err := serviceContainer.SemanticRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+								log.Error().Err(err).Msg("Failed to reload semantic routers after sync")
+							}
+						}
 
 						// Reconcile running plugins with updated DB state
 						go serviceContainer.PluginManager.ReconcilePlugins(context.Background())
@@ -223,6 +228,11 @@ func main() {
 								log.Error().Err(err).Msg("Failed to reload model routers after initial sync")
 							} else {
 								log.Debug().Msg("Model routers reloaded after initial configuration sync")
+							}
+						}
+						if serviceContainer.SemanticRouterService != nil {
+							if err := serviceContainer.SemanticRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+								log.Error().Err(err).Msg("Failed to reload semantic routers after initial sync")
 							}
 						}
 					}

@@ -116,11 +116,15 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	gateway.SetAuthHooks(authHooks)
 	log.Debug().Msg("Authentication hooks registered with AI Gateway")
 
-	// Routers (Enterprise Model Routers) are resolved inside the gateway's
-	// /ai/ chain after authentication; the unified ingress and the legacy
-	// /router/ endpoints both reach them there.
-	if serviceContainer.ModelRouterService != nil {
-		gateway.SetRouteResolver(services.NewModelRouterResolver(serviceContainer.ModelRouterService))
+	// Routers (Enterprise Model and Semantic Routers) are resolved inside the
+	// gateway's /ai/ chain after authentication; the unified ingress and the
+	// legacy /router/ endpoints both reach them there. A Semantic Router
+	// reaches its embedding and judge LLMs through the gateway's own LLMs.
+	if serviceContainer.SemanticRouterService != nil {
+		serviceContainer.SemanticRouterService.SetLLMLookup(gatewayServiceAdapter.GetLLMByID)
+	}
+	if serviceContainer.ModelRouterService != nil || serviceContainer.SemanticRouterService != nil {
+		gateway.SetRouteResolver(services.NewRouterResolver(serviceContainer.ModelRouterService, serviceContainer.SemanticRouterService))
 	}
 
 	// Initialize Prometheus metrics if enabled

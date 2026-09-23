@@ -69,7 +69,7 @@ func (a *API) createApp(c *gin.Context) {
 		}
 	}
 	// So are router grants.
-	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
 	if !ok {
 		return
 	}
@@ -306,7 +306,7 @@ func (a *API) updateApp(c *gin.Context) {
 			return
 		}
 	}
-	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
 	if !ok {
 		return
 	}
@@ -554,6 +554,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.ToolIDs = getToolIDs(app.Tools)
 	resp.Attributes.MCPServerIDs, resp.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
 	resp.Attributes.ModelRouterIDs, resp.Attributes.ModelRouters = appModelRouterOutputs(app.ModelRouters)
+	resp.Attributes.SemanticRouterIDs, resp.Attributes.SemanticRouters = appSemanticRouterOutputs(app.SemanticRouters)
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
 	resp.Attributes.TeamID = app.TeamID

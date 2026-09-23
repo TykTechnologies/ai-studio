@@ -789,7 +789,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	// Get the associated app with LLM/Tool/Datasource relationships (preload for pull-on-miss sync)
 	var app models.App
 	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).
-		Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").First(&app).Error; err != nil {
+		Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").Preload("SemanticRouters").First(&app).Error; err != nil {
 		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
@@ -897,6 +897,8 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			proxyLogs[i].RouteSourceModel = event.RouteSourceModel
 			proxyLogs[i].RouteTargetModel = event.RouteTargetModel
 			proxyLogs[i].RouteSelection = event.RouteSelection
+			proxyLogs[i].RouteScore = event.RouteScore
+			proxyLogs[i].ShadowRoute = event.ShadowRoute
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{
@@ -1354,7 +1356,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get Apps for namespace with relationships
 	var apps []models.App
-	appQuery := s.db.Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").Where("is_active = ?", true)
+	appQuery := s.db.Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").Preload("SemanticRouters").Where("is_active = ?", true)
 	if namespace == "" {
 		// Global namespace - only global apps
 		appQuery = appQuery.Where("namespace = ''")
@@ -1459,6 +1461,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ToolIds:            toolIDs,
 			DatasourceIds:      datasourceIDs,
 			ModelRouterIds:     appModelRouterIDs(&app),
+			SemanticRouterIds:  appSemanticRouterIDs(&app),
 			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
@@ -1843,6 +1846,36 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Str("router_slug", router.Slug).
 			Int("pool_count", len(router.Pools)).
 			Msg("Model Router synced to snapshot")
+	}
+
+	// Semantic Routers (Enterprise). The configuration travels as JSON; the
+	// edge compiles it with the engine.
+	var semanticRouters []models.SemanticRouter
+	semanticQuery := s.db.Where("active = ?", true)
+	if namespace == "" {
+		semanticQuery = semanticQuery.Where("namespace = ''")
+	} else {
+		semanticQuery = semanticQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+	if err := semanticQuery.Order("id ASC").Find(&semanticRouters).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to get Semantic Routers")
+	}
+	for _, router := range semanticRouters {
+		cfg, err := router.ConfigJSON()
+		if err != nil {
+			log.Error().Err(err).Uint("router_id", router.ID).Msg("Failed to encode Semantic Router; not synced")
+			continue
+		}
+		snapshot.SemanticRouters = append(snapshot.SemanticRouters, &pb.SemanticRouterConfig{
+			Id:         uint32(router.ID),
+			Name:       router.Name,
+			Slug:       router.Slug,
+			Namespace:  router.Namespace,
+			IsActive:   router.Active,
+			ConfigJson: cfg,
+			CreatedAt:  timestamppb.New(router.CreatedAt),
+			UpdatedAt:  timestamppb.New(router.UpdatedAt),
+		})
 	}
 
 	// Get Tools for namespace with relationships
@@ -2485,6 +2518,9 @@ const (
 	topicModelRouterCreated = "system.model_router.created"
 	topicModelRouterUpdated = "system.model_router.updated"
 	topicModelRouterDeleted = "system.model_router.deleted"
+	topicSemanticRouterCreated = "system.semantic_router.created"
+	topicSemanticRouterUpdated = "system.semantic_router.updated"
+	topicSemanticRouterDeleted = "system.semantic_router.deleted"
 	topicToolCreated        = "system.tool.created"
 	topicToolUpdated        = "system.tool.updated"
 	topicToolDeleted        = "system.tool.deleted"
@@ -2509,6 +2545,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicPluginCreated, topicPluginUpdated, topicPluginDeleted,
 		topicModelPriceCreated, topicModelPriceUpdated, topicModelPriceDeleted,
 		topicModelRouterCreated, topicModelRouterUpdated, topicModelRouterDeleted,
+		topicSemanticRouterCreated, topicSemanticRouterUpdated, topicSemanticRouterDeleted,
 		topicToolCreated, topicToolUpdated, topicToolDeleted,
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 	}
@@ -2599,6 +2636,15 @@ func appModelRouterIDs(app *models.App) []uint32 {
 	return ids
 }
 
+// appSemanticRouterIDs lists the Semantic Routers an App was granted.
+func appSemanticRouterIDs(app *models.App) []uint32 {
+	ids := make([]uint32, len(app.SemanticRouters))
+	for i, r := range app.SemanticRouters {
+		ids[i] = uint32(r.ID)
+	}
+	return ids
+}
+
 // convertAppToProto converts a models.App to a pb.AppConfig for pull-on-miss sync.
 // Note: CurrentPeriodUsage is set to 0 - the edge tracks budget locally via analytics.
 func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
@@ -2660,6 +2706,7 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		ToolIds:            toolIDs,
 		DatasourceIds:      datasourceIDs,
 		ModelRouterIds:     appModelRouterIDs(app),
+		SemanticRouterIds:  appSemanticRouterIDs(app),
 		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),

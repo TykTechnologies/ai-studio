@@ -134,6 +134,8 @@ type ProxyLogAttributes struct {
 	RouteSourceModel  string    `json:"route_source_model,omitempty"`
 	RouteTargetModel  string    `json:"route_target_model,omitempty"`
 	RouteSelection    string    `json:"route_selection,omitempty"`
+	RouteScore        float64   `json:"route_score,omitempty"`
+	ShadowRoute       string    `json:"shadow_route,omitempty"`
 }
 
 // NewProxyLogResponse serialises one ProxyLog row for the proxy-log
@@ -162,6 +164,8 @@ func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
 			RouteSourceModel:  log.RouteSourceModel,
 			RouteTargetModel:  log.RouteTargetModel,
 			RouteSelection:    log.RouteSelection,
+			RouteScore:        log.RouteScore,
+			ShadowRoute:       log.ShadowRoute,
 		},
 	}
 }
@@ -220,4 +224,8 @@ type ProxyLog struct {
 	RouteSourceModel string
 	RouteTargetModel string
 	RouteSelection   string `gorm:"size:32"`
+	// Semantic Routers: the similarity that decided an embedding match, and,
+	// in shadow mode, the route the classifier picked (the default served).
+	RouteScore  float64
+	ShadowRoute string
 }

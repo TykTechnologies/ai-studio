@@ -76,6 +76,7 @@ func (s *DatabaseGatewayService) GetAppByID(id uint) (interface{}, error) {
 		Preload("Tools.Filters").
 		Preload("Datasources").
 		Preload("ModelRouters").
+		Preload("SemanticRouters").
 		First(&app).Error
 
 	if err != nil {

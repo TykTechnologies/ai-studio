@@ -104,6 +104,8 @@ type App struct {
 	// ModelRouters the App was granted (Enterprise); a grant lets the App
 	// reach the router's LLMs through the router.
 	ModelRouters []ModelRouter   `gorm:"many2many:app_model_routers;"`
+	// SemanticRouters the App was granted (Enterprise).
+	SemanticRouters []SemanticRouter `gorm:"many2many:app_semantic_routers;"`
 	BudgetUsage []BudgetUsage    `gorm:"foreignKey:AppID"`
 	Events      []AnalyticsEvent `gorm:"foreignKey:AppID"`
 }
@@ -223,6 +225,8 @@ type AnalyticsEvent struct {
 	RouterSourceModel   string // Original model name before mapping
 	RouterTargetModel   string // Model name after mapping (may be same as source)
 	RouterSelectionAlgo string // Selection algorithm used: "round_robin" or "weighted"
+	RouteScore          float64 // Semantic Router: similarity that decided an embedding match
+	ShadowRoute         string  // Semantic Router shadow mode: the route the classifier picked
 
 	// LLM failover: set when this attempt was a rung of FailoverFromLLMID's
 	// waterfall; nil / 0 for a primary attempt.
@@ -581,6 +585,26 @@ type AppModelRouter struct {
 	CreatedAt     time.Time
 }
 
+// SemanticRouter is a Semantic Router (Enterprise). ConfigJSON is the
+// pkg/semanticrouting.Config the hub sent; SemanticRouterService compiles it.
+type SemanticRouter struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	Name       string    `gorm:"not null" json:"name"`
+	Slug       string    `gorm:"uniqueIndex:idx_semantic_router_slug_namespace;not null" json:"slug"`
+	Namespace  string    `gorm:"default:'';uniqueIndex:idx_semantic_router_slug_namespace" json:"namespace"`
+	IsActive   bool      `gorm:"default:false" json:"is_active"`
+	ConfigJSON string    `gorm:"type:text" json:"config_json"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// AppSemanticRouter is a Semantic Router grant: the App may call the router.
+type AppSemanticRouter struct {
+	AppID            uint `gorm:"primaryKey"`
+	SemanticRouterID uint `gorm:"primaryKey"`
+	CreatedAt        time.Time
+}
+
 // AppDatasource represents the many-to-many relationship between apps and datasources
 type AppDatasource struct {
 	AppID        uint      `gorm:"primaryKey"`
@@ -610,5 +634,7 @@ func (OAuthClientEdge) TableName() string   { return "oauth_clients" }
 func (AccessTokenEdge) TableName() string   { return "access_tokens" }
 func (AppTool) TableName() string           { return "app_tools" }
 func (AppModelRouter) TableName() string    { return "app_model_routers" }
+func (SemanticRouter) TableName() string    { return "semantic_routers" }
+func (AppSemanticRouter) TableName() string { return "app_semantic_routers" }
 func (AppDatasource) TableName() string     { return "app_datasources" }
 func (ToolFilter) TableName() string        { return "tool_filters" }

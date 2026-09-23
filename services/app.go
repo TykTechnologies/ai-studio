@@ -68,10 +68,8 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		return nil, err
 	}
 
-	if o.modelRouterIDs != nil && len(*o.modelRouterIDs) > 0 {
-		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
-			return nil, err
-		}
+	if err := s.setAppRouterGrants(app, o, true); err != nil {
+		return nil, err
 	}
 
 	// Add datasources to the app
@@ -212,10 +210,8 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		return nil, err
 	}
 
-	if o.modelRouterIDs != nil && len(*o.modelRouterIDs) > 0 {
-		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
-			return nil, err
-		}
+	if err := s.setAppRouterGrants(app, o, true); err != nil {
+		return nil, err
 	}
 
 	// Add datasources to the app
@@ -277,7 +273,7 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 
 	// Check if datasources have higher privacy score than LLMs (and the
 	// routers the App is granted, which count as providers)
-	routerProviders, err := s.routerProvidersFor(o, app.ModelRouters)
+	routerProviders, err := s.routerProvidersFor(o, app)
 	if err != nil {
 		return nil, err
 	}
@@ -329,10 +325,8 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	}
 
 	// Update router grants, when the change sets them
-	if o.modelRouterIDs != nil {
-		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
-			return nil, err
-		}
+	if err := s.setAppRouterGrants(app, o, false); err != nil {
+		return nil, err
 	}
 
 	if err := app.Update(s.DB); err != nil {
@@ -692,6 +686,9 @@ func (s *Service) DeleteApp(id uint) error {
 		return fmt.Errorf("failed to clear app plugin resources: %w", err)
 	}
 	if err := s.ClearAppModelRouters(id); err != nil {
+		return err
+	}
+	if err := s.ClearAppSemanticRouters(id); err != nil {
 		return err
 	}
 	if err := s.ClearAppMCPServers(id); err != nil {
@@ -1238,11 +1235,11 @@ func (s *Service) UpdateAppWithResources(
 	}
 
 	// Validate privacy scores (built-in + plugin + routers)
-	var existingRouters []models.ModelRouter
+	var existingApp *models.App
 	if existing, err := s.GetAppByID(id); err == nil {
-		existingRouters = existing.ModelRouters
+		existingApp = existing
 	}
-	routerProviders, err := s.routerProvidersFor(resolveAppOptions(opts), existingRouters)
+	routerProviders, err := s.routerProvidersFor(resolveAppOptions(opts), existingApp)
 	if err != nil {
 		return nil, err
 	}

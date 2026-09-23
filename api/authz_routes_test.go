@@ -116,6 +116,8 @@ func TestAuthzRoutes_RegistryLookup(t *testing.T) {
 	assert.Equal(t, authz.Write("apps"), get("POST", "/api/v1/apps/:id/activate-credential").perm, "credential toggles stay write")
 	assert.Equal(t, authz.Publish("agents"), get("POST", "/api/v1/agents/:id/activate").perm)
 	assert.Equal(t, authz.Publish("model-routers"), get("PATCH", "/api/v1/model-routers/:id/toggle").perm)
+	assert.Equal(t, authz.Publish("semantic-routers"), get("PATCH", "/api/v1/semantic-routers/:id/toggle").perm)
+	assert.Equal(t, authz.Write("semantic-routers"), get("POST", "/api/v1/semantic-routers/:id/test").perm, "a test prompt spends tokens")
 	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/enable").perm)
 	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/disable").perm)
 	assert.Equal(t, authz.Write("plugins"), get("POST", "/api/v1/plugins/:id/upgrade").perm)

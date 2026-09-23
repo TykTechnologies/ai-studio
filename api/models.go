@@ -485,6 +485,9 @@ type AppInput struct {
 			// ModelRouterIDs grants Model Routers (Enterprise). Omitted leaves
 			// the grants unchanged on update; an empty list clears them.
 			ModelRouterIDs *[]uint `json:"model_router_ids,omitempty"`
+			// SemanticRouterIDs grants Semantic Routers (Enterprise), with
+			// the same omitted/empty rules.
+			SemanticRouterIDs *[]uint `json:"semantic_router_ids,omitempty"`
 			// IsActive is the live switch. Omitted = unchanged on update, live
 			// on create (unless the caller lacks apps:publish, in which case
 			// the app is created inactive). Setting it needs apps:publish.
@@ -526,6 +529,9 @@ type AppResponse struct {
 		// Model Routers the app is granted (Enterprise).
 		ModelRouterIDs []uint                 `json:"model_router_ids"`
 		ModelRouters   []AppModelRouterOutput `json:"model_routers,omitempty"`
+		// Semantic Routers the app is granted (Enterprise).
+		SemanticRouterIDs []uint                    `json:"semantic_router_ids"`
+		SemanticRouters   []AppSemanticRouterOutput `json:"semantic_routers,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -1171,6 +1177,9 @@ type AppDetailResponse struct {
 		// shows their unified-ingress model strings.
 		ModelRouterIDs []uint                 `json:"model_router_ids"`
 		ModelRouters   []AppModelRouterOutput `json:"model_routers,omitempty"`
+		// Semantic Routers the app is granted (Enterprise).
+		SemanticRouterIDs []uint                    `json:"semantic_router_ids"`
+		SemanticRouters   []AppSemanticRouterOutput `json:"semantic_routers,omitempty"`
 	} `json:"attributes"`
 }
 
