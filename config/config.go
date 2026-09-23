@@ -53,6 +53,9 @@ type AppConf struct {
 	// gateway is embeddable in hosts that own the "/v1" path space.
 	UnifiedRouterPath     string
 	UnifiedRouterDisabled bool
+	// GatewayServerTiming adds Server-Timing headers/trailers to embedded
+	// gateway LLM responses (GATEWAY_SERVER_TIMING), for benchmarking.
+	GatewayServerTiming bool
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -350,6 +353,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 		cfgLog.Info().Msg("Unified router endpoint disabled; only per-route LLM endpoints are served")
 	} else if conf.UnifiedRouterPath != "" {
 		cfgLog.Info().Msgf("Unified router endpoint mounted at %s", conf.UnifiedRouterPath)
+	}
+
+	if v := os.Getenv("GATEWAY_SERVER_TIMING"); v == "true" || v == "1" {
+		conf.GatewayServerTiming = true
+		cfgLog.Info().Msg("Gateway Server-Timing headers enabled")
 	}
 
 	// Docs server configuration - read port first so we can use it in default URL

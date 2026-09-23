@@ -341,6 +341,7 @@ func main() {
 		Port:                  appConf.ProxyPort,
 		UnifiedRouterBasePath: appConf.UnifiedRouterPath,
 		DisableUnifiedRouter:  appConf.UnifiedRouterDisabled,
+		ServerTiming:          appConf.GatewayServerTiming,
 	}
 	p := proxy.NewProxy(service, pConfig, service.Budget)
 

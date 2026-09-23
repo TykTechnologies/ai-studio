@@ -105,5 +105,5 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// never what is enforced, so it needs no trust.
 	req.Header.Set(hdrInternalHop, "1")
 
-	return t.underlying.RoundTrip(req)
+	return loopbackRoundTrip(t.underlying, req)
 }

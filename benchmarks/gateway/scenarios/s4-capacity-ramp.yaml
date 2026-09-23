@@ -1,0 +1,29 @@
+name: s4-capacity-ramp
+title: "S4 · Capacity ramp with realistic streaming upstream"
+description: >
+  Arrivals follow a Poisson process whose rate steps up every minute. The mock
+  upstream behaves like a hosted chat model (about 300ms to first token, 50
+  tokens/s, 200 tokens), so each stream stays open for about 4 seconds and the
+  gateway holds thousands of concurrent streams at the top of the ramp. A 10%
+  sample of traffic goes straight to the mock as the baseline. The capacity is
+  the highest rate at which the gateway's p99 time to first token stays within
+  25ms of the baseline's with an error rate below 0.1%. The ramp stops early once
+  the gateway is clearly past it. Size S6 and S7 from this result with
+  --rate-scale.
+mode: open
+baseline: direct
+timeout: 60s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: steps, start: 50, step: 50, max: 2000, hold: 60s}
+  warmup: 10s
+  max_in_flight: 30000
+  max_lag_ms: 5
+  stop: {max_error_rate: 0.02, max_p99_overhead_ms: 500, metric: ttft}
+cells:
+  - name: stream-realistic
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 2048, max_tokens: 200}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-realistic/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:realistic}/v1/chat/completions", weight: 0.1}
