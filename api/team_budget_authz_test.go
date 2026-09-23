@@ -97,3 +97,29 @@ func TestSetUserBudgetTeam_RequiresMembership(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, put(`{"team_id": null}`))
 	assert.Nil(t, budgetTeam(), "clearing is always allowed")
 }
+
+// The route itself requires users:write: a caller without it is refused
+// before the handler runs. Built with TestMode off (setupAuthzAPI) so the
+// real authorization chain runs.
+func TestSetUserBudgetTeam_RouteRequiresUsersWrite(t *testing.T) {
+	api, admin, member := setupAuthzAPI(t)
+	db := api.service.DB
+
+	eng := &models.Group{Name: "Engineering"}
+	require.NoError(t, db.Create(eng).Error)
+	target := &models.User{Email: "target@x.io", EmailVerified: true}
+	require.NoError(t, db.Create(target).Error)
+	require.NoError(t, db.Model(eng).Association("Users").Append(target))
+
+	path := fmt.Sprintf("/api/v1/users/%d/budget-team", target.ID)
+	body := map[string]interface{}{"team_id": eng.ID}
+
+	w := apitest.PerformAuthRequest(api.router, "PUT", path, body, member.APIKey)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	var stored models.User
+	require.NoError(t, db.First(&stored, target.ID).Error)
+	assert.Nil(t, stored.BudgetTeamID, "nothing written for a caller without users:write")
+
+	w = apitest.PerformAuthRequest(api.router, "PUT", path, body, admin.APIKey)
+	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+}

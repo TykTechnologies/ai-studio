@@ -26,6 +26,7 @@ export class AdminLLMProvidersPage extends PageTemplate {
     readonly LongDescriptionInput: Locator;
     readonly ProviderTypeDropDown: DropDownWrapper;
     readonly DefaultModelInput: Locator;
+    readonly MonthlyBudgetMode: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly BudgetStartDateInput: Locator;
     /** The 0–100 number half of the privacy control (name="privacy_score"). */
@@ -58,7 +59,10 @@ export class AdminLLMProvidersPage extends PageTemplate {
         this.LongDescriptionInput = this.page.getByRole('textbox', { name: 'Long Description' });
         this.ProviderTypeDropDown = new DropDownWrapper('#mui-component-select-vendor', this.page);
         this.DefaultModelInput = this.page.getByRole('textbox', { name: 'Default Model' });
-        this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
+        // The budget field is a mode choice ("No limit"/"Default" vs "Fixed
+        // amount"); the amount box only appears for a fixed amount.
+        this.MonthlyBudgetMode = this.page.getByRole('combobox', { name: /^Monthly budget/ });
+        this.MonthlyBudgetInput = this.page.getByTestId('llm-budget-amount');
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
         this.PrivacyScoreInput = this.page.locator('input[name="privacy_score"]');
         this.PrivacyLevelSelect = this.page.getByRole('combobox', { name: 'Privacy level' });
@@ -116,7 +120,7 @@ export class AdminLLMProvidersPage extends PageTemplate {
             await this.DefaultModelInput.fill(params.defaultModel);
         }
         if (params.monthlyBudget) {
-            await this.MonthlyBudgetInput.fill(params.monthlyBudget);
+            await this.setMonthlyBudget(params.monthlyBudget);
         }
         if (params.budgetStartDate) {
             await this.BudgetStartDateInput.fill(params.budgetStartDate);
@@ -139,5 +143,12 @@ export class AdminLLMProvidersPage extends PageTemplate {
             await this.LogoUrlInput.fill(params.logoUrl);
         }
         await this.SaveButton.click();
+    }
+
+    // setMonthlyBudget picks "Fixed amount" and fills the amount.
+    async setMonthlyBudget(amount: string) {
+        await this.MonthlyBudgetMode.click();
+        await this.page.getByRole('option', { name: 'Fixed amount' }).click();
+        await this.MonthlyBudgetInput.fill(amount);
     }
 }
