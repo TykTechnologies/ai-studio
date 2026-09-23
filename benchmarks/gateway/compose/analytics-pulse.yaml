@@ -1,0 +1,25 @@
+# Analytics pulse for the benchmark edge: ships analytics, budget usage and
+# proxy logs to Studio over gRPC, as a production edge does. Bodies are left
+# out, as recommended for production. Unlike the dev config, no vendor is
+# excluded: the mock LLMs are seeded as vendor "openai"/"anthropic" and their
+# analytics must reach Studio for the completeness check.
+version: "1.0"
+
+data_collection_plugins:
+  - name: "analytics_pulse"
+    enabled: true
+    hook_types: ["analytics", "budget", "proxy_log"]
+    replace_database: false
+    priority: 100
+    config:
+      interval_seconds: 10
+      max_batch_size: 1000
+      max_buffer_size: 10000
+      compression_enabled: true
+      include_proxy_summaries: true
+      include_request_response_data: false
+      edge_retention_hours: 24
+      excluded_vendors: []
+      timeout_seconds: 30
+      max_retries: 3
+      retry_interval_secs: 5

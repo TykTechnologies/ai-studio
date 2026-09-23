@@ -127,6 +127,12 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	}
 	messages := attemptReq.GetMessages()
 
+	// The attempt context is detached from the request's, so carry the
+	// Server-Timing recorder (if any) across for the loopback transport.
+	if rt := timingFrom(r.Context()); rt != nil {
+		ctx = withRequestTiming(ctx, rt)
+	}
+
 	// SDK call routes through /llm/call/ which executes all plugin hooks
 	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
 	return llm.GenerateContent(ctx, messages, opts...)

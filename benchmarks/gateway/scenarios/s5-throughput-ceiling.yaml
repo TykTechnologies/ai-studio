@@ -1,0 +1,24 @@
+name: s5-throughput-ceiling
+title: "S5 · Request-rate ceiling with a fast upstream"
+description: >
+  The complement of S4: short requests against an upstream that answers in 20ms,
+  so the gateway's per-request cost (authentication, policy, analytics), not the
+  number of open streams, sets the limit. The rate steps up every 30 seconds
+  until p99 overhead or errors breach the limits.
+mode: open
+baseline: direct
+timeout: 30s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: steps, start: 100, step: 100, max: 10000, hold: 30s}
+  warmup: 5s
+  max_in_flight: 20000
+  max_lag_ms: 2
+  stop: {max_error_rate: 0.02, max_p99_overhead_ms: 500, metric: total}
+cells:
+  - name: rest-20ms
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-20ms/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:20ms}/v1/chat/completions", weight: 0.1}

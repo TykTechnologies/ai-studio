@@ -18,3 +18,7 @@ docs/swagger
 .zed
 .github*
 extra
+# Benchmark output and seed state (the state file holds a credential)
+benchmarks/gateway/results
+benchmarks/gateway/.state
+test-secrets/*.env

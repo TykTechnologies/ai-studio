@@ -1,0 +1,63 @@
+name: s1-overhead-floor
+title: "S1 · Gateway overhead floor, unloaded, per endpoint"
+description: >
+  One request at a time against an upstream that answers immediately, so the
+  difference between the gateway arm and the direct arm is the gateway's own
+  cost: authentication, policy, request handling and the extra network hop. Arms
+  alternate request by request so both see the same conditions. Every public LLM
+  endpoint is covered, streaming and non-streaming. The /ai/ shim and the unified
+  /v1 endpoint translate to the OpenAI format through an internal second hop, so
+  expect them to cost more than the native /llm/ routes.
+mode: closed
+baseline: direct
+timeout: 30s
+closed:
+  concurrency: 1
+  requests: 5000
+  warmup_requests: 300
+cells:
+  - name: llm-rest
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/rest/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: llm-stream
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/stream/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: llm-call-rest
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: llm-call-stream
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: anthropic-native-stream
+    body: {format: anthropic, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-anthropic/v1/messages, headers: {anthropic-version: "2023-06-01"}}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/messages", headers: {anthropic-version: "2023-06-01"}}
+  - name: ai-shim-rest
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /ai/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: ai-shim-stream
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /ai/mock-fast/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: unified-rest
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /v1/chat/completions, model: mock-fast/mock-model}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: unified-stream
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /v1/chat/completions, model: mock-fast/mock-model}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
