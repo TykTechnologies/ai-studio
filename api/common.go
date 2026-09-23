@@ -782,8 +782,10 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
 			TeamID          *uint            `json:"team_id"`
-			BudgetSource    string           `json:"budget_source"`
-			IsOrphaned      bool             `json:"is_orphaned"`
+			// BudgetSource tells the portal where the budget came from: "team"
+			// when the App's team hands out budgets from a pool, else empty.
+			BudgetSource string `json:"budget_source,omitempty"`
+			IsOrphaned   bool   `json:"is_orphaned"`
 			IsActive        bool             `json:"is_active"`
 			Credential      CredentialDetail `json:"credential"`
 			MCPServerIDs    []uint               `json:"mcp_server_ids"`
@@ -825,7 +827,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 			TeamID:          app.TeamID,
-			BudgetSource:    app.BudgetSource,
+			BudgetSource:    a.portalBudgetSource(app),
 			IsOrphaned:      app.IsOrphaned,
 		},
 	}

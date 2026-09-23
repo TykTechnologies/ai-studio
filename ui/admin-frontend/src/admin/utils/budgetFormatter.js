@@ -28,14 +28,17 @@ const formatBudgetPeriod = (startDate) => {
 	return `${start.toLocaleString('default', { month: 'short' })} ${start.getDate()} - ${end.toLocaleString('default', { month: 'short' })} ${end.getDate()}`;
 };
 
+// A budget of null (or undefined) is "no limit"; 0 is a budget of zero.
 export const formatBudgetDisplay = (item) => {
-	const monthlyBudget = item.budget || item.monthlyBudget;
+	const monthlyBudget = item.budget ?? item.monthlyBudget;
 	const budgetStartDate = item.budgetStartDate;
 	const spent = item.spent || item.currentUsage || 0;
 
-
-	if (!monthlyBudget) {
-		return "not set";
+	if (monthlyBudget === null || monthlyBudget === undefined) {
+		return "No limit";
+	}
+	if (Number(monthlyBudget) === 0) {
+		return "$0.00 (nothing may be spent; requests are refused)";
 	}
 
 	const usagePercent = (spent / monthlyBudget) * 100 || 0;

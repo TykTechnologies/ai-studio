@@ -23,9 +23,9 @@ type DatabaseBudgetService struct {
 	db            *gorm.DB
 	repo          *database.Repository
 	pluginManager *plugins.PluginManager // For global data collection plugins
-	// teamBlocks is the control plane's team budget verdict per App; nil
+	// budgetBlocks is the control plane's budget verdict per App; nil
 	// means the shared edge set filled by the budget sync.
-	teamBlocks *TeamBlocks
+	budgetBlocks *BudgetBlocks
 }
 
 // NewDatabaseBudgetService creates a new database-backed budget service
@@ -98,11 +98,12 @@ func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCo
 // gateway refuses the request as a 503 instead of reporting a spent budget.
 // An app that does not exist or is inactive is a real refusal.
 func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estimatedCost float64) (float64, float64, error) {
-	// The team comes first: an App with no team allocation, or in a team
-	// over its hard-blocking budget, is refused whatever its own budget.
-	blocks := s.teamBlocks
+	// The control plane's verdict comes first: an App whose Studio budget
+	// is 0, or whose team is over its hard-blocking budget, is refused
+	// whatever the local App row says (it reads 0 as "no limit").
+	blocks := s.budgetBlocks
 	if blocks == nil {
-		blocks = edgeTeamBlocks
+		blocks = edgeBudgetBlocks
 	}
 	if reason, blocked := blocks.Reason(appID); blocked {
 		return 0, 0, fmt.Errorf("budget exceeded: %s", reason)

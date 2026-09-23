@@ -53,6 +53,7 @@ type Service interface {
 type TeamChecker interface {
 	CheckApp(app *models.App) error
 	AnalyzeTeamUsage(app *models.App)
+	EdgeBlocks() (map[uint]string, error)
 }
 
 // TeamAware is implemented by budget services that consult a TeamChecker

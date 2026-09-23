@@ -27,11 +27,25 @@ Budgets are typically configured by administrators and applied at specific level
 
 Administrators configure these budgets via the Tyk AI Studio UI or API.
 
+## No Limit Versus Zero
+
+A budget can be empty or a number, and the two mean different things:
+
+*   **No limit** (empty; `null` in the API): spending is not capped.
+*   **$0**: nothing may be spent. Requests are refused with HTTP 403.
+*   **Any other amount**: requests are refused once that much has been spent in the current period.
+
+In the UI the budget field is an explicit choice between "No limit" and "Fixed amount". On a new App the first choice is "Default": the App's team's allocation when the team has a budget pool, otherwise the platform default (`DEFAULT_APP_BUDGET`), otherwise no limit.
+
+> **Upgrading from earlier versions:** a budget of 0 used to mean "no limit". When the new version first starts, stored App and LLM budgets of 0 are changed to "no limit" automatically, so nothing starts blocking. Scripts and integrations that send `monthly_budget: 0` to mean "no limit" must send `null` (or leave the field out) instead.
+
 ## Enforcement
 
 > **Note:** Budget *enforcement* (blocking requests when limits are exceeded) is an **Enterprise Edition** feature. In Community Edition, budgets are tracked and recorded for reporting purposes, but requests are not blocked when limits are exceeded.
 
 Budget enforcement primarily occurs at the **[Proxy & API Gateway](./proxy.md)**:
+
+Most deployments serve traffic through [Microgateways](./edge-gateways.md); Studio's embedded gateway applies the same rules.
 
 1.  **Request Received:** The Proxy receives a request destined for an LLM.
 2.  **Cost Estimation:** Before forwarding the request, the Proxy might estimate the potential maximum cost (or rely on post-request cost calculation).
@@ -49,6 +63,10 @@ When running multiple Microgateways in a hub-and-spoke architecture, budget trac
 2. **Budget pulse:** AI Studio periodically sends a budget pulse to each gateway containing the **total spend** for each access token across all gateways.
 
 3. **Local update:** Each gateway updates its local spend counter if Studio's reported number is higher than what it has locally.
+
+4. **Blocks:** the same pulse lists the Apps every gateway must refuse regardless of its local numbers: Apps with a budget of $0, and Apps whose [team](#team-budgets-enterprise) has spent a blocking team budget. Gateways keep this list across restarts.
+
+5. **Alerts:** each pulse also has AI Studio check the Apps whose spend moved at the gateways against their App, LLM and team budgets, so the 80% and 100% alerts fire for gateway traffic too.
 
 This provides **eventually-accurate** budget control. There may be a slight overrun window under very high concurrent load across multiple gateways, but the system converges quickly and prevents sustained overspending.
 

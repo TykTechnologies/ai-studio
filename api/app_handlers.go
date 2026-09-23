@@ -541,7 +541,6 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
 	resp.Attributes.TeamID = app.TeamID
-	resp.Attributes.BudgetSource = app.BudgetSource
 	resp.Attributes.IsActive = app.IsActive
 	resp.Attributes.IsOrphaned = app.IsOrphaned
 	resp.Attributes.Metadata = app.Metadata

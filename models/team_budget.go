@@ -15,17 +15,13 @@ const (
 	TeamBudgetHardBlock = "hard_block"
 )
 
-// BudgetSourceTeam marks an App whose MonthlyBudget was drawn from its team's
-// allocation pool. For such an App a budget of zero means "nothing allocated"
-// (blocked), not "unlimited" as it does for a manually budgeted App.
-const BudgetSourceTeam = "team"
-
 // TeamBudget holds the budget of one team (Group). Enterprise; the table
 // exists in CE and is used there for nothing but reporting.
 //
-// MonthlyBudget semantics:
+// MonthlyBudget semantics (as for App and LLM budgets, nil is "no limit" and
+// 0 is zero):
 //   - no row, or a nil budget: the team is unmanaged (no pool, no ceiling);
-//   - 0: managed with an empty pool; new Apps are allocated nothing;
+//   - 0: an empty pool and a zero ceiling; new Apps are allocated nothing;
 //   - > 0: the pool Apps draw from, and the ceiling on the team's total spend.
 //
 // No gorm.Model: the row is deleted outright with its team, so a soft-delete
@@ -46,15 +42,9 @@ func (tb *TeamBudget) IsManaged() bool {
 	return tb != nil && tb.MonthlyBudget != nil
 }
 
-// HasCeiling reports whether the team's total spend is capped. A zero budget
-// is a managed but empty pool; like App and LLM budgets, it caps nothing.
-func (tb *TeamBudget) HasCeiling() bool {
-	return tb.IsManaged() && *tb.MonthlyBudget > 0
-}
-
-// HardBlocks reports whether reaching the ceiling refuses the team's Apps.
+// HardBlocks reports whether reaching the budget refuses the team's Apps.
 func (tb *TeamBudget) HardBlocks() bool {
-	return tb.HasCeiling() && tb.Enforcement == TeamBudgetHardBlock
+	return tb.IsManaged() && tb.Enforcement == TeamBudgetHardBlock
 }
 
 // GetTeamBudget returns the budget row of a team, or nil when it has none.
@@ -79,7 +69,10 @@ type TeamBudgetSettings struct {
 	// AttributionBackfilled records that apps and spend recorded before
 	// team attribution existed have been stamped with their team.
 	AttributionBackfilled bool `gorm:"not null;default:false"`
-	UpdatedAt             time.Time
+	// ZeroBudgetsCleared records that App and LLM budgets of 0, which meant
+	// "no limit" before 0 came to mean zero, were rewritten to nil.
+	ZeroBudgetsCleared bool `gorm:"not null;default:false"`
+	UpdatedAt          time.Time
 }
 
 const teamBudgetSettingsID = 1
@@ -113,6 +106,7 @@ func SaveTeamBudgetSettings(db *gorm.DB, s *TeamBudgetSettings) error {
 	return db.Model(&TeamBudgetSettings{}).Where("id = ?", s.ID).Updates(map[string]interface{}{
 		"enabled":                s.Enabled,
 		"attribution_backfilled": s.AttributionBackfilled,
+		"zero_budgets_cleared":   s.ZeroBudgetsCleared,
 		"updated_at":             time.Now(),
 	}).Error
 }
@@ -233,6 +227,31 @@ func BackfillTeamAttribution(db *gorm.DB) error {
 	}
 
 	settings.AttributionBackfilled = true
+	return SaveTeamBudgetSettings(db, settings)
+}
+
+// ClearLegacyZeroBudgets rewrites App and LLM budgets of 0 (or less) to nil.
+// Budgets used to treat anything at or below 0 as "no limit"; now nil is "no
+// limit" and 0 is a budget of zero, so existing zeros must not start
+// blocking traffic. It runs once: the settings row remembers it ran, because
+// afterwards a 0 is a deliberate zero budget.
+func ClearLegacyZeroBudgets(db *gorm.DB) error {
+	settings, err := GetTeamBudgetSettings(db)
+	if err != nil {
+		return err
+	}
+	if settings.ZeroBudgetsCleared {
+		return nil
+	}
+	if err := db.Model(&App{}).Unscoped().Where("monthly_budget <= 0").
+		Update("monthly_budget", nil).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&LLM{}).Unscoped().Where("monthly_budget <= 0").
+		Update("monthly_budget", nil).Error; err != nil {
+		return err
+	}
+	settings.ZeroBudgetsCleared = true
 	return SaveTeamBudgetSettings(db, settings)
 }
 

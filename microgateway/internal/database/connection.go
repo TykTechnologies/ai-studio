@@ -95,6 +95,7 @@ func Migrate(db *gorm.DB) error {
 		&EdgeInstance{},
 		&ControlPayload{},
 		&SyncState{},
+		&BudgetBlock{},
 		// Model Router models (Enterprise)
 		&ModelRouter{},
 		&ModelPool{},

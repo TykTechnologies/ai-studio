@@ -807,16 +807,7 @@ const AppDetails = () => {
               </Box>
             </Grid>
             {isEnterprise && (
-              <AppTeamBudgetRow
-                app={app}
-                FieldLabel={FieldLabel}
-                FieldValue={FieldValue}
-                onChanged={() => {
-                  fetchAppDetails();
-                  fetchTokenUsageAndCost();
-                }}
-                onError={(message) => setSnackbar({ open: true, message, severity: "error" })}
-              />
+              <AppTeamBudgetRow app={app} FieldLabel={FieldLabel} FieldValue={FieldValue} />
             )}
           </Grid>
         </Section>

@@ -31,13 +31,11 @@ func (s *communityService) DeleteTeamBudget(uint) error { return nil }
 
 func (s *communityService) ResetTeamBudget(uint) error { return ErrEnterpriseFeature }
 
-func (s *communityService) AllocateForNewApp(*models.App) error { return nil }
+func (s *communityService) AllocateForNewApp(*models.App) (bool, error) { return false, nil }
 
 func (s *communityService) ValidateAllocation(*models.App, *float64, *uint) error { return nil }
 
 func (s *communityService) ReleaseAllocation(*models.App) error { return nil }
-
-func (s *communityService) AdoptApp(uint) (*models.App, error) { return nil, ErrEnterpriseFeature }
 
 func (s *communityService) CheckApp(*models.App) error { return nil }
 

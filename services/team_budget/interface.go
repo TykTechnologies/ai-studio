@@ -24,9 +24,6 @@ var (
 	ErrValidation            = errors.New("invalid team budget input")
 	ErrNotFound              = errors.New("team not found")
 	ErrAllocationExceedsPool = errors.New("allocation exceeds the team's unallocated budget")
-	// ErrAllocationExhausted refuses a request of an App whose team
-	// allocation is zero (the pool was empty when it was created).
-	ErrAllocationExhausted = errors.New("team allocation exhausted")
 	// ErrTeamBudgetExceeded refuses a request of an App whose hard-blocking
 	// team has reached its monthly budget.
 	ErrTeamBudgetExceeded = errors.New("team monthly budget exceeded")
@@ -53,19 +50,18 @@ type BudgetInput struct {
 
 // AppAllocation is one App's share of its team's budget in a report.
 type AppAllocation struct {
-	AppID        uint     `json:"app_id"`
-	Name         string   `json:"name"`
-	OwnerID      uint     `json:"owner_id"`
-	OwnerEmail   string   `json:"owner_email"`
-	Allocation   *float64 `json:"allocation"`
-	BudgetSource string   `json:"budget_source"`
-	Spent        float64  `json:"spent"`
+	AppID      uint     `json:"app_id"`
+	Name       string   `json:"name"`
+	OwnerID    uint     `json:"owner_id"`
+	OwnerEmail string   `json:"owner_email"`
+	Allocation *float64 `json:"allocation"`
+	Spent      float64  `json:"spent"`
 	// Deleted Apps keep their spend in the period they made it, but no
 	// longer hold an allocation.
 	Deleted bool `json:"deleted"`
-	// Blocked is a team-allocated App with nothing allocated.
+	// Blocked is a live App with a budget of zero.
 	Blocked bool `json:"blocked"`
-	// Uncapped is a live App with no budget of its own; its spend counts
+	// Uncapped is a live App with no limit of its own; its spend counts
 	// towards the team ceiling but it holds no allocation.
 	Uncapped bool `json:"uncapped"`
 }
@@ -91,9 +87,11 @@ type Report struct {
 	Unallocated float64 `json:"unallocated"` // negative when over-allocated
 	// OverBudget: spend has reached the budget. OverAllocated: App
 	// allocations add up to more than the budget.
-	OverBudget    bool            `json:"over_budget"`
-	OverAllocated bool            `json:"over_allocated"`
-	Apps          []AppAllocation `json:"apps"`
+	OverBudget    bool `json:"over_budget"`
+	OverAllocated bool `json:"over_allocated"`
+	// Blocking: the team hard-blocks and its Apps are being refused.
+	Blocking bool            `json:"blocking"`
+	Apps     []AppAllocation `json:"apps"`
 }
 
 // TeamCosts is every team's spend over a reporting window.
@@ -124,33 +122,30 @@ type Service interface {
 
 	// AllocateForNewApp draws the budget of an App about to be created from
 	// its team's pool: a requested budget (app.MonthlyBudget) must fit the
-	// unallocated pool, otherwise the team's default allocation is capped
-	// at what is left. Either way the App becomes team-allocated.
-	// app.TeamID must already be set. It is a no-op while the switch is
-	// off or the team is unmanaged.
-	AllocateForNewApp(app *models.App) error
+	// unallocated pool; with none requested the App gets the team's default
+	// allocation, capped at what is left (possibly 0, which blocks it).
+	// app.TeamID must already be set. It reports whether the pool applied;
+	// it does not while the switch is off or the team is unmanaged.
+	AllocateForNewApp(app *models.App) (bool, error)
 	// ValidateAllocation checks an App budget (and optionally a move to
 	// another team) against the destination team's unallocated pool. It
 	// returns ErrAllocationExceedsPool when it does not fit.
 	ValidateAllocation(app *models.App, newBudget *float64, newTeamID *uint) error
 	// ReleaseAllocation returns an App's allocation to its pool while the
-	// App itself lives on (orphaned Apps). Deleted Apps release theirs by
-	// dropping out of the pool on soft delete.
+	// App itself lives on (orphaned Apps): its budget becomes 0. Deleted
+	// Apps release theirs by dropping out of the pool on soft delete.
 	ReleaseAllocation(app *models.App) error
-	// AdoptApp converts a manually budgeted App of a managed team into a
-	// team allocation, drawing its current budget (or the team default)
-	// from the pool.
-	AdoptApp(appID uint) (*models.App, error)
 
-	// CheckApp is the request-time check. It returns ErrAllocationExhausted
-	// or ErrTeamBudgetExceeded when the App must be refused.
+	// CheckApp is the request-time check. It returns ErrTeamBudgetExceeded
+	// when the App's hard-blocking team has spent its budget. (An App with a
+	// budget of 0 is refused by the App budget check itself.)
 	CheckApp(app *models.App) error
 	// AnalyzeTeamUsage checks the App's team against its alert thresholds
 	// after spend was recorded. It never blocks the caller.
 	AnalyzeTeamUsage(app *models.App)
-	// EdgeBlocks lists the Apps edge gateways must refuse because of their
-	// team, with the reason, for the budget sync to push down. Empty while
-	// the switch is off.
+	// EdgeBlocks lists the Apps edge gateways must refuse because their
+	// hard-blocking team has spent its budget, with the reason, for the
+	// budget sync to push down. Empty while the switch is off.
 	EdgeBlocks() (map[uint]string, error)
 
 	// GetReport returns a team's position in its current period.

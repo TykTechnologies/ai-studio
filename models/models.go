@@ -136,6 +136,11 @@ func InitModels(db *gorm.DB) error {
 		return err
 	}
 
+	// Migration: budgets of 0 meant "no limit"; now nil does (runs once).
+	if err := ClearLegacyZeroBudgets(db); err != nil {
+		return err
+	}
+
 	// Migration: classify users created before auth_source existed.
 	if err := BackfillAuthSource(db); err != nil {
 		return err

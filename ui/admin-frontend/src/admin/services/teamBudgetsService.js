@@ -32,11 +32,6 @@ export const teamBudgetsService = {
     await apiClient.post(`/groups/${teamId}/budget/reset`);
   },
 
-  adoptApp: async (appId) => {
-    const response = await apiClient.post(`/apps/${appId}/adopt-team-budget`);
-    return response.data;
-  },
-
   // Spend per team; dates are YYYY-MM-DD, end inclusive.
   getTeamCosts: async (startDate, endDate) => {
     const response = await apiClient.get("/analytics/team-costs", {

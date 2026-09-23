@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,6 +19,19 @@ func asHelperError(err error) (helpers.ErrorResponse, bool) {
 		return he, true
 	}
 	return he, false
+}
+
+// portalBudgetSource labels an App's budget for the portal: "team" when team
+// budgets are on and the App's team hands out budgets from a pool.
+func (a *API) portalBudgetSource(app *models.App) string {
+	if app.TeamID == nil || app.MonthlyBudget == nil || a.service.TeamBudget == nil || !a.service.TeamBudget.Enabled() {
+		return ""
+	}
+	tb, err := a.service.TeamBudget.GetTeamBudget(*app.TeamID)
+	if err != nil || !tb.IsManaged() {
+		return ""
+	}
+	return "team"
 }
 
 // teamBudgetErrorResponse maps team budget service errors onto HTTP statuses.
@@ -171,33 +185,6 @@ func (a *API) resetTeamBudget(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
-}
-
-// @Summary Adopt an App into its team's pool
-// @Description Converts a manually budgeted App into a team allocation (Enterprise)
-// @Tags team-budgets
-// @Produce json
-// @Param id path int true "App ID"
-// @Success 200 {object} AppResponse
-// @Failure 400 {object} ErrorResponse
-// @Router /apps/{id}/adopt-team-budget [post]
-// @Security BearerAuth
-func (a *API) adoptAppTeamBudget(c *gin.Context) {
-	id, ok := parseUintParam(c, "id")
-	if !ok {
-		return
-	}
-	if _, err := a.service.TeamBudget.AdoptApp(id); err != nil {
-		teamBudgetErrorResponse(c, err)
-		return
-	}
-	app, err := a.service.GetAppByID(id)
-	if err != nil {
-		teamBudgetErrorResponse(c, err)
-		return
-	}
-	a.service.Budget.ClearCache()
-	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
 // @Summary Spend per team

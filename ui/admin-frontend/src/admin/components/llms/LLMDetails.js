@@ -231,8 +231,8 @@ const LLMDetails = () => {
       fetchVendorUsage();
       fetchVendorModelCost();
 
-      // Initialize budget usage with 0 if no monthly budget
-      if (!llm.attributes.monthly_budget) {
+      // Initialize budget usage with 0 if no monthly budget (null = no limit)
+      if (llm.attributes.monthly_budget === null || llm.attributes.monthly_budget === undefined) {
         setBudgetUsageData({
           current_usage: 0,
           percentage: 0,
@@ -360,7 +360,7 @@ const LLMDetails = () => {
           total_cost: llmBudgetData.totalCost,
           start_date: llmBudgetData.budgetStartDate || llm.attributes.budget_start_date || startDate,
         });
-      } else if (llm.attributes.monthly_budget) {
+      } else if (llm.attributes.monthly_budget > 0) {
         // Fallback to calculating from vendor usage if budget data is not found
         const totalCost = usageResponse.data.cost?.reduce((sum, cost) => sum + cost, 0) || 0;
         setBudgetUsageData({

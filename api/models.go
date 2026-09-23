@@ -512,7 +512,6 @@ type AppResponse struct {
 		MonthlyBudget    *float64               `json:"monthly_budget"`
 		BudgetStartDate  *time.Time             `json:"budget_start_date"`
 		TeamID           *uint                  `json:"team_id"`
-		BudgetSource     string                 `json:"budget_source"`
 		IsActive         bool                   `json:"is_active"` // live switch (apps:publish)
 		IsOrphaned       bool                   `json:"is_orphaned"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
@@ -1152,8 +1151,10 @@ type AppDetailResponse struct {
 		MonthlyBudget   *float64         `json:"monthly_budget"`
 		BudgetStartDate *time.Time       `json:"budget_start_date"`
 		TeamID          *uint            `json:"team_id"`
-		BudgetSource    string           `json:"budget_source"`
-		IsOrphaned      bool             `json:"is_orphaned"`
+		// BudgetSource tells the portal where the budget came from: "team"
+		// when the App's team hands out budgets from a pool, else empty.
+		BudgetSource string `json:"budget_source,omitempty"`
+		IsOrphaned   bool   `json:"is_orphaned"`
 		IsActive        bool             `json:"is_active"`
 		Credential      CredentialDetail `json:"credential"`
 		// MCPServerIDs / MCPServers mirror the list endpoint (serializeApp):

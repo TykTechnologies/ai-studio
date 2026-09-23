@@ -37,7 +37,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
-	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
 	"github.com/go-mail/mail"
@@ -368,8 +367,10 @@ func main() {
 
 		controlServer = grpc.NewControlServer(grpcConfig, db)
 		controlServer.SetGovernedMetadataReader(service.GovernedMetadataService)
-		if team_budget.IsEnterpriseAvailable() {
-			controlServer.SetTeamBlockSource(service.TeamBudget)
+		// Enterprise: edges learn which Apps to refuse (budget 0, team over
+		// a hard-blocking budget) and edge spend raises budget alerts.
+		if src, ok := service.Budget.(grpc.EdgeBudgetSource); ok {
+			controlServer.SetEdgeBudgetSource(src)
 		}
 
 		// Create reload coordinator and connect it to control server

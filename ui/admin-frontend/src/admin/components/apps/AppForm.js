@@ -16,7 +16,6 @@ import {
   InputLabel,
   Switch,
   FormControlLabel,
-  InputAdornment,
   Tooltip,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
@@ -40,6 +39,7 @@ import {
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
 import AppTeamField from "./AppTeamField";
+import BudgetField from "../common/BudgetField";
 import { errorDetail } from "../../services/teamBudgetsService";
 
 // The app stores relationships as id arrays (llm_ids, datasource_ids,
@@ -280,12 +280,12 @@ const AppForm = () => {
     setApp({ ...app, [name]: value });
   };
 
-  const handleBudgetChange = (e) => {
-    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+  // null is "no limit" (or, on a new App, the default); 0 is a budget of 0.
+  const handleBudgetChange = (value) => {
     setApp(prev => ({
       ...prev,
       monthly_budget: value,
-      budget_start_date: value ? prev.budget_start_date || new Date().toISOString() : null
+      budget_start_date: value !== null ? prev.budget_start_date || new Date().toISOString() : null
     }));
   };
 
@@ -362,10 +362,9 @@ const AppForm = () => {
         };
       });
 
-    // budget_source is server-owned; team_id null keeps the resolved team.
-    const { budget_source: _budgetSource, ...appFields } = app;
+    // team_id null keeps the resolved team.
     const appPayload = {
-      ...appFields,
+      ...app,
       user_id: parseInt(app.user_id, 10),
       llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
@@ -497,30 +496,25 @@ const AppForm = () => {
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <TextField
-                      fullWidth
-                      label="Monthly Budget"
-                      name="monthly_budget"
-                      type="number"
-                      inputProps={{
-                        step: "0.01",
-                        min: "0"
-                      }}
-                      value={app.monthly_budget || ''}
-                      onChange={handleBudgetChange}
-                      disabled={!isEnterprise}
-                      sx={{ opacity: isEnterprise ? 1 : 0.6 }}
-                      InputProps={{
-                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                      }}
-                      helperText={
-                        !isEnterprise
-                          ? "Budget enforcement is an Enterprise feature"
-                          : app.budget_source === "team"
-                            ? "Allocated from the team's budget pool; 0 blocks the App"
-                            : "Leave empty for no budget limit, or the team's default allocation when its team has a budget"
-                      }
-                    />
+                    <Box sx={{ flex: 1, opacity: isEnterprise ? 1 : 0.6 }}>
+                      <BudgetField
+                        value={app.monthly_budget}
+                        onChange={handleBudgetChange}
+                        disabled={!isEnterprise}
+                        testIdPrefix="app-budget"
+                        // On a new App "empty" is whatever default applies:
+                        // the team's allocation when its team has a budget
+                        // pool, else the platform default, else no limit.
+                        emptyLabel={id ? "No limit" : "Default"}
+                        emptyHelp={
+                          !isEnterprise
+                            ? "Budget enforcement is an Enterprise feature"
+                            : id
+                              ? "Spending is not capped (the team's budget still applies)."
+                              : "The team's default allocation when its team has a budget pool; otherwise no limit."
+                        }
+                      />
+                    </Box>
                     {!isEnterprise && (
                       <Tooltip
                         title="Budget enforcement is an Enterprise feature"
@@ -541,7 +535,7 @@ const AppForm = () => {
                       type="date"
                       value={app.budget_start_date ? app.budget_start_date.split('T')[0] : ''}
                       onChange={handleBudgetStartDateChange}
-                      disabled={!isEnterprise || !app.monthly_budget}
+                      disabled={!isEnterprise || app.monthly_budget === null || app.monthly_budget === undefined}
                       sx={{ opacity: isEnterprise ? 1 : 0.6 }}
                       InputLabelProps={{
                         shrink: true,

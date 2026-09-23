@@ -84,18 +84,22 @@ func TestTeamBudgetsEnterprise_API(t *testing.T) {
 	require.Equal(t, http.StatusCreated, code, out)
 	attrs := out["data"].(map[string]interface{})["attributes"].(map[string]interface{})
 	assert.Equal(t, float64(eng.ID), attrs["team_id"])
-	assert.Equal(t, models.BudgetSourceTeam, attrs["budget_source"])
 	assert.Equal(t, 4.0, attrs["monthly_budget"])
 
 	code, out = createApp("too-big", 7, nil)
 	assert.Equal(t, http.StatusBadRequest, code, out)
+
+	// An explicit 0 is kept as a zero budget.
+	code, out = createApp("zero", 0, nil)
+	require.Equal(t, http.StatusCreated, code, out)
+	assert.Equal(t, 0.0, out["data"].(map[string]interface{})["attributes"].(map[string]interface{})["monthly_budget"])
 
 	// Explicit team, empty Ops pool (unmanaged: no allocation).
 	code, out = createApp("ops-app", nil, ops.ID)
 	require.Equal(t, http.StatusCreated, code, out)
 	attrs = out["data"].(map[string]interface{})["attributes"].(map[string]interface{})
 	assert.Equal(t, float64(ops.ID), attrs["team_id"])
-	assert.Equal(t, "", attrs["budget_source"])
+	assert.Nil(t, attrs["monthly_budget"], "unmanaged team: no limit")
 
 	code, out = do("GET", "/api/v1/groups/"+itoa(eng.ID)+"/budget", nil)
 	require.Equal(t, http.StatusOK, code)

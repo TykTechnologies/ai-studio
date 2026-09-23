@@ -173,10 +173,11 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	return server
 }
 
-// SetTeamBlockSource has the budget sync push team budget blocks to edges.
-func (s *ControlServer) SetTeamBlockSource(src TeamBlockSource) {
+// SetEdgeBudgetSource has the budget sync push budget blocks to edges and
+// raise budget alerts for edge spend (Enterprise).
+func (s *ControlServer) SetEdgeBudgetSource(src EdgeBudgetSource) {
 	if s.budgetSyncService != nil {
-		s.budgetSyncService.SetTeamBlockSource(src)
+		s.budgetSyncService.SetEdgeBudgetSource(src)
 	}
 }
 

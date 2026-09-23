@@ -96,7 +96,6 @@ func TestBackfillTeamAttribution(t *testing.T) {
 	require.NoError(t, db.First(&got, app.ID).Error)
 	require.NotNil(t, got.TeamID)
 	assert.Equal(t, eng.ID, *got.TeamID)
-	assert.Empty(t, got.BudgetSource, "existing budgets stay manual")
 	assert.Equal(t, 5.0, *got.MonthlyBudget)
 
 	var unstamped int64
@@ -106,4 +105,40 @@ func TestBackfillTeamAttribution(t *testing.T) {
 	s, err := GetTeamBudgetSettings(db)
 	require.NoError(t, err)
 	assert.True(t, s.AttributionBackfilled)
+}
+
+func TestClearLegacyZeroBudgets(t *testing.T) {
+	db := teamTestDB(t)
+	// InitModels already ran it on the empty database; simulate an upgrade.
+	require.NoError(t, db.Model(&TeamBudgetSettings{}).Where("id = 1").Update("zero_budgets_cleared", false).Error)
+
+	zero, five := 0.0, 5.0
+	legacyZero := &App{Name: "legacy-zero", MonthlyBudget: &zero}
+	capped := &App{Name: "capped", MonthlyBudget: &five}
+	unlimited := &App{Name: "unlimited"}
+	for _, a := range []*App{legacyZero, capped, unlimited} {
+		require.NoError(t, db.Create(a).Error)
+	}
+	llm := &LLM{Name: "llm", MonthlyBudget: &zero}
+	require.NoError(t, db.Create(llm).Error)
+
+	require.NoError(t, ClearLegacyZeroBudgets(db))
+
+	var gotZero, gotCapped App
+	require.NoError(t, db.First(&gotZero, legacyZero.ID).Error)
+	assert.Nil(t, gotZero.MonthlyBudget, "0 meant no limit before the upgrade")
+	require.NoError(t, db.First(&gotCapped, capped.ID).Error)
+	assert.Equal(t, 5.0, *gotCapped.MonthlyBudget)
+	var gotLLM LLM
+	require.NoError(t, db.First(&gotLLM, llm.ID).Error)
+	assert.Nil(t, gotLLM.MonthlyBudget)
+
+	// After the upgrade a 0 is a deliberate zero budget: it must survive
+	// the next boot.
+	require.NoError(t, db.Model(&App{}).Where("id = ?", capped.ID).Update("monthly_budget", 0).Error)
+	require.NoError(t, ClearLegacyZeroBudgets(db))
+	var again App
+	require.NoError(t, db.First(&again, capped.ID).Error)
+	require.NotNil(t, again.MonthlyBudget)
+	assert.Equal(t, 0.0, *again.MonthlyBudget)
 }

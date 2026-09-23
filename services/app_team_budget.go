@@ -65,10 +65,11 @@ func (s *Service) attributeNewApp(app *models.App, o appOptions) (bool, error) {
 	if app.TeamID == nil || s.TeamBudget == nil {
 		return false, nil
 	}
-	if err := s.TeamBudget.AllocateForNewApp(app); err != nil {
+	fromTeam, err := s.TeamBudget.AllocateForNewApp(app)
+	if err != nil {
 		return false, teamBudgetError(err)
 	}
-	return app.BudgetSource == models.BudgetSourceTeam, nil
+	return fromTeam, nil
 }
 
 // teamBudgetError maps team budget validation failures onto 400s.

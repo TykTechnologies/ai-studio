@@ -296,7 +296,7 @@ describe("AppForm team budgets (Enterprise)", () => {
     mockParams = { id: "5" };
     useEdition.mockReturnValue({ isEnterprise: true });
     const payload = appPayload();
-    Object.assign(payload.data.data.attributes, { team_id: 3, budget_source: "team", monthly_budget: 20 });
+    Object.assign(payload.data.data.attributes, { team_id: 3, monthly_budget: 20 });
     apiClient.get.mockImplementation((url) => {
       if (url === "/users") return Promise.resolve({ data: { data: users } });
       if (url === "/groups") {
@@ -314,19 +314,19 @@ describe("AppForm team budgets (Enterprise)", () => {
     apiClient.patch.mockResolvedValue({ data: { data: { id: "5" } } });
   });
 
-  it("shows the team's pool and sends the team, not the server-owned budget source", async () => {
+  it("shows the team's pool and sends the team", async () => {
     renderForm();
     await screen.findByDisplayValue("Sales bot");
     await waitFor(() =>
       expect(screen.getByTestId("app-team-pool")).toHaveTextContent("Team pool: $40.00 of $100.00 unallocated"),
     );
-    expect(screen.getByText("Allocated from the team's budget pool; 0 blocks the App")).toBeInTheDocument();
+    expect(screen.getByTestId("app-budget-help")).toHaveTextContent("Requests are refused once");
 
     fireEvent.click(screen.getByRole("button", { name: "Update app" }));
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
     const [, body] = apiClient.patch.mock.calls[0];
     expect(body.data.attributes.team_id).toBe(3);
-    expect(body.data.attributes).not.toHaveProperty("budget_source");
+    expect(body.data.attributes.monthly_budget).toBe(20);
   });
 
   it("shows why the server refused an allocation", async () => {

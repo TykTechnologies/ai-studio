@@ -769,7 +769,6 @@ func (a *API) setupRoutes() {
 	v1.POST("/apps/:id/activate-credential", authz.Write("apps"), a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", authz.Write("apps"), a.deactivateAppCredential)
 	v1.POST("/apps/:id/reset-budget", authz.Write("apps"), a.resetAppBudget)
-	v1.POST("/apps/:id/adopt-team-budget", authz.Write("apps"), a.adoptAppTeamBudget)
 	v1.GET("/apps", authz.Read("apps"), a.listApps)
 	v1.GET("/apps/search", authz.Read("apps"), a.searchApps)
 	v1.GET("/apps/count", authz.Read("apps"), a.countApps)

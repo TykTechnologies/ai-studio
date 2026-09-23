@@ -46,10 +46,9 @@ const Stat = ({ label, value, testId }) => (
 
 const appStatus = (row) => {
   if (row.deleted) return <Chip size="small" label="Decommissioned" />;
-  if (row.blocked) return <Chip size="small" color="error" label="No allocation" />;
-  if (row.uncapped) return <Chip size="small" color="warning" label="Uncapped" />;
-  if (row.budget_source === "team") return <Chip size="small" color="primary" label="Team pool" />;
-  return <Chip size="small" variant="outlined" label="Own budget" />;
+  if (row.blocked) return <Chip size="small" color="error" label="Budget $0: refused" />;
+  if (row.uncapped) return <Chip size="small" color="warning" label="No limit" />;
+  return <Chip size="small" variant="outlined" label="Allocated" />;
 };
 
 const emptyForm = {
@@ -163,10 +162,13 @@ const TeamBudgetPanel = ({ teamId }) => {
             Team budgets are switched off: spend is reported, but nothing is allocated or enforced. Switch them on from the Teams page.
           </Alert>
         )}
-        {report.over_budget && (
+        {report.blocking ? (
           <Alert severity="error" data-testid="team-over-budget">
-            The team has spent its budget for this period
-            {report.enforcement === "hard_block" ? "; its Apps are refused until the period ends or the budget is raised or reset." : " (alert only; its Apps keep working)."}
+            The team&apos;s Apps are being refused: it has {budget > 0 ? "spent its budget for this period" : "a budget of $0"}. They are served again when the period ends or the budget is raised or reset.
+          </Alert>
+        ) : report.over_budget && (
+          <Alert severity="warning" data-testid="team-over-budget">
+            The team has spent its budget for this period (alert only; its Apps keep working).
           </Alert>
         )}
         {report.over_allocated && (
@@ -183,7 +185,7 @@ const TeamBudgetPanel = ({ teamId }) => {
           <>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
               <Stat label="Monthly budget" value={formatMoney(budget)} testId="team-budget-amount" />
-              <Stat label="Spent this period" value={`${formatMoney(report.spent)}${hasCeiling ? ` (${report.usage.toFixed(0)}%)` : ""}`} testId="team-budget-spent" />
+              <Stat label="Spent this period" value={`${formatMoney(report.spent)}${budget > 0 ? ` (${report.usage.toFixed(0)}%)` : ""}`} testId="team-budget-spent" />
               <Stat label="Allocated to Apps" value={formatMoney(report.allocated)} testId="team-budget-allocated" />
               <Stat label="Unallocated" value={formatMoney(report.unallocated)} testId="team-budget-unallocated" />
               <Stat label="Default per new App" value={formatMoney(report.default_app_allocation ?? 0)} />
@@ -223,7 +225,7 @@ const TeamBudgetPanel = ({ teamId }) => {
                 <TableRow key={row.app_id}>
                   <TableCell>{row.name}</TableCell>
                   <TableCell>{row.owner_email || "—"}</TableCell>
-                  <TableCell align="right">{row.deleted ? "—" : formatMoney(row.allocation)}</TableCell>
+                  <TableCell align="right">{row.deleted ? "—" : row.uncapped ? "No limit" : formatMoney(row.allocation)}</TableCell>
                   <TableCell align="right">{formatMoney(row.spent)}</TableCell>
                   <TableCell>{appStatus(row)}</TableCell>
                 </TableRow>
@@ -260,7 +262,7 @@ const TeamBudgetPanel = ({ teamId }) => {
             value={form.monthly_budget}
             onChange={(e) => setForm({ ...form, monthly_budget: e.target.value })}
             InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-            helperText="The most the team's Apps may spend together each period. 0 is an empty pool: new Apps get nothing."
+            helperText="The most the team's Apps may spend together each period, and the pool new Apps draw from. $0 is a real budget: new Apps get nothing, and a blocking team may spend nothing."
           />
           <TextField
             label="Default allocation per new App"

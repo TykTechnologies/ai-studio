@@ -11,7 +11,7 @@ const poolSummary = (report) => {
     return "This team has no budget pool; the App budget below applies on its own.";
   }
   const left = Math.max(0, report.unallocated);
-  return `Team pool: ${formatMoney(left)} of ${formatMoney(report.monthly_budget)} unallocated. Leave the budget empty to draw the team's default of ${formatMoney(report.default_app_allocation ?? 0)}.`;
+  return `Team pool: ${formatMoney(left)} of ${formatMoney(report.monthly_budget)} unallocated. A new App set to "Default" gets the team's default of ${formatMoney(report.default_app_allocation ?? 0)}, or what is left.`;
 };
 
 // AppTeamField picks the team an App's spend is attributed to (Enterprise).

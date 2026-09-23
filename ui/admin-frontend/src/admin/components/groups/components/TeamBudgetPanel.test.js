@@ -43,11 +43,12 @@ const managedReport = {
   allocated: 125,
   unallocated: -25,
   over_budget: true,
+  blocking: true,
   over_allocated: true,
   apps: [
-    { app_id: 1, name: "search", owner_email: "a@x.io", allocation: 100, budget_source: "team", spent: 90 },
-    { app_id: 2, name: "blocked", owner_email: "a@x.io", allocation: 0, budget_source: "team", spent: 0, blocked: true },
-    { app_id: 3, name: "gone", owner_email: "a@x.io", allocation: null, budget_source: "team", spent: 25, deleted: true },
+    { app_id: 1, name: "search", owner_email: "a@x.io", allocation: 100, spent: 90 },
+    { app_id: 2, name: "blocked", owner_email: "a@x.io", allocation: 0, spent: 0, blocked: true },
+    { app_id: 3, name: "gone", owner_email: "a@x.io", allocation: null, spent: 25, deleted: true },
   ],
 };
 
@@ -66,9 +67,9 @@ describe("TeamBudgetPanel", () => {
     expect(screen.getByTestId("team-budget-amount")).toHaveTextContent("$100.00");
     expect(screen.getByTestId("team-budget-spent")).toHaveTextContent("$120.00 (120%)");
     expect(screen.getByTestId("team-budget-unallocated")).toHaveTextContent("$-25.00");
-    expect(screen.getByTestId("team-over-budget")).toHaveTextContent(/Apps are refused/);
+    expect(screen.getByTestId("team-over-budget")).toHaveTextContent(/being refused/);
     expect(screen.getByTestId("team-over-allocated")).toBeInTheDocument();
-    expect(screen.getByText("No allocation")).toBeInTheDocument();
+    expect(screen.getByText("Budget $0: refused")).toBeInTheDocument();
     expect(screen.getByText("Decommissioned")).toBeInTheDocument();
     expect(screen.getByText(/Includes \$5.00 of chat/)).toBeInTheDocument();
   });

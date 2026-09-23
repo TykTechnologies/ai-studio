@@ -29,11 +29,8 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		return nil, err
 	}
 
-	// A zero budget is "none requested", as it always was.
-	if monthlyBudget != nil && *monthlyBudget == 0 {
-		monthlyBudget = nil
-	}
-
+	// A nil budget is "none requested": the team's default allocation, or
+	// DEFAULT_APP_BUDGET, or no limit. 0 is a budget of zero.
 	app := &models.App{
 		Name:            name,
 		Description:     description,
@@ -164,11 +161,8 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		return nil, err
 	}
 
-	// A zero budget is "none requested", as it always was.
-	if monthlyBudget != nil && *monthlyBudget == 0 {
-		monthlyBudget = nil
-	}
-
+	// A nil budget is "none requested": the team's default allocation, or
+	// DEFAULT_APP_BUDGET, or no limit. 0 is a budget of zero.
 	app := &models.App{
 		Name:            name,
 		Description:     description,
@@ -281,13 +275,6 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	}
 	if o.teamID != nil && (app.TeamID == nil || *app.TeamID != *o.teamID) {
 		app.TeamID = o.teamID
-		// An allocation belongs to the pool it came from; in an unmanaged
-		// team the budget is an ordinary App budget again.
-		if app.BudgetSource == models.BudgetSourceTeam && s.TeamBudget != nil {
-			if tb, err := s.TeamBudget.GetTeamBudget(*o.teamID); err != nil || !tb.IsManaged() {
-				app.BudgetSource = ""
-			}
-		}
 	}
 
 	app.Name = name
