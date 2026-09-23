@@ -68,13 +68,10 @@ func (a *API) createApp(c *gin.Context) {
 		}
 	}
 	// So are router grants.
-	if input.Data.Attributes.ModelRouterIDs != nil {
-		actorID, actorAdmin := adminAppActor(c)
-		if !a.validateAppModelRouterBindings(c, actorID, actorAdmin, *input.Data.Attributes.ModelRouterIDs) {
-			return
-		}
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	if !ok {
+		return
 	}
-	routerOpts := appRouterOptions(input.Data.Attributes.ModelRouterIDs)
 
 	// Apps default to active. Asking for an active app explicitly needs
 	// apps:publish; a caller without it gets an inactive app unless they
@@ -296,13 +293,10 @@ func (a *API) updateApp(c *gin.Context) {
 			return
 		}
 	}
-	if input.Data.Attributes.ModelRouterIDs != nil {
-		actorID, actorAdmin := adminAppActor(c)
-		if !a.validateAppModelRouterBindings(c, actorID, actorAdmin, *input.Data.Attributes.ModelRouterIDs) {
-			return
-		}
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	if !ok {
+		return
 	}
-	routerOpts := appRouterOptions(input.Data.Attributes.ModelRouterIDs)
 
 	var app *models.App
 	if len(pluginResources) > 0 {

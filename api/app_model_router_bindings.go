@@ -63,3 +63,18 @@ func appRouterOptions(ids *[]uint) []services.AppOption {
 	}
 	return []services.AppOption{services.WithModelRouters(*ids)}
 }
+
+// adminAppRouterOptions validates the router grants an admin App create or
+// update asks for (nil: the request leaves them alone) and returns them as
+// service options. It writes the error response itself and reports whether
+// the caller may go on.
+func (a *API) adminAppRouterOptions(c *gin.Context, ids *[]uint) ([]services.AppOption, bool) {
+	if ids == nil {
+		return nil, true
+	}
+	actorID, actorAdmin := adminAppActor(c)
+	if !a.validateAppModelRouterBindings(c, actorID, actorAdmin, *ids) {
+		return nil, false
+	}
+	return appRouterOptions(ids), true
+}
