@@ -211,6 +211,7 @@ type failoverHarness struct {
 	primary, fallback *models.LLM
 	primaryVendor     *fakeVendor
 	fallbackVendor    *fakeVendor
+	proxy             *Proxy
 }
 
 func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFunc, mutate func(primary, fallback *models.LLM)) *failoverHarness {
@@ -262,6 +263,7 @@ func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFu
 
 	p := NewProxy(service, &Config{Port: h.port}, budgetSvc)
 	require.NoError(t, p.loadResources())
+	h.proxy = p
 	srv := &http.Server{Handler: p.createHandler()}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
@@ -397,17 +399,26 @@ func TestFailover_PrimaryFailsFallbackServes(t *testing.T) {
 	// One ProxyLog per attempt: the failed primary and the fallback that served.
 	waitForProxyLog(t, h.db, h.app.ID, http.StatusServiceUnavailable)
 	waitForProxyLog(t, h.db, h.app.ID, http.StatusOK)
+	// The rows are written asynchronously (goAnalyze), so id order is not
+	// attempt order: the fallback's row can land first. Match them by LLM.
 	logs := h.proxyLogs()
 	require.Len(t, logs, 2)
-	assert.Equal(t, h.primary.ID, logs[0].LLMID)
-	assert.Equal(t, http.StatusServiceUnavailable, logs[0].ResponseCode)
-	assert.Nil(t, logs[0].FailoverFromLLMID)
-	assert.Equal(t, 0, logs[0].FailoverAttempt)
-	assert.Equal(t, h.fallback.ID, logs[1].LLMID)
-	assert.Equal(t, http.StatusOK, logs[1].ResponseCode)
-	require.NotNil(t, logs[1].FailoverFromLLMID)
-	assert.Equal(t, h.primary.ID, *logs[1].FailoverFromLLMID)
-	assert.Equal(t, 1, logs[1].FailoverAttempt)
+	byLLM := map[uint]models.ProxyLog{}
+	for _, l := range logs {
+		byLLM[l.LLMID] = l
+	}
+	primaryLog, ok := byLLM[h.primary.ID]
+	require.True(t, ok, "no ProxyLog for the primary: %+v", logs)
+	fallbackLog, ok := byLLM[h.fallback.ID]
+	require.True(t, ok, "no ProxyLog for the fallback: %+v", logs)
+
+	assert.Equal(t, http.StatusServiceUnavailable, primaryLog.ResponseCode)
+	assert.Nil(t, primaryLog.FailoverFromLLMID)
+	assert.Equal(t, 0, primaryLog.FailoverAttempt)
+	assert.Equal(t, http.StatusOK, fallbackLog.ResponseCode)
+	require.NotNil(t, fallbackLog.FailoverFromLLMID)
+	assert.Equal(t, h.primary.ID, *fallbackLog.FailoverFromLLMID)
+	assert.Equal(t, 1, fallbackLog.FailoverAttempt)
 }
 
 func TestFailover_CallerErrorsDoNotFailOver(t *testing.T) {
@@ -551,6 +562,14 @@ func TestFailover_SpoofedMarkerCannotTaintAnalytics(t *testing.T) {
 	assert.Equal(t, h.primary.ID, logs[0].LLMID)
 	assert.Nil(t, logs[0].FailoverFromLLMID, "a forged marker must not be recorded")
 	assert.Equal(t, 0, logs[0].FailoverAttempt)
+
+	// The same forged marker aimed at the fallback, which the app was never
+	// granted, does not inherit access: without the process token it is just a
+	// request for an ungranted LLM.
+	resp, body := h.post("/llm/call/fallback/v1/chat/completions", failoverChatBody,
+		hdrFailoverOrigin, "primary", hdrFailoverAttempt, "1", hdrFailoverToken, "guess")
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
+	assert.Empty(t, h.fallbackVendor.calls())
 }
 
 func TestFailover_UnifiedRouterInheritsTheWaterfall(t *testing.T) {
