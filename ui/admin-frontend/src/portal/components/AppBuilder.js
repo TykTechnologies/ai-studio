@@ -9,17 +9,24 @@ import {
   CircularProgress,
   Card,
   CardContent,
+  Grid,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
 import {
   PrimaryButton,
   SecondaryOutlineButton,
 } from "../../admin/styles/sharedStyles";
-import RelationshipPicker from "../../admin/components/common/relationship-picker";
+import { getVendorName } from "../../admin/utils/vendorLogos";
 import {
   useUnsavedForm,
   useConfirmNavigation,
 } from "../../components/unsaved-changes";
+import { CATALOG_TYPES, MCP_KIND_LABELS, typeIcon, typeLabel } from "../utils/catalog";
+import {
+  AccessPicker,
+  RequestedAccessList,
+  selectionCount,
+} from "./AppAccessPicker";
 
 const jsonApiName = (item) => item?.attributes?.name ?? "";
 
@@ -29,24 +36,161 @@ const jsonApiName = (item) => item?.attributes?.name ?? "";
 const appGrantedInstances = (resourceType) =>
   (resourceType?.instances || []).filter((inst) => inst.access_granted_via_app !== false);
 
+const pluginGroupKey = (rt) => `plugin:${rt.plugin_id}:${rt.slug}`;
+
+const GROUP_KEYS = {
+  LLM: CATALOG_TYPES.LLM,
+  DATASOURCE: CATALOG_TYPES.DATASOURCE,
+  TOOL: CATALOG_TYPES.TOOL,
+  MCP_SERVER: CATALOG_TYPES.MCP_SERVER,
+};
+
+const TOOL_HELPER =
+  "Served by AI Studio. Your app calls them over REST or MCP with its own credential.";
+const MCP_HELPER =
+  "Served by a Tyk Gateway. Once the app is approved you request a Tyk access key for them on the app page.";
+
+// A second line that only repeats the name ("Anthropic" by Anthropic) is noise.
+const withoutEcho = (opt) =>
+  opt.secondary && opt.secondary.trim().toLowerCase() === opt.name.trim().toLowerCase()
+    ? { ...opt, secondary: "" }
+    : opt;
+
+const coreGroup = (type, helperText, options) => ({
+  key: type,
+  label: typeLabel(type, { plural: true }),
+  icon: typeIcon(type),
+  helperText,
+  options: options.map(withoutEcho),
+});
+
+/**
+ * One group per asset type an App can be granted, in catalog order. Types
+ * with nothing to offer are left out, so a user who can only reach LLM
+ * providers sees one tab rather than four empty ones.
+ */
+const buildGroups = ({ llms, dataSources, tools, mcpServers, pluginResourceTypes }) =>
+  [
+    coreGroup(
+      CATALOG_TYPES.LLM,
+      null,
+      llms.map((llm) => ({
+        id: String(llm.id),
+        name: jsonApiName(llm),
+        secondary: getVendorName(llm.attributes?.vendor) || llm.attributes?.vendor || "",
+      })),
+    ),
+    coreGroup(
+      CATALOG_TYPES.DATASOURCE,
+      null,
+      dataSources.map((ds) => ({
+        id: String(ds.id),
+        name: jsonApiName(ds),
+        secondary: ds.attributes?.short_description || "",
+      })),
+    ),
+    coreGroup(
+      CATALOG_TYPES.TOOL,
+      TOOL_HELPER,
+      tools.map((tool) => ({
+        id: String(tool.id),
+        name: jsonApiName(tool),
+        secondary: tool.attributes?.description || "",
+      })),
+    ),
+    coreGroup(
+      CATALOG_TYPES.MCP_SERVER,
+      MCP_HELPER,
+      mcpServers.map((server) => ({
+        id: String(server.id),
+        name: server.attributes?.name || "",
+        secondary:
+          server.attributes?.short_description ||
+          server.attributes?.description ||
+          MCP_KIND_LABELS[server.attributes?.kind] ||
+          "",
+      })),
+    ),
+    // Types whose instances are not granted through an App (informational
+    // assets, plugin-managed access) offer nothing here.
+    ...pluginResourceTypes.map((rt) => ({
+      key: pluginGroupKey(rt),
+      label: rt.name,
+      icon: "puzzle-piece",
+      helperText: rt.description || null,
+      pluginId: rt.plugin_id,
+      slug: rt.slug,
+      options: appGrantedInstances(rt).map((inst) => ({
+        id: String(inst.id),
+        name: inst.name || "",
+        secondary: inst.description || "",
+      })).map(withoutEcho),
+    })),
+  ].filter((group) => group.options.length > 0);
+
+/**
+ * The ?llm= / ?datasource= / ?tool= / ?mcp_server= / ?plugin_resource=
+ * preselection from a catalog "Build with" link. Only ids the user can
+ * actually add are kept; a deep link to anything else is ignored.
+ */
+const preselectionFrom = (search, groups) => {
+  const params = new URLSearchParams(search);
+  const selection = {};
+  const keep = (key, id) => {
+    const group = groups.find((g) => g.key === key);
+    if (id && group?.options.some((opt) => opt.id === id)) {
+      selection[key] = [...(selection[key] || []), id];
+    }
+  };
+
+  keep(GROUP_KEYS.LLM, params.get("llm"));
+  keep(GROUP_KEYS.DATASOURCE, params.get("datasource"));
+  keep(GROUP_KEYS.TOOL, params.get("tool"));
+  keep(GROUP_KEYS.MCP_SERVER, params.get("mcp_server"));
+
+  // ?plugin_resource=<plugin id>:<slug>:<instance id>, from a plugin
+  // resource's catalog page. The instance id may itself contain ":".
+  const pluginResource = params.get("plugin_resource");
+  if (pluginResource) {
+    const [pluginId, slug, ...rest] = pluginResource.split(":");
+    keep(`plugin:${pluginId}:${slug}`, rest.join(":"));
+  }
+  return selection;
+};
+
+const toInts = (ids = []) => ids.map((id) => parseInt(id, 10));
+
+const pageSx = {
+  px: 3,
+  py: 3,
+  boxSizing: "border-box",
+  width: "100%",
+};
+
+const SectionHeading = ({ title, subtitle }) => (
+  <Box sx={{ mb: 1.5 }}>
+    <Typography variant="headingSmall" component="h2">
+      {title}
+    </Typography>
+    {subtitle && (
+      <Typography variant="bodyMediumDefault" color="text.secondary" component="p">
+        {subtitle}
+      </Typography>
+    )}
+  </Box>
+);
+
 const AppBuilder = () => {
   // No placeholder name: the field is required and a default of "My New App"
   // was being submitted as-is.
   const [appName, setAppName] = useState("");
   const [description, setDescription] = useState("");
-  const [dataSources, setDataSources] = useState([]);
-  const [llms, setLLMs] = useState([]);
-  const [tools, setTools] = useState([]);
-  const [selectedDataSources, setSelectedDataSources] = useState([]);
-  const [selectedLLMs, setSelectedLLMs] = useState([]);
-  const [selectedTools, setSelectedTools] = useState([]);
-  const [mcpServers, setMCPServers] = useState([]);
-  const [selectedMCPServers, setSelectedMCPServers] = useState([]);
-  const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
-  const [pluginResourceSelections, setPluginResourceSelections] = useState({});
+  const [groups, setGroups] = useState([]);
+  const [selection, setSelection] = useState({});
+  const [initialGroupKey, setInitialGroupKey] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedApp, setSubmittedApp] = useState(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -56,20 +200,7 @@ const AppBuilder = () => {
   // arriving from a resource page never counts as a change. markSaved()
   // runs before the success screen replaces the form.
   const { markSaved } = useUnsavedForm(
-    {
-      appName,
-      description,
-      dataSourceIds: selectedDataSources.map((ds) => String(ds.id)),
-      llmIds: selectedLLMs.map((llm) => String(llm.id)),
-      toolIds: selectedTools.map((tool) => String(tool.id)),
-      mcpServerIds: selectedMCPServers.map((s) => String(s.id)),
-      pluginResourceIds: Object.fromEntries(
-        Object.entries(pluginResourceSelections).map(([key, items]) => [
-          key,
-          items.map((item) => String(item.id)),
-        ]),
-      ),
-    },
+    { appName, description, selection },
     { ready: !isLoading },
   );
   const confirmNavigation = useConfirmNavigation();
@@ -96,64 +227,22 @@ const AppBuilder = () => {
         // Only servers AI Studio brokers (key-backed) belong on an App;
         // OAuth, mTLS and keyless servers are reached directly and the
         // server refuses to bind them.
-        const mcpOptions = (mcpResponse.data?.data || [])
-          .filter((item) => item.attributes?.access_granted_via_app !== false)
-          .map((item) => ({
-            id: item.id,
-            name: item.attributes?.name || "",
-            attributes: item.attributes,
-          }));
-        setMCPServers(mcpOptions);
-        setDataSources(dataSourcesResponse.data);
-        setLLMs(llmsResponse.data);
-        setTools(toolsResponse.data);
-        setPluginResourceTypes(pluginResourcesResponse.data?.data || []);
+        const mcpServers = (mcpResponse.data?.data || []).filter(
+          (item) => item.attributes?.access_granted_via_app !== false,
+        );
+        const nextGroups = buildGroups({
+          llms: llmsResponse.data || [],
+          dataSources: dataSourcesResponse.data || [],
+          tools: toolsResponse.data || [],
+          mcpServers,
+          pluginResourceTypes: pluginResourcesResponse.data?.data || [],
+        });
+        const preselected = preselectionFrom(location.search, nextGroups);
 
-        // Parse query parameters
-        const params = new URLSearchParams(location.search);
-        const dataSourceId = params.get("datasource");
-        const llmId = params.get("llm");
-        const toolId = params.get("tool");
-
-        if (dataSourceId) {
-          const dataSource = dataSourcesResponse.data.find(
-            (ds) => ds.id === dataSourceId,
-          );
-          if (dataSource) setSelectedDataSources([dataSource]);
-        }
-
-        if (llmId) {
-          const llm = llmsResponse.data.find((l) => l.id === llmId);
-          if (llm) setSelectedLLMs([llm]);
-        }
-
-        if (toolId) {
-          const tool = toolsResponse.data.find((t) => t.id === toolId);
-          if (tool) setSelectedTools([tool]);
-        }
-
-        const mcpServerId = params.get("mcp_server");
-        if (mcpServerId) {
-          const server = mcpOptions.find((s) => String(s.id) === mcpServerId);
-          if (server) setSelectedMCPServers([server]);
-        }
-
-        // ?plugin_resource=<plugin id>:<slug>:<instance id>, from a plugin
-        // resource's catalog page. The instance id may itself contain ":".
-        const pluginResource = params.get("plugin_resource");
-        if (pluginResource) {
-          const [pluginId, slug, ...rest] = pluginResource.split(":");
-          const instanceId = rest.join(":");
-          const key = `${pluginId}:${slug}`;
-          const resourceType = (pluginResourcesResponse.data?.data || []).find(
-            (t) => `${t.plugin_id}:${t.slug}` === key,
-          );
-          // Only instances an App credential grants access to can be
-          // preselected; a deep link to anything else is ignored.
-          const instance = appGrantedInstances(resourceType).find((inst) => String(inst.id) === instanceId);
-          if (instance) setPluginResourceSelections({ [key]: [instance] });
-        }
-
+        setGroups(nextGroups);
+        setSelection(preselected);
+        // Open the picker on the type the user arrived with.
+        setInitialGroupKey(nextGroups.find((g) => preselected[g.key])?.key || null);
         setIsLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -165,39 +254,47 @@ const AppBuilder = () => {
     fetchData();
   }, [location.search]);
 
+  const toggleItem = (key, id) =>
+    setSelection((prev) => {
+      const ids = prev[key] || [];
+      const next = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+      const { [key]: _omit, ...rest } = prev;
+      return next.length > 0 ? { ...rest, [key]: next } : rest;
+    });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
     try {
-      // Build plugin resource selections
-      const pluginResourcesPayload = Object.entries(pluginResourceSelections)
-        .filter(([, items]) => items.length > 0)
-        .map(([key, items]) => {
-          const rt = pluginResourceTypes.find(
-            (t) => `${t.plugin_id}:${t.slug}` === key,
-          );
-          return {
-            plugin_id: rt ? rt.plugin_id : 0,
-            resource_type_slug: rt ? rt.slug : "",
-            instance_ids: items.map((item) => item.id),
-          };
-        });
+      const pluginResourcesPayload = groups
+        .filter((group) => group.pluginId !== undefined && selection[group.key]?.length)
+        .map((group) => ({
+          plugin_id: group.pluginId,
+          resource_type_slug: group.slug,
+          instance_ids: selection[group.key],
+        }));
+      const mcpServerIds = selection[GROUP_KEYS.MCP_SERVER] || [];
 
       const response = await pubClient.post("/common/apps", {
         name: appName,
         description,
-        data_source_ids: selectedDataSources.map((ds) => parseInt(ds.id, 10)),
-        llm_ids: selectedLLMs.map((llm) => parseInt(llm.id, 10)),
-        tool_ids: selectedTools.map((tool) => parseInt(tool.id, 10)),
-        ...(selectedMCPServers.length > 0 && {
-          mcp_server_ids: selectedMCPServers.map((s) => parseInt(s.id, 10)),
+        data_source_ids: toInts(selection[GROUP_KEYS.DATASOURCE]),
+        llm_ids: toInts(selection[GROUP_KEYS.LLM]),
+        tool_ids: toInts(selection[GROUP_KEYS.TOOL]),
+        ...(mcpServerIds.length > 0 && {
+          mcp_server_ids: toInts(mcpServerIds),
         }),
         ...(pluginResourcesPayload.length > 0 && {
           plugin_resources: pluginResourcesPayload,
         }),
       });
       markSaved();
-      setIsSubmitted(true);
+      setSubmittedApp({
+        id: response?.data?.id ?? null,
+        name: appName,
+        description,
+        selection,
+      });
     } catch (err) {
       console.error("Error creating app:", err);
       // The API already explains a privacy refusal -- which resource, which
@@ -209,23 +306,12 @@ const AppBuilder = () => {
     }
   };
 
-  const hasPluginResourceSelections = useMemo(() => {
-    return Object.values(pluginResourceSelections).some(
-      (items) => items.length > 0,
-    );
-  }, [pluginResourceSelections]);
+  const requestedCount = selectionCount(selection);
 
-  const isFormValid = useMemo(() => {
-    return (
-      appName.trim() !== "" &&
-      description.trim() !== "" &&
-      (selectedDataSources.length > 0 ||
-        selectedLLMs.length > 0 ||
-        selectedTools.length > 0 ||
-        selectedMCPServers.length > 0 ||
-        hasPluginResourceSelections)
-    );
-  }, [appName, description, selectedDataSources, selectedLLMs, selectedTools, selectedMCPServers, hasPluginResourceSelections]);
+  const isFormValid = useMemo(
+    () => appName.trim() !== "" && description.trim() !== "" && requestedCount > 0,
+    [appName, description, requestedCount],
+  );
 
   if (isLoading)
     return (
@@ -239,147 +325,135 @@ const AppBuilder = () => {
       </Box>
     );
 
-  if (isSubmitted) {
+  if (submittedApp) {
+    const hasMCPServers = Boolean(submittedApp.selection[GROUP_KEYS.MCP_SERVER]?.length);
     return (
-      <Container maxWidth="md">
+      <Container maxWidth={false} sx={pageSx}>
         <Typography variant="h4" component="h1" gutterBottom>
           App Submitted
         </Typography>
         <Typography variant="body1" paragraph>
-          Your app has been successfully submitted for approval.
+          An administrator reviews the request. Once it is approved, the app
+          page has the credential to call everything below with.
         </Typography>
-        <PrimaryButton
-          variant="contained"
-          color="primary"
-          onClick={() => navigate("/portal/apps")}
-        >
-          View your Apps and Credentials
-        </PrimaryButton>
+        <Card sx={{ maxWidth: 720 }} data-testid="app-submitted-summary">
+          <CardContent sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <Box>
+              <Typography variant="headingMedium" component="h2">
+                {submittedApp.name}
+              </Typography>
+              <Typography variant="bodyLargeDefault" color="text.secondary" component="p" sx={{ whiteSpace: "pre-line" }}>
+                {submittedApp.description}
+              </Typography>
+            </Box>
+            <Box>
+              <SectionHeading title="Access requested" />
+              <RequestedAccessList groups={groups} selection={submittedApp.selection} />
+            </Box>
+            {hasMCPServers && (
+              <Alert severity="info">
+                After approval, request a Tyk access key for the MCP servers
+                on the app page.
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+        <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
+          {submittedApp.id && (
+            <PrimaryButton
+              variant="contained"
+              color="primary"
+              onClick={() => navigate(`/portal/apps/${submittedApp.id}`)}
+            >
+              Open app
+            </PrimaryButton>
+          )}
+          <SecondaryOutlineButton onClick={() => navigate("/portal/apps")}>
+            View your Apps and Credentials
+          </SecondaryOutlineButton>
+        </Box>
       </Container>
     );
   }
 
   return (
-    <Container
-      maxWidth={false}
-      sx={{
-        px: 3,
-        py: 3,
-        boxSizing: "border-box",
-        width: "100%",
-      }}
-    >
+    <Container maxWidth={false} sx={pageSx}>
       <Typography variant="h4" component="h1" gutterBottom>
         Create New App
       </Typography>
       <Card>
-        <CardContent>
+        <CardContent sx={{ p: 3 }}>
           {error && (
-            <Alert severity="error" sx={{ mt: 2, mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 3 }}>
               {error}
             </Alert>
           )}
-          <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
-            <TextField
-              fullWidth
-              label="App Name"
-              value={appName}
-              onChange={(e) => setAppName(e.target.value)}
-              required
-              margin="normal"
-            />
-            <TextField
-              fullWidth
-              label="Description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-              multiline
-              rows={4}
-              margin="normal"
-            />
-            <Box sx={{ mt: 3, mb: 2 }}>
-              <RelationshipPicker
-                label="Data sources (optional)"
-                itemLabel="data source"
-                value={selectedDataSources}
-                onChange={setSelectedDataSources}
-                options={dataSources}
-                getOptionLabel={jsonApiName}
-              />
-            </Box>
-            <Box sx={{ mt: 3, mb: 2 }}>
-              <RelationshipPicker
-                label="LLM providers (optional)"
-                itemLabel="LLM provider"
-                value={selectedLLMs}
-                onChange={setSelectedLLMs}
-                options={llms}
-                getOptionLabel={jsonApiName}
-              />
-            </Box>
-            <Box sx={{ mt: 3, mb: 2 }}>
-              <RelationshipPicker
-                label="Tools (optional)"
-                itemLabel="tool"
-                value={selectedTools}
-                onChange={setSelectedTools}
-                options={tools}
-                getOptionLabel={jsonApiName}
-                helperText="Served by AI Studio. Your app calls them over REST or MCP with its own credential."
-              />
-            </Box>
-            {mcpServers.length > 0 && (
-              <Box sx={{ mt: 3, mb: 2 }}>
-                <RelationshipPicker
-                  label="MCP servers (optional)"
-                  itemLabel="MCP server"
-                  value={selectedMCPServers}
-                  onChange={setSelectedMCPServers}
-                  options={mcpServers}
-                  getOptionLabel={(server) => server?.name ?? ""}
-                  helperText="Served by a Tyk Gateway. Once the app is approved you request a Tyk access key for them on the app page."
+          <Box component="form" onSubmit={handleSubmit}>
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={5}>
+                <SectionHeading title="Details" />
+                <TextField
+                  fullWidth
+                  label="App Name"
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  required
+                  margin="dense"
                 />
-              </Box>
-            )}
-            {/* Dynamic Plugin Resource Sections: one picker per resource
-                type; selections are the full instance objects. Types whose
-                instances are not granted through an App (informational
-                assets, plugin-managed access) offer nothing here. */}
-            {pluginResourceTypes.map((rt) => {
-              const key = `${rt.plugin_id}:${rt.slug}`;
-              const instances = appGrantedInstances(rt);
-              const selected = pluginResourceSelections[key] || [];
-
-              if (instances.length === 0) return null;
-
-              return (
-                <Box key={key} sx={{ mt: 3, mb: 2 }}>
-                  <RelationshipPicker
-                    label={`${rt.name} (Optional)`}
-                    itemLabel={rt.name.toLowerCase()}
-                    value={selected}
-                    onChange={(items) =>
-                      setPluginResourceSelections((prev) => ({
-                        ...prev,
-                        [key]: items,
-                      }))
-                    }
-                    options={instances}
-                    getOptionLabel={(inst) => inst?.name ?? ""}
+                <TextField
+                  fullWidth
+                  label="Description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  required
+                  multiline
+                  rows={3}
+                  margin="normal"
+                  helperText="What the app does. The administrator who approves it reads this."
+                />
+                <Box sx={{ mt: 3 }}>
+                  <SectionHeading
+                    title={requestedCount > 0 ? `Access requested (${requestedCount})` : "Access requested"}
+                  />
+                  <RequestedAccessList
+                    groups={groups}
+                    selection={selection}
+                    onRemove={toggleItem}
+                    emptyText="Nothing yet. Add at least one item this app needs from the list."
                   />
                 </Box>
-              );
-            })}
-            <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-              You must select at least one resource for your app. You can add
-              multiple of each if needed. Not all resources are allowed to be
-              used together in an app due to data security - please ensure the
-              resources you select are compatible. Once your App has been
-              approved, you will be able to start building your app using the
-              credentials provided.
-            </Alert>
-            <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
+              </Grid>
+              <Grid item xs={12} md={7}>
+                <SectionHeading
+                  title="Add access"
+                  subtitle="Pick a type, then add what the app needs. You can mix types."
+                />
+                {groups.length > 0 ? (
+                  <AccessPicker
+                    groups={groups}
+                    selection={selection}
+                    onToggle={toggleItem}
+                    initialGroupKey={initialGroupKey}
+                  />
+                ) : (
+                  <Alert severity="info">
+                    Nothing is available to add to an app yet. Ask an
+                    administrator to add you to a team with a catalog.
+                  </Alert>
+                )}
+                <Typography
+                  variant="bodySmallDefault"
+                  color="text.secondary"
+                  component="p"
+                  sx={{ mt: 1.5 }}
+                >
+                  Some combinations are refused to protect data: nothing on
+                  an app can be more sensitive than its LLM providers are
+                  cleared for.
+                </Typography>
+              </Grid>
+            </Grid>
+            <Box sx={{ mt: 4, display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap" }}>
               <SecondaryOutlineButton onClick={handleCancel}>
                 Cancel
               </SecondaryOutlineButton>
@@ -391,6 +465,11 @@ const AppBuilder = () => {
               >
                 Create App
               </PrimaryButton>
+              {!isFormValid && (
+                <Typography variant="bodySmallDefault" color="text.secondary">
+                  Add a name, a description and at least one item to continue.
+                </Typography>
+              )}
             </Box>
           </Box>
         </CardContent>

@@ -19,10 +19,6 @@ jest.mock("../../components/common/Icon", () => {
     return <div data-testid="mock-icon">{props.name}</div>;
   };
 });
-jest.mock("../../admin/components/common/relationship-picker", () =>
-  require("../../test-utils/component-mocks").relationshipPickerMock,
-);
-
 const mockNavigate = jest.fn();
 jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),
@@ -77,13 +73,24 @@ const renderBuilder = ({ path = "/portal/apps/new" } = {}) =>
     </ThemeProvider>,
   );
 
-const picker = (itemLabel) =>
-  screen.getAllByTestId("relationship-picker").find((el) => el.dataset.itemLabel === itemLabel);
+const picker = () => screen.getByTestId("app-access-picker");
+// The mocked Icon renders its name as text, so read the label on its own.
+const tabLabel = (el) => el.querySelector("[data-testid=app-access-tab-label]").textContent;
+const tab = (name) => within(picker()).getAllByRole("tab").find((el) => tabLabel(el) === name);
+const tabNames = () => within(picker()).getAllByRole("tab").map(tabLabel);
+const openTab = (name) => fireEvent.click(tab(name));
+const options = () =>
+  within(screen.getByTestId("app-access-options")).queryAllByRole("button").map((el) => el.getAttribute("aria-label"));
+const addFromPicker = (name) =>
+  fireEvent.click(within(screen.getByTestId("app-access-options")).getByRole("button", { name: `Add ${name}` }));
+const requested = (groupKey) => {
+  const group = screen.queryByTestId(`requested-access-${groupKey}`);
+  return group
+    ? within(group).getAllByTestId("requested-access-item").map((el) => el.querySelector(".MuiListItemText-primary").textContent)
+    : [];
+};
 
-const pickerItems = (itemLabel) =>
-  within(picker(itemLabel)).queryAllByTestId("relationship-picker-item").map((el) => el.textContent);
-
-describe("AppBuilder pickers, name default and commit semantics", () => {
+describe("AppBuilder access picker, name default and commit semantics", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     pubClient.get.mockImplementation((url) => {
@@ -94,38 +101,42 @@ describe("AppBuilder pickers, name default and commit semantics", () => {
       if (url === "/common/catalog") return Promise.resolve({ data: { data: mcpServers } });
       return Promise.resolve({ data: [] });
     });
-    pubClient.post.mockResolvedValue({ data: { data: { id: "77" } } });
+    // POST /common/apps answers with the serialized app itself, not a { data } envelope.
+    pubClient.post.mockResolvedValue({ data: { type: "apps", id: "77", attributes: {} } });
   });
 
-  // The "pick, then Add" blocks with chips were one of five idioms for the
-  // same relationship (F-05); "My New App" was submitted verbatim as a name.
-  it("starts with an empty required name and one compact picker per resource", async () => {
+  // One list per asset type made the form a wall of dropdowns when an app
+  // needs one thing; types are now a rail and only the chosen one is listed.
+  it("starts empty, with one tab per grantable asset type and nothing requested", async () => {
     renderBuilder();
-    await waitFor(() => expect(picker("LLM provider")).toBeTruthy());
+    await waitFor(() => expect(picker()).toBeTruthy());
 
     expect(screen.getByRole("textbox", { name: /App Name/ })).toHaveValue("");
     expect(screen.getByRole("textbox", { name: /App Name/ })).toBeRequired();
-    for (const label of ["data source", "LLM provider", "tool", "vector dbs"]) {
-      expect(picker(label)).toHaveAttribute("data-variant", "compact");
-    }
-    expect(within(picker("LLM provider")).getByTestId("relationship-picker-options-count")).toHaveTextContent("2");
-    // The old "Select LLM" dropdown + "Add" button pairs are gone.
-    expect(screen.queryByRole("combobox", { name: /Select LLM/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("Select Data Source")).not.toBeInTheDocument();
+    // Prompts has nothing an app credential unlocks, so it has no tab.
+    expect(tabNames()).toEqual(["LLM providers", "Data sources", "Tools", "MCP servers", "Vector DBs", "Agents"]);
+    expect(tab("LLM providers")).toHaveAttribute("aria-selected", "true");
+    expect(options()).toEqual(["Add OpenAI", "Add Anthropic"]);
+    expect(screen.getByTestId("requested-access-empty")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create App" })).toBeDisabled();
   });
 
-  it("shows a ?llm= preselection as a member without dirtying the form, and saves what the pickers hold", async () => {
+  it("opens on a ?llm= preselection without dirtying the form, and submits what was requested", async () => {
     renderBuilder({ path: "/portal/apps/new?llm=2" });
-    await waitFor(() => expect(pickerItems("LLM provider")).toEqual(["Anthropic"]));
+    await waitFor(() => expect(requested("llm")).toEqual(["Anthropic"]));
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
+    expect(tab("LLM providers")).toHaveTextContent("1");
+    expect(options()).toEqual(["Add OpenAI", "Remove Anthropic"]);
 
     fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Support bot" } });
     fireEvent.change(screen.getByRole("textbox", { name: /Description/ }), { target: { value: "Helps" } });
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("true"));
-    fireEvent.click(within(picker("LLM provider")).getByTestId("relationship-picker-add"));
-    fireEvent.click(within(picker("vector dbs")).getByTestId("relationship-picker-add"));
-    expect(pickerItems("LLM provider")).toEqual(["Anthropic", "OpenAI"]);
+    addFromPicker("OpenAI");
+    openTab("Vector DBs");
+    addFromPicker("Pinecone");
+    expect(requested("llm")).toEqual(["Anthropic", "OpenAI"]);
+    expect(requested("plugin:3:vector-db")).toEqual(["Pinecone"]);
+    expect(screen.getByText("Access requested (3)")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Create App" }));
 
@@ -144,44 +155,87 @@ describe("AppBuilder pickers, name default and commit semantics", () => {
     expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
   });
 
+  it("summarises the submitted app instead of repeating the helper text", async () => {
+    renderBuilder({ path: "/portal/apps/new?mcp_server=12" });
+    await waitFor(() => expect(requested("mcp_server")).toEqual(["Weather MCP"]));
+    expect(tab("MCP servers")).toHaveAttribute("aria-selected", "true");
+    openTab("Tools");
+    addFromPicker("Weather");
+    fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Forecaster" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Description/ }), { target: { value: "Daily weather" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create App" }));
+
+    const summary = await screen.findByTestId("app-submitted-summary");
+    expect(pubClient.post).toHaveBeenCalledWith(
+      "/common/apps",
+      expect.objectContaining({ tool_ids: [4], mcp_server_ids: [12] }),
+    );
+    expect(within(summary).getByText("Forecaster")).toBeInTheDocument();
+    expect(within(summary).getByText("Daily weather")).toBeInTheDocument();
+    expect(requested("tool")).toEqual(["Weather"]);
+    expect(requested("mcp_server")).toEqual(["Weather MCP"]);
+    // Read-only: nothing to remove on the summary.
+    expect(within(summary).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
+    expect(within(summary).getByText(/request a Tyk access key/)).toBeInTheDocument();
+    expect(screen.queryByText(/You must select at least one resource/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open app" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/portal/apps/77");
+  });
+
+  it("removes a requested item from the details column and from the picker", async () => {
+    renderBuilder({ path: "/portal/apps/new?tool=4" });
+    await waitFor(() => expect(requested("tool")).toEqual(["Weather"]));
+
+    fireEvent.click(within(screen.getByTestId("requested-access")).getByRole("button", { name: "Remove Weather" }));
+    expect(requested("tool")).toEqual([]);
+    expect(screen.getByTestId("requested-access-empty")).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId("app-access-options")).getByRole("button", { name: "Add Weather" }));
+    fireEvent.click(within(screen.getByTestId("app-access-options")).getByRole("button", { name: "Remove Weather" }));
+    expect(requested("tool")).toEqual([]);
+  });
+
   // Attaching an asset the plugin gates itself grants nothing, so the builder
-  // does not offer it; a type with nothing app-granted has no picker at all.
+  // does not offer it; a type with nothing app-granted has no tab at all.
   it("offers only instances an app credential unlocks and ignores deep links to the rest", async () => {
     renderBuilder({ path: "/portal/apps/new?plugin_resource=9%3Aagent%3Aa1" });
-    await waitFor(() => expect(picker("LLM provider")).toBeTruthy());
+    await waitFor(() => expect(picker()).toBeTruthy());
 
-    expect(picker("prompts")).toBeUndefined();
-    expect(within(picker("agents")).getByTestId("relationship-picker-options-count")).toHaveTextContent("1");
-    expect(pickerItems("agents")).toEqual([]);
-
-    fireEvent.click(within(picker("agents")).getByTestId("relationship-picker-add"));
-    expect(pickerItems("agents")).toEqual(["Proxied Agent"]);
+    expect(tab("Prompts")).toBeUndefined();
+    expect(requested("plugin:9:agent")).toEqual([]);
+    openTab("Agents");
+    expect(options()).toEqual(["Add Proxied Agent"]);
+    addFromPicker("Proxied Agent");
+    expect(requested("plugin:9:agent")).toEqual(["Proxied Agent"]);
   });
 
   it("offers only MCP servers AI Studio brokers and ignores deep links to the rest", async () => {
     renderBuilder({ path: "/portal/apps/new?mcp_server=13" });
-    await waitFor(() => expect(picker("MCP server")).toBeTruthy());
-    expect(within(picker("MCP server")).getByTestId("relationship-picker-options-count")).toHaveTextContent("1");
-    expect(pickerItems("MCP server")).toEqual([]);
-    fireEvent.click(within(picker("MCP server")).getByTestId("relationship-picker-add"));
-    expect(pickerItems("MCP server")).toEqual(["Weather MCP"]);
+    await waitFor(() => expect(picker()).toBeTruthy());
+    expect(requested("mcp_server")).toEqual([]);
+    openTab("MCP servers");
+    expect(options()).toEqual(["Add Weather MCP"]);
+    expect(screen.getByText(/Served by a Tyk Gateway/)).toBeInTheDocument();
   });
 
   it("preselects an app-granted instance from a deep link", async () => {
     renderBuilder({ path: "/portal/apps/new?plugin_resource=9%3Aagent%3Aa2" });
-    await waitFor(() => expect(pickerItems("agents")).toEqual(["Proxied Agent"]));
+    await waitFor(() => expect(requested("plugin:9:agent")).toEqual(["Proxied Agent"]));
+    expect(tab("Agents")).toHaveAttribute("aria-selected", "true");
   });
 
   it("has a Cancel that returns to the apps list when clean and prompts when dirty", async () => {
     renderBuilder();
-    await waitFor(() => expect(picker("LLM provider")).toBeTruthy());
+    await waitFor(() => expect(picker()).toBeTruthy());
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
     fireEvent.click(cancel);
     expect(mockNavigate).toHaveBeenCalledWith("/portal/apps");
 
-    fireEvent.click(within(picker("tool")).getByTestId("relationship-picker-add"));
+    openTab("Tools");
+    addFromPicker("Weather");
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("true"));
 
     mockNavigate.mockClear();
