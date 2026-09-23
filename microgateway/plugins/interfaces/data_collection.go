@@ -80,6 +80,8 @@ type AnalyticsData struct {
 	RouterSourceModel      string    `json:"router_source_model,omitempty"`
 	RouterTargetModel      string    `json:"router_target_model,omitempty"`
 	RouterSelectionAlgo    string    `json:"router_selection_algo,omitempty"`
+	RouteScore             float64   `json:"route_score,omitempty"`  // Semantic Router: similarity that decided an embedding match
+	ShadowRoute            string    `json:"shadow_route,omitempty"` // Semantic Router shadow mode: the route the classifier picked
 }
 
 // BudgetUsageData contains budget tracking information

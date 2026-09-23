@@ -327,6 +327,8 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 					RouterSourceModel:      mergedEvent.RouterSourceModel,
 					RouterTargetModel:      mergedEvent.RouterTargetModel,
 					RouterSelectionAlgo:    mergedEvent.RouterSelectionAlgo,
+					RouteScore:             mergedEvent.RouteScore,
+					ShadowRoute:            mergedEvent.ShadowRoute,
 				}
 
 				// Execute analytics plugins (this buffers data in pulse plugin)
