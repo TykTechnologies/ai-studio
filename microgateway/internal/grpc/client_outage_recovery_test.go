@@ -74,7 +74,11 @@ func TestSimpleEdgeClient_ReconnectsAfterLongOutage(t *testing.T) {
 	client.reconnectInterval = 20 * time.Millisecond
 	require.NoError(t, client.Start())
 	defer client.Stop()
-	require.Equal(t, int32(1), fc.streams.Load())
+	// Start returns once the stream is opened client-side; the server handler
+	// may not have run yet.
+	require.Eventually(t, func() bool {
+		return fc.streams.Load() == 1
+	}, 5*time.Second, 10*time.Millisecond, "initial subscription")
 
 	// Outage: long enough for several reconnect attempts to fail.
 	srv.Stop()

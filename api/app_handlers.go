@@ -270,8 +270,21 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	// A budget key left out keeps its value. A nil MonthlyBudget means "no
-	// limit", so reading an omitted key as nil lifted the App's limit.
-	if omitted := omittedAppAttributes(c, "monthly_budget", "budget_start_date"); len(omitted) > 0 {
+	// limit", so reading an omitted key as nil lifted the App's limit. If the
+	// keys cannot be read, refuse the request rather than guess.
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	_, hasBudget := present["monthly_budget"]
+	_, hasStart := present["budget_start_date"]
+	if !hasBudget || !hasStart {
 		existing, err := a.service.GetAppByID(uint(id))
 		if err != nil {
 			c.JSON(http.StatusNotFound, ErrorResponse{
@@ -282,10 +295,10 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
-		if omitted["monthly_budget"] {
+		if !hasBudget {
 			input.Data.Attributes.MonthlyBudget = existing.MonthlyBudget
 		}
-		if omitted["budget_start_date"] {
+		if !hasStart {
 			input.Data.Attributes.BudgetStartDate = existing.BudgetStartDate
 		}
 	}
@@ -1062,28 +1075,19 @@ func (a *API) getAppTools(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
-// omittedAppAttributes reports which of keys are absent from the request's
-// data.attributes, telling an omitted key from an explicit null. The body must
-// have been bound with ShouldBindBodyWith.
-func omittedAppAttributes(c *gin.Context, keys ...string) map[string]bool {
-	raw, ok := c.Get(gin.BodyBytesKey)
-	body, _ := raw.([]byte)
-	if !ok || body == nil {
-		return nil
+// boundAttributeKeys returns the data.attributes keys of a body bound with
+// ShouldBindBodyWith, so an omitted key can be told from an explicit null.
+// It fails rather than report "nothing present" when the body is unavailable,
+// since callers read absence as "keep the stored value".
+func boundAttributeKeys(c *gin.Context) (map[string]json.RawMessage, error) {
+	raw, _ := c.Get(gin.BodyBytesKey)
+	body, ok := raw.([]byte)
+	if !ok {
+		return nil, errors.New("request body is unavailable")
 	}
-	var probe struct {
-		Data struct {
-			Attributes map[string]json.RawMessage `json:"attributes"`
-		} `json:"data"`
+	present := llmPatchAttributeKeys(body)
+	if present == nil {
+		return nil, errors.New("request body has no data.attributes object")
 	}
-	if err := json.Unmarshal(body, &probe); err != nil {
-		return nil
-	}
-	omitted := map[string]bool{}
-	for _, k := range keys {
-		if _, present := probe.Data.Attributes[k]; !present {
-			omitted[k] = true
-		}
-	}
-	return omitted
+	return present, nil
 }

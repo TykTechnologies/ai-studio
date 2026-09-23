@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	// "github.com/gin-gonic/gin" // Not directly used in this file
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -508,4 +508,30 @@ func TestUpdateApp_OmittedBudgetIsKept(t *testing.T) {
 
 	patch(map[string]interface{}{"name": "Renamed", "user_id": user.ID, "monthly_budget": nil})
 	assert.Nil(t, reload().MonthlyBudget, "an explicit null clears the budget")
+}
+
+// The key probe fails closed: an unreadable body must not read as "every key
+// omitted", which would keep values the caller asked to change, nor as
+// "nothing to keep".
+func TestBoundAttributeKeys_FailsClosed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx := func(body []byte) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		if body != nil {
+			c.Set(gin.BodyBytesKey, body)
+		}
+		return c
+	}
+
+	_, err := boundAttributeKeys(ctx(nil))
+	assert.Error(t, err, "no bound body")
+	_, err = boundAttributeKeys(ctx([]byte("not json")))
+	assert.Error(t, err, "malformed body")
+	_, err = boundAttributeKeys(ctx([]byte(`{"data":{"type":"app"}}`)))
+	assert.Error(t, err, "no attributes object")
+
+	present, err := boundAttributeKeys(ctx([]byte(`{"data":{"attributes":{"name":"x","monthly_budget":null}}}`)))
+	require.NoError(t, err)
+	assert.Contains(t, present, "monthly_budget", "an explicit null is present")
+	assert.NotContains(t, present, "budget_start_date")
 }
