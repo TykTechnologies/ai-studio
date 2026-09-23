@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import AppMCPConnect from "./AppMCPConnect";
 import AppToolAccess from "./AppToolAccess";
 import { toolMcpEnabled } from "../utils/toolEndpoints";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import {
   Typography,
   CircularProgress,
@@ -345,6 +345,10 @@ const AppDetailView = () => {
     (app.attributes.tool_ids || []).includes(Number(tool.id)),
   );
 
+  // Model routers granted to the app: [{id, name, slug}]. They are called on
+  // the Main Ingress as "<router-slug>/<model>".
+  const modelRouters = app.attributes.model_routers || [];
+
   return (
     <Box sx={{p: 4}}>
       <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between" }}>
@@ -618,6 +622,20 @@ const AppDetailView = () => {
                 <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-mcp-servers">
                   {app.attributes.mcp_servers.map((server) => (
                     <Chip key={server.id} label={server.name} />
+                  ))}
+                </Box>
+              </Grid>
+            </>
+          )}
+          {modelRouters.length > 0 && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Model routers:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-model-routers">
+                  {modelRouters.map((router) => (
+                    <Chip key={router.id} label={router.name} />
                   ))}
                 </Box>
               </Grid>
@@ -939,6 +957,65 @@ const AppDetailView = () => {
                 LLM&apos;s prefix — the names above are examples using each
                 LLM&apos;s default model.
               </Typography>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Model routers are reached only through the Main Ingress: the
+            router slug takes the place of the LLM slug in the model field. */}
+        {modelRouters.length > 0 && (
+          <Card sx={{ mb: 3 }} data-testid="app-model-routers-ingress">
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Model Routers
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                A model router picks an LLM for each request from the model
+                name. Call it on the Main Ingress
+                {unifiedRouterPath ? (
+                  <>
+                    {" "}(<code>{unifiedChatCompletionsUrl()}</code>)
+                  </>
+                ) : null}{" "}
+                with the model written as{" "}
+                <code>&lt;router-slug&gt;/&lt;model&gt;</code>. This app reaches
+                the router&apos;s LLMs only through the router.
+              </Typography>
+              {!unifiedRouterPath && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  The gateway does not serve the Main Ingress, so model routers
+                  cannot be called. Ask an administrator to enable it.
+                </Alert>
+              )}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {modelRouters.map((router) => (
+                  <Box
+                    key={`router-${router.id}`}
+                    sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1 }}
+                  >
+                    <FieldLabel sx={{ minWidth: "200px" }}>{router.name}:</FieldLabel>
+                    <Typography
+                      variant="body2"
+                      component="code"
+                      sx={{
+                        fontFamily: "monospace",
+                        bgcolor: "background.paper",
+                        p: 1,
+                        borderRadius: 1,
+                      }}
+                    >
+                      {`${router.slug}/<model>`}
+                    </Typography>
+                    <Button
+                      size="small"
+                      component={RouterLink}
+                      to={`/portal/catalog/model-routers/${router.id}`}
+                    >
+                      See its models
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
             </CardContent>
           </Card>
         )}

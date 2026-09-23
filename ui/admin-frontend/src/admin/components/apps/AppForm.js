@@ -64,6 +64,7 @@ const AppForm = () => {
     llm_ids: [],
     datasource_ids: [],
     tool_ids: [], // Added for tools
+    model_router_ids: [],
     monthly_budget: null,
     budget_start_date: null,
     team_id: null, // Enterprise team budgets; null = owner's budget team
@@ -77,6 +78,7 @@ const AppForm = () => {
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
+  const [modelRouters, setModelRouters] = useState([]);
   const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
   const [pluginResourceInstances, setPluginResourceInstances] = useState({}); // { "pluginId:slug": [...instances] }
   const [pluginResourceSelections, setPluginResourceSelections] = useState({}); // { "pluginId:slug": [...selectedIds] }
@@ -126,6 +128,9 @@ const AppForm = () => {
           : [],
         tool_ids: Array.isArray(appData.tool_ids)
           ? appData.tool_ids.map(String)
+          : [],
+        model_router_ids: Array.isArray(appData.model_router_ids)
+          ? appData.model_router_ids.map(String)
           : [],
         namespace: appData.namespace || "",
         team_id: appData.team_id ?? null,
@@ -193,6 +198,7 @@ const AppForm = () => {
     fetchLLMs();
     fetchDatasources();
     fetchTools();
+    fetchModelRouters();
     fetchPluginResourceTypes();
     if (id) {
       fetchApp();
@@ -275,6 +281,17 @@ const AppForm = () => {
     }
   };
 
+  // Model routers are Enterprise; the endpoint is absent on Community
+  // Edition, so a failure just leaves the list empty.
+  const fetchModelRouters = async () => {
+    try {
+      const response = await listAll(apiClient, "/model-routers");
+      setModelRouters(response.data.data || []);
+    } catch (error) {
+      setModelRouters([]);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setApp({ ...app, [name]: value });
@@ -315,6 +332,10 @@ const AppForm = () => {
   const selectedTools = useMemo(
     () => itemsForIds(app.tool_ids, availableTools, (t) => t.id, (id) => ({ id, attributes: { name: String(id) } })),
     [app.tool_ids, availableTools],
+  );
+  const selectedModelRouters = useMemo(
+    () => itemsForIds(app.model_router_ids, modelRouters, (r) => r.id, (id) => ({ id, attributes: { name: String(id) } })),
+    [app.model_router_ids, modelRouters],
   );
 
   const handleNamespaceChange = (namespaces) => {
@@ -369,6 +390,7 @@ const AppForm = () => {
       llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
       tool_ids: app.tool_ids.map((id) => parseInt(id, 10)),
+      model_router_ids: app.model_router_ids.map((id) => parseInt(id, 10)),
       metadata: parsedMetadata,
       ...(pluginResourcesPayload.length > 0 && {
         plugin_resources: pluginResourcesPayload,
@@ -492,6 +514,23 @@ const AppForm = () => {
                 getOptionLabel={jsonApiName}
               />
             </Grid>
+            {/* Model routers (Enterprise). A router grant lets the app reach
+                the router's LLMs only through the router, as
+                "<router-slug>/<model>" on the unified endpoint. Hidden when
+                there are none and the app holds none. */}
+            {(modelRouters.length > 0 || app.model_router_ids.length > 0) && (
+              <Grid item xs={12}>
+                <RelationshipPicker
+                  label="Model routers"
+                  itemLabel="model router"
+                  value={selectedModelRouters}
+                  onChange={handleRelationshipChange("model_router_ids")}
+                  options={modelRouters}
+                  getOptionLabel={jsonApiName}
+                  helperText="Called on the unified endpoint as <router-slug>/<model>."
+                />
+              </Grid>
+            )}
             <Grid item xs={12}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>

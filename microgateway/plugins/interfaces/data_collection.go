@@ -69,6 +69,17 @@ type AnalyticsData struct {
 	// pulse can report the marker to the hub's ProxyLog.
 	FailoverFromLLMID      *uint     `json:"failover_from_llm_id,omitempty"`
 	FailoverAttempt        int       `json:"failover_attempt,omitempty"`
+
+	// Routing decision, when the request was addressed to a router: its kind
+	// and slug, the pool or route chosen, and why.
+	RouterKind             string    `json:"router_kind,omitempty"`
+	RouterSlug             string    `json:"router_slug,omitempty"`
+	RouterPool             string    `json:"router_pool,omitempty"`
+	Route                  string    `json:"route,omitempty"`
+	RouteReason            string    `json:"route_reason,omitempty"`
+	RouterSourceModel      string    `json:"router_source_model,omitempty"`
+	RouterTargetModel      string    `json:"router_target_model,omitempty"`
+	RouterSelectionAlgo    string    `json:"router_selection_algo,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information

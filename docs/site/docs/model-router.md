@@ -23,7 +23,7 @@ A **Router** is the top-level entity that defines a routing endpoint. Each route
 - Contains one or more **pools** for routing logic
 - Supports **namespaces** for multi-tenant deployments
 
-Routers are exposed at `/router/{slug}/v1/chat/completions` and provide an OpenAI-compatible interface.
+Clients call a router on the gateway's OpenAI-compatible unified endpoint with the model string `{slug}/{model}` (for example `prod/gpt-4o`). The legacy `/router/{slug}/v1/chat/completions` endpoint is an alias of the same thing.
 
 ### Pool
 
@@ -168,26 +168,57 @@ curl -X POST "https://your-host/api/v1/model-routers" \
 
 ## Using the Model Router
 
-Once a router is active, you can send OpenAI-compatible requests to its endpoint:
+Routers are served by the **Microgateway** (the edge data plane). AI Studio's embedded gateway is for basic proxying and testing and does not route through Model Routers.
+
+A router lives in the same namespace as your LLMs on the OpenAI-compatible unified endpoint. Clients address it with the model string `{router-slug}/{model}`, exactly as they address an LLM with `{llm-slug}/{model}`:
 
 ```bash
-curl -X POST "https://your-host/router/prod/v1/chat/completions" \
+curl -X POST "https://your-gateway/v1/chat/completions" \
   -H "Authorization: Bearer YOUR_APP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-3-sonnet-20240229",
+    "model": "prod/claude-3-sonnet-20240229",
     "messages": [
       {"role": "user", "content": "Hello!"}
     ]
   }'
 ```
 
-The router will:
-1. Match the model name against pool patterns (in priority order)
-2. Select a vendor using the pool's selection algorithm
-3. Apply any model mappings for the selected vendor
-4. Forward the request to the vendor's LLM endpoint
-5. Return the response to the client
+`GET /v1/models` lists the router's model strings (the literal entries of its pool patterns and the source models of its mappings) for Apps granted the router.
+
+The gateway:
+1. Authenticates the App. An anonymous caller is refused before any routing work is done.
+2. Checks that the App is granted the router (see [Access control](#access-control)).
+3. Matches the model name against pool patterns (in priority order).
+4. Selects a vendor using the pool's selection algorithm.
+5. Applies any model mappings for the selected vendor.
+6. Forwards the request to the vendor's LLM, with that LLM's filters, budget, plugins and failover applied as usual.
+
+The response carries the decision in headers: `X-Tyk-Router` (router slug), `X-Tyk-Route` (the pool that matched), `X-Tyk-Route-Reason` (`model_pattern`), next to the usual `X-Tyk-Served-LLM` and `X-Tyk-Served-Model`. The same fields are recorded on the request's proxy log, so analytics can be broken down by router and pool.
+
+The legacy endpoint `/router/{slug}/v1/chat/completions` still works. It is an alias of the same path and follows the same rules, including authentication before routing.
+
+### Slugs
+
+A router slug is a route name on the gateway, shared with LLMs (an LLM answers to the slug of its name). AI Studio refuses a router slug an LLM already answers to, and an LLM name whose slug a router already uses.
+
+## Access control
+
+A router is granted to an App like an LLM. The grant lets the App reach **every LLM the router can pick, but only through the router**: an App granted router `prod` can call `prod/gpt-4o`, but cannot call the LLMs behind it directly unless it was granted them too. When a router-chosen LLM fails over to a fallback, the fallback is reachable in the same way.
+
+For the privacy rule, a router counts as a provider scored by the **lowest** privacy score among the LLMs it can reach: whatever an App sends through the router may end up at any of them. Data sources and tools on the App must not exceed that score.
+
+**Compatibility:** an App that calls a router it has not been granted is still served, from the LLMs it holds directly and only those, as routers were used before they could be granted. This fallback is deprecated; grant the router to the App instead.
+
+## Publishing in the AI Portal
+
+Routers are published in **LLM catalogues**, next to the LLMs they route to:
+
+1. Open the router in **Model Routers** and choose the catalogues under **Publish in catalogues** (or `PUT /api/v1/model-routers/{id}/catalogues`).
+2. Teams granted one of those catalogues see the router in the portal catalog, with the model strings to call it with, the LLMs it can route to and its privacy score.
+3. Developers add the router to an App in the App builder, like an LLM. Administrators can grant it in the App editor.
+
+The short description, long description and logo URL on the router are what the portal shows.
 
 ## Use Cases
 
@@ -233,6 +264,10 @@ Use weighted routing to gradually shift traffic between model versions or vendor
 | `PATCH` | `/api/v1/model-routers/{id}` | Update a model router |
 | `DELETE` | `/api/v1/model-routers/{id}` | Delete a model router |
 | `PATCH` | `/api/v1/model-routers/{id}/toggle` | Toggle router active status |
+| `PUT` | `/api/v1/model-routers/{id}/catalogues` | Set the LLM catalogues the router is published in (`{"catalogue_ids": [...]}`) |
+| `GET` | `/api/v1/model-routers/{id}/dependents` | Apps granted the router and catalogues it is published in |
+
+Apps take router grants as `model_router_ids` on `POST /api/v1/apps`, `PATCH /api/v1/apps/{id}` and the portal's `POST /common/apps`; App responses list them as `model_router_ids` and `model_routers`.
 
 ### Query Parameters (List)
 
@@ -241,10 +276,6 @@ Use weighted routing to gradually shift traffic between model versions or vendor
 | `page_size` | int | 10 | Number of items per page |
 | `page_number` | int | 1 | Page number |
 | `all` | bool | false | Return all items without pagination |
-
-## Current Limitations
-
-- **AI Portal integration:** Model Routers are not yet integrated with the AI Portal. Users cannot browse or subscribe to routers through the portal interface. Routers are currently managed exclusively through the Admin UI and API.
 
 ## Enterprise Feature
 

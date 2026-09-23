@@ -42,6 +42,7 @@ const (
 	CatalogItemTool           = "tool"
 	CatalogItemPluginResource = "plugin_resource"
 	CatalogItemMCPServer      = "mcp_server"
+	CatalogItemModelRouter    = "model_router"
 )
 
 // CatalogRef names one catalog an item is available through.
@@ -141,6 +142,12 @@ type CatalogItemAttributes struct {
 	GatewayTags  []string                             `json:"gateway_tags,omitempty"`
 	Brokerable   *bool                                `json:"brokerable,omitempty"`
 	OAuth        *models.MCPProtectedResourceMetadata `json:"oauth,omitempty"`
+
+	// Model Routers: the slug, the "{slug}/{model}" strings a client sends
+	// to the unified ingress, and (detail only) the LLMs it can route to.
+	RouterSlug   string             `json:"router_slug,omitempty"`
+	RouterModels []string           `json:"router_models,omitempty"`
+	RouterLLMs   []CatalogRouterLLM `json:"router_llms,omitempty"`
 }
 
 // CatalogItem is one entry of the unified catalog.
@@ -326,6 +333,25 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 		}
 		idOf = func(i int) uint { return servers[i].ID }
 		memberships, objectType = models.MCPServerCatalogueMemberships, models.GovernedObjectTypeMCPServer
+	case CatalogItemModelRouter:
+		var routers []models.ModelRouter
+		if err := query.Preload("Pools.Vendors.Mappings").Find(&routers).Error; err != nil {
+			return nil, err
+		}
+		ids := make([]uint, len(routers))
+		for i := range routers {
+			ids[i] = routers[i].ID
+		}
+		privacy, err := models.ModelRouterPrivacyScores(db, ids)
+		if err != nil {
+			return nil, err
+		}
+		items = make([]CatalogItem, len(routers))
+		for i := range routers {
+			items[i] = modelRouterCatalogItem(&routers[i], privacy)
+		}
+		idOf = func(i int) uint { return routers[i].ID }
+		memberships = models.ModelRouterCatalogueMemberships
 	default:
 		return nil, nil
 	}
@@ -584,7 +610,7 @@ func (a *API) getPortalCatalog(c *gin.Context) {
 
 	// Facets over the whole accessible set: aggregates for the database
 	// types, the plugin instances (which the plugins list in full anyway).
-	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0, CatalogItemMCPServer: 0}
+	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0, CatalogItemMCPServer: 0, CatalogItemModelRouter: 0}
 	kinds := []CatalogKindFacet{}
 	catalogs := []CatalogFilterOption{}
 	for i := range catalogSources {

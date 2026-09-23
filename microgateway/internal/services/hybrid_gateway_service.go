@@ -155,7 +155,7 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 			log.Debug().Uint32("app_id", resp.AppId).Msg("App not found via GetAppByTokenID, trying direct lookup")
 
 			var dbApp database.App
-			if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").First(&dbApp).Error; err != nil {
+			if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").Preload("ModelRouters").First(&dbApp).Error; err != nil {
 				return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
 			}
 
@@ -197,7 +197,7 @@ func (h *HybridGatewayService) loadAppByTokenID(tokenID uint) (*database.App, er
 	// For on-demand validation, token_id equals app_id
 	// Get the app directly from local SQLite (now has full relationships!)
 	var app database.App
-	if err := h.db.Where("id = ?", tokenID).Preload("LLMs").Preload("Tools.Filters").Preload("Datasources").First(&app).Error; err != nil {
+	if err := h.db.Where("id = ?", tokenID).Preload("LLMs").Preload("Tools.Filters").Preload("Datasources").Preload("ModelRouters").First(&app).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			log.Debug().Uint("app_id", tokenID).Msg("App not found in local SQLite")
 			return nil, fmt.Errorf("app not found: %d", tokenID)
@@ -444,6 +444,17 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 			}
 			if err := tx.Create(appLLM).Error; err != nil {
 				return fmt.Errorf("failed to create app_llm (app=%d, llm=%d): %w", pbApp.Id, llmID, err)
+			}
+		}
+
+		// Clear existing router grants for this app and recreate
+		if err := tx.Exec("DELETE FROM app_model_routers WHERE app_id = ?", pbApp.Id).Error; err != nil {
+			return fmt.Errorf("failed to clear app_model_routers: %w", err)
+		}
+		for _, routerID := range pbApp.ModelRouterIds {
+			grant := &database.AppModelRouter{AppID: uint(pbApp.Id), ModelRouterID: uint(routerID), CreatedAt: time.Now()}
+			if err := tx.Create(grant).Error; err != nil {
+				return fmt.Errorf("failed to create app_model_router (app=%d, router=%d): %w", pbApp.Id, routerID, err)
 			}
 		}
 

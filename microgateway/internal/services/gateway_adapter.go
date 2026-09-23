@@ -1060,6 +1060,12 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		datasources[i] = a.convertDatabaseDatasourceToModel(&dbDS)
 	}
 
+	// Router grants: the gateway checks them by id and lists them by slug.
+	modelRouters := make([]models.ModelRouter, len(dbApp.ModelRouters))
+	for i, r := range dbApp.ModelRouters {
+		modelRouters[i] = models.ModelRouter{ID: r.ID, Name: r.Name, Slug: r.Slug, Namespace: r.Namespace, Active: r.IsActive}
+	}
+
 	modelApp := models.App{
 		Model:           gorm.Model{ID: dbApp.ID, CreatedAt: dbApp.CreatedAt, UpdatedAt: dbApp.UpdatedAt},
 		ID:              dbApp.ID,
@@ -1073,6 +1079,7 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		LLMs:            llms,        // Include LLM associations for access control
 		Tools:           tools,       // Include Tool associations for access control
 		Datasources:     datasources, // Include Datasource associations for access control
+		ModelRouters:    modelRouters, // Router grants (Enterprise)
 	}
 
 	log.Debug().

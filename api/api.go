@@ -544,6 +544,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/catalog/datasources/:id", a.getPortalCatalogDatasource)
 	authed.GET("/catalog/tools/:id", a.getPortalCatalogTool)
 	authed.GET("/catalog/mcp-servers/:id", a.getPortalCatalogMCPServer)
+	authed.GET("/catalog/model-routers/:id", a.getPortalCatalogModelRouter)
 	authed.GET("/catalog/resources/:plugin_id/:slug/:id", a.getPortalCatalogPluginResource)
 	authed.GET("/apps", a.getUserApps)
 	authed.GET("/apps/usage-summary", a.getUserAppsUsageSummary)
@@ -969,6 +970,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/model-routers", authz.Read("model-routers"), a.listModelRouters)
 	v1.PATCH("/model-routers/:id/toggle", authz.Publish("model-routers"), a.toggleModelRouterActive)
 	v1.GET("/model-routers/:id/dependents", authz.Read("model-routers"), a.getModelRouterDependents)
+	v1.PUT("/model-routers/:id/catalogues", authz.Write("model-routers"), a.setModelRouterCatalogues)
 	v1.HandleFn("POST", "/model-routers/bulk", bulkActionPermission("model-routers"), a.bulkModelRouters)
 
 	// Marketplace routes (only register if marketplace service is available)

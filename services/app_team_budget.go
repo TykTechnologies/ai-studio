@@ -10,27 +10,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// AppOption adjusts an App being created or updated.
-type AppOption func(*appOptions)
-
-type appOptions struct {
-	teamID *uint
-}
-
 // WithAppTeam attributes the App to the given team instead of the owner's
 // resolved budget team (administrators only).
 func WithAppTeam(teamID uint) AppOption {
 	return func(o *appOptions) { o.teamID = &teamID }
-}
-
-func collectAppOptions(opts []AppOption) appOptions {
-	var o appOptions
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&o)
-		}
-	}
-	return o
 }
 
 // validateAppTeam checks that an explicitly chosen team exists.

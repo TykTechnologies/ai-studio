@@ -48,6 +48,8 @@ const PortalRoutes = () => {
       <Route path="/catalog/tools/:id" element={<AssetDetail type={CATALOG_TYPES.TOOL} />} />
       <Route path="/catalog/mcp-servers" element={<CatalogBrowse type={CATALOG_TYPES.MCP_SERVER} />} />
       <Route path="/catalog/mcp-servers/:id" element={<AssetDetail type={CATALOG_TYPES.MCP_SERVER} />} />
+      <Route path="/catalog/model-routers" element={<CatalogBrowse type={CATALOG_TYPES.MODEL_ROUTER} />} />
+      <Route path="/catalog/model-routers/:id" element={<AssetDetail type={CATALOG_TYPES.MODEL_ROUTER} />} />
       <Route path="/catalog/resources/:pluginId/:slug" element={<CatalogBrowse type={CATALOG_TYPES.PLUGIN_RESOURCE} />} />
       <Route path="/catalog/resources/:pluginId/:slug/:instanceId" element={<AssetDetail type={CATALOG_TYPES.PLUGIN_RESOURCE} />} />
 

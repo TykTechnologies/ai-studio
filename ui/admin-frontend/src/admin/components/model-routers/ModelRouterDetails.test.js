@@ -62,6 +62,37 @@ describe("ModelRouterDetails edit/toggle affordances", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 
+  it("shows the catalogs it is published in and the model strings to call it with", async () => {
+    apiClient.get.mockResolvedValue({
+      data: {
+        data: {
+          id: "3",
+          attributes: {
+            name: "Primary router",
+            slug: "primary",
+            active: true,
+            catalogues: [{ id: 4, name: "Platform" }],
+            pools: [
+              { name: "gpt", model_pattern: "gpt-4o", selection_algorithm: "round_robin", priority: 0, vendors: [] },
+              { name: "rest", model_pattern: "*", selection_algorithm: "round_robin", priority: 1, vendors: [] },
+            ],
+          },
+        },
+      },
+    });
+    renderWith(["model-routers:read"]);
+    expect(await screen.findByTestId("router-catalogues")).toHaveTextContent("Platform");
+    expect(screen.getByTestId("router-model-strings")).toHaveTextContent("primary/gpt-4o");
+    // Both the Endpoint card and the Portal hint name the unified endpoint.
+    expect(screen.getAllByText("/v1/chat/completions").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^\/router\/.*\/v1\/chat\/completions$/)).not.toBeInTheDocument();
+  });
+
+  it("says when the router is in no catalog", async () => {
+    renderWith(["model-routers:read"]);
+    expect(await screen.findByText(/Not in any catalog/)).toBeInTheDocument();
+  });
+
   it("write-only: Edit shown, toggle hidden", async () => {
     renderWith(["model-routers:write"]);
     expect(await screen.findByRole("button", { name: "Edit" })).toBeInTheDocument();

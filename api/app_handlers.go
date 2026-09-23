@@ -68,6 +68,11 @@ func (a *API) createApp(c *gin.Context) {
 			return
 		}
 	}
+	// So are router grants.
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	if !ok {
+		return
+	}
 
 	// Apps default to active. Asking for an active app explicitly needs
 	// apps:publish; a caller without it gets an inactive app unless they
@@ -106,7 +111,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
 			pluginResources,
-			appOpts...,
+			append(routerOpts, appOpts...)...,
 		)
 	} else if input.Data.Attributes.Namespace != "" {
 		app, err = a.service.CreateAppWithNamespace(
@@ -120,7 +125,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			input.Data.Attributes.Namespace,
 			metadata, // Pass metadata
-			appOpts...,
+			append(routerOpts, appOpts...)...,
 		)
 	} else {
 		app, err = a.service.CreateApp(
@@ -133,7 +138,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			metadata, // Pass metadata
-			appOpts...,
+			append(routerOpts, appOpts...)...,
 		)
 	}
 	if err != nil {
@@ -301,6 +306,10 @@ func (a *API) updateApp(c *gin.Context) {
 			return
 		}
 	}
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	if !ok {
+		return
+	}
 
 	var appOpts []services.AppOption
 	if input.Data.Attributes.TeamID != nil {
@@ -324,7 +333,7 @@ func (a *API) updateApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
 			pluginResources,
-			appOpts...,
+			append(routerOpts, appOpts...)...,
 		)
 	} else {
 		app, err = a.service.UpdateApp(
@@ -338,7 +347,7 @@ func (a *API) updateApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
-			appOpts...,
+			append(routerOpts, appOpts...)...,
 		)
 	}
 	if err != nil {
@@ -544,6 +553,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.LLMIDs = getLLMIDs(app.LLMs)
 	resp.Attributes.ToolIDs = getToolIDs(app.Tools)
 	resp.Attributes.MCPServerIDs, resp.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
+	resp.Attributes.ModelRouterIDs, resp.Attributes.ModelRouters = appModelRouterOutputs(app.ModelRouters)
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
 	resp.Attributes.TeamID = app.TeamID

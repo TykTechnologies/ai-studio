@@ -353,9 +353,9 @@ const PortalDashboard = () => {
           ) : (
             <>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, mb: 3 }} data-testid="overview-counts">
-                {/* MCP servers are an asset type like the others; the tile
-                    only shows where the catalog has some. */}
-                {[CATALOG_TYPES.LLM, CATALOG_TYPES.DATASOURCE, CATALOG_TYPES.TOOL, CATALOG_TYPES.MCP_SERVER]
+                {/* MCP servers and model routers are asset types like the
+                    others; their tiles only show where the catalog has some. */}
+                {[CATALOG_TYPES.LLM, CATALOG_TYPES.MODEL_ROUTER, CATALOG_TYPES.DATASOURCE, CATALOG_TYPES.TOOL, CATALOG_TYPES.MCP_SERVER]
                   .filter((type) => (counts[type] || 0) > 0)
                   .map((type) => (
                     <CountTile key={type} component={RouterLink} to={browsePath(type)}>

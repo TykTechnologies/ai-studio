@@ -107,6 +107,7 @@ func Migrate(db *gorm.DB) error {
 		&OAuthClientEdge{},
 		&AccessTokenEdge{},
 		&AppTool{},
+		&AppModelRouter{},
 		&AppDatasource{},
 		&ToolFilter{},
 	)

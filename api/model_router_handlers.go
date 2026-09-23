@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -24,6 +25,10 @@ type ModelRouterInput struct {
 			Active      *bool               `json:"active"`
 			Namespace   string              `json:"namespace"`
 			Pools       []ModelPoolInput    `json:"pools"`
+			// Portal presentation (the router is published in LLM catalogues).
+			ShortDescription string `json:"short_description"`
+			LongDescription  string `json:"long_description"`
+			LogoURL          string `json:"logo_url"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -75,7 +80,11 @@ func (a *API) createModelRouter(c *gin.Context) {
 		return
 	}
 
-	router := a.inputToModelRouter(&input)
+	router := a.inputToModelRouter(&input, false)
+	if err := models.CheckLogoURL(router.LogoURL); err != nil {
+		respondModelRouterError(c, err)
+		return
+	}
 
 	// Creating a router already active is the publish action on model-routers.
 	if !a.requirePublishToCreateLive(c, "model-routers", router.Active) {
@@ -83,16 +92,7 @@ func (a *API) createModelRouter(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.CreateRouter(router); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -182,31 +182,28 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		return
 	}
 
-	router := a.inputToModelRouter(&input)
-	router.ID = uint(id)
+	// The update is applied to the stored router: an omitted switch keeps its
+	// stored value, and flipping it is the publish action on model-routers.
+	// Without the stored router neither rule can be applied, so the update
+	// does not go ahead.
+	existing, err := a.service.ModelRouterService.GetRouter(uint(id))
+	if err != nil || existing == nil {
+		a.respondModelRouterLookupError(c, uint(id), err)
+		return
+	}
 
-	// Flipping the active switch is the publish action on model-routers; an
-	// omitted switch keeps the stored value rather than deactivating.
-	if existing, err := a.service.ModelRouterService.GetRouter(uint(id)); err == nil && existing != nil {
-		if input.Data.Attributes.Active == nil {
-			router.Active = existing.Active
-		}
-		if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
-			return
-		}
+	router := a.inputToModelRouter(&input, existing.Active)
+	router.ID = uint(id)
+	if err := models.CheckLogoURL(router.LogoURL); err != nil {
+		respondModelRouterError(c, err)
+		return
+	}
+	if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
+		return
 	}
 
 	if err := a.service.ModelRouterService.UpdateRouter(router); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -250,16 +247,7 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.DeleteRouter(uint(id)); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
@@ -302,16 +290,7 @@ func (a *API) listModelRouters(c *gin.Context) {
 
 	routers, totalCount, totalPages, err := a.service.ListModelRouters(pageSize, pageNumber, all, opts)
 	if err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		respondModelRouterError(c, err)
 		return
 	}
 
@@ -370,16 +349,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), input.Active); err != nil {
-		statusCode := http.StatusInternalServerError
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
@@ -394,15 +364,27 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 }
 
 // inputToModelRouter converts the API input to a ModelRouter model
-func (a *API) inputToModelRouter(input *ModelRouterInput) *models.ModelRouter {
+//
+// activeIfOmitted is the live switch when the input leaves "active" out:
+// false on create (a new router starts inactive), the stored value on update
+// (omitting the switch is not the publish action).
+func (a *API) inputToModelRouter(input *ModelRouterInput, activeIfOmitted bool) *models.ModelRouter {
+	active := activeIfOmitted
+	if input.Data.Attributes.Active != nil {
+		active = *input.Data.Attributes.Active
+	}
 	router := &models.ModelRouter{
 		Name:        input.Data.Attributes.Name,
 		Slug:        input.Data.Attributes.Slug,
 		Description: input.Data.Attributes.Description,
 		APICompat:   input.Data.Attributes.APICompat,
-		Active:      input.Data.Attributes.Active != nil && *input.Data.Attributes.Active,
+		Active:      active,
 		Namespace:   input.Data.Attributes.Namespace,
 		Pools:       make([]*models.ModelPool, len(input.Data.Attributes.Pools)),
+
+		ShortDescription: input.Data.Attributes.ShortDescription,
+		LongDescription:  input.Data.Attributes.LongDescription,
+		LogoURL:          input.Data.Attributes.LogoURL,
 	}
 
 	if router.APICompat == "" {
@@ -507,6 +489,51 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 			"pools":       pools,
 			"created_at":  router.CreatedAt,
 			"updated_at":  router.UpdatedAt,
+
+			"short_description": router.ShortDescription,
+			"long_description":  router.LongDescription,
+			"logo_url":          router.LogoURL,
+			"catalogues":        routerCatalogueRefs(router.Catalogues),
 		},
 	}
+}
+
+// respondModelRouterError maps a model router service error to its response:
+// 402 in the Community Edition, 400 for a caller's mistake (a slug another
+// route already answers to, an unsafe logo URL), 500 otherwise.
+func respondModelRouterError(c *gin.Context, err error) {
+	statusCode := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, model_router.ErrEnterpriseFeature):
+		statusCode = http.StatusPaymentRequired
+	case errors.Is(err, models.ErrRouteSlugTaken), errors.Is(err, models.ErrUnsafeLogoURL):
+		statusCode = http.StatusBadRequest
+	}
+	c.JSON(statusCode, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Error", Detail: err.Error()}},
+	})
+}
+
+// respondModelRouterLookupError answers a failed operation on one router: 404
+// when the router does not exist, otherwise as respondModelRouterError (402 in
+// the Community Edition, 400 for a caller's mistake, 500 for a server fault).
+// Existence is read from the table because the Enterprise service's not-found
+// error is not visible to this package; a lookup that itself fails leaves the
+// original error to decide.
+func (a *API) respondModelRouterLookupError(c *gin.Context, id uint, err error) {
+	if err != nil && errors.Is(err, model_router.ErrEnterpriseFeature) {
+		respondModelRouterError(c, err)
+		return
+	}
+	if exists, lookupErr := a.rowExists(&models.ModelRouter{}, id); lookupErr == nil && !exists {
+		simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
+		return
+	}
+	if err == nil {
+		err = errors.New("model router could not be loaded")
+	}
+	respondModelRouterError(c, err)
 }

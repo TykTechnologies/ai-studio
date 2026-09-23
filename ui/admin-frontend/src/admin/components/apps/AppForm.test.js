@@ -200,6 +200,44 @@ describe("AppForm relationships and commit semantics", () => {
     ]);
   });
 
+  // Model routers (Enterprise) are granted like LLM providers; the picker
+  // only shows when there are routers or the app already holds one.
+  it("binds model routers through model_router_ids", async () => {
+    const withRouter = appPayload();
+    withRouter.data.data.attributes.model_router_ids = [21];
+    withRouter.data.data.attributes.model_routers = [{ id: 21, name: "Prod router", slug: "prod" }];
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url, config) => {
+      if (url === "/apps/5") return Promise.resolve(withRouter);
+      if (url === "/model-routers") {
+        return Promise.resolve({
+          data: {
+            data: [
+              { id: "22", attributes: { name: "Batch router" } },
+              { id: "21", attributes: { name: "Prod router" } },
+            ],
+          },
+        });
+      }
+      return base(url, config);
+    });
+
+    renderForm();
+    await waitForLoaded();
+    await waitFor(() => expect(pickerItems("model router")).toEqual(["Prod router"]));
+    fireEvent.click(within(picker("model router")).getByTestId("relationship-picker-add"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(apiClient.patch.mock.calls[0][1].data.attributes.model_router_ids).toEqual([21, 22]);
+  });
+
+  it("hides the model router picker when there are none", async () => {
+    renderForm();
+    await waitForLoaded();
+    expect(picker("model router")).toBeUndefined();
+  });
+
   it("saves the picker selections in the unchanged id-array payload", async () => {
     renderForm();
     await waitForLoaded();

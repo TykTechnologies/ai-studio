@@ -30,6 +30,7 @@ import {
 } from "../../styles/sharedStyles";
 import Can from "../rbac/Can";
 import { P } from "../../rbac/permissions";
+import { routerModelStrings } from "./routerModels";
 
 const ModelRouterDetails = () => {
   const { id } = useParams();
@@ -97,7 +98,9 @@ const ModelRouterDetails = () => {
   }
 
   const { attributes } = router;
-  const endpointUrl = `/router/${attributes.slug}/v1/chat/completions`;
+  const endpointUrl = "/v1/chat/completions";
+  const catalogues = attributes.catalogues || [];
+  const modelStrings = routerModelStrings(attributes.slug, attributes.pools);
 
   return (
     <Box sx={{ p: 0 }}>
@@ -205,11 +208,62 @@ const ModelRouterDetails = () => {
                   POST
                 </Typography>
                 <Typography variant="body1">{endpointUrl}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {`{"model": "${attributes.slug}/<model>", ...}`}
+                </Typography>
               </Box>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-                Send OpenAI-compatible chat completion requests to this endpoint.
-                The model name in your request will be matched against pool patterns.
+                Send OpenAI-compatible chat completion requests to the gateway's unified endpoint,
+                naming this router in the model field. The part after the slash is matched against
+                pool patterns. The legacy /router/{attributes.slug}/v1/chat/completions endpoint is an alias.
               </Typography>
+            </Section>
+          </Grid>
+
+          {/* Portal: where the router is published, and how an App granted it
+              names it on the unified endpoint. */}
+          <Grid item xs={12}>
+            <Section title="Portal" sx={{ mb: 0 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Published in catalogs
+              </Typography>
+              {catalogues.length > 0 ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }} data-testid="router-catalogues">
+                  {catalogues.map((catalogue) => (
+                    <Chip
+                      key={catalogue.id}
+                      label={catalogue.name}
+                      size="small"
+                      component={Link}
+                      to={`/admin/catalogs/llms/${catalogue.id}`}
+                      clickable
+                    />
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  Not in any catalog. Portal users cannot add it to their Apps.
+                </Typography>
+              )}
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Call it with
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Apps granted this router call the unified endpoint{" "}
+                <code>/v1/chat/completions</code> with the model written as{" "}
+                <code>{attributes.slug}/&lt;model&gt;</code>.
+              </Typography>
+              {modelStrings.length > 0 ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }} data-testid="router-model-strings">
+                  {modelStrings.map((model) => (
+                    <Chip key={model} label={model} size="small" variant="outlined" sx={{ fontFamily: "monospace" }} />
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Every pool matches by pattern, so any model name a pattern accepts works after the slug.
+                </Typography>
+              )}
             </Section>
           </Grid>
 

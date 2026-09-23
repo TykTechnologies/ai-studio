@@ -56,6 +56,14 @@ const resourceTypes = [
   { plugin_id: 9, slug: "prompt", name: "Prompts", access_granted_via_app: false, instances: [{ id: "p1", name: "Tone", access_granted_via_app: false }] },
 ];
 
+// Model routers from the unified catalog (Enterprise). Empty unless a test
+// sets them, so the other tests see the Community Edition tab set.
+const modelRouters = [
+  { id: "21", type: "model_router", attributes: { name: "Prod router", short_description: "GPT traffic", access_granted_via_app: true } },
+  { id: "22", type: "model_router", attributes: { name: "Hidden router", access_granted_via_app: false } },
+];
+let catalogRouters = [];
+
 const DirtyProbe = () => {
   const { isDirty } = useUnsavedChanges();
   return <span data-testid="registry-dirty">{String(isDirty)}</span>;
@@ -93,12 +101,15 @@ const requested = (groupKey) => {
 describe("AppBuilder access picker, name default and commit semantics", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    pubClient.get.mockImplementation((url) => {
+    catalogRouters = [];
+    pubClient.get.mockImplementation((url, config) => {
       if (url === "/common/accessible-datasources") return Promise.resolve({ data: dataSources });
       if (url === "/common/accessible-llms") return Promise.resolve({ data: llms });
       if (url === "/common/accessible-tools") return Promise.resolve({ data: tools });
       if (url === "/common/accessible-plugin-resources") return Promise.resolve({ data: { data: resourceTypes } });
-      if (url === "/common/catalog") return Promise.resolve({ data: { data: mcpServers } });
+      if (url === "/common/catalog") {
+        return Promise.resolve({ data: { data: config?.params?.type === "model_router" ? catalogRouters : mcpServers } });
+      }
       return Promise.resolve({ data: [] });
     });
     // POST /common/apps answers with the serialized app itself, not a { data } envelope.
@@ -242,5 +253,44 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     fireEvent.click(cancel);
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  // A model router stands in for LLM providers: an app of routers alone is
+  // valid, and only routers an app credential unlocks are offered.
+  it("offers app-granted model routers next to LLM providers and submits a router-only app", async () => {
+    catalogRouters = modelRouters;
+    renderBuilder({ path: "/portal/apps/new?model_router=21" });
+    await waitFor(() => expect(requested("model_router")).toEqual(["Prod router"]));
+    expect(pubClient.get).toHaveBeenCalledWith("/common/catalog", { params: { type: "model_router", page_size: 100 } });
+    expect(tabNames().slice(0, 2)).toEqual(["LLM providers", "Model routers"]);
+    expect(tab("Model routers")).toHaveAttribute("aria-selected", "true");
+    expect(options()).toEqual(["Remove Prod router"]);
+    await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
+
+    fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Routed bot" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Description/ }), { target: { value: "Uses the router" } });
+    expect(screen.getByRole("button", { name: "Create App" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Create App" }));
+
+    const summary = await screen.findByTestId("app-submitted-summary");
+    expect(pubClient.post).toHaveBeenCalledWith("/common/apps", {
+      name: "Routed bot",
+      description: "Uses the router",
+      data_source_ids: [],
+      llm_ids: [],
+      tool_ids: [],
+      model_router_ids: [21],
+    });
+    expect(requested("model_router")).toEqual(["Prod router"]);
+    expect(within(summary).getByTestId("app-submitted-router-note")).toBeInTheDocument();
+  });
+
+  it("ignores a deep link to a model router an app cannot be granted", async () => {
+    catalogRouters = modelRouters;
+    renderBuilder({ path: "/portal/apps/new?model_router=22" });
+    await waitFor(() => expect(picker()).toBeTruthy());
+    expect(requested("model_router")).toEqual([]);
+    openTab("Model routers");
+    expect(options()).toEqual(["Add Prod router"]);
   });
 });

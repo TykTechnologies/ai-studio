@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -655,71 +654,6 @@ func TestGetRouterSlugs(t *testing.T) {
 	assert.Contains(t, slugs, "alpha")
 	assert.Contains(t, slugs, "beta")
 	assert.Contains(t, slugs, "gamma")
-}
-
-// ============================================================================
-// Router Metadata Store Tests
-// ============================================================================
-
-func TestRouterMetadataStore_StoreAndGet(t *testing.T) {
-	store := &RouterMetadataStore{}
-
-	meta := &RouterMetadata{
-		RouterSlug:  "test-router",
-		PoolName:    "default",
-		SourceModel: "gpt-4",
-		TargetModel: "claude-3-opus",
-	}
-
-	store.StoreMetadata("key-1", meta)
-
-	// GetMetadata MUST return and remove the metadata
-	retrieved := store.GetMetadata("key-1")
-	assert.NotNil(t, retrieved)
-	assert.Equal(t, "test-router", retrieved.RouterSlug)
-	assert.Equal(t, "gpt-4", retrieved.SourceModel)
-
-	// Second call MUST return nil (already removed)
-	retrieved = store.GetMetadata("key-1")
-	assert.Nil(t, retrieved, "GetMetadata MUST remove metadata after retrieval")
-}
-
-func TestRouterMetadataStore_PeekMetadata(t *testing.T) {
-	store := &RouterMetadataStore{}
-
-	meta := &RouterMetadata{
-		RouterSlug: "test-router",
-	}
-
-	store.StoreMetadata("key-1", meta)
-
-	// PeekMetadata MUST return without removing
-	retrieved := store.PeekMetadata("key-1")
-	assert.NotNil(t, retrieved)
-
-	// Second peek MUST still work
-	retrieved = store.PeekMetadata("key-1")
-	assert.NotNil(t, retrieved, "PeekMetadata MUST NOT remove metadata")
-}
-
-func TestRouterMetadataStore_NonExistentKey(t *testing.T) {
-	store := &RouterMetadataStore{}
-
-	assert.Nil(t, store.GetMetadata("non-existent"))
-	assert.Nil(t, store.PeekMetadata("non-existent"))
-}
-
-func TestGetRouterMetadataFromContext(t *testing.T) {
-	// Without metadata
-	ctx := context.Background()
-	assert.Nil(t, GetRouterMetadataFromContext(ctx))
-
-	// With metadata
-	meta := &RouterMetadata{RouterSlug: "test"}
-	ctx = context.WithValue(ctx, RouterMetadataKey, meta)
-	retrieved := GetRouterMetadataFromContext(ctx)
-	assert.NotNil(t, retrieved)
-	assert.Equal(t, "test", retrieved.RouterSlug)
 }
 
 // ============================================================================

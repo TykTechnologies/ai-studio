@@ -318,6 +318,15 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 					// Failover marker set by the proxy log merge above
 					FailoverFromLLMID:      mergedEvent.FailoverFromLLMID,
 					FailoverAttempt:        mergedEvent.FailoverAttempt,
+					// Routing decision set by the proxy log merge above
+					RouterKind:             mergedEvent.RouterKind,
+					RouterSlug:             mergedEvent.RouterSlug,
+					RouterPool:             mergedEvent.RouterPoolName,
+					Route:                  mergedEvent.Route,
+					RouteReason:            mergedEvent.RouteReason,
+					RouterSourceModel:      mergedEvent.RouterSourceModel,
+					RouterTargetModel:      mergedEvent.RouterTargetModel,
+					RouterSelectionAlgo:    mergedEvent.RouterSelectionAlgo,
 				}
 
 				// Execute analytics plugins (this buffers data in pulse plugin)
@@ -531,22 +540,18 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog
 		event.FailoverAttempt = proxyLog.FailoverAttempt
 	}
 
-	// Check for router metadata (if request came through model router)
-	// Try multiple timestamp keys since there may be slight timing variance
-	routerMetaKey := fmt.Sprintf("router_%d_%d", 0, proxyLog.TimeStamp.Unix())
-	if routerMeta := GetRouterMetadataStore().GetMetadata(routerMetaKey); routerMeta != nil {
-		event.RouterSlug = routerMeta.RouterSlug
-		event.RouterPoolName = routerMeta.PoolName
-		event.RouterSourceModel = routerMeta.SourceModel
-		event.RouterTargetModel = routerMeta.TargetModel
-		event.RouterSelectionAlgo = routerMeta.SelectionAlgo
-		log.Debug().
-			Str("router_slug", routerMeta.RouterSlug).
-			Str("pool", routerMeta.PoolName).
-			Str("source_model", routerMeta.SourceModel).
-			Str("target_model", routerMeta.TargetModel).
-			Msg("Added router metadata to analytics event")
-	}
+	// Routing decision, when the request was addressed to a router. Carried
+	// on the proxy log by the gateway's loopback marker, so it belongs to this
+	// exact request (it used to be looked up by second, which mixed up
+	// concurrent requests).
+	event.RouterKind = proxyLog.RouterKind
+	event.RouterSlug = proxyLog.RouterSlug
+	event.RouterPoolName = proxyLog.RouterPool
+	event.Route = proxyLog.Route
+	event.RouteReason = proxyLog.RouteReason
+	event.RouterSourceModel = proxyLog.RouteSourceModel
+	event.RouterTargetModel = proxyLog.RouteTargetModel
+	event.RouterSelectionAlgo = proxyLog.RouteSelection
 
 	// Create the analytics event and store for potential merge with ChatRecord
 	if err := h.db.Create(event).Error; err != nil {

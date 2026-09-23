@@ -72,6 +72,10 @@ message AppConfig {
 
   // Plugin resource associations (generic extensible resource types)
   repeated PluginResourceAssociation plugin_resources = 22;
+
+  // Router grants (Enterprise): from the app_model_routers join table. A
+  // router grant lets the App reach the router's LLMs, through the router.
+  repeated uint32 model_router_ids = 23;
 }
 
 // TokenConfig represents an API token configuration

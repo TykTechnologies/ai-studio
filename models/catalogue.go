@@ -9,6 +9,9 @@ type Catalogue struct {
 	ID   uint   `json:"id" gorm:"primary_key"`
 	Name string `json:"name"`
 	LLMs []LLM  `gorm:"many2many:catalogue_llms;"`
+	// ModelRouters are published in LLM catalogues alongside the LLMs they
+	// route to (Enterprise).
+	ModelRouters []ModelRouter `json:"-" gorm:"many2many:catalogue_model_routers;"`
 }
 
 type Catalogues []Catalogue
