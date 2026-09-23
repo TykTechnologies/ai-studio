@@ -44,6 +44,7 @@ export default defineConfig({
           { text: 'Chat Interface', link: '/docs/chat-interface' }, // Moved up
           { text: 'LLM Management', link: '/docs/llm-management' },
           { text: 'Model Router (Enterprise)', link: '/docs/model-router' }, // Enterprise model routing
+          { text: 'Semantic Router (Enterprise)', link: '/docs/semantic-router' }, // Enterprise semantic routing
           { text: 'Tools & Extensibility', link: '/docs/tools' },
           { text: 'Data Sources & RAG', link: '/docs/datasources-rag' },
           { text: 'Filters & Policies', link: '/docs/filters' },

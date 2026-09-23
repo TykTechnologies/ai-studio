@@ -1,8 +1,11 @@
 # Routers (Enterprise)
 
-A **router** is a gateway route that is not an LLM: the caller names the router, and the router picks the LLM and model that serve the request. Today the only kind is the **Model Router** (pools matched on the requested model name, vendors picked by round robin or weight, per-vendor model mappings). A **Semantic Router** (routes chosen from what the prompt means) is planned on the same foundation; see [Roadmap](#roadmap-semantic-routing).
+A **router** is a gateway route that is not an LLM: the caller names the router, and the router picks the LLM and model that serve the request. There are two kinds:
 
-User docs: `docs/site/docs/model-router.md`.
+- The **Model Router** maps the requested model name to a pool of vendors. It picks a vendor by round robin or weight and applies per-vendor model mappings.
+- The **Semantic Router** picks a named route from what the prompt means, using keywords, embeddings, an optional LLM judge, and a default route. Each route targets an (LLM, model) pair or hands a model alias to a Model Router. See [Semantic Router](#semantic-router).
+
+User docs: `docs/site/docs/model-router.md`, `docs/site/docs/semantic-router.md`.
 
 ## Addressing
 
@@ -11,35 +14,64 @@ Routers share the model namespace of the unified OpenAI-compatible ingress with 
 ```
 POST /v1/chat/completions  {"model": "openai/gpt-4o"}   -> LLM "openai"
                            {"model": "prod/gpt-4o"}     -> Model Router "prod"
+                           {"model": "smart/auto"}      -> Semantic Router "smart"
 ```
 
 - The ingress (`proxy/unified_router.go`) rewrites `{route}/{model}` to `/ai/{route}/v1/...` **without resolving the route**, so authentication always runs first.
-- The `/ai/{routeId}` bridge (`proxy/translator.go`) resolves a route that is not an LLM through a `proxy.RouteResolver` (`proxy/router.go`). The host installs the resolver. The **microgateway** does so (`microgateway/internal/services/model_router_resolver.go`); AI Studio's embedded gateway does not, so there a router slug is an unknown vendor. Routing is a data-plane feature of the edge.
+- The `/ai/{routeId}` bridge (`proxy/translator.go`) resolves a route that is not an LLM through a `proxy.RouteResolver` (`proxy/router.go`). The host installs the resolver. The **microgateway** does so (`microgateway/internal/services/router_resolver.go`); AI Studio's embedded gateway does not, so there a router slug is an unknown vendor. Routing is a data-plane feature of the edge.
 - The legacy `/router/{slug}/v1/...` endpoints on the microgateway are an alias that rewrites to `/ai/{slug}/v1/...`.
-- A router slug and an LLM's slug (`slug.Make(name)`) must not clash (`models/route_slugs.go`). Both LLM saves and router saves check this, across namespaces.
+- LLM slugs (`slug.Make(name)`), Model Router slugs and Semantic Router slugs must not clash with one another (`models/route_slugs.go`). Every save of any of the three checks this, across namespaces.
+- The microgateway resolves both kinds with `services.RouterResolver`.
 
 ## Access model
 
-- **Grant.** `App.ModelRouters` (`app_model_routers`), synced to the edge in `AppConfig.model_router_ids` and stored in the edge's `app_model_routers` table.
-- **Outer hop** (`resolveRoute`): the App must hold the router. Deprecated fallback: a Model Router called by an App without a grant is served only from the LLMs the App holds directly (`RouteRequest.Allow`).
+- **Grant.** `App.ModelRouters` (`app_model_routers`) and `App.SemanticRouters` (`app_semantic_routers`). They are synced to the edge in `AppConfig.model_router_ids` / `semantic_router_ids` (23/24) and stored in the edge join tables of the same names.
+- **Outer hop** (`resolveRoute`): the App must hold the router. Deprecated fallback, for Model Routers only: a Model Router called by an App without a grant is served only from the LLMs the App holds directly (`RouteRequest.Allow`). A Semantic Router always needs the grant.
 - **Inner hop** (`/llm/call/{llm}`): access to the chosen LLM is inherited through the router (`routerGrantsAccess`). This requires a loopback marker (`X-Tyk-Router-*`) carrying the per-process token, an App that holds the router, and the router being able to reach that LLM (`RouteResolver.Reaches`). A failover rung whose origin was reached through the router is accepted too (`failoverGrantsAccess` uses `appAllowedLLM`). Markers are stripped before egress.
-- **Privacy.** A router is a provider scored by the **minimum** privacy score of the active LLMs behind its active vendors (`models.ModelRouterPrivacySQL`). App validation counts it like an LLM (`services.WithModelRouters` → `routerProvidersFor`).
+- **Privacy.** A router is a provider scored by the **minimum** privacy score of the LLMs a request's text may reach.
+  - For a Model Router, these are the active LLMs behind its active vendors (`models.ModelRouterPrivacySQL`).
+  - For a Semantic Router, these are its LLM targets, every active vendor of each Model Router it hands off to, and its embedding and judge LLMs (`models.SemanticRouterPrivacySQL`, over the `semantic_router_targets` rows rebuilt on every save).
+  - App validation counts routers like LLMs (`services.WithModelRouters` / `WithSemanticRouters` → `routerProvidersFor`).
+- **Reach** (what the inner hop accepts) for a Semantic Router covers its LLM targets, plus the vendors of the pool that each hand-off alias matches (`ModelRouterService.ReachesModel`). The judge and embedding LLMs are not reachable through it.
 
 ## Portal
 
-- Routers are published in **LLM catalogues** (`catalogue_model_routers`; `PUT /api/v1/model-routers/{id}/catalogues`). Visibility follows `models.AccessibleModelRouterQuery`: user → teams → LLM catalogues → active routers.
-- The portal catalog has a `model_router` item type in the LLM catalogue family, with `router_models` (the `{slug}/{model}` strings) and, on detail, `router_llms`.
-- The App builder and admin App editor grant routers via `model_router_ids`. The portal validates visibility; admins may grant any active router.
+- Routers are published in **LLM catalogues**.
+  - Model Routers use `catalogue_model_routers` and `PUT /api/v1/model-routers/{id}/catalogues`; Semantic Routers use `catalogue_semantic_routers` and `PUT /api/v1/semantic-routers/{id}/catalogues`.
+  - Visibility follows `models.Accessible{Model,Semantic}RouterQuery`: user → teams → LLM catalogues → active routers.
+- The portal catalog has `model_router` and `semantic_router` item types in the LLM catalogue family.
+  - Both carry `router_models`, the `{slug}/{model}` strings.
+  - Semantic Routers also carry `router_routes`: name, description and whether the route is the default. Keywords and examples are never shown.
+  - Detail adds `router_llms`.
+- The App builder and admin App editor grant routers via `model_router_ids` / `semantic_router_ids`. The portal validates visibility; admins may grant any active router.
 - Deleting a router withdraws its App grants and catalogue memberships. Dependents lists both.
 
 ## Observability
 
-- Response headers: `X-Tyk-Router`, `X-Tyk-Route` (pool or route), `X-Tyk-Route-Reason` (`model_pattern`), next to `X-Tyk-Served-LLM` and `X-Tyk-Served-Model`. They are CORS-exposed.
-- `ProxyLog` gains `RouterKind`, `RouterSlug`, `RouterPool`, `Route` and `RouteReason`. They reach the hub from the edge through the analytics pulse (`AnalyticsEvent` fields 30-34). This replaced a per-second in-memory lookup, which mixed up concurrent requests and never reached the hub.
+- Response headers: `X-Tyk-Router`, `X-Tyk-Route` (pool or route), and `X-Tyk-Route-Reason` (`model_pattern`, or a Semantic Router stage), next to `X-Tyk-Served-LLM` and `X-Tyk-Served-Model`. They are CORS-exposed.
+- `ProxyLog` gains:
+  - `RouterKind`, `RouterSlug`, `RouterPool`, `Route`, `RouteReason`;
+  - `RouteSourceModel`, `RouteTargetModel`, `RouteSelection`;
+  - for Semantic Routers, `RouteScore` and `ShadowRoute`.
+- These fields reach the hub from the edge through the analytics pulse (`AnalyticsEvent` fields 30-39). This replaced a per-second in-memory lookup, which mixed up concurrent requests and never reached the hub.
 
-## Roadmap: semantic routing
+## Semantic Router
 
-Research summary (Sept 2026):
+- **Contract:** `pkg/semanticrouting` holds the configuration (`Config`, `Settings`, `Route`, `Target`), `Validate`, `ModelsFor`, the `Engine`/`Router` interfaces and the engine registry. `pkg/semanticrouting/llmclient` reaches LLMs for embeddings and the judge through the vendor drivers.
+- **Engine (Enterprise):** `enterprise/features/semantic_router/engine`, registered from `init()`.
+  - Stages run in order: explicit, affinity, keywords, embeddings (max over examples, a threshold per route, priority breaks ties), judge (`low_confidence` or `always`), default.
+  - Any classifier error falls back to the default route with reason `classifier_error`.
+  - Shadow mode serves the default and records `ShadowRoute`.
+  - Examples are embedded in the background with retry backoff; classification never waits for them.
+- **Hub:** `models.SemanticRouter` stores the settings and routes as JSON. It is hard-deleted, clearing its targets, grants and catalogue memberships.
+  - The service is `services/semantic_router` (a CE stub returning 402) plus `enterprise/features/semantic_router` (validation of every reference; `Test`).
+  - The API lives in `api/semantic_router_handlers.go`, under the `semantic-routers` RBAC resource. It includes `POST /semantic-routers/{id}/test` and `POST /semantic-routers/test`, which test a draft.
+- **Sync:** `ConfigurationSnapshot.semantic_routers` (field 15, `SemanticRouterConfig.config_json`) goes to the edge table `semantic_routers`.
+  - `SemanticRouterService.LoadRouters` compiles the routers after each sync.
+  - A router whose configuration is unchanged keeps its compiled form, so its example vectors and affinity survive syncs.
+  - The engine reaches LLMs through `GatewayServiceAdapter.GetLLMByID`. The microgateway registers the engine in `cmd/microgateway/main_enterprise.go`.
+
+## Research notes (Sept 2026)
 
 - **Kong** is the only incumbent API gateway with native semantic routing (`ai-proxy-advanced`, `balancer.algorithm: semantic`). It embeds one description per target, matches against a threshold, and sends everything else to a CATCHALL target.
 - **Apigee** and **Gravitee** have a semantic *cache* but route only on rules (headers or the model field).
@@ -49,11 +81,3 @@ Research summary (Sept 2026):
   - learned quality predictors (RouteLLM, Bedrock Intelligent Prompt Routing, Azure Foundry Model Router, NotDiamond);
   - LLM-as-judge (LiteLLM Auto Router v2).
 - No one scopes routing to what the caller is authorised to use, offers a shadow or dry-run mode, or records why a route was chosen.
-
-Planned design (phases 2 and 3):
-
-- A standalone **Semantic Router** resource: named routes, each targeting either an (LLM, model) pair or a Model Router alias. It needs no pools of its own.
-- Stages run in order: affinity pin, explicit route (`smart/<route>`), keywords, embedding similarity (max over example utterances, a threshold per route), an optional LLM judge, then a mandatory default route.
-- It fails open to the default route, and has a shadow mode that computes and records the decision but serves the default.
-- A test-prompt endpoint on the hub shows the per-stage trace.
-- It reuses everything above: `RouteResolver` (a new `RouterKind`), grants, catalogue publishing, loopback markers and analytics fields.

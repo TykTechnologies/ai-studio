@@ -182,9 +182,10 @@ Each feature specification below provides detailed documentation on the individu
 - Streaming support for real-time responses
 
 ### [Routers](Routers.md) (Enterprise)
-- Model Routers addressed as `{router}/{model}` on the unified ingress, resolved after auth on the edge
+- Model Routers (`{router}/{model}`) and Semantic Routers (`{router}/auto`) on the unified ingress, resolved after auth on the edge
+- Semantic Routers pick a route from the prompt: keywords, embeddings, optional LLM judge, default route; shadow mode and a test panel
 - Granted to Apps and published in LLM catalogues like LLMs; access to the LLMs behind them only through the router
-- Routing decision in response headers and analytics; roadmap to semantic routing
+- Routing decision (route, reason, score) in response headers and analytics
 
 ### [Model Pricing System](Pricing.md)
 - Cost definition for various LLM models
