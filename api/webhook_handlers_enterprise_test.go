@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,6 +40,8 @@ type webhookEntHarness struct {
 	second *models.User
 }
 
+var sharedMemoryDBSeq atomic.Int64
+
 // sharedMemoryDB opens a named shared-cache in-memory database. The webhook
 // workers and the audit writer run on their own goroutines with pooled
 // connections; with a plain ":memory:" DSN each connection would see an
@@ -46,12 +49,15 @@ type webhookEntHarness struct {
 func sharedMemoryDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	config.Get("").FilterSignupDomains = nil
-	name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	// Unique per call, so -count reruns of a test do not reopen its data.
+	name := fmt.Sprintf("%s_%d", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()), sharedMemoryDBSeq.Add(1))
 	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
+	// Registered first, so it runs after the services' own cleanups.
+	t.Cleanup(func() { sqlDB.Close() })
 	require.NoError(t, models.InitModels(db))
 	return db
 }

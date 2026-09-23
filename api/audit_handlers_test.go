@@ -27,7 +27,10 @@ import (
 // NewAPI exactly as in production) with an explicitly enabled audit service.
 func setupAuditTestAPI(t *testing.T) (*API, *gin.Engine) {
 	t.Helper()
-	db := apitest.SetupTestDB(t)
+	// The audit writer flushes on its own goroutine through a pooled
+	// connection; a plain ":memory:" DB gives that connection an empty
+	// database ("no such table: audit_records"), which made this suite flaky.
+	db := sharedMemoryDB(t)
 	service := apitest.SetupTestService(db)
 	cfg := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
