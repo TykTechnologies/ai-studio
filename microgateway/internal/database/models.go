@@ -101,6 +101,9 @@ type App struct {
 	LLMs        []LLM            `gorm:"many2many:app_llms;"`
 	Tools       []Tool           `gorm:"many2many:app_tools;"`
 	Datasources []Datasource     `gorm:"many2many:app_datasources;"`
+	// ModelRouters the App was granted (Enterprise); a grant lets the App
+	// reach the router's LLMs through the router.
+	ModelRouters []ModelRouter   `gorm:"many2many:app_model_routers;"`
 	BudgetUsage []BudgetUsage    `gorm:"foreignKey:AppID"`
 	Events      []AnalyticsEvent `gorm:"foreignKey:AppID"`
 }
@@ -209,9 +212,14 @@ type AnalyticsEvent struct {
 	RequestBody    string         `gorm:"type:text"` // Store request payload
 	ResponseBody   string         `gorm:"type:text"` // Store response payload
 
-	// Model Router metadata (Enterprise)
-	RouterSlug          string // Model router slug if routed via /router/
+	// Router metadata (Enterprise), set when the request was addressed to a
+	// router: its kind ("model_router"), slug, the pool or route chosen, and
+	// why (RouteReason).
+	RouterKind          string
+	RouterSlug          string // Router slug
 	RouterPoolName      string // Pool name that matched the model pattern
+	Route               string // Named route chosen, for routers that have them
+	RouteReason         string
 	RouterSourceModel   string // Original model name before mapping
 	RouterTargetModel   string // Model name after mapping (may be same as source)
 	RouterSelectionAlgo string // Selection algorithm used: "round_robin" or "weighted"
@@ -555,6 +563,13 @@ type AppTool struct {
 	CreatedAt time.Time
 }
 
+// AppModelRouter is a Model Router grant: the App may call the router.
+type AppModelRouter struct {
+	AppID         uint `gorm:"primaryKey"`
+	ModelRouterID uint `gorm:"primaryKey"`
+	CreatedAt     time.Time
+}
+
 // AppDatasource represents the many-to-many relationship between apps and datasources
 type AppDatasource struct {
 	AppID        uint      `gorm:"primaryKey"`
@@ -583,5 +598,6 @@ func (Datasource) TableName() string        { return "datasources" }
 func (OAuthClientEdge) TableName() string   { return "oauth_clients" }
 func (AccessTokenEdge) TableName() string   { return "access_tokens" }
 func (AppTool) TableName() string           { return "app_tools" }
+func (AppModelRouter) TableName() string    { return "app_model_routers" }
 func (AppDatasource) TableName() string     { return "app_datasources" }
 func (ToolFilter) TableName() string        { return "tool_filters" }

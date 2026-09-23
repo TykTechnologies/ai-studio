@@ -123,6 +123,11 @@ type ProxyLogAttributes struct {
 	ResponseCode      int       `json:"response_code"`
 	FailoverAttempt   int       `json:"failover_attempt"`
 	FailoverFromLLMID *uint     `json:"failover_from_llm_id,omitempty"`
+	RouterKind        string    `json:"router_kind,omitempty"`
+	RouterSlug        string    `json:"router_slug,omitempty"`
+	RouterPool        string    `json:"router_pool,omitempty"`
+	Route             string    `json:"route,omitempty"`
+	RouteReason       string    `json:"route_reason,omitempty"`
 }
 
 // NewProxyLogResponse serialises one ProxyLog row for the proxy-log
@@ -143,6 +148,11 @@ func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
 			ResponseCode:      log.ResponseCode,
 			FailoverAttempt:   log.FailoverAttempt,
 			FailoverFromLLMID: log.FailoverFromLLMID,
+			RouterKind:        log.RouterKind,
+			RouterSlug:        log.RouterSlug,
+			RouterPool:        log.RouterPool,
+			Route:             log.Route,
+			RouteReason:       log.RouteReason,
 		},
 	}
 }
@@ -187,4 +197,12 @@ type ProxyLog struct {
 	// row per attempt, so request counts should filter failover_attempt = 0.
 	FailoverFromLLMID *uint `gorm:"index:idx_proxy_logs_failover_from"`
 	FailoverAttempt   int   `gorm:"default:0"`
+	// Router fields are set when the request was addressed to a router: its
+	// kind ("model_router"), slug, the pool or route that matched, and why
+	// (RouteReason, a small fixed set).
+	RouterKind  string `gorm:"size:32"`
+	RouterSlug  string `gorm:"index:idx_proxy_logs_router"`
+	RouterPool  string
+	Route       string
+	RouteReason string `gorm:"size:64"`
 }

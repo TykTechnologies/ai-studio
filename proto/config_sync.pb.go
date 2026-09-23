@@ -1928,8 +1928,14 @@ type AnalyticsEvent struct {
 	// LLM failover: set when this attempt was a rung of another LLM's waterfall.
 	FailoverFromLlmId uint32 `protobuf:"varint,28,opt,name=failover_from_llm_id,json=failoverFromLlmId,proto3" json:"failover_from_llm_id,omitempty"` // Primary LLM the request failed over from (0 = primary attempt)
 	FailoverAttempt   uint32 `protobuf:"varint,29,opt,name=failover_attempt,json=failoverAttempt,proto3" json:"failover_attempt,omitempty"`           // 1-based rung index (0 = primary attempt)
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Routing decision, set when the request was addressed to a router.
+	RouterKind    string `protobuf:"bytes,30,opt,name=router_kind,json=routerKind,proto3" json:"router_kind,omitempty"` // "model_router"
+	RouterSlug    string `protobuf:"bytes,31,opt,name=router_slug,json=routerSlug,proto3" json:"router_slug,omitempty"`
+	RouterPool    string `protobuf:"bytes,32,opt,name=router_pool,json=routerPool,proto3" json:"router_pool,omitempty"`    // Model Router pool that matched
+	Route         string `protobuf:"bytes,33,opt,name=route,proto3" json:"route,omitempty"`                                // named route chosen, for routers that have them
+	RouteReason   string `protobuf:"bytes,34,opt,name=route_reason,json=routeReason,proto3" json:"route_reason,omitempty"` // why the target was chosen ("model_pattern", ...)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnalyticsEvent) Reset() {
@@ -2163,6 +2169,41 @@ func (x *AnalyticsEvent) GetFailoverAttempt() uint32 {
 		return x.FailoverAttempt
 	}
 	return 0
+}
+
+func (x *AnalyticsEvent) GetRouterKind() string {
+	if x != nil {
+		return x.RouterKind
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetRouterSlug() string {
+	if x != nil {
+		return x.RouterSlug
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetRouterPool() string {
+	if x != nil {
+		return x.RouterPool
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetRoute() string {
+	if x != nil {
+		return x.Route
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetRouteReason() string {
+	if x != nil {
+		return x.RouteReason
+	}
+	return ""
 }
 
 // Budget usage event for pulse batching
@@ -3120,7 +3161,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\x96\b\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xb2\t\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -3156,7 +3197,15 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\frequest_body\x18\x1a \x01(\tR\vrequestBody\x12#\n" +
 	"\rresponse_body\x18\x1b \x01(\tR\fresponseBody\x12/\n" +
 	"\x14failover_from_llm_id\x18\x1c \x01(\rR\x11failoverFromLlmId\x12)\n" +
-	"\x10failover_attempt\x18\x1d \x01(\rR\x0ffailoverAttempt\"\xa2\x03\n" +
+	"\x10failover_attempt\x18\x1d \x01(\rR\x0ffailoverAttempt\x12\x1f\n" +
+	"\vrouter_kind\x18\x1e \x01(\tR\n" +
+	"routerKind\x12\x1f\n" +
+	"\vrouter_slug\x18\x1f \x01(\tR\n" +
+	"routerSlug\x12\x1f\n" +
+	"\vrouter_pool\x18  \x01(\tR\n" +
+	"routerPool\x12\x14\n" +
+	"\x05route\x18! \x01(\tR\x05route\x12!\n" +
+	"\froute_reason\x18\" \x01(\tR\vrouteReason\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

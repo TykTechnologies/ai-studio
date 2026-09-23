@@ -268,3 +268,49 @@ describe("AppDetailView Main Ingress endpoint", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+// A model router is reached only through the Main Ingress, as
+// "<router-slug>/<model>". The app response carries just {id, name, slug},
+// so the page names the shape and links to the router's catalog page for
+// the model list.
+describe("AppDetailView model routers", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockConfig = {
+      apiUrl: "http://localhost",
+      proxyURL: "http://gw.example.com",
+      unifiedRouterPath: "/v1",
+    };
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1")
+        return Promise.resolve(
+          appFixture(true, [], {
+            model_router_ids: [5],
+            model_routers: [{ id: 5, name: "Prod router", slug: "prod" }],
+          }),
+        );
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it("explains the model string for a router-only app and links to its models", async () => {
+    renderView();
+
+    const section = await screen.findByTestId("app-model-routers-ingress");
+    expect(screen.getByTestId("app-model-routers")).toHaveTextContent("Prod router");
+    expect(section).toHaveTextContent("http://gw.example.com/v1/chat/completions");
+    expect(section).toHaveTextContent("prod/<model>");
+    expect(screen.getByRole("link", { name: "See its models" })).toHaveAttribute(
+      "href",
+      "/portal/catalog/model-routers/5",
+    );
+  });
+
+  it("warns that routers cannot be called when the ingress is off", async () => {
+    mockConfig = { ...mockConfig, unifiedRouterPath: "" };
+    renderView();
+
+    const section = await screen.findByTestId("app-model-routers-ingress");
+    expect(section).toHaveTextContent(/does not serve the Main Ingress/);
+  });
+});

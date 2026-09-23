@@ -22,6 +22,7 @@ export const CATALOG_TYPES = {
   TOOL: "tool",
   PLUGIN_RESOURCE: "plugin_resource",
   MCP_SERVER: "mcp_server",
+  MODEL_ROUTER: "model_router",
 };
 
 // Terminology from the September 2026 audit (M9): "LLM provider", "Data
@@ -32,6 +33,8 @@ const TYPE_LABELS = {
   [CATALOG_TYPES.TOOL]: { singular: "Tool", plural: "Tools", slug: "tools", icon: "screwdriver-wrench" },
   [CATALOG_TYPES.PLUGIN_RESOURCE]: { singular: "Resource", plural: "Resources", slug: "resources", icon: "puzzle-piece" },
   [CATALOG_TYPES.MCP_SERVER]: { singular: "MCP server", plural: "MCP servers", slug: "mcp-servers", icon: "server" },
+  // A model router lives in LLM catalogs and fronts LLM providers.
+  [CATALOG_TYPES.MODEL_ROUTER]: { singular: "Model router", plural: "Model routers", slug: "model-routers", icon: "route" },
 };
 
 export const typeLabel = (type, { plural = false } = {}) => {
@@ -39,6 +42,9 @@ export const typeLabel = (type, { plural = false } = {}) => {
   if (!entry) return plural ? "Assets" : "Asset";
   return plural ? entry.plural : entry.singular;
 };
+
+/** The API path of the portal detail endpoint for a model router. */
+export const modelRouterDetailApiPath = (id) => `/common/catalog/model-routers/${id}`;
 
 /** The singular label in running text ("LLM provider" keeps its capitals). */
 export const typeLabelLower = (type) => {
@@ -147,6 +153,8 @@ export const builtInDetailPath = (item) => {
       return `/portal/catalog/tools/${item.id}`;
     case CATALOG_TYPES.MCP_SERVER:
       return `/portal/catalog/mcp-servers/${item.id}`;
+    case CATALOG_TYPES.MODEL_ROUTER:
+      return `/portal/catalog/model-routers/${item.id}`;
     case CATALOG_TYPES.PLUGIN_RESOURCE:
       return a.resource_type
         ? `/portal/catalog/resources/${a.resource_type.plugin_id}/${a.resource_type.slug}/${encodeURIComponent(item.id)}`
@@ -168,6 +176,8 @@ export const buildAppPath = (item) => {
       return `/portal/app/new?tool=${item.id}`;
     case CATALOG_TYPES.MCP_SERVER:
       return `/portal/app/new?mcp_server=${item.id}`;
+    case CATALOG_TYPES.MODEL_ROUTER:
+      return `/portal/app/new?model_router=${item.id}`;
     case CATALOG_TYPES.PLUGIN_RESOURCE:
       return a.resource_type
         ? `/portal/app/new?plugin_resource=${encodeURIComponent(`${a.resource_type.plugin_id}:${a.resource_type.slug}:${item.id}`)}`
@@ -314,4 +324,19 @@ export const openAICompatibleBaseUrl = (llmName) => {
   const proxyUrl =
     config.proxyURL || `${window.location.protocol}//${window.location.hostname}:9090`;
   return `${proxyUrl.replace(/\/+$/, "")}/ai/${generateSlug(llmName)}/v1`;
+};
+
+/**
+ * The gateway's unified ("Main Ingress") OpenAI-compatible base URL, e.g.
+ * `<proxyURL>/v1`, or null when the ingress is not served. Model routers are
+ * only reachable here, addressed as `<router-slug>/<model>`. The path comes
+ * from /auth/config, as on the app page; nothing is guessed when it is unset.
+ */
+export const unifiedIngressBaseUrl = () => {
+  const config = getConfig();
+  const path = (config.unifiedRouterPath || "").replace(/^\/+|\/+$/g, "");
+  if (!path) return null;
+  const proxyUrl =
+    config.proxyURL || `${window.location.protocol}//${window.location.hostname}:9090`;
+  return `${proxyUrl.replace(/\/+$/, "")}/${path}`;
 };

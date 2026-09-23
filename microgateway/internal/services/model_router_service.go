@@ -2,12 +2,7 @@
 package services
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"math/rand"
 	"net/http"
 	"path"
@@ -20,82 +15,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
-
-// Context keys for model router metadata
-type routerContextKey string
-
-const (
-	// RouterMetadataKey is the context key for router metadata
-	RouterMetadataKey routerContextKey = "router_metadata"
-)
-
-// RouterMetadata contains routing decision information for analytics
-type RouterMetadata struct {
-	RouterSlug     string
-	PoolName       string
-	SourceModel    string // Original model from request
-	TargetModel    string // Model after mapping
-	SelectionAlgo  string // "round_robin" or "weighted"
-	SelectedLLM    string // LLM slug that was selected
-	SelectedWeight int    // Weight of selected vendor (for weighted algo)
-}
-
-// GetRouterMetadataFromContext extracts router metadata from request context
-func GetRouterMetadataFromContext(ctx context.Context) *RouterMetadata {
-	if meta, ok := ctx.Value(RouterMetadataKey).(*RouterMetadata); ok {
-		return meta
-	}
-	return nil
-}
-
-// RouterMetadataStore provides a concurrent-safe store for router metadata
-// keyed by request identifiers. This allows the analytics handler to retrieve
-// router metadata even when it doesn't have access to the HTTP request context.
-type RouterMetadataStore struct {
-	store sync.Map
-}
-
-// Global router metadata store
-var routerMetadataStore = &RouterMetadataStore{}
-
-// GetRouterMetadataStore returns the global router metadata store
-func GetRouterMetadataStore() *RouterMetadataStore {
-	return routerMetadataStore
-}
-
-// StoreMetadata stores router metadata with a TTL for automatic cleanup
-func (s *RouterMetadataStore) StoreMetadata(key string, meta *RouterMetadata) {
-	s.store.Store(key, meta)
-	// Auto-cleanup after 60 seconds to prevent memory leaks
-	go func() {
-		time.Sleep(60 * time.Second)
-		s.store.Delete(key)
-	}()
-}
-
-// GetMetadata retrieves and removes router metadata by key
-func (s *RouterMetadataStore) GetMetadata(key string) *RouterMetadata {
-	if val, ok := s.store.LoadAndDelete(key); ok {
-		if meta, ok := val.(*RouterMetadata); ok {
-			return meta
-		}
-	}
-	return nil
-}
-
-// PeekMetadata retrieves router metadata without removing it
-func (s *RouterMetadataStore) PeekMetadata(key string) *RouterMetadata {
-	if val, ok := s.store.Load(key); ok {
-		if meta, ok := val.(*RouterMetadata); ok {
-			return meta
-		}
-	}
-	return nil
-}
 
 var (
 	// ErrRouterNotFound is returned when a router is not found
@@ -106,6 +28,10 @@ var (
 
 	// ErrNoActiveVendors is returned when a pool has no active vendors
 	ErrNoActiveVendors = errors.New("no active vendors in matching pool")
+
+	// ErrNoPermittedVendors is returned when the matching pool has active
+	// vendors, but none the caller may use.
+	ErrNoPermittedVendors = errors.New("no vendor in the matching pool is available to this app")
 )
 
 // ModelRouterService handles model routing logic
@@ -265,6 +191,14 @@ func (s *ModelRouterService) GetRouter(slug string) (*CompiledRouter, bool) {
 
 // SelectVendor selects a vendor for the given model in the router
 func (s *ModelRouterService) SelectVendor(routerSlug string, modelName string) (*VendorSelection, error) {
+	return s.SelectVendorFor(routerSlug, modelName, nil)
+}
+
+// SelectVendorFor selects a vendor for the given model in the router among
+// the vendors whose LLM allow accepts (nil accepts every vendor). Pools are
+// matched on the model alone, first match wins, so a restriction never sends
+// a model to a different pool than an unrestricted caller would get.
+func (s *ModelRouterService) SelectVendorFor(routerSlug string, modelName string, allow func(llmID uint) bool) (*VendorSelection, error) {
 	router, ok := s.GetRouter(routerSlug)
 	if !ok {
 		return nil, ErrRouterNotFound
@@ -288,7 +222,7 @@ func (s *ModelRouterService) SelectVendor(routerSlug string, modelName string) (
 		return nil, ErrNoMatchingPool
 	}
 
-	// Get active vendors
+	// Get active vendors, then the ones the caller may use
 	var activeVendors []*database.PoolVendor
 	for i := range matchedPool.Pool.Vendors {
 		vendor := &matchedPool.Pool.Vendors[i]
@@ -299,6 +233,19 @@ func (s *ModelRouterService) SelectVendor(routerSlug string, modelName string) (
 
 	if len(activeVendors) == 0 {
 		return nil, ErrNoActiveVendors
+	}
+
+	if allow != nil {
+		var permitted []*database.PoolVendor
+		for _, v := range activeVendors {
+			if allow(v.LLMID) {
+				permitted = append(permitted, v)
+			}
+		}
+		if len(permitted) == 0 {
+			return nil, ErrNoPermittedVendors
+		}
+		activeVendors = permitted
 	}
 
 	// Select vendor based on algorithm
@@ -329,6 +276,54 @@ func (s *ModelRouterService) SelectVendor(routerSlug string, modelName string) (
 		Pool:        matchedPool.Pool,
 		TargetModel: targetModel,
 	}, nil
+}
+
+// Reaches reports whether any active vendor of the router's pools is the LLM.
+func (s *ModelRouterService) Reaches(routerSlug string, routerID uint, llmID uint) bool {
+	router, ok := s.GetRouter(routerSlug)
+	if !ok || router.Router.ID != routerID {
+		return false
+	}
+	for _, pool := range router.CompiledPools {
+		for _, v := range pool.Pool.Vendors {
+			if v.IsActive && v.LLMID == llmID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// AdvertisedModels lists the model names a router can be asked for by name:
+// the literal (glob-free) entries of its pool patterns and the source models
+// of its vendor mappings. Pure wildcard pools advertise nothing.
+func (s *ModelRouterService) AdvertisedModels(routerSlug string) []string {
+	router, ok := s.GetRouter(routerSlug)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(m string) {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] || strings.ContainsAny(m, "*?[") {
+			return
+		}
+		seen[m] = true
+		out = append(out, m)
+	}
+	for _, pool := range router.CompiledPools {
+		for _, p := range strings.Split(pool.Pattern, ",") {
+			add(p)
+		}
+		for _, v := range pool.Pool.Vendors {
+			for _, m := range v.Mappings {
+				add(m.SourceModel)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // selectRoundRobinVendor selects a vendor using round-robin
@@ -388,178 +383,29 @@ func (s *ModelRouterService) GetRouterSlugs() []string {
 	return slugs
 }
 
-// ModelRouterHandler is a Gin handler for model routing
+// ModelRouterHandler serves the legacy /router/{slug}/v1/... endpoints. They
+// are an alias of the /ai/ chain: the path is rewritten to /ai/{slug}/v1/...
+// and routing happens there, after authentication, exactly as it does for
+// {"model": "{slug}/{model}"} on the unified ingress (see ModelRouterResolver).
 type ModelRouterHandler struct {
-	routerService *ModelRouterService
-	chatHandler   http.HandlerFunc // The /ai/{routeId}/v1/chat/completions handler
+	gatewayHandler http.HandlerFunc // the AI Gateway handler
 }
 
 // NewModelRouterHandler creates a new model router handler
-func NewModelRouterHandler(routerService *ModelRouterService, chatHandler http.HandlerFunc) *ModelRouterHandler {
-	return &ModelRouterHandler{
-		routerService: routerService,
-		chatHandler:   chatHandler,
-	}
+func NewModelRouterHandler(gatewayHandler http.HandlerFunc) *ModelRouterHandler {
+	return &ModelRouterHandler{gatewayHandler: gatewayHandler}
 }
 
-// ChatCompletionRequest is the minimal structure needed to extract the model
-type ChatCompletionRequest struct {
-	Model string `json:"model"`
-}
+var routerPathRegex = regexp.MustCompile(`^/router/([^/]+)/(.*)$`)
 
 // GinHandler returns a Gin handler function for model routing
 func (h *ModelRouterHandler) GinHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Extract routerSlug from Gin path parameter (like other handlers in the codebase)
-		routerSlug := c.Param("routerSlug")
-
-		w := c.Writer
 		r := c.Request
-
-		// Read the full request body first (we need to preserve it for downstream)
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Failed to read request body: "+err.Error())
-			return
+		if m := routerPathRegex.FindStringSubmatch(r.URL.Path); len(m) == 3 {
+			r.URL.Path = "/ai/" + m[1] + "/" + m[2]
+			r.URL.RawPath = ""
 		}
-		r.Body.Close()
-
-		// Parse just the model field from the body
-		var req ChatCompletionRequest
-		if err := json.Unmarshal(bodyBytes, &req); err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
-			return
-		}
-
-		// Select vendor based on model
-		selection, err := h.routerService.SelectVendor(routerSlug, req.Model)
-		if err != nil {
-			switch err {
-			case ErrRouterNotFound:
-				respondWithError(w, http.StatusNotFound, "Router not found")
-			case ErrNoMatchingPool:
-				respondWithError(w, http.StatusBadRequest, "No pool matches model: "+req.Model)
-			case ErrNoActiveVendors:
-				respondWithError(w, http.StatusServiceUnavailable, "No active vendors available")
-			default:
-				respondWithError(w, http.StatusInternalServerError, err.Error())
-			}
-			return
-		}
-
-		// Create router metadata for analytics
-		routerMeta := &RouterMetadata{
-			RouterSlug:     routerSlug,
-			PoolName:       selection.Pool.Name,
-			SourceModel:    req.Model, // Original model before any mapping
-			TargetModel:    selection.TargetModel,
-			SelectionAlgo:  selection.Pool.SelectionAlgorithm,
-			SelectedLLM:    selection.Vendor.LLMSlug,
-			SelectedWeight: selection.Vendor.Weight,
-		}
-
-		// Store router metadata keyed by app+timestamp pattern that analytics will use
-		// This allows the analytics handler to retrieve router info when recording events
-		// We store with multiple potential keys since timing can vary slightly
-		timestamp := time.Now()
-		metadataKey := fmt.Sprintf("router_%d_%d", 0, timestamp.Unix()) // AppID will be determined later
-		GetRouterMetadataStore().StoreMetadata(metadataKey, routerMeta)
-
-		// Log the routing decision
-		log.Debug().
-			Str("router", routerSlug).
-			Str("model", req.Model).
-			Str("target_model", selection.TargetModel).
-			Str("llm_slug", selection.Vendor.LLMSlug).
-			Str("pool", selection.Pool.Name).
-			Str("algorithm", selection.Pool.SelectionAlgorithm).
-			Str("metadata_key", metadataKey).
-			Msg("Model router routing request")
-
-		// Inject router metadata into request context for analytics
-		ctx := context.WithValue(r.Context(), RouterMetadataKey, routerMeta)
-		r = r.WithContext(ctx)
-
-		// Inject the LLM slug as the routeId using mux.SetURLVars
-		// This allows the downstream /ai/ handler to use the correct LLM
-		r = mux.SetURLVars(r, map[string]string{
-			"routeId":    selection.Vendor.LLMSlug,
-			"routerSlug": routerSlug, // Preserve for analytics
-		})
-
-		// Rewrite the URL path from /router/{slug}/v1/... to /ai/{llm_slug}/v1/...
-		// This is needed because the gateway handler expects /ai/{llm_slug}/... format
-		originalPath := r.URL.Path
-		routerPathRegex := regexp.MustCompile(`^/router/[^/]+/(.*)$`)
-		if matches := routerPathRegex.FindStringSubmatch(originalPath); len(matches) >= 2 {
-			newPath := "/ai/" + selection.Vendor.LLMSlug + "/" + matches[1]
-			r.URL.Path = newPath
-			log.Debug().
-				Str("original_path", originalPath).
-				Str("new_path", newPath).
-				Msg("Rewrote URL path for gateway routing")
-		}
-
-		// Restore the request body - apply model mapping if needed
-		finalBody := bodyBytes
-		if selection.TargetModel != req.Model {
-			// Need to update the model field in the body
-			// Parse as generic map to preserve all fields
-			var bodyMap map[string]interface{}
-			if err := json.Unmarshal(bodyBytes, &bodyMap); err == nil {
-				bodyMap["model"] = selection.TargetModel
-				if modifiedBody, err := json.Marshal(bodyMap); err == nil {
-					finalBody = modifiedBody
-					log.Debug().
-						Str("original_model", req.Model).
-						Str("target_model", selection.TargetModel).
-						Msg("Applied model mapping to request body")
-				}
-			}
-		}
-
-		// Set the body for downstream handler
-		r.Body = io.NopCloser(bytes.NewReader(finalBody))
-		r.ContentLength = int64(len(finalBody))
-
-		// Call the chat completion handler directly (no HTTP hop)
-		h.chatHandler(w, r)
+		h.gatewayHandler(c.Writer, r)
 	}
-}
-
-// respondWithError writes a JSON error response
-func respondWithError(w http.ResponseWriter, statusCode int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": map[string]interface{}{
-			"message": message,
-			"type":    "model_router_error",
-			"code":    statusCode,
-		},
-	})
-}
-
-// newReaderCloser creates a new ReadCloser from a struct
-func newReaderCloser(r *http.Request, data interface{}) *bodyReader {
-	body, _ := json.Marshal(data)
-	return &bodyReader{data: body, offset: 0}
-}
-
-type bodyReader struct {
-	data   []byte
-	offset int
-}
-
-func (b *bodyReader) Read(p []byte) (n int, err error) {
-	if b.offset >= len(b.data) {
-		return 0, io.EOF
-	}
-	n = copy(p, b.data[b.offset:])
-	b.offset += n
-	return n, nil
-}
-
-func (b *bodyReader) Close() error {
-	return nil
 }

@@ -714,6 +714,16 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 		// Not granted directly. A failover rung inherits access from the
 		// primary the app was granted, but only when the request carries the
 		// proxy's own marker (see failover.go).
+		// Or inherited through a router the app holds, when the outer hop
+		// resolved one to this LLM (see router.go).
+		if cv.p.routerGrantsAccess(r, app, llm) {
+			log.Debug().
+				Uint("app_id", app.ID).
+				Uint("llm_id", llm.ID).
+				Str("router", r.Header.Get(hdrRouterOrigin)).
+				Msg("CheckAPICredential: access inherited via router - validation PASSED")
+			return true, r
+		}
 		if cv.p.failoverGrantsAccess(r, app, llm) {
 			log.Debug().
 				Uint("app_id", app.ID).
@@ -734,6 +744,12 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	if routeID != "" { // This was for /ai/{routeID}, assuming routeID is an LLM slug
 		px, ok := cv.p.GetLLM(routeID)
 		if !ok {
+			// A router slug authenticates here; whether the app may use the
+			// router is decided where it is resolved (resolveRoute), which every
+			// auth branch reaches, not only this one.
+			if _, isRouter := cv.p.lookupRouter(routeID); isRouter {
+				return true, r
+			}
 			return false, r
 		}
 		for _, llm := range app.LLMs {

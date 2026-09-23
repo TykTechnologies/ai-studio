@@ -478,6 +478,9 @@ type AppInput struct {
 			// MCPServerIDs binds Tyk-managed MCP servers (Enterprise). Omitted
 			// leaves the bindings unchanged on update; an empty list clears them.
 			MCPServerIDs *[]uint `json:"mcp_server_ids,omitempty"`
+			// ModelRouterIDs grants Model Routers (Enterprise). Omitted leaves
+			// the grants unchanged on update; an empty list clears them.
+			ModelRouterIDs *[]uint `json:"model_router_ids,omitempty"`
 			// IsActive is the live switch. Omitted = unchanged on update, live
 			// on create (unless the caller lacks apps:publish, in which case
 			// the app is created inactive). Setting it needs apps:publish.
@@ -512,6 +515,9 @@ type AppResponse struct {
 		// Tyk-managed MCP servers bound to the app (Enterprise).
 		MCPServerIDs []uint               `json:"mcp_server_ids"`
 		MCPServers   []AppMCPServerOutput `json:"mcp_servers,omitempty"`
+		// Model Routers the app is granted (Enterprise).
+		ModelRouterIDs []uint                 `json:"model_router_ids"`
+		ModelRouters   []AppModelRouterOutput `json:"model_routers,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -1149,6 +1155,10 @@ type AppDetailResponse struct {
 		// the portal app page mounts its "MCP access" section from them.
 		MCPServerIDs []uint               `json:"mcp_server_ids"`
 		MCPServers   []AppMCPServerOutput `json:"mcp_servers,omitempty"`
+		// Model Routers the app is granted (Enterprise); the portal app page
+		// shows their unified-ingress model strings.
+		ModelRouterIDs []uint                 `json:"model_router_ids"`
+		ModelRouters   []AppModelRouterOutput `json:"model_routers,omitempty"`
 	} `json:"attributes"`
 }
 

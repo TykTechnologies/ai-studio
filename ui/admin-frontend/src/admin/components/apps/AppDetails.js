@@ -719,6 +719,27 @@ const AppDetails = () => {
                 ))}
               </Box>
             </Grid>
+            {/* Model routers (Enterprise) come expanded on the app response. */}
+            {(app.attributes.model_routers || []).length > 0 && (
+              <>
+                <Grid item xs={3}>
+                  <FieldLabel>Model routers:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-model-routers">
+                    {app.attributes.model_routers.map((router) => (
+                      <Chip
+                        key={router.id}
+                        label={router.name}
+                        component={RouterLink}
+                        to={`/admin/model-routers/${router.id}`}
+                        clickable
+                      />
+                    ))}
+                  </Box>
+                </Grid>
+              </>
+            )}
             <Grid item xs={3}>
               <FieldLabel>Data sources:</FieldLabel>
             </Grid>

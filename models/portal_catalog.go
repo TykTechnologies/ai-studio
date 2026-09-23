@@ -120,3 +120,22 @@ func AccessibleMCPServerQuery(db *gorm.DB, userID uint) *gorm.DB {
 		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
 		Where("user_groups.user_id = ? AND mcp_servers.is_active = ? AND mcp_servers.dashboard_state = ?", userID, true, MCPDashboardActive)
 }
+
+// ModelRouterCatalogueMemberships maps Model Router ids to the LLM catalogues
+// (among catalogueIDs) they belong to.
+func ModelRouterCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint, error) {
+	return catalogueMemberships(db, "catalogue_model_routers", "catalogue_id", "model_router_id", catalogueIDs)
+}
+
+// AccessibleModelRouterQuery is the portal visibility rule for Model Routers:
+// the user's teams -> the LLM catalogues granted to them -> active routers in
+// those catalogues. Routers have no catalogue family of their own; they share
+// the LLM catalogues with the LLMs they route to.
+func AccessibleModelRouterQuery(db *gorm.DB, userID uint) *gorm.DB {
+	return db.Model(&ModelRouter{}).
+		Joins("JOIN catalogue_model_routers ON catalogue_model_routers.model_router_id = model_routers.id").
+		Joins("JOIN catalogues ON catalogues.id = catalogue_model_routers.catalogue_id AND catalogues.deleted_at IS NULL").
+		Joins("JOIN group_catalogues ON group_catalogues.catalogue_id = catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_catalogues.group_id").
+		Where("user_groups.user_id = ? AND model_routers.active = ?", userID, true)
+}

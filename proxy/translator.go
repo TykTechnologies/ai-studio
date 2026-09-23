@@ -90,7 +90,7 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	streamingFunc func(context.Context, []byte) error) (*llms.ContentResponse, error) {
 	// Create internal routing HTTP client
 	// This routes SDK requests through /llm/call/ for plugin hook execution
-	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.failoverHeaders(a))
+	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.loopbackHeaders(r.Context(), a))
 
 	// Create a modified LLM config with internal endpoint
 	// The SDK will route to /llm/call/{slug} instead of the external vendor
@@ -161,15 +161,26 @@ func (p *Proxy) CreateCompletionHandler(w http.ResponseWriter, r *http.Request) 
 	// get the route ID from the DB to find out what back-end LLM to use
 	// (GetLLM takes the read lock; Reload writes this map concurrently)
 	conf, ok := p.GetLLM(routeID)
+	var routerRef RouterRef
 	if !ok {
-		respondWithOAIError(w, http.StatusNotFound, fmt.Sprintf("vendor '%s' not found or not supported by your access rights", routeID), nil, false)
-		return
+		if routerRef, ok = p.lookupRouter(routeID); !ok {
+			respondWithOAIError(w, http.StatusNotFound, fmt.Sprintf("vendor '%s' not found or not supported by your access rights", routeID), nil, false)
+			return
+		}
 	}
 
 	var req CreateCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	if conf == nil {
+		body, _ := json.Marshal(req)
+		var ok bool
+		if conf, r, _, ok = p.routeBridgeRequest(w, r, routerRef, &req.Model, body); !ok {
+			return
+		}
 	}
 
 	// Validate model
@@ -221,11 +232,16 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	routeID := vars["routeId"]
 
 	// get the route ID from the DB to find out what back-end LLM to use
-	// (GetLLM takes the read lock; Reload writes this map concurrently)
+	// (GetLLM takes the read lock; Reload writes this map concurrently).
+	// A route that is not an LLM may be a router, resolved once the body is
+	// read (see router.go).
 	conf, ok := p.GetLLM(routeID)
+	var routerRef RouterRef
 	if !ok {
-		respondWithOAIError(w, http.StatusNotFound, fmt.Sprintf("vendor '%s' not found or not supported by your access rights", routeID), nil, false)
-		return
+		if routerRef, ok = p.lookupRouter(routeID); !ok {
+			respondWithOAIError(w, http.StatusNotFound, fmt.Sprintf("vendor '%s' not found or not supported by your access rights", routeID), nil, false)
+			return
+		}
 	}
 
 	// Capture request body for decoding
@@ -243,6 +259,13 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithOAIError(w, http.StatusBadRequest, "Invalid request body", err, false)
 		return
+	}
+
+	if conf == nil {
+		var ok bool
+		if conf, r, reqBody, ok = p.routeBridgeRequest(w, r, routerRef, &req.Model, reqBody); !ok {
+			return
+		}
 	}
 
 	// Validate model (keep this here for fast-fail before internal routing)

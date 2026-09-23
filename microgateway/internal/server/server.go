@@ -115,6 +115,13 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	gateway.SetAuthHooks(authHooks)
 	log.Debug().Msg("Authentication hooks registered with AI Gateway")
 
+	// Routers (Enterprise Model Routers) are resolved inside the gateway's
+	// /ai/ chain after authentication; the unified ingress and the legacy
+	// /router/ endpoints both reach them there.
+	if serviceContainer.ModelRouterService != nil {
+		gateway.SetRouteResolver(services.NewModelRouterResolver(serviceContainer.ModelRouterService))
+	}
+
 	// Initialize Prometheus metrics if enabled
 	var metricsHandler http.Handler
 	if cfg.Observability.EnableMetrics {

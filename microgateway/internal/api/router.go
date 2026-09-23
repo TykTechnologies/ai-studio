@@ -305,12 +305,11 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			gateway.Any(unifiedBasePath+"/*path", gin.WrapH(config.Gateway.Handler()))
 		}
 
-		// Model Router endpoints (Enterprise)
-		// Routes requests to LLM vendors based on model name patterns
+		// Model Router endpoints (Enterprise). Legacy alias of /ai/{router}/v1/...:
+		// routing itself happens in the gateway, after auth (ModelRouterResolver).
 		if config.ModelRouterService != nil {
 			log.Debug().Msg("Mounting Model Router handler (Enterprise)")
 			modelRouterHandler := services.NewModelRouterHandler(
-				config.ModelRouterService,
 				func(w http.ResponseWriter, r *http.Request) {
 					// Forward to the gateway handler - the mux.SetURLVars has already set routeId
 					config.Gateway.Handler().ServeHTTP(w, r)

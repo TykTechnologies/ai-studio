@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -24,6 +25,10 @@ type ModelRouterInput struct {
 			Active      *bool               `json:"active"`
 			Namespace   string              `json:"namespace"`
 			Pools       []ModelPoolInput    `json:"pools"`
+			// Portal presentation (the router is published in LLM catalogues).
+			ShortDescription string `json:"short_description"`
+			LongDescription  string `json:"long_description"`
+			LogoURL          string `json:"logo_url"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -86,6 +91,8 @@ func (a *API) createModelRouter(c *gin.Context) {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {
 			statusCode = http.StatusPaymentRequired
+		} else if errors.Is(err, models.ErrRouteSlugTaken) {
+			statusCode = http.StatusBadRequest
 		}
 		c.JSON(statusCode, ErrorResponse{
 			Errors: []struct {
@@ -200,6 +207,8 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {
 			statusCode = http.StatusPaymentRequired
+		} else if errors.Is(err, models.ErrRouteSlugTaken) {
+			statusCode = http.StatusBadRequest
 		}
 		c.JSON(statusCode, ErrorResponse{
 			Errors: []struct {
@@ -253,6 +262,8 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {
 			statusCode = http.StatusPaymentRequired
+		} else if errors.Is(err, models.ErrRouteSlugTaken) {
+			statusCode = http.StatusBadRequest
 		}
 		c.JSON(statusCode, ErrorResponse{
 			Errors: []struct {
@@ -305,6 +316,8 @@ func (a *API) listModelRouters(c *gin.Context) {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {
 			statusCode = http.StatusPaymentRequired
+		} else if errors.Is(err, models.ErrRouteSlugTaken) {
+			statusCode = http.StatusBadRequest
 		}
 		c.JSON(statusCode, ErrorResponse{
 			Errors: []struct {
@@ -373,6 +386,8 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {
 			statusCode = http.StatusPaymentRequired
+		} else if errors.Is(err, models.ErrRouteSlugTaken) {
+			statusCode = http.StatusBadRequest
 		}
 		c.JSON(statusCode, ErrorResponse{
 			Errors: []struct {
@@ -403,6 +418,10 @@ func (a *API) inputToModelRouter(input *ModelRouterInput) *models.ModelRouter {
 		Active:      input.Data.Attributes.Active != nil && *input.Data.Attributes.Active,
 		Namespace:   input.Data.Attributes.Namespace,
 		Pools:       make([]*models.ModelPool, len(input.Data.Attributes.Pools)),
+
+		ShortDescription: input.Data.Attributes.ShortDescription,
+		LongDescription:  input.Data.Attributes.LongDescription,
+		LogoURL:          input.Data.Attributes.LogoURL,
 	}
 
 	if router.APICompat == "" {
@@ -507,6 +526,11 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 			"pools":       pools,
 			"created_at":  router.CreatedAt,
 			"updated_at":  router.UpdatedAt,
+
+			"short_description": router.ShortDescription,
+			"long_description":  router.LongDescription,
+			"logo_url":          router.LogoURL,
+			"catalogues":        routerCatalogueRefs(router.Catalogues),
 		},
 	}
 }

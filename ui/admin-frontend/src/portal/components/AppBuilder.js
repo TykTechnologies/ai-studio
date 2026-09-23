@@ -43,8 +43,11 @@ const GROUP_KEYS = {
   DATASOURCE: CATALOG_TYPES.DATASOURCE,
   TOOL: CATALOG_TYPES.TOOL,
   MCP_SERVER: CATALOG_TYPES.MCP_SERVER,
+  MODEL_ROUTER: CATALOG_TYPES.MODEL_ROUTER,
 };
 
+const ROUTER_HELPER =
+  "Called on the unified endpoint as <router>/<model>. The app reaches the router's LLM providers only through the router.";
 const TOOL_HELPER =
   "Served by AI Studio. Your app calls them over REST or MCP with its own credential.";
 const MCP_HELPER =
@@ -69,7 +72,7 @@ const coreGroup = (type, helperText, options) => ({
  * with nothing to offer are left out, so a user who can only reach LLM
  * providers sees one tab rather than four empty ones.
  */
-const buildGroups = ({ llms, dataSources, tools, mcpServers, pluginResourceTypes }) =>
+const buildGroups = ({ llms, modelRouters = [], dataSources, tools, mcpServers, pluginResourceTypes }) =>
   [
     coreGroup(
       CATALOG_TYPES.LLM,
@@ -78,6 +81,16 @@ const buildGroups = ({ llms, dataSources, tools, mcpServers, pluginResourceTypes
         id: String(llm.id),
         name: jsonApiName(llm),
         secondary: getVendorName(llm.attributes?.vendor) || llm.attributes?.vendor || "",
+      })),
+    ),
+    // Model routers sit in LLM catalogs and stand in for LLM providers.
+    coreGroup(
+      CATALOG_TYPES.MODEL_ROUTER,
+      ROUTER_HELPER,
+      modelRouters.map((router) => ({
+        id: String(router.id),
+        name: router.attributes?.name || "",
+        secondary: router.attributes?.short_description || "",
       })),
     ),
     coreGroup(
@@ -129,8 +142,8 @@ const buildGroups = ({ llms, dataSources, tools, mcpServers, pluginResourceTypes
   ].filter((group) => group.options.length > 0);
 
 /**
- * The ?llm= / ?datasource= / ?tool= / ?mcp_server= / ?plugin_resource=
- * preselection from a catalog "Build with" link. Only ids the user can
+ * The ?llm= / ?model_router= / ?datasource= / ?tool= / ?mcp_server= /
+ * ?plugin_resource= preselection from a catalog "Build with" link. Only ids the user can
  * actually add are kept; a deep link to anything else is ignored.
  */
 const preselectionFrom = (search, groups) => {
@@ -144,6 +157,7 @@ const preselectionFrom = (search, groups) => {
   };
 
   keep(GROUP_KEYS.LLM, params.get("llm"));
+  keep(GROUP_KEYS.MODEL_ROUTER, params.get("model_router"));
   keep(GROUP_KEYS.DATASOURCE, params.get("datasource"));
   keep(GROUP_KEYS.TOOL, params.get("tool"));
   keep(GROUP_KEYS.MCP_SERVER, params.get("mcp_server"));
@@ -209,7 +223,7 @@ const AppBuilder = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataSourcesResponse, llmsResponse, toolsResponse, pluginResourcesResponse, mcpResponse] =
+        const [dataSourcesResponse, llmsResponse, toolsResponse, pluginResourcesResponse, mcpResponse, routerResponse] =
           await Promise.all([
             pubClient.get("/common/accessible-datasources"),
             pubClient.get("/common/accessible-llms"),
@@ -223,6 +237,10 @@ const AppBuilder = () => {
             pubClient
               .get("/common/catalog", { params: { type: "mcp_server", page_size: 100 } })
               .catch(() => ({ data: { data: [] } })),
+            // Model routers (Enterprise) likewise come from the unified catalog.
+            pubClient
+              .get("/common/catalog", { params: { type: "model_router", page_size: 100 } })
+              .catch(() => ({ data: { data: [] } })),
           ]);
         // Only servers AI Studio brokers (key-backed) belong on an App;
         // OAuth, mTLS and keyless servers are reached directly and the
@@ -230,8 +248,12 @@ const AppBuilder = () => {
         const mcpServers = (mcpResponse.data?.data || []).filter(
           (item) => item.attributes?.access_granted_via_app !== false,
         );
+        const modelRouters = (routerResponse.data?.data || []).filter(
+          (item) => item.attributes?.access_granted_via_app !== false,
+        );
         const nextGroups = buildGroups({
           llms: llmsResponse.data || [],
+          modelRouters,
           dataSources: dataSourcesResponse.data || [],
           tools: toolsResponse.data || [],
           mcpServers,
@@ -274,6 +296,7 @@ const AppBuilder = () => {
           instance_ids: selection[group.key],
         }));
       const mcpServerIds = selection[GROUP_KEYS.MCP_SERVER] || [];
+      const modelRouterIds = selection[GROUP_KEYS.MODEL_ROUTER] || [];
 
       const response = await pubClient.post("/common/apps", {
         name: appName,
@@ -283,6 +306,9 @@ const AppBuilder = () => {
         tool_ids: toInts(selection[GROUP_KEYS.TOOL]),
         ...(mcpServerIds.length > 0 && {
           mcp_server_ids: toInts(mcpServerIds),
+        }),
+        ...(modelRouterIds.length > 0 && {
+          model_router_ids: toInts(modelRouterIds),
         }),
         ...(pluginResourcesPayload.length > 0 && {
           plugin_resources: pluginResourcesPayload,
@@ -327,6 +353,7 @@ const AppBuilder = () => {
 
   if (submittedApp) {
     const hasMCPServers = Boolean(submittedApp.selection[GROUP_KEYS.MCP_SERVER]?.length);
+    const hasModelRouters = Boolean(submittedApp.selection[GROUP_KEYS.MODEL_ROUTER]?.length);
     return (
       <Container maxWidth={false} sx={pageSx}>
         <Typography variant="h4" component="h1" gutterBottom>
@@ -354,6 +381,13 @@ const AppBuilder = () => {
               <Alert severity="info">
                 After approval, request a Tyk access key for the MCP servers
                 on the app page.
+              </Alert>
+            )}
+            {hasModelRouters && (
+              <Alert severity="info" data-testid="app-submitted-router-note">
+                Call the model routers on the unified endpoint with the model
+                written as <code>&lt;router&gt;/&lt;model&gt;</code>; the app
+                page shows how.
               </Alert>
             )}
           </CardContent>

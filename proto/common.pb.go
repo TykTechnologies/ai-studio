@@ -468,8 +468,11 @@ type AppConfig struct {
 	DatasourceIds []uint32 `protobuf:"varint,21,rep,packed,name=datasource_ids,json=datasourceIds,proto3" json:"datasource_ids,omitempty"` // From app_datasources join table
 	// Plugin resource associations (generic extensible resource types)
 	PluginResources []*PluginResourceAssociation `protobuf:"bytes,22,rep,name=plugin_resources,json=pluginResources,proto3" json:"plugin_resources,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Router grants (Enterprise): from the app_model_routers join table. A
+	// router grant lets the App reach the router's LLMs, through the router.
+	ModelRouterIds []uint32 `protobuf:"varint,23,rep,packed,name=model_router_ids,json=modelRouterIds,proto3" json:"model_router_ids,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AppConfig) Reset() {
@@ -652,6 +655,13 @@ func (x *AppConfig) GetDatasourceIds() []uint32 {
 func (x *AppConfig) GetPluginResources() []*PluginResourceAssociation {
 	if x != nil {
 		return x.PluginResources
+	}
+	return nil
+}
+
+func (x *AppConfig) GetModelRouterIds() []uint32 {
+	if x != nil {
+		return x.ModelRouterIds
 	}
 	return nil
 }
@@ -2669,7 +2679,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\x12&\n" +
 	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\x12+\n" +
 	"\x11governed_metadata\x18\x19 \x01(\tR\x10governedMetadata\x12\x1a\n" +
-	"\bfailover\x18\x1a \x01(\tR\bfailover\"\xc1\x06\n" +
+	"\bfailover\x18\x1a \x01(\tR\bfailover\"\xeb\x06\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2697,7 +2707,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x14current_period_usage\x18\x13 \x01(\x01R\x12currentPeriodUsage\x12\x19\n" +
 	"\btool_ids\x18\x14 \x03(\rR\atoolIds\x12%\n" +
 	"\x0edatasource_ids\x18\x15 \x03(\rR\rdatasourceIds\x12R\n" +
-	"\x10plugin_resources\x18\x16 \x03(\v2'.microgateway.PluginResourceAssociationR\x0fpluginResources\"\xe8\x02\n" +
+	"\x10plugin_resources\x18\x16 \x03(\v2'.microgateway.PluginResourceAssociationR\x0fpluginResources\x12(\n" +
+	"\x10model_router_ids\x18\x17 \x03(\rR\x0emodelRouterIds\"\xe8\x02\n" +
 	"\vTokenConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x12\n" +

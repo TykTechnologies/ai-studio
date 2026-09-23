@@ -47,17 +47,40 @@ import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
 import { useEdition } from "../../context/EditionContext";
+import RelationshipPicker from "../common/relationship-picker";
+import { listAll } from "../../utils/listAll";
+
+// LLM catalogues come back as JSON:API rows; the picker wants {id, name}.
+const catalogueOptions = (rows) =>
+  (rows || []).map((c) => ({
+    id: Number(c.id),
+    name: c.attributes?.name ?? c.name ?? `Catalog ${c.id}`,
+  }));
+
+const sameIds = (a, b) => {
+  const left = a.map((c) => Number(c.id)).sort((x, y) => x - y);
+  const right = b.map((c) => Number(c.id)).sort((x, y) => x - y);
+  return left.length === right.length && left.every((id, i) => id === right[i]);
+};
 
 const ModelRouterForm = () => {
   const [router, setRouter] = useState({
     name: "",
     slug: "",
     description: "",
+    short_description: "",
+    long_description: "",
+    logo_url: "",
     api_compat: "openai",
     active: false,
     namespace: "",
     pools: [],
   });
+  // LLM catalogues the router is published in. Saved through its own
+  // endpoint (PUT /model-routers/:id/catalogues) after the router itself.
+  const [catalogues, setCatalogues] = useState([]);
+  const [selectedCatalogues, setSelectedCatalogues] = useState([]);
+  const [savedCatalogues, setSavedCatalogues] = useState([]);
   const [availableLLMs, setAvailableLLMs] = useState([]);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -73,13 +96,18 @@ const ModelRouterForm = () => {
   const isEditMode = !!id;
   const { isEnterprise } = useEdition();
 
-  // Unsaved-changes tracking over the whole router, pools included.
-  const { markSaved } = useUnsavedForm(router, { ready: !isEditMode || loaded });
+  // Unsaved-changes tracking over the whole router, pools and catalogues
+  // included.
+  const { markSaved } = useUnsavedForm(
+    { router, selectedCatalogues },
+    { ready: !isEditMode || loaded },
+  );
   const confirmNavigation = useConfirmNavigation();
   const handleCancel = () => confirmNavigation(() => navigate("/admin/model-routers"));
 
   useEffect(() => {
     fetchLLMs();
+    fetchCatalogues();
     if (isEditMode) {
       fetchRouter();
     }
@@ -94,6 +122,15 @@ const ModelRouterForm = () => {
     }
   };
 
+  const fetchCatalogues = async () => {
+    try {
+      const response = await listAll(apiClient, "/catalogues");
+      setCatalogues(catalogueOptions(response.data.data));
+    } catch (error) {
+      console.error("Error fetching catalogues:", error);
+    }
+  };
+
   const fetchRouter = async () => {
     try {
       const response = await apiClient.get(`/model-routers/${id}`);
@@ -102,11 +139,17 @@ const ModelRouterForm = () => {
         name: data.attributes.name || "",
         slug: data.attributes.slug || "",
         description: data.attributes.description || "",
+        short_description: data.attributes.short_description || "",
+        long_description: data.attributes.long_description || "",
+        logo_url: data.attributes.logo_url || "",
         api_compat: data.attributes.api_compat || "openai",
         active: data.attributes.active || false,
         namespace: data.attributes.namespace || "",
         pools: data.attributes.pools || [],
       });
+      const published = catalogueOptions(data.attributes.catalogues);
+      setSelectedCatalogues(published);
+      setSavedCatalogues(published);
       setSlugManuallyEdited(true); // Don't auto-generate slug in edit mode
       setLoaded(true);
     } catch (error) {
@@ -350,6 +393,9 @@ const ModelRouterForm = () => {
             name: router.name,
             slug: router.slug,
             description: router.description,
+            short_description: router.short_description,
+            long_description: router.long_description,
+            logo_url: router.logo_url,
             api_compat: router.api_compat,
             active: router.active,
             namespace: router.namespace,
@@ -372,21 +418,42 @@ const ModelRouterForm = () => {
         },
       };
 
+      let routerId = id;
       if (isEditMode) {
         await apiClient.patch(`/model-routers/${id}`, payload);
       } else {
-        await apiClient.post("/model-routers", payload);
+        const response = await apiClient.post("/model-routers", payload);
+        routerId = response?.data?.data?.id;
+      }
+
+      // Catalogue membership has its own endpoint, so it is written once the
+      // router exists, and only when the selection changed.
+      let catalogueFailed = false;
+      if (routerId && !sameIds(selectedCatalogues, savedCatalogues)) {
+        try {
+          await apiClient.put(`/model-routers/${routerId}/catalogues`, {
+            catalogue_ids: selectedCatalogues.map((c) => Number(c.id)),
+          });
+        } catch (error) {
+          console.error("Error saving router catalogues:", error);
+          catalogueFailed = true;
+        }
       }
 
       markSaved();
       navigate("/admin/model-routers", {
         state: {
-          snackbar: {
-            message: isEditMode
-              ? "Model Router updated successfully"
-              : "Model Router created successfully",
-            severity: "success",
-          },
+          snackbar: catalogueFailed
+            ? {
+                message: "Model Router saved, but publishing it in the catalogs failed",
+                severity: "warning",
+              }
+            : {
+                message: isEditMode
+                  ? "Model Router updated successfully"
+                  : "Model Router created successfully",
+                severity: "success",
+              },
         },
       });
     } catch (error) {
@@ -455,7 +522,7 @@ const ModelRouterForm = () => {
               value={router.slug}
               onChange={handleSlugChange}
               error={!!errors.slug}
-              helperText={errors.slug || "Used in URL: /router/{slug}/v1/chat/completions"}
+              helperText={errors.slug || "Clients call it on /v1/chat/completions with the model written as {slug}/<model>. Must not match an LLM's name."}
               required
             />
           </Grid>
@@ -508,6 +575,69 @@ const ModelRouterForm = () => {
               />
             </Grid>
           )}
+
+          <Grid item xs={12}>
+            <Divider sx={{ my: 2 }} />
+          </Grid>
+
+          {/* Portal: published in LLM catalogues like an LLM provider, so
+              teams holding those catalogues can add it to their Apps. */}
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom>
+              Portal
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              How the router appears in the portal catalog. Apps granted the router call the
+              unified endpoint with the model written as <code>{router.slug || "<slug>"}/&lt;model&gt;</code>.
+            </Typography>
+          </Grid>
+
+          <Grid item xs={12}>
+            <RelationshipPicker
+              label="Publish in catalogs"
+              itemLabel="catalog"
+              value={selectedCatalogues}
+              onChange={setSelectedCatalogues}
+              options={catalogues}
+              idField="id"
+              getOptionLabel={(c) => c.name}
+              helperText="LLM catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Short Description"
+              name="short_description"
+              value={router.short_description}
+              onChange={handleChange}
+              multiline
+              rows={2}
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Long Description"
+              name="long_description"
+              value={router.long_description}
+              onChange={handleChange}
+              multiline
+              rows={4}
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Logo URL"
+              name="logo_url"
+              value={router.logo_url}
+              onChange={handleChange}
+            />
+          </Grid>
 
           <Grid item xs={12}>
             <Divider sx={{ my: 2 }} />

@@ -175,6 +175,11 @@ Each feature specification below provides detailed documentation on the individu
 - Analytics and observability for all LLM interactions
 - Streaming support for real-time responses
 
+### [Routers](Routers.md) (Enterprise)
+- Model Routers addressed as `{router}/{model}` on the unified ingress, resolved after auth on the edge
+- Granted to Apps and published in LLM catalogues like LLMs; access to the LLMs behind them only through the router
+- Routing decision in response headers and analytics; roadmap to semantic routing
+
 ### [Model Pricing System](Pricing.md)
 - Cost definition for various LLM models
 - Accurate tracking of token usage and costs

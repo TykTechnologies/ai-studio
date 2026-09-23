@@ -32,6 +32,15 @@ type ModelRouter struct {
 	Active      bool         `json:"active" gorm:"default:false"`
 	Namespace   string       `json:"namespace" gorm:"default:'';uniqueIndex:idx_router_slug_namespace;index:idx_router_namespace"`
 	Pools       []*ModelPool `json:"pools" gorm:"foreignKey:RouterID;constraint:OnDelete:CASCADE"`
+
+	// Portal presentation. A router is published like an LLM: it sits in LLM
+	// catalogues, teams are granted the catalogues, and Apps are granted the
+	// router, which lets them reach every LLM its pools can pick, through it.
+	ShortDescription string `json:"short_description"`
+	LongDescription  string `json:"long_description"`
+	LogoURL          string `json:"logo_url"`
+
+	Catalogues []Catalogue `json:"-" gorm:"many2many:catalogue_model_routers;"`
 }
 
 type ModelRouters []ModelRouter
@@ -85,7 +94,7 @@ func NewModelRouter() *ModelRouter {
 
 // Get retrieves a ModelRouter by ID with all relationships
 func (r *ModelRouter) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").First(r, id).Error
+	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").Preload("Catalogues").First(r, id).Error
 }
 
 // GetBySlug retrieves a ModelRouter by slug within a namespace
@@ -211,6 +220,15 @@ func (r *ModelRouter) Delete(db *gorm.DB) error {
 		return err
 	}
 
+	// Withdraw the router from Apps and catalogues: a grant of a deleted
+	// router must not come back if the id is ever reused.
+	for _, table := range []string{"app_model_routers", "catalogue_model_routers"} {
+		if err := tx.Exec("DELETE FROM "+table+" WHERE model_router_id = ?", r.ID).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
 	// Delete the router itself
 	if err := tx.Delete(r).Error; err != nil {
 		tx.Rollback()
@@ -223,7 +241,7 @@ func (r *ModelRouter) Delete(db *gorm.DB) error {
 // GetAll retrieves all ModelRouters with pagination
 func (r *ModelRouters) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (int64, int, error) {
 	var totalCount int64
-	query := db.Model(&ModelRouter{}).Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings")
+	query := db.Model(&ModelRouter{}).Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").Preload("Catalogues")
 
 	// Optional search/sort scopes (services.ListOptions); applied before the
 	// count so X-Total-Count reflects the filtered set.

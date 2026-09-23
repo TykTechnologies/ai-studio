@@ -325,7 +325,7 @@ func failoverChanged(existing models.LLMFailover, incoming *models.LLMFailover) 
 // anything else stays a 500.
 func respondLLMServiceError(c *gin.Context, err error) {
 	var verr *services.LLMFailoverValidationError
-	if errors.As(err, &verr) {
+	if errors.As(err, &verr) || errors.Is(err, models.ErrRouteSlugTaken) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

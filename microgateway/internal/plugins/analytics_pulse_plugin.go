@@ -338,6 +338,13 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		// Failover marker (nil / 0 for a primary attempt)
 		FailoverFromLLMID:      req.FailoverFromLLMID,
 		FailoverAttempt:        req.FailoverAttempt,
+
+		// Routing decision (empty unless addressed to a router)
+		RouterKind:             req.RouterKind,
+		RouterSlug:             req.RouterSlug,
+		RouterPoolName:         req.RouterPool,
+		Route:                  req.Route,
+		RouteReason:            req.RouteReason,
 	}
 
 	// Store metadata for pulse transmission
@@ -795,6 +802,11 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			LlmId:                   llmID,
 			FailoverFromLlmId: failoverFrom,
 			FailoverAttempt:   uint32(event.FailoverAttempt),
+			RouterKind:        event.RouterKind,
+			RouterSlug:        event.RouterSlug,
+			RouterPool:        event.RouterPoolName,
+			Route:             event.Route,
+			RouteReason:       event.RouteReason,
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

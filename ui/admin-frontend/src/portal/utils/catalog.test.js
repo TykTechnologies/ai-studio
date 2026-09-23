@@ -114,6 +114,47 @@ describe("catalog utils", () => {
   });
 });
 
+describe("model router catalog type", () => {
+  const {
+    CATALOG_TYPES,
+    browsePath,
+    buildActionLabel,
+    itemTypeLabel,
+    modelRouterDetailApiPath,
+    typeForSlug,
+    typeIcon,
+    typeLabel,
+    unifiedIngressBaseUrl,
+  } = require("./catalog");
+  const router = item("model_router", 5, { name: "Prod", kind: "openai", kind_label: "Model Router", access_granted_via_app: true });
+
+  it("registers the type with its labels, route slug and icon", () => {
+    expect(CATALOG_TYPES.MODEL_ROUTER).toBe("model_router");
+    expect(typeLabel("model_router")).toBe("Model router");
+    expect(typeLabel("model_router", { plural: true })).toBe("Model routers");
+    expect(itemTypeLabel(router)).toBe("Model router");
+    expect(typeIcon("model_router")).toBe("route");
+    expect(typeForSlug("model-routers")).toBe("model_router");
+    expect(browsePath("model_router")).toBe("/portal/catalog/model-routers");
+    expect(kindLabel(router)).toBe("Model Router");
+  });
+
+  it("routes to its detail page, its detail endpoint and the app builder", () => {
+    expect(detailPath(router)).toBe("/portal/catalog/model-routers/5");
+    expect(modelRouterDetailApiPath(5)).toBe("/common/catalog/model-routers/5");
+    expect(isAppGranted(router)).toBe(true);
+    expect(buildAppPath(router)).toBe("/portal/app/new?model_router=5");
+    expect(buildActionLabel(router)).toBe("Build app");
+  });
+
+  it("builds the unified ingress URL only when the gateway serves it", () => {
+    mockConfig = { proxyURL: "http://gw.example.com/", unifiedRouterPath: "/v1/" };
+    expect(unifiedIngressBaseUrl()).toBe("http://gw.example.com/v1");
+    mockConfig = { proxyURL: "http://gw.example.com" };
+    expect(unifiedIngressBaseUrl()).toBeNull();
+  });
+});
+
 describe("formatPerMillion", () => {
   const { formatPerMillion } = require("./catalog");
   it("prints dollar prices plainly and keeps sub-dollar precision", () => {

@@ -198,7 +198,7 @@ func TestGetFilterDependents(t *testing.T) {
 	assert.Equal(t, 3, deps.Total)
 }
 
-func TestGetModelRouterDependents_IsEmpty(t *testing.T) {
+func TestGetModelRouterDependents(t *testing.T) {
 	db := setupDependentsTestDB(t)
 	s := NewService(db)
 
@@ -206,6 +206,22 @@ func TestGetModelRouterDependents_IsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, deps.Total)
 	assert.NotNil(t, deps.Apps)
+
+	router := &models.ModelRouter{Name: "Prod", Slug: "prod", Active: true}
+	require.NoError(t, db.Create(router).Error)
+	app := &models.App{Name: "Uses router"}
+	require.NoError(t, db.Create(app).Error)
+	require.NoError(t, db.Model(app).Association("ModelRouters").Append(router))
+	cat := &models.Catalogue{Name: "LLMs"}
+	require.NoError(t, db.Create(cat).Error)
+	require.NoError(t, db.Model(router).Association("Catalogues").Append(cat))
+
+	deps, err = s.GetModelRouterDependents(router.ID)
+	require.NoError(t, err)
+	require.Len(t, deps.Apps, 1)
+	assert.Equal(t, "Uses router", deps.Apps[0].Name)
+	require.Len(t, deps.Catalogues, 1)
+	assert.Equal(t, "LLMs", deps.Catalogues[0].Name)
 }
 
 func TestSecretReferences(t *testing.T) {
