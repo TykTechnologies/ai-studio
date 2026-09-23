@@ -115,6 +115,10 @@ func TestTeamBudgetsEnterprise_API(t *testing.T) {
 	assert.NotEmpty(t, out["teams"])
 	code, _ = do("GET", "/api/v1/analytics/team-costs?start_date=yesterday", nil)
 	assert.Equal(t, http.StatusBadRequest, code)
+	code, _ = do("GET", "/api/v1/analytics/team-costs?start_date=2024-01-01&end_date=2026-01-01", nil)
+	assert.Equal(t, http.StatusBadRequest, code, "at most 366 days")
+	code, _ = do("GET", "/api/v1/analytics/team-costs?start_date=2026-02-01&end_date=2026-01-01", nil)
+	assert.Equal(t, http.StatusBadRequest, code, "end before start")
 
 	code, _ = do("DELETE", "/api/v1/groups/"+itoa(eng.ID)+"/budget", nil)
 	assert.Equal(t, http.StatusNoContent, code)

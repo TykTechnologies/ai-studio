@@ -84,6 +84,9 @@ func (a *API) createApp(c *gin.Context) {
 
 	var appOpts []services.AppOption
 	if input.Data.Attributes.TeamID != nil {
+		if !a.authorizeAppTeam(c, input.Data.Attributes.UserID, input.Data.Attributes.TeamID) {
+			return
+		}
 		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
 	}
 
@@ -301,6 +304,9 @@ func (a *API) updateApp(c *gin.Context) {
 
 	var appOpts []services.AppOption
 	if input.Data.Attributes.TeamID != nil {
+		if !a.authorizeAppTeam(c, input.Data.Attributes.UserID, input.Data.Attributes.TeamID) {
+			return
+		}
 		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
 	}
 

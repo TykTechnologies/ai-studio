@@ -94,16 +94,22 @@ func (s *Service) releaseTeamAllocations(apps []models.App) {
 	}
 }
 
+// IsUserInGroup reports whether the user is a member of the team.
+func (s *Service) IsUserInGroup(userID, groupID uint) (bool, error) {
+	var n int64
+	err := s.DB.Table("user_groups").Where("user_id = ? AND group_id = ?", userID, groupID).Count(&n).Error
+	return n > 0, err
+}
+
 // SetUserBudgetTeam sets (or clears, with nil) the team a user's new Apps are
 // attributed to. The user must be a member of the team.
 func (s *Service) SetUserBudgetTeam(userID uint, teamID *uint) error {
 	if teamID != nil {
-		var n int64
-		if err := s.DB.Table("user_groups").
-			Where("user_id = ? AND group_id = ?", userID, *teamID).Count(&n).Error; err != nil {
+		member, err := s.IsUserInGroup(userID, *teamID)
+		if err != nil {
 			return err
 		}
-		if n == 0 {
+		if !member {
 			return helpers.NewBadRequestError("the user is not a member of that team")
 		}
 	}

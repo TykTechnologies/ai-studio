@@ -170,9 +170,7 @@ func (h *DatabaseHandler) startWorker() {
 				logger.Warnf("Error creating proxy log: %s", sanitizeError(err))
 			}
 		case records := <-h.chatRecordBatchChan:
-			for _, record := range records {
-				h.teams.stamp(record)
-			}
+			h.teams.stampBatch(records)
 			startTime := time.Now()
 			err := h.createRecordWithRetry(func() error {
 				return h.db.CreateInBatches(records, 100).Error

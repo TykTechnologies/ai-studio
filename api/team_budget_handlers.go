@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -32,6 +33,28 @@ func (a *API) portalBudgetSource(app *models.App) string {
 		return ""
 	}
 	return "team"
+}
+
+// authorizeAppTeam checks an explicit team_id on App create/update. Moving
+// an App's spend (and its allocation) into a team is a team budget decision,
+// so a team the owner does not belong to needs groups:write; otherwise it
+// must be one of the owner's teams. It writes the refusal and reports
+// whether the caller may go on.
+func (a *API) authorizeAppTeam(c *gin.Context, ownerID uint, teamID *uint) bool {
+	if teamID == nil || a.holds(c, authz.Write("groups")) {
+		return true
+	}
+	member, err := a.service.IsUserInGroup(ownerID, *teamID)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		return false
+	}
+	if !member {
+		helpers.SendErrorResponse(c, helpers.NewForbiddenError(
+			"the App's owner is not a member of that team; assigning an App to another team needs the groups:write permission"))
+		return false
+	}
+	return true
 }
 
 // teamBudgetErrorResponse maps team budget service errors onto HTTP statuses.
@@ -187,8 +210,11 @@ func (a *API) resetTeamBudget(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// maxTeamCostsWindow bounds a team costs query (one year, leap day included).
+const maxTeamCostsWindow = 366 * 24 * time.Hour
+
 // @Summary Spend per team
-// @Description Cost, tokens and requests per team over a window; defaults to the last 30 days (Enterprise)
+// @Description Cost, tokens and requests per team over a window of at most 366 days; defaults to the last 30 days (Enterprise)
 // @Tags analytics
 // @Produce json
 // @Param start_date query string false "Start date (YYYY-MM-DD)"
@@ -216,6 +242,14 @@ func (a *API) getTeamCosts(c *gin.Context) {
 			return
 		}
 		end = t.AddDate(0, 0, 1)
+	}
+	if !end.After(start) {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("end_date must not be before start_date"))
+		return
+	}
+	if end.Sub(start) > maxTeamCostsWindow {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("the date range may cover at most 366 days"))
+		return
 	}
 	costs, err := a.service.TeamBudget.GetTeamCosts(start, end)
 	if err != nil {

@@ -122,51 +122,146 @@ func ResolveBudgetTeam(db *gorm.DB, userID uint) (*uint, error) {
 	if userID == 0 {
 		return nil, nil
 	}
-
-	var user User
-	if err := db.Select("id", "budget_team_id").First(&user, userID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	if user.BudgetTeamID != nil {
-		var n int64
-		if err := db.Table("user_groups").
-			Joins("JOIN groups ON groups.id = user_groups.group_id AND groups.deleted_at IS NULL").
-			Where("user_groups.user_id = ? AND user_groups.group_id = ?", userID, *user.BudgetTeamID).
-			Count(&n).Error; err != nil {
-			return nil, err
-		}
-		if n > 0 {
-			id := *user.BudgetTeamID
-			return &id, nil
-		}
-	}
-
-	var ids []uint
-	if err := db.Table("user_groups").
-		Joins("JOIN groups ON groups.id = user_groups.group_id AND groups.deleted_at IS NULL").
-		Where("user_groups.user_id = ? AND groups.name <> ?", userID, DefaultGroupName).
-		Order("groups.id ASC").
-		Limit(1).
-		Pluck("groups.id", &ids).Error; err != nil {
-		return nil, err
-	}
-	if len(ids) > 0 {
-		return &ids[0], nil
-	}
-
-	var def Group
-	err := db.Select("id").Where("name = ?", DefaultGroupName).First(&def).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
+	teams, err := ResolveBudgetTeams(db, []uint{userID})
 	if err != nil {
 		return nil, err
 	}
-	return &def.ID, nil
+	return teams[userID], nil
+}
+
+// resolveChunk bounds the IDs in one IN list (SQLite allows 999 variables).
+const resolveChunk = 500
+
+// usersByTeam inverts a user -> team map, dropping users with no team, so
+// a backfill writes once per team rather than once per user.
+func usersByTeam(teams map[uint]*uint) map[uint][]uint {
+	out := map[uint][]uint{}
+	for userID, teamID := range teams {
+		if teamID != nil {
+			out[*teamID] = append(out[*teamID], userID)
+		}
+	}
+	return out
+}
+
+// chunkIDs splits IDs into IN-list sized chunks.
+func chunkIDs(ids []uint) [][]uint {
+	var out [][]uint
+	for start := 0; start < len(ids); start += resolveChunk {
+		end := start + resolveChunk
+		if end > len(ids) {
+			end = len(ids)
+		}
+		out = append(out, ids[start:end])
+	}
+	return out
+}
+
+// ResolveBudgetTeams applies ResolveBudgetTeam to many users with a fixed
+// number of queries: their budget teams, their memberships of live teams,
+// and the Default team. Users that do not exist (or have no team at all and
+// no Default team exists) map to nil.
+func ResolveBudgetTeams(db *gorm.DB, userIDs []uint) (map[uint]*uint, error) {
+	out := make(map[uint]*uint, len(userIDs))
+	ids := make([]uint, 0, len(userIDs))
+	for _, id := range userIDs {
+		if id == 0 {
+			continue
+		}
+		if _, seen := out[id]; !seen {
+			out[id] = nil
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	type membership struct {
+		UserID  uint
+		GroupID uint
+		Name    string
+	}
+	budgetTeam := map[uint]*uint{}
+	exists := map[uint]bool{}
+	member := map[uint]map[uint]bool{}
+	firstOther := map[uint]uint{}
+	for start := 0; start < len(ids); start += resolveChunk {
+		end := start + resolveChunk
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+
+		var users []User
+		if err := db.Select("id", "budget_team_id").Where("id IN ?", chunk).Find(&users).Error; err != nil {
+			return nil, err
+		}
+		for _, u := range users {
+			exists[u.ID] = true
+			budgetTeam[u.ID] = u.BudgetTeamID
+		}
+
+		var rows []membership
+		if err := db.Table("user_groups").
+			Select("user_groups.user_id AS user_id, groups.id AS group_id, groups.name AS name").
+			Joins("JOIN groups ON groups.id = user_groups.group_id AND groups.deleted_at IS NULL").
+			Where("user_groups.user_id IN ?", chunk).
+			Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			if member[r.UserID] == nil {
+				member[r.UserID] = map[uint]bool{}
+			}
+			member[r.UserID][r.GroupID] = true
+			if r.Name != DefaultGroupName {
+				if cur, ok := firstOther[r.UserID]; !ok || r.GroupID < cur {
+					firstOther[r.UserID] = r.GroupID
+				}
+			}
+		}
+	}
+
+	var defaultID *uint
+	needDefault := false
+	for _, id := range ids {
+		if !exists[id] {
+			continue
+		}
+		// 1. The budget team, while the user is still a member of it (SSO
+		//    rewrites memberships, so a stale choice is skipped).
+		if bt := budgetTeam[id]; bt != nil && member[id][*bt] {
+			v := *bt
+			out[id] = &v
+			continue
+		}
+		// 2. The first team other than Default, by lowest ID.
+		if g, ok := firstOther[id]; ok {
+			v := g
+			out[id] = &v
+			continue
+		}
+		needDefault = true
+	}
+	if needDefault {
+		var def Group
+		err := db.Select("id").Where("name = ?", DefaultGroupName).First(&def).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if err == nil {
+			defaultID = &def.ID
+		}
+		// 3. The Default team.
+		for _, id := range ids {
+			if exists[id] && out[id] == nil && defaultID != nil {
+				v := *defaultID
+				out[id] = &v
+			}
+		}
+	}
+	return out, nil
 }
 
 // BackfillTeamAttribution stamps Apps and spend recorded before team
@@ -186,17 +281,16 @@ func BackfillTeamAttribution(db *gorm.DB) error {
 	if err := db.Model(&App{}).Unscoped().Where("team_id IS NULL").Distinct().Pluck("user_id", &owners).Error; err != nil {
 		return err
 	}
-	for _, owner := range owners {
-		teamID, err := ResolveBudgetTeam(db, owner)
-		if err != nil {
-			return err
-		}
-		if teamID == nil {
-			continue
-		}
-		if err := db.Model(&App{}).Unscoped().Where("team_id IS NULL AND user_id = ?", owner).
-			Update("team_id", *teamID).Error; err != nil {
-			return err
+	ownerTeams, err := ResolveBudgetTeams(db, owners)
+	if err != nil {
+		return err
+	}
+	for teamID, users := range usersByTeam(ownerTeams) {
+		for _, chunk := range chunkIDs(users) {
+			if err := db.Model(&App{}).Unscoped().Where("team_id IS NULL AND user_id IN ?", chunk).
+				Update("team_id", teamID).Error; err != nil {
+				return err
+			}
 		}
 	}
 
@@ -212,17 +306,16 @@ func BackfillTeamAttribution(db *gorm.DB) error {
 		Distinct().Pluck("user_id", &chatUsers).Error; err != nil {
 		return err
 	}
-	for _, uid := range chatUsers {
-		teamID, err := ResolveBudgetTeam(db, uid)
-		if err != nil {
-			return err
-		}
-		if teamID == nil {
-			continue
-		}
-		if err := db.Model(&LLMChatRecord{}).Where("team_id IS NULL AND app_id = 0 AND user_id = ?", uid).
-			Update("team_id", *teamID).Error; err != nil {
-			return err
+	chatTeams, err := ResolveBudgetTeams(db, chatUsers)
+	if err != nil {
+		return err
+	}
+	for teamID, users := range usersByTeam(chatTeams) {
+		for _, chunk := range chunkIDs(users) {
+			if err := db.Model(&LLMChatRecord{}).Where("team_id IS NULL AND app_id = 0 AND user_id IN ?", chunk).
+				Update("team_id", teamID).Error; err != nil {
+				return err
+			}
 		}
 	}
 
