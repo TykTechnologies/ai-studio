@@ -80,7 +80,7 @@ func (a *API) createModelRouter(c *gin.Context) {
 		return
 	}
 
-	router := a.inputToModelRouter(&input)
+	router := a.inputToModelRouter(&input, false)
 	if err := models.CheckLogoURL(router.LogoURL); err != nil {
 		respondModelRouterError(c, err)
 		return
@@ -182,18 +182,10 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		return
 	}
 
-	router := a.inputToModelRouter(&input)
-	router.ID = uint(id)
-	if err := models.CheckLogoURL(router.LogoURL); err != nil {
-		respondModelRouterError(c, err)
-		return
-	}
-
-	// Flipping the active switch is the publish action on model-routers; an
-	// omitted switch keeps the stored value rather than deactivating. Both
-	// rules need the stored router, so the update does not go ahead without
-	// it: a failed lookup used to skip them and save the omitted switch as
-	// false, unpublishing the router without the publish permission.
+	// The update is applied to the stored router: an omitted switch keeps its
+	// stored value, and flipping it is the publish action on model-routers.
+	// Without the stored router neither rule can be applied, so the update
+	// does not go ahead.
 	existing, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil || existing == nil {
 		if err == nil || !errors.Is(err, model_router.ErrEnterpriseFeature) {
@@ -203,8 +195,12 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		respondModelRouterError(c, err)
 		return
 	}
-	if input.Data.Attributes.Active == nil {
-		router.Active = existing.Active
+
+	router := a.inputToModelRouter(&input, existing.Active)
+	router.ID = uint(id)
+	if err := models.CheckLogoURL(router.LogoURL); err != nil {
+		respondModelRouterError(c, err)
+		return
 	}
 	if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
 		return
@@ -372,13 +368,21 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 }
 
 // inputToModelRouter converts the API input to a ModelRouter model
-func (a *API) inputToModelRouter(input *ModelRouterInput) *models.ModelRouter {
+//
+// activeIfOmitted is the live switch when the input leaves "active" out:
+// false on create (a new router starts inactive), the stored value on update
+// (omitting the switch is not the publish action).
+func (a *API) inputToModelRouter(input *ModelRouterInput, activeIfOmitted bool) *models.ModelRouter {
+	active := activeIfOmitted
+	if input.Data.Attributes.Active != nil {
+		active = *input.Data.Attributes.Active
+	}
 	router := &models.ModelRouter{
 		Name:        input.Data.Attributes.Name,
 		Slug:        input.Data.Attributes.Slug,
 		Description: input.Data.Attributes.Description,
 		APICompat:   input.Data.Attributes.APICompat,
-		Active:      input.Data.Attributes.Active != nil && *input.Data.Attributes.Active,
+		Active:      active,
 		Namespace:   input.Data.Attributes.Namespace,
 		Pools:       make([]*models.ModelPool, len(input.Data.Attributes.Pools)),
 

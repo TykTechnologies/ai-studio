@@ -294,7 +294,7 @@ func TestInputToModelRouter_BasicConversion(t *testing.T) {
 		}},
 	}}
 
-	router := api.inputToModelRouter(input)
+	router := api.inputToModelRouter(input, false)
 
 	// SPECIFICATION: Input conversion MUST preserve all fields
 	assert.Equal(t, "Test Router", router.Name)
@@ -339,7 +339,7 @@ func TestInputToModelRouter_DefaultValues(t *testing.T) {
 		}},
 	}}
 
-	router := api.inputToModelRouter(input)
+	router := api.inputToModelRouter(input, false)
 
 	// SPECIFICATION: Empty APICompat MUST default to "openai"
 	assert.Equal(t, "openai", router.APICompat)
