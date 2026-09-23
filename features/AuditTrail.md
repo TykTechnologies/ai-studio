@@ -106,6 +106,8 @@ Plain struct, not `gorm.Model`: no soft-delete column, no update path. Indexed o
 
 `snapshotTargets` maps a collection segment to the GORM model backing it (plus the id column when it is not `id`, e.g. edges by `edge_id`, SSO profiles by `profile_id`). `snapshot()` loads the row as `map[string]interface{}` by **table**, not by model: it parses the model's schema for the table name and the `deleted_at` column, then runs `db.Table(t).Where(col = ?).Where(deleted_at IS NULL).Take(&row)`. A model-scoped map scan makes GORM push every column through the schema field's Go type, and a `serializer:json` field (`llms.allowed_models`) then fails with `unsupported Scan … into *[]string`, which used to drop the whole LLM snapshot and with it the diff and `resource_name` on every LLM audit record. Scanning by table returns raw driver values, which is what the diff wants; `TableName()` overrides still apply because the name comes from the parsed schema.
 
+A target can also list **grant sets** (`grantSet`): ids held in join tables, which a row snapshot does not see. Apps list theirs (`appGrants`: `llm_ids`, `datasource_ids`, `tool_ids`, `mcp_server_ids`, `model_router_ids`, `semantic_router_ids`, `tag_ids`, and `plugin_resources` as `type_id:instance_id`), sorted, so a PATCH that only changes grants still produces a diff. A set whose table cannot be read is left out of the snapshot rather than failing it.
+
 Redaction rules live in a `redactor` built once per service from the built-in lists plus `AuditConfig.RedactKeys` / `RedactHeaders`; operator additions extend, never replace, the built-ins.
 
 `redactor.computeDiff(before, after)`:

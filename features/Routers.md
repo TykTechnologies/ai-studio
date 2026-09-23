@@ -46,6 +46,8 @@ POST /v1/chat/completions  {"model": "openai/gpt-4o"}   -> LLM "openai"
   - Detail adds `router_llms`.
 - The App builder and admin App editor grant routers via `model_router_ids` / `semantic_router_ids`. The portal validates visibility; admins may grant any active router.
 - Deleting a router withdraws its App grants and catalogue memberships. Dependents lists both.
+- Model Routers are hard-deleted with their pools, vendors and mappings, like Semantic Routers, so a deleted router's slug can be used again. Creating or updating a router also purges soft-deleted rows left on that slug by older releases.
+- A configuration the Model Router service refuses (missing name, bad or taken slug, no pools, a pool without vendors, a missing LLM, ...) wraps `model_router.ErrInvalid`, and the API answers 400 instead of 500.
 
 ## Observability
 

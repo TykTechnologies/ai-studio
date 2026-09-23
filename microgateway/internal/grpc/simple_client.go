@@ -464,7 +464,7 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 		}
 
 		// Start reconnection process if not already stopping
-		if c.conn != nil {
+		if !c.stopping() {
 			go c.attemptReconnection()
 		}
 	}()
@@ -930,9 +930,11 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 			return
 		}
 
-		// Check if we should stop (connection was manually closed)
-		if c.conn == nil {
-			log.Debug().Msg("Connection manually closed, stopping reconnection attempts")
+		// Stop() closes stopCh. A nil c.conn is not a stop signal: a failed
+		// reconnectWithRetry clears it, and treating that as "manually closed"
+		// left edges disconnected after any outage longer than one attempt.
+		if c.stopping() {
+			log.Debug().Msg("Client stopped, stopping reconnection attempts")
 			return
 		}
 
@@ -954,6 +956,16 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		// Reset attempt counter
 		c.reconnectAttempts = 0
 		return
+	}
+}
+
+// stopping reports whether Stop has been called.
+func (c *SimpleEdgeClient) stopping() bool {
+	select {
+	case <-c.stopCh:
+		return true
+	default:
+		return false
 	}
 }
 

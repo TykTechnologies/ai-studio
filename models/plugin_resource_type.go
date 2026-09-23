@@ -125,6 +125,17 @@ func (p *PluginResourceType) GetByPluginAndSlug(db *gorm.DB, pluginID uint, slug
 	return db.Where("plugin_id = ? AND slug = ?", pluginID, slug).First(p).Error
 }
 
+// DeactivateOrphanedPluginResourceTypes retires active resource types whose
+// plugin no longer exists (deleted while not loaded, before DeletePlugin
+// retired them). Returns the number of types deactivated.
+func DeactivateOrphanedPluginResourceTypes(db *gorm.DB) (int64, error) {
+	res := db.Model(&PluginResourceType{}).
+		Where("is_active = ? AND plugin_id NOT IN (?)", true,
+			db.Model(&Plugin{}).Select("id")).
+		Update("is_active", false)
+	return res.RowsAffected, res.Error
+}
+
 // GetAllActive returns all active plugin resource types
 func (pts *PluginResourceTypes) GetAllActive(db *gorm.DB) error {
 	return db.Where("is_active = ?", true).Preload("Plugin").Find(pts).Error

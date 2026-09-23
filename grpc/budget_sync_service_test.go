@@ -148,7 +148,7 @@ func TestBudgetSyncService_PublishesEvents(t *testing.T) {
 	assert.InDelta(t, 5.0, payload.AppUsages[uint32(apps[1].ID)], 0.01)
 
 	// Verify sequence number incremented
-	assert.Equal(t, uint64(1), payload.SequenceNumber)
+	assert.NotZero(t, payload.SequenceNumber)
 
 	// Verify period dates (compare year, month, day - timezone handling varies by environment)
 	assert.Equal(t, periodStart.Year(), payload.PeriodStart.Year())
@@ -200,12 +200,26 @@ func TestBudgetSyncService_SequenceNumberIncrement(t *testing.T) {
 	// Allow time for events to be processed
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify sequence numbers are incrementing
+	// Verify sequence numbers are increasing
 	mu.Lock()
-	assert.Len(t, events, 3)
-	assert.Equal(t, uint64(1), events[0].SequenceNumber)
-	assert.Equal(t, uint64(2), events[1].SequenceNumber)
-	assert.Equal(t, uint64(3), events[2].SequenceNumber)
+	require.Len(t, events, 3)
+	assert.Less(t, events[0].SequenceNumber, events[1].SequenceNumber)
+	assert.Less(t, events[1].SequenceNumber, events[2].SequenceNumber)
+	last := events[2].SequenceNumber
+	events = nil
+	mu.Unlock()
+
+	// A Studio restart is a new service instance. Edges persist the highest
+	// sequence they have seen and drop anything lower, so the restarted
+	// service must continue above it rather than start again from 1.
+	restarted := NewBudgetSyncService(db, bus)
+	restarted.aggregateAndPublish()
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	require.Len(t, events, 1)
+	assert.Greater(t, events[0].SequenceNumber, last,
+		"sequence after a restart must exceed the last one edges saw")
 	mu.Unlock()
 }
 

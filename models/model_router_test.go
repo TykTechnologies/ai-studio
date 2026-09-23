@@ -295,6 +295,67 @@ func TestModelRouter_Delete(t *testing.T) {
 	assert.Equal(t, int64(0), mappingCount, "Mapping MUST be cascade deleted")
 }
 
+// A deleted router's slug must be free for a new router. Soft deletes kept
+// the tombstone in the (slug, namespace) unique index, so the create failed
+// with a raw constraint error.
+func TestModelRouter_DeleteFreesSlug(t *testing.T) {
+	db := setupTestDB(t)
+	llm := &LLM{Name: "TestLLM", Vendor: "openai", Active: true, APIEndpoint: "https://api.test.com"}
+	require.NoError(t, db.Create(llm).Error)
+
+	newRouter := func() *ModelRouter {
+		return &ModelRouter{
+			Name: "Reuse", Slug: "reuse-me",
+			Pools: []*ModelPool{{
+				Name: "Pool", ModelPattern: "*", SelectionAlgorithm: SelectionRoundRobin,
+				Vendors: []*PoolVendor{{
+					LLMID: llm.ID, Weight: 1, Active: true,
+					Mappings: []*ModelMapping{{SourceModel: "src", TargetModel: "tgt"}},
+				}},
+			}},
+		}
+	}
+
+	first := newRouter()
+	require.NoError(t, first.Create(db))
+	require.NoError(t, first.Delete(db))
+
+	second := newRouter()
+	require.NoError(t, second.Create(db), "a deleted router's slug must be reusable")
+
+	// Nothing of the first router is left behind, soft-deleted or not.
+	var n int64
+	db.Unscoped().Model(&ModelRouter{}).Where("id = ?", first.ID).Count(&n)
+	assert.Zero(t, n, "router row")
+	db.Unscoped().Model(&ModelPool{}).Where("router_id = ?", first.ID).Count(&n)
+	assert.Zero(t, n, "pool rows")
+	db.Unscoped().Model(&PoolVendor{}).Where("id = ?", first.Pools[0].Vendors[0].ID).Count(&n)
+	assert.Zero(t, n, "vendor rows")
+	db.Unscoped().Model(&ModelMapping{}).Where("id = ?", first.Pools[0].Vendors[0].Mappings[0].ID).Count(&n)
+	assert.Zero(t, n, "mapping rows")
+}
+
+// A tombstone left by an older release (soft delete) must not block a new
+// router with its slug either.
+func TestModelRouter_CreateOverLegacyTombstone(t *testing.T) {
+	db := setupTestDB(t)
+	llm := &LLM{Name: "TestLLM", Vendor: "openai", Active: true, APIEndpoint: "https://api.test.com"}
+	require.NoError(t, db.Create(llm).Error)
+
+	pools := func() []*ModelPool {
+		return []*ModelPool{{
+			Name: "Pool", ModelPattern: "*", SelectionAlgorithm: SelectionRoundRobin,
+			Vendors: []*PoolVendor{{LLMID: llm.ID, Weight: 1, Active: true}},
+		}}
+	}
+	old := &ModelRouter{Name: "Old", Slug: "legacy", Pools: pools()}
+	require.NoError(t, old.Create(db))
+	require.NoError(t, db.Delete(&ModelRouter{}, old.ID).Error) // soft delete, as before
+
+	fresh := &ModelRouter{Name: "New", Slug: "legacy", Pools: pools()}
+	require.NoError(t, fresh.Create(db))
+}
+
 // ============================================================================
 // ModelRouters Collection Tests
 // ============================================================================

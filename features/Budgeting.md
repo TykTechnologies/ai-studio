@@ -113,7 +113,7 @@ flowchart LR
 *   **API Endpoints:**
     *   `GET /analytics/budget-usage`: Aggregated view, uses `analytics.GetBudgetUsage` (part of **Analytics**).
     *   `GET /analytics/budget-usage-for-app?app_id=X`: Specific app view, uses `BudgetService.GetMonthlySpending`.
-    *   `PATCH /v1/apps/:id`, `PATCH /v1/llms/:id`: Set budget config (part of **App/LLM Management**).
+    *   `PATCH /v1/apps/:id`, `PATCH /v1/llms/:id`: Set budget config (part of **App/LLM Management**). On an App PATCH, an omitted `monthly_budget` or `budget_start_date` keeps the current value; send `null` to clear it.
 
 **4. Use Cases & Behavior** (Remains largely the same as previous version, implicitly involving the dependent features)
 

@@ -9,6 +9,10 @@ import (
 var (
 	// ErrEnterpriseFeature is returned when attempting to use enterprise-only features in CE
 	ErrEnterpriseFeature = errors.New("model router is an Enterprise Edition feature - visit https://tyk.io/ai-studio/pricing for more information")
+
+	// ErrInvalid wraps a configuration the service refuses (a missing name,
+	// a bad or taken slug, a pool without vendors, ...). The API answers 400.
+	ErrInvalid = errors.New("invalid model router")
 )
 
 // communityService is a stub implementation of the model router service for Community Edition.

@@ -655,6 +655,31 @@ func TestModelRouterHandlers_ENT_CreateRouter_Success(t *testing.T) {
 	assert.NotNil(t, response["data"], "Response MUST contain data")
 }
 
+// A configuration the service refuses is the caller's mistake: 400, not 500.
+func TestModelRouterHandlers_ENT_CreateRouter_InvalidIs400(t *testing.T) {
+	api, _, _ := setupTestAPIForCommonTests(t)
+	api.service.ModelRouterService = &mockModelRouterService{
+		createRouterFunc: func(router *models.ModelRouter) error {
+			return fmt.Errorf("%w: at least one pool must be configured", model_router.ErrInvalid)
+		},
+	}
+
+	input := ModelRouterInput{}
+	input.Data.Type = "model-routers"
+	input.Data.Attributes.Name = "No Pools"
+	input.Data.Attributes.Slug = "no-pools"
+	payload, _ := json.Marshal(input)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest("POST", "/model-routers", bytes.NewBuffer(payload))
+	c.Request.Header.Set("Content-Type", "application/json")
+	api.createModelRouter(c)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "at least one pool")
+}
+
 func TestModelRouterHandlers_ENT_GetRouter_Success(t *testing.T) {
 	api, _, _ := setupTestAPIForCommonTests(t)
 

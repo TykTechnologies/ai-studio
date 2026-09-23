@@ -116,6 +116,11 @@ func (r *ModelRouter) Create(db *gorm.DB) error {
 		return err
 	}
 
+	if err := purgeModelRouterTombstones(tx, r.Slug, r.Namespace, 0); err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if err := tx.Create(r).Error; err != nil {
 		tx.Rollback()
 		return err
@@ -134,6 +139,11 @@ func (r *ModelRouter) Update(db *gorm.DB) error {
 	}()
 
 	if err := tx.Error; err != nil {
+		return err
+	}
+
+	if err := purgeModelRouterTombstones(tx, r.Slug, r.Namespace, r.ID); err != nil {
+		tx.Rollback()
 		return err
 	}
 
@@ -174,68 +184,69 @@ func (r *ModelRouter) Update(db *gorm.DB) error {
 	return tx.Commit().Error
 }
 
-// Delete removes a ModelRouter (cascades to pools, vendors, mappings)
-// Note: GORM soft delete does not trigger DB-level CASCADE constraints,
-// so we must manually delete children for soft delete cascade behavior
+// Delete removes a ModelRouter for good, with its pools, vendors, mappings,
+// App grants and catalogue memberships. It is a hard delete: a soft-deleted
+// row keeps its slug in the (slug, namespace) unique index, so a new router
+// could never take the slug again. The system event and audit log carry the
+// history.
 func (r *ModelRouter) Delete(db *gorm.DB) error {
-	tx := db.Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		return hardDeleteModelRouter(tx, r.ID)
+	})
+}
 
-	// Get all pools for this router to find their vendors
-	var pools []ModelPool
-	if err := tx.Where("router_id = ?", r.ID).Find(&pools).Error; err != nil {
-		tx.Rollback()
+// hardDeleteModelRouter removes a router row, soft-deleted or not, and
+// everything hanging off it.
+func hardDeleteModelRouter(tx *gorm.DB, id uint) error {
+	var poolIDs []uint
+	if err := tx.Unscoped().Model(&ModelPool{}).Where("router_id = ?", id).Pluck("id", &poolIDs).Error; err != nil {
 		return err
 	}
-
-	// Delete mappings and vendors for each pool
-	for _, pool := range pools {
-		// Get vendors for this pool
-		var vendors []PoolVendor
-		if err := tx.Where("pool_id = ?", pool.ID).Find(&vendors).Error; err != nil {
-			tx.Rollback()
+	if len(poolIDs) > 0 {
+		var vendorIDs []uint
+		if err := tx.Unscoped().Model(&PoolVendor{}).Where("pool_id IN ?", poolIDs).Pluck("id", &vendorIDs).Error; err != nil {
 			return err
 		}
-
-		// Delete mappings for each vendor
-		for _, vendor := range vendors {
-			if err := tx.Where("vendor_id = ?", vendor.ID).Delete(&ModelMapping{}).Error; err != nil {
-				tx.Rollback()
+		if len(vendorIDs) > 0 {
+			if err := tx.Unscoped().Where("vendor_id IN ?", vendorIDs).Delete(&ModelMapping{}).Error; err != nil {
 				return err
 			}
 		}
-
-		// Delete vendors for this pool
-		if err := tx.Where("pool_id = ?", pool.ID).Delete(&PoolVendor{}).Error; err != nil {
-			tx.Rollback()
+		if err := tx.Unscoped().Where("pool_id IN ?", poolIDs).Delete(&PoolVendor{}).Error; err != nil {
 			return err
 		}
 	}
-
-	// Delete pools
-	if err := tx.Where("router_id = ?", r.ID).Delete(&ModelPool{}).Error; err != nil {
-		tx.Rollback()
+	if err := tx.Unscoped().Where("router_id = ?", id).Delete(&ModelPool{}).Error; err != nil {
 		return err
 	}
 
 	// Withdraw the router from Apps and catalogues: a grant of a deleted
 	// router must not come back if the id is ever reused.
 	for _, table := range []string{"app_model_routers", "catalogue_model_routers"} {
-		if err := tx.Exec("DELETE FROM "+table+" WHERE model_router_id = ?", r.ID).Error; err != nil {
-			tx.Rollback()
+		if err := tx.Exec("DELETE FROM "+table+" WHERE model_router_id = ?", id).Error; err != nil {
 			return err
 		}
 	}
 
-	// Delete the router itself
-	if err := tx.Delete(r).Error; err != nil {
-		tx.Rollback()
+	return tx.Unscoped().Delete(&ModelRouter{}, id).Error
+}
+
+// purgeModelRouterTombstones hard-deletes soft-deleted routers holding a
+// slug in a namespace. Releases before hard deletes left such rows, and they
+// still occupy the unique index.
+func purgeModelRouterTombstones(tx *gorm.DB, slug, namespace string, exceptID uint) error {
+	var ids []uint
+	if err := tx.Unscoped().Model(&ModelRouter{}).
+		Where("slug = ? AND namespace = ? AND deleted_at IS NOT NULL AND id <> ?", slug, namespace, exceptID).
+		Pluck("id", &ids).Error; err != nil {
 		return err
 	}
-
-	return tx.Commit().Error
+	for _, id := range ids {
+		if err := hardDeleteModelRouter(tx, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetAll retrieves all ModelRouters with pagination

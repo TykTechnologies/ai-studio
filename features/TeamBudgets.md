@@ -23,7 +23,7 @@ Before this change, any budget at or below 0 meant "no limit".
 
 **Upgrade:**
 - A one-time migration (`models.ClearLegacyZeroBudgets`, recorded in `team_budget_settings.zero_budgets_cleared`) rewrites stored App and LLM budgets of 0 to `null`, so nothing starts blocking.
-- API clients that send `monthly_budget: 0` to mean "no limit" must send `null`, or omit the field, instead.
+- API clients that send `monthly_budget: 0` to mean "no limit" must send `null` instead. On create, an omitted field is also no limit. On `PATCH /api/v1/apps/:id`, an omitted `monthly_budget` (or `budget_start_date`) keeps the App's current value, and only an explicit `null` clears it (fixed 2026-09-24; before that, an omitted key lifted the App's limit).
 
 **Creating Apps:**
 - A new App with no budget (`null`) gets whatever default applies: the team's allocation when its team has a pool, else `DEFAULT_APP_BUDGET`, else no limit.
@@ -112,6 +112,8 @@ Edge traffic never passes Studio's budget check. Edges enforce App budgets local
 - The field is ignored by edges that predate it. A zero-budget App on an old edge is not refused until that edge is upgraded; everything else behaves as before.
 - There is no protobuf change and no config checksum churn.
 
+**Sequence numbers:** edges persist the highest `sequence_number` they have applied (`sync_states`) and drop anything lower. The hub seeds the sequence from the clock (`max(previous + 1, now in ns)`, `nextSequence`), so it keeps rising across Studio restarts and between Studio nodes. Until 2026-09-24 it was an in-memory counter from 1, so after a Studio restart edges ignored every budget sync, blocks included, until the counter caught up.
+
 **Lag:** a new block reaches edges within one pulse interval plus one sync interval. Edge spend has to reach Studio in the analytics pulse, and then the next budget sync carries the block. With the defaults that's up to about 40 s.
 
 Edge App-budget enforcement itself is unchanged. In live testing an App overshot its own budget by a few requests before the edge refused it; that comes from the edge's existing usage accounting, not from this feature.
@@ -163,7 +165,7 @@ Studio's alerts used to run only after embedded-gateway requests, so microgatewa
 - **App detail:** the team, and a note when the team has a pool.
 - **User form:** a budget team picker (shown when the user is in more than one team).
 - **LLM form:** the budget mode field.
-- **Dashboard:** a Team Costs table for the selected date range.
+- **Dashboard:** a Team Costs table for the selected date range. A deleted team that spent in the range is listed with `deleted: true`, shown as "(deleted)" and not linked, since a new team may carry its name.
 
 ## Code map
 

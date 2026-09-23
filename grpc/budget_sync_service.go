@@ -305,7 +305,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		PeriodStart:      calendarPeriodStart, // Legacy field
 		PeriodEnd:        calendarPeriodEnd,   // Legacy field
 		ControlTimestamp: now,
-		SequenceNumber:   atomic.AddUint64(&s.sequenceNumber, 1),
+		SequenceNumber:   s.nextSequence(),
 	}
 
 	// Publish via event bridge (DirDown = control to edges)
@@ -318,6 +318,25 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		Int("app_count", len(appBudgets)).
 		Uint64("sequence", payload.SequenceNumber).
 		Msg("Published budget sync to edges")
+}
+
+// nextSequence returns a sequence number above both the previous one and
+// the current time in nanoseconds. Edges persist the highest sequence they
+// have seen and drop anything lower, so a counter that restarted from zero
+// with Studio made edges ignore every sync after a Studio restart (and a
+// second Studio node's syncs). Seeding from the clock keeps it increasing
+// across restarts and nodes.
+func (s *BudgetSyncService) nextSequence() uint64 {
+	for {
+		prev := atomic.LoadUint64(&s.sequenceNumber)
+		next := uint64(time.Now().UnixNano())
+		if next <= prev {
+			next = prev + 1
+		}
+		if atomic.CompareAndSwapUint64(&s.sequenceNumber, prev, next) {
+			return next
+		}
+	}
 }
 
 // GetSyncInterval returns the configured sync interval (for testing)

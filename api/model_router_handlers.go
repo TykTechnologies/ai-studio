@@ -499,14 +499,16 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 }
 
 // respondModelRouterError maps a model router service error to its response:
-// 402 in the Community Edition, 400 for a caller's mistake (a slug another
-// route already answers to, an unsafe logo URL), 500 otherwise.
+// 402 in the Community Edition, 400 for a caller's mistake (a configuration
+// the service refuses, a slug another route already answers to, an unsafe
+// logo URL), 500 otherwise.
 func respondModelRouterError(c *gin.Context, err error) {
 	statusCode := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, model_router.ErrEnterpriseFeature):
 		statusCode = http.StatusPaymentRequired
-	case errors.Is(err, models.ErrRouteSlugTaken), errors.Is(err, models.ErrUnsafeLogoURL):
+	case errors.Is(err, model_router.ErrInvalid),
+		errors.Is(err, models.ErrRouteSlugTaken), errors.Is(err, models.ErrUnsafeLogoURL):
 		statusCode = http.StatusBadRequest
 	}
 	c.JSON(statusCode, ErrorResponse{
