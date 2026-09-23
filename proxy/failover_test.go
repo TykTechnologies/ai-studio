@@ -211,6 +211,7 @@ type failoverHarness struct {
 	primary, fallback *models.LLM
 	primaryVendor     *fakeVendor
 	fallbackVendor    *fakeVendor
+	proxy             *Proxy
 }
 
 func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFunc, mutate func(primary, fallback *models.LLM)) *failoverHarness {
@@ -262,6 +263,7 @@ func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFu
 
 	p := NewProxy(service, &Config{Port: h.port}, budgetSvc)
 	require.NoError(t, p.loadResources())
+	h.proxy = p
 	srv := &http.Server{Handler: p.createHandler()}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
@@ -551,6 +553,14 @@ func TestFailover_SpoofedMarkerCannotTaintAnalytics(t *testing.T) {
 	assert.Equal(t, h.primary.ID, logs[0].LLMID)
 	assert.Nil(t, logs[0].FailoverFromLLMID, "a forged marker must not be recorded")
 	assert.Equal(t, 0, logs[0].FailoverAttempt)
+
+	// The same forged marker aimed at the fallback, which the app was never
+	// granted, does not inherit access: without the process token it is just a
+	// request for an ungranted LLM.
+	resp, body := h.post("/llm/call/fallback/v1/chat/completions", failoverChatBody,
+		hdrFailoverOrigin, "primary", hdrFailoverAttempt, "1", hdrFailoverToken, "guess")
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
+	assert.Empty(t, h.fallbackVendor.calls())
 }
 
 func TestFailover_UnifiedRouterInheritsTheWaterfall(t *testing.T) {

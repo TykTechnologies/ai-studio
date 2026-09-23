@@ -245,10 +245,12 @@ func TestGatewayTraffic_EndToEnd(t *testing.T) {
 		assert.Contains(t, errResp.Error.Message, "<vendor>/<model>")
 	})
 
-	t.Run("unified router: unknown vendor 404s", func(t *testing.T) {
+	// Refused at authorization, before the translator: an unknown vendor reads
+	// exactly like one the app was not granted, so slugs cannot be enumerated.
+	t.Run("unified router: unknown vendor is refused", func(t *testing.T) {
 		status, body := gatewayPost(t, baseURL+"/v1/chat/completions", trafficTestToken,
 			`{"model":"no-such-route/gpt-4","messages":[{"role":"user","content":"hello"}]}`)
-		assert.Equal(t, http.StatusNotFound, status)
+		assert.Equal(t, http.StatusForbidden, status)
 		assert.Contains(t, string(body), "not found or not supported by your access rights")
 	})
 
