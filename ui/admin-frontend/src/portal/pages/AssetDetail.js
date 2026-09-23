@@ -52,6 +52,7 @@ import {
   kindLabel,
   kindLogo,
   modelRouterDetailApiPath,
+  semanticRouterDetailApiPath,
   openAICompatibleBaseUrl,
   typeLabelLower,
   unifiedIngressBaseUrl,
@@ -74,6 +75,7 @@ const DETAIL_PATHS = {
   [CATALOG_TYPES.TOOL]: (params) => `/common/catalog/tools/${params.id}`,
   [CATALOG_TYPES.MCP_SERVER]: (params) => `/common/catalog/mcp-servers/${params.id}`,
   [CATALOG_TYPES.MODEL_ROUTER]: (params) => modelRouterDetailApiPath(params.id),
+  [CATALOG_TYPES.SEMANTIC_ROUTER]: (params) => semanticRouterDetailApiPath(params.id),
   [CATALOG_TYPES.PLUGIN_RESOURCE]: (params) =>
     `/common/catalog/resources/${params.pluginId}/${params.slug}/${encodeURIComponent(params.instanceId)}`,
 };
@@ -84,6 +86,7 @@ const APP_ID_FIELDS = {
   [CATALOG_TYPES.TOOL]: "tool_ids",
   [CATALOG_TYPES.MCP_SERVER]: "mcp_server_ids",
   [CATALOG_TYPES.MODEL_ROUTER]: "model_router_ids",
+  [CATALOG_TYPES.SEMANTIC_ROUTER]: "semantic_router_ids",
 };
 
 const formatDate = (value) => {
@@ -483,6 +486,106 @@ const ModelRouterSections = ({ item }) => {
   );
 };
 
+// A semantic router picks one of its named routes by classifying the prompt.
+// The portal shows the routes by name and description only; how they are
+// matched (keywords, examples) is the administrator's business.
+const SemanticRouterSections = ({ item }) => {
+  const a = item.attributes || {};
+  const models = a.router_models || [];
+  const routes = a.router_routes || [];
+  const llms = a.router_llms || [];
+  const baseUrl = unifiedIngressBaseUrl();
+  const example = models[0] || `${a.router_slug || "<router>"}/auto`;
+  return (
+    <>
+      <Section
+        title="Call it with"
+        description="Apps granted this router call the gateway's unified OpenAI-compatible endpoint and name the router in the model field."
+        data-testid="router-call-section"
+      >
+        {baseUrl ? (
+          <>
+            <FieldLabel variant="bodySmallDefault">Endpoint</FieldLabel>
+            <CopyableCode value={`${baseUrl}/chat/completions`} label="endpoint" testId="router-endpoint" />
+          </>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued" component="p" sx={{ m: 0 }}>
+            Send requests to the gateway&apos;s unified endpoint, <code>POST /v1/chat/completions</code>. Ask your platform team for the gateway address.
+          </Typography>
+        )}
+        <FieldLabel variant="bodySmallDefault" sx={{ mt: 2, display: "block" }}>
+          Model names
+        </FieldLabel>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }} data-testid="router-models">
+          {(models.length > 0 ? models : [example]).map((model) => (
+            <CopyableCode key={model} value={model} label={`model ${model}`} />
+          ))}
+        </Box>
+        <Typography variant="bodySmallDefault" color="text.defaultSubdued" component="p" sx={{ mt: 1, mb: 2 }}>
+          <code>{a.router_slug || "<router>"}/auto</code> lets the router pick a route from the prompt.
+          {models.length > 1 && " The other names pick a route directly."}
+        </Typography>
+        <FieldLabel variant="bodySmallDefault">Example</FieldLabel>
+        <CopyableBlock
+          value={routerCurlSnippet(baseUrl || "https://<gateway>/v1", example)}
+          label="example request"
+          testId="router-example"
+        />
+        <Typography variant="bodySmallDefault" color="text.defaultSubdued" component="p" sx={{ mt: 1 }}>
+          With an OpenAI SDK, set the base URL to the endpoint without <code>/chat/completions</code>, use the app secret as the API key and pass <code>{example}</code> as the model.
+        </Typography>
+      </Section>
+      <Section
+        title="Routes"
+        description="What the router chooses between. When no route fits the prompt, the default route answers."
+      >
+        {routes.length > 0 ? (
+          <Box component="ul" sx={{ m: 0, pl: 2.5 }} data-testid="router-routes">
+            {routes.map((route) => (
+              <li key={route.name}>
+                <Typography variant="bodyMediumDefault" component="span" sx={{ fontFamily: "monospace" }}>
+                  {route.name}
+                </Typography>
+                {route.default && <Chip size="small" label="Default" sx={{ ml: 1 }} />}
+                {route.description && (
+                  <Typography variant="bodyMediumDefault" color="text.defaultSubdued" component="span">
+                    {" "}— {route.description}
+                  </Typography>
+                )}
+              </li>
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+            No routes are listed for this router.
+          </Typography>
+        )}
+      </Section>
+      <Section
+        title="Routes to"
+        description="The LLM providers a request through this router may end up at. An app granted the router reaches them only through it."
+      >
+        {llms.length > 0 ? (
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }} data-testid="router-llms">
+            {llms.map((llm) => (
+              <Chip
+                key={llm.id}
+                size="small"
+                variant="outlined"
+                label={llm.vendor ? `${llm.name} · ${getVendorName(llm.vendor) || llm.vendor}` : llm.name}
+              />
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+            No LLM providers are listed for this router.
+          </Typography>
+        )}
+      </Section>
+    </>
+  );
+};
+
 const AssetDetail = ({ type }) => {
   const params = useParams();
   const navigate = useNavigate();
@@ -658,6 +761,7 @@ const AssetDetail = ({ type }) => {
         {type === CATALOG_TYPES.TOOL && <ToolSections item={item} />}
         {type === CATALOG_TYPES.MCP_SERVER && <MCPServerSections item={item} />}
         {type === CATALOG_TYPES.MODEL_ROUTER && <ModelRouterSections item={item} />}
+        {type === CATALOG_TYPES.SEMANTIC_ROUTER && <SemanticRouterSections item={item} />}
         {type === CATALOG_TYPES.PLUGIN_RESOURCE && <PluginResourceSections item={item} />}
 
         {governed.length > 0 && (

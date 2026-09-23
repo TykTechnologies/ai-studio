@@ -89,6 +89,9 @@ const PortalDrawer = ({ open }) => {
           ...(features.feature_model_router
             ? [{ id: 'browse-model-routers', text: 'Model routers', path: '/portal/catalog/model-routers' }]
             : []),
+          ...(features.feature_semantic_router
+            ? [{ id: 'browse-semantic-routers', text: 'Semantic routers', path: '/portal/catalog/semantic-routers' }]
+            : []),
           ...(features.feature_tyk_mcp
             ? [{ id: 'browse-mcp-servers', text: 'MCP servers', path: '/portal/catalog/mcp-servers' }]
             : []),

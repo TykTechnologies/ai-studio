@@ -314,3 +314,40 @@ describe("AppDetailView model routers", () => {
     expect(section).toHaveTextContent(/does not serve the Main Ingress/);
   });
 });
+
+// A semantic router is reached the same way, as "<router-slug>/auto" or
+// "<router-slug>/<route>"; the app response carries the model strings.
+describe("AppDetailView semantic routers", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockConfig = {
+      apiUrl: "http://localhost",
+      proxyURL: "http://gw.example.com",
+      unifiedRouterPath: "/v1",
+    };
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1")
+        return Promise.resolve(
+          appFixture(true, [], {
+            semantic_router_ids: [7],
+            semantic_routers: [{ id: 7, name: "Smart router", slug: "smart", models: ["smart/auto", "smart/complex"] }],
+          }),
+        );
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it("lists the model strings to call and links to the router's catalog page", async () => {
+    renderView();
+
+    const section = await screen.findByTestId("app-semantic-routers-ingress");
+    expect(screen.getByTestId("app-semantic-routers")).toHaveTextContent("Smart router");
+    expect(section).toHaveTextContent("http://gw.example.com/v1/chat/completions");
+    expect(section).toHaveTextContent("smart/auto");
+    expect(section).toHaveTextContent("smart/complex");
+    expect(screen.getByRole("link", { name: "See its routes" })).toHaveAttribute(
+      "href",
+      "/portal/catalog/semantic-routers/7",
+    );
+  });
+});

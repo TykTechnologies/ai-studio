@@ -15,6 +15,7 @@ export const DEPENDENT_GROUPS = [
   { key: "datasources", singular: "data source", plural: "data sources", label: "Data sources", path: "datasources" },
   { key: "agents", singular: "agent", plural: "agents", label: "Agents", path: "agents" },
   { key: "model_routers", singular: "model router", plural: "model routers", label: "Model routers", path: "model-routers" },
+  { key: "semantic_routers", singular: "semantic router", plural: "semantic routers", label: "Semantic routers", path: "semantic-routers" },
   { key: "chats", singular: "chat", plural: "chats", label: "Chats", path: "chats" },
 ];
 

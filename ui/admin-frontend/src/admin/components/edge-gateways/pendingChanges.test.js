@@ -16,6 +16,7 @@ describe('pendingChanges helpers', () => {
     expect(changeTypeLabel('llm')).toBe('LLM providers');
     expect(changeTypeLabel('datasource')).toBe('Data sources');
     expect(changeTypeLabel('model_price')).toBe('Model prices');
+    expect(changeTypeLabel('semantic_router')).toBe('Semantic routers');
     expect(changeTypeLabel('access_token')).toBe('Access tokens');
     expect(changeTypeLabel('something_new')).toBe('something_new');
   });
@@ -23,6 +24,7 @@ describe('pendingChanges helpers', () => {
   it('links to the admin page when there is one', () => {
     expect(changeLink({ type: 'llm', id: 3, change: 'updated' })).toBe('/admin/llms/3');
     expect(changeLink({ type: 'model_router', id: 'r1', change: 'created' })).toBe('/admin/model-routers/r1');
+    expect(changeLink({ type: 'semantic_router', id: 5, change: 'updated' })).toBe('/admin/semantic-routers/5');
     expect(changeLink({ type: 'access_token', id: 9, change: 'created' })).toBeNull();
     expect(changeLink({ type: 'app', id: 4, change: 'deleted' })).toBeNull();
   });

@@ -741,6 +741,28 @@ const AppDetails = () => {
                 </Grid>
               </>
             )}
+            {/* Semantic routers (Enterprise) likewise, with the model
+                strings the app calls them with. */}
+            {(app.attributes.semantic_routers || []).length > 0 && (
+              <>
+                <Grid item xs={3}>
+                  <FieldLabel>Semantic routers:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-semantic-routers">
+                    {app.attributes.semantic_routers.map((router) => (
+                      <Chip
+                        key={router.id}
+                        label={router.models?.length ? `${router.name} (${router.models[0]})` : router.name}
+                        component={RouterLink}
+                        to={`/admin/semantic-routers/${router.id}`}
+                        clickable
+                      />
+                    ))}
+                  </Box>
+                </Grid>
+              </>
+            )}
             <Grid item xs={3}>
               <FieldLabel>Data sources:</FieldLabel>
             </Grid>

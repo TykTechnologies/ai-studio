@@ -63,6 +63,12 @@ const modelRouters = [
   { id: "22", type: "model_router", attributes: { name: "Hidden router", access_granted_via_app: false } },
 ];
 let catalogRouters = [];
+// Semantic routers from the unified catalog (Enterprise), likewise empty
+// unless a test sets them.
+const semanticRouters = [
+  { id: "31", type: "semantic_router", attributes: { name: "Smart router", short_description: "Picks by prompt", access_granted_via_app: true } },
+];
+let catalogSemanticRouters = [];
 
 const DirtyProbe = () => {
   const { isDirty } = useUnsavedChanges();
@@ -102,12 +108,14 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     catalogRouters = [];
+    catalogSemanticRouters = [];
     pubClient.get.mockImplementation((url, config) => {
       if (url === "/common/accessible-datasources") return Promise.resolve({ data: dataSources });
       if (url === "/common/accessible-llms") return Promise.resolve({ data: llms });
       if (url === "/common/accessible-tools") return Promise.resolve({ data: tools });
       if (url === "/common/accessible-plugin-resources") return Promise.resolve({ data: { data: resourceTypes } });
       if (url === "/common/catalog") {
+        if (config?.params?.type === "semantic_router") return Promise.resolve({ data: { data: catalogSemanticRouters } });
         return Promise.resolve({ data: { data: config?.params?.type === "model_router" ? catalogRouters : mcpServers } });
       }
       return Promise.resolve({ data: [] });
@@ -292,5 +300,30 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     expect(requested("model_router")).toEqual([]);
     openTab("Model routers");
     expect(options()).toEqual(["Add Prod router"]);
+  });
+
+  it("offers semantic routers next to model routers and submits semantic_router_ids", async () => {
+    catalogRouters = modelRouters;
+    catalogSemanticRouters = semanticRouters;
+    renderBuilder({ path: "/portal/apps/new?semantic_router=31" });
+    await waitFor(() => expect(requested("semantic_router")).toEqual(["Smart router"]));
+    expect(pubClient.get).toHaveBeenCalledWith("/common/catalog", { params: { type: "semantic_router", page_size: 100 } });
+    expect(tabNames().slice(0, 3)).toEqual(["LLM providers", "Model routers", "Semantic routers"]);
+    expect(tab("Semantic routers")).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Smart bot" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Description/ }), { target: { value: "Uses the semantic router" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create App" }));
+
+    const summary = await screen.findByTestId("app-submitted-summary");
+    expect(pubClient.post).toHaveBeenCalledWith("/common/apps", {
+      name: "Smart bot",
+      description: "Uses the semantic router",
+      data_source_ids: [],
+      llm_ids: [],
+      tool_ids: [],
+      semantic_router_ids: [31],
+    });
+    expect(within(summary).getByTestId("app-submitted-semantic-router-note")).toBeInTheDocument();
   });
 });

@@ -348,6 +348,9 @@ const AppDetailView = () => {
   // Model routers granted to the app: [{id, name, slug}]. They are called on
   // the Main Ingress as "<router-slug>/<model>".
   const modelRouters = app.attributes.model_routers || [];
+  // Semantic routers granted to the app: [{id, name, slug, models}]. Also
+  // called on the Main Ingress, as "<router-slug>/auto" (or a route name).
+  const semanticRouters = app.attributes.semantic_routers || [];
 
   return (
     <Box sx={{p: 4}}>
@@ -635,6 +638,20 @@ const AppDetailView = () => {
               <Grid item xs={9}>
                 <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-model-routers">
                   {modelRouters.map((router) => (
+                    <Chip key={router.id} label={router.name} />
+                  ))}
+                </Box>
+              </Grid>
+            </>
+          )}
+          {semanticRouters.length > 0 && (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Semantic routers:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1} data-testid="app-semantic-routers">
+                  {semanticRouters.map((router) => (
                     <Chip key={router.id} label={router.name} />
                   ))}
                 </Box>
@@ -1012,6 +1029,68 @@ const AppDetailView = () => {
                       to={`/portal/catalog/model-routers/${router.id}`}
                     >
                       See its models
+                    </Button>
+                  </Box>
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Semantic routers, like model routers, are reached only through
+            the Main Ingress. */}
+        {semanticRouters.length > 0 && (
+          <Card sx={{ mb: 3 }} data-testid="app-semantic-routers-ingress">
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Semantic Routers
+              </Typography>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                A semantic router picks a route for each request from what the
+                prompt is about. Call it on the Main Ingress
+                {unifiedRouterPath ? (
+                  <>
+                    {" "}(<code>{unifiedChatCompletionsUrl()}</code>)
+                  </>
+                ) : null}{" "}
+                with the model written as{" "}
+                <code>&lt;router-slug&gt;/auto</code>. This app reaches the
+                router&apos;s LLMs only through the router.
+              </Typography>
+              {!unifiedRouterPath && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  The gateway does not serve the Main Ingress, so semantic
+                  routers cannot be called. Ask an administrator to enable it.
+                </Alert>
+              )}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {semanticRouters.map((router) => (
+                  <Box
+                    key={`semantic-router-${router.id}`}
+                    sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1 }}
+                  >
+                    <FieldLabel sx={{ minWidth: "200px" }}>{router.name}:</FieldLabel>
+                    {(router.models?.length ? router.models : [`${router.slug}/auto`]).map((model) => (
+                      <Typography
+                        key={model}
+                        variant="body2"
+                        component="code"
+                        sx={{
+                          fontFamily: "monospace",
+                          bgcolor: "background.paper",
+                          p: 1,
+                          borderRadius: 1,
+                        }}
+                      >
+                        {model}
+                      </Typography>
+                    ))}
+                    <Button
+                      size="small"
+                      component={RouterLink}
+                      to={`/portal/catalog/semantic-routers/${router.id}`}
+                    >
+                      See its routes
                     </Button>
                   </Box>
                 ))}

@@ -65,6 +65,7 @@ const AppForm = () => {
     datasource_ids: [],
     tool_ids: [], // Added for tools
     model_router_ids: [],
+    semantic_router_ids: [],
     monthly_budget: null,
     budget_start_date: null,
     team_id: null, // Enterprise team budgets; null = owner's budget team
@@ -79,6 +80,7 @@ const AppForm = () => {
   const [datasources, setDatasources] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
   const [modelRouters, setModelRouters] = useState([]);
+  const [semanticRouters, setSemanticRouters] = useState([]);
   const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
   const [pluginResourceInstances, setPluginResourceInstances] = useState({}); // { "pluginId:slug": [...instances] }
   const [pluginResourceSelections, setPluginResourceSelections] = useState({}); // { "pluginId:slug": [...selectedIds] }
@@ -131,6 +133,9 @@ const AppForm = () => {
           : [],
         model_router_ids: Array.isArray(appData.model_router_ids)
           ? appData.model_router_ids.map(String)
+          : [],
+        semantic_router_ids: Array.isArray(appData.semantic_router_ids)
+          ? appData.semantic_router_ids.map(String)
           : [],
         namespace: appData.namespace || "",
         team_id: appData.team_id ?? null,
@@ -199,6 +204,7 @@ const AppForm = () => {
     fetchDatasources();
     fetchTools();
     fetchModelRouters();
+    fetchSemanticRouters();
     fetchPluginResourceTypes();
     if (id) {
       fetchApp();
@@ -292,6 +298,16 @@ const AppForm = () => {
     }
   };
 
+  // Semantic routers are Enterprise too; same fallback.
+  const fetchSemanticRouters = async () => {
+    try {
+      const response = await listAll(apiClient, "/semantic-routers");
+      setSemanticRouters(response.data.data || []);
+    } catch (error) {
+      setSemanticRouters([]);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setApp({ ...app, [name]: value });
@@ -336,6 +352,10 @@ const AppForm = () => {
   const selectedModelRouters = useMemo(
     () => itemsForIds(app.model_router_ids, modelRouters, (r) => r.id, (id) => ({ id, attributes: { name: String(id) } })),
     [app.model_router_ids, modelRouters],
+  );
+  const selectedSemanticRouters = useMemo(
+    () => itemsForIds(app.semantic_router_ids, semanticRouters, (r) => r.id, (id) => ({ id, attributes: { name: String(id) } })),
+    [app.semantic_router_ids, semanticRouters],
   );
 
   const handleNamespaceChange = (namespaces) => {
@@ -391,6 +411,7 @@ const AppForm = () => {
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
       tool_ids: app.tool_ids.map((id) => parseInt(id, 10)),
       model_router_ids: app.model_router_ids.map((id) => parseInt(id, 10)),
+      semantic_router_ids: (app.semantic_router_ids || []).map((id) => parseInt(id, 10)),
       metadata: parsedMetadata,
       ...(pluginResourcesPayload.length > 0 && {
         plugin_resources: pluginResourcesPayload,
@@ -528,6 +549,21 @@ const AppForm = () => {
                   options={modelRouters}
                   getOptionLabel={jsonApiName}
                   helperText="Called on the unified endpoint as <router-slug>/<model>."
+                />
+              </Grid>
+            )}
+            {/* Semantic routers (Enterprise), granted the same way; called
+                as "<router-slug>/auto". */}
+            {(semanticRouters.length > 0 || (app.semantic_router_ids || []).length > 0) && (
+              <Grid item xs={12}>
+                <RelationshipPicker
+                  label="Semantic routers"
+                  itemLabel="semantic router"
+                  value={selectedSemanticRouters}
+                  onChange={handleRelationshipChange("semantic_router_ids")}
+                  options={semanticRouters}
+                  getOptionLabel={jsonApiName}
+                  helperText="Called on the unified endpoint as <router-slug>/auto."
                 />
               </Grid>
             )}

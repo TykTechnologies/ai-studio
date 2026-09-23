@@ -149,6 +149,9 @@ const Drawer = () => {
         ...(features.feature_model_router
           ? [{ id: 'model-routers', text: 'Model Routers', path: '/admin/model-routers', permission: P.MODEL_ROUTERS_READ }]
           : []),
+        ...(features.feature_semantic_router
+          ? [{ id: 'semantic-routers', text: 'Semantic Routers', path: '/admin/semantic-routers', permission: P.SEMANTIC_ROUTERS_READ }]
+          : []),
       ],
     },
     {
