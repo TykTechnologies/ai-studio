@@ -11,11 +11,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
-// App grants of Model Routers. The admin App handlers and the portal's
-// createUserApp grant routers the same way: validate visibility before the
-// App is written (so a refusal leaves nothing behind), then pass the grants to
-// the service, which counts routers as providers in the privacy check and
-// binds them with the App.
+// App grants of routers (Model and Semantic). The admin App handlers and the
+// portal's createUserApp grant routers the same way: validate visibility
+// before the App is written (so a refusal leaves nothing behind), then pass
+// the grants to the service, which counts routers as providers in the privacy
+// check and binds them with the App.
 
 // AppModelRouterOutput is the slim projection of a granted Model Router in
 // App responses. Model is what a client sends to the unified ingress for it.
@@ -57,6 +57,16 @@ func modelRouterBindingError(c *gin.Context, err error) bool {
 	return false
 }
 
+// semanticRouterBindingError maps a Semantic Router grant refusal to its
+// response.
+func semanticRouterBindingError(c *gin.Context, err error) bool {
+	if errors.Is(err, services.ErrSemanticRouterNotVisible) {
+		simpleError(c, http.StatusForbidden, "Forbidden", "User does not have access to one or more specified semantic routers")
+		return true
+	}
+	return false
+}
+
 // appRouterOptions turns optional lists of Model and Semantic Router ids
 // into service options (nil: leave that kind alone).
 func appRouterOptions(modelIDs, semanticIDs *[]uint) []services.AppOption {
@@ -79,9 +89,7 @@ func (a *API) validateAppRouterBindings(c *gin.Context, actorID uint, actorAdmin
 	}
 	if semanticIDs != nil {
 		if _, err := a.service.ValidateSemanticRouterBindings(actorID, actorAdmin, *semanticIDs); err != nil {
-			if errors.Is(err, services.ErrSemanticRouterNotVisible) {
-				simpleError(c, http.StatusForbidden, "Forbidden", "User does not have access to one or more specified semantic routers")
-			} else {
+			if !semanticRouterBindingError(c, err) {
 				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 			}
 			return false

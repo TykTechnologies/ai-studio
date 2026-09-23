@@ -381,6 +381,7 @@ func (a *API) getSemanticRouterDependents(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 402 {object} ErrorResponse "Enterprise feature required"
 // @Failure 404 {object} ErrorResponse
+// @Failure 429 {object} ErrorResponse "More than 30 test runs a minute"
 // @Router /semantic-routers/{id}/test [post]
 // @Security BearerAuth
 func (a *API) testSemanticRouter(c *gin.Context) {
@@ -410,6 +411,7 @@ func (a *API) testSemanticRouter(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse
 // @Failure 402 {object} ErrorResponse "Enterprise feature required"
+// @Failure 429 {object} ErrorResponse "More than 30 test runs a minute"
 // @Router /semantic-routers/test [post]
 // @Security BearerAuth
 func (a *API) testDraftSemanticRouter(c *gin.Context) {
@@ -429,6 +431,13 @@ func (a *API) testDraftSemanticRouter(c *gin.Context) {
 const maxTestMessages = 50
 
 func (a *API) runSemanticRouterTest(c *gin.Context, router *models.SemanticRouter, input *SemanticRouterTestInput) {
+	actorID, _ := adminAppActor(c)
+	if ok, wait := semanticRouterTests.allow(strconv.FormatUint(uint64(actorID), 10)); !ok {
+		c.Header("Retry-After", retryAfterSeconds(wait))
+		simpleError(c, http.StatusTooManyRequests, "Too Many Requests",
+			"too many semantic router tests; the test panel is limited to 30 runs a minute per user")
+		return
+	}
 	if len(input.Messages) == 0 || len(input.Messages) > maxTestMessages {
 		simpleError(c, http.StatusBadRequest, "Bad Request", "messages must hold between 1 and 50 messages")
 		return
