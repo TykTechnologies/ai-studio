@@ -886,6 +886,9 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			proxyLogs[i].RouterPool = event.RouterPool
 			proxyLogs[i].Route = event.Route
 			proxyLogs[i].RouteReason = event.RouteReason
+			proxyLogs[i].RouteSourceModel = event.RouteSourceModel
+			proxyLogs[i].RouteTargetModel = event.RouteTargetModel
+			proxyLogs[i].RouteSelection = event.RouteSelection
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{

@@ -312,6 +312,9 @@ message AnalyticsEvent {
   string router_pool = 32;          // Model Router pool that matched
   string route = 33;                // named route chosen, for routers that have them
   string route_reason = 34;         // why the target was chosen ("model_pattern", ...)
+  string route_source_model = 35;   // model the caller asked the router for
+  string route_target_model = 36;   // model the chosen LLM was asked for (after mapping)
+  string route_selection = 37;      // how the target was selected ("round_robin", "weighted")
 }
 
 // Budget usage event for pulse batching

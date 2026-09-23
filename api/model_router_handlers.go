@@ -188,11 +188,7 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	// does not go ahead.
 	existing, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil || existing == nil {
-		if err == nil || !errors.Is(err, model_router.ErrEnterpriseFeature) {
-			simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
-			return
-		}
-		respondModelRouterError(c, err)
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
@@ -251,7 +247,7 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.DeleteRouter(uint(id)); err != nil {
-		respondModelRouterError(c, err)
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
@@ -353,7 +349,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 	}
 
 	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), input.Active); err != nil {
-		respondModelRouterError(c, err)
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
@@ -519,4 +515,25 @@ func respondModelRouterError(c *gin.Context, err error) {
 			Detail string `json:"detail"`
 		}{{Title: "Error", Detail: err.Error()}},
 	})
+}
+
+// respondModelRouterLookupError answers a failed operation on one router: 404
+// when the router does not exist, otherwise as respondModelRouterError (402 in
+// the Community Edition, 400 for a caller's mistake, 500 for a server fault).
+// Existence is read from the table because the Enterprise service's not-found
+// error is not visible to this package; a lookup that itself fails leaves the
+// original error to decide.
+func (a *API) respondModelRouterLookupError(c *gin.Context, id uint, err error) {
+	if err != nil && errors.Is(err, model_router.ErrEnterpriseFeature) {
+		respondModelRouterError(c, err)
+		return
+	}
+	if exists, lookupErr := a.rowExists(&models.ModelRouter{}, id); lookupErr == nil && !exists {
+		simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
+		return
+	}
+	if err == nil {
+		err = errors.New("model router could not be loaded")
+	}
+	respondModelRouterError(c, err)
 }

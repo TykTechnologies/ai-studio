@@ -78,6 +78,12 @@ type RouteDecision struct {
 	// Reason says why this target was chosen, from a small fixed set
 	// ("model_pattern", ...), for analytics and the X-Tyk-Route-Reason header.
 	Reason string
+	// Selection is how the target was picked among the candidates (a Model
+	// Router pool's algorithm: "round_robin", "weighted"), for analytics.
+	Selection string
+	// SourceModel is the model the caller asked the router for; Model is what
+	// the chosen LLM is asked for. Set by resolveRoute.
+	SourceModel string
 }
 
 // RouteResolver resolves router slugs. Implementations must be safe for
@@ -196,6 +202,7 @@ func (p *Proxy) resolveRoute(r *http.Request, ref RouterRef, model string, body 
 		return nil, routeErrorStatus(err), err
 	}
 	d.Router = ref
+	d.SourceModel = model
 	return d, http.StatusOK, nil
 }
 
@@ -261,6 +268,11 @@ const (
 	hdrRouterPool   = "X-Tyk-Router-Pool"
 	hdrRouterRoute  = "X-Tyk-Router-Route"
 	hdrRouterReason = "X-Tyk-Router-Reason"
+	// The requested and forwarded models and how the target was selected,
+	// for the inner hop's analytics.
+	hdrRouterSourceModel = "X-Tyk-Router-Source-Model"
+	hdrRouterTargetModel = "X-Tyk-Router-Target-Model"
+	hdrRouterSelection   = "X-Tyk-Router-Selection"
 )
 
 // Client-facing response headers naming the routing decision.
@@ -308,8 +320,17 @@ func (p *Proxy) routerHeaders(ctx context.Context, h http.Header) http.Header {
 	if d.Reason != "" {
 		h.Set(hdrRouterReason, d.Reason)
 	}
+	setIfNotEmpty(h, hdrRouterSourceModel, d.SourceModel)
+	setIfNotEmpty(h, hdrRouterTargetModel, d.Model)
+	setIfNotEmpty(h, hdrRouterSelection, d.Selection)
 	h.Set(hdrFailoverToken, p.failoverToken)
 	return h
+}
+
+func setIfNotEmpty(h http.Header, k, v string) {
+	if v != "" {
+		h.Set(k, v)
+	}
 }
 
 // loopbackHeaders is every marker a loopback request for attempt a carries.
@@ -319,10 +340,13 @@ func (p *Proxy) loopbackHeaders(ctx context.Context, a llmAttempt) http.Header {
 
 // routerMarker is what the inner hop learns from a trusted router marker.
 type routerMarker struct {
-	Ref    RouterRef
-	Pool   string
-	Route  string
-	Reason string
+	Ref         RouterRef
+	Pool        string
+	Route       string
+	Reason      string
+	SourceModel string
+	TargetModel string
+	Selection   string
 }
 
 type routerMarkerKey struct{}
@@ -351,6 +375,10 @@ func (p *Proxy) parseRouterMarker(r *http.Request) (routerMarker, bool) {
 		Pool:   r.Header.Get(hdrRouterPool),
 		Route:  r.Header.Get(hdrRouterRoute),
 		Reason: r.Header.Get(hdrRouterReason),
+
+		SourceModel: r.Header.Get(hdrRouterSourceModel),
+		TargetModel: r.Header.Get(hdrRouterTargetModel),
+		Selection:   r.Header.Get(hdrRouterSelection),
 	}, true
 }
 
@@ -383,6 +411,9 @@ func stripRouterHeaders(h http.Header) {
 	h.Del(hdrRouterPool)
 	h.Del(hdrRouterRoute)
 	h.Del(hdrRouterReason)
+	h.Del(hdrRouterSourceModel)
+	h.Del(hdrRouterTargetModel)
+	h.Del(hdrRouterSelection)
 }
 
 // setRouteHeaders tells the client which router served the request and why.
@@ -414,6 +445,9 @@ func applyRouterMarker(l *models.ProxyLog, ctx context.Context) {
 		l.RouterPool = m.Pool
 		l.Route = m.Route
 		l.RouteReason = m.Reason
+		l.RouteSourceModel = m.SourceModel
+		l.RouteTargetModel = m.TargetModel
+		l.RouteSelection = m.Selection
 		return
 	}
 	if d, ok := routeDecisionFromContext(ctx); ok {
@@ -422,5 +456,8 @@ func applyRouterMarker(l *models.ProxyLog, ctx context.Context) {
 		l.RouterPool = d.Pool
 		l.Route = d.Route
 		l.RouteReason = d.Reason
+		l.RouteSourceModel = d.SourceModel
+		l.RouteTargetModel = d.Model
+		l.RouteSelection = d.Selection
 	}
 }

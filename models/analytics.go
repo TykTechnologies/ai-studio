@@ -128,6 +128,9 @@ type ProxyLogAttributes struct {
 	RouterPool        string    `json:"router_pool,omitempty"`
 	Route             string    `json:"route,omitempty"`
 	RouteReason       string    `json:"route_reason,omitempty"`
+	RouteSourceModel  string    `json:"route_source_model,omitempty"`
+	RouteTargetModel  string    `json:"route_target_model,omitempty"`
+	RouteSelection    string    `json:"route_selection,omitempty"`
 }
 
 // NewProxyLogResponse serialises one ProxyLog row for the proxy-log
@@ -153,6 +156,9 @@ func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
 			RouterPool:        log.RouterPool,
 			Route:             log.Route,
 			RouteReason:       log.RouteReason,
+			RouteSourceModel:  log.RouteSourceModel,
+			RouteTargetModel:  log.RouteTargetModel,
+			RouteSelection:    log.RouteSelection,
 		},
 	}
 }
@@ -205,4 +211,10 @@ type ProxyLog struct {
 	RouterPool  string
 	Route       string
 	RouteReason string `gorm:"size:64"`
+	// The model the caller asked the router for, the model the chosen LLM
+	// was asked for (after any mapping), and how the target was selected
+	// ("round_robin", "weighted").
+	RouteSourceModel string
+	RouteTargetModel string
+	RouteSelection   string `gorm:"size:32"`
 }

@@ -56,6 +56,8 @@ func (m *ModelRouterResolver) Resolve(_ context.Context, req proxy.RouteRequest)
 		Model:  sel.TargetModel,
 		Pool:   sel.Pool.Name,
 		Reason: "model_pattern",
+
+		Selection: selectionAlgorithm(sel.Pool.SelectionAlgorithm),
 	}, nil
 }
 
@@ -70,4 +72,13 @@ func (m *ModelRouterResolver) Models(ref proxy.RouterRef) []string {
 		return nil
 	}
 	return m.routers.AdvertisedModels(ref.Slug)
+}
+
+// selectionAlgorithm names a pool's algorithm as SelectVendorFor applies it:
+// anything but "weighted" is round robin.
+func selectionAlgorithm(a string) string {
+	if a == "weighted" {
+		return a
+	}
+	return "round_robin"
 }

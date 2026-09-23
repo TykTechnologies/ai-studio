@@ -82,6 +82,7 @@ func TestModelRouterResolver(t *testing.T) {
 	assert.Equal(t, "claude-opus-4", d.Model)
 	assert.Equal(t, "claude", d.Pool)
 	assert.Equal(t, "model_pattern", d.Reason)
+	assert.Equal(t, "round_robin", d.Selection)
 
 	_, err = res.Resolve(context.Background(), proxy.RouteRequest{Router: ref, Model: "llama"})
 	assert.ErrorIs(t, err, proxy.ErrRouteNoMatch)

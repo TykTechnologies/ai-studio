@@ -837,9 +837,12 @@ func TestModelRouterHandlers_ENT_Update_OmittedActiveKeepsStoredValue(t *testing
 }
 
 // If the stored router cannot be loaded, the update must not go ahead: the
-// omitted-switch and publish rules both depend on it.
+// omitted-switch and publish rules both depend on it. A router that exists
+// but cannot be read is a server fault (500), not a missing router.
 func TestModelRouterHandlers_ENT_Update_LookupFailureDoesNotSave(t *testing.T) {
-	api, _, _ := setupTestAPIForCommonTests(t)
+	api, db, _ := setupTestAPIForCommonTests(t)
+	stored := &models.ModelRouter{Name: "Prod", Slug: "prod", Active: true}
+	require.NoError(t, db.Create(stored).Error)
 	updated := false
 	api.service.ModelRouterService = &mockModelRouterService{
 		getRouterFunc: func(id uint) (*models.ModelRouter, error) {
@@ -848,7 +851,35 @@ func TestModelRouterHandlers_ENT_Update_LookupFailureDoesNotSave(t *testing.T) {
 		updateRouterFunc: func(r *models.ModelRouter) error { updated = true; return nil },
 	}
 
-	w := patchModelRouter(t, api, "1")
-	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	w := patchModelRouter(t, api, fmt.Sprint(stored.ID))
+	assert.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
 	assert.False(t, updated, "no update without the stored router")
+}
+
+// A router that does not exist is a 404 on update, delete and toggle.
+func TestModelRouterHandlers_ENT_MissingRouterIs404(t *testing.T) {
+	api, _, _ := setupTestAPIForCommonTests(t)
+	notFound := fmt.Errorf("model router not found")
+	api.service.ModelRouterService = &mockModelRouterService{
+		getRouterFunc:          func(id uint) (*models.ModelRouter, error) { return nil, notFound },
+		deleteRouterFunc:       func(id uint) error { return notFound },
+		toggleRouterActiveFunc: func(id uint, active bool) error { return notFound },
+	}
+
+	assert.Equal(t, http.StatusNotFound, patchModelRouter(t, api, "4242").Code, "update")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest("DELETE", "/model-routers/4242", nil)
+	c.Params = gin.Params{{Key: "id", Value: "4242"}}
+	api.deleteModelRouter(c)
+	assert.Equal(t, http.StatusNotFound, w.Code, "delete")
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest("PATCH", "/model-routers/4242/toggle", bytes.NewBufferString(`{"active":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: "4242"}}
+	api.toggleModelRouterActive(c)
+	assert.Equal(t, http.StatusNotFound, w.Code, "toggle")
 }

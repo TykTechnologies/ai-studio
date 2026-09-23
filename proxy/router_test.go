@@ -242,6 +242,8 @@ func TestRouter_GrantedAppIsServedThroughTheUnifiedIngress(t *testing.T) {
 	assert.Equal(t, "smart", logs[0].RouterSlug)
 	assert.Equal(t, "big-pool", logs[0].RouterPool)
 	assert.Equal(t, "model_pattern", logs[0].RouteReason)
+	assert.Equal(t, "big", logs[0].RouteSourceModel, "the model the caller asked the router for")
+	assert.Equal(t, "gpt-4o", logs[0].RouteTargetModel, "the model the chosen LLM was asked for")
 }
 
 func TestRouter_Streaming(t *testing.T) {

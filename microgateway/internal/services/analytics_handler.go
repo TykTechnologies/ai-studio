@@ -324,6 +324,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 					RouterPool:             mergedEvent.RouterPoolName,
 					Route:                  mergedEvent.Route,
 					RouteReason:            mergedEvent.RouteReason,
+					RouterSourceModel:      mergedEvent.RouterSourceModel,
+					RouterTargetModel:      mergedEvent.RouterTargetModel,
+					RouterSelectionAlgo:    mergedEvent.RouterSelectionAlgo,
 				}
 
 				// Execute analytics plugins (this buffers data in pulse plugin)
@@ -546,6 +549,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog
 	event.RouterPoolName = proxyLog.RouterPool
 	event.Route = proxyLog.Route
 	event.RouteReason = proxyLog.RouteReason
+	event.RouterSourceModel = proxyLog.RouteSourceModel
+	event.RouterTargetModel = proxyLog.RouteTargetModel
+	event.RouterSelectionAlgo = proxyLog.RouteSelection
 
 	// Create the analytics event and store for potential merge with ChatRecord
 	if err := h.db.Create(event).Error; err != nil {

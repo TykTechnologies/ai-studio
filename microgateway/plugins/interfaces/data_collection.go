@@ -77,6 +77,9 @@ type AnalyticsData struct {
 	RouterPool             string    `json:"router_pool,omitempty"`
 	Route                  string    `json:"route,omitempty"`
 	RouteReason            string    `json:"route_reason,omitempty"`
+	RouterSourceModel      string    `json:"router_source_model,omitempty"`
+	RouterTargetModel      string    `json:"router_target_model,omitempty"`
+	RouterSelectionAlgo    string    `json:"router_selection_algo,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information
