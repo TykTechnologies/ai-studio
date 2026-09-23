@@ -352,6 +352,7 @@ func serializeUser(user *models.User) UserResponse {
 			APIKeyLastUsedAt:     user.APIKeyLastUsedAt,
 			Disabled:             user.Disabled,
 			DisabledAt:           user.DisabledAt,
+			BudgetTeamID:         user.BudgetTeamID,
 		},
 	}
 

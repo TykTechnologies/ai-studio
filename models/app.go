@@ -19,6 +19,9 @@ type App struct {
 	BudgetStartDate *time.Time             `json:"budget_start_date" gorm:"column:budget_start_date"`
 	IsOrphaned      bool                   `json:"is_orphaned" gorm:"default:false"`
 	IsActive        bool                   `json:"is_active" gorm:"default:true"`
+	// TeamID is the team (Group) the App's spend is attributed to, stamped
+	// at creation (see ResolveBudgetTeam).
+	TeamID *uint `json:"team_id" gorm:"index"`
 	Metadata        map[string]interface{} `json:"metadata,omitempty" gorm:"serializer:json"`
 	// Hub-and-Spoke Configuration
 	Namespace   string       `json:"namespace" gorm:"default:'';index:idx_app_namespace"`

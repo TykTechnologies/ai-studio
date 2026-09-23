@@ -49,6 +49,24 @@ type BudgetSyncPayload struct {
 
 	// SequenceNumber for ordering and deduplication
 	SequenceNumber uint64 `json:"sequence_number"`
+
+	// Blocks maps app_id to the reason edges must refuse the App on budget
+	// grounds (Enterprise): its budget is 0, or its hard-blocking team has
+	// spent its budget. Edges read a synced App budget of 0 as "no limit",
+	// so this is how a zero budget reaches them. When BlocksIncluded is set
+	// it is the complete set: edges replace theirs, so a released App is
+	// served again.
+	Blocks         map[uint32]string `json:"blocks,omitempty"`
+	BlocksIncluded bool              `json:"blocks_included,omitempty"`
+}
+
+// EdgeBudgetSource is the Enterprise budget service as the budget sync sees
+// it: the Apps edges must refuse, and threshold analysis for spend that
+// reached Studio from edges (edge traffic never passes Studio's own budget
+// check, so nothing else would raise its alerts).
+type EdgeBudgetSource interface {
+	EdgeBlocks() (map[uint]string, error)
+	AnalyzeApps(appIDs []uint)
 }
 
 // BudgetSyncService aggregates budget usage from llm_chat_records
@@ -61,6 +79,18 @@ type BudgetSyncService struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	done           chan struct{}
+	budgetSource   atomic.Value // EdgeBudgetSource
+	// lastUsage is each App's usage at the previous sync; Apps whose usage
+	// moved are analysed for alerts. Only the sync goroutine touches it.
+	lastUsage map[uint32]float64
+}
+
+// SetEdgeBudgetSource makes every sync carry budget blocks and analyse
+// Apps whose spend moved since the previous sync.
+func (s *BudgetSyncService) SetEdgeBudgetSource(src EdgeBudgetSource) {
+	if src != nil {
+		s.budgetSource.Store(src)
+	}
 }
 
 // DefaultBudgetSyncInterval is the default interval for budget sync (30 seconds)
@@ -227,13 +257,49 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		}
 	}
 
-	// Skip publishing if no usage data
-	if len(appBudgets) == 0 {
+	// Blocks are sent every time (even empty) so edges release Apps that
+	// are allowed again.
+	var blocks map[uint32]string
+	blocksIncluded := false
+	src, _ := s.budgetSource.Load().(EdgeBudgetSource)
+	if src != nil {
+		found, err := src.EdgeBlocks()
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to compute budget blocks; keeping edges' last set")
+		} else {
+			blocksIncluded = true
+			blocks = make(map[uint32]string, len(found))
+			for id, reason := range found {
+				blocks[uint32(id)] = reason
+			}
+		}
+
+		// Alerts for spend that came in from edges.
+		var moved []uint
+		for id, data := range appBudgets {
+			if prev, ok := s.lastUsage[id]; !ok || prev != data.Usage {
+				moved = append(moved, uint(id))
+			}
+		}
+		next := make(map[uint32]float64, len(appBudgets))
+		for id, data := range appBudgets {
+			next[id] = data.Usage
+		}
+		s.lastUsage = next
+		if len(moved) > 0 {
+			src.AnalyzeApps(moved)
+		}
+	}
+
+	// Skip publishing if there is nothing to sync
+	if len(appBudgets) == 0 && !blocksIncluded {
 		log.Debug().Msg("No budget usage data to sync")
 		return
 	}
 
 	payload := BudgetSyncPayload{
+		Blocks:           blocks,
+		BlocksIncluded:   blocksIncluded,
 		AppUsages:        appUsages,           // Legacy field
 		AppBudgets:       appBudgets,          // New per-app periods
 		PeriodStart:      calendarPeriodStart, // Legacy field

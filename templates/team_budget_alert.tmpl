@@ -1,0 +1,11 @@
+Subject: Team Budget Alert: {{.Name}} at {{.Threshold}}% Usage
+
+The team {{.Name}} has {{if eq .Threshold 100}}exceeded{{else}}reached {{.Threshold}}% of{{end}} its monthly budget.
+{{if eq .Threshold 100}}{{if .HardBlock}}
+Requests from the team's Apps are now refused until the next budget period, or until the team budget is raised or reset.
+{{else}}
+The team is in alert-only mode: its Apps keep working.
+{{end}}{{end}}
+Current usage: {{printf "%.2f" .CurrentUsage}}
+Budget limit: {{printf "%.2f" .Budget}}
+Budget period: {{.StartDate | formatDate}} to {{.EndDate | formatDate}}

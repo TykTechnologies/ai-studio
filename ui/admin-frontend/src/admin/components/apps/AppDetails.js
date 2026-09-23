@@ -10,6 +10,7 @@ import { resetAppBudget } from "../../services/appService";
 import SearchInput from "../common/SearchInput";
 import FailoverCell from "../common/FailoverCell";
 import ConfirmationDialog from "../common/ConfirmationDialog";
+import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import {
   Alert,
   Typography,
@@ -826,6 +827,9 @@ const AppDetails = () => {
                 )}
               </Box>
             </Grid>
+            {isEnterprise && (
+              <AppTeamBudgetRow app={app} FieldLabel={FieldLabel} FieldValue={FieldValue} />
+            )}
           </Grid>
         </Section>
 

@@ -327,8 +327,12 @@ const AppDetailView = () => {
   // is the platform default. If the backend starts reporting budget_source,
   // only the default-derived values keep the "(platform default)" label.
   const budgetSource = app.attributes.budget_source;
+  const budgetFromTeam = budgetSource === "team";
   const budgetIsPlatformDefault =
     !budgetSource || budgetSource === "platform_default" || budgetSource === "default";
+  // null is "no limit"; 0 is a budget of zero (requests are refused).
+  const budget = app.attributes.monthly_budget;
+  const hasBudget = budget !== null && budget !== undefined;
 
   const appLLMs = accessibleLLMs.filter((llm) =>
     (app.attributes.llm_ids || []).includes(Number(llm.id))
@@ -659,17 +663,28 @@ const AppDetailView = () => {
                 administrator set later). Say where it came from rather than
                 presenting "$100" as something the developer decided. */}
             <FieldLabel>
-              {app.attributes.monthly_budget && budgetIsPlatformDefault
-                ? "Monthly budget (platform default):"
-                : "Monthly Budget:"}
+              {hasBudget && budgetFromTeam
+                ? "Monthly budget (from your team):"
+                : hasBudget && Number(budget) > 0 && budgetIsPlatformDefault
+                  ? "Monthly budget (platform default):"
+                  : "Monthly Budget:"}
             </FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box>
               <FieldValue>
-                {app.attributes.monthly_budget ? `$${app.attributes.monthly_budget}` : 'No budget limit'}
+                {!hasBudget
+                  ? 'No budget limit'
+                  : Number(budget) === 0
+                    ? '$0: requests are refused'
+                    : `$${budget}`}
               </FieldValue>
-              {app.attributes.monthly_budget && budgetIsPlatformDefault && (
+              {hasBudget && budgetFromTeam && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  Allocated from your team&apos;s budget. Ask an administrator if you need more.
+                </Typography>
+              )}
+              {hasBudget && Number(budget) > 0 && budgetIsPlatformDefault && (
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                   Applied automatically from the platform&apos;s default app budget.
                   An administrator can change it.

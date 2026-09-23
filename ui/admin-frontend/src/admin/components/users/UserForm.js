@@ -8,6 +8,11 @@ import {
   Typography,
   Grid,
   Snackbar,
+  FormControl,
+  FormHelperText,
+  InputLabel,
+  MenuItem,
+  Select,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -29,6 +34,8 @@ import {
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
+import { useEdition } from "../../context/EditionContext";
+import { teamBudgetsService, errorDetail } from "../../services/teamBudgetsService";
 
 const WILDCARD_ROLE_SLUGS = ["owner", "administrator"];
 
@@ -36,6 +43,7 @@ const UserForm = () => {
   // With roles active (Enterprise) access is assigned through roles rather
   // than the admin switch; the legacy flags stay for Community Edition.
   const { rbacEnabled, identity } = usePermissions();
+  const { isEnterprise } = useEdition();
   const [roleIds, setRoleIds] = useState([]);
   const [initialRoleIds, setInitialRoleIds] = useState([]);
   const [availableRoles, setAvailableRoles] = useState([]);
@@ -54,6 +62,10 @@ const UserForm = () => {
   // form -- UX review F-03.)
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [loadedGroupIds, setLoadedGroupIds] = useState([]);
+  // Budget team (Enterprise team budgets): which of the user's teams their
+  // new Apps count towards. "" = resolved automatically.
+  const [budgetTeamId, setBudgetTeamId] = useState("");
+  const [loadedBudgetTeamId, setLoadedBudgetTeamId] = useState("");
   // True once the user being edited (record and teams) is on screen.
   const [loaded, setLoaded] = useState(false);
   const [errors, setErrors] = useState({});
@@ -87,6 +99,7 @@ const UserForm = () => {
       accessToSSOConfig,
       roleIds,
       groupIds: selectedGroups.map((group) => String(group.id)),
+      budgetTeamId,
     },
     { ready: !id || loaded },
   );
@@ -133,6 +146,9 @@ const UserForm = () => {
       setEmailVerified(userData.attributes.email_verified ?? false);
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
       setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
+      const budgetTeam = userData.attributes.budget_team_id ? String(userData.attributes.budget_team_id) : "";
+      setBudgetTeamId(budgetTeam);
+      setLoadedBudgetTeamId(budgetTeam);
       const ids = (userData.attributes.roles || []).map((r) => Number(r.id));
       setRoleIds(ids);
       setInitialRoleIds(ids);
@@ -271,6 +287,18 @@ const UserForm = () => {
       }
 
       await syncTeams(savedUserId);
+
+      // The budget team must be one of the user's teams, so it is set
+      // after membership is saved; a team the user left is cleared.
+      const selectedIds = selectedGroups.map((group) => String(group.id));
+      const nextBudgetTeam = budgetTeamId && selectedIds.includes(budgetTeamId) ? budgetTeamId : "";
+      if (isEnterprise && nextBudgetTeam !== loadedBudgetTeamId) {
+        try {
+          await teamBudgetsService.setUserBudgetTeam(savedUserId, nextBudgetTeam ? Number(nextBudgetTeam) : null);
+        } catch (budgetError) {
+          throw new Error(errorDetail(budgetError, "Failed to set the budget team"));
+        }
+      }
 
       markSaved();
       navigate("/admin/users", {
@@ -540,6 +568,30 @@ const UserForm = () => {
                   (!id ? "New users also join the Default team automatically." : "")
                 }
               />
+              {isEnterprise && selectedGroups.length > 1 && (
+                <FormControl fullWidth sx={{ mt: 2 }}>
+                  <InputLabel id="user-budget-team-label">Budget team</InputLabel>
+                  <Select
+                    labelId="user-budget-team-label"
+                    label="Budget team"
+                    value={selectedGroups.some((g) => String(g.id) === budgetTeamId) ? budgetTeamId : ""}
+                    onChange={(e) => setBudgetTeamId(e.target.value)}
+                    inputProps={{ "data-testid": "user-budget-team" }}
+                  >
+                    <MenuItem value="">
+                      <em>Automatic (first team other than Default)</em>
+                    </MenuItem>
+                    {selectedGroups.map((group) => (
+                      <MenuItem key={group.id} value={String(group.id)}>
+                        {group.attributes?.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>
+                    The team this user's new Apps, and their chat, count towards.
+                  </FormHelperText>
+                </FormControl>
+              )}
               {/* Inline "create a new team": the team itself is created at
                   once (it has to exist to be picked); its assignment to
                   this user is saved with the form like any other change. */}

@@ -220,10 +220,11 @@ const AppList = () => {
       field: "monthly_budget",
       headerName: "Budget",
       sortable: true,
+      // null is "no limit"; 0 is a budget of zero (requests are refused).
       renderCell: (app) =>
-        app.attributes.monthly_budget
-          ? `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}`
-          : "Not set",
+        app.attributes.monthly_budget === null || app.attributes.monthly_budget === undefined
+          ? "No limit"
+          : `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}`,
     },
   ];
 

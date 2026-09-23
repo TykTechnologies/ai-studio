@@ -653,6 +653,14 @@ func (a *API) setupRoutes() {
 	v1.GET("/groups/:id/tool-catalogues", authz.Read("groups"), a.listGroupToolCatalogues)
 	v1.PUT("/groups/:id/catalogues", authz.Write("groups"), a.updateGroupCatalogues)
 	v1.PUT("/groups/:id/users", authz.Write("groups"), a.updateGroupUsers)
+	// Team budgets (Enterprise; CE answers 402)
+	v1.GET("/groups/:id/budget", authz.Read("groups"), a.getTeamBudget)
+	v1.PUT("/groups/:id/budget", authz.Write("groups"), a.setTeamBudget)
+	v1.DELETE("/groups/:id/budget", authz.Delete("groups"), a.deleteTeamBudget)
+	v1.POST("/groups/:id/budget/reset", authz.Write("groups"), a.resetTeamBudget)
+	v1.GET("/team-budgets/settings", authz.Read("groups"), a.getTeamBudgetSettings)
+	v1.PUT("/team-budgets/settings", authz.Write("groups"), a.setTeamBudgetSettings)
+	v1.PUT("/users/:id/budget-team", authz.Write("users"), a.setUserBudgetTeam)
 
 	// LLM routes
 	v1.POST("/llms", authz.Write("llms"), a.createLLM)
@@ -1041,6 +1049,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/vendor-usage", authz.Read("analytics"), a.getVendorUsage)
 	v1.GET("/analytics/total-cost-per-vendor-and-model", authz.Read("analytics"), a.getTotalCostPerVendorAndModel)
 	v1.GET("/analytics/budget-usage", authz.Read("analytics"), a.getBudgetUsage)
+	v1.GET("/analytics/team-costs", authz.Read("analytics"), a.getTeamCosts)
 	v1.GET("/analytics/budget-usage-for-app", authz.Read("analytics"), a.getBudgetUsageForApp)
 	v1.GET("/analytics/app-interactions-over-time", authz.Read("analytics"), a.getAppInteractionsOverTime)
 	v1.GET("/analytics/apps-for-model", authz.Read("analytics"), a.getAppsForModel)

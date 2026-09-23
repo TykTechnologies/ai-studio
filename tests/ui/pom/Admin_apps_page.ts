@@ -26,6 +26,7 @@ export class AdminAppsPage extends PageTemplate {
     readonly AddLlmInput: Locator;
     readonly AddDataSourceInput: Locator;
     readonly AddToolInput: Locator;
+    readonly MonthlyBudgetMode: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly BudgetStartDateInput: Locator;
     readonly SaveButton: Locator; // More generic name for the save/submit button on the form
@@ -48,7 +49,10 @@ export class AdminAppsPage extends PageTemplate {
         this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add LLM provider' });
         this.AddDataSourceInput = this.page.getByRole('combobox', { name: 'Add data source' });
         this.AddToolInput = this.page.getByRole('combobox', { name: 'Add tool' });
-        this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
+        // The budget field is a mode choice ("No limit"/"Default" vs "Fixed
+        // amount"); the amount box only appears for a fixed amount.
+        this.MonthlyBudgetMode = this.page.getByRole('combobox', { name: /^Monthly budget/ });
+        this.MonthlyBudgetInput = this.page.getByTestId('app-budget-amount');
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
         this.SaveButton = this.page.getByRole('button', { name: 'Add app' });
         this.CancelButton = this.page.getByRole('button', { name: 'Cancel' });
@@ -127,7 +131,7 @@ export class AdminAppsPage extends PageTemplate {
                 await this.addTool(toolName);
             }
         }
-        await this.MonthlyBudgetInput.fill(params.monthlyBudget);
+        await this.setMonthlyBudget(params.monthlyBudget);
         await this.BudgetStartDateInput.fill(params.budgetStartDate);
         await this.SaveButton.click();
     }
@@ -160,4 +164,11 @@ export class AdminAppsPage extends PageTemplate {
         await this.expectPopupWithText('App deleted successfully');
     }
 
+
+    // setMonthlyBudget picks "Fixed amount" and fills the amount.
+    async setMonthlyBudget(amount: string) {
+        await this.MonthlyBudgetMode.click();
+        await this.page.getByRole('option', { name: 'Fixed amount' }).click();
+        await this.MonthlyBudgetInput.fill(amount);
+    }
 }

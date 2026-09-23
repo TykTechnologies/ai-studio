@@ -4,11 +4,14 @@ The microgateway provides comprehensive budget management capabilities to contro
 
 ## Overview
 
-Budget management operates at multiple levels:
-- **Application-level budgets**: Overall spending limits per application
-- **LLM-specific budgets**: Spending limits per LLM provider
-- **Real-time enforcement**: Pre-request budget validation
-- **Flexible reset cycles**: Configurable monthly reset dates
+Budgets are enforced per **application**:
+- **Application budgets**: a monthly spending limit per application, covering all its LLM usage
+- **Pre-request enforcement**: requests are refused once the application has spent its budget (Enterprise Edition)
+- **Flexible reset cycles**: configurable monthly reset dates
+
+Budget *enforcement* is an Enterprise Edition feature. Community Edition records usage for reporting but never refuses a request.
+
+When the microgateway runs as an edge of AI Studio (hub-and-spoke), budgets are managed in AI Studio; see [Budgets on edge gateways](#budgets-on-edge-gateways-ai-studio).
 
 ## Budget Types
 
@@ -27,37 +30,22 @@ mgw app create \
 mgw app update 1 --budget=1000.0 --reset-day=15
 ```
 
-### LLM-Specific Budgets
-Individual LLM providers can have their own budget limits.
-
-```bash
-# Create LLM with budget
-mgw llm create \
-  --name="GPT-4" \
-  --vendor=openai \
-  --model=gpt-4 \
-  --api-key=$OPENAI_API_KEY \
-  --budget=300.0
-
-# Update LLM budget
-mgw llm update 1 --budget=500.0
-```
+### LLM Budgets
+LLM configurations carry a `monthly_budget` field (`mgw llm create --budget=...`), and it is stored and returned by the API. It is **not enforced** by the microgateway: only application budgets are. To cap spend on an expensive provider, give the applications that use it their own budgets, or enforce the LLM budget in AI Studio's embedded gateway.
 
 ## Budget Enforcement
 
 ### Pre-Request Validation
-Before each LLM request, the microgateway:
-1. Estimates the cost of the request
-2. Checks against remaining budget
-3. Blocks the request if it would exceed the budget
-4. Returns `402 Payment Required` if over budget
+Before each LLM request, the microgateway (Enterprise Edition):
+1. Refuses the request if AI Studio has told this gateway to block the application (see below)
+2. Looks up the application's spend so far in the current budget period
+3. Refuses the request if that spend has reached the application's budget
+4. Answers `403 Forbidden` ("Budget limit exceeded") when it refuses
 
-### Cost Estimation
-The microgateway estimates costs based on:
-- Input token count
-- Expected output token ratio
-- LLM provider pricing models
-- Historical usage patterns
+The check uses spend already recorded; the cost of the incoming request is not estimated. Spend is recorded after each response, so under steady traffic an application can go a few requests past its budget before requests are refused.
+
+### Cost Calculation
+The cost of each request is calculated after the response, from its prompt and completion token counts (including cache tokens) and the model's configured prices.
 
 ## Budget Configuration
 
@@ -83,15 +71,14 @@ mgw app create --name="App" --budget=1000.0 --reset-day=15
 # Or omit budget parameter for unlimited
 ```
 
+On a standalone microgateway a budget of 0 means "no limit". AI Studio works differently: there an empty budget means no limit and 0 means nothing may be spent. The edge applies AI Studio's zero budgets through the blocks described below.
+
 ## Monitoring Budget Usage
 
 ### Current Usage
 ```bash
 # Check application budget status
 mgw budget usage 1
-
-# Check budget for specific LLM
-mgw budget usage 1 --llm-id=2
 
 # Example output:
 # APP_ID  USAGE    BUDGET   REMAINING  % USED
@@ -107,9 +94,6 @@ mgw budget history 1
 mgw budget history 1 \
   --start=2024-01-01T00:00:00Z \
   --end=2024-01-31T23:59:59Z
-
-# History for specific LLM
-mgw budget history 1 --llm-id=2
 ```
 
 ### Usage Analytics
@@ -155,6 +139,21 @@ curl -X PUT \
   -d '{"monthly_budget": 1000.0, "budget_reset_day": 15}' \
   "http://localhost:8080/api/v1/budgets/1"
 ```
+
+## Budgets on Edge Gateways (AI Studio)
+
+When the microgateway runs in edge mode, AI Studio is the source of truth for budgets:
+
+- **Application budgets and periods** arrive with the application configuration pushed from AI Studio.
+- **Spend** is recorded locally and sent to AI Studio in the analytics pulse. AI Studio adds up spend from every edge and sends each application's total back in the budget sync (`budget.sync`, every 30 seconds by default, `BUDGET_SYNC_INTERVAL` on AI Studio). Each edge keeps the higher of its own figure and AI Studio's, so one edge cannot spend what another already has.
+- **Blocks:** the same sync lists applications every edge must refuse whatever its local numbers say:
+  - applications whose budget in AI Studio is 0;
+  - applications whose team has spent a blocking team budget (AI Studio team budgets).
+
+  The list replaces the previous one on every sync, so an application is served again once it is allowed again, for example after a team budget reset. Edges store the list in their `budget_blocks` table, so a restarted edge keeps refusing until the next sync.
+- **Alerts:** AI Studio raises budget alerts (80% and 100%) for spend that arrives from edges, as it does for its own traffic.
+
+Blocks reach edges with a delay of up to one pulse interval plus one sync interval after the spend that causes them.
 
 ## Budget Scenarios
 
@@ -210,7 +209,7 @@ fi
 
 ### Cost Optimization
 ```bash
-# Analyze cost patterns
+# Analyze cost patterns (per LLM, for reporting)
 mgw analytics costs 1 --format=json | \
   jq '.data.cost_by_llm'
 
@@ -221,33 +220,22 @@ mgw analytics events 1 --format=json | \
 
 ## Configuration
 
-### Environment Variables
-Budget-related configuration options:
-
-```bash
-# Budget enforcement settings
-BUDGET_CHECK_ENABLED=true
-BUDGET_ESTIMATION_BUFFER=0.1  # 10% safety margin
-BUDGET_RESET_TIMEZONE=UTC
-
-# Cost tracking
-COST_CALCULATION_ENABLED=true
-COST_PRECISION=4  # Decimal places for cost calculations
-```
+### Settings
+Budget enforcement has no switches of its own: it applies in Enterprise Edition whenever an application has a budget above 0. Costs come from the model prices configured on the gateway (or synced from AI Studio).
 
 ### Database Schema
 Budget data is stored in these tables:
-- `budget_usage` - Current usage tracking
+- `budget_usage` - Spend per application and budget period
+- `budget_blocks` - Applications AI Studio says to refuse (edge mode)
 - `analytics_events` - Individual request costs
 - `apps` - Application budget settings
-- `llms` - LLM budget settings
 
 ## Best Practices
 
 ### Budget Planning
 - Start with conservative budgets and adjust based on usage
 - Set different budgets for development vs. production
-- Use LLM-specific budgets for cost allocation
+- Use separate applications (each with its own budget) to allocate cost per team, project or provider
 - Monitor usage patterns to optimize budgets
 
 ### Cost Control
@@ -266,21 +254,20 @@ Budget data is stored in these tables:
 
 ### Budget Not Enforcing
 ```bash
-# Check budget configuration
+# Check budget configuration and spend
 mgw budget usage 1
-
-# Verify budget enforcement is enabled
-# Check BUDGET_CHECK_ENABLED=true in configuration
 
 # Check cost calculation
 mgw analytics events 1 | grep cost
 ```
 
+- Enforcement needs Enterprise Edition; Community Edition only records usage.
+- A budget of 0 on a standalone gateway means "no limit".
+- LLM budgets are not enforced on the gateway; set application budgets.
+- In edge mode, a block from AI Studio takes up to one pulse plus one sync interval to arrive.
+
 ### Inaccurate Cost Tracking
 ```bash
-# Verify cost calculation is enabled
-# Check COST_CALCULATION_ENABLED=true
-
 # Check model pricing configuration
 mgw analytics costs 1 --format=json
 
@@ -293,8 +280,7 @@ mgw analytics events 1 --limit=10
 # Check reset day configuration
 mgw app get 1 | grep reset_day
 
-# Verify timezone settings
-# Check BUDGET_RESET_TIMEZONE in configuration
+# Periods start at midnight (gateway local time) on the reset day
 ```
 
 ---

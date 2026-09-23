@@ -88,10 +88,17 @@ export const BudgetCell = ({ summary, spendTracked }) => {
       </Typography>
     );
   }
-  if (typeof budget !== "number" || budget <= 0) {
+  if (typeof budget !== "number") {
     return (
       <Typography variant="bodySmallDefault" data-testid="budget-cell">
         {formatMoney(spent)} spent · No limit
+      </Typography>
+    );
+  }
+  if (budget <= 0) {
+    return (
+      <Typography variant="bodySmallDefault" color="error" data-testid="budget-cell">
+        Budget $0: requests are refused
       </Typography>
     );
   }

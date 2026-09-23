@@ -123,6 +123,12 @@ Each feature specification below provides detailed documentation on the individu
 - Analytics and reporting
 - UI components for budget management
 
+### [Team Budgets](TeamBudgets.md) (Enterprise)
+- Team cost reporting across Apps, edges and chat
+- Team budget ceiling (alert only or blocking) and allocation pool for new Apps
+- Budget team per user, attribution stamped on Apps and spend
+- Threshold alerts, webhook events and audit records; edge enforcement via the budget sync
+
 ### [Chat Session System](Chat.md)
 - Stateful conversation management with LLMs
 - Real-time streaming responses via Server-Sent Events

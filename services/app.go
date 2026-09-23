@@ -35,20 +35,8 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		return nil, err
 	}
 
-	// Apply default budget if not set and default is configured
-	budgetNotSet := monthlyBudget == nil
-	if !budgetNotSet && *monthlyBudget == 0 {
-		budgetNotSet = true
-	}
-	defaultBudget := config.Get("").DefaultAppBudget
-	if budgetNotSet && defaultBudget != nil && *defaultBudget > 0 {
-		monthlyBudget = defaultBudget
-		if budgetStartDate == nil {
-			now := time.Now()
-			budgetStartDate = &now
-		}
-	}
-
+	// A nil budget is "none requested": the team's default allocation, or
+	// DEFAULT_APP_BUDGET, or no limit. 0 is a budget of zero.
 	app := &models.App{
 		Name:            name,
 		Description:     description,
@@ -57,6 +45,23 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		BudgetStartDate: budgetStartDate,
 		Namespace:       "", // Default to global namespace
 		Metadata:        metadata,
+	}
+
+	// Attribute the App to its team; a managed team pool supplies (or
+	// validates) its budget.
+	fromTeam, err := s.attributeNewApp(app, o)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply default budget if not set and default is configured
+	defaultBudget := config.Get("").DefaultAppBudget
+	if !fromTeam && app.MonthlyBudget == nil && defaultBudget != nil && *defaultBudget > 0 {
+		app.MonthlyBudget = defaultBudget
+		if app.BudgetStartDate == nil {
+			now := time.Now()
+			app.BudgetStartDate = &now
+		}
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -174,20 +179,8 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		return nil, err
 	}
 
-	// Apply default budget if not set and default is configured
-	budgetNotSet := monthlyBudget == nil
-	if !budgetNotSet && *monthlyBudget == 0 {
-		budgetNotSet = true
-	}
-	defaultBudget := config.Get("").DefaultAppBudget
-	if budgetNotSet && defaultBudget != nil && *defaultBudget > 0 {
-		monthlyBudget = defaultBudget
-		if budgetStartDate == nil {
-			now := time.Now()
-			budgetStartDate = &now
-		}
-	}
-
+	// A nil budget is "none requested": the team's default allocation, or
+	// DEFAULT_APP_BUDGET, or no limit. 0 is a budget of zero.
 	app := &models.App{
 		Name:            name,
 		Description:     description,
@@ -196,6 +189,23 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		BudgetStartDate: budgetStartDate,
 		Namespace:       namespace,
 		Metadata:        metadata,
+	}
+
+	// Attribute the App to its team; a managed team pool supplies (or
+	// validates) its budget.
+	fromTeam, err := s.attributeNewApp(app, o)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply default budget if not set and default is configured
+	defaultBudget := config.Get("").DefaultAppBudget
+	if !fromTeam && app.MonthlyBudget == nil && defaultBudget != nil && *defaultBudget > 0 {
+		app.MonthlyBudget = defaultBudget
+		if app.BudgetStartDate == nil {
+			now := time.Now()
+			app.BudgetStartDate = &now
+		}
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -278,6 +288,22 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	// are kept (see rejectChatOnlyTools).
 	if err := s.rejectChatOnlyTools(&app.ID, toolIDs); err != nil {
 		return nil, err
+	}
+
+	// A budget change, or a move to another team, must fit the destination
+	// team's pool.
+	if o.teamID != nil {
+		if err := s.validateAppTeam(*o.teamID); err != nil {
+			return nil, err
+		}
+	}
+	if s.TeamBudget != nil {
+		if err := s.TeamBudget.ValidateAllocation(app, monthlyBudget, o.teamID); err != nil {
+			return nil, teamBudgetError(err)
+		}
+	}
+	if o.teamID != nil && (app.TeamID == nil || *app.TeamID != *o.teamID) {
+		app.TeamID = o.teamID
 	}
 
 	app.Name = name

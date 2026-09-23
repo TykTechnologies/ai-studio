@@ -47,6 +47,14 @@ type BudgetSyncPayload struct {
 
 	// SequenceNumber for ordering and deduplication
 	SequenceNumber uint64 `json:"sequence_number"`
+
+	// Blocks maps app_id to the reason the App must be refused on budget
+	// grounds (Studio budget of 0, or a hard-blocking team over budget).
+	// When BlocksIncluded is set it is the complete set and replaces ours;
+	// controls without it (Community Edition, older versions) omit both
+	// and ours is left alone.
+	Blocks         map[uint32]string `json:"blocks,omitempty"`
+	BlocksIncluded bool              `json:"blocks_included,omitempty"`
 }
 
 // BudgetSyncTopic is re-exported from eventbridge for convenience
@@ -59,6 +67,18 @@ type BudgetSyncHandler struct {
 	db                 *gorm.DB
 	lastSequenceNumber uint64
 	mu                 sync.Mutex
+	// blocks receives budget blocks; nil means the shared edge set.
+	blocks *BudgetBlocks
+	// blocksUnsaved is set when persisting the blocks failed, so the next
+	// sync writes them even if the set is unchanged.
+	blocksUnsaved bool
+}
+
+func (h *BudgetSyncHandler) budgetBlocks() *BudgetBlocks {
+	if h.blocks != nil {
+		return h.blocks
+	}
+	return edgeBudgetBlocks
 }
 
 // NewBudgetSyncHandler creates a new budget sync handler.
@@ -69,6 +89,8 @@ func NewBudgetSyncHandler(db *gorm.DB) *BudgetSyncHandler {
 	}
 	// Load persisted sequence number from database
 	handler.loadSequenceNumber()
+	// A restarted edge keeps refusing what it was last told to refuse.
+	loadBudgetBlocks(db, handler.budgetBlocks())
 	return handler
 }
 
@@ -132,6 +154,23 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		return
 	}
 	h.lastSequenceNumber = payload.SequenceNumber
+
+	if payload.BlocksIncluded {
+		blocks := make(map[uint]string, len(payload.Blocks))
+		for appID, reason := range payload.Blocks {
+			blocks[uint(appID)] = reason
+		}
+		// The set is sent every sync; only a change (or a write that
+		// failed last time) is written.
+		if h.budgetBlocks().Replace(blocks) || h.blocksUnsaved {
+			if err := persistBudgetBlocks(h.db, blocks); err != nil {
+				h.blocksUnsaved = true
+				log.Error().Err(err).Msg("Failed to persist budget blocks")
+			} else {
+				h.blocksUnsaved = false
+			}
+		}
+	}
 
 	// Use new AppBudgets if available (supports per-app budget periods)
 	if len(payload.AppBudgets) > 0 {

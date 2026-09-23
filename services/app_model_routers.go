@@ -27,6 +27,9 @@ type appOptions struct {
 	// modelRouterIDs replaces the App's router grants when set; nil leaves
 	// them as they are (an update) or empty (a create).
 	modelRouterIDs *[]uint
+	// teamID attributes the App to this team instead of the owner's
+	// resolved budget team (see WithAppTeam).
+	teamID *uint
 }
 
 func resolveAppOptions(opts []AppOption) appOptions {

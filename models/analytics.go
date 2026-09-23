@@ -26,7 +26,7 @@ type LLMChatRecord struct {
 	PromptTokens           int
 	ResponseTokens         int
 	TotalTokens            int
-	TimeStamp              time.Time `gorm:"index:idx_llm_chat_records_time;index:idx_llm_chat_records_app_time,priority:2;index:idx_llm_chat_records_llm_time,priority:2"`
+	TimeStamp              time.Time `gorm:"index:idx_llm_chat_records_time;index:idx_llm_chat_records_app_time,priority:2;index:idx_llm_chat_records_llm_time,priority:2;index:idx_llm_chat_records_team_time,priority:2"`
 	UserID                 uint      `gorm:"index"`
 	Choices                int
 	ToolCalls              int
@@ -37,6 +37,9 @@ type LLMChatRecord struct {
 	InteractionType        InteractionType `gorm:"type:string;default:'chat'"`
 	CacheWritePromptTokens int
 	CacheReadPromptTokens  int
+	// TeamID is the team the spend is attributed to: the App's team for
+	// proxy and edge traffic, the user's budget team for chat.
+	TeamID *uint `gorm:"index:idx_llm_chat_records_team_time,priority:1"`
 }
 
 // LLMChatLogEntry for storing extra logs

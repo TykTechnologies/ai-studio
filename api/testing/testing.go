@@ -13,7 +13,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/stretchr/testify/assert"
@@ -36,17 +35,15 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 
 func SetupTestService(db *gorm.DB) *services.Service {
 	notificationService := services.NewTestNotificationService(db)
-	budgetSvc := budget.NewService(db, notificationService)
 	
 	// Initialize hub-and-spoke services
 	edgeService := services.NewEdgeService(db)
 	namespaceService := services.NewNamespaceService(db, edgeService)
 	pluginService := services.NewPluginService(db)
 	
-	return &services.Service{
+	svc := &services.Service{
 		DB:                  db,
 		NotificationService: notificationService,
-		Budget:              budgetSvc,
 		EdgeService:         edgeService,
 		NamespaceService:    namespaceService,
 		PluginService:       pluginService,
@@ -55,6 +52,9 @@ func SetupTestService(db *gorm.DB) *services.Service {
 		GovernedMetadataService: governed_metadata.NewService(db, governed_metadata.Deps{}),
 		RBAC:                    rbac.NewService(db),
 	}
+	// Budget and team budget services, wired together as in production.
+	svc.InitBudgets(notificationService)
+	return svc
 }
 
 func SetupTestNotificationService(db *gorm.DB) *services.NotificationService {

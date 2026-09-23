@@ -16,7 +16,6 @@ import {
   InputLabel,
   Switch,
   FormControlLabel,
-  InputAdornment,
   Tooltip,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
@@ -39,6 +38,9 @@ import {
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
+import AppTeamField from "./AppTeamField";
+import BudgetField from "../common/BudgetField";
+import { errorDetail } from "../../services/teamBudgetsService";
 
 // The app stores relationships as id arrays (llm_ids, datasource_ids,
 // tool_ids, plugin resource instance ids) and the API payload keeps that
@@ -65,6 +67,7 @@ const AppForm = () => {
     model_router_ids: [],
     monthly_budget: null,
     budget_start_date: null,
+    team_id: null, // Enterprise team budgets; null = owner's budget team
     namespace: "", // Added for edge availability
     metadata: {}, // Added for custom metadata
   });
@@ -130,6 +133,7 @@ const AppForm = () => {
           ? appData.model_router_ids.map(String)
           : [],
         namespace: appData.namespace || "",
+        team_id: appData.team_id ?? null,
         metadata: metadata,
       });
       setMetadataJSON(JSON.stringify(metadata, null, 2));
@@ -293,12 +297,12 @@ const AppForm = () => {
     setApp({ ...app, [name]: value });
   };
 
-  const handleBudgetChange = (e) => {
-    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+  // null is "no limit" (or, on a new App, the default); 0 is a budget of 0.
+  const handleBudgetChange = (value) => {
     setApp(prev => ({
       ...prev,
       monthly_budget: value,
-      budget_start_date: value ? prev.budget_start_date || new Date().toISOString() : null
+      budget_start_date: value !== null ? prev.budget_start_date || new Date().toISOString() : null
     }));
   };
 
@@ -379,6 +383,7 @@ const AppForm = () => {
         };
       });
 
+    // team_id null keeps the resolved team.
     const appPayload = {
       ...app,
       user_id: parseInt(app.user_id, 10),
@@ -414,7 +419,8 @@ const AppForm = () => {
       console.error("Error saving app", error);
       setSnackbar({
         open: true,
-        message: "Failed to save app. Please try again.",
+        // A refused team allocation explains itself (400 with the reason).
+        message: errorDetail(error, "Failed to save app. Please try again."),
         severity: "error",
       });
     }
@@ -490,6 +496,14 @@ const AppForm = () => {
                 )}
               </FormControl>
             </Grid>
+            {isEnterprise && (
+              <Grid item xs={12}>
+                <AppTeamField
+                  value={app.team_id}
+                  onChange={(teamId) => setApp((prev) => ({ ...prev, team_id: teamId }))}
+                />
+              </Grid>
+            )}
             <Grid item xs={12}>
               <RelationshipPicker
                 label="LLM providers"
@@ -521,24 +535,25 @@ const AppForm = () => {
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <TextField
-                      fullWidth
-                      label="Monthly Budget"
-                      name="monthly_budget"
-                      type="number"
-                      inputProps={{
-                        step: "0.01",
-                        min: "0"
-                      }}
-                      value={app.monthly_budget || ''}
-                      onChange={handleBudgetChange}
-                      disabled={!isEnterprise}
-                      sx={{ opacity: isEnterprise ? 1 : 0.6 }}
-                      InputProps={{
-                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                      }}
-                      helperText={isEnterprise ? "Leave empty for no budget limit" : "Budget enforcement is an Enterprise feature"}
-                    />
+                    <Box sx={{ flex: 1, opacity: isEnterprise ? 1 : 0.6 }}>
+                      <BudgetField
+                        value={app.monthly_budget}
+                        onChange={handleBudgetChange}
+                        disabled={!isEnterprise}
+                        testIdPrefix="app-budget"
+                        // On a new App "empty" is whatever default applies:
+                        // the team's allocation when its team has a budget
+                        // pool, else the platform default, else no limit.
+                        emptyLabel={id ? "No limit" : "Default"}
+                        emptyHelp={
+                          !isEnterprise
+                            ? "Budget enforcement is an Enterprise feature"
+                            : id
+                              ? "Spending is not capped (the team's budget still applies)."
+                              : "The team's default allocation when its team has a budget pool; otherwise no limit."
+                        }
+                      />
+                    </Box>
                     {!isEnterprise && (
                       <Tooltip
                         title="Budget enforcement is an Enterprise feature"
@@ -559,7 +574,7 @@ const AppForm = () => {
                       type="date"
                       value={app.budget_start_date ? app.budget_start_date.split('T')[0] : ''}
                       onChange={handleBudgetStartDateChange}
-                      disabled={!isEnterprise || !app.monthly_budget}
+                      disabled={!isEnterprise || app.monthly_budget === null || app.monthly_budget === undefined}
                       sx={{ opacity: isEnterprise ? 1 : 0.6 }}
                       InputLabelProps={{
                         shrink: true,

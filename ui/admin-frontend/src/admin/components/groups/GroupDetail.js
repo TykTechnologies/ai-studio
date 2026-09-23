@@ -14,11 +14,14 @@ import GroupCatalogsDisplay from "./components/GroupCatalogsDisplay";
 import { getFeatureFlags } from "../../utils/featureUtils";
 import RoleBadge from "../roles/RoleBadge";
 import { usePermissions } from "../../context/PermissionsContext";
+import { useEdition } from "../../context/EditionContext";
+import TeamBudgetPanel from "./components/TeamBudgetPanel";
 
 const GroupDetail = () => {
   const navigate = useNavigate();
   const { features } = useSystemFeatures();
   const { rbacEnabled } = usePermissions();
+  const { isEnterprise } = useEdition();
   
   const {
     group,
@@ -121,6 +124,9 @@ const GroupDetail = () => {
             </div>
           </Section>
         )}
+
+        {/* Budget (Enterprise) */}
+        {isEnterprise && <TeamBudgetPanel teamId={group.id} />}
 
         {/* Section 2: Team Members */}
         <CollapsibleSection title="Team members" defaultExpanded>

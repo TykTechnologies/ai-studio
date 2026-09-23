@@ -68,6 +68,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LLMFailoverSection, { validateFailover } from "./LLMFailoverSection";
 import { listAll } from "../../utils/listAll";
+import BudgetField from "../common/BudgetField";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -332,12 +333,12 @@ const LLMForm = () => {
     }
   };
 
-  const handleBudgetChange = (e) => {
-    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+  // null is "no limit"; 0 is a budget of 0.
+  const handleBudgetChange = (value) => {
     setLLM(prev => ({
       ...prev,
       monthly_budget: value,
-      budget_start_date: value ? prev.budget_start_date || new Date().toISOString() : null
+      budget_start_date: value !== null ? prev.budget_start_date || new Date().toISOString() : null
     }));
   };
 
@@ -747,21 +748,10 @@ const LLMForm = () => {
             <Grid item xs={12}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Monthly Budget"
-                    name="monthly_budget"
-                    type="number"
-                    inputProps={{
-                      step: "0.01",
-                      min: "0"
-                    }}
-                    value={llm.monthly_budget || ''}
+                  <BudgetField
+                    value={llm.monthly_budget}
                     onChange={handleBudgetChange}
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                    }}
-                    helperText="Leave empty for no budget limit"
+                    testIdPrefix="llm-budget"
                   />
                 </Grid>
                 <Grid item xs={12} md={6}>
@@ -772,7 +762,7 @@ const LLMForm = () => {
                     type="date"
                     value={llm.budget_start_date ? new Date(llm.budget_start_date).toISOString().split('T')[0] : ''}
                     onChange={handleBudgetStartDateChange}
-                    disabled={!llm.monthly_budget}
+                    disabled={llm.monthly_budget === null || llm.monthly_budget === undefined}
                     InputLabelProps={{
                       shrink: true,
                     }}

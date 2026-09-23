@@ -424,6 +424,17 @@ type SyncState struct {
 	UpdatedAt      time.Time
 }
 
+// BudgetBlock is an App the control plane says this gateway must refuse on
+// budget grounds (Enterprise): its Studio budget is 0, or its team has spent
+// a hard-blocking team budget. The budget sync replaces the whole table each
+// interval; it is persisted so a restarted edge keeps refusing until the
+// next sync.
+type BudgetBlock struct {
+	AppID     uint   `gorm:"primaryKey;autoIncrement:false"`
+	Reason    string `gorm:"size:255"`
+	UpdatedAt time.Time
+}
+
 // ModelRouter represents a model router configuration (Enterprise)
 // Routes incoming requests to LLM vendors based on model name patterns
 type ModelRouter struct {

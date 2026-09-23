@@ -173,6 +173,14 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	return server
 }
 
+// SetEdgeBudgetSource has the budget sync push budget blocks to edges and
+// raise budget alerts for edge spend (Enterprise).
+func (s *ControlServer) SetEdgeBudgetSource(src EdgeBudgetSource) {
+	if s.budgetSyncService != nil {
+		s.budgetSyncService.SetEdgeBudgetSource(src)
+	}
+}
+
 // Start starts the gRPC control server
 func (s *ControlServer) Start() error {
 	// Create listener

@@ -33,7 +33,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
-	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
@@ -316,7 +315,9 @@ func main() {
 	ctx, stopRec := context.WithCancel(context.Background())
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
-	budgetService := budget.NewService(db, notificationService)
+	// One budget service (and team budget service) for the API and the
+	// proxy, so resets and allocation changes clear the cache the proxy reads.
+	service.InitBudgets(notificationService)
 
 	// Reinitialize LogExportService with the proper notification service (with SMTP configured)
 	// The service created in NewServiceWithOCI has a notification service without SMTP
@@ -342,7 +343,7 @@ func main() {
 		DisableUnifiedRouter:  appConf.UnifiedRouterDisabled,
 		ServerTiming:          appConf.GatewayServerTiming,
 	}
-	p := proxy.NewProxy(service, pConfig, budgetService)
+	p := proxy.NewProxy(service, pConfig, service.Budget)
 
 	// Start gateway if licensed (CE: always enabled, ENT: requires feature_gateway entitlement)
 	if ent, ok := licensingService.Entitlement(licensing.FeatureGateway); ok && ent.Bool() {
@@ -367,6 +368,11 @@ func main() {
 
 		controlServer = grpc.NewControlServer(grpcConfig, db)
 		controlServer.SetGovernedMetadataReader(service.GovernedMetadataService)
+		// Enterprise: edges learn which Apps to refuse (budget 0, team over
+		// a hard-blocking budget) and edge spend raises budget alerts.
+		if src, ok := service.Budget.(grpc.EdgeBudgetSource); ok {
+			controlServer.SetEdgeBudgetSource(src)
+		}
 
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)

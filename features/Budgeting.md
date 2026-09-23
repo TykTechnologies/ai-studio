@@ -1,5 +1,9 @@
 ## Budget Control System
 
+> Team-level budgets (a ceiling and allocation pool per team) build on this system; see [TeamBudgets.md](TeamBudgets.md).
+>
+> **Budget values changed with team budgets:** `null` is "no limit" and 0 is a budget of zero (requests refused). Earlier, any budget at or below 0 meant "no limit"; `models.ClearLegacyZeroBudgets` migrates stored zeros once. Edges learn about zero budgets from the budget sync's `blocks`, and alerts now also fire for edge spend. See TeamBudgets.md.
+
 **1. Overview & Purpose**
 
 The core goal of the Budget Control System is to enable organizations to set and enforce monthly spending limits on AI usage, specifically for:

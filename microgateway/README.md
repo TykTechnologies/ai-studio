@@ -7,7 +7,7 @@ A production-ready microgateway for AI/LLM API management built on the Midsommar
 - 🚀 **High Performance**: Built with Go for low latency and high throughput
 - 🔐 **Token Authentication**: Secure API access with token-based authentication
 - 📊 **Analytics & Monitoring**: Real-time analytics and usage tracking
-- 💰 **Budget Management**: Per-app and per-LLM budget controls
+- 💰 **Budget Management**: Per-app budget controls (enforcement in Enterprise Edition)
 - 🔄 **Multi-LLM Support**: OpenAI, Anthropic, Google, Vertex AI, Ollama
 - 🗄️ **Database Flexibility**: PostgreSQL for production, SQLite for development
 - 🎯 **Management API**: Full CRUD operations for all entities

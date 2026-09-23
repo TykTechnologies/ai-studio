@@ -123,7 +123,21 @@ func InitModels(db *gorm.DB) error {
 		&MCPSyncRun{},          // Discovery sync run log
 		&MCPAccessGrant{},      // Who has access to which MCP server
 		&MCPCredential{},       // Tyk keys minted for Apps (ledger; plaintext never stored)
+		// Team budgets (Enterprise; tables exist in CE for team cost reporting)
+		&TeamBudget{},         // Per-team budget, allocation pool and enforcement
+		&TeamBudgetSettings{}, // Global team budget switch
 	); err != nil {
+		return err
+	}
+
+	// Migration: attribute Apps and spend recorded before team budgets
+	// existed to their team (runs once).
+	if err := BackfillTeamAttribution(db); err != nil {
+		return err
+	}
+
+	// Migration: budgets of 0 meant "no limit"; now nil does (runs once).
+	if err := ClearLegacyZeroBudgets(db); err != nil {
 		return err
 	}
 

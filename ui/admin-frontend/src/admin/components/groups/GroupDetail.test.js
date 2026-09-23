@@ -3,6 +3,10 @@ import { screen, fireEvent } from '@testing-library/react';
 import GroupDetail from './GroupDetail';
 import { renderWithRouterAndTheme } from '../../../test-utils/render-with-theme';
 
+jest.mock('../../context/EditionContext', () => ({
+  useEdition: () => ({ isEnterprise: false }),
+}));
+
 jest.mock('./hooks/useGroupDetail', () => ({
   __esModule: true,
   default: jest.fn(),

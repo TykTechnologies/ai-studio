@@ -7,6 +7,9 @@ import { createTheme } from '@mui/material';
 import UserForm from './UserForm';
 
 // Mock apiClient
+jest.mock("../../context/EditionContext", () => ({
+  useEdition: () => ({ isEnterprise: false }),
+}));
 jest.mock('../../utils/apiClient', () => {
   const mockClient = {
     get: jest.fn(),

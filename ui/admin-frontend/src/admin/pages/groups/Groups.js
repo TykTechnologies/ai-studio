@@ -16,6 +16,7 @@ import AddIcon from "@mui/icons-material/Add";
 import useGroups from "./hooks/useGroups";
 import useGroupActions from "./hooks/useGroupActions";
 import GroupsTable from "./components/GroupsTable";
+import TeamBudgetsSwitch from "./components/TeamBudgetsSwitch";
 import GroupDeleteDialog from "./components/GroupDeleteDialog";
 import ManageTeamMembersModal from "./components/ManageTeamMembersModal";
 import ManageGroupCatalogsModal from "./components/ManageGroupCatalogsModal";
@@ -119,6 +120,9 @@ const Groups = () => {
           Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.{' '}
           <LearnMoreLink onClick={createDocsLinkHandler(getDocsLink, 'teams')} />
         </Typography>
+        <Box sx={{ mt: 2 }}>
+          <TeamBudgetsSwitch />
+        </Box>
       </Box>
       <Box sx={{ p: 3 }}>
         <GroupsTable
