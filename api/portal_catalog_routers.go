@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 )
 
 // Model Routers in the portal catalog. A router is published in LLM
@@ -71,6 +72,75 @@ func (a *API) getPortalCatalogModelRouter(c *gin.Context) {
 	}
 	id, _ := strconv.ParseUint(item.ID, 10, 64)
 	llms, err := a.service.ModelRouterReachableLLMs(uint(id))
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	item.Attributes.RouterLLMs = make([]CatalogRouterLLM, 0, len(llms))
+	for _, l := range llms {
+		item.Attributes.RouterLLMs = append(item.Attributes.RouterLLMs, CatalogRouterLLM{
+			ID: uintID(l.ID), Name: cleanText(l.Name), Vendor: string(l.Vendor),
+		})
+	}
+	c.JSON(http.StatusOK, CatalogItemResponse{Data: *item})
+}
+
+// CatalogRouterRoute is one route of a Semantic Router, as the portal shows it.
+type CatalogRouterRoute struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Default     bool   `json:"default,omitempty"`
+}
+
+func semanticRouterCatalogItem(r *models.SemanticRouter, privacy map[uint]int) CatalogItem {
+	var score *int
+	if s, ok := privacy[r.ID]; ok {
+		score = intPtr(s)
+	}
+	short := r.ShortDescription
+	if short == "" {
+		short = r.Description
+	}
+	routes := make([]CatalogRouterRoute, 0, len(r.Routes))
+	for _, rt := range r.Routes {
+		routes = append(routes, CatalogRouterRoute{Name: rt.Name, Description: cleanText(rt.Description),
+			Default: rt.Name == r.Settings.DefaultRoute})
+	}
+	return CatalogItem{Type: CatalogItemSemanticRouter, ID: uintID(r.ID), Attributes: CatalogItemAttributes{
+		Name:                cleanText(r.Name),
+		ShortDescription:    cleanText(short),
+		LongDescription:     cleanText(r.LongDescription),
+		LogoURL:             models.SafeLogoURL(r.LogoURL),
+		Kind:                r.APICompat,
+		KindLabel:           "Semantic Router",
+		PrivacyScore:        score,
+		Tags:                []string{},
+		Catalogs:            []CatalogRef{},
+		CreatedAt:           timePtr(r.CreatedAt),
+		UpdatedAt:           timePtr(r.UpdatedAt),
+		AccessGrantedViaApp: true,
+		RouterSlug:          r.Slug,
+		RouterModels:        sr.ModelsFor(r.Slug, r.Config()),
+		RouterRoutes:        routes,
+	}}
+}
+
+// getPortalCatalogSemanticRouter godoc
+// @Summary One Semantic Router from the portal catalog
+// @Description The catalog entry for a Semantic Router the user can see: the model strings to call it with, its routes, and the LLMs it can route to.
+// @Tags common
+// @Produce json
+// @Param id path int true "Semantic Router ID"
+// @Success 200 {object} CatalogItemResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /common/catalog/semantic-routers/{id} [get]
+func (a *API) getPortalCatalogSemanticRouter(c *gin.Context) {
+	item, ok := a.findCatalogItem(c, CatalogItemSemanticRouter, c.Param("id"))
+	if !ok {
+		return
+	}
+	id, _ := strconv.ParseUint(item.ID, 10, 64)
+	llms, err := a.service.SemanticRouterReachableLLMs(uint(id))
 	if err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return

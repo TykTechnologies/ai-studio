@@ -108,6 +108,8 @@ func Migrate(db *gorm.DB) error {
 		&AccessTokenEdge{},
 		&AppTool{},
 		&AppModelRouter{},
+		&SemanticRouter{},
+		&AppSemanticRouter{},
 		&AppDatasource{},
 		&ToolFilter{},
 	)

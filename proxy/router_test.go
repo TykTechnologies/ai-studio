@@ -34,6 +34,10 @@ type fakeRoute struct {
 	llmID uint
 	model string
 	pool  string
+	// Semantic Router fields.
+	route  string
+	score  float64
+	shadow string
 }
 
 func (f *fakeResolver) Lookup(s string) (RouterRef, bool) {
@@ -52,7 +56,11 @@ func (f *fakeResolver) Resolve(_ context.Context, req RouteRequest) (*RouteDecis
 	if req.Allow != nil && !req.Allow(rt.llmID) {
 		return nil, ErrRouteNoCandidates
 	}
-	return &RouteDecision{LLMID: rt.llmID, Model: rt.model, Pool: rt.pool, Reason: "model_pattern"}, nil
+	d := &RouteDecision{LLMID: rt.llmID, Model: rt.model, Pool: rt.pool, Reason: "model_pattern"}
+	if f.ref.Kind == RouterKindSemantic {
+		d.Route, d.Score, d.ShadowRoute, d.Reason = rt.route, rt.score, rt.shadow, "embedding"
+	}
+	return d, nil
 }
 
 func (f *fakeResolver) Reaches(ref RouterRef, llmID uint) bool {
@@ -90,6 +98,7 @@ type routerHarness struct {
 	fastV, bigV      *fakeVendor
 	spareV           *fakeVendor
 	router           *models.ModelRouter
+	semanticRouter   *models.SemanticRouter
 	resolver         *fakeResolver
 }
 
@@ -98,6 +107,9 @@ type routerHarnessOpts struct {
 	directLLMs  func(h *routerHarness) []uint
 	noResolver  bool
 	mutate      func(h *routerHarness)
+	// semantic makes "smart" a Semantic Router: "auto" classifies to the big
+	// route (score 0.87, shadow route "fast").
+	semantic bool
 }
 
 func newRouterHarness(t *testing.T, o routerHarnessOpts) *routerHarness {
@@ -133,6 +145,17 @@ func newRouterHarness(t *testing.T, o routerHarnessOpts) *routerHarness {
 			"big":  {llmID: h.big.ID, model: "gpt-4o", pool: "big-pool"},
 		},
 	}
+	if o.semantic {
+		require.NoError(t, db.Delete(h.router).Error)
+		h.semanticRouter = &models.SemanticRouter{Name: "Smart", Slug: "smart", Active: true}
+		require.NoError(t, db.Create(h.semanticRouter).Error)
+		h.resolver = &fakeResolver{
+			ref: RouterRef{Kind: RouterKindSemantic, ID: h.semanticRouter.ID, Slug: "smart"},
+			routes: map[string]fakeRoute{
+				"auto": {llmID: h.big.ID, model: "gpt-4o", route: "complex", score: 0.87, shadow: "fast"},
+			},
+		}
+	}
 	if o.mutate != nil {
 		o.mutate(h)
 	}
@@ -143,7 +166,9 @@ func newRouterHarness(t *testing.T, o routerHarnessOpts) *routerHarness {
 	}
 	app, err := h.service.CreateApp("Router App", "", user.ID, nil, direct, nil, nil, nil, nil)
 	require.NoError(t, err)
-	if o.grantRouter {
+	if o.grantRouter && o.semantic {
+		require.NoError(t, db.Model(app).Association("SemanticRouters").Append(h.semanticRouter))
+	} else if o.grantRouter {
 		require.NoError(t, db.Model(app).Association("ModelRouters").Append(h.router))
 	}
 	require.NoError(t, h.service.ActivateAppCredential(app.ID))
@@ -367,6 +392,50 @@ func TestRouter_ChosenLLMFailsOverToALLMOutsideTheRouter(t *testing.T) {
 	assert.Equal(t, "true", resp.Header.Get(hdrFailover))
 	assert.Equal(t, slug.Make(h.spare.Name), resp.Header.Get(hdrServedLLM))
 	assert.Len(t, h.spareV.calls(), 1)
+}
+
+func TestRouter_SemanticRouterIsServedAndRecorded(t *testing.T) {
+	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true, semantic: true})
+
+	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/auto", false))
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	assert.Equal(t, "smart", resp.Header.Get(hdrRouter))
+	assert.Equal(t, "complex", resp.Header.Get(hdrRoute))
+	assert.Equal(t, "embedding", resp.Header.Get(hdrRouteReason))
+	assert.Equal(t, slug.Make(h.big.Name), resp.Header.Get(hdrServedLLM))
+	calls := h.bigV.calls()
+	require.Len(t, calls, 1)
+	for k := range calls[0].Headers {
+		assert.False(t, strings.HasPrefix(http.CanonicalHeaderKey(k), "X-Tyk-Router"), "router marker %s leaked to the vendor", k)
+	}
+
+	waitForProxyLog(t, h.db, h.app.ID, http.StatusOK)
+	logs := h.proxyLogs()
+	require.Len(t, logs, 1)
+	assert.Equal(t, string(RouterKindSemantic), logs[0].RouterKind)
+	assert.Equal(t, "complex", logs[0].Route)
+	assert.Equal(t, "embedding", logs[0].RouteReason)
+	assert.InDelta(t, 0.87, logs[0].RouteScore, 1e-9)
+	assert.Equal(t, "fast", logs[0].ShadowRoute)
+	assert.Equal(t, "auto", logs[0].RouteSourceModel)
+}
+
+func TestRouter_SemanticRouterNeedsAGrant(t *testing.T) {
+	// Unlike a Model Router, a Semantic Router has no grant-less fallback:
+	// holding the LLM it would pick is not enough.
+	h := newRouterHarness(t, routerHarnessOpts{semantic: true,
+		directLLMs: func(h *routerHarness) []uint { return []uint{h.big.ID} }})
+	resp, _ := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/auto", false))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Zero(t, h.resolver.calls.Load(), "an ungranted App is refused before classification")
+	assert.Empty(t, h.bigV.calls())
+}
+
+func TestRouter_ModelsListsGrantedSemanticRouters(t *testing.T) {
+	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true, semantic: true})
+	_, body := h.do(http.MethodGet, "/v1/models", "")
+	assert.Contains(t, string(body), `"smart/auto"`)
+	assert.Contains(t, string(body), `"semantic_router"`)
 }
 
 // --- unit: the inner hop's grant rule --------------------------------------

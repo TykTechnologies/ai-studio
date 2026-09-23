@@ -1065,6 +1065,10 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 	for i, r := range dbApp.ModelRouters {
 		modelRouters[i] = models.ModelRouter{ID: r.ID, Name: r.Name, Slug: r.Slug, Namespace: r.Namespace, Active: r.IsActive}
 	}
+	semanticRouters := make([]models.SemanticRouter, len(dbApp.SemanticRouters))
+	for i, r := range dbApp.SemanticRouters {
+		semanticRouters[i] = models.SemanticRouter{ID: r.ID, Name: r.Name, Slug: r.Slug, Namespace: r.Namespace, Active: r.IsActive}
+	}
 
 	modelApp := models.App{
 		Model:           gorm.Model{ID: dbApp.ID, CreatedAt: dbApp.CreatedAt, UpdatedAt: dbApp.UpdatedAt},
@@ -1080,6 +1084,7 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		Tools:           tools,       // Include Tool associations for access control
 		Datasources:     datasources, // Include Datasource associations for access control
 		ModelRouters:    modelRouters, // Router grants (Enterprise)
+		SemanticRouters: semanticRouters,
 	}
 
 	log.Debug().

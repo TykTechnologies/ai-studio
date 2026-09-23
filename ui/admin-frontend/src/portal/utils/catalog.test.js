@@ -155,6 +155,43 @@ describe("model router catalog type", () => {
   });
 });
 
+describe("semantic router catalog type", () => {
+  const {
+    CATALOG_TYPES,
+    browsePath,
+    buildActionLabel,
+    isRouterType,
+    itemTypeLabel,
+    semanticRouterDetailApiPath,
+    typeForSlug,
+    typeIcon,
+    typeLabel,
+  } = require("./catalog");
+  const router = item("semantic_router", 7, { name: "Smart", kind: "openai", kind_label: "Semantic Router", access_granted_via_app: true });
+
+  it("registers the type with its labels, route slug and icon", () => {
+    expect(CATALOG_TYPES.SEMANTIC_ROUTER).toBe("semantic_router");
+    expect(typeLabel("semantic_router")).toBe("Semantic router");
+    expect(typeLabel("semantic_router", { plural: true })).toBe("Semantic routers");
+    expect(itemTypeLabel(router)).toBe("Semantic router");
+    expect(typeIcon("semantic_router")).toBe("psychology");
+    expect(typeForSlug("semantic-routers")).toBe("semantic_router");
+    expect(browsePath("semantic_router")).toBe("/portal/catalog/semantic-routers");
+    expect(kindLabel(router)).toBe("Semantic Router");
+    expect(isRouterType("semantic_router")).toBe(true);
+    expect(isRouterType("model_router")).toBe(true);
+    expect(isRouterType("llm")).toBe(false);
+  });
+
+  it("routes to its detail page, its detail endpoint and the app builder", () => {
+    expect(detailPath(router)).toBe("/portal/catalog/semantic-routers/7");
+    expect(builtInDetailPath(router)).toBe("/portal/catalog/semantic-routers/7");
+    expect(semanticRouterDetailApiPath(7)).toBe("/common/catalog/semantic-routers/7");
+    expect(buildAppPath(router)).toBe("/portal/app/new?semantic_router=7");
+    expect(buildActionLabel(router)).toBe("Build app");
+  });
+});
+
 describe("formatPerMillion", () => {
   const { formatPerMillion } = require("./catalog");
   it("prints dollar prices plainly and keeps sub-dollar precision", () => {

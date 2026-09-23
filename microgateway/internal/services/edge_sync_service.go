@@ -120,6 +120,11 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync ModelRouters: %w", err)
 	}
 
+	// 5b. Sync Semantic Routers (Enterprise feature)
+	if err := s.syncSemanticRouters(tx, config.SemanticRouters); err != nil {
+		return fmt.Errorf("failed to sync SemanticRouters: %w", err)
+	}
+
 	// 6. Sync Tools with filter and app associations
 	if err := s.syncTools(tx, config.Tools); err != nil {
 		return fmt.Errorf("failed to sync Tools: %w", err)
@@ -176,6 +181,9 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 
 	if err := tx.Exec("DELETE FROM app_model_routers WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear app_model_routers: %w", err)
+	}
+	if err := tx.Exec("DELETE FROM app_semantic_routers WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		return fmt.Errorf("failed to clear app_semantic_routers: %w", err)
 	}
 
 	// Tool/Datasource join tables (must clear before apps and tools are deleted)
@@ -238,6 +246,9 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	}
 	if err := tx.Exec("DELETE FROM model_routers WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		log.Warn().Err(err).Msg("Failed to clear model_routers (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM semantic_routers WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
+		return fmt.Errorf("failed to clear semantic_routers: %w", err)
 	}
 
 	log.Debug().Msg("Existing configuration data cleared")
@@ -329,6 +340,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	var allAppTools []database.AppTool
 	var allAppDatasources []database.AppDatasource
 	var allAppModelRouters []database.AppModelRouter
+	var allAppSemanticRouters []database.AppSemanticRouter
 
 	for _, pbApp := range apps {
 		// Insert main App record
@@ -395,6 +407,11 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 		for _, routerID := range pbApp.ModelRouterIds {
 			allAppModelRouters = append(allAppModelRouters, database.AppModelRouter{
 				AppID: uint(pbApp.Id), ModelRouterID: uint(routerID), CreatedAt: now,
+			})
+		}
+		for _, routerID := range pbApp.SemanticRouterIds {
+			allAppSemanticRouters = append(allAppSemanticRouters, database.AppSemanticRouter{
+				AppID: uint(pbApp.Id), SemanticRouterID: uint(routerID), CreatedAt: now,
 			})
 		}
 
@@ -466,6 +483,11 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	if len(allAppModelRouters) > 0 {
 		if err := tx.Create(&allAppModelRouters).Error; err != nil {
 			return fmt.Errorf("failed to batch insert app_model_routers: %w", err)
+		}
+	}
+	if len(allAppSemanticRouters) > 0 {
+		if err := tx.Create(&allAppSemanticRouters).Error; err != nil {
+			return fmt.Errorf("failed to batch insert app_semantic_routers: %w", err)
 		}
 	}
 
@@ -612,6 +634,27 @@ func (s *EdgeSyncService) syncModelPrices(tx *gorm.DB, modelPrices []*pb.ModelPr
 			Msg("Model price synced to SQLite")
 	}
 
+	return nil
+}
+
+// syncSemanticRouters stores Semantic Routers as the hub sent them; the
+// SemanticRouterService compiles them on reload.
+func (s *EdgeSyncService) syncSemanticRouters(tx *gorm.DB, routers []*pb.SemanticRouterConfig) error {
+	for _, pbRouter := range routers {
+		router := &database.SemanticRouter{
+			ID:         uint(pbRouter.Id),
+			Name:       pbRouter.Name,
+			Slug:       pbRouter.Slug,
+			Namespace:  pbRouter.Namespace,
+			IsActive:   pbRouter.IsActive,
+			ConfigJSON: pbRouter.ConfigJson,
+			CreatedAt:  pbRouter.CreatedAt.AsTime(),
+			UpdatedAt:  pbRouter.UpdatedAt.AsTime(),
+		}
+		if err := tx.Create(router).Error; err != nil {
+			return fmt.Errorf("failed to insert SemanticRouter %d: %w", pbRouter.Id, err)
+		}
+	}
 	return nil
 }
 

@@ -227,7 +227,7 @@ func isPlatformPermission(perm string) bool {
 		return false
 	}
 	switch perm[:i] {
-	case "analytics", "proxy-logs", "plugins", "marketplace", "llms", "model-prices", "model-routers",
+	case "analytics", "proxy-logs", "plugins", "marketplace", "llms", "model-prices", "model-routers", "semantic-routers",
 		"datasources", "tools", "filters", "filestores", "tags", "submissions", "attestation-templates",
 		"users", "groups", "roles", "sso-profiles", "audit", "compliance", "metadata", "exports",
 		"secrets", "branding", "apps", "credentials", "edges", "chats", "agents", "llm-settings",

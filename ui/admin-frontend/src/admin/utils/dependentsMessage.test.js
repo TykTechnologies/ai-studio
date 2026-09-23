@@ -122,7 +122,7 @@ describe("groupsForDependents", () => {
   it("returns nothing for a missing payload and covers every group the API sends", () => {
     expect(groupsForDependents(null)).toEqual([]);
     expect(DEPENDENT_GROUPS.map((g) => g.key)).toEqual([
-      "apps", "catalogues", "llms", "tools", "datasources", "agents", "model_routers", "chats",
+      "apps", "catalogues", "llms", "tools", "datasources", "agents", "model_routers", "semantic_routers", "chats",
     ]);
   });
 });

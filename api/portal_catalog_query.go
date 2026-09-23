@@ -66,6 +66,7 @@ var catalogTypeNames = map[string]string{
 	CatalogItemPluginResource: "resource",
 	CatalogItemMCPServer:      "MCP server",
 	CatalogItemModelRouter:    "model router",
+	CatalogItemSemanticRouter: "semantic router",
 }
 
 type catalogQuery struct {
@@ -209,6 +210,15 @@ var catalogSources = []catalogSource{
 		catalogueIDCol: "catalogue_model_routers.catalogue_id", catalogueNameCol: "catalogues.name", catalogueType: CatalogItemLLM,
 		searchCols: []string{"model_routers.name", "model_routers.slug", "model_routers.description", "model_routers.short_description", "model_routers.long_description"},
 		base:       models.AccessibleModelRouterQuery,
+	},
+	{
+		// Semantic Routers share the LLM catalogues too, scored like Model
+		// Routers (models.SemanticRouterPrivacySQL).
+		typ: CatalogItemSemanticRouter, table: "semantic_routers",
+		kindCol: "semantic_routers.api_compat", privacyCol: models.SemanticRouterPrivacySQL,
+		catalogueIDCol: "catalogue_semantic_routers.catalogue_id", catalogueNameCol: "catalogues.name", catalogueType: CatalogItemLLM,
+		searchCols: []string{"semantic_routers.name", "semantic_routers.slug", "semantic_routers.description", "semantic_routers.short_description", "semantic_routers.long_description"},
+		base:       models.AccessibleSemanticRouterQuery,
 	},
 }
 

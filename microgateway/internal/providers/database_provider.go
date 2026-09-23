@@ -142,7 +142,7 @@ func (p *DatabaseProvider) GetApp(id uint) (*database.App, error) {
 		query = query.Where("(namespace = '' OR namespace = ?)", p.namespace)
 	}
 	
-	err := query.Preload("LLMs").Preload("ModelRouters").First(&app).Error
+	err := query.Preload("LLMs").Preload("ModelRouters").Preload("SemanticRouters").First(&app).Error
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (p *DatabaseProvider) ListApps(namespace string, active bool) ([]database.A
 		query = query.Where("(namespace = '' OR namespace = ?)", targetNamespace)
 	}
 	
-	err := query.Preload("LLMs").Preload("ModelRouters").Find(&apps).Error
+	err := query.Preload("LLMs").Preload("ModelRouters").Preload("SemanticRouters").Find(&apps).Error
 	return apps, err
 }
 

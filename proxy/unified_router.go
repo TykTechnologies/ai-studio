@@ -240,9 +240,16 @@ func (p *Proxy) handleUnifiedListModels(w http.ResponseWriter, r *http.Request) 
 	// Routers the app holds, as "{router}/{model}" for each model the router
 	// advertises. Resolved through the resolver so a router this gateway does
 	// not serve is left out.
+	granted := make([]RouterRef, 0, len(app.ModelRouters)+len(app.SemanticRouters))
 	for _, mr := range app.ModelRouters {
-		ref, ok := p.lookupRouter(mr.Slug)
-		if !ok || ref.Kind != RouterKindModel || ref.ID != mr.ID {
+		granted = append(granted, RouterRef{Kind: RouterKindModel, ID: mr.ID, Slug: mr.Slug})
+	}
+	for _, sr := range app.SemanticRouters {
+		granted = append(granted, RouterRef{Kind: RouterKindSemantic, ID: sr.ID, Slug: sr.Slug})
+	}
+	for _, g := range granted {
+		ref, ok := p.lookupRouter(g.Slug)
+		if !ok || ref.Kind != g.Kind || ref.ID != g.ID {
 			continue
 		}
 		for _, m := range p.resolver().Models(ref) {

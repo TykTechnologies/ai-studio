@@ -182,6 +182,10 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	} else {
 		log.Debug().Int("router_count", modelRouterService.GetRouterCount()).Msg("Model routers loaded in hub-spoke container")
 	}
+	semanticRouterService := NewSemanticRouterService(db)
+	if err := semanticRouterService.LoadRouters(namespace); err != nil {
+		log.Warn().Err(err).Msg("Failed to load semantic routers")
+	}
 
 	return &ServiceContainer{
 		DB:         db,
@@ -201,6 +205,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 		PluginManager:      pluginManager,
 		ModelRouterService: modelRouterService,
+		SemanticRouterService: semanticRouterService,
 
 		// Edge identity from config
 		EdgeID:        cfg.HubSpoke.EdgeID,

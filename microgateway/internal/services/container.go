@@ -46,6 +46,8 @@ type ServiceContainer struct {
 
 	// Model Router (Enterprise feature)
 	ModelRouterService *ModelRouterService
+	// Semantic Router (Enterprise feature)
+	SemanticRouterService *SemanticRouterService
 
 	// Edge identity (populated in edge mode)
 	EdgeID        string
@@ -169,6 +171,10 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	} else {
 		log.Debug().Int("router_count", modelRouterService.GetRouterCount()).Msg("Model routers loaded")
 	}
+	semanticRouterService := NewSemanticRouterService(db)
+	if err := semanticRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+		log.Warn().Err(err).Msg("Failed to load semantic routers")
+	}
 
 	return &ServiceContainer{
 		DB:         db,
@@ -190,7 +196,8 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		PluginSecurityService: pluginSecurityService,
 
 		// Model Router (Enterprise feature)
-		ModelRouterService: modelRouterService,
+		ModelRouterService:    modelRouterService,
+		SemanticRouterService: semanticRouterService,
 
 		// Edge identity from config (populated in edge mode)
 		EdgeID:        cfg.HubSpoke.EdgeID,

@@ -61,6 +61,11 @@ const (
 	TopicModelRouterUpdated = "system.model_router.updated"
 	TopicModelRouterDeleted = "system.model_router.deleted"
 
+	// SemanticRouter events
+	TopicSemanticRouterCreated = "system.semantic_router.created"
+	TopicSemanticRouterUpdated = "system.semantic_router.updated"
+	TopicSemanticRouterDeleted = "system.semantic_router.deleted"
+
 	// Governed metadata events (Enterprise). Payload object: {object_type, object_id, values, validation_status, source}
 	TopicGovernedMetadataUpdated = "system.governed_metadata.updated"
 	TopicGovernedMetadataDeleted = "system.governed_metadata.deleted"
@@ -276,4 +281,19 @@ func (e *SystemEventEmitter) EmitModelRouterUpdated(router interface{}, objectID
 // EmitModelRouterDeleted emits an event when a ModelRouter is deleted
 func (e *SystemEventEmitter) EmitModelRouterDeleted(objectID uint, userID uint) {
 	e.EmitObjectEvent(TopicModelRouterDeleted, "model_router", "deleted", objectID, userID, nil)
+}
+
+// EmitSemanticRouterCreated emits an event when a SemanticRouter is created
+func (e *SystemEventEmitter) EmitSemanticRouterCreated(router interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicSemanticRouterCreated, "semantic_router", "created", objectID, userID, router)
+}
+
+// EmitSemanticRouterUpdated emits an event when a SemanticRouter is updated
+func (e *SystemEventEmitter) EmitSemanticRouterUpdated(router interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicSemanticRouterUpdated, "semantic_router", "updated", objectID, userID, router)
+}
+
+// EmitSemanticRouterDeleted emits an event when a SemanticRouter is deleted
+func (e *SystemEventEmitter) EmitSemanticRouterDeleted(objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicSemanticRouterDeleted, "semantic_router", "deleted", objectID, userID, nil)
 }

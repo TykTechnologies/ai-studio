@@ -27,6 +27,8 @@ type appOptions struct {
 	// modelRouterIDs replaces the App's router grants when set; nil leaves
 	// them as they are (an update) or empty (a create).
 	modelRouterIDs *[]uint
+	// semanticRouterIDs is the same for Semantic Router grants.
+	semanticRouterIDs *[]uint
 	// teamID attributes the App to this team instead of the owner's
 	// resolved budget team (see WithAppTeam).
 	teamID *uint
@@ -129,18 +131,49 @@ func (s *Service) modelRouterProviders(routerIDs []uint) ([]privacyResource, err
 }
 
 // routerProvidersFor is the router side of an App's privacy check: the
-// routers the change sets, or, when it leaves them alone, the ones the App
-// already holds.
-func (s *Service) routerProvidersFor(o appOptions, existing []models.ModelRouter) ([]privacyResource, error) {
-	var ids []uint
+// routers (of either kind) the change sets, or, for a kind it leaves alone,
+// the ones the App already holds (existing is nil for a new App).
+func (s *Service) routerProvidersFor(o appOptions, existing *models.App) ([]privacyResource, error) {
+	var modelIDs, semanticIDs []uint
 	if o.modelRouterIDs != nil {
-		ids = *o.modelRouterIDs
-	} else {
-		for _, r := range existing {
-			ids = append(ids, r.ID)
+		modelIDs = *o.modelRouterIDs
+	} else if existing != nil {
+		for _, r := range existing.ModelRouters {
+			modelIDs = append(modelIDs, r.ID)
 		}
 	}
-	return s.modelRouterProviders(ids)
+	if o.semanticRouterIDs != nil {
+		semanticIDs = *o.semanticRouterIDs
+	} else if existing != nil {
+		for _, r := range existing.SemanticRouters {
+			semanticIDs = append(semanticIDs, r.ID)
+		}
+	}
+	out, err := s.modelRouterProviders(modelIDs)
+	if err != nil {
+		return nil, err
+	}
+	sem, err := s.semanticRouterProviders(semanticIDs)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, sem...), nil
+}
+
+// setAppRouterGrants applies the router grants the change sets. On a create
+// an empty list is a no-op; on an update it clears the grants.
+func (s *Service) setAppRouterGrants(app *models.App, o appOptions, create bool) error {
+	if o.modelRouterIDs != nil && (!create || len(*o.modelRouterIDs) > 0) {
+		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
+			return err
+		}
+	}
+	if o.semanticRouterIDs != nil && (!create || len(*o.semanticRouterIDs) > 0) {
+		if err := s.setAppSemanticRouters(app, *o.semanticRouterIDs); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // setAppModelRouters replaces the App's router grants.

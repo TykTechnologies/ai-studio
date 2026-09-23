@@ -223,6 +223,8 @@ const CatalogBrowse = ({ type: routeType = "" }) => {
               ...((counts[CATALOG_TYPES.MCP_SERVER] || 0) > 0 || routeType === CATALOG_TYPES.MCP_SERVER ? [CATALOG_TYPES.MCP_SERVER] : []),
               // Model routers (Enterprise) get a tab only where the catalog has some.
               ...((counts[CATALOG_TYPES.MODEL_ROUTER] || 0) > 0 || routeType === CATALOG_TYPES.MODEL_ROUTER ? [CATALOG_TYPES.MODEL_ROUTER] : []),
+              // Semantic routers (Enterprise) likewise.
+              ...((counts[CATALOG_TYPES.SEMANTIC_ROUTER] || 0) > 0 || routeType === CATALOG_TYPES.SEMANTIC_ROUTER ? [CATALOG_TYPES.SEMANTIC_ROUTER] : []),
             ].map((t) => (
               <Tab key={t} value={t} label={`${typeLabel(t, { plural: true })}${meta ? ` (${counts[t] || 0})` : ""}`} />
             ))}

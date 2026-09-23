@@ -46,6 +46,10 @@ export const P = Object.freeze({
   MODEL_ROUTERS_WRITE: p('model-routers', 'write'),
   MODEL_ROUTERS_DELETE: p('model-routers', 'delete'),
   MODEL_ROUTERS_PUBLISH: p('model-routers', 'publish'),
+  SEMANTIC_ROUTERS_READ: p('semantic-routers', 'read'),
+  SEMANTIC_ROUTERS_WRITE: p('semantic-routers', 'write'),
+  SEMANTIC_ROUTERS_DELETE: p('semantic-routers', 'delete'),
+  SEMANTIC_ROUTERS_PUBLISH: p('semantic-routers', 'publish'),
 
   // Context management
   DATASOURCES_READ: p('datasources', 'read'),

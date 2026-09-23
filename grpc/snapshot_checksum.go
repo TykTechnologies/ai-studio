@@ -69,6 +69,11 @@ func ComputeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot) (string, error)
 		router.UpdatedAt = nil
 	}
 
+	for _, router := range checksumSnapshot.SemanticRouters {
+		router.CreatedAt = nil
+		router.UpdatedAt = nil
+	}
+
 	// Clear volatile fields from nested ToolConfig messages
 	for _, tool := range checksumSnapshot.Tools {
 		tool.CreatedAt = nil

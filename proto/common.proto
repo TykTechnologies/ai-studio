@@ -76,6 +76,8 @@ message AppConfig {
   // Router grants (Enterprise): from the app_model_routers join table. A
   // router grant lets the App reach the router's LLMs, through the router.
   repeated uint32 model_router_ids = 23;
+  // Semantic Router grants (Enterprise): from app_semantic_routers.
+  repeated uint32 semantic_router_ids = 24;
 }
 
 // TokenConfig represents an API token configuration
@@ -155,6 +157,21 @@ message ModelRouterConfig {
   repeated ModelPoolConfig pools = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+}
+
+// SemanticRouterConfig is a Semantic Router (Enterprise). Its routes and
+// settings travel as the JSON of pkg/semanticrouting.Config, which the edge
+// compiles with the engine; example vectors are computed on the edge and
+// never travel, so the snapshot checksum only changes with the configuration.
+message SemanticRouterConfig {
+  uint32 id = 1;
+  string name = 2;
+  string slug = 3;
+  string namespace = 4;
+  bool is_active = 5;
+  string config_json = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
 }
 
 // ModelPoolConfig represents a pool within a model router
@@ -290,6 +307,8 @@ message ConfigurationSnapshot {
   // OAuth state for MCP authentication on edges
   repeated OAuthClientConfig oauth_clients = 13;
   repeated AccessTokenConfig access_tokens = 14;
+
+  repeated SemanticRouterConfig semantic_routers = 15; // Enterprise: Semantic routers
 }
 
 // ConfigurationChange represents a single configuration change
@@ -312,6 +331,7 @@ message ConfigurationChange {
     DATASOURCE = 8;
     OAUTH_CLIENT = 9;
     ACCESS_TOKEN = 10;
+    SEMANTIC_ROUTER = 11;
   }
   
   ChangeType change_type = 1;

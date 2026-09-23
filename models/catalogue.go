@@ -12,6 +12,8 @@ type Catalogue struct {
 	// ModelRouters are published in LLM catalogues alongside the LLMs they
 	// route to (Enterprise).
 	ModelRouters []ModelRouter `json:"-" gorm:"many2many:catalogue_model_routers;"`
+	// SemanticRouters are published the same way (Enterprise).
+	SemanticRouters []SemanticRouter `json:"-" gorm:"many2many:catalogue_semantic_routers;"`
 }
 
 type Catalogues []Catalogue

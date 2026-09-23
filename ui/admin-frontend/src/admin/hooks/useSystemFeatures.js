@@ -11,6 +11,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
     hub_spoke_multi_tenant: false, // Enterprise-only multi-tenant namespace support
     feature_groups: false, // Enterprise-only group-based access control
     feature_model_router: false, // Enterprise-only model routing
+    feature_semantic_router: false, // Enterprise-only semantic (prompt-classifying) routing
     feature_webhooks: false, // Enterprise-only outbound webhooks
     chat_ui_v2: false, // assistant-ui based chat pages (CHAT_UI_V2_ENABLED)
   });

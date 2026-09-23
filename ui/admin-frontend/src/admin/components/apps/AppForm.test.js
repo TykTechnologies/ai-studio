@@ -236,6 +236,39 @@ describe("AppForm relationships and commit semantics", () => {
     renderForm();
     await waitForLoaded();
     expect(picker("model router")).toBeUndefined();
+    expect(picker("semantic router")).toBeUndefined();
+  });
+
+  // Semantic routers (Enterprise) are granted the same way.
+  it("binds semantic routers through semantic_router_ids", async () => {
+    const withRouter = appPayload();
+    withRouter.data.data.attributes.semantic_router_ids = [31];
+    withRouter.data.data.attributes.semantic_routers = [{ id: 31, name: "Smart", slug: "smart", models: ["smart/auto"] }];
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url, config) => {
+      if (url === "/apps/5") return Promise.resolve(withRouter);
+      if (url === "/semantic-routers") {
+        return Promise.resolve({
+          data: {
+            data: [
+              { id: "32", attributes: { name: "Support triage" } },
+              { id: "31", attributes: { name: "Smart" } },
+            ],
+          },
+        });
+      }
+      return base(url, config);
+    });
+
+    renderForm();
+    await waitForLoaded();
+    await waitFor(() => expect(pickerItems("semantic router")).toEqual(["Smart"]));
+    expect(apiClient.get).toHaveBeenCalledWith("/semantic-routers", { params: { page: 1, page_size: 100 } });
+    fireEvent.click(within(picker("semantic router")).getByTestId("relationship-picker-add"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(apiClient.patch.mock.calls[0][1].data.attributes.semantic_router_ids).toEqual([31, 32]);
   });
 
   it("saves the picker selections in the unchanged id-array payload", async () => {

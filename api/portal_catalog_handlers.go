@@ -43,6 +43,7 @@ const (
 	CatalogItemPluginResource = "plugin_resource"
 	CatalogItemMCPServer      = "mcp_server"
 	CatalogItemModelRouter    = "model_router"
+	CatalogItemSemanticRouter = "semantic_router"
 )
 
 // CatalogRef names one catalog an item is available through.
@@ -148,6 +149,9 @@ type CatalogItemAttributes struct {
 	RouterSlug   string             `json:"router_slug,omitempty"`
 	RouterModels []string           `json:"router_models,omitempty"`
 	RouterLLMs   []CatalogRouterLLM `json:"router_llms,omitempty"`
+	// RouterRoutes are a Semantic Router's routes (name and description; the
+	// examples and keywords that pick them are configuration and stay out).
+	RouterRoutes []CatalogRouterRoute `json:"router_routes,omitempty"`
 }
 
 // CatalogItem is one entry of the unified catalog.
@@ -352,6 +356,25 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 		}
 		idOf = func(i int) uint { return routers[i].ID }
 		memberships = models.ModelRouterCatalogueMemberships
+	case CatalogItemSemanticRouter:
+		var routers []models.SemanticRouter
+		if err := query.Find(&routers).Error; err != nil {
+			return nil, err
+		}
+		ids := make([]uint, len(routers))
+		for i := range routers {
+			ids[i] = routers[i].ID
+		}
+		privacy, err := models.SemanticRouterPrivacyScores(db, ids)
+		if err != nil {
+			return nil, err
+		}
+		items = make([]CatalogItem, len(routers))
+		for i := range routers {
+			items[i] = semanticRouterCatalogItem(&routers[i], privacy)
+		}
+		idOf = func(i int) uint { return routers[i].ID }
+		memberships = models.SemanticRouterCatalogueMemberships
 	default:
 		return nil, nil
 	}
@@ -610,7 +633,7 @@ func (a *API) getPortalCatalog(c *gin.Context) {
 
 	// Facets over the whole accessible set: aggregates for the database
 	// types, the plugin instances (which the plugins list in full anyway).
-	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0, CatalogItemMCPServer: 0, CatalogItemModelRouter: 0}
+	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0, CatalogItemMCPServer: 0, CatalogItemModelRouter: 0, CatalogItemSemanticRouter: 0}
 	kinds := []CatalogKindFacet{}
 	catalogs := []CatalogFilterOption{}
 	for i := range catalogSources {

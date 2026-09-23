@@ -348,6 +348,8 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		RouterSourceModel:      req.RouterSourceModel,
 		RouterTargetModel:      req.RouterTargetModel,
 		RouterSelectionAlgo:    req.RouterSelectionAlgo,
+		RouteScore:             req.RouteScore,
+		ShadowRoute:            req.ShadowRoute,
 	}
 
 	// Store metadata for pulse transmission
@@ -813,6 +815,8 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			RouteSourceModel:  event.RouterSourceModel,
 			RouteTargetModel:  event.RouterTargetModel,
 			RouteSelection:    event.RouterSelectionAlgo,
+			RouteScore:        event.RouteScore,
+			ShadowRoute:       event.ShadowRoute,
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

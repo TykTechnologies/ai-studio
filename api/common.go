@@ -482,13 +482,17 @@ func (a *API) createUserApp(c *gin.Context) {
 	if len(req.MCPServerIDs) > 0 && !a.validateAppMCPBindings(c, currentUser.ID, currentUser.IsAdmin, req.LLMIDs, req.MCPServerIDs) {
 		return
 	}
-	var routerOpts []services.AppOption
+	var modelRouterIDs, semanticRouterIDs *[]uint
 	if len(req.ModelRouterIDs) > 0 {
-		if !a.validateAppModelRouterBindings(c, currentUser.ID, currentUser.IsAdmin, req.ModelRouterIDs) {
-			return
-		}
-		routerOpts = appRouterOptions(&req.ModelRouterIDs)
+		modelRouterIDs = &req.ModelRouterIDs
 	}
+	if len(req.SemanticRouterIDs) > 0 {
+		semanticRouterIDs = &req.SemanticRouterIDs
+	}
+	if !a.validateAppRouterBindings(c, currentUser.ID, currentUser.IsAdmin, modelRouterIDs, semanticRouterIDs) {
+		return
+	}
+	routerOpts := appRouterOptions(modelRouterIDs, semanticRouterIDs)
 
 	// Create the app (with plugin resources if any)
 	var app *models.App
@@ -576,6 +580,9 @@ type CreateAppRequest struct {
 	// ModelRouterIDs grants Model Routers published in the user's LLM
 	// catalogues (Enterprise).
 	ModelRouterIDs []uint `json:"model_router_ids,omitempty"`
+	// SemanticRouterIDs grants Semantic Routers published in the user's LLM
+	// catalogues (Enterprise).
+	SemanticRouterIDs []uint `json:"semantic_router_ids,omitempty"`
 }
 
 // getUserAccessibleDataSources godoc
@@ -802,6 +809,8 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			MCPServers      []AppMCPServerOutput `json:"mcp_servers,omitempty"`
 			ModelRouterIDs  []uint                 `json:"model_router_ids"`
 			ModelRouters    []AppModelRouterOutput `json:"model_routers,omitempty"`
+			SemanticRouterIDs []uint                    `json:"semantic_router_ids"`
+			SemanticRouters   []AppSemanticRouterOutput `json:"semantic_routers,omitempty"`
 		}{
 			Name:         app.Name,
 			Description:  app.Description,
@@ -847,6 +856,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 	// MCP access section (and its key minting) from the detail response.
 	response.Attributes.MCPServerIDs, response.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
 	response.Attributes.ModelRouterIDs, response.Attributes.ModelRouters = appModelRouterOutputs(app.ModelRouters)
+	response.Attributes.SemanticRouterIDs, response.Attributes.SemanticRouters = appSemanticRouterOutputs(app.SemanticRouters)
 
 	c.JSON(http.StatusOK, response)
 }

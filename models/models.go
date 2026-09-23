@@ -89,6 +89,9 @@ func InitModels(db *gorm.DB) error {
 		&ModelPool{},    // Model pools with patterns
 		&PoolVendor{},   // Pool-LLM vendor associations
 		&ModelMapping{}, // Model name mappings
+		// Semantic Router Models (Enterprise)
+		&SemanticRouter{},       // Semantic router configurations
+		&SemanticRouterTarget{}, // What each semantic router may send text to
 		// Scheduler Models
 		&PluginSchedule{},          // Plugin scheduled tasks
 		&PluginScheduleExecution{}, // Schedule execution history

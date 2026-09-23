@@ -23,6 +23,7 @@ export const CATALOG_TYPES = {
   PLUGIN_RESOURCE: "plugin_resource",
   MCP_SERVER: "mcp_server",
   MODEL_ROUTER: "model_router",
+  SEMANTIC_ROUTER: "semantic_router",
 };
 
 // Terminology from the September 2026 audit (M9): "LLM provider", "Data
@@ -35,6 +36,9 @@ const TYPE_LABELS = {
   [CATALOG_TYPES.MCP_SERVER]: { singular: "MCP server", plural: "MCP servers", slug: "mcp-servers", icon: "server" },
   // A model router lives in LLM catalogs and fronts LLM providers.
   [CATALOG_TYPES.MODEL_ROUTER]: { singular: "Model router", plural: "Model routers", slug: "model-routers", icon: "route" },
+  // A semantic router likewise lives in LLM catalogs; it picks a route by
+  // classifying the prompt.
+  [CATALOG_TYPES.SEMANTIC_ROUTER]: { singular: "Semantic router", plural: "Semantic routers", slug: "semantic-routers", icon: "psychology" },
 };
 
 export const typeLabel = (type, { plural = false } = {}) => {
@@ -45,6 +49,13 @@ export const typeLabel = (type, { plural = false } = {}) => {
 
 /** The API path of the portal detail endpoint for a model router. */
 export const modelRouterDetailApiPath = (id) => `/common/catalog/model-routers/${id}`;
+
+/** The API path of the portal detail endpoint for a semantic router. */
+export const semanticRouterDetailApiPath = (id) => `/common/catalog/semantic-routers/${id}`;
+
+/** Whether a catalog type is one of the routers (model or semantic). */
+export const isRouterType = (type) =>
+  type === CATALOG_TYPES.MODEL_ROUTER || type === CATALOG_TYPES.SEMANTIC_ROUTER;
 
 /** The singular label in running text ("LLM provider" keeps its capitals). */
 export const typeLabelLower = (type) => {
@@ -155,6 +166,8 @@ export const builtInDetailPath = (item) => {
       return `/portal/catalog/mcp-servers/${item.id}`;
     case CATALOG_TYPES.MODEL_ROUTER:
       return `/portal/catalog/model-routers/${item.id}`;
+    case CATALOG_TYPES.SEMANTIC_ROUTER:
+      return `/portal/catalog/semantic-routers/${item.id}`;
     case CATALOG_TYPES.PLUGIN_RESOURCE:
       return a.resource_type
         ? `/portal/catalog/resources/${a.resource_type.plugin_id}/${a.resource_type.slug}/${encodeURIComponent(item.id)}`
@@ -178,6 +191,8 @@ export const buildAppPath = (item) => {
       return `/portal/app/new?mcp_server=${item.id}`;
     case CATALOG_TYPES.MODEL_ROUTER:
       return `/portal/app/new?model_router=${item.id}`;
+    case CATALOG_TYPES.SEMANTIC_ROUTER:
+      return `/portal/app/new?semantic_router=${item.id}`;
     case CATALOG_TYPES.PLUGIN_RESOURCE:
       return a.resource_type
         ? `/portal/app/new?plugin_resource=${encodeURIComponent(`${a.resource_type.plugin_id}:${a.resource_type.slug}:${item.id}`)}`

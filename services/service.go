@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
@@ -62,6 +63,8 @@ type Service struct {
 	LicensingService licensing.Service
 	// Model Router (Enterprise)
 	ModelRouterService model_router.Service
+	// Semantic Router (Enterprise)
+	SemanticRouterService semantic_router.Service
 	// Governed Metadata (Enterprise)
 	GovernedMetadataService governed_metadata.Service
 	// Sync Status (Hub-and-Spoke)
@@ -295,6 +298,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		HookRegistry:          hookRegistry,
 		HookManager:           hookManager,
 		ModelRouterService:    modelRouterSvc,
+		SemanticRouterService: semantic_router.NewService(db),
 		SyncStatusService:     syncStatusService,
 		RBAC:                  rbac.NewService(db),
 	}

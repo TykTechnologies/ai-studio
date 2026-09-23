@@ -84,6 +84,9 @@ import BrandingSettings from "./pages/BrandingSettings";
 import ModelRouterList from "./pages/ModelRouterList";
 import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
 import ModelRouterForm from "./components/model-routers/ModelRouterForm";
+import SemanticRouterList from "./pages/SemanticRouterList";
+import SemanticRouterDetails from "./components/semantic-routers/SemanticRouterDetails";
+import SemanticRouterForm from "./components/semantic-routers/SemanticRouterForm";
 
 import ComplianceOverview from "./pages/ComplianceOverview";
 import AuditTrail from "./pages/AuditTrail";
@@ -281,5 +284,14 @@ const roleRoutes = [
   { path: "roles/new", element: <RoleForm />, permission: P.ROLES_WRITE },
 ];
 
-export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, roleRoutes };
+// Semantic Router routes (Enterprise only - requires feature_semantic_router)
+const semanticRouterRoutes = [
+  { path: "semantic-routers", element: <SemanticRouterList />, permission: P.SEMANTIC_ROUTERS_READ },
+  { path: "semantic-routers/:id", element: <SemanticRouterDetails />, permission: P.SEMANTIC_ROUTERS_READ },
+  { path: "semantic-routers/edit/:id", element: <SemanticRouterForm />, permission: P.SEMANTIC_ROUTERS_WRITE },
+  { path: "semantic-routers/:id/edit", element: <EditRedirect to="semantic-routers/edit" /> },
+  { path: "semantic-routers/new", element: <SemanticRouterForm />, permission: P.SEMANTIC_ROUTERS_WRITE },
+];
+
+export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, semanticRouterRoutes, roleRoutes };
 export default mainAdminRoutes;

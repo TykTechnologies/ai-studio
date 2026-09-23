@@ -14,6 +14,7 @@ const AssetTypeChip = ({ item, type, label, size = "small", sx = {} }) => {
     [CATALOG_TYPES.LLM]: theme.palette.background.surfaceBrandDefaultDashboard,
     // A model router fronts LLM providers, so it shares their colour.
     [CATALOG_TYPES.MODEL_ROUTER]: theme.palette.background.surfaceBrandDefaultDashboard,
+    [CATALOG_TYPES.SEMANTIC_ROUTER]: theme.palette.background.surfaceBrandDefaultDashboard,
     [CATALOG_TYPES.DATASOURCE]: theme.palette.background.surfaceInformativeDefault,
     [CATALOG_TYPES.TOOL]: theme.palette.background.surfaceSuccessDefault,
     [CATALOG_TYPES.PLUGIN_RESOURCE]: theme.palette.background.surfaceWarningDefault,

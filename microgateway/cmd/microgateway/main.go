@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -151,6 +152,11 @@ func main() {
 	var serviceContainer *services.ServiceContainer
 	var hubSpokeContainer *services.HubSpokeServiceContainer
 	var edgeReloadHandler *services.EdgeReloadHandler // For setting gateway reloader after server creation
+	// gatewayReloader refreshes the AI Gateway's in-memory LLMs; set once the
+	// server exists. Every configuration sync calls it: the reload handler's
+	// own reload is skipped when the pushed snapshot already arrived through
+	// the config-change callback, which left the gateway serving stale LLMs.
+	var gatewayReloader atomic.Pointer[func() error]
 
 	// Always use hub-spoke container for control and edge modes
 	if cfg.IsControl() || cfg.IsEdge() {
@@ -192,6 +198,16 @@ func main() {
 								log.Debug().Msg("Model routers reloaded after configuration sync")
 							}
 						}
+						if serviceContainer.SemanticRouterService != nil {
+							if err := serviceContainer.SemanticRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+								log.Error().Err(err).Msg("Failed to reload semantic routers after sync")
+							}
+						}
+						if reload := gatewayReloader.Load(); reload != nil {
+							if err := (*reload)(); err != nil {
+								log.Error().Err(err).Msg("Failed to reload gateway after configuration sync")
+							}
+						}
 
 						// Reconcile running plugins with updated DB state
 						go serviceContainer.PluginManager.ReconcilePlugins(context.Background())
@@ -223,6 +239,11 @@ func main() {
 								log.Error().Err(err).Msg("Failed to reload model routers after initial sync")
 							} else {
 								log.Debug().Msg("Model routers reloaded after initial configuration sync")
+							}
+						}
+						if serviceContainer.SemanticRouterService != nil {
+							if err := serviceContainer.SemanticRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+								log.Error().Err(err).Msg("Failed to reload semantic routers after initial sync")
 							}
 						}
 					}
@@ -368,6 +389,14 @@ func main() {
 	if edgeReloadHandler != nil {
 		edgeReloadHandler.SetGatewayReloader(srv.Reload)
 		log.Debug().Msg("Gateway reloader (srv.Reload) set on edge reload handler")
+	}
+	if cfg.IsEdge() {
+		reload := srv.Reload
+		gatewayReloader.Store(&reload)
+		// A sync that finished while the server was being built is picked up here.
+		if err := srv.Reload(); err != nil {
+			log.Error().Err(err).Msg("Failed to reload gateway after startup")
+		}
 	}
 
 	// Setup signal handling for graceful shutdown

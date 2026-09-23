@@ -545,6 +545,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/catalog/tools/:id", a.getPortalCatalogTool)
 	authed.GET("/catalog/mcp-servers/:id", a.getPortalCatalogMCPServer)
 	authed.GET("/catalog/model-routers/:id", a.getPortalCatalogModelRouter)
+	authed.GET("/catalog/semantic-routers/:id", a.getPortalCatalogSemanticRouter)
 	authed.GET("/catalog/resources/:plugin_id/:slug/:id", a.getPortalCatalogPluginResource)
 	authed.GET("/apps", a.getUserApps)
 	authed.GET("/apps/usage-summary", a.getUserAppsUsageSummary)
@@ -691,6 +692,8 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/catalogues/:id/llms/:llmId", authz.Delete("catalogues"), a.removeLLMFromCatalogue)
 	v1.GET("/catalogues/:id/llms", authz.Read("catalogues"), a.listCatalogueLLMs)
 	v1.GET("/catalogues/:id/groups", authz.Read("catalogues"), a.getCatalogueGroups)
+	v1.GET("/catalogues/:id/routers", authz.Read("catalogues"), a.getCatalogueRouters)
+	v1.PUT("/catalogues/:id/routers", authz.Write("catalogues"), a.setCatalogueRouters)
 
 	// Tag routes
 	v1.POST("/tags", authz.Write("tags"), a.createTag)
@@ -972,6 +975,18 @@ func (a *API) setupRoutes() {
 	v1.GET("/model-routers/:id/dependents", authz.Read("model-routers"), a.getModelRouterDependents)
 	v1.PUT("/model-routers/:id/catalogues", authz.Write("model-routers"), a.setModelRouterCatalogues)
 	v1.HandleFn("POST", "/model-routers/bulk", bulkActionPermission("model-routers"), a.bulkModelRouters)
+
+	// Semantic Router routes (Enterprise only)
+	v1.POST("/semantic-routers", authz.Write("semantic-routers"), a.createSemanticRouter)
+	v1.GET("/semantic-routers", authz.Read("semantic-routers"), a.listSemanticRouters)
+	v1.POST("/semantic-routers/test", authz.Write("semantic-routers"), a.testDraftSemanticRouter)
+	v1.GET("/semantic-routers/:id", authz.Read("semantic-routers"), a.getSemanticRouter)
+	v1.PATCH("/semantic-routers/:id", authz.Write("semantic-routers"), a.updateSemanticRouter)
+	v1.DELETE("/semantic-routers/:id", authz.Delete("semantic-routers"), a.deleteSemanticRouter)
+	v1.PATCH("/semantic-routers/:id/toggle", authz.Publish("semantic-routers"), a.toggleSemanticRouterActive)
+	v1.GET("/semantic-routers/:id/dependents", authz.Read("semantic-routers"), a.getSemanticRouterDependents)
+	v1.PUT("/semantic-routers/:id/catalogues", authz.Write("semantic-routers"), a.setSemanticRouterCatalogues)
+	v1.POST("/semantic-routers/:id/test", authz.Write("semantic-routers"), a.testSemanticRouter)
 
 	// Marketplace routes (only register if marketplace service is available)
 	if a.service.MarketplaceService != nil {

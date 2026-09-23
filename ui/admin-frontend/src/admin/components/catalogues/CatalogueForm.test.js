@@ -21,6 +21,14 @@ jest.mock("../../utils/apiClient", () => ({
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
 
+// A plain function (not a jest.fn implementation), so CRA's resetMocks
+// cannot clear it; tests switch routers on through mockFeatures.
+let mockFeatures = {};
+jest.mock("../../hooks/useSystemFeatures", () => ({
+  __esModule: true,
+  default: () => ({ features: mockFeatures, loading: false }),
+}));
+
 const mockNavigate = jest.fn();
 jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),
@@ -42,6 +50,7 @@ const renderForm = () =>
 describe("CatalogueForm", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFeatures = {};
     apiClient.get.mockResolvedValue({
       data: { data: [{ id: "7", attributes: { name: "OpenAI", active: true } }] },
     });
@@ -179,6 +188,54 @@ describe("CatalogueForm", () => {
       // The form unmounts on redirect in the app; here navigate is a mock,
       // so the registry state after markSaved() is observable.
       await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
+    });
+  });
+
+  describe("routers", () => {
+    beforeEach(() => {
+      mockFeatures = { feature_model_router: true, feature_semantic_router: true };
+      apiClient.get.mockImplementation((url) => {
+        if (url.startsWith("/model-routers")) {
+          return Promise.resolve({ data: { data: [{ id: "3", attributes: { name: "Prod" } }], meta: { total_count: 1 } } });
+        }
+        if (url.startsWith("/semantic-routers")) {
+          return Promise.resolve({ data: { data: [{ id: "5", attributes: { name: "Smart" } }], meta: { total_count: 1 } } });
+        }
+        return Promise.resolve({
+          data: { data: [{ id: "7", attributes: { name: "OpenAI", active: true } }], meta: { total_count: 1 } },
+        });
+      });
+      apiClient.put = jest.fn().mockResolvedValue({ data: { data: {} } });
+    });
+
+    it("publishes routers chosen from the catalog form", async () => {
+      renderForm();
+      await screen.findByLabelText(/Catalog Name/);
+      fireEvent.change(screen.getByLabelText(/Catalog Name/), { target: { value: "Routed" } });
+
+      const pick = async (label, option) => {
+        const input = await screen.findByRole("combobox", { name: label });
+        fireEvent.focus(input);
+        fireEvent.mouseDown(input);
+        fireEvent.click(await screen.findByRole("option", { name: option }));
+      };
+      await pick("Add semantic router", "Smart");
+
+      fireEvent.click(screen.getByRole("button", { name: /create catalog/i }));
+      await waitFor(() =>
+        expect(apiClient.put).toHaveBeenCalledWith("/catalogues/42/routers", {
+          model_router_ids: [],
+          semantic_router_ids: [5],
+        })
+      );
+    });
+
+    it("hides the router pickers without the router features", async () => {
+      mockFeatures = {};
+      renderForm();
+      await screen.findByLabelText(/Catalog Name/);
+      expect(screen.queryByRole("combobox", { name: "Add semantic router" })).toBeNull();
+      expect(screen.queryByRole("combobox", { name: "Add model router" })).toBeNull();
     });
   });
 });
