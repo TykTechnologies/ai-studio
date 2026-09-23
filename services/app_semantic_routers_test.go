@@ -137,3 +137,38 @@ func TestRouteSlugs_SemanticRoutersClashWithLLMsAndModelRouters(t *testing.T) {
 	assert.ErrorIs(t, models.CheckSemanticRouterRouteSlug(f.db, "public"), models.ErrRouteSlugTaken)
 	assert.NoError(t, models.CheckSemanticRouterRouteSlug(f.db, "fresh"))
 }
+
+func TestCatalogueRouters_BothDirections(t *testing.T) {
+	f := newSemanticFixture(t)
+	other := &models.Catalogue{Name: "Other"}
+	require.NoError(t, f.db.Create(other).Error)
+
+	// Set from the catalogue: the router side sees it.
+	got, err := f.svc.SetCatalogueRouters(other.ID, &[]uint{f.prod.ID}, &[]uint{f.smart.ID, f.hidden.ID})
+	require.NoError(t, err)
+	assert.Len(t, got.ModelRouters, 1)
+	assert.Len(t, got.SemanticRouters, 2)
+	cats, err := f.svc.GetSemanticRouterCatalogues(f.hidden.ID)
+	require.NoError(t, err)
+	require.Len(t, cats, 1)
+	assert.Equal(t, "Other", cats[0].Name)
+
+	// Set from the router: the catalogue side sees it.
+	_, err = f.svc.SetSemanticRouterCatalogues(f.hidden.ID, nil)
+	require.NoError(t, err)
+	got, err = f.svc.GetCatalogueRouters(other.ID)
+	require.NoError(t, err)
+	require.Len(t, got.SemanticRouters, 1)
+	assert.Equal(t, "Smart", got.SemanticRouters[0].Name)
+
+	// A nil list leaves that kind alone; an empty one clears it.
+	got, err = f.svc.SetCatalogueRouters(other.ID, nil, &[]uint{})
+	require.NoError(t, err)
+	assert.Len(t, got.ModelRouters, 1)
+	assert.Empty(t, got.SemanticRouters)
+
+	_, err = f.svc.SetCatalogueRouters(other.ID, &[]uint{9999}, nil)
+	assert.ErrorIs(t, err, ErrInvalidRouterReference)
+	got, _ = f.svc.GetCatalogueRouters(other.ID)
+	assert.Len(t, got.ModelRouters, 1, "a refused change leaves the catalogue as it was")
+}

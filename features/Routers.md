@@ -38,6 +38,7 @@ POST /v1/chat/completions  {"model": "openai/gpt-4o"}   -> LLM "openai"
 
 - Routers are published in **LLM catalogues**.
   - Model Routers use `catalogue_model_routers` and `PUT /api/v1/model-routers/{id}/catalogues`; Semantic Routers use `catalogue_semantic_routers` and `PUT /api/v1/semantic-routers/{id}/catalogues`.
+  - Memberships can also be edited from the catalogue: `GET`/`PUT /api/v1/catalogues/{id}/routers` (`model_router_ids`, `semantic_router_ids`; a list left out is unchanged). The LLM catalogue form and details page show both kinds.
   - Visibility follows `models.Accessible{Model,Semantic}RouterQuery`: user → teams → LLM catalogues → active routers.
 - The portal catalog has `model_router` and `semantic_router` item types in the LLM catalogue family.
   - Both carry `router_models`, the `{slug}/{model}` strings.

@@ -23,10 +23,40 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
+
+// One kind of router published in the catalogue, linking to its page.
+const RouterList = ({ title, routers, path, emptyText }) => (
+  <Section title={title}>
+    <List>
+      {routers.length > 0 ? (
+        routers.map((r) => (
+          <React.Fragment key={r.id}>
+            <ListItem component={Link} to={`/admin/${path}/${r.id}`} sx={{ color: "inherit" }}>
+              <ListItemText
+                primary={r.name}
+                secondary={`${r.slug}${r.active ? "" : " (inactive)"}`}
+              />
+            </ListItem>
+            <Divider />
+          </React.Fragment>
+        ))
+      ) : (
+        <ListItem>
+          <ListItemText primary={emptyText} />
+        </ListItem>
+      )}
+    </List>
+  </Section>
+);
 
 const CatalogueDetails = () => {
   const [catalogue, setCatalogue] = useState(null);
   const [llms, setLLMs] = useState([]);
+  const [routers, setRouters] = useState({ model_routers: [], semantic_routers: [] });
+  const { features } = useSystemFeatures();
+  const showModelRouters = Boolean(features?.feature_model_router);
+  const showSemanticRouters = Boolean(features?.feature_semantic_router);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { id } = useParams();
@@ -36,6 +66,19 @@ const CatalogueDetails = () => {
     fetchCatalogueDetails();
     fetchCatalogueLLMs();
   }, [id]);
+
+  useEffect(() => {
+    if (!showModelRouters && !showSemanticRouters) return;
+    apiClient
+      .get(`/catalogues/${id}/routers`)
+      .then((response) =>
+        setRouters({
+          model_routers: response.data.data.model_routers || [],
+          semantic_routers: response.data.data.semantic_routers || [],
+        })
+      )
+      .catch((err) => console.error("Error fetching catalog routers", err));
+  }, [id, showModelRouters, showSemanticRouters]);
 
   const fetchCatalogueDetails = async () => {
     try {
@@ -119,6 +162,24 @@ const CatalogueDetails = () => {
             )}
           </List>
         </Section>
+
+        {showModelRouters && (
+          <RouterList
+            title="Model routers in this catalog"
+            routers={routers.model_routers}
+            path="model-routers"
+            emptyText="No model routers in this catalog"
+          />
+        )}
+
+        {showSemanticRouters && (
+          <RouterList
+            title="Semantic routers in this catalog"
+            routers={routers.semantic_routers}
+            path="semantic-routers"
+            emptyText="No semantic routers in this catalog"
+          />
+        )}
 
         <CatalogueTeamsSection resourcePath="catalogues" id={id} />
 

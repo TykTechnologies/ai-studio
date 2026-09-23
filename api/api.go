@@ -692,6 +692,8 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/catalogues/:id/llms/:llmId", authz.Delete("catalogues"), a.removeLLMFromCatalogue)
 	v1.GET("/catalogues/:id/llms", authz.Read("catalogues"), a.listCatalogueLLMs)
 	v1.GET("/catalogues/:id/groups", authz.Read("catalogues"), a.getCatalogueGroups)
+	v1.GET("/catalogues/:id/routers", authz.Read("catalogues"), a.getCatalogueRouters)
+	v1.PUT("/catalogues/:id/routers", authz.Write("catalogues"), a.setCatalogueRouters)
 
 	// Tag routes
 	v1.POST("/tags", authz.Write("tags"), a.createTag)

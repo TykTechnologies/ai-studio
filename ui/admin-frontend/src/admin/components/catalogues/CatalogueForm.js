@@ -23,11 +23,23 @@ import {
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
+import useSystemFeatures from "../../hooks/useSystemFeatures";
+
+// Routers are published in LLM catalogues too; the picker works on
+// {id, attributes: {name}} items like the LLM one.
+const routerOption = (r) => ({ id: String(r.id), attributes: { name: r.name } });
 
 const CatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({ name: "" });
   const [llms, setLLMs] = useState([]);
   const [availableLLMs, setAvailableLLMs] = useState([]);
+  const [modelRouters, setModelRouters] = useState([]);
+  const [semanticRouters, setSemanticRouters] = useState([]);
+  const [availableModelRouters, setAvailableModelRouters] = useState([]);
+  const [availableSemanticRouters, setAvailableSemanticRouters] = useState([]);
+  const { features } = useSystemFeatures();
+  const showModelRouters = Boolean(features?.feature_model_router);
+  const showSemanticRouters = Boolean(features?.feature_semantic_router);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -39,7 +51,12 @@ const CatalogueForm = () => {
 
   // Unsaved-changes tracking: the name plus the picker's membership.
   const { markSaved } = useUnsavedForm(
-    { name: catalogue.name, llmIds: llms.map((llm) => String(llm.id)).sort() },
+    {
+      name: catalogue.name,
+      llmIds: llms.map((llm) => String(llm.id)).sort(),
+      modelRouterIds: modelRouters.map((r) => String(r.id)).sort(),
+      semanticRouterIds: semanticRouters.map((r) => String(r.id)).sort(),
+    },
     { ready: !loading }
   );
   const confirmNavigation = useConfirmNavigation();
@@ -78,6 +95,34 @@ const CatalogueForm = () => {
     fetchData();
   }, [id]);
 
+  // Routers load once the edition says they exist.
+  useEffect(() => {
+    if (!showModelRouters && !showSemanticRouters) return;
+    let cancelled = false;
+    const fetchRouters = async () => {
+      try {
+        const [current, mrs, srs] = await Promise.all([
+          id ? apiClient.get(`/catalogues/${id}/routers`) : Promise.resolve(null),
+          showModelRouters ? listAll(apiClient, "/model-routers") : Promise.resolve(null),
+          showSemanticRouters ? listAll(apiClient, "/semantic-routers") : Promise.resolve(null),
+        ]);
+        if (cancelled) return;
+        if (mrs) setAvailableModelRouters(mrs.data.data || []);
+        if (srs) setAvailableSemanticRouters(srs.data.data || []);
+        if (current) {
+          setModelRouters((current.data.data.model_routers || []).map(routerOption));
+          setSemanticRouters((current.data.data.semantic_routers || []).map(routerOption));
+        }
+      } catch (error) {
+        console.error("Error fetching routers", error);
+      }
+    };
+    fetchRouters();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, showModelRouters, showSemanticRouters]);
+
   const handleChange = (e) => {
     setCatalogue({ ...catalogue, [e.target.name]: e.target.value });
   };
@@ -109,6 +154,14 @@ const CatalogueForm = () => {
 
       // Now handle LLM additions/removals
       await updateCatalogueLLMs(catalogueId, desiredLLMs);
+
+      if (showModelRouters || showSemanticRouters) {
+        const toIds = (list) => list.map((r) => parseInt(r.id, 10));
+        await apiClient.put(`/catalogues/${catalogueId}/routers`, {
+          ...(showModelRouters && { model_router_ids: toIds(modelRouters) }),
+          ...(showSemanticRouters && { semantic_router_ids: toIds(semanticRouters) }),
+        });
+      }
 
       markSaved();
       navigate("/admin/catalogs/llms", {
@@ -191,7 +244,7 @@ const CatalogueForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific teams to manage access easily.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers and routers that you can assign to specific teams to manage access easily.</Typography>  
       </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -215,6 +268,32 @@ const CatalogueForm = () => {
               getOptionLabel={(llm) => llm.attributes?.name ?? ""}
             />
           </Box>
+
+          {showModelRouters && (
+            <Box sx={{ mt: 3 }}>
+              <RelationshipPicker
+                label="Model routers in this catalog"
+                itemLabel="model router"
+                value={modelRouters}
+                onChange={setModelRouters}
+                options={availableModelRouters}
+                getOptionLabel={(r) => r.attributes?.name ?? ""}
+              />
+            </Box>
+          )}
+
+          {showSemanticRouters && (
+            <Box sx={{ mt: 3 }}>
+              <RelationshipPicker
+                label="Semantic routers in this catalog"
+                itemLabel="semantic router"
+                value={semanticRouters}
+                onChange={setSemanticRouters}
+                options={availableSemanticRouters}
+                getOptionLabel={(r) => r.attributes?.name ?? ""}
+              />
+            </Box>
+          )}
 
           <Box mt={3} display="flex" gap={2}>
             <SecondaryOutlineButton onClick={handleCancel}>
