@@ -51,7 +51,7 @@ cat > .env << EOF
 ENCRYPTION_KEY=$ENCRYPTION_KEY
 JWT_SECRET=$JWT_SECRET
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/microgateway.db?mode=rwc
 LOG_LEVEL=info
 EOF
 ```

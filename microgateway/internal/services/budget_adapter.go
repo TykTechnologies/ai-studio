@@ -25,12 +25,24 @@ func NewBudgetServiceAdapter(
 	}
 }
 
+// budgetStatusChecker is implemented by budget services that can return the
+// current spend and limit from the check itself.
+type budgetStatusChecker interface {
+	CheckBudgetStatus(appID uint, llmID *uint, estimatedCost float64) (usage, limit float64, err error)
+}
+
 // CheckBudget validates if the request is within budget limits
 func (a *BudgetServiceAdapter) CheckBudget(app *models.App, llm *models.LLM) (float64, float64, error) {
 	// Convert models to internal format and check budget
 	var llmID *uint
 	if llm != nil {
 		llmID = &llm.ID
+	}
+
+	// A service that reports spend with its check answers in one pass; the
+	// generic path below reads the app and its usage twice per request.
+	if sc, ok := a.budgetService.(budgetStatusChecker); ok {
+		return sc.CheckBudgetStatus(app.ID, llmID, 0.0)
 	}
 
 	err := a.budgetService.CheckBudget(app.ID, llmID, 0.0) // We'll estimate cost as 0 for pre-check

@@ -63,7 +63,7 @@ type ServerConfig struct {
 // DatabaseConfig holds database configuration
 type DatabaseConfig struct {
 	Type            string        `env:"DATABASE_TYPE" envDefault:"sqlite"` // sqlite or postgres
-	DSN             string        `env:"DATABASE_DSN" envDefault:"file:./data/microgateway.db?cache=shared&mode=rwc"`
+	DSN             string        `env:"DATABASE_DSN" envDefault:"file:./data/microgateway.db?mode=rwc"`
 	MaxOpenConns    int           `env:"DB_MAX_OPEN_CONNS" envDefault:"25"`
 	MaxIdleConns    int           `env:"DB_MAX_IDLE_CONNS" envDefault:"25"`
 	ConnMaxLifetime time.Duration `env:"DB_CONN_MAX_LIFETIME" envDefault:"5m"`

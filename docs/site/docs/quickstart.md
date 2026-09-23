@@ -142,7 +142,7 @@ WRITE_TIMEOUT=300s
 SHUTDOWN_TIMEOUT=30s
 
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/edge.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/edge.db?mode=rwc
 DB_AUTO_MIGRATE=true
 
 GATEWAY_MODE=edge

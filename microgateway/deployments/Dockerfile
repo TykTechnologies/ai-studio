@@ -102,13 +102,13 @@ EXPOSE 8080 50051
 
 # Health check using the built-in health endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+    CMD wget -q -O /dev/null http://localhost:8080/health || exit 1
 
 # Set default environment variables for microgateway
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=8080
 ENV DATABASE_TYPE=sqlite
-ENV DATABASE_DSN=file:./data/microgateway.db?cache=shared&mode=rwc
+ENV DATABASE_DSN=file:./data/microgateway.db?mode=rwc
 ENV LOG_LEVEL=info
 ENV LOG_FORMAT=json
 ENV GATEWAY_MODE=standalone
