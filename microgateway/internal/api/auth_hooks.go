@@ -503,22 +503,43 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 // /llm/ request. Each hook needs it only for the LLM's ID, vendor and
 // governed metadata, and usually only to find that the LLM has no plugins,
 // yet each lookup preloaded every app linked to the LLM: about a dozen
-// queries per request between the three hooks. Entries are shared read-only
-// and are invalidated by any configuration write (database.GenCache).
+// queries per request between the three hooks. Entries are invalidated by
+// any configuration write (database.GenCache).
+//
+// The cached LLM is stored without its Apps and Filters relations, which the
+// hooks do not use, and every caller gets its own deep copy.
 type hookLLMLookup struct {
 	gateway services.GatewayServiceInterface
-	cache   *database.GenCache[string, interface{}]
+	cache   *database.GenCache[string, *database.LLM]
 }
 
 func newHookLLMLookup(sc *services.ServiceContainer) *hookLLMLookup {
 	if err := database.EnsureConfigGenerationCallbacks(sc.DB); err != nil {
 		log.Warn().Err(err).Msg("Could not register config generation callbacks; auth hook LLM lookups fall back to a short TTL")
 	}
-	return &hookLLMLookup{gateway: sc.GatewayService, cache: database.NewGenCache[string, interface{}]()}
+	return &hookLLMLookup{gateway: sc.GatewayService, cache: database.NewGenCache[string, *database.LLM]()}
 }
 
+// get returns the LLM as the hooks expect it from GetLLMBySlug: an
+// interface{} holding a *database.LLM.
 func (l *hookLLMLookup) get(slug string) (interface{}, error) {
-	return l.cache.Load(slug, func() (interface{}, error) { return l.gateway.GetLLMBySlug(slug) })
+	llm, err := l.cache.Load(slug, func() (*database.LLM, error) {
+		v, err := l.gateway.GetLLMBySlug(slug)
+		if err != nil {
+			return nil, err
+		}
+		found, ok := v.(*database.LLM)
+		if !ok {
+			return nil, fmt.Errorf("unexpected LLM type %T for %q", v, slug)
+		}
+		trimmed := *found
+		trimmed.Apps, trimmed.Filters = nil, nil
+		return &trimmed, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return database.DeepCopy(llm), nil
 }
 
 func extractLLMSlugFromPath(path string) string {

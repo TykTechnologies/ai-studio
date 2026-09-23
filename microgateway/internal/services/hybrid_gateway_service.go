@@ -183,8 +183,12 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 
 // GetAppByTokenID overrides to handle pseudo token IDs from on-demand validation
 func (h *HybridGatewayService) GetAppByTokenID(tokenID uint) (*database.App, error) {
-	// The cached app is shared: callers convert it and must not modify it.
-	return h.apps.Load(tokenID, func() (*database.App, error) { return h.loadAppByTokenID(tokenID) })
+	app, err := h.apps.Load(tokenID, func() (*database.App, error) { return h.loadAppByTokenID(tokenID) })
+	if err != nil {
+		return nil, err
+	}
+	// Each caller gets its own copy, so none can change the cached app.
+	return database.DeepCopy(app), nil
 }
 
 func (h *HybridGatewayService) loadAppByTokenID(tokenID uint) (*database.App, error) {

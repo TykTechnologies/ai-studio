@@ -85,6 +85,30 @@ func TestHybridGatewayService_GetAppByTokenID_CacheSeesAccessChange(t *testing.T
 	assert.Empty(t, got.LLMs, "revoking an LLM must be visible on the next request")
 }
 
+// A caller that modifies the app it got must not change what the next
+// request sees.
+func TestHybridGatewayService_GetAppByTokenID_ReturnsCopies(t *testing.T) {
+	db, repo := setupHybridTestDB(t)
+	h := createTestHybridService(t, db, repo)
+	app := &database.App{Name: "a", IsActive: true}
+	require.NoError(t, db.Create(app).Error)
+	llm := &database.LLM{Name: "l", Slug: "l", Vendor: "openai", IsActive: true}
+	require.NoError(t, db.Create(llm).Error)
+	require.NoError(t, db.Create(&database.AppLLM{AppID: app.ID, LLMID: llm.ID, IsActive: true}).Error)
+
+	first, err := h.GetAppByTokenID(app.ID)
+	require.NoError(t, err)
+	first.Name = "mutated"
+	first.LLMs[0].Slug = "mutated"
+	first.LLMs = nil
+
+	second, err := h.GetAppByTokenID(app.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "a", second.Name)
+	require.Len(t, second.LLMs, 1)
+	assert.Equal(t, "l", second.LLMs[0].Slug)
+}
+
 // Analytics and budget writes happen on every request; they must not empty
 // the configuration caches, or caching would buy nothing under load.
 func TestHybridGatewayService_GetAppByTokenID_RuntimeWritesKeepCache(t *testing.T) {

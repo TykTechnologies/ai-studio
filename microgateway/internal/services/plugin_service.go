@@ -198,8 +198,11 @@ func (s *PluginService) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) 
 	if err != nil {
 		return nil, err
 	}
-	// Callers get their own slice: the cached one is shared.
-	return append([]database.Plugin{}, plugins...), nil
+	// Callers get their own copy: the cached slice is shared.
+	if len(plugins) == 0 {
+		return []database.Plugin{}, nil
+	}
+	return database.DeepCopy(plugins), nil
 }
 
 func (s *PluginService) loadPluginsForLLM(llmID uint) ([]database.Plugin, error) {
