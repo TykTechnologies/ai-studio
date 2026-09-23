@@ -17,7 +17,7 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}) (*models.App, error) {
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
@@ -29,18 +29,9 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		return nil, err
 	}
 
-	// Apply default budget if not set and default is configured
-	budgetNotSet := monthlyBudget == nil
-	if !budgetNotSet && *monthlyBudget == 0 {
-		budgetNotSet = true
-	}
-	defaultBudget := config.Get("").DefaultAppBudget
-	if budgetNotSet && defaultBudget != nil && *defaultBudget > 0 {
-		monthlyBudget = defaultBudget
-		if budgetStartDate == nil {
-			now := time.Now()
-			budgetStartDate = &now
-		}
+	// A zero budget is "none requested", as it always was.
+	if monthlyBudget != nil && *monthlyBudget == 0 {
+		monthlyBudget = nil
 	}
 
 	app := &models.App{
@@ -51,6 +42,23 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		BudgetStartDate: budgetStartDate,
 		Namespace:       "", // Default to global namespace
 		Metadata:        metadata,
+	}
+
+	// Attribute the App to its team; a managed team pool supplies (or
+	// validates) its budget.
+	fromTeam, err := s.attributeNewApp(app, collectAppOptions(opts))
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply default budget if not set and default is configured
+	defaultBudget := config.Get("").DefaultAppBudget
+	if !fromTeam && app.MonthlyBudget == nil && defaultBudget != nil && *defaultBudget > 0 {
+		app.MonthlyBudget = defaultBudget
+		if app.BudgetStartDate == nil {
+			now := time.Now()
+			app.BudgetStartDate = &now
+		}
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -144,7 +152,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // CreateAppWithNamespace creates a new app with namespace support
-func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string, metadata map[string]interface{}) (*models.App, error) {
+func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
@@ -156,18 +164,9 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		return nil, err
 	}
 
-	// Apply default budget if not set and default is configured
-	budgetNotSet := monthlyBudget == nil
-	if !budgetNotSet && *monthlyBudget == 0 {
-		budgetNotSet = true
-	}
-	defaultBudget := config.Get("").DefaultAppBudget
-	if budgetNotSet && defaultBudget != nil && *defaultBudget > 0 {
-		monthlyBudget = defaultBudget
-		if budgetStartDate == nil {
-			now := time.Now()
-			budgetStartDate = &now
-		}
+	// A zero budget is "none requested", as it always was.
+	if monthlyBudget != nil && *monthlyBudget == 0 {
+		monthlyBudget = nil
 	}
 
 	app := &models.App{
@@ -178,6 +177,23 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		BudgetStartDate: budgetStartDate,
 		Namespace:       namespace,
 		Metadata:        metadata,
+	}
+
+	// Attribute the App to its team; a managed team pool supplies (or
+	// validates) its budget.
+	fromTeam, err := s.attributeNewApp(app, collectAppOptions(opts))
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply default budget if not set and default is configured
+	defaultBudget := config.Get("").DefaultAppBudget
+	if !fromTeam && app.MonthlyBudget == nil && defaultBudget != nil && *defaultBudget > 0 {
+		app.MonthlyBudget = defaultBudget
+		if app.BudgetStartDate == nil {
+			now := time.Now()
+			app.BudgetStartDate = &now
+		}
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -232,7 +248,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
@@ -248,6 +264,30 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	// are kept (see rejectChatOnlyTools).
 	if err := s.rejectChatOnlyTools(&app.ID, toolIDs); err != nil {
 		return nil, err
+	}
+
+	// A budget change, or a move to another team, must fit the destination
+	// team's pool.
+	o := collectAppOptions(opts)
+	if o.teamID != nil {
+		if err := s.validateAppTeam(*o.teamID); err != nil {
+			return nil, err
+		}
+	}
+	if s.TeamBudget != nil {
+		if err := s.TeamBudget.ValidateAllocation(app, monthlyBudget, o.teamID); err != nil {
+			return nil, teamBudgetError(err)
+		}
+	}
+	if o.teamID != nil && (app.TeamID == nil || *app.TeamID != *o.teamID) {
+		app.TeamID = o.teamID
+		// An allocation belongs to the pool it came from; in an unmanaged
+		// team the budget is an ordinary App budget again.
+		if app.BudgetSource == models.BudgetSourceTeam && s.TeamBudget != nil {
+			if tb, err := s.TeamBudget.GetTeamBudget(*o.teamID); err != nil || !tb.IsManaged() {
+				app.BudgetSource = ""
+			}
+		}
 	}
 
 	app.Name = name
@@ -1071,6 +1111,7 @@ func (s *Service) CreateAppWithResources(
 	budgetStartDate *time.Time,
 	metadata map[string]interface{},
 	pluginResources []PluginResourceSelection,
+	opts ...AppOption,
 ) (*models.App, error) {
 	// Collect privacy scores from plugin resources via plugin RPC
 	var pluginScores []int
@@ -1098,7 +1139,7 @@ func (s *Service) CreateAppWithResources(
 	}
 
 	// Create the app with built-in resources (reuse existing logic)
-	app, err := s.CreateApp(name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata)
+	app, err := s.CreateApp(name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1134,6 +1175,7 @@ func (s *Service) UpdateAppWithResources(
 	budgetStartDate *time.Time,
 	metadata map[string]interface{},
 	pluginResources []PluginResourceSelection,
+	opts ...AppOption,
 ) (*models.App, error) {
 	// Collect privacy scores from plugin resources via plugin RPC
 	var pluginScores []int
@@ -1162,7 +1204,7 @@ func (s *Service) UpdateAppWithResources(
 	}
 
 	// Update the app with built-in resources (reuse existing logic)
-	app, err := s.UpdateApp(id, name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata)
+	app, err := s.UpdateApp(id, name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata, opts...)
 	if err != nil {
 		return nil, err
 	}

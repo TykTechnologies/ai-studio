@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -81,6 +82,11 @@ func (a *API) createApp(c *gin.Context) {
 		wantActive = false
 	}
 
+	var appOpts []services.AppOption
+	if input.Data.Attributes.TeamID != nil {
+		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
+	}
+
 	// Use namespace-aware service method if namespace is provided
 	var app *models.App
 	var err error
@@ -97,6 +103,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
 			pluginResources,
+			appOpts...,
 		)
 	} else if input.Data.Attributes.Namespace != "" {
 		app, err = a.service.CreateAppWithNamespace(
@@ -110,6 +117,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			input.Data.Attributes.Namespace,
 			metadata, // Pass metadata
+			appOpts...,
 		)
 	} else {
 		app, err = a.service.CreateApp(
@@ -122,6 +130,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			metadata, // Pass metadata
+			appOpts...,
 		)
 	}
 	if err != nil {
@@ -141,6 +150,10 @@ func (a *API) createApp(c *gin.Context) {
 					Detail string `json:"detail"`
 				}{{Title: "Resource Not Available To Apps", Detail: err.Error()}},
 			})
+			return
+		}
+		if he, ok := asHelperError(err); ok {
+			helpers.SendErrorResponse(c, he)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -286,6 +299,11 @@ func (a *API) updateApp(c *gin.Context) {
 		}
 	}
 
+	var appOpts []services.AppOption
+	if input.Data.Attributes.TeamID != nil {
+		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
+	}
+
 	var app *models.App
 	if len(pluginResources) > 0 {
 		app, err = a.service.UpdateAppWithResources(
@@ -300,6 +318,7 @@ func (a *API) updateApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
 			pluginResources,
+			appOpts...,
 		)
 	} else {
 		app, err = a.service.UpdateApp(
@@ -313,6 +332,7 @@ func (a *API) updateApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
+			appOpts...,
 		)
 	}
 	if err != nil {
@@ -341,6 +361,10 @@ func (a *API) updateApp(c *gin.Context) {
 					Detail string `json:"detail"`
 				}{{Title: "Resource Not Available To Apps", Detail: err.Error()}},
 			})
+			return
+		}
+		if he, ok := asHelperError(err); ok {
+			helpers.SendErrorResponse(c, he)
 			return
 		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -516,6 +540,8 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.MCPServerIDs, resp.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
+	resp.Attributes.TeamID = app.TeamID
+	resp.Attributes.BudgetSource = app.BudgetSource
 	resp.Attributes.IsActive = app.IsActive
 	resp.Attributes.IsOrphaned = app.IsOrphaned
 	resp.Attributes.Metadata = app.Metadata

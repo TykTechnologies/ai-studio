@@ -28,6 +28,8 @@ type DatabaseHandler struct {
 	complianceEventChan    chan []*models.ComplianceEvent
 	recStarted          bool
 	recMutex            sync.RWMutex
+	// teams attributes spend records to their team before they are written.
+	teams *teamStamper
 	ctx                 context.Context
 	cancel              context.CancelFunc
 }
@@ -69,6 +71,7 @@ func NewDatabaseHandler(ctx context.Context, db *gorm.DB) *DatabaseHandler {
 		db:     db,
 		ctx:    ctx,
 		cancel: cancel,
+		teams:  newTeamStamper(db),
 	}
 
 	// Initialize and start the handler
@@ -125,6 +128,7 @@ func (h *DatabaseHandler) startWorker() {
 	for {
 		select {
 		case record := <-h.chatRecordChan:
+			h.teams.stamp(record)
 			err := h.createRecordWithRetry(func() error {
 				return h.db.Create(record).Error
 			})
@@ -166,6 +170,9 @@ func (h *DatabaseHandler) startWorker() {
 				logger.Warnf("Error creating proxy log: %s", sanitizeError(err))
 			}
 		case records := <-h.chatRecordBatchChan:
+			for _, record := range records {
+				h.teams.stamp(record)
+			}
 			startTime := time.Now()
 			err := h.createRecordWithRetry(func() error {
 				return h.db.CreateInBatches(records, 100).Error

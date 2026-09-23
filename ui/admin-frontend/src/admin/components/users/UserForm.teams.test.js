@@ -12,6 +12,9 @@ import {
   useUnsavedChanges,
 } from "../../../components/unsaved-changes";
 
+jest.mock("../../context/EditionContext", () => ({
+  useEdition: () => ({ isEnterprise: false }),
+}));
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },

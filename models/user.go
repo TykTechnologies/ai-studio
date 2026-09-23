@@ -68,6 +68,9 @@ type User struct {
 	// update (SetEmailNotificationsEnabled).
 	EmailNotificationsEnabled bool    `json:"email_notifications_enabled" gorm:"default:true"`
 	Groups                    []Group `json:"groups" gorm:"many2many:user_groups;"`
+	// BudgetTeamID is the team the user's new Apps (and chat spend) are
+	// attributed to when they belong to several (Enterprise team budgets).
+	BudgetTeamID *uint `json:"budget_team_id"`
 
 	// Provenance and activity. AuthSource is one of the AuthSource*
 	// constants; SSOProfileID is the identity provider profile that

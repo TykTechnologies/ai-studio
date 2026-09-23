@@ -4,6 +4,11 @@ import Groups from './Groups';
 import { CACHE_KEYS } from '../../utils/constants';
 import { renderWithTheme } from '../../../test-utils/render-with-theme';
 
+jest.mock('./components/TeamBudgetsSwitch', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('./hooks/useGroups', () => ({
   __esModule: true,
   default: jest.fn(),

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -501,6 +502,8 @@ func (a *API) createUserApp(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Resource Not Available To Apps", Detail: err.Error()}}})
+		} else if he, ok := asHelperError(err); ok {
+			helpers.SendErrorResponse(c, he)
 		} else {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
@@ -778,6 +781,8 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			ToolIDs         []uint           `json:"tool_ids"`
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
+			TeamID          *uint            `json:"team_id"`
+			BudgetSource    string           `json:"budget_source"`
 			IsOrphaned      bool             `json:"is_orphaned"`
 			IsActive        bool             `json:"is_active"`
 			Credential      CredentialDetail `json:"credential"`
@@ -819,6 +824,8 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			},
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
+			TeamID:          app.TeamID,
+			BudgetSource:    app.BudgetSource,
 			IsOrphaned:      app.IsOrphaned,
 		},
 	}

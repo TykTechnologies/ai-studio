@@ -127,6 +127,18 @@ func (s *Service) DeleteGroup(id uint) error {
 		return err
 	}
 
+	// The team's budget goes with it, and nobody keeps it as budget team.
+	// Its Apps and past spend keep their team attribution for reporting.
+	if err := tx.Where("group_id = ?", group.ID).Delete(&models.TeamBudget{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Model(&models.User{}).Where("budget_team_id = ?", group.ID).
+		Update("budget_team_id", nil).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if err := group.Delete(tx); err != nil {
 		tx.Rollback()
 		return err

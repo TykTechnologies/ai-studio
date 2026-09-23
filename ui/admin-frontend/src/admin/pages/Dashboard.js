@@ -48,6 +48,7 @@ import {
 } from "chart.js";
 import IconButton from "@mui/material/IconButton";
 import { listAll } from "../utils/listAll";
+import TeamCostsTable from "../components/dashboard/TeamCostsTable";
 
 ChartJS.register(
   CategoryScale,
@@ -736,6 +737,7 @@ const Dashboard = () => {
                 ) : (
                   <NoDataMessage message="No budget usage data available." />
                 )}
+                <TeamCostsTable startDate={startDate} endDate={endDate} />
               </Grid>
             </Grid>
           </Box>

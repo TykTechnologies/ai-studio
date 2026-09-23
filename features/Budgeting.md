@@ -1,5 +1,7 @@
 ## Budget Control System
 
+> Team-level budgets (a ceiling and allocation pool per team) build on this system; see [TeamBudgets.md](TeamBudgets.md).
+
 **1. Overview & Purpose**
 
 The core goal of the Budget Control System is to enable organizations to set and enforce monthly spending limits on AI usage, specifically for:

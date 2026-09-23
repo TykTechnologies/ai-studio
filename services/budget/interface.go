@@ -47,3 +47,16 @@ type Service interface {
 	// ENT: Sends email notification
 	NotifyBudgetUsage(usage *models.BudgetUsage, threshold int) error
 }
+
+// TeamChecker lets team budgets take part in every App budget check and
+// analysis. The team_budget service satisfies it.
+type TeamChecker interface {
+	CheckApp(app *models.App) error
+	AnalyzeTeamUsage(app *models.App)
+}
+
+// TeamAware is implemented by budget services that consult a TeamChecker
+// (Enterprise). The community stub enforces nothing and does not.
+type TeamAware interface {
+	SetTeamChecker(TeamChecker)
+}

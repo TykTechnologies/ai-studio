@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
+	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
@@ -29,8 +30,11 @@ import (
 )
 
 type Service struct {
-	DB                  *gorm.DB
-	Budget              budget.Service
+	DB     *gorm.DB
+	Budget budget.Service
+	// TeamBudget is the team (Group) budget feature (Enterprise). It takes
+	// part in every Budget check; see InitBudgets.
+	TeamBudget          team_budget.Service
 	GroupAccessService  group_access.Service
 	NotificationService *NotificationService
 	LogExportService    log_export.Service
@@ -92,6 +96,24 @@ func (s *Service) Audit() audit.Service {
 	return s.auditService
 }
 
+// InitBudgets (re)builds the App/LLM budget service and the team budget
+// service around the given notification service, and has the former consult
+// the latter on every check. main calls it again once SMTP is configured, and
+// must hand the resulting Budget to the proxy so both share one cache.
+func (s *Service) InitBudgets(notifier *NotificationService) {
+	s.Budget = budget.NewService(s.DB, notifier)
+	s.TeamBudget = team_budget.NewService(team_budget.Deps{
+		DB:       s.DB,
+		Bus:      func() eventbridge.Bus { return s.EventBus },
+		Notifier: notifier,
+		Audit:    s.Audit,
+		NodeID:   "control",
+	})
+	if ta, ok := s.Budget.(budget.TeamAware); ok {
+		ta.SetTeamChecker(s.TeamBudget)
+	}
+}
+
 // InitWebhooks builds the webhooks service (Enterprise implementation when
 // linked in, community stub otherwise). Call after SetEventBus so ingestion
 // can subscribe; the audit trail is looked up lazily through Audit().
@@ -149,7 +171,6 @@ func NewService(db *gorm.DB) *Service {
 func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	secrets.SetDBRef(db)
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
-	budgetSvc := budget.NewService(db, notificationService)
 	groupAccessSvc := group_access.NewService(db)
 	modelRouterSvc := model_router.NewService(db)
 
@@ -261,7 +282,6 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	service := &Service{
 		DB:                    db,
 		NotificationService:   notificationService,
-		Budget:                budgetSvc,
 		GroupAccessService:    groupAccessSvc,
 		LogExportService:      logExportSvc,
 		EdgeService:           edgeService,
@@ -278,6 +298,8 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		SyncStatusService:     syncStatusService,
 		RBAC:                  rbac.NewService(db),
 	}
+
+	service.InitBudgets(notificationService)
 
 	// Governed metadata: hooks are optional (nil when no plugin manager); the event
 	// emitter is resolved lazily because SetEventBus runs after construction.

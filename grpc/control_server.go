@@ -173,6 +173,13 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	return server
 }
 
+// SetTeamBlockSource has the budget sync push team budget blocks to edges.
+func (s *ControlServer) SetTeamBlockSource(src TeamBlockSource) {
+	if s.budgetSyncService != nil {
+		s.budgetSyncService.SetTeamBlockSource(src)
+	}
+}
+
 // Start starts the gRPC control server
 func (s *ControlServer) Start() error {
 	// Create listener

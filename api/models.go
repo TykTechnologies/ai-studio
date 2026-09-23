@@ -100,6 +100,10 @@ type UserAttributes struct {
 	// Account switch. A disabled user cannot authenticate by any means.
 	Disabled   bool       `json:"disabled"`
 	DisabledAt *time.Time `json:"disabled_at,omitempty"`
+
+	// BudgetTeamID is the team the user's new Apps and chat spend are
+	// attributed to (Enterprise team budgets); null = resolved automatically.
+	BudgetTeamID *uint `json:"budget_team_id"`
 }
 
 // GroupResponse represents the response for group-related operations
@@ -482,6 +486,9 @@ type AppInput struct {
 			// on create (unless the caller lacks apps:publish, in which case
 			// the app is created inactive). Setting it needs apps:publish.
 			IsActive *bool `json:"is_active,omitempty"`
+			// TeamID attributes the App to a team (Enterprise team budgets).
+			// Omitted = the owner's budget team on create, unchanged on update.
+			TeamID *uint `json:"team_id,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -504,6 +511,8 @@ type AppResponse struct {
 		ToolIDs          []uint                 `json:"tool_ids"`
 		MonthlyBudget    *float64               `json:"monthly_budget"`
 		BudgetStartDate  *time.Time             `json:"budget_start_date"`
+		TeamID           *uint                  `json:"team_id"`
+		BudgetSource     string                 `json:"budget_source"`
 		IsActive         bool                   `json:"is_active"` // live switch (apps:publish)
 		IsOrphaned       bool                   `json:"is_orphaned"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
@@ -1142,6 +1151,8 @@ type AppDetailResponse struct {
 		ToolIDs         []uint           `json:"tool_ids"`
 		MonthlyBudget   *float64         `json:"monthly_budget"`
 		BudgetStartDate *time.Time       `json:"budget_start_date"`
+		TeamID          *uint            `json:"team_id"`
+		BudgetSource    string           `json:"budget_source"`
 		IsOrphaned      bool             `json:"is_orphaned"`
 		IsActive        bool             `json:"is_active"`
 		Credential      CredentialDetail `json:"credential"`

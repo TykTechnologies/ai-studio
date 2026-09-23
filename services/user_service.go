@@ -512,6 +512,10 @@ func (s *Service) DeleteUser(user *models.User) error {
 		return err
 	}
 
+	// Orphaned Apps live on without an owner; their team allocations go
+	// back to the pool.
+	s.releaseTeamAllocations(userApps)
+
 	// Execute "after_delete" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(

@@ -49,6 +49,18 @@ type BudgetSyncPayload struct {
 
 	// SequenceNumber for ordering and deduplication
 	SequenceNumber uint64 `json:"sequence_number"`
+
+	// TeamBlocks maps app_id to the reason its team refuses it (Enterprise
+	// team budgets). When TeamBlocksIncluded is set it is the complete set:
+	// edges replace theirs, so an unblocked App is released.
+	TeamBlocks         map[uint32]string `json:"team_blocks,omitempty"`
+	TeamBlocksIncluded bool              `json:"team_blocks_included,omitempty"`
+}
+
+// TeamBlockSource lists the Apps edges must refuse because of their team.
+// The team budget service satisfies it.
+type TeamBlockSource interface {
+	EdgeBlocks() (map[uint]string, error)
 }
 
 // BudgetSyncService aggregates budget usage from llm_chat_records
@@ -61,6 +73,14 @@ type BudgetSyncService struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	done           chan struct{}
+	teamBlocks     atomic.Value // TeamBlockSource
+}
+
+// SetTeamBlockSource makes every sync carry the team blocks.
+func (s *BudgetSyncService) SetTeamBlockSource(src TeamBlockSource) {
+	if src != nil {
+		s.teamBlocks.Store(src)
+	}
 }
 
 // DefaultBudgetSyncInterval is the default interval for budget sync (30 seconds)
@@ -227,19 +247,38 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		}
 	}
 
-	// Skip publishing if no usage data
-	if len(appBudgets) == 0 {
+	// Team blocks are sent every time (even empty) so edges release Apps
+	// whose team is back under budget.
+	var teamBlocks map[uint32]string
+	teamBlocksIncluded := false
+	if src, _ := s.teamBlocks.Load().(TeamBlockSource); src != nil {
+		blocks, err := src.EdgeBlocks()
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to compute team budget blocks; keeping edges' last set")
+		} else {
+			teamBlocksIncluded = true
+			teamBlocks = make(map[uint32]string, len(blocks))
+			for id, reason := range blocks {
+				teamBlocks[uint32(id)] = reason
+			}
+		}
+	}
+
+	// Skip publishing if there is nothing to sync
+	if len(appBudgets) == 0 && !teamBlocksIncluded {
 		log.Debug().Msg("No budget usage data to sync")
 		return
 	}
 
 	payload := BudgetSyncPayload{
-		AppUsages:        appUsages,           // Legacy field
-		AppBudgets:       appBudgets,          // New per-app periods
-		PeriodStart:      calendarPeriodStart, // Legacy field
-		PeriodEnd:        calendarPeriodEnd,   // Legacy field
-		ControlTimestamp: now,
-		SequenceNumber:   atomic.AddUint64(&s.sequenceNumber, 1),
+		TeamBlocks:         teamBlocks,
+		TeamBlocksIncluded: teamBlocksIncluded,
+		AppUsages:          appUsages,           // Legacy field
+		AppBudgets:         appBudgets,          // New per-app periods
+		PeriodStart:        calendarPeriodStart, // Legacy field
+		PeriodEnd:          calendarPeriodEnd,   // Legacy field
+		ControlTimestamp:   now,
+		SequenceNumber:     atomic.AddUint64(&s.sequenceNumber, 1),
 	}
 
 	// Publish via event bridge (DirDown = control to edges)

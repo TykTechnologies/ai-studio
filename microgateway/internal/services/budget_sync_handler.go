@@ -47,6 +47,12 @@ type BudgetSyncPayload struct {
 
 	// SequenceNumber for ordering and deduplication
 	SequenceNumber uint64 `json:"sequence_number"`
+
+	// TeamBlocks maps app_id to the reason its team refuses it. When
+	// TeamBlocksIncluded is set it is the complete set and replaces ours;
+	// controls without team budgets omit both and ours is left alone.
+	TeamBlocks         map[uint32]string `json:"team_blocks,omitempty"`
+	TeamBlocksIncluded bool              `json:"team_blocks_included,omitempty"`
 }
 
 // BudgetSyncTopic is re-exported from eventbridge for convenience
@@ -59,6 +65,15 @@ type BudgetSyncHandler struct {
 	db                 *gorm.DB
 	lastSequenceNumber uint64
 	mu                 sync.Mutex
+	// blocks receives team budget blocks; nil means the shared edge set.
+	blocks *TeamBlocks
+}
+
+func (h *BudgetSyncHandler) teamBlocks() *TeamBlocks {
+	if h.blocks != nil {
+		return h.blocks
+	}
+	return edgeTeamBlocks
 }
 
 // NewBudgetSyncHandler creates a new budget sync handler.
@@ -132,6 +147,14 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		return
 	}
 	h.lastSequenceNumber = payload.SequenceNumber
+
+	if payload.TeamBlocksIncluded {
+		blocks := make(map[uint]string, len(payload.TeamBlocks))
+		for appID, reason := range payload.TeamBlocks {
+			blocks[uint(appID)] = reason
+		}
+		h.teamBlocks().Replace(blocks)
+	}
 
 	// Use new AppBudgets if available (supports per-app budget periods)
 	if len(payload.AppBudgets) > 0 {

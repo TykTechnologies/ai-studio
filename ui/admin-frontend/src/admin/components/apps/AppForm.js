@@ -39,6 +39,8 @@ import {
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
+import AppTeamField from "./AppTeamField";
+import { errorDetail } from "../../services/teamBudgetsService";
 
 // The app stores relationships as id arrays (llm_ids, datasource_ids,
 // tool_ids, plugin resource instance ids) and the API payload keeps that
@@ -64,6 +66,7 @@ const AppForm = () => {
     tool_ids: [], // Added for tools
     monthly_budget: null,
     budget_start_date: null,
+    team_id: null, // Enterprise team budgets; null = owner's budget team
     namespace: "", // Added for edge availability
     metadata: {}, // Added for custom metadata
   });
@@ -125,6 +128,7 @@ const AppForm = () => {
           ? appData.tool_ids.map(String)
           : [],
         namespace: appData.namespace || "",
+        team_id: appData.team_id ?? null,
         metadata: metadata,
       });
       setMetadataJSON(JSON.stringify(metadata, null, 2));
@@ -358,8 +362,10 @@ const AppForm = () => {
         };
       });
 
+    // budget_source is server-owned; team_id null keeps the resolved team.
+    const { budget_source: _budgetSource, ...appFields } = app;
     const appPayload = {
-      ...app,
+      ...appFields,
       user_id: parseInt(app.user_id, 10),
       llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
@@ -392,7 +398,8 @@ const AppForm = () => {
       console.error("Error saving app", error);
       setSnackbar({
         open: true,
-        message: "Failed to save app. Please try again.",
+        // A refused team allocation explains itself (400 with the reason).
+        message: errorDetail(error, "Failed to save app. Please try again."),
         severity: "error",
       });
     }
@@ -468,6 +475,14 @@ const AppForm = () => {
                 )}
               </FormControl>
             </Grid>
+            {isEnterprise && (
+              <Grid item xs={12}>
+                <AppTeamField
+                  value={app.team_id}
+                  onChange={(teamId) => setApp((prev) => ({ ...prev, team_id: teamId }))}
+                />
+              </Grid>
+            )}
             <Grid item xs={12}>
               <RelationshipPicker
                 label="LLM providers"
@@ -498,7 +513,13 @@ const AppForm = () => {
                       InputProps={{
                         startAdornment: <InputAdornment position="start">$</InputAdornment>,
                       }}
-                      helperText={isEnterprise ? "Leave empty for no budget limit" : "Budget enforcement is an Enterprise feature"}
+                      helperText={
+                        !isEnterprise
+                          ? "Budget enforcement is an Enterprise feature"
+                          : app.budget_source === "team"
+                            ? "Allocated from the team's budget pool; 0 blocks the App"
+                            : "Leave empty for no budget limit, or the team's default allocation when its team has a budget"
+                      }
                     />
                     {!isEnterprise && (
                       <Tooltip

@@ -54,6 +54,36 @@ This provides **eventually-accurate** budget control. There may be a slight over
 
 > **Note:** Budget *enforcement* (blocking requests at the limit) is an Enterprise Edition feature. In Community Edition, budgets are tracked and visible in dashboards but requests are not blocked.
 
+## Team Budgets (Enterprise)
+
+Budgets can also be set per **team**. A team budget is both:
+
+*   **A ceiling:** the most all of the team's Apps may spend together in a month. It can alert only, or also block the team's Apps once it is reached.
+*   **An allocation pool:** when an App is created for a member of the team, it gets a default allocation from the pool, capped at what is left. When the pool is empty, the App gets nothing and its requests are refused until an administrator allocates to it. Deleting an App returns its allocation to the pool; the money it already spent this month still counts towards the team.
+
+**Which team an App belongs to.** Users can belong to several teams, so each App is attributed to one team when it is created:
+
+1.  the owner's **budget team**, if one is set on the user and they are still a member;
+2.  otherwise their first team other than Default;
+3.  otherwise the **Default** team.
+
+Administrators can choose another team on the App form.
+
+**Switching it on.** Team budgets are off until an administrator turns on the **Team budgets** switch on the Teams page. When it is on:
+
+*   the Default team starts with an empty pool (a budget of 0), so Apps that fall through to it get nothing until it is given a budget;
+*   Apps created before the switch keep their own budgets;
+*   a team without a budget is not affected.
+
+**Seeing what a team costs.** Every team's spend is reported whether or not it has a budget:
+
+*   the **Team Costs** table on the dashboard covers the selected date range;
+*   each team's page shows its budget, spend, allocations and the per-App breakdown for the current period.
+
+**Overshoot.** Administrators are notified at 80% and 100% of a team's budget. The same thresholds publish `budget.team.threshold` events, which can be sent to [webhooks](./webhooks.md), and are recorded in the audit trail. The team page also warns when the App allocations add up to more than the team budget.
+
+Edge gateways receive the list of Apps their team blocks with each budget pulse, so a team block reaches the edges within one sync interval (30 seconds by default).
+
 ## Integration with Other Systems
 
 *   **[Analytics & Monitoring](./analytics.md):** The Analytics system provides the cost data used to track spending against budgets. The current spent amount for a budget period is derived from aggregated analytics data.

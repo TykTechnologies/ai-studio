@@ -280,3 +280,63 @@ describe("AppForm relationships and commit semantics", () => {
     expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
   });
 });
+
+describe("AppForm team budgets (Enterprise)", () => {
+  const teamReport = {
+    team_id: 3,
+    enabled: true,
+    managed: true,
+    monthly_budget: 100,
+    default_app_allocation: 20,
+    unallocated: 40,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockParams = { id: "5" };
+    useEdition.mockReturnValue({ isEnterprise: true });
+    const payload = appPayload();
+    Object.assign(payload.data.data.attributes, { team_id: 3, budget_source: "team", monthly_budget: 20 });
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/users") return Promise.resolve({ data: { data: users } });
+      if (url === "/groups") {
+        return Promise.resolve({
+          data: { data: [{ id: "3", attributes: { name: "Engineering" } }, { id: "4", attributes: { name: "Ops" } }] },
+        });
+      }
+      if (url === "/groups/3/budget") return Promise.resolve({ data: teamReport });
+      if (url === "/apps/5") return Promise.resolve(payload);
+      if (url === "/credentials/9") return Promise.resolve(credentialPayload(true));
+      if (url === "/plugin-resource-types") return Promise.resolve({ data: { data: [] } });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    appToolAPI.listAvailableTools.mockResolvedValue({ data: { data: tools } });
+    apiClient.patch.mockResolvedValue({ data: { data: { id: "5" } } });
+  });
+
+  it("shows the team's pool and sends the team, not the server-owned budget source", async () => {
+    renderForm();
+    await screen.findByDisplayValue("Sales bot");
+    await waitFor(() =>
+      expect(screen.getByTestId("app-team-pool")).toHaveTextContent("Team pool: $40.00 of $100.00 unallocated"),
+    );
+    expect(screen.getByText("Allocated from the team's budget pool; 0 blocks the App")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const [, body] = apiClient.patch.mock.calls[0];
+    expect(body.data.attributes.team_id).toBe(3);
+    expect(body.data.attributes).not.toHaveProperty("budget_source");
+  });
+
+  it("shows why the server refused an allocation", async () => {
+    apiClient.patch.mockRejectedValue({
+      response: { data: { errors: [{ detail: "allocation exceeds the team's unallocated budget: requested 90.00, 40.00 of the team budget is unallocated" }] } },
+    });
+    renderForm();
+    await screen.findByDisplayValue("Sales bot");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    expect(await screen.findByText(/40.00 of the team budget is unallocated/)).toBeInTheDocument();
+  });
+});
