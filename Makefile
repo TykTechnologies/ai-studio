@@ -1074,7 +1074,7 @@ bench-soak: ## S7 one-hour soak (size with BENCH_RATE_SCALE=<S4 sustained rps / 
 
 bench-build-gateway: ## Build an edge image from another checkout: make bench-build-gateway SRC=<path> TAG=<tag>
 	@test -n "$(SRC)" && test -n "$(TAG)" || { echo "usage: make bench-build-gateway SRC=<checkout path> TAG=<tag>"; exit 1; }
-	docker build -f $(SRC)/microgateway/deployments/Dockerfile --build-arg EDITION=$(or $(EDITION),ent) -t gwbench-microgateway:$(TAG) $(SRC)
+	docker build -f "$(SRC)/microgateway/deployments/Dockerfile" --build-arg "EDITION=$(or $(EDITION),ent)" -t "gwbench-microgateway:$(TAG)" "$(SRC)"
 
 bench-swap: ## Run the edge from another image and re-seed: make bench-swap TAG=<tag>
 	@test -n "$(TAG)" || { echo "usage: make bench-swap TAG=<tag> (an image gwbench-microgateway:<tag>)"; exit 1; }

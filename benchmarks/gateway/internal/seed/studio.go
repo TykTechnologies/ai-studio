@@ -238,19 +238,25 @@ func (s *Studio) EnsureLLM(ctx context.Context, l LLMSpec) (int, error) {
 // EnsurePrice creates a model price; an existing one for the same model and
 // vendor is left as it is.
 func (s *Studio) EnsurePrice(ctx context.Context, model, vendor string, outPerToken, inPerToken float64) error {
+	var list jsonAPIList[struct {
+		ModelName string `json:"model_name"`
+		Vendor    string `json:"vendor"`
+	}]
+	if err := s.mustOK(ctx, http.MethodGet, "/api/v1/model-prices?all=true", nil, &list, http.StatusOK); err != nil {
+		return err
+	}
+	for _, p := range list.Data {
+		if p.Attributes.ModelName == model && p.Attributes.Vendor == vendor {
+			return nil
+		}
+	}
 	body := map[string]any{"data": map[string]any{"type": "model-prices", "attributes": map[string]any{
 		"model_name": model, "vendor": vendor, "cpt": outPerToken, "cpit": inPerToken, "currency": "USD",
 	}}}
-	status, resp, err := s.do(ctx, http.MethodPost, "/api/v1/model-prices", body, nil)
-	if err != nil {
-		return err
+	if err := s.mustOK(ctx, http.MethodPost, "/api/v1/model-prices", body, nil, http.StatusCreated); err != nil {
+		return fmt.Errorf("create model price %s/%s: %w", vendor, model, err)
 	}
-	if status == http.StatusCreated || status == http.StatusConflict ||
-		(status >= 400 && strings.Contains(strings.ToLower(string(resp)), "exist")) ||
-		(status >= 400 && strings.Contains(strings.ToLower(string(resp)), "unique")) {
-		return nil
-	}
-	return fmt.Errorf("create model price %s/%s: HTTP %d: %s", vendor, model, status, truncate(resp))
+	return nil
 }
 
 type appAttrs struct {

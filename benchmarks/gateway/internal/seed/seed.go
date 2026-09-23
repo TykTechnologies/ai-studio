@@ -229,9 +229,18 @@ func ReadState(path string) (*State, error) {
 	return &st, json.Unmarshal(b, &st)
 }
 
+// redactEndpoint returns e fit for logs: user information and the query
+// string, the two places a URL carries credentials, are replaced.
 func redactEndpoint(e string) string {
-	if i := strings.Index(e, "@"); i > 0 {
-		return "***" + e[i:]
+	u, err := url.Parse(e)
+	if err != nil {
+		return "[unparseable endpoint]"
 	}
-	return e
+	if u.User != nil {
+		u.User = url.User("***")
+	}
+	if u.RawQuery != "" {
+		u.RawQuery = "***"
+	}
+	return u.String()
 }

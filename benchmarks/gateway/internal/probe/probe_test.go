@@ -12,28 +12,40 @@ import (
 )
 
 func TestDoStreamMeasuresFirstTokenSeparately(t *testing.T) {
+	const (
+		ttft   = 40 * time.Millisecond
+		tps    = 100
+		tokens = 6
+		// The mock sends token i at ttft + i/tps, so the last token leaves
+		// (tokens-1)/tps after the first.
+		streamTime = time.Duration(tokens-1) * time.Second / tps
+		// The client times the first token when it arrives and the end when
+		// the last arrives; delivery of the two can differ by a scheduler
+		// tick, so allow that much below the server-side spacing.
+		deliverySlack = 5 * time.Millisecond
+	)
+	msf := func(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }
 	for _, f := range []Format{FormatOpenAI, FormatAnthropic} {
 		t.Run(string(f), func(t *testing.T) {
 			srv := httptest.NewServer(mockllm.NewServer(mockllm.Profile{
-				TTFT: 40 * time.Millisecond, TokensPerSecond: 100, OutputTokens: 6, TokenText: "a ",
+				TTFT: ttft, TokensPerSecond: tps, OutputTokens: tokens, TokenText: "a ",
 			}))
 			defer srv.Close()
 			path := "/v1/chat/completions"
 			if f == FormatAnthropic {
 				path = "/v1/messages"
 			}
-			req := BodySpec{Format: f, Stream: true, Model: "m", MaxTokens: 6}.Build()
+			req := BodySpec{Format: f, Stream: true, Model: "m", MaxTokens: tokens}.Build()
 			res := Do(context.Background(), http.DefaultClient, Target{URL: srv.URL + path}, req, time.Now())
 
-			if !res.OK() || res.Tokens != 6 {
+			if !res.OK() || res.Tokens != tokens {
 				t.Fatalf("result: %+v", res)
 			}
-			if res.TTFT < 40 || res.TTFT > res.Total {
-				t.Fatalf("ttft=%.1f total=%.1f", res.TTFT, res.Total)
+			if res.TTFT < msf(ttft) || res.TTFT > res.Total {
+				t.Fatalf("ttft=%.1f total=%.1f, want ttft >= %.0fms", res.TTFT, res.Total, msf(ttft))
 			}
-			// 5 more tokens at 10ms each.
-			if res.Total-res.TTFT < 45 {
-				t.Fatalf("stream body time %.1fms, want >= 45ms", res.Total-res.TTFT)
+			if min := msf(streamTime - deliverySlack); res.Total-res.TTFT < min {
+				t.Fatalf("stream body time %.1fms, want >= %.0fms", res.Total-res.TTFT, min)
 			}
 		})
 	}

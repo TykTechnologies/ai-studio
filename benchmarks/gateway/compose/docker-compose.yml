@@ -13,6 +13,11 @@
 #
 # The load generator runs inside the compose network, so neither arm goes
 # through Docker Desktop's host port forwarding.
+#
+# LOCAL USE ONLY. The stack uses well-known default secrets (Postgres password,
+# encryption key, gRPC token), a plaintext hub-edge link and a throwaway admin
+# account, and its published ports are bound to 127.0.0.1. Never reuse this
+# file as a deployment template; RUNBOOK-cloud.md covers dedicated hosts.
 name: gwbench
 
 # CPU and memory limits are set per service; override them with the *_CPUS
@@ -64,7 +69,7 @@ services:
       MARKETPLACE_ENABLED: "false"
       TELEMETRY_ENABLED: "false"
     ports:
-      - "18080:8080"
+      - "127.0.0.1:18080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,13 +111,14 @@ services:
       # Analytics go to Studio on the analytics pulse, as in production.
       PLUGINS_CONFIG_PATH: /bench/analytics-pulse.yaml
       ENABLE_METRICS: "true"
-      METRICS_ALLOW_UNAUTHENTICATED: "true"
+      # The load generator's resource sampler scrapes /metrics with this token.
+      METRICS_AUTH_TOKEN: ${BENCH_METRICS_TOKEN:-bench-metrics-token-0123456789abcdef}
       GATEWAY_SERVER_TIMING: "true"
       ENABLE_TRACING: ${ENABLE_TRACING:-false}
     volumes:
       - ./analytics-pulse.yaml:/bench/analytics-pulse.yaml:ro
     ports:
-      - "18081:8080"
+      - "127.0.0.1:18081:8080"
     # The image's own healthcheck uses `wget --spider` (a HEAD request), which
     # /health does not answer, so it always reports unhealthy.
     healthcheck:
@@ -135,7 +141,7 @@ services:
     image: gwbench-tools
     entrypoint: ["mockllm", "-addr", ":9999"]
     ports:
-      - "18099:9999"
+      - "127.0.0.1:18099:9999"
     ulimits:
       nofile: {soft: 1048576, hard: 1048576}
     cpus: ${MOCK_CPUS:-2}
@@ -155,6 +161,7 @@ services:
       GWBENCH_STATE: /bench/benchmarks/gateway/.state/state.json
       GWBENCH_OUT: /bench/benchmarks/gateway/results
       GWBENCH_LABEL: ${GWBENCH_LABEL:-local docker compose}
+      GWBENCH_METRICS_TOKEN: ${BENCH_METRICS_TOKEN:-bench-metrics-token-0123456789abcdef}
       GWBENCH_GIT_SHA: ${GWBENCH_GIT_SHA:-}
       GWBENCH_GIT_DIRTY: ${GWBENCH_GIT_DIRTY:-}
       VENDOR_TESTS_ENV_FILE: /bench/test-secrets/vendors.env
@@ -165,5 +172,7 @@ services:
       - ${VENDORS_ENV_DIR:-../../../test-secrets}:/bench/test-secrets:ro
     ulimits:
       nofile: {soft: 1048576, hard: 1048576}
-    cpus: ${LOADGEN_CPUS:-2}
+    # 4 CPUs: at 2 the load generator fell behind its schedule at ~300
+    # streaming req/s and the run was (rightly) marked invalid.
+    cpus: ${LOADGEN_CPUS:-4}
     mem_limit: ${LOADGEN_MEM:-2g}

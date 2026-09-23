@@ -46,17 +46,31 @@ On each VM, build the image it runs from the same commit:
 ```bash
 # hub
 docker compose -f benchmarks/gateway/compose/docker-compose.yml --env-file license.env up -d postgres studio
-# gateway: point it at the hub
+# gateway: point it at the hub. Secrets go in an env file readable only by
+# you, not on the command line (where they reach shell history and `ps`).
 docker compose -f benchmarks/gateway/compose/docker-compose.yml --env-file license.env build gateway
+install -m 600 /dev/null gateway.env
+cat > gateway.env <<'ENV'
+GATEWAY_MODE=edge
+CONTROL_ENDPOINT=<hub-ip>:50051
+EDGE_ID=bench-edge-1
+EDGE_NAMESPACE=default
+EDGE_AUTH_TOKEN=<same as studio GRPC_AUTH_TOKEN>
+EDGE_ALLOW_INSECURE=true
+EDGE_HEARTBEAT_INTERVAL=5s
+ENCRYPTION_KEY=<same as studio TYK_AI_SECRET_KEY>
+TYK_AI_LICENSE=<licence>
+PORT=8080
+LOG_LEVEL=info
+ALLOW_INTERNAL_NETWORK_ACCESS=true
+PLUGINS_CONFIG_PATH=/bench/analytics-pulse.yaml
+ENABLE_METRICS=true
+METRICS_AUTH_TOKEN=<metrics-token>
+GATEWAY_SERVER_TIMING=true
+ENV
 docker run -d --name gateway --network host --ulimit nofile=1048576:1048576 \
-  -e GATEWAY_MODE=edge -e CONTROL_ENDPOINT=<hub-ip>:50051 -e EDGE_ID=bench-edge-1 \
-  -e EDGE_NAMESPACE=default -e EDGE_AUTH_TOKEN=<same as studio GRPC_AUTH_TOKEN> \
-  -e EDGE_ALLOW_INSECURE=true -e EDGE_HEARTBEAT_INTERVAL=5s \
-  -e ENCRYPTION_KEY=<same as studio TYK_AI_SECRET_KEY> -e TYK_AI_LICENSE=... \
-  -e PORT=8080 -e LOG_LEVEL=info -e ALLOW_INTERNAL_NETWORK_ACCESS=true \
-  -e PLUGINS_CONFIG_PATH=/bench/analytics-pulse.yaml \
+  --env-file gateway.env \
   -v $PWD/benchmarks/gateway/compose/analytics-pulse.yaml:/bench/analytics-pulse.yaml:ro \
-  -e ENABLE_METRICS=true -e METRICS_ALLOW_UNAUTHENTICATED=true -e GATEWAY_SERVER_TIMING=true \
   gwbench-microgateway:ent
 # mock
 docker compose -f benchmarks/gateway/compose/docker-compose.yml build mockllm
@@ -75,6 +89,7 @@ cloud firewall.
 export GWBENCH_STUDIO_URL=http://<hub-ip>:8080
 export GWBENCH_GATEWAY_URL=http://<gateway-ip>:8080
 export GWBENCH_MOCK_URL=http://<mock-ip>:9999
+export GWBENCH_METRICS_TOKEN=<metrics-token>   # the gateway's METRICS_AUTH_TOKEN
 export GWBENCH_LABEL="aws c7i.xlarge gateway, us-east-1a, ping p99 0.21ms"
 
 ./gwbench seed -mock-upstream http://<mock-ip>:9999 -vendors
