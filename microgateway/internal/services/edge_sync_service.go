@@ -144,6 +144,10 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
+	// The per-statement callbacks already bumped the config generation, but
+	// before this commit. Bump again so no request-path cache keeps an entry
+	// that was read from the pre-sync data in between.
+	database.BumpConfigGeneration()
 
 	log.Debug().
 		Str("version", config.Version).

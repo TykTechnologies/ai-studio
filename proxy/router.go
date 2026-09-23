@@ -145,18 +145,6 @@ func appHoldsRouter(app *models.App, ref RouterRef) bool {
 	return false
 }
 
-func appHoldsLLM(app *models.App, llmID uint) bool {
-	if app == nil {
-		return false
-	}
-	for _, l := range app.LLMs {
-		if l.ID == llmID {
-			return true
-		}
-	}
-	return false
-}
-
 // routeError maps a resolver error to the status the caller gets.
 func routeErrorStatus(err error) int {
 	switch {

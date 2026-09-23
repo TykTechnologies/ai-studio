@@ -26,6 +26,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
+	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1250,8 +1251,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Convert LLMs to protobuf with complete configuration
 	for _, llm := range llms {
-		// Create slug from name (microgateway expects slugs)
-		slug := strings.ToLower(strings.ReplaceAll(llm.Name, " ", "-"))
+		// Same slug the proxy routes /llm/.../{slug}/ by; edges look the LLM
+		// up by this value (post-auth plugins, model-router rewrites).
+		llmSlug := slug.Make(llm.Name)
 
 		// Get filter IDs for this LLM
 		filterIDs := make([]uint32, len(llm.Filters))
@@ -1315,7 +1317,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		pbLLM := &pb.LLMConfig{
 			Id:               uint32(llm.ID),
 			Name:             llm.Name,
-			Slug:             slug,
+			Slug:             llmSlug,
 			Vendor:           string(llm.Vendor),
 			Endpoint:         resolvedEndpoint,
 			ApiKeyEncrypted:  encryptedAPIKey, // Encrypted using microgateway's format
@@ -1797,7 +1799,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			for _, vendor := range pool.Vendors {
 				llmSlug := ""
 				if vendor.LLM != nil {
-					llmSlug = strings.ToLower(strings.ReplaceAll(vendor.LLM.Name, " ", "-"))
+					llmSlug = slug.Make(vendor.LLM.Name)
 				}
 				pbVendor := &pb.PoolVendorConfig{
 					Id:       uint32(vendor.ID),

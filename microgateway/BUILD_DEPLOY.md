@@ -118,7 +118,7 @@ nano .env
 ```bash
 # SQLite requires no setup - database file created automatically
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/microgateway.db?mode=rwc
 ```
 
 #### PostgreSQL (Production)

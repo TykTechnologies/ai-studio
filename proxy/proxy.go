@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -548,12 +549,41 @@ func toolCORSMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// budgetDenial maps a CheckBudget error to a response. A budget decision is
+// a 403 with exceededMsg; a check that could not run
+// (services.ErrBudgetCheckUnavailable) still refuses the request, as a 503,
+// so the client is not told a budget is spent when it is not.
+func budgetDenial(err error, exceededMsg string) (int, string) {
+	if errors.Is(err, services.ErrBudgetCheckUnavailable) {
+		return http.StatusServiceUnavailable, "Budget check unavailable, retry shortly"
+	}
+	return http.StatusForbidden, exceededMsg
+}
+
 // upstreamGuardedTransport is the shared transport for all upstream LLM
 // requests. Its dialer enforces the internal-network policy on the exact IP
 // being connected (post-DNS), so a DNS answer that changes between validation
 // and connection cannot bypass the SSRF protection. Shared so connection
 // pooling behaves like the default transport it replaces.
-var upstreamGuardedTransport = netguard.HTTPTransport()
+var upstreamGuardedTransport = newUpstreamTransport()
+
+// Idle connection limits for the upstream and loopback pools. The default
+// transport keeps 2 idle connections per host, so a gateway with more than
+// two requests in flight to one vendor closed connections as requests
+// finished and opened new ones (TCP plus TLS, a round trip or more each) for
+// the next. LLM traffic concentrates on a handful of hosts, so the per-host
+// limit is set close to the total.
+const (
+	upstreamMaxIdleConns        = 1024
+	upstreamMaxIdleConnsPerHost = 512
+)
+
+func newUpstreamTransport() *http.Transport {
+	t := netguard.HTTPTransport()
+	t.MaxIdleConns = upstreamMaxIdleConns
+	t.MaxIdleConnsPerHost = upstreamMaxIdleConnsPerHost
+	return t
+}
 
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
@@ -788,13 +818,16 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+		status, msg := budgetDenial(err, "Budget limit exceeded")
+		if status == http.StatusForbidden {
+			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+		}
 		// Error body for analytics should be constructed carefully if needed
 		p.goAnalyze(func() {
-			p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
+			p.analyzeResponse(llm, app, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, r)
 		})
-		respStatus = http.StatusForbidden
-		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
+		respStatus = status
+		respondWithError(w, status, msg, err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
@@ -1517,12 +1550,15 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+		status, msg := budgetDenial(err, "Budget limit exceeded for streaming")
+		if status == http.StatusForbidden {
+			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+		}
 		p.goAnalyze(func() {
-			p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
+			p.analyzeStreamingResponse(llm, app, r, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, nil, time.Now(), "")
 		})
-		respStatus = http.StatusForbidden
-		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
+		respStatus = status
+		respondWithError(w, status, msg, err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {

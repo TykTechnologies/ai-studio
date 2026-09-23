@@ -31,6 +31,7 @@ The Proxy serves several critical functions:
     *   Validates the API key provided by the client application.
     *   Identifies the associated Application and User.
     *   Checks if the Application/User group has permission to access the requested LLM Configuration based on [RBAC rules](./user-management.md).
+    *   The same check applies however the caller authenticated (API key, `Authorization: Bearer` app secret, or an auth plugin) and on every entry point: `/llm/...`, `/ai/...`, `/anthropic/...`, the unified `/v1` endpoint (the vendor prefix of the `model` string) and `/datasource/...`, on AI Studio's embedded gateway and on edge microgateways alike. An App may only call the LLMs and data sources it was granted, plus the fallbacks of a granted LLM's failover waterfall when reached through that waterfall. Naming anything else, including a slug that does not exist, returns `403`.
 
 3.  **Policy Enforcement:** Before forwarding the request to the backend LLM, the Proxy enforces policies defined in the LLM Configuration or globally:
     *   **Budget Checks:** Verifies if the estimated cost exceeds the configured [Budgets](./llm-management.md) for the App or LLM.

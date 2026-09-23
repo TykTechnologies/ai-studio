@@ -204,7 +204,7 @@ Flags:
 ### SQLite (Development)
 ```bash
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/microgateway.db?mode=rwc
 ```
 
 **Pros:** 

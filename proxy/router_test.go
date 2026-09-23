@@ -257,6 +257,24 @@ func TestRouter_Streaming(t *testing.T) {
 	assert.Len(t, h.fastV.calls(), 1)
 }
 
+// A router grant reaches the router's LLMs only through the router: naming
+// one of them directly is refused, on every entry point.
+func TestRouter_GrantDoesNotGrantItsLLMsDirectly(t *testing.T) {
+	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
+
+	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("big/gpt-4o", false))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "unified ingress: %s", body)
+	resp, body = h.do(http.MethodPost, "/ai/big/v1/chat/completions", chatBody("gpt-4o", false))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "/ai/ bridge: %s", body)
+	resp, body = h.do(http.MethodPost, "/llm/call/big/v1/chat/completions", chatBody("gpt-4o", false))
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "/llm/ inner path: %s", body)
+	assert.Empty(t, h.bigV.calls(), "nothing may reach Big except through the router")
+
+	resp, body = h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/big", false))
+	require.Equal(t, http.StatusOK, resp.StatusCode, "through the router: %s", body)
+	assert.Len(t, h.bigV.calls(), 1)
+}
+
 func TestRouter_DirectAIPath(t *testing.T) {
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 	resp, body := h.do(http.MethodPost, "/ai/smart/v1/chat/completions", chatBody("fast", false))
@@ -306,9 +324,9 @@ func TestRouter_UngrantedAppWithNoLLMsIsRefused(t *testing.T) {
 func TestRouter_WithoutAResolverARouterIsAnUnknownVendor(t *testing.T) {
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true, noResolver: true})
 	resp, _ := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/big", false))
-	// The /ai/ credential check rejects a route that is neither an LLM nor a
-	// router before the handler's 404; either way nothing is routed.
-	assert.Contains(t, []int{http.StatusNotFound, http.StatusUnauthorized}, resp.StatusCode)
+	// Unknown and ungranted routes get the same 403, so a caller cannot list
+	// the slugs a gateway serves; either way nothing is routed.
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	assert.Empty(t, h.bigV.calls())
 }
 

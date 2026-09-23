@@ -55,6 +55,11 @@ func newLoopbackTransport(serverTLS bool) *http.Transport {
 	// This prevents double-decompression issues when the SDK also tries to handle gzip
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DisableCompression = true // Don't add Accept-Encoding or auto-decompress
+	// Every /ai/ and unified-router request makes this hop to one host, so
+	// the default of 2 idle connections per host churned connections under
+	// any concurrency (see upstreamMaxIdleConnsPerHost).
+	transport.MaxIdleConns = upstreamMaxIdleConns
+	transport.MaxIdleConnsPerHost = upstreamMaxIdleConnsPerHost
 	if serverTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // loopback to our own listener on 127.0.0.1
 	}
@@ -62,22 +67,24 @@ func newLoopbackTransport(serverTLS bool) *http.Transport {
 }
 
 func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// DEBUG: Log the outgoing request details
-	bodySize := int64(0)
-	if req.Body != nil {
-		// Read body to get size, then restore it
-		bodyBytes, err := io.ReadAll(req.Body)
-		if err == nil {
-			bodySize = int64(len(bodyBytes))
-			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	// DEBUG: Log the outgoing request details. Measuring the body means
+	// reading and re-buffering it, so do it only when the line is logged.
+	if ev := log.Debug(); ev.Enabled() {
+		bodySize := int64(0)
+		if req.Body != nil {
+			// Read body to get size, then restore it
+			bodyBytes, err := io.ReadAll(req.Body)
+			if err == nil {
+				bodySize = int64(len(bodyBytes))
+				req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			}
 		}
+		ev.Str("url", req.URL.String()).
+			Str("method", req.Method).
+			Int64("body_size", bodySize).
+			Int64("content_length", req.ContentLength).
+			Msg("InternalRoutingTransport.RoundTrip")
 	}
-	log.Debug().
-		Str("url", req.URL.String()).
-		Str("method", req.Method).
-		Int64("body_size", bodySize).
-		Int64("content_length", req.ContentLength).
-		Msg("InternalRoutingTransport.RoundTrip")
 
 	// Strip SDK-set vendor auth headers
 	// The SDK may set these, but /llm/ will set the correct vendor auth

@@ -110,6 +110,151 @@ func (cv *CredentialValidator) authorizeToolAccess(w http.ResponseWriter, r *htt
 	return ctx, true
 }
 
+// Kinds of resource a request path can name, besides a tool.
+const (
+	targetLLM        = "llm"        // /llm/{rest|stream|call}/{slug}/...
+	targetDatasource = "datasource" // /datasource/{slug}[/...]
+	targetRoute      = "route"      // /ai/{slug}/... and /anthropic/{slug}/... (the unified /v1 rewrites to /ai/ before auth)
+)
+
+// gatewayTarget is the LLM, datasource or bridge route a request path names.
+// A zero value means the path names none of them (tool paths, /v1/models, and
+// paths the router does not serve), and there is nothing to authorise here.
+type gatewayTarget struct {
+	kind string
+	slug string
+}
+
+// targetFromPath splits the path by hand for the same reason toolSlugFromPath
+// does: the middleware wraps the router. It parses exactly as the API-key branch
+// always has, so both see the same slug. A recognised prefix with no slug keeps
+// its kind with an empty slug, which resolves to nothing and is refused.
+func targetFromPath(path string) gatewayTarget {
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		return gatewayTarget{}
+	}
+	var t gatewayTarget
+	switch parts[1] {
+	case "llm":
+		t.kind = targetLLM
+		if len(parts) > 3 {
+			t.slug = parts[3]
+		} else if len(parts) > 2 {
+			t.slug = parts[2]
+		}
+	case "datasource":
+		t.kind = targetDatasource
+	case "ai", "anthropic":
+		t.kind = targetRoute
+	default:
+		return gatewayTarget{}
+	}
+	if t.kind != targetLLM && len(parts) > 2 {
+		t.slug = parts[2]
+	}
+	return t
+}
+
+// appHoldsLLM reports whether the app was granted the LLM directly.
+func appHoldsLLM(app *models.App, llmID uint) bool {
+	if app == nil {
+		return false
+	}
+	for _, l := range app.LLMs {
+		if l.ID == llmID {
+			return true
+		}
+	}
+	return false
+}
+
+// appHoldsDatasource reports whether the app was granted the datasource.
+func appHoldsDatasource(app *models.App, dsID uint) bool {
+	if app == nil {
+		return false
+	}
+	for _, d := range app.Datasources {
+		if d.ID == dsID {
+			return true
+		}
+	}
+	return false
+}
+
+// targetAllowed is the single implementation of the LLM, datasource and route
+// ACL, as authorizeToolAccess is for tools. The API-key branch used to be the
+// only one that applied it: the bearer app-secret, custom-auth and
+// plugin-authenticated branches authenticated the caller and then let it name
+// any LLM or datasource on the gateway.
+//
+//   - An LLM path passes when the app holds the LLM, inherits it through a
+//     router it holds (routerGrantsAccess), or inherits it as a failover rung
+//     of an LLM it holds or reached through a router (failoverGrantsAccess).
+//     Both inheritances trust the loopback marker only with this process's
+//     token.
+//   - A route (/ai/, /anthropic/, and so the unified /v1) passes when the app
+//     holds the LLM it names. The outer hop always names the primary, so
+//     failover inheritance is not needed there; Bedrock is served from this
+//     hop directly, so this is its only check. A route that names a router
+//     rather than an LLM passes here: the router grant is checked where the
+//     router is resolved (resolveRoute), and the LLM it picks is checked on
+//     the inner hop (or, for Bedrock, is one the router can reach).
+//   - A datasource passes when the app holds it.
+//
+// Unknown slugs are refused. A path that names none of these passes: tools
+// have their own ACL, and anything else is for the router to serve or 404.
+func (cv *CredentialValidator) targetAllowed(r *http.Request, app *models.App, t gatewayTarget) bool {
+	switch t.kind {
+	case "":
+		return true
+	case targetLLM:
+		llm, ok := cv.p.GetLLM(t.slug)
+		if !ok {
+			return false
+		}
+		return cv.p.appAllowedLLM(r, app, llm) || cv.p.failoverGrantsAccess(r, app, llm)
+	case targetRoute:
+		llm, ok := cv.p.GetLLM(t.slug)
+		if !ok {
+			_, isRouter := cv.p.lookupRouter(t.slug)
+			return isRouter
+		}
+		return appHoldsLLM(app, llm.ID)
+	case targetDatasource:
+		ds, ok := cv.p.GetDatasource(t.slug)
+		if !ok {
+			return false
+		}
+		return appHoldsDatasource(app, ds.ID)
+	}
+	return false
+}
+
+// authorizeTarget applies targetAllowed to the request path for an app that has
+// already been authenticated, answering 403 when the app may not use what the
+// path names. Every authenticated branch other than the API-key one (which goes
+// through CheckAPICredential) calls it before the post-auth hook and next.
+//
+// Unknown and ungranted get the same status and the same words - the wording
+// the /ai/ translator already used for an unknown vendor - so a caller cannot
+// use the difference to list the slugs configured on the gateway.
+func (cv *CredentialValidator) authorizeTarget(w http.ResponseWriter, r *http.Request, app *models.App) bool {
+	t := targetFromPath(r.URL.Path)
+	if cv.targetAllowed(r, app, t) {
+		return true
+	}
+	log.Debug().
+		Uint("app_id", app.GetID()).
+		Str("target_kind", t.kind).
+		Str("target_slug", t.slug).
+		Msg("Authorization denied: app is not granted the requested resource")
+	noun := map[string]string{targetLLM: "LLM", targetRoute: "vendor", targetDatasource: "datasource"}[t.kind]
+	respondWithError(w, http.StatusForbidden,
+		fmt.Sprintf("%s '%s' not found or not supported by your access rights", noun, t.slug), nil, false)
+	return false
+}
+
 // appFromPluginAuthContext loads the app a microgateway auth plugin authenticated
 // as. The plugin middleware puts the id on the context under "app_id" (it cannot
 // put a *models.App there without importing models), so the app is resolved here.
@@ -176,6 +321,24 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					ctx = context.WithValue(ctx, "app", app)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
+				}
+				// Likewise an LLM, datasource or route: the plugin said who the caller
+				// is, not what that app may use.
+				if targetFromPath(r.URL.Path).kind != "" {
+					app, err := cv.appFromPluginAuthContext(r)
+					if err != nil {
+						log.Debug().Err(err).Msg("Plugin-authenticated request without a resolvable app")
+						respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+						return
+					}
+					if !app.IsActive {
+						respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
+						return
+					}
+					if !cv.authorizeTarget(w, r, app) {
+						return
+					}
+					r = r.WithContext(context.WithValue(r.Context(), "app", app))
 				}
 				next.ServeHTTP(w, r)
 				return
@@ -354,6 +517,11 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						return
 					}
 
+					// Nor does it authorise an LLM, datasource or route.
+					if !cv.authorizeTarget(w, r, app) {
+						return
+					}
+
 					ctx := context.WithValue(r.Context(), "app", app)
 					// Update request with context BEFORE calling hook so hook modifications persist
 					r = r.WithContext(ctx)
@@ -395,7 +563,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						return
 					}
 
-					// Not a tool request - continue with LLM request
+					// Not a tool request - continue with LLM request. The app must hold
+					// the LLM, datasource or route the path names; this is the same
+					// check the API-key branch makes in CheckAPICredential. Both hops of
+					// the /ai/ bridge land here, since the loopback forwards the caller's
+					// bearer secret, and failover rungs pass on the inherited-access marker.
+					if !cv.authorizeTarget(w, r, app) {
+						return
+					}
+
 					// Update request with context BEFORE calling hook so hook modifications persist
 					r = r.WithContext(ctx)
 
@@ -561,6 +737,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 
+				if !cv.authorizeTarget(w, r, app) {
+					return
+				}
+
 				ctx := r.Context()
 				ctx = context.WithValue(ctx, "app", app)
 				r = r.WithContext(ctx)
@@ -678,86 +858,26 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	}
 	r = r.WithContext(ctx)
 
+	// The resource half of the check is shared with every other authentication
+	// branch (see targetAllowed), so the rules cannot drift between them again.
 	if dsSlug != "" {
-		ds, ok := cv.p.GetDatasource(dsSlug)
-		if !ok {
-			return false, r
-		}
-		for _, d := range app.Datasources {
-			if d.ID == ds.ID {
-				return true, r
-			}
-		}
-		return false, r
+		return cv.targetAllowed(r, app, gatewayTarget{kind: targetDatasource, slug: dsSlug}), r
 	}
 
 	if llmSlug != "" {
-		llm, ok := cv.p.GetLLM(llmSlug)
-		if !ok {
-			log.Debug().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
-			return false, r
-		}
+		// A failover rung is allowed through the inherited-access marker.
+		allowed := cv.targetAllowed(r, app, gatewayTarget{kind: targetLLM, slug: llmSlug})
 		log.Debug().
-			Uint("llm_id", llm.ID).
-			Str("llm_slug", llmSlug).
 			Uint("app_id", app.ID).
+			Str("llm_slug", llmSlug).
 			Int("app_llm_count", len(app.LLMs)).
-			Msg("CheckAPICredential: Checking if app has access to LLM")
-
-		for i, l := range app.LLMs {
-			log.Debug().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
-			if l.ID == llm.ID {
-				log.Debug().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
-				return true, r
-			}
-		}
-		// Not granted directly. A failover rung inherits access from the
-		// primary the app was granted, but only when the request carries the
-		// proxy's own marker (see failover.go).
-		// Or inherited through a router the app holds, when the outer hop
-		// resolved one to this LLM (see router.go).
-		if cv.p.routerGrantsAccess(r, app, llm) {
-			log.Debug().
-				Uint("app_id", app.ID).
-				Uint("llm_id", llm.ID).
-				Str("router", r.Header.Get(hdrRouterOrigin)).
-				Msg("CheckAPICredential: access inherited via router - validation PASSED")
-			return true, r
-		}
-		if cv.p.failoverGrantsAccess(r, app, llm) {
-			log.Debug().
-				Uint("app_id", app.ID).
-				Uint("llm_id", llm.ID).
-				Str("origin_slug", r.Header.Get(hdrFailoverOrigin)).
-				Msg("CheckAPICredential: access inherited via failover origin - validation PASSED")
-			return true, r
-		}
-		log.Debug().
-			Uint("app_id", app.ID).
-			Uint("required_llm_id", llm.ID).
-			Str("llm_slug", llmSlug).
-			Int("app_llms_count", len(app.LLMs)).
-			Msg("CheckAPICredential: App does not have access to this LLM - validation FAILED")
-		return false, r
+			Bool("allowed", allowed).
+			Msg("CheckAPICredential: LLM access check")
+		return allowed, r
 	}
 
-	if routeID != "" { // This was for /ai/{routeID}, assuming routeID is an LLM slug
-		px, ok := cv.p.GetLLM(routeID)
-		if !ok {
-			// A router slug authenticates here; whether the app may use the
-			// router is decided where it is resolved (resolveRoute), which every
-			// auth branch reaches, not only this one.
-			if _, isRouter := cv.p.lookupRouter(routeID); isRouter {
-				return true, r
-			}
-			return false, r
-		}
-		for _, llm := range app.LLMs {
-			if llm.ID == px.ID {
-				return true, r
-			}
-		}
-		return false, r
+	if routeID != "" { // /ai/{routeID} and /anthropic/{routeID}: routeID is an LLM slug
+		return cv.targetAllowed(r, app, gatewayTarget{kind: targetRoute, slug: routeID}), r
 	}
 
 	if toolSlugContext := r.Context().Value("toolSlug"); toolSlugContext != nil {

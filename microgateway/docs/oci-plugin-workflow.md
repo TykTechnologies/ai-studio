@@ -285,7 +285,7 @@ EDGE_AUTH_TOKEN=your-edge-auth-token
 
 # Database (local SQLite for edge)
 DATABASE_TYPE=sqlite
-DATABASE_DSN=file:./data/edge-microgateway.db?cache=shared&mode=rwc
+DATABASE_DSN=file:./data/edge-microgateway.db?mode=rwc
 
 # OCI Plugin Configuration
 OCI_PLUGINS_CACHE_DIR=/var/lib/microgateway/plugins

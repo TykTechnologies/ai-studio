@@ -342,15 +342,16 @@ func TestToolACL_PluginAuthenticatedShortCircuit(t *testing.T) {
 		})
 	}
 
-	// A non-tool path is untouched by this branch and still passes straight
-	// through, as it did before.
-	t.Run("non-tool paths still short-circuit", func(t *testing.T) {
+	// An LLM path used to pass straight through this branch unchecked. It is now
+	// held to the LLM ACL (see llm_acl_branches_test.go), which starts with
+	// needing an app to check: with no app id on the context it is refused.
+	t.Run("LLM paths without an app id are refused", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/llm/call/whatever/v1/chat/completions", nil)
 		ctx := context.WithValue(req.Context(), "plugin_authenticated", true)
 		req = req.WithContext(ctx)
 
 		rr := httptest.NewRecorder()
 		f.handler.ServeHTTP(rr, req)
-		require.NotEqual(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
+		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
 	})
 }
