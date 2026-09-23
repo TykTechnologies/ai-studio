@@ -803,3 +803,52 @@ func TestModelRouterHandlers_ENT_NotFound(t *testing.T) {
 	// SPECIFICATION: Not found MUST return 404
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// patchModelRouter sends an update whose attributes omit "active".
+func patchModelRouter(t *testing.T, api *API, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := `{"data":{"type":"model-routers","attributes":{"name":"Prod","slug":"prod",` +
+		`"pools":[{"name":"all","model_pattern":"*","vendors":[{"llm_id":1,"weight":1,"active":true}]}]}}}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request, _ = http.NewRequest("PATCH", "/model-routers/"+id, bytes.NewBufferString(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: id}}
+	api.updateModelRouter(c)
+	return w
+}
+
+// An update that omits "active" must keep the stored value: omitting it is
+// not the publish action, and must not unpublish the router.
+func TestModelRouterHandlers_ENT_Update_OmittedActiveKeepsStoredValue(t *testing.T) {
+	api, _, _ := setupTestAPIForCommonTests(t)
+	var saved *models.ModelRouter
+	api.service.ModelRouterService = &mockModelRouterService{
+		getRouterFunc: func(id uint) (*models.ModelRouter, error) {
+			return &models.ModelRouter{ID: id, Name: "Prod", Slug: "prod", Active: true}, nil
+		},
+		updateRouterFunc: func(r *models.ModelRouter) error { saved = r; return nil },
+	}
+
+	w := patchModelRouter(t, api, "1")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotNil(t, saved)
+	assert.True(t, saved.Active, "omitting active must keep the router active")
+}
+
+// If the stored router cannot be loaded, the update must not go ahead: the
+// omitted-switch and publish rules both depend on it.
+func TestModelRouterHandlers_ENT_Update_LookupFailureDoesNotSave(t *testing.T) {
+	api, _, _ := setupTestAPIForCommonTests(t)
+	updated := false
+	api.service.ModelRouterService = &mockModelRouterService{
+		getRouterFunc: func(id uint) (*models.ModelRouter, error) {
+			return nil, fmt.Errorf("database is locked")
+		},
+		updateRouterFunc: func(r *models.ModelRouter) error { updated = true; return nil },
+	}
+
+	w := patchModelRouter(t, api, "1")
+	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	assert.False(t, updated, "no update without the stored router")
+}

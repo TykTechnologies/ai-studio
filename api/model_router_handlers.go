@@ -190,14 +190,24 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	}
 
 	// Flipping the active switch is the publish action on model-routers; an
-	// omitted switch keeps the stored value rather than deactivating.
-	if existing, err := a.service.ModelRouterService.GetRouter(uint(id)); err == nil && existing != nil {
-		if input.Data.Attributes.Active == nil {
-			router.Active = existing.Active
-		}
-		if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
+	// omitted switch keeps the stored value rather than deactivating. Both
+	// rules need the stored router, so the update does not go ahead without
+	// it: a failed lookup used to skip them and save the omitted switch as
+	// false, unpublishing the router without the publish permission.
+	existing, err := a.service.ModelRouterService.GetRouter(uint(id))
+	if err != nil || existing == nil {
+		if err == nil || !errors.Is(err, model_router.ErrEnterpriseFeature) {
+			simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
 			return
 		}
+		respondModelRouterError(c, err)
+		return
+	}
+	if input.Data.Attributes.Active == nil {
+		router.Active = existing.Active
+	}
+	if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
+		return
 	}
 
 	if err := a.service.ModelRouterService.UpdateRouter(router); err != nil {
