@@ -481,13 +481,20 @@ func (a *API) createUserApp(c *gin.Context) {
 	if len(req.MCPServerIDs) > 0 && !a.validateAppMCPBindings(c, currentUser.ID, currentUser.IsAdmin, req.LLMIDs, req.MCPServerIDs) {
 		return
 	}
+	var routerOpts []services.AppOption
+	if len(req.ModelRouterIDs) > 0 {
+		if !a.validateAppModelRouterBindings(c, currentUser.ID, currentUser.IsAdmin, req.ModelRouterIDs) {
+			return
+		}
+		routerOpts = appRouterOptions(&req.ModelRouterIDs)
+	}
 
 	// Create the app (with plugin resources if any)
 	var app *models.App
 	if len(pluginResources) > 0 {
-		app, err = a.service.CreateAppWithResources(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil, pluginResources)
+		app, err = a.service.CreateAppWithResources(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil, pluginResources, routerOpts...)
 	} else {
-		app, err = a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil)
+		app, err = a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil, routerOpts...)
 	}
 	if err != nil {
 		// Check for specific error types and return appropriate responses
@@ -563,6 +570,9 @@ type CreateAppRequest struct {
 	PluginResources []PluginResourceInput `json:"plugin_resources,omitempty"`
 	// MCPServerIDs binds Tyk-managed MCP servers the user's teams can see.
 	MCPServerIDs []uint `json:"mcp_server_ids,omitempty"`
+	// ModelRouterIDs grants Model Routers published in the user's LLM
+	// catalogues (Enterprise).
+	ModelRouterIDs []uint `json:"model_router_ids,omitempty"`
 }
 
 // getUserAccessibleDataSources godoc
@@ -783,6 +793,8 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			Credential      CredentialDetail `json:"credential"`
 			MCPServerIDs    []uint               `json:"mcp_server_ids"`
 			MCPServers      []AppMCPServerOutput `json:"mcp_servers,omitempty"`
+			ModelRouterIDs  []uint                 `json:"model_router_ids"`
+			ModelRouters    []AppModelRouterOutput `json:"model_routers,omitempty"`
 		}{
 			Name:         app.Name,
 			Description:  app.Description,
@@ -825,6 +837,7 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 	// Same shape as the list endpoint, so the portal app page can mount the
 	// MCP access section (and its key minting) from the detail response.
 	response.Attributes.MCPServerIDs, response.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
+	response.Attributes.ModelRouterIDs, response.Attributes.ModelRouters = appModelRouterOutputs(app.ModelRouters)
 
 	c.JSON(http.StatusOK, response)
 }

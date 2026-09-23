@@ -40,6 +40,10 @@ type Gateway interface {
 
 	// SetPostAuthCallback is deprecated, use SetAuthHooks instead
 	SetPostAuthCallback(callback proxy.PostAuthCallback)
+
+	// SetRouteResolver installs the router implementation for the /ai/ chain
+	// and the unified ingress (Model Routers). Nil disables routers.
+	SetRouteResolver(resolver proxy.RouteResolver)
 }
 
 // gateway wraps the existing proxy.Proxy to provide a cleaner API
@@ -188,6 +192,11 @@ func (g *gateway) AddResponseHook(hook proxy.ResponseHook) {
 // SetAuthHooks sets authentication lifecycle hooks
 func (g *gateway) SetAuthHooks(hooks *proxy.AuthHooks) {
 	g.proxy.SetAuthHooks(hooks)
+}
+
+// SetRouteResolver installs the router implementation
+func (g *gateway) SetRouteResolver(resolver proxy.RouteResolver) {
+	g.proxy.SetRouteResolver(resolver)
 }
 
 // SetPostAuthCallback is deprecated, use SetAuthHooks instead

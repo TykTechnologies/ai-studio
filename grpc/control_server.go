@@ -781,7 +781,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	// Get the associated app with LLM/Tool/Datasource relationships (preload for pull-on-miss sync)
 	var app models.App
 	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).
-		Preload("LLMs").Preload("Tools").Preload("Datasources").First(&app).Error; err != nil {
+		Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").First(&app).Error; err != nil {
 		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
@@ -880,6 +880,15 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			if event.FailoverAttempt != 0 {
 				proxyLogs[i].FailoverAttempt = int(event.FailoverAttempt)
 			}
+			// Routing decision, when the request was addressed to a router.
+			proxyLogs[i].RouterKind = event.RouterKind
+			proxyLogs[i].RouterSlug = event.RouterSlug
+			proxyLogs[i].RouterPool = event.RouterPool
+			proxyLogs[i].Route = event.Route
+			proxyLogs[i].RouteReason = event.RouteReason
+			proxyLogs[i].RouteSourceModel = event.RouteSourceModel
+			proxyLogs[i].RouteTargetModel = event.RouteTargetModel
+			proxyLogs[i].RouteSelection = event.RouteSelection
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{
@@ -1337,7 +1346,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get Apps for namespace with relationships
 	var apps []models.App
-	appQuery := s.db.Preload("LLMs").Preload("Tools").Preload("Datasources").Where("is_active = ?", true)
+	appQuery := s.db.Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").Where("is_active = ?", true)
 	if namespace == "" {
 		// Global namespace - only global apps
 		appQuery = appQuery.Where("namespace = ''")
@@ -1441,6 +1450,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			LlmIds:             llmIDs,
 			ToolIds:            toolIDs,
 			DatasourceIds:      datasourceIDs,
+			ModelRouterIds:     appModelRouterIDs(&app),
 			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
@@ -2572,6 +2582,15 @@ func (s *ControlServer) shouldIncludeAppInResponse(appNamespace, edgeNamespace s
 	return appNamespace == edgeNamespace
 }
 
+// appModelRouterIDs lists the Model Routers an App was granted.
+func appModelRouterIDs(app *models.App) []uint32 {
+	ids := make([]uint32, len(app.ModelRouters))
+	for i, r := range app.ModelRouters {
+		ids[i] = uint32(r.ID)
+	}
+	return ids
+}
+
 // convertAppToProto converts a models.App to a pb.AppConfig for pull-on-miss sync.
 // Note: CurrentPeriodUsage is set to 0 - the edge tracks budget locally via analytics.
 func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
@@ -2632,6 +2651,7 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		LlmIds:             llmIDs,
 		ToolIds:            toolIDs,
 		DatasourceIds:      datasourceIDs,
+		ModelRouterIds:     appModelRouterIDs(app),
 		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),

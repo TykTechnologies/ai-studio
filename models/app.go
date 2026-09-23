@@ -28,6 +28,10 @@ type App struct {
 	// MCPServers are Tyk-managed MCP servers the App may reach (Enterprise);
 	// serialised by the App handlers, never through this struct.
 	MCPServers []MCPServer `json:"-" gorm:"many2many:app_mcp_servers;"`
+	// ModelRouters the App may call (Enterprise). A router grant lets the App
+	// reach every LLM the router can pick, but only through the router;
+	// serialised by the App handlers, never through this struct.
+	ModelRouters []ModelRouter `json:"-" gorm:"many2many:app_model_routers;"`
 	Tags        []Tag        `json:"tags" gorm:"many2many:app_tags;"`
 }
 
@@ -56,7 +60,7 @@ func (a *App) Create(db *gorm.DB) error {
 
 // Get an app by ID
 func (a *App) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").First(a, id).Error
+	return db.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").First(a, id).Error
 }
 
 // Update an existing app
@@ -77,18 +81,18 @@ func (a *App) GetID() uint {
 // GetByUserID gets all apps for a specific user
 func (a *App) GetByUserID(db *gorm.DB, userID uint) ([]App, error) {
 	var apps []App
-	err := db.Where("user_id = ?", userID).Preload("Credential").Preload("Tools").Preload("MCPServers").Preload("Tags").Find(&apps).Error
+	err := db.Where("user_id = ?", userID).Preload("Credential").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").Find(&apps).Error
 	return apps, err
 }
 
 // GetByName gets an app by its name
 func (a *App) GetByName(db *gorm.DB, name string) error {
-	return db.Where("name = ?", name).Preload("Credential").Preload("Tools").Preload("MCPServers").Preload("Tags").First(a).Error
+	return db.Where("name = ?", name).Preload("Credential").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").First(a).Error
 }
 
 // GetByCredentialID gets an app by its credential ID
 func (a *App) GetByCredentialID(db *gorm.DB, credentialID uint) error {
-	return db.Where("credential_id = ?", credentialID).Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").First(a).Error
+	return db.Where("credential_id = ?", credentialID).Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").First(a).Error
 }
 
 // ActivateCredential activates the credential associated with the app
@@ -216,7 +220,7 @@ func (a *App) GetLLMs(db *gorm.DB, pageSize, pageNumber int, all bool) ([]LLM, i
 // List returns all apps
 func (a *App) List(db *gorm.DB) (Apps, error) {
 	var apps Apps
-	err := db.Preload("Credential").Preload("Tools").Preload("MCPServers").Preload("Tags").Find(&apps).Error
+	err := db.Preload("Credential").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").Find(&apps).Error
 	return apps, err
 }
 
@@ -257,7 +261,7 @@ func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").Find(a).Error
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").Find(a).Error
 	return totalCount, totalPages, err
 }
 
@@ -317,7 +321,7 @@ func (a *Apps) ListWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bo
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").Find(a).Error
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").Find(a).Error
 	return totalCount, totalPages, err
 }
 
@@ -354,7 +358,7 @@ func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber i
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").Find(a).Error
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").Find(a).Error
 	return totalCount, totalPages, err
 }
 
@@ -403,13 +407,13 @@ func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber i
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").Find(a).Error
+	err := query.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").Find(a).Error
 	return totalCount, totalPages, err
 }
 
 // GetByTag retrieves all apps with a specific tag
 func (a *Apps) GetByTag(db *gorm.DB, tagName string) error {
-	return db.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("Tags").
+	return db.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("Tags").
 		Joins("JOIN app_tags ON app_tags.app_id = apps.id").
 		Joins("JOIN tags ON tags.id = app_tags.tag_id").
 		Where("tags.name = ?", tagName).

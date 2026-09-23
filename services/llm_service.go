@@ -100,6 +100,9 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
 	}
+	if err := models.CheckLLMRouteSlug(s.DB, llm.Name); err != nil {
+		return nil, err
+	}
 
 	// Execute "before_create" hooks
 	if s.HookManager != nil {
@@ -198,6 +201,9 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
 	}
+	if err := models.CheckLLMRouteSlug(s.DB, llm.Name); err != nil {
+		return nil, err
+	}
 
 	// Execute "before_create" hooks
 	if s.HookManager != nil {
@@ -275,6 +281,11 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 		return nil, err
 	}
 
+	if models.LLMRouteSlug(name) != models.LLMRouteSlug(llm.Name) {
+		if err := models.CheckLLMRouteSlug(s.DB, name); err != nil {
+			return nil, err
+		}
+	}
 	llm.Name = name
 	// Smart API key update logic
 	if apiKey == "[redacted]" {

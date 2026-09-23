@@ -237,6 +237,23 @@ func (p *Proxy) handleUnifiedListModels(w http.ResponseWriter, r *http.Request) 
 	}
 	p.mu.RUnlock()
 
+	// Routers the app holds, as "{router}/{model}" for each model the router
+	// advertises. Resolved through the resolver so a router this gateway does
+	// not serve is left out.
+	for _, mr := range app.ModelRouters {
+		ref, ok := p.lookupRouter(mr.Slug)
+		if !ok || ref.Kind != RouterKindModel || ref.ID != mr.ID {
+			continue
+		}
+		for _, m := range p.resolver().Models(ref) {
+			entries = append(entries, unifiedModelInfo{
+				ID:      ref.Slug + "/" + m,
+				Object:  "model",
+				OwnedBy: string(ref.Kind),
+			})
+		}
+	}
+
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
 
 	w.Header().Set("Content-Type", "application/json")

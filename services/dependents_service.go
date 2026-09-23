@@ -237,14 +237,24 @@ func (s *Service) GetFilterDependents(filterID uint) (*Dependents, error) {
 	return d.finalize(), nil
 }
 
-// GetModelRouterDependents lists what references a model router.
-//
-// Nothing in the data model points at a router today: routers are addressed
-// by slug on the gateway (/router/{slug}/...) and apps carry no router
-// association, so the answer is always empty. The endpoint exists so the
-// delete dialog can ask one question for every object type.
+// GetModelRouterDependents lists what references a model router: the apps
+// granted it and the LLM catalogues it is published in. Deleting the router
+// withdraws both (ModelRouter.Delete).
 func (s *Service) GetModelRouterDependents(routerID uint) (*Dependents, error) {
-	return newDependents().finalize(), nil
+	d := newDependents()
+	var err error
+
+	if d.Apps, err = dependentRefs(s.DB, &models.App{}, "apps",
+		"JOIN app_model_routers ON app_model_routers.app_id = apps.id",
+		"app_model_routers.model_router_id = ?", routerID); err != nil {
+		return nil, err
+	}
+	if d.Catalogues, err = dependentRefs(s.DB, &models.Catalogue{}, "catalogues",
+		"JOIN catalogue_model_routers ON catalogue_model_routers.catalogue_id = catalogues.id",
+		"catalogue_model_routers.model_router_id = ?", routerID); err != nil {
+		return nil, err
+	}
+	return d.finalize(), nil
 }
 
 // GetAppDependents lists what references an app: the agents configured to

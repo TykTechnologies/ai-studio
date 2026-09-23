@@ -24,7 +24,7 @@ import GovernedMetadataBadges from "../components/GovernedMetadataBadges";
 import AssetAvatar from "../components/catalog/AssetAvatar";
 import AssetTypeChip from "../components/catalog/AssetTypeChip";
 import AppStatusChip, { getAppStatus } from "../components/AppStatusChip";
-import CopyableCode from "../components/connect/CopyableCode";
+import CopyableCode, { CopyableBlock } from "../components/connect/CopyableCode";
 import { toolMcpEnabled, toolRestEnabled } from "../utils/toolEndpoints";
 import {
   TitleBox,
@@ -51,9 +51,12 @@ import {
   itemKey,
   kindLabel,
   kindLogo,
+  modelRouterDetailApiPath,
   openAICompatibleBaseUrl,
   typeLabelLower,
+  unifiedIngressBaseUrl,
 } from "../utils/catalog";
+import { getVendorName } from "../../admin/utils/vendorLogos";
 import { generateSlug } from "../../admin/components/wizards/quick-start/utils";
 
 /**
@@ -70,6 +73,7 @@ const DETAIL_PATHS = {
   [CATALOG_TYPES.DATASOURCE]: (params) => `/common/catalog/datasources/${params.id}`,
   [CATALOG_TYPES.TOOL]: (params) => `/common/catalog/tools/${params.id}`,
   [CATALOG_TYPES.MCP_SERVER]: (params) => `/common/catalog/mcp-servers/${params.id}`,
+  [CATALOG_TYPES.MODEL_ROUTER]: (params) => modelRouterDetailApiPath(params.id),
   [CATALOG_TYPES.PLUGIN_RESOURCE]: (params) =>
     `/common/catalog/resources/${params.pluginId}/${params.slug}/${encodeURIComponent(params.instanceId)}`,
 };
@@ -79,6 +83,7 @@ const APP_ID_FIELDS = {
   [CATALOG_TYPES.DATASOURCE]: "datasource_ids",
   [CATALOG_TYPES.TOOL]: "tool_ids",
   [CATALOG_TYPES.MCP_SERVER]: "mcp_server_ids",
+  [CATALOG_TYPES.MODEL_ROUTER]: "model_router_ids",
 };
 
 const formatDate = (value) => {
@@ -393,6 +398,91 @@ const MCPServerSections = ({ item }) => {
   );
 };
 
+// A chat completion against the unified ingress, the way an OpenAI SDK sends
+// it. The app's secret is the bearer token, as on the app page.
+const routerCurlSnippet = (baseUrl, model) =>
+  [
+    `curl ${baseUrl}/chat/completions \\`,
+    `  -H "Authorization: Bearer $APP_SECRET" \\`,
+    `  -H "Content-Type: application/json" \\`,
+    `  -d '{"model": "${model}", "messages": [{"role": "user", "content": "Hello"}]}'`,
+  ].join("\n");
+
+const ModelRouterSections = ({ item }) => {
+  const a = item.attributes || {};
+  const models = a.router_models || [];
+  const llms = a.router_llms || [];
+  const baseUrl = unifiedIngressBaseUrl();
+  const example = models[0] || `${a.router_slug || "<router>"}/<model>`;
+  return (
+    <>
+      <Section
+        title="Call it with"
+        description="Apps granted this router call the gateway's unified OpenAI-compatible endpoint and name the router in the model field."
+        data-testid="router-call-section"
+      >
+        {baseUrl ? (
+          <>
+            <FieldLabel variant="bodySmallDefault">Endpoint</FieldLabel>
+            <CopyableCode value={`${baseUrl}/chat/completions`} label="endpoint" testId="router-endpoint" />
+          </>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued" component="p" sx={{ m: 0 }}>
+            Send requests to the gateway&apos;s unified endpoint, <code>POST /v1/chat/completions</code>. Ask your platform team for the gateway address.
+          </Typography>
+        )}
+        <FieldLabel variant="bodySmallDefault" sx={{ mt: 2, display: "block" }}>
+          Model names
+        </FieldLabel>
+        {models.length > 0 ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }} data-testid="router-models">
+            {models.map((model) => (
+              <CopyableCode key={model} value={model} label={`model ${model}`} />
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued" component="p" sx={{ m: 0 }}>
+            The router matches model names by pattern. Send <code>{a.router_slug || "<router>"}/&lt;model&gt;</code> with a model its pools accept.
+          </Typography>
+        )}
+        <Typography variant="bodySmallDefault" color="text.defaultSubdued" component="p" sx={{ mt: 1, mb: 2 }}>
+          The part before the slash picks this router; the rest is the model it routes on.
+        </Typography>
+        <FieldLabel variant="bodySmallDefault">Example</FieldLabel>
+        <CopyableBlock
+          value={routerCurlSnippet(baseUrl || "https://<gateway>/v1", example)}
+          label="example request"
+          testId="router-example"
+        />
+        <Typography variant="bodySmallDefault" color="text.defaultSubdued" component="p" sx={{ mt: 1 }}>
+          With an OpenAI SDK, set the base URL to the endpoint without <code>/chat/completions</code>, use the app secret as the API key and pass <code>{example}</code> as the model.
+        </Typography>
+      </Section>
+      <Section
+        title="Routes to"
+        description="The LLM providers a request through this router may end up at. An app granted the router reaches them only through it."
+      >
+        {llms.length > 0 ? (
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }} data-testid="router-llms">
+            {llms.map((llm) => (
+              <Chip
+                key={llm.id}
+                size="small"
+                variant="outlined"
+                label={llm.vendor ? `${llm.name} · ${getVendorName(llm.vendor) || llm.vendor}` : llm.name}
+              />
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+            No LLM providers are listed for this router.
+          </Typography>
+        )}
+      </Section>
+    </>
+  );
+};
+
 const AssetDetail = ({ type }) => {
   const params = useParams();
   const navigate = useNavigate();
@@ -567,6 +657,7 @@ const AssetDetail = ({ type }) => {
         {type === CATALOG_TYPES.DATASOURCE && <DatasourceSections item={item} />}
         {type === CATALOG_TYPES.TOOL && <ToolSections item={item} />}
         {type === CATALOG_TYPES.MCP_SERVER && <MCPServerSections item={item} />}
+        {type === CATALOG_TYPES.MODEL_ROUTER && <ModelRouterSections item={item} />}
         {type === CATALOG_TYPES.PLUGIN_RESOURCE && <PluginResourceSections item={item} />}
 
         {governed.length > 0 && (

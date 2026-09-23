@@ -63,7 +63,7 @@ const (
 // Access-Control-Expose-Headers: a browser client cannot read a response
 // header the server has not exposed, so without this the failover headers
 // were invisible to exactly the clients that read them from JavaScript.
-const servedCORSExposeHeaders = hdrServedLLM + ", " + hdrServedModel + ", " + hdrFailover
+const servedCORSExposeHeaders = hdrServedLLM + ", " + hdrServedModel + ", " + hdrFailover + ", " + routerCORSExposeHeaders
 
 // llmAttempt is one rung of the waterfall as the loop sees it: the LLM config
 // to call and the model to ask it for. Index 0 is the primary.
@@ -354,14 +354,9 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 	if !ok || origin.ID == target.ID {
 		return false
 	}
-	allowedOrigin := false
-	for _, l := range app.LLMs {
-		if l.ID == origin.ID {
-			allowedOrigin = true
-			break
-		}
-	}
-	if !allowedOrigin {
+	// The origin may itself have been reached through a router the App
+	// holds: a router-chosen primary fails over like a directly granted one.
+	if !p.appAllowedLLM(r, app, origin) {
 		return false
 	}
 	for _, t := range origin.Failover.Targets {
@@ -372,16 +367,19 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 	return false
 }
 
-// stripFailoverHeaders removes the loopback marker before a request leaves
-// for the vendor.
+// stripFailoverHeaders removes the loopback markers (failover and router)
+// before a request leaves for the vendor.
 func stripFailoverHeaders(h http.Header) {
 	h.Del(hdrFailoverOrigin)
 	h.Del(hdrFailoverAttempt)
 	h.Del(hdrFailoverToken)
+	stripRouterHeaders(h)
 }
 
-// applyFailoverMarker stamps a ProxyLog with the marker from ctx, if any.
+// applyFailoverMarker stamps a ProxyLog with the markers from ctx, if any:
+// the failover rung, and the router that chose the LLM.
 func applyFailoverMarker(l *models.ProxyLog, ctx context.Context) {
+	applyRouterMarker(l, ctx)
 	m, ok := failoverMarkerFromContext(ctx)
 	if !ok || m.Attempt < 1 {
 		return

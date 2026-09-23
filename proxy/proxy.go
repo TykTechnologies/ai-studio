@@ -133,6 +133,9 @@ type Proxy struct {
 	datasources             map[string]*models.Datasource
 	// failoverToken authenticates the loopback failover marker (see failover.go).
 	failoverToken                string
+	// routeResolver resolves router slugs on the /ai/ chain (see router.go);
+	// nil where the host serves no routers.
+	routeResolver RouteResolver
 	mu                      sync.RWMutex
 	config                  *Config
 	credValidator              *CredentialValidator
@@ -791,6 +794,10 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	// keep it on the context so this attempt's analytics can say so.
 	if m, ok := p.parseFailoverMarker(r); ok {
 		r = r.WithContext(withFailoverMarker(r.Context(), m))
+	}
+	// Likewise the router marker, when the outer hop resolved a router.
+	if m, ok := p.parseRouterMarker(r); ok {
+		r = r.WithContext(withRouterMarker(r.Context(), m))
 	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries
@@ -1518,6 +1525,10 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// keep it on the context so this attempt's analytics can say so.
 	if m, ok := p.parseFailoverMarker(r); ok {
 		r = r.WithContext(withFailoverMarker(r.Context(), m))
+	}
+	// Likewise the router marker, when the outer hop resolved a router.
+	if m, ok := p.parseRouterMarker(r); ok {
+		r = r.WithContext(withRouterMarker(r.Context(), m))
 	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries

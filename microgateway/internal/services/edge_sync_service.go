@@ -174,6 +174,10 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 		return fmt.Errorf("failed to clear llm_filters: %w", err)
 	}
 
+	if err := tx.Exec("DELETE FROM app_model_routers WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		return fmt.Errorf("failed to clear app_model_routers: %w", err)
+	}
+
 	// Tool/Datasource join tables (must clear before apps and tools are deleted)
 	if err := tx.Exec("DELETE FROM app_tools WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear app_tools: %w", err)
@@ -324,6 +328,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	var allAppLLMs []database.AppLLM
 	var allAppTools []database.AppTool
 	var allAppDatasources []database.AppDatasource
+	var allAppModelRouters []database.AppModelRouter
 
 	for _, pbApp := range apps {
 		// Insert main App record
@@ -385,6 +390,11 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 		for _, dsID := range pbApp.DatasourceIds {
 			allAppDatasources = append(allAppDatasources, database.AppDatasource{
 				AppID: uint(pbApp.Id), DatasourceID: uint(dsID), CreatedAt: now,
+			})
+		}
+		for _, routerID := range pbApp.ModelRouterIds {
+			allAppModelRouters = append(allAppModelRouters, database.AppModelRouter{
+				AppID: uint(pbApp.Id), ModelRouterID: uint(routerID), CreatedAt: now,
 			})
 		}
 
@@ -451,6 +461,11 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	if len(allAppDatasources) > 0 {
 		if err := tx.Create(&allAppDatasources).Error; err != nil {
 			return fmt.Errorf("failed to batch insert app_datasources: %w", err)
+		}
+	}
+	if len(allAppModelRouters) > 0 {
+		if err := tx.Create(&allAppModelRouters).Error; err != nil {
+			return fmt.Errorf("failed to batch insert app_model_routers: %w", err)
 		}
 	}
 

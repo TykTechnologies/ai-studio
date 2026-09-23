@@ -17,11 +17,17 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}) (*models.App, error) {
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	// toolIDs is already of type []uint, no conversion needed
+	o := resolveAppOptions(opts)
 
-	// Check if datasources have higher privacy score than LLMs
-	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
+	// Check if datasources have higher privacy score than LLMs (and the
+	// routers the App is granted, which count as providers)
+	routerProviders, err := s.routerProvidersFor(o, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, nil, routerProviders...); err != nil {
 		return nil, err
 	}
 	// A chat-only tool has no endpoint an App credential could unlock.
@@ -55,6 +61,12 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 
 	if err := app.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	if o.modelRouterIDs != nil && len(*o.modelRouterIDs) > 0 {
+		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	// Add datasources to the app
@@ -144,11 +156,17 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // CreateAppWithNamespace creates a new app with namespace support
-func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string, metadata map[string]interface{}) (*models.App, error) {
+func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	// toolIDs is already of type []uint, no conversion needed
+	o := resolveAppOptions(opts)
 
-	// Check if datasources have higher privacy score than LLMs
-	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
+	// Check if datasources have higher privacy score than LLMs (and the
+	// routers the App is granted, which count as providers)
+	routerProviders, err := s.routerProvidersFor(o, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, nil, routerProviders...); err != nil {
 		return nil, err
 	}
 	// A chat-only tool has no endpoint an App credential could unlock.
@@ -182,6 +200,12 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 
 	if err := app.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	if o.modelRouterIDs != nil && len(*o.modelRouterIDs) > 0 {
+		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	// Add datasources to the app
@@ -232,16 +256,22 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
 	}
+	o := resolveAppOptions(opts)
 
 	// toolIDs is already of type []uint, no conversion needed
 
-	// Check if datasources have higher privacy score than LLMs
-	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
+	// Check if datasources have higher privacy score than LLMs (and the
+	// routers the App is granted, which count as providers)
+	routerProviders, err := s.routerProvidersFor(o, app.ModelRouters)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, nil, routerProviders...); err != nil {
 		return nil, err
 	}
 	// New bindings to a chat-only tool are refused; ones the App already has
@@ -270,6 +300,13 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	// Update Tools
 	if err := s.updateAppTools(app, toolIDs); err != nil {
 		return nil, fmt.Errorf("failed to update app tools: %w", err)
+	}
+
+	// Update router grants, when the change sets them
+	if o.modelRouterIDs != nil {
+		if err := s.setAppModelRouters(app, *o.modelRouterIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := app.Update(s.DB); err != nil {
@@ -411,7 +448,10 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs, toolIDs []uint) e
 // that provider with a privacy-80 datasource was refused. The mismatch then
 // surfaced at chat time, where it does not skip the offending tool -- it fails
 // the entire chat session, presenting as a composer that never enables.
-func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs []uint, pluginResourceScores []int) error {
+//
+// providers are further providers beside the LLMs: the App's Model Routers,
+// each scored by the least private LLM it can reach.
+func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs []uint, pluginResourceScores []int, providers ...privacyResource) error {
 	// Loaded in bulk: one query per resource kind rather than one per id.
 	// See privacy_score_lookup.go for the behaviours this preserves.
 	llms, err := s.loadLLMPrivacyScores(llmIDs)
@@ -426,6 +466,12 @@ func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs
 		if llm.Score > maxLLMScore {
 			maxLLMScore = llm.Score
 			maxLLMName = llm.Name
+		}
+	}
+	for _, p := range providers {
+		if p.Score > maxLLMScore {
+			maxLLMScore = p.Score
+			maxLLMName = p.Name
 		}
 	}
 
@@ -618,6 +664,9 @@ func (s *Service) DeleteApp(id uint) error {
 	// Clear plugin resource associations
 	if err := s.ClearAppPluginResources(id); err != nil {
 		return fmt.Errorf("failed to clear app plugin resources: %w", err)
+	}
+	if err := s.ClearAppModelRouters(id); err != nil {
+		return err
 	}
 	if err := s.ClearAppMCPServers(id); err != nil {
 		return fmt.Errorf("failed to clear app MCP servers: %w", err)
@@ -1071,6 +1120,7 @@ func (s *Service) CreateAppWithResources(
 	budgetStartDate *time.Time,
 	metadata map[string]interface{},
 	pluginResources []PluginResourceSelection,
+	opts ...AppOption,
 ) (*models.App, error) {
 	// Collect privacy scores from plugin resources via plugin RPC
 	var pluginScores []int
@@ -1092,13 +1142,17 @@ func (s *Service) CreateAppWithResources(
 		pluginScores = append(pluginScores, scores...)
 	}
 
-	// Validate privacy scores (built-in + plugin)
-	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, pluginScores); err != nil {
+	// Validate privacy scores (built-in + plugin + routers)
+	routerProviders, err := s.routerProvidersFor(resolveAppOptions(opts), nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, pluginScores, routerProviders...); err != nil {
 		return nil, err
 	}
 
 	// Create the app with built-in resources (reuse existing logic)
-	app, err := s.CreateApp(name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata)
+	app, err := s.CreateApp(name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1134,6 +1188,7 @@ func (s *Service) UpdateAppWithResources(
 	budgetStartDate *time.Time,
 	metadata map[string]interface{},
 	pluginResources []PluginResourceSelection,
+	opts ...AppOption,
 ) (*models.App, error) {
 	// Collect privacy scores from plugin resources via plugin RPC
 	var pluginScores []int
@@ -1156,13 +1211,21 @@ func (s *Service) UpdateAppWithResources(
 		pluginScores = append(pluginScores, scores...)
 	}
 
-	// Validate privacy scores (built-in + plugin)
-	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, pluginScores); err != nil {
+	// Validate privacy scores (built-in + plugin + routers)
+	var existingRouters []models.ModelRouter
+	if existing, err := s.GetAppByID(id); err == nil {
+		existingRouters = existing.ModelRouters
+	}
+	routerProviders, err := s.routerProvidersFor(resolveAppOptions(opts), existingRouters)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, pluginScores, routerProviders...); err != nil {
 		return nil, err
 	}
 
 	// Update the app with built-in resources (reuse existing logic)
-	app, err := s.UpdateApp(id, name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata)
+	app, err := s.UpdateApp(id, name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata, opts...)
 	if err != nil {
 		return nil, err
 	}

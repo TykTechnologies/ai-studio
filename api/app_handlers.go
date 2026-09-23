@@ -67,6 +67,11 @@ func (a *API) createApp(c *gin.Context) {
 			return
 		}
 	}
+	// So are router grants.
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	if !ok {
+		return
+	}
 
 	// Apps default to active. Asking for an active app explicitly needs
 	// apps:publish; a caller without it gets an inactive app unless they
@@ -97,6 +102,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
 			pluginResources,
+			routerOpts...,
 		)
 	} else if input.Data.Attributes.Namespace != "" {
 		app, err = a.service.CreateAppWithNamespace(
@@ -110,6 +116,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			input.Data.Attributes.Namespace,
 			metadata, // Pass metadata
+			routerOpts...,
 		)
 	} else {
 		app, err = a.service.CreateApp(
@@ -122,6 +129,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			metadata, // Pass metadata
+			routerOpts...,
 		)
 	}
 	if err != nil {
@@ -285,6 +293,10 @@ func (a *API) updateApp(c *gin.Context) {
 			return
 		}
 	}
+	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs)
+	if !ok {
+		return
+	}
 
 	var app *models.App
 	if len(pluginResources) > 0 {
@@ -300,6 +312,7 @@ func (a *API) updateApp(c *gin.Context) {
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
 			pluginResources,
+			routerOpts...,
 		)
 	} else {
 		app, err = a.service.UpdateApp(
@@ -313,6 +326,7 @@ func (a *API) updateApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			metadata,
+			routerOpts...,
 		)
 	}
 	if err != nil {
@@ -514,6 +528,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.LLMIDs = getLLMIDs(app.LLMs)
 	resp.Attributes.ToolIDs = getToolIDs(app.Tools)
 	resp.Attributes.MCPServerIDs, resp.Attributes.MCPServers = appMCPServerOutputs(app.MCPServers)
+	resp.Attributes.ModelRouterIDs, resp.Attributes.ModelRouters = appModelRouterOutputs(app.ModelRouters)
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
 	resp.Attributes.IsActive = app.IsActive

@@ -65,6 +65,7 @@ var catalogTypeNames = map[string]string{
 	CatalogItemTool:           "tool",
 	CatalogItemPluginResource: "resource",
 	CatalogItemMCPServer:      "MCP server",
+	CatalogItemModelRouter:    "model router",
 }
 
 type catalogQuery struct {
@@ -199,6 +200,15 @@ var catalogSources = []catalogSource{
 		catalogueIDCol: "tool_catalogue_mcp_servers.tool_catalogue_id", catalogueNameCol: "tool_catalogues.name", catalogueType: CatalogItemTool,
 		searchCols: []string{"mcp_servers.name", "mcp_servers.description", "mcp_servers.long_description", "mcp_servers.listen_path", "mcp_servers.primitives", "mcp_servers.tags", "mcp_servers.auth_mode"},
 		base:       models.AccessibleMCPServerQuery,
+	},
+	{
+		// Model Routers share the LLM catalogues. They have no privacy column:
+		// a router is as private as the least private LLM it can reach.
+		typ: CatalogItemModelRouter, table: "model_routers",
+		kindCol: "model_routers.api_compat", privacyCol: models.ModelRouterPrivacySQL,
+		catalogueIDCol: "catalogue_model_routers.catalogue_id", catalogueNameCol: "catalogues.name", catalogueType: CatalogItemLLM,
+		searchCols: []string{"model_routers.name", "model_routers.slug", "model_routers.description", "model_routers.short_description", "model_routers.long_description"},
+		base:       models.AccessibleModelRouterQuery,
 	},
 }
 

@@ -188,13 +188,18 @@ func appHoldsDatasource(app *models.App, dsID uint) bool {
 // plugin-authenticated branches authenticated the caller and then let it name
 // any LLM or datasource on the gateway.
 //
-//   - An LLM path passes when the app holds the LLM, or inherits it as a
-//     failover rung of an LLM it holds (failoverGrantsAccess, which trusts the
-//     loopback marker only with this process's token).
+//   - An LLM path passes when the app holds the LLM, inherits it through a
+//     router it holds (routerGrantsAccess), or inherits it as a failover rung
+//     of an LLM it holds or reached through a router (failoverGrantsAccess).
+//     Both inheritances trust the loopback marker only with this process's
+//     token.
 //   - A route (/ai/, /anthropic/, and so the unified /v1) passes when the app
 //     holds the LLM it names. The outer hop always names the primary, so
 //     failover inheritance is not needed there; Bedrock is served from this
-//     hop directly, so this is its only check.
+//     hop directly, so this is its only check. A route that names a router
+//     rather than an LLM passes here: the router grant is checked where the
+//     router is resolved (resolveRoute), and the LLM it picks is checked on
+//     the inner hop (or, for Bedrock, is one the router can reach).
 //   - A datasource passes when the app holds it.
 //
 // Unknown slugs are refused. A path that names none of these passes: tools
@@ -208,11 +213,12 @@ func (cv *CredentialValidator) targetAllowed(r *http.Request, app *models.App, t
 		if !ok {
 			return false
 		}
-		return appHoldsLLM(app, llm.ID) || cv.p.failoverGrantsAccess(r, app, llm)
+		return cv.p.appAllowedLLM(r, app, llm) || cv.p.failoverGrantsAccess(r, app, llm)
 	case targetRoute:
 		llm, ok := cv.p.GetLLM(t.slug)
 		if !ok {
-			return false
+			_, isRouter := cv.p.lookupRouter(t.slug)
+			return isRouter
 		}
 		return appHoldsLLM(app, llm.ID)
 	case targetDatasource:

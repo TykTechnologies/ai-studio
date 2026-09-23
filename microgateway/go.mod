@@ -253,7 +253,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/mux v1.8.1
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gosimple/slug v1.15.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.7.0

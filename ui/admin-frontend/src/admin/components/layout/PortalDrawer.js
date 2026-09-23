@@ -86,6 +86,9 @@ const PortalDrawer = ({ open }) => {
           { id: 'browse-llms', text: 'LLM providers', path: '/portal/catalog/llms' },
           { id: 'browse-datasources', text: 'Data sources', path: '/portal/catalog/datasources' },
           { id: 'browse-tools', text: 'Tools', path: '/portal/catalog/tools' },
+          ...(features.feature_model_router
+            ? [{ id: 'browse-model-routers', text: 'Model routers', path: '/portal/catalog/model-routers' }]
+            : []),
           ...(features.feature_tyk_mcp
             ? [{ id: 'browse-mcp-servers', text: 'MCP servers', path: '/portal/catalog/mcp-servers' }]
             : []),
