@@ -106,7 +106,7 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 	converseMsgs, systemBlocks := bedrockVendor.ConvertChatMessagesToConverse(chatMessages)
 
 	// Build inference config
-	inferenceConfig := bedrockVendor.BuildInferenceConfig(req.MaxCompletionTokens, req.Temperature, req.TopP, req.Stop)
+	inferenceConfig := bedrockVendor.BuildInferenceConfig(req.OutputTokenLimit(), req.Temperature, req.TopP, req.Stop)
 
 	// Build tool config
 	var toolConfig *types.ToolConfiguration
