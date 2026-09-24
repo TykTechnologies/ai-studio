@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
 )
@@ -173,9 +174,13 @@ func (s *Service) findOrCreateStandaloneEmbedder(tx *gorm.DB, spec models.Embedd
 	// Not validated: the legacy datasource fields never were (a datasource
 	// could name a vendor that cannot embed, or no model yet), and a write
 	// through them keeps working as it did. The embedder shows up in the
-	// Embedders list, where it can be fixed.
+	// Embedders list, where it can be fixed; the log says why it cannot
+	// embed yet.
 	if err := e.Create(tx); err != nil {
 		return nil, err
+	}
+	if err := s.validateEmbedder(tx, &e); err != nil {
+		logger.Warn(fmt.Sprintf("embedder %q (id %d) was created from datasource embed_* fields but cannot embed yet: %v", e.Name, e.ID, err))
 	}
 	s.emitEmbedder(&e, "created", userID)
 	return &e, nil
