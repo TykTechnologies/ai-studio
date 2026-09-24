@@ -321,7 +321,7 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260902213528-f80534f57671
+replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260924053222-23fb5b550452
 
 replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.44.0
 

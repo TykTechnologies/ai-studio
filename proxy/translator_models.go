@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/google/uuid"
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/openai"
 )
 
 // Models
@@ -22,6 +23,7 @@ type ChatCompletionRequest struct {
 	TopLogProbs         *int            `json:"top_logprobs,omitempty"`
 	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
 	MaxTokens           *int            `json:"max_tokens,omitempty"`
+	ReasoningEffort     *string         `json:"reasoning_effort,omitempty"`
 	N                   *int            `json:"n,omitempty"`
 	Modalities          []string        `json:"modalities,omitempty"`
 	Audio               *AudioConfig    `json:"audio,omitempty"`
@@ -99,6 +101,14 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 
 	if limit := r.OutputTokenLimit(); limit != nil {
 		options = append(options, llms.WithMaxTokens(*limit))
+	}
+
+	// reasoning_effort goes to OpenAI-wire upstreams verbatim, and only when
+	// the client sent it: accepted values and defaults differ per model, so
+	// the gateway neither checks nor defaults it. Other vendors express
+	// effort differently and do not receive it.
+	if r.ReasoningEffort != nil && *r.ReasoningEffort != "" && conf.Vendor == models.OPENAI {
+		options = append(options, openai.WithReasoningEffort(*r.ReasoningEffort))
 	}
 
 	if r.N != nil {
