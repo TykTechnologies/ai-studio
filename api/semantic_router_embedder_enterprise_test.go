@@ -118,3 +118,28 @@ func TestSemanticRouterAPI_Embedders(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "semantic router")
 	}
 }
+
+// A router can only use an embedder whose LLM serves its namespace: edges in
+// other namespaces never receive that LLM (or its key).
+func TestSemanticRouterAPI_EmbedderNamespace(t *testing.T) {
+	a, service, db := setupEmbedderAPI(t)
+	service.SemanticRouterService = entsr.NewEnterpriseService(db)
+	r := a.Router()
+
+	target := &models.LLM{Name: "Target", Vendor: models.OPENAI, PrivacyScore: 80, Active: true}
+	require.NoError(t, db.Create(target).Error)
+	euLLM := &models.LLM{Name: "EU Embed", Vendor: models.OPENAI, PrivacyScore: 80, Active: true, Namespace: "eu"}
+	require.NoError(t, db.Create(euLLM).Error)
+	e, err := service.CreateEmbedder(&models.Embedder{Name: "eu-linked", LLMID: &euLLM.ID, ModelName: "m"}, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, target.ID)
+
+	w := apitest.PerformRequest(r, "POST", "/api/v1/semantic-routers", routerBody(map[string]interface{}{"embedder_id": e.ID}))
+	assert.Equal(t, http.StatusBadRequest, w.Code, "a global router cannot use an EU-scoped LLM: %s", w.Body.String())
+	assert.Contains(t, w.Body.String(), "namespace")
+
+	w = apitest.PerformRequest(r, "POST", "/api/v1/semantic-routers", routerBody(map[string]interface{}{
+		"embedder_id": e.ID, "namespace": "eu", "slug": "smart-eu", "name": "Smart EU",
+	}))
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+}

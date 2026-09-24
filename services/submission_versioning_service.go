@@ -465,7 +465,7 @@ func (s *Service) applyDatasourceUpdates(tx *gorm.DB, id uint, updates map[strin
 	if err := tx.Preload("Embedder.LLM").First(&ds, id).Error; err != nil {
 		return err
 	}
-	in.VectorConn, in.VectorAPIKey = ds.DBConnString, ds.DBConnAPIKey
+	in.VectorConn, in.VectorAPIKey, in.Namespace = ds.DBConnString, ds.DBConnAPIKey, ds.Namespace
 	e, err := s.resolveDatasourceEmbedder(tx, ds.Embedder, in, ds.Name, privacyScore, 0)
 	if err != nil {
 		return err

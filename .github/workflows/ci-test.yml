@@ -181,6 +181,78 @@ jobs:
           retention-days: 7
 
   # ==========================================================================
+  # Go Postgres Tests: the tests that need a real PostgreSQL (SQLite hides
+  # multi-connection behaviour: advisory locks, concurrent find-or-create,
+  # transaction deadlocks, dialect-specific SQL). They skip without
+  # DATABASE_URL, so the unit jobs above never run them.
+  # ==========================================================================
+  go-postgres-tests:
+    needs: [dep-guard]
+    name: Go Postgres Tests
+    runs-on: warp-ubuntu-latest-arm64-4x
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: midsommar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/midsommar_test?sslmode=disable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+
+      - name: Create enterprise stub for CE builds
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/midsommar/v2/enterprise
+
+          go 1.26.6
+          EOF
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Go Cache
+        uses: WarpBuilds/cache@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-ce-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-ce-
+            ${{ runner.os }}-go-
+
+      - name: Create placeholders for embeds
+        run: |
+          mkdir -p docs/site/dist ui/admin-frontend/build
+          echo "placeholder" > docs/site/dist/index.html
+          echo "placeholder" > ui/admin-frontend/build/index.html
+          cp dev/.env.dev .env
+
+      # One package at a time (-p 1): the packages share the database, and
+      # tests that are not schema-isolated would otherwise migrate it at once.
+      - name: Run Postgres tests
+        run: |
+          go test -v -race -p 1 -count=1 \
+            -run 'PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue' \
+            ./models/ ./services/
+
+  # ==========================================================================
   # Documentation Build
   # ==========================================================================
   docs-build:
@@ -220,7 +292,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: warp-ubuntu-latest-arm64-2x
-    needs: [frontend-tests, go-unit-tests, docs-build]
+    needs: [frontend-tests, go-unit-tests, go-postgres-tests, docs-build]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -239,6 +311,7 @@ jobs:
           echo "| Frontend Tests | ${{ needs.frontend-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Unit Tests (CE) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Unit Tests (ENT) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Coverage files:" >> $GITHUB_STEP_SUMMARY
@@ -253,7 +326,7 @@ jobs:
         continue-on-error: true
 
       - name: Check Results
-        if: needs.frontend-tests.result != 'success' || needs.go-unit-tests.result != 'success'
+        if: needs.frontend-tests.result != 'success' || needs.go-unit-tests.result != 'success' || needs.go-postgres-tests.result != 'success'
         run: |
           echo "Some tests failed!"
           exit 1

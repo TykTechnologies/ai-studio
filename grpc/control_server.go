@@ -1864,6 +1864,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		log.Warn().Err(err).Msg("Failed to get Semantic Routers")
 	}
 	for _, router := range semanticRouters {
+		if router.Embedder != nil {
+			if err := router.Embedder.UsableInNamespace(router.Namespace); err != nil {
+				log.Error().Err(err).Uint("router_id", router.ID).Msg("Semantic Router embedder not available in its namespace; not synced")
+				continue
+			}
+		}
 		cfg, err := router.EdgeConfigJSON(s.db, s.encryptForMicrogateway)
 		if err != nil {
 			log.Error().Err(err).Uint("router_id", router.ID).Msg("Failed to encode Semantic Router; not synced")
@@ -2056,7 +2062,16 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnAPIKey = encrypted
 		}
 
+		// An embedder linked to an LLM scoped to another namespace must not
+		// carry that LLM's credentials here (the API refuses such links;
+		// this covers rows saved before it did).
 		embed := ds.EmbedFields(true)
+		if ds.Embedder != nil {
+			if err := ds.Embedder.UsableInNamespace(ds.Namespace); err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Datasource embedder not available in its namespace - syncing it without embedding settings")
+				embed = models.LegacyEmbed{}
+			}
+		}
 		resolvedEmbedAPIKey := embed.APIKey
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {

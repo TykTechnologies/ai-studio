@@ -145,3 +145,51 @@ func TestSnapshot_FlattensRouterEmbedders(t *testing.T) {
 	assert.Equal(t, "ollama-key", decryptLikeMicrogateway(t, key, inline.APIKeyEncrypted))
 	require.NoError(t, sr.Validate(snapshotRouterConfig(t, server, "inline")))
 }
+
+// Rows that break the namespace rule (written before the API enforced it)
+// never carry the LLM's credentials to edges: the datasource syncs without
+// embedding settings and the router is left out.
+func TestSnapshot_EmbedderNamespaceBackstop(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	euLLM := &models.LLM{Name: "EU", Vendor: models.OPENAI, APIKey: "sk-eu-only", Active: true, Namespace: "eu"}
+	require.NoError(t, db.Create(euLLM).Error)
+	e := &models.Embedder{Name: "eu-linked", LLMID: &euLLM.ID, ModelName: "m"}
+	require.NoError(t, db.Create(e).Error)
+	require.NoError(t, db.Create(&models.Datasource{Name: "Global DS", Active: true, EmbedderID: &e.ID}).Error)
+	r := &models.SemanticRouter{Name: "global", Slug: "global", Active: true, EmbedderID: &e.ID,
+		Settings: sr.Settings{DefaultRoute: "a"},
+		Routes:   []sr.Route{{Name: "a", Utterances: []string{"hi"}, Target: sr.Target{Type: sr.TargetLLM, LLMID: euLLM.ID, Model: "m"}}}}
+	require.NoError(t, r.Create(db))
+
+	snap, err := server.getConfigurationSnapshot("us")
+	require.NoError(t, err)
+	var ds *pb.DatasourceConfig
+	for _, d := range snap.Datasources {
+		if d.Name == "Global DS" {
+			ds = d
+		}
+	}
+	require.NotNil(t, ds, "the datasource itself still syncs")
+	assert.Empty(t, ds.EmbedVendor)
+	assert.Empty(t, ds.EmbedApiKeyEncrypted, "the EU LLM's key does not reach a US edge")
+	for _, rt := range snap.SemanticRouters {
+		assert.NotEqual(t, "global", rt.Slug, "the router is not synced")
+	}
+}
+
+// An inactive LLM still lends its connection to a datasource's linked
+// embedder at the edge (datasources carry it flattened). Pinned so a change
+// here is deliberate; see features/Embedders.md.
+func TestSnapshot_InactiveLinkedLLMStillEmbedsDatasources(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	llm := &models.LLM{Name: "Paused", Vendor: models.OPENAI, APIKey: "sk-paused", Active: true}
+	require.NoError(t, db.Create(llm).Error)
+	require.NoError(t, db.Model(llm).Update("active", false).Error)
+	e := &models.Embedder{Name: "paused-linked", LLMID: &llm.ID, ModelName: "m"}
+	require.NoError(t, db.Create(e).Error)
+	require.NoError(t, db.Create(&models.Datasource{Name: "Docs", Active: true, EmbedderID: &e.ID}).Error)
+
+	ds := snapshotDatasource(t, server, "Docs")
+	assert.Equal(t, "openai", ds.EmbedVendor)
+	assert.NotEmpty(t, ds.EmbedApiKeyEncrypted)
+}

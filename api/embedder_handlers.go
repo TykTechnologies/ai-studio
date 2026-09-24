@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -87,7 +88,11 @@ func (a *API) createEmbedder(c *gin.Context) {
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}
-	e, err := a.service.CreateEmbedder(attributesToEmbedder(&input.Data.Attributes), currentUserID(c))
+	e := attributesToEmbedder(&input.Data.Attributes)
+	if e.IsLinked() && !a.requireLLMReadToLink(c) {
+		return
+	}
+	e, err := a.service.CreateEmbedder(e, currentUserID(c))
 	if err != nil {
 		respondEmbedderError(c, err)
 		return
@@ -143,7 +148,18 @@ func (a *API) updateEmbedder(c *gin.Context) {
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}
-	e, err := a.service.UpdateEmbedder(id, attributesToEmbedder(&input.Data.Attributes), currentUserID(c))
+	changes := attributesToEmbedder(&input.Data.Attributes)
+	if changes.IsLinked() {
+		current, err := a.service.GetEmbedder(id)
+		if err != nil {
+			respondEmbedderError(c, err)
+			return
+		}
+		if (!current.IsLinked() || *current.LLMID != *changes.LLMID) && !a.requireLLMReadToLink(c) {
+			return
+		}
+	}
+	e, err := a.service.UpdateEmbedder(id, changes, currentUserID(c))
 	if err != nil {
 		respondEmbedderError(c, err)
 		return
@@ -243,6 +259,18 @@ func (a *API) listEmbedderVendors(c *gin.Context) {
 	c.JSON(http.StatusOK, VendorListResponse{Data: out})
 }
 
+// requireLLMReadToLink refuses linking an embedder to an LLM the caller may
+// not read (checked like the route permissions: see holds): a linked embedder uses the LLM's credentials (and a datasource
+// using it would spend them), so embedders:write alone is not enough. It
+// writes the 403 and returns false when the caller lacks llms:read.
+func (a *API) requireLLMReadToLink(c *gin.Context) bool {
+	if a.holds(c, authz.Read("llms")) {
+		return true
+	}
+	simpleError(c, http.StatusForbidden, "Forbidden", "linking an embedder to an LLM provider requires llms:read")
+	return false
+}
+
 // serializeEmbedder is an embedder in JSON:API form. The key is redacted
 // (secret references are shown as they are); a linked embedder also shows
 // the LLM it inherits from and the vendor and privacy score that come with it.
@@ -281,10 +309,11 @@ func respondEmbedderError(c *gin.Context, err error) {
 	var inUse *services.EmbedderInUseError
 	var locked *services.EmbedderLockedError
 	var privacy *services.EmbedderPrivacyError
+	var namespace *services.EmbedderNamespaceError
 	switch {
 	case errors.Is(err, services.ErrEmbedderNotFound):
 		simpleError(c, http.StatusNotFound, "Not Found", "Embedder not found")
-	case errors.As(err, &inUse), errors.As(err, &locked), errors.As(err, &privacy):
+	case errors.As(err, &inUse), errors.As(err, &locked), errors.As(err, &privacy), errors.As(err, &namespace):
 		simpleError(c, http.StatusConflict, "Conflict", err.Error())
 	case errors.Is(err, services.ErrEmbedderInvalid):
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())

@@ -190,30 +190,62 @@ func GetEmbedderResolved(db *gorm.DB, id uint) (*EmbedderSpec, error) {
 // FindOrCreateLinkedEmbedder returns the embedder linked to the LLM with this
 // model, creating one (named "<LLM name> · <model>") when there is none.
 // created reports whether it was made now.
-func FindOrCreateLinkedEmbedder(tx *gorm.DB, llmID uint, model string, userID uint) (e *Embedder, created bool, err error) {
-	var found Embedder
-	err = tx.Preload("LLM").Where("llm_id = ? AND model = ?", llmID, model).Order("id").First(&found).Error
-	if err == nil {
-		return &found, false, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, false, err
-	}
-	var llm LLM
-	if err := tx.First(&llm, llmID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, false, fmt.Errorf("%w: LLM %d does not exist", ErrEmbedderInvalid, llmID)
+//
+// Concurrent calls for the same LLM and model create one embedder (see
+// LockEmbedderConfig).
+func FindOrCreateLinkedEmbedder(db *gorm.DB, llmID uint, model string, userID uint) (e *Embedder, created bool, err error) {
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := LockEmbedderConfig(tx, "linked", fmt.Sprint(llmID), model); err != nil {
+			return err
 		}
-		return nil, false, err
-	}
-	name, err := UniqueEmbedderName(tx, llm.Name, model)
+		var found Embedder
+		ferr := tx.Preload("LLM").Where("llm_id = ? AND model = ?", llmID, model).Order("id").First(&found).Error
+		if ferr == nil {
+			e = &found
+			return nil
+		}
+		if !errors.Is(ferr, gorm.ErrRecordNotFound) {
+			return ferr
+		}
+		var llm LLM
+		if err := tx.First(&llm, llmID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: LLM %d does not exist", ErrEmbedderInvalid, llmID)
+			}
+			return err
+		}
+		id := llmID
+		found = Embedder{LLMID: &id, ModelName: model, UserID: userID}
+		if err := CreateWithDefaultName(tx, &found, llm.Name, model); err != nil {
+			return err
+		}
+		found.LLM = &llm
+		e, created = &found, true
+		return nil
+	})
 	if err != nil {
 		return nil, false, err
 	}
-	id := llmID
-	found = Embedder{Name: name, LLMID: &id, ModelName: model, UserID: userID, LLM: &llm}
-	if err := found.Create(tx); err != nil {
-		return nil, false, err
+	return e, created, nil
+}
+
+// ErrEmbedderNamespace is returned when a linked embedder's LLM is scoped to
+// a namespace other than its consumer's.
+var ErrEmbedderNamespace = errors.New("embedder is not available in this namespace")
+
+// UsableInNamespace reports whether the embedder may serve a datasource or
+// router in namespace ns. A linked embedder carries its LLM's credentials,
+// and edges only receive an LLM in its own namespace (or everywhere when it
+// is global): so an LLM scoped to a namespace may only embed for objects in
+// that namespace. A standalone embedder has no namespace. The LLM must be
+// loaded for a linked embedder.
+func (e *Embedder) UsableInNamespace(ns string) error {
+	if !e.IsLinked() || e.LLM == nil {
+		return nil
 	}
-	return &found, true, nil
+	llmNS := CanonicalNamespace(e.LLM.Namespace)
+	if llmNS == DefaultNamespace || llmNS == CanonicalNamespace(ns) {
+		return nil
+	}
+	return fmt.Errorf("%w: it uses LLM %q, which is scoped to namespace %q", ErrEmbedderNamespace, e.LLM.Name, e.LLM.Namespace)
 }

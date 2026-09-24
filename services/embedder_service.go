@@ -60,6 +60,58 @@ func (e *EmbedderPrivacyError) Error() string {
 	return fmt.Sprintf("embedder privacy score %d is below the datasource privacy score %d", e.EmbedderScore, e.Required)
 }
 
+// EmbedderNamespaceError refuses a change that would leave datasources or
+// routers using an embedder whose LLM is scoped to another namespace.
+type EmbedderNamespaceError struct {
+	Namespace string
+	Consumers []DependentRef
+}
+
+func (e *EmbedderNamespaceError) Error() string {
+	return fmt.Sprintf("the embedder's LLM would be scoped to namespace %q, but %s in other namespaces use it", e.Namespace, refNames(e.Consumers))
+}
+
+// embedderConsumer is a datasource or router that embeds with an embedder.
+type embedderConsumer struct {
+	ID        uint
+	Name      string
+	Namespace string
+}
+
+// embedderConsumers lists the datasources and routers using the embedders
+// selected by where (a clause on the embedders table, e.g. "embedders.id = ?").
+func (s *Service) embedderConsumers(where string, args ...interface{}) ([]embedderConsumer, error) {
+	var out []embedderConsumer
+	for _, table := range []string{"datasources", "semantic_routers"} {
+		var rows []embedderConsumer
+		if err := s.DB.Table(table).
+			Select(table+".id, "+table+".name, "+table+".namespace").
+			Joins("JOIN embedders ON embedders.id = "+table+".embedder_id").
+			Where(table+".deleted_at IS NULL AND "+where, args...).
+			Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
+// namespaceConflicts are the consumers an LLM scoped to llmNamespace may not
+// serve (a global LLM serves every namespace).
+func namespaceConflicts(llmNamespace string, consumers []embedderConsumer) []DependentRef {
+	llmNS := models.CanonicalNamespace(llmNamespace)
+	if llmNS == models.DefaultNamespace {
+		return nil
+	}
+	var out []DependentRef
+	for _, c := range consumers {
+		if models.CanonicalNamespace(c.Namespace) != llmNS {
+			out = append(out, DependentRef{ID: c.ID, Name: c.Name})
+		}
+	}
+	return out
+}
+
 // LLMEmbedderConflictError refuses an LLM change or delete that would break
 // embedders linked to it.
 type LLMEmbedderConflictError struct {
@@ -147,16 +199,6 @@ func (s *Service) GetEmbedder(id uint) (*models.Embedder, error) {
 	return &e, nil
 }
 
-// GetEmbedderResolved returns an embedder's resolved spec (secrets included)
-// for runtime use.
-func (s *Service) GetEmbedderResolved(id uint) (*models.EmbedderSpec, error) {
-	e, err := s.GetEmbedder(id)
-	if err != nil {
-		return nil, err
-	}
-	return e.Spec(true)
-}
-
 // ListEmbedders lists embedders with their LLMs.
 func (s *Service) ListEmbedders(pageSize, pageNumber int, all bool, opts ...ListOptions) (models.Embedders, int64, int, error) {
 	var es models.Embedders
@@ -210,6 +252,17 @@ func (s *Service) UpdateEmbedder(id uint, changes *models.Embedder, userID uint)
 
 	if err := s.validateEmbedder(s.DB, &next); err != nil {
 		return nil, err
+	}
+
+	// A linked embedder only serves its LLM's namespace.
+	if next.IsLinked() && next.LLM != nil {
+		consumers, err := s.embedderConsumers("embedders.id = ?", id)
+		if err != nil {
+			return nil, err
+		}
+		if bad := namespaceConflicts(next.LLM.Namespace, consumers); len(bad) > 0 {
+			return nil, &EmbedderNamespaceError{Namespace: next.LLM.Namespace, Consumers: bad}
+		}
 	}
 
 	datasources, err := dependentRefs(s.DB, &models.Datasource{}, "datasources", "",
@@ -328,10 +381,22 @@ func (s *Service) CheckLLMDeleteForEmbedders(llmID uint) error {
 // datasources embedding through it: a vendor its drivers cannot embed with
 // or a different vendor (another vector space), or a privacy score below
 // theirs.
-func (s *Service) CheckLLMUpdateForEmbedders(current *models.LLM, newVendor models.Vendor, newPrivacy int) error {
+//
+// Moving the LLM to a namespace is refused when datasources or routers in
+// other namespaces embed through it.
+func (s *Service) CheckLLMUpdateForEmbedders(current *models.LLM, newVendor models.Vendor, newPrivacy int, newNamespace string) error {
 	refs, err := s.linkedEmbedderRefs(current.ID)
 	if err != nil || len(refs) == 0 {
 		return err
+	}
+	if models.CanonicalNamespace(newNamespace) != models.CanonicalNamespace(current.Namespace) {
+		consumers, err := s.embedderConsumers("embedders.llm_id = ?", current.ID)
+		if err != nil {
+			return err
+		}
+		if bad := namespaceConflicts(newNamespace, consumers); len(bad) > 0 {
+			return &EmbedderNamespaceError{Namespace: newNamespace, Consumers: bad}
+		}
 	}
 	if newVendor != current.Vendor && !switches.SupportsEmbeddings(newVendor) {
 		return &LLMEmbedderConflictError{Reason: fmt.Sprintf("vendor %q does not provide embeddings", newVendor), Embedders: refs}
@@ -365,4 +430,24 @@ func (s *Service) CheckLLMUpdateForEmbedders(current *models.LLM, newVendor mode
 // EmbeddingVendors lists the vendors whose drivers can embed.
 func (s *Service) EmbeddingVendors() []models.Vendor {
 	return switches.EmbeddingVendors()
+}
+
+// CheckEmbedderForNamespace refuses an embedder (by id; nil means none) that
+// may not serve an object in namespace ns: one linked to an LLM scoped to
+// another namespace.
+func (s *Service) CheckEmbedderForNamespace(embedderID *uint, ns string) error {
+	if embedderID == nil {
+		return nil
+	}
+	e, err := s.GetEmbedder(*embedderID)
+	if err != nil {
+		if errors.Is(err, ErrEmbedderNotFound) {
+			return fmt.Errorf("%w: embedder %d does not exist", ErrEmbedderInvalid, *embedderID)
+		}
+		return err
+	}
+	if err := e.UsableInNamespace(ns); err != nil {
+		return fmt.Errorf("%w: %v", ErrEmbedderInvalid, err)
+	}
+	return nil
 }

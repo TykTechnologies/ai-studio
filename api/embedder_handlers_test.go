@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
@@ -209,4 +210,59 @@ func TestDatasourceHandlers_EmbedderFields(t *testing.T) {
 	require.NoError(t, err)
 	w = apitest.PerformRequest(r, "POST", "/api/v1/datasources", body(map[string]interface{}{"name": "Too private", "embedder_id": low.ID}))
 	assert.Equal(t, http.StatusBadRequest, w.Code, "an embedder trusted with less than the datasource is refused")
+}
+
+// embedder_id 0 through the datasource API unlinks the embedder.
+func TestDatasourceHandlers_EmbedderIDZeroUnlinks(t *testing.T) {
+	a, service, _ := setupEmbedderAPI(t)
+	e, err := service.CreateEmbedder(&models.Embedder{Name: "e", Vendor: models.OLLAMA, ModelName: "nomic", PrivacyScore: 100}, 1)
+	require.NoError(t, err)
+	ds, err := service.CreateDatasource("Docs", "", "", "", "", 10, 1, nil, "", "pgvector", "", "db",
+		services.EmbedderInput{EmbedderID: &e.ID}, true)
+	require.NoError(t, err)
+
+	w := apitest.PerformRequest(a.Router(), "PATCH", fmt.Sprintf("/api/v1/datasources/%d", ds.ID), map[string]interface{}{
+		"data": map[string]interface{}{"type": "datasources", "attributes": map[string]interface{}{
+			"name": "Docs", "privacy_score": 10, "db_source_type": "pgvector", "db_name": "db", "active": true,
+			"user_id": 1, "embedder_id": 0, "db_conn_api_key": "[redacted]",
+		}},
+	})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp struct {
+		Data DatasourceResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Nil(t, resp.Data.Attributes.EmbedderID)
+	assert.Equal(t, "", resp.Data.Attributes.EmbedVendor)
+
+	// The embedder is free again.
+	w = apitest.PerformRequest(a.Router(), "DELETE", fmt.Sprintf("/api/v1/embedders/%d", e.ID), nil)
+	assert.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+}
+
+// An LLM update that would break the datasources embedding through it is a
+// 409 at the API: a lower privacy score, or a namespace they are not in.
+func TestLLMHandlers_UpdateRefusedForLinkedEmbedders(t *testing.T) {
+	a, service, db := setupEmbedderAPI(t)
+	llm := &models.LLM{Name: "Prod OpenAI", Vendor: models.OPENAI, PrivacyScore: 80, Active: true, APIEndpoint: "https://api.openai.com/v1", DefaultModel: "gpt-4o"}
+	require.NoError(t, db.Create(llm).Error)
+	e, err := service.CreateEmbedder(&models.Embedder{Name: "linked", LLMID: &llm.ID, ModelName: "m"}, 1)
+	require.NoError(t, err)
+	_, err = service.CreateDatasource("Sensitive", "", "", "", "", 70, 1, nil, "", "pgvector", "", "db",
+		services.EmbedderInput{EmbedderID: &e.ID}, true)
+	require.NoError(t, err)
+
+	patch := func(attrs map[string]interface{}) *httptest.ResponseRecorder {
+		return apitest.PerformRequest(a.Router(), "PATCH", fmt.Sprintf("/api/v1/llms/%d", llm.ID),
+			map[string]interface{}{"data": map[string]interface{}{"type": "llms", "attributes": attrs}})
+	}
+	w := patch(map[string]interface{}{"privacy_score": 50})
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	assert.Contains(t, errorDetail(t, w.Body.Bytes()), "Sensitive")
+
+	w = patch(map[string]interface{}{"namespace": "eu"})
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+
+	w = patch(map[string]interface{}{"privacy_score": 90})
+	assert.Equal(t, http.StatusOK, w.Code, "raising it is fine: %s", w.Body.String())
 }
