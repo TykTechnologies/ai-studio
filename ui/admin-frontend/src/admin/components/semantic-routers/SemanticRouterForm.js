@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
 import { generateSlug } from "../../components/wizards/quick-start/utils";
 import {
@@ -63,9 +63,9 @@ import {
   emptyDraft,
   emptyRoute,
   routeNames,
-  supportsEmbeddings,
   validateDraft,
 } from "./semanticRouterModel";
+import EmbedderPicker from "../embedders/EmbedderPicker";
 
 // LLM catalogues come back as JSON:API rows; the picker wants {id, name}.
 const catalogueOptions = (rows) =>
@@ -538,20 +538,8 @@ const SemanticRouterForm = () => {
 
   const names = routeNames(router.routes);
 
-  // The embedding stage only works with vendors that serve embeddings; an
-  // already-chosen LLM stays listed so the form shows what is saved.
-  const embeddingLLMs = useMemo(
-    () =>
-      llms.filter(
-        (llm) =>
-          supportsEmbeddings(llm.attributes?.vendor) ||
-          String(llm.id) === String(router.settings.embedding.llm_id),
-      ),
-    [llms, router.settings.embedding.llm_id],
-  );
-
   const handleSubmit = async () => {
-    const newErrors = validateDraft(router, { llms });
+    const newErrors = validateDraft(router);
     setErrors(newErrors);
     setSaveError("");
     if (Object.keys(newErrors).length > 0) {
@@ -868,29 +856,26 @@ const SemanticRouterForm = () => {
           <Grid item xs={12}>
             <Typography variant="subtitle1">Embeddings</Typography>
             <Typography variant="body2" color="text.secondary">
-              Needed when any route has example prompts. Only LLM providers whose vendor serves
-              embeddings are listed.
+              Needed when any route has example prompts: the embedder turns the examples and each
+              request into vectors to compare.
             </Typography>
           </Grid>
-          <Grid item xs={12} md={6}>
-            <RowSelect
-              id="semanticrouterform-embedding-llm"
-              label="Embedding LLM"
-              value={router.settings.embedding.llm_id}
-              onChange={(value) => updateSetting("embedding", "llm_id", value)}
-              rows={embeddingLLMs}
-              emptyLabel="None"
+          <Grid item xs={12}>
+            <EmbedderPicker
+              id="semanticrouterform-embedder"
+              allowNone
+              value={router.embedder_id}
+              currentName={router.embedder_name}
               error={errors.embedding}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              label="Embedding model"
-              value={router.settings.embedding.model}
-              onChange={(e) => updateSetting("embedding", "model", e.target.value)}
-              helperText="e.g. text-embedding-3-small"
-              disabled={!router.settings.embedding.llm_id}
+              helperText="Pick an embedder or create one. It sees the prompt, so its privacy level counts toward the router's."
+              onChange={(value, row) => {
+                setRouter((prev) => ({
+                  ...prev,
+                  embedder_id: value,
+                  embedder_name: row?.attributes?.name || "",
+                }));
+                clearError("embedding");
+              }}
             />
           </Grid>
 

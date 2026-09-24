@@ -122,6 +122,9 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	// reaches its embedding and judge LLMs through the gateway's own LLMs.
 	if serviceContainer.SemanticRouterService != nil {
 		serviceContainer.SemanticRouterService.SetLLMLookup(gatewayServiceAdapter.GetLLMByID)
+		if serviceContainer.Crypto != nil {
+			serviceContainer.SemanticRouterService.SetDecrypter(serviceContainer.Crypto.Decrypt)
+		}
 	}
 	if serviceContainer.ModelRouterService != nil || serviceContainer.SemanticRouterService != nil {
 		gateway.SetRouteResolver(services.NewRouterResolver(serviceContainer.ModelRouterService, serviceContainer.SemanticRouterService))

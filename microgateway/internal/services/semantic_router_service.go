@@ -32,6 +32,7 @@ type SemanticRouterService struct {
 
 	lookupMu sync.RWMutex
 	lookup   llmclient.LLMLookup
+	decrypt  llmclient.Decrypter
 }
 
 type compiledSemanticRouter struct {
@@ -57,6 +58,24 @@ func (s *SemanticRouterService) SetLLMLookup(lookup llmclient.LLMLookup) {
 	s.lookup = lookup
 }
 
+// SetDecrypter tells the service how to decrypt the key of a standalone
+// embedder, which the hub sends inline in the router's configuration.
+func (s *SemanticRouterService) SetDecrypter(d llmclient.Decrypter) {
+	s.lookupMu.Lock()
+	defer s.lookupMu.Unlock()
+	s.decrypt = d
+}
+
+func (s *SemanticRouterService) decryptKey(ciphertext string) (string, error) {
+	s.lookupMu.RLock()
+	d := s.decrypt
+	s.lookupMu.RUnlock()
+	if d == nil {
+		return "", errors.New("embedder keys cannot be decrypted yet")
+	}
+	return d(ciphertext)
+}
+
 func (s *SemanticRouterService) llm(id uint) (*models.LLM, error) {
 	s.lookupMu.RLock()
 	lookup := s.lookup
@@ -71,7 +90,7 @@ func (s *SemanticRouterService) engineLocked() (sr.Engine, error) {
 	if s.engine != nil {
 		return s.engine, nil
 	}
-	e, err := sr.NewEngine(llmclient.New(s.llm).Deps())
+	e, err := sr.NewEngine(llmclient.New(s.llm, llmclient.WithDecrypter(s.decryptKey)).Deps())
 	if err != nil {
 		return nil, err
 	}

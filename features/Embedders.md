@@ -1,6 +1,6 @@
 # Embedders
 
-An **Embedder** is a reusable embedding configuration: the client (API compatibility), endpoint, credentials and model that turn text into vectors. Datasources embed with one (and, from the Semantic Router switch-over, so do Semantic Routers). Before Embedders, each datasource carried its own `embed_vendor/url/api_key/model` fields and Semantic Routers named an LLM plus a model; the list of vendors that can embed existed three times and had drifted.
+An **Embedder** is a reusable embedding configuration: the client (API compatibility), endpoint, credentials and model that turn text into vectors. Datasources and Semantic Routers embed with one. Before Embedders, each datasource carried its own `embed_vendor/url/api_key/model` fields and Semantic Routers named an LLM plus a model; the list of vendors that can embed existed three times and had drifted.
 
 Embedders are managed in the admin UI and API only. They are not exposed in the AI Portal, and neither the plugin SDK nor the proto changed.
 
@@ -87,6 +87,17 @@ Events: `system.embedder.created|updated|deleted` (payload redacted). They are c
 - **`EmbedderPicker`** is the reusable picker + inline creator (`EmbedderCreateDialog`). It lists embedders with their model, connection and privacy, flags one below the form's required privacy level, and offers **New embedder** only with `embedders:write`. Without `embedders:read` it shows the saved embedder's name read-only.
 - The **data source form** uses the picker instead of the vendor/URL/key/model inputs and saves `embedder_id` (the flattened `embed_*` fields are not sent back). Data source list and detail show the embedder, linking to its page. The portal submission form keeps the legacy fields.
 
+## Semantic Routers
+
+- `SemanticRouter.EmbedderID` replaces the LLM + model in `settings.embedding` (which keeps only the timeout). The embedder's LLM (linked) is a classifier target; a standalone embedder's privacy score joins the router's (`SemanticRouterPrivacySQL`).
+- `CompiledConfig(db, encrypt)` flattens the embedder for the engine: linked → `{llm_id, model}`; standalone → inline `ModelRef` (`vendor`, `endpoint`, `embedder_id`, `api_key` resolved on the hub, `api_key_encrypted` on edges). The hub test panel and validation use it; the snapshot uses `EdgeConfigJSON` (fail-closed on encryption).
+- `llmclient.Embed` handles inline references, decrypting edge keys with `WithDecrypter`; the microgateway wires `SetDecrypter(crypto.Decrypt)`.
+- API: `embedder_id` in and out, `embedder_name` out; a legacy `settings.embedding{llm_id, model}` is saved as the matching linked embedder (after validation, so a refused router creates none) and responses still show that shape.
+- Migration: stored routers with an embedding LLM are linked the same way, keeping the timeout.
+- Routers never lock the model (they re-embed on reload); an embedder used by a router cannot be deleted.
+- Older edges ignore the inline fields, so a router with a standalone embedder is not served there until edges are upgraded; linked embedders keep working on them.
+- The router form uses `EmbedderPicker` (with "None").
+
 ## Edges
 
 Edges get no Embedder objects and the proto is unchanged. The snapshot flattens each datasource's embedder into `embed_vendor/url/api_key_encrypted/model` (a linked embedder resolves its LLM's connection); editing an embedder or its LLM changes those values, so the checksum moves and edges reload. The microgateway rebuilds an in-memory standalone embedder from the fields (`gateway_adapter.convertDatabaseDatasourceToModel`), falling back to the vector store fields for Vertex from an older hub.
@@ -95,4 +106,3 @@ Edges get no Embedder objects and the proto is unchanged. The snapshot flattens 
 
 - Drop the `embed_*` datasource columns after a rollback window.
 - A RESTful datasource API that deprecates the `embed_*` fields.
-- The Semantic Router switch-over (routers reference an embedder; the form uses `EmbedderPicker`) ships separately.

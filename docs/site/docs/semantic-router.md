@@ -43,7 +43,7 @@ In the admin UI, open **Semantic Routers** and choose **Create**.
    - a **target**: an LLM and model, or a Model Router and the alias to send it;
    - optionally, **keywords** and **example utterances**. A handful of varied, realistic examples per route works better than many similar ones.
 3. **Default route.** This is required. It serves everything no stage claims.
-4. **Embedding model.** This is required when any route has examples. Choose an LLM whose vendor provides embeddings (OpenAI, Ollama, Google AI, Vertex, Hugging Face) and its embedding model, for example `text-embedding-3-small`.
+4. **Embedder.** This is required when any route has examples. Pick an [Embedder](./embedders.md) or create one from the form: either one that uses an LLM provider whose vendor provides embeddings (OpenAI, Ollama, Google AI, Vertex, Hugging Face), or a standalone one with its own endpoint and key. Unlike a data source's, a router's embedder can change model freely: the router re-embeds its examples when its configuration changes.
 5. **Optional settings:** the LLM judge, session affinity, shadow mode, and **Allow explicit routes**. The last one lets clients send `smart/<route>` to skip classification.
 6. **Test** the router with the **Test prompt** panel before you publish it. The panel runs the same engine the gateway runs against your draft. It shows the chosen route, the reason, each route's similarity score and every stage's latency.
 7. **Publish.** Set the router active, add it to one or more LLM catalogues, and grant it to Apps.
@@ -55,7 +55,7 @@ A Semantic Router is granted and published like an LLM:
 - It sits in **LLM catalogues**. Teams that hold one of those catalogues see it in the portal catalogue as "Semantic Router". The portal shows its model strings and route descriptions; keywords and examples are never shown.
 - An **App** is granted the router, in the portal App builder or the admin App editor. The grant lets the App reach every LLM the router's routes can send to, but **only through the router**. It is not a grant of those LLMs. A route that hands off to a Model Router needs no separate grant of that Model Router.
 - An App that is not granted the router gets `403`. Unlike Model Routers, there is no grant-less fallback.
-- **Privacy.** A router's privacy score is the lowest score among the LLMs it may send a request's text to. That includes the embedding and judge LLMs, because they see the prompt too, and all vendors of a Model Router it hands off to. An App's data sources and tools must fit within it, as they would for an LLM.
+- **Privacy.** A router's privacy score is the lowest score among the LLMs it may send a request's text to. That includes the embedder (its LLM provider's score, or a standalone embedder's own) and the judge LLM, because they see the prompt too, and all vendors of a Model Router it hands off to. An App's data sources and tools must fit within it, as they would for an LLM.
 - `GET /v1/models` lists `smart/auto`, plus `smart/<route>` for each route when explicit routes are allowed, for Apps that hold the router.
 
 ## Observability

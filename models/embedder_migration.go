@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	"gorm.io/gorm"
 )
 
@@ -58,17 +59,19 @@ func (r legacyEmbedRow) effective() legacyEmbedKey {
 // once it has run it finds nothing. On Postgres an advisory lock keeps two
 // replicas from migrating the same rows.
 func MigrateEmbedders(db *gorm.DB) error {
-	m := db.Migrator()
-	for _, c := range legacyEmbedColumns {
-		if !m.HasColumn("datasources", c) {
-			return nil // a database created after the columns went away
-		}
-	}
-
 	return db.Transaction(func(tx *gorm.DB) error {
 		if tx.Dialector.Name() == "postgres" {
 			if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", embedderMigrationLockKey).Error; err != nil {
 				return err
+			}
+		}
+		if err := migrateRouterEmbedders(tx); err != nil {
+			return err
+		}
+		m := tx.Migrator()
+		for _, c := range legacyEmbedColumns {
+			if !m.HasColumn("datasources", c) {
+				return nil // a database created after the columns went away
 			}
 		}
 
@@ -139,6 +142,49 @@ func MigrateEmbedders(db *gorm.DB) error {
 		log.Printf("embedder migration: moved %d datasource(s) onto %d embedder(s)", len(rows), len(order))
 		return nil
 	})
+}
+
+// migrateRouterEmbedders moves Semantic Routers whose embedding stage names
+// an LLM ({llm_id, model} in settings) onto the embedder linked to that LLM
+// with that model, keeping only the timeout in settings. A router whose LLM
+// is gone is left as it is (and logged): it could not embed either way.
+func migrateRouterEmbedders(tx *gorm.DB) error {
+	var routers []SemanticRouter
+	if err := tx.Where("embedder_id IS NULL").Find(&routers).Error; err != nil {
+		return err
+	}
+	moved := 0
+	for i := range routers {
+		r := &routers[i]
+		ref := r.Settings.Embedding
+		if ref == nil || ref.LLMID == 0 {
+			continue
+		}
+		e, _, err := FindOrCreateLinkedEmbedder(tx, ref.LLMID, ref.Model, 0)
+		if err != nil {
+			log.Printf("embedder migration: semantic router %q (id %d) embeds with LLM %d, which cannot be linked: %v", r.Name, r.ID, ref.LLMID, err)
+			continue
+		}
+		id := e.ID
+		r.EmbedderID = &id
+		r.Embedder = e
+		if ref.TimeoutMs > 0 {
+			r.Settings.Embedding = &sr.ModelRef{TimeoutMs: ref.TimeoutMs}
+		} else {
+			r.Settings.Embedding = nil
+		}
+		if err := tx.Model(r).Select("EmbedderID", "Settings").Updates(r).Error; err != nil {
+			return err
+		}
+		if err := r.writeTargets(tx); err != nil {
+			return err
+		}
+		moved++
+	}
+	if moved > 0 {
+		log.Printf("embedder migration: moved %d semantic router(s) onto linked embedders", moved)
+	}
+	return nil
 }
 
 // defaultEmbedderName is the name an embedder gets when one is created for

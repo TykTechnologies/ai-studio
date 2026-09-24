@@ -30,7 +30,7 @@ POST /v1/chat/completions  {"model": "openai/gpt-4o"}   -> LLM "openai"
 - **Inner hop** (`/llm/call/{llm}`): access to the chosen LLM is inherited through the router (`routerGrantsAccess`). This requires a loopback marker (`X-Tyk-Router-*`) carrying the per-process token, an App that holds the router, and the router being able to reach that LLM (`RouteResolver.Reaches`). A failover rung whose origin was reached through the router is accepted too (`failoverGrantsAccess` uses `appAllowedLLM`). Markers are stripped before egress.
 - **Privacy.** A router is a provider scored by the **minimum** privacy score of the LLMs a request's text may reach.
   - For a Model Router, these are the active LLMs behind its active vendors (`models.ModelRouterPrivacySQL`).
-  - For a Semantic Router, these are its LLM targets, every active vendor of each Model Router it hands off to, and its embedding and judge LLMs (`models.SemanticRouterPrivacySQL`, over the `semantic_router_targets` rows rebuilt on every save).
+  - For a Semantic Router, these are its LLM targets, every active vendor of each Model Router it hands off to, its judge LLM, and its embedder: a linked embedder's LLM (a classifier target row) or a standalone embedder's own score (`models.SemanticRouterPrivacySQL`, over the `semantic_router_targets` rows rebuilt on every save plus `embedders`).
   - App validation counts routers like LLMs (`services.WithModelRouters` / `WithSemanticRouters` → `routerProvidersFor`).
 - **Reach** (what the inner hop accepts) for a Semantic Router covers its LLM targets, plus the vendors of the pool that each hand-off alias matches (`ModelRouterService.ReachesModel`). The judge and embedding LLMs are not reachable through it.
 
@@ -60,6 +60,7 @@ POST /v1/chat/completions  {"model": "openai/gpt-4o"}   -> LLM "openai"
 
 ## Semantic Router
 
+- **Embedder:** `SemanticRouter.EmbedderID` names an [Embedder](Embedders.md); `settings.embedding` keeps only its timeout. `CompiledConfig`/`EdgeConfigJSON` flatten it into `settings.embedding` for the engine: a linked embedder as `{llm_id, model}` (what older edges understand), a standalone one inline (`vendor`, `endpoint`, `embedder_id`, key resolved on the hub, `api_key_encrypted` for edges, decrypted through `llmclient.WithDecrypter` / `SemanticRouterService.SetDecrypter`). A router without an embedder uses `settings.embedding` as given (draft tests, pre-Embedders rows). The API still accepts `{llm_id, model}` and saves it as the matching linked embedder; the startup migration does the same for stored routers.
 - **Contract:** `pkg/semanticrouting` holds the configuration (`Config`, `Settings`, `Route`, `Target`), `Validate`, `ModelsFor`, the `Engine`/`Router` interfaces and the engine registry. `pkg/semanticrouting/llmclient` reaches LLMs for embeddings and the judge through the vendor drivers.
 - **Engine (Enterprise):** `enterprise/features/semantic_router/engine`, registered from `init()`.
   - Stages run in order: explicit, affinity, keywords, embeddings (max over examples, a threshold per route, priority breaks ties), judge (`low_confidence` or `always`), default.

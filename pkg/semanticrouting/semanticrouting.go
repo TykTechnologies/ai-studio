@@ -85,11 +85,26 @@ const (
 )
 
 // ModelRef names an LLM (by id) and the model to ask it for.
+//
+// For the embedding stage it may instead carry a standalone Embedder inline
+// (Vendor set, LLMID zero): the hub flattens the router's embedder into it,
+// with the key resolved in APIKey (never serialised) on the hub and encrypted
+// in APIKeyEncrypted for edges.
 type ModelRef struct {
 	LLMID     uint   `json:"llm_id"`
 	Model     string `json:"model"`
 	TimeoutMs int    `json:"timeout_ms,omitempty"`
+
+	EmbedderID      uint   `json:"embedder_id,omitempty"`
+	Vendor          string `json:"vendor,omitempty"`
+	Endpoint        string `json:"endpoint,omitempty"`
+	APIKeyEncrypted string `json:"api_key_encrypted,omitempty"`
+	APIKey          string `json:"-"`
 }
+
+// Inline reports whether the reference carries its own connection (a
+// standalone embedder) rather than naming an LLM.
+func (m ModelRef) Inline() bool { return m.LLMID == 0 && m.Vendor != "" }
 
 // Keyword is one keyword of a route. A literal matches case-insensitively as
 // a substring; a regex is Go RE2 syntax, matched as written.

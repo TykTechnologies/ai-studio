@@ -4,11 +4,6 @@
 // validate.go). The server stays the authority; these only catch the
 // mistakes that would otherwise cost a round trip.
 
-/** LLM vendors that serve embeddings; the embedding picker offers only these. */
-export const EMBEDDING_VENDORS = ["openai", "ollama", "google_ai", "vertex", "huggingface"];
-
-export const supportsEmbeddings = (vendor) => EMBEDDING_VENDORS.includes(vendor);
-
 export const ROUTE_NAME_PATTERN = /^[a-z0-9]+([-_][a-z0-9]+)*$/;
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -61,12 +56,15 @@ export const emptyDraft = () => ({
   logo_url: "",
   active: false,
   namespace: "",
+  // The embedder of the embedding stage ("" = none); its name for display.
+  embedder_id: "",
+  embedder_name: "",
   settings: {
     mode: "enforce",
     allow_explicit_route: false,
     input_scope: "last_user",
     max_input_chars: "",
-    embedding: { llm_id: "", model: "", timeout_ms: "" },
+    embedding: { timeout_ms: "" },
     judge: { enabled: false, llm_id: "", model: "", timeout_ms: "", when: "low_confidence" },
     affinity: { enabled: false, header: DEFAULT_AFFINITY_HEADER, ttl_seconds: "" },
     default_route: "",
@@ -89,14 +87,14 @@ export const draftFromAttributes = (attributes = {}) => {
     logo_url: attributes.logo_url || "",
     active: Boolean(attributes.active),
     namespace: attributes.namespace || "",
+    embedder_id: attributes.embedder_id ? String(attributes.embedder_id) : "",
+    embedder_name: attributes.embedder_name || "",
     settings: {
       mode: s.mode || "enforce",
       allow_explicit_route: Boolean(s.allow_explicit_route),
       input_scope: s.input_scope || "last_user",
       max_input_chars: s.max_input_chars ? String(s.max_input_chars) : "",
       embedding: {
-        llm_id: s.embedding?.llm_id ? String(s.embedding.llm_id) : "",
-        model: s.embedding?.model || "",
         timeout_ms: s.embedding?.timeout_ms ? String(s.embedding.timeout_ms) : "",
       },
       judge: {
@@ -147,7 +145,7 @@ const targetPayload = (target) =>
     ? { type: TARGET_MODEL_ROUTER, model_router_id: toInt(target.model_router_id), model: target.model.trim() }
     : { type: TARGET_LLM, llm_id: toInt(target.llm_id), model: target.model.trim() };
 
-/** The router's configuration in the shape the API takes (settings + routes). */
+/** The router's configuration in the shape the API takes (settings, routes, embedder). */
 export const configFromDraft = (draft) => {
   const s = draft.settings;
   const settings = {
@@ -171,13 +169,10 @@ export const configFromDraft = (draft) => {
     default_route: s.default_route,
   };
   if (toInt(s.max_input_chars) > 0) settings.max_input_chars = toInt(s.max_input_chars);
-  // No embedding LLM means no embedding stage; the setting is left out.
-  if (s.embedding.llm_id) {
-    settings.embedding = {
-      llm_id: toInt(s.embedding.llm_id),
-      model: s.embedding.model.trim(),
-      ...(toInt(s.embedding.timeout_ms) > 0 && { timeout_ms: toInt(s.embedding.timeout_ms) }),
-    };
+  // The embedder is sent by id (embedder_id); settings only carry the
+  // embedding timeout.
+  if (toInt(s.embedding.timeout_ms) > 0) {
+    settings.embedding = { timeout_ms: toInt(s.embedding.timeout_ms) };
   }
   const routes = draft.routes.map((route) => {
     const threshold = parseFloat(route.threshold);
@@ -193,7 +188,7 @@ export const configFromDraft = (draft) => {
       target: targetPayload(route.target),
     };
   });
-  return { settings, routes };
+  return { settings, routes, embedder_id: toInt(draft.embedder_id) };
 };
 
 /** The full attributes object for POST/PATCH (and the draft test). */
@@ -217,10 +212,9 @@ export const routeNames = (routes = []) =>
  * Client-side checks. Returns an errors object keyed by field (`name`,
  * `slug`, `routes`, `route_<i>_name`, `route_<i>_target`, `route_<i>_model`,
  * `route_<i>_threshold`, `default_route`, `embedding`, `judge`); empty when
- * the draft looks valid. `llms` (JSON:API rows) lets the embedding vendor be
- * checked.
+ * the draft looks valid.
  */
-export const validateDraft = (draft, { llms = [] } = {}) => {
+export const validateDraft = (draft) => {
   const errors = {};
   if (!draft.name.trim()) errors.name = "Name is required";
   const slug = draft.slug.trim();
@@ -259,17 +253,8 @@ export const validateDraft = (draft, { llms = [] } = {}) => {
   if (!def) errors.default_route = "Pick the default route";
   else if (!routeNames(draft.routes).includes(def)) errors.default_route = "The default route must be one of the routes";
 
-  const emb = draft.settings.embedding;
-  if (anyUtterances && (!emb.llm_id || !emb.model.trim())) {
-    errors.embedding = "Routes with examples need an embedding LLM and model";
-  } else if (emb.llm_id) {
-    const llm = llms.find((l) => String(l.id) === String(emb.llm_id));
-    const vendor = llm?.attributes?.vendor;
-    if (llm && vendor && !supportsEmbeddings(vendor)) {
-      errors.embedding = `${llm.attributes.name} (${vendor}) does not provide embeddings`;
-    } else if (!emb.model.trim()) {
-      errors.embedding = "Embedding model is required";
-    }
+  if (anyUtterances && !draft.embedder_id) {
+    errors.embedding = "Routes with examples need an embedder";
   }
 
   const judge = draft.settings.judge;

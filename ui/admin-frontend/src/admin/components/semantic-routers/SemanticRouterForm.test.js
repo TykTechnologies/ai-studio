@@ -36,6 +36,9 @@ const llms = [
   { id: "2", attributes: { name: "Anthropic", vendor: "anthropic" } },
 ];
 const modelRouters = [{ id: "4", attributes: { name: "Cheap pool" } }];
+const embedders = [
+  { id: "3", attributes: { name: "OpenAI small", model: "text-embedding-3-small", vendor: "openai", privacy_score: 60 } },
+];
 const catalogues = [{ id: "2", attributes: { name: "Platform" } }];
 
 const existingRouter = {
@@ -52,6 +55,8 @@ const existingRouter = {
         long_description: "",
         logo_url: "",
         catalogues: [],
+        embedder_id: 3,
+        embedder_name: "OpenAI small",
         settings: {
           mode: "shadow",
           allow_explicit_route: true,
@@ -88,7 +93,7 @@ const identity = {
     is_admin: false,
     has_admin_access: true,
     rbac_enabled: true,
-    permissions: ["semantic-routers:write", "semantic-routers:publish"],
+    permissions: ["semantic-routers:write", "semantic-routers:publish", "embedders:read", "embedders:write"],
   },
 };
 
@@ -119,6 +124,7 @@ describe("SemanticRouterForm", () => {
       if (url === "/llms") return Promise.resolve({ data: { data: llms }, headers: {} });
       if (url === "/model-routers") return Promise.resolve({ data: { data: modelRouters }, headers: {} });
       if (url === "/catalogues") return Promise.resolve({ data: { data: catalogues }, headers: {} });
+      if (url === "/embedders") return Promise.resolve({ data: { data: embedders }, headers: {} });
       if (url === "/semantic-routers/5") return Promise.resolve(existingRouter);
       return Promise.resolve({ data: { data: [] } });
     });
@@ -157,7 +163,7 @@ describe("SemanticRouterForm", () => {
     expect(screen.queryByTestId("route-card-1")).not.toBeInTheDocument();
   });
 
-  it("flags bad route names, a missing target and examples without an embedding model", async () => {
+  it("flags bad route names, a missing target and examples without an embedder", async () => {
     renderForm();
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/llms", expect.anything()));
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Smart" } });
@@ -170,11 +176,11 @@ describe("SemanticRouterForm", () => {
     expect(await within(card).findByText('"auto" is reserved')).toBeInTheDocument();
     expect(within(card).getByText("Pick an LLM provider")).toBeInTheDocument();
     expect(within(card).getByText("Model is required")).toBeInTheDocument();
-    expect(screen.getByText("Routes with examples need an embedding LLM and model")).toBeInTheDocument();
+    expect(screen.getByText("Routes with examples need an embedder")).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it("offers only embedding-capable LLMs for embeddings and submits the full config", async () => {
+  it("picks an embedder and submits the full config", async () => {
     renderForm();
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/llms", expect.anything()));
     await screen.findAllByTestId("relationship-picker");
@@ -207,12 +213,10 @@ describe("SemanticRouterForm", () => {
 
     choose("Default route", "simple");
 
-    // Anthropic serves no embeddings, so it is not offered.
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Embedding LLM" }));
-    const listbox = screen.getByRole("listbox");
-    expect(within(listbox).queryByText("Anthropic (anthropic)")).not.toBeInTheDocument();
-    fireEvent.click(within(listbox).getByText("OpenAI (openai)"));
-    fireEvent.change(screen.getByLabelText("Embedding model"), { target: { value: "text-embedding-3-small" } });
+    // The embedding stage uses an embedder (picked, or created inline).
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/embedders", expect.anything()));
+    expect(screen.getByRole("button", { name: "New embedder" })).toBeInTheDocument();
+    choose("Embedder", "OpenAI small");
 
     const catalogPicker = screen.getAllByTestId("relationship-picker").find((el) => el.dataset.itemLabel === "catalog");
     fireEvent.click(within(catalogPicker).getByTestId("relationship-picker-add"));
@@ -228,11 +232,11 @@ describe("SemanticRouterForm", () => {
       mode: "enforce",
       allow_explicit_route: false,
       input_scope: "last_user",
-      embedding: { llm_id: 1, model: "text-embedding-3-small" },
       judge: { enabled: false, model_ref: { llm_id: 0, model: "" }, when: "low_confidence" },
       affinity: { enabled: false, header: "X-Tyk-Session-Id" },
       default_route: "simple",
     });
+    expect(attrs.embedder_id).toBe(3);
     expect(attrs.routes).toEqual([
       {
         name: "simple",
@@ -274,7 +278,9 @@ describe("SemanticRouterForm", () => {
     const attrs = body.data.attributes;
     expect(attrs.settings.mode).toBe("shadow");
     expect(attrs.settings.allow_explicit_route).toBe(true);
-    expect(attrs.settings.embedding).toEqual({ llm_id: 1, model: "text-embedding-3-small", timeout_ms: 1500 });
+    // The embedder goes by id; settings keep only its timeout.
+    expect(attrs.embedder_id).toBe(3);
+    expect(attrs.settings.embedding).toEqual({ timeout_ms: 1500 });
     expect(attrs.routes[1]).toEqual({
       name: "complex",
       description: "Hard reasoning",

@@ -34,17 +34,33 @@ var ErrNoEmbeddings = errors.New("this LLM's vendor does not provide embeddings"
 // judgeMaxTokens bounds the judge's answer: it only names a route.
 const judgeMaxTokens = 64
 
+// Decrypter turns an inline embedder's APIKeyEncrypted back into the key.
+// Edges set it (the hub encrypts the key for transit); on the hub the key
+// arrives resolved in ModelRef.APIKey instead.
+type Decrypter func(ciphertext string) (string, error)
+
 // Clients implements semanticrouting.Embedder and Completer.
 type Clients struct {
-	lookup LLMLookup
+	lookup  LLMLookup
+	decrypt Decrypter
 
 	mu        sync.Mutex
 	embedders map[string]*embeddings.EmbedderImpl
 }
 
+// Option configures Clients.
+type Option func(*Clients)
+
+// WithDecrypter sets how inline embedder keys are decrypted.
+func WithDecrypter(d Decrypter) Option { return func(c *Clients) { c.decrypt = d } }
+
 // New returns clients that find LLMs with lookup.
-func New(lookup LLMLookup) *Clients {
-	return &Clients{lookup: lookup, embedders: map[string]*embeddings.EmbedderImpl{}}
+func New(lookup LLMLookup, opts ...Option) *Clients {
+	c := &Clients{lookup: lookup, embedders: map[string]*embeddings.EmbedderImpl{}}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Deps is these clients as the engine's dependencies.
@@ -82,6 +98,43 @@ func (c *Clients) embedder(llm *models.LLM, model string) (*embeddings.EmbedderI
 		return nil, ErrNoEmbeddings
 	}
 	key := fmt.Sprintf("%d|%d|%s|%s|%s", llm.ID, llm.UpdatedAt.UnixNano(), llm.APIEndpoint, model, llm.APIKey)
+	return c.cached(key, &models.EmbedderSpec{
+		Vendor:   llm.Vendor,
+		Endpoint: llm.APIEndpoint,
+		APIKey:   llm.APIKey,
+		Model:    model,
+	})
+}
+
+// inlineEmbedder is the client for a standalone embedder carried in the
+// reference, keyed by its whole connection so an edit gets a new client.
+func (c *Clients) inlineEmbedder(ref sr.ModelRef) (*embeddings.EmbedderImpl, error) {
+	if !SupportsEmbeddings(models.Vendor(ref.Vendor)) {
+		return nil, ErrNoEmbeddings
+	}
+	apiKey := ref.APIKey
+	if apiKey == "" && ref.APIKeyEncrypted != "" {
+		if c.decrypt == nil {
+			return nil, errors.New("embedder key is encrypted and no decrypter is configured")
+		}
+		k, err := c.decrypt(ref.APIKeyEncrypted)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt embedder key: %w", err)
+		}
+		apiKey = k
+	}
+	key := fmt.Sprintf("e|%d|%s|%s|%s|%s", ref.EmbedderID, ref.Vendor, ref.Endpoint, ref.Model, apiKey)
+	return c.cached(key, &models.EmbedderSpec{
+		EmbedderID: ref.EmbedderID,
+		Vendor:     models.Vendor(ref.Vendor),
+		Endpoint:   ref.Endpoint,
+		APIKey:     apiKey,
+		Model:      ref.Model,
+	})
+}
+
+// cached returns the client for key, building it from spec on a miss.
+func (c *Clients) cached(key string, spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	c.mu.Lock()
 	if e, ok := c.embedders[key]; ok {
 		c.mu.Unlock()
@@ -89,12 +142,7 @@ func (c *Clients) embedder(llm *models.LLM, model string) (*embeddings.EmbedderI
 	}
 	c.mu.Unlock()
 
-	e, err := switches.GetEmbedder(&models.EmbedderSpec{
-		Vendor:   llm.Vendor,
-		Endpoint: llm.APIEndpoint,
-		APIKey:   llm.APIKey,
-		Model:    model,
-	})
+	e, err := switches.GetEmbedder(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +155,16 @@ func (c *Clients) embedder(llm *models.LLM, model string) (*embeddings.EmbedderI
 	return e, nil
 }
 
-// Embed embeds texts with the LLM's embedding model.
+// Embed embeds texts with the LLM's embedding model, or with the inline
+// embedder the reference carries.
 func (c *Clients) Embed(ctx context.Context, ref sr.ModelRef, texts []string) ([][]float32, error) {
+	if ref.Inline() {
+		e, err := c.inlineEmbedder(ref)
+		if err != nil {
+			return nil, err
+		}
+		return e.EmbedDocuments(ctx, texts)
+	}
 	llm, err := c.resolved(ref.LLMID)
 	if err != nil {
 		return nil, err
