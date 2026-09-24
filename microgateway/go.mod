@@ -274,6 +274,6 @@ require (
 
 replace github.com/TykTechnologies/midsommar/v2 => ../
 
-replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260902213528-f80534f57671
+replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260924053222-23fb5b550452
 
 replace github.com/TykTechnologies/midsommar/v2/enterprise => ../enterprise
