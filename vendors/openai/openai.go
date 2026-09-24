@@ -56,22 +56,22 @@ func (v *OpenAI) GetDriver(
 	return llm, err
 }
 
-func (v *OpenAI) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *OpenAI) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	var llm embeddings.EmbedderClient
 	var err error
 
 	opts := []openai.Option{}
-	if d.EmbedAPIKey != "" {
-		opts = append(opts, openai.WithToken(d.EmbedAPIKey))
+	if spec.APIKey != "" {
+		opts = append(opts, openai.WithToken(spec.APIKey))
 	}
-	if d.EmbedUrl != "" {
-		opts = append(opts, openai.WithBaseURL(d.EmbedUrl))
+	if spec.Endpoint != "" {
+		opts = append(opts, openai.WithBaseURL(spec.Endpoint))
 	}
-	if d.EmbedModel == "" {
+	if spec.Model == "" {
 		return nil, fmt.Errorf("missing embed model")
 	}
 
-	opts = append(opts, openai.WithEmbeddingModel(d.EmbedModel))
+	opts = append(opts, openai.WithEmbeddingModel(spec.Model))
 	llm, err = openai.New(opts...)
 
 	if err != nil {

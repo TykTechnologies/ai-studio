@@ -77,7 +77,7 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 
 	if chat.DefaultDataSource != nil {
 		chat.DefaultDataSource.DBConnAPIKey = secrets.GetValue(chat.DefaultDataSource.DBConnAPIKey, false) // false to resolve actual value
-		chat.DefaultDataSource.EmbedAPIKey = secrets.GetValue(chat.DefaultDataSource.EmbedAPIKey, false)   // false to resolve actual value
+		// The embedder's key is resolved when its spec is taken.
 	}
 
 	return chat, nil
@@ -192,7 +192,7 @@ func (s *Service) UpdateChat(id uint, name string, description string, llmSettin
 		Preload("DefaultTools").
 		Preload("LLMSettings").
 		Preload("LLM").
-		Preload("DefaultDataSource").
+		Preload("DefaultDataSource").Preload("DefaultDataSource.Embedder.LLM").
 		First(updatedChat, id).Error; err != nil {
 		return nil, err
 	}

@@ -1989,7 +1989,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get Datasources for namespace
 	var datasources []models.Datasource
-	dsQuery := s.db.Where("active = ?", true)
+	// Embedders are flattened into each datasource's embed_* fields, so the
+	// edge needs no Embedder objects; a linked embedder resolves its LLM's
+	// connection here.
+	dsQuery := s.db.Preload("Embedder.LLM").Where("active = ?", true)
 	if namespace == "" {
 		dsQuery = dsQuery.Where("namespace = ''")
 	} else {
@@ -2050,7 +2053,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnAPIKey = encrypted
 		}
 
-		resolvedEmbedAPIKey := secrets.GetValue(ds.EmbedAPIKey, false)
+		embed := ds.EmbedFields(true)
+		resolvedEmbedAPIKey := embed.APIKey
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)
@@ -2081,10 +2085,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			DbConnStringEncrypted: encryptedConnString,
 			DbConnApiKeyEncrypted: encryptedConnAPIKey,
 			DbName:                ds.DBName,
-			EmbedVendor:           string(ds.EmbedVendor),
-			EmbedUrl:              ds.EmbedUrl,
+			EmbedVendor:           string(embed.Vendor),
+			EmbedUrl:              embed.URL,
 			EmbedApiKeyEncrypted:  encryptedEmbedAPIKey,
-			EmbedModel:            ds.EmbedModel,
+			EmbedModel:            embed.Model,
 			IsActive:              ds.Active,
 			Namespace:             ds.Namespace,
 			Metadata:              metadataJSON,
@@ -2525,6 +2529,12 @@ const (
 	topicToolUpdated        = "system.tool.updated"
 	topicToolDeleted        = "system.tool.deleted"
 
+	// Embedders are flattened into the datasources (and semantic routers)
+	// that use them, so an embedder edit changes the snapshot.
+	topicEmbedderCreated = "system.embedder.created"
+	topicEmbedderUpdated = "system.embedder.updated"
+	topicEmbedderDeleted = "system.embedder.deleted"
+
 	// Governed metadata (Enterprise): gateway-visible fields are part of the snapshot.
 	topicGovernedMetadataUpdated = "system.governed_metadata.updated"
 	topicGovernedMetadataDeleted = "system.governed_metadata.deleted"
@@ -2547,6 +2557,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicModelRouterCreated, topicModelRouterUpdated, topicModelRouterDeleted,
 		topicSemanticRouterCreated, topicSemanticRouterUpdated, topicSemanticRouterDeleted,
 		topicToolCreated, topicToolUpdated, topicToolDeleted,
+		topicEmbedderCreated, topicEmbedderUpdated, topicEmbedderDeleted,
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 	}
 

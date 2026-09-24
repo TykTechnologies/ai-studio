@@ -324,6 +324,15 @@ func failoverChanged(existing models.LLMFailover, incoming *models.LLMFailover) 
 // waterfall that fails validation is the caller's 400, naming the rung;
 // anything else stays a 500.
 func respondLLMServiceError(c *gin.Context, err error) {
+	if llmEmbedderConflict(err) {
+		c.JSON(http.StatusConflict, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Conflict", Detail: err.Error()}},
+		})
+		return
+	}
 	var verr *services.LLMFailoverValidationError
 	if errors.As(err, &verr) || errors.Is(err, models.ErrRouteSlugTaken) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -340,6 +349,14 @@ func respondLLMServiceError(c *gin.Context, err error) {
 			Detail string `json:"detail"`
 		}{{Title: "Internal Server Error", Detail: err.Error()}},
 	})
+}
+
+// llmEmbedderConflict reports an LLM change or delete refused because
+// embedders linked to the LLM depend on it.
+func llmEmbedderConflict(err error) bool {
+	var conflict *services.LLMEmbedderConflictError
+	var privacy *services.EmbedderPrivacyError
+	return errors.As(err, &conflict) || errors.As(err, &privacy)
 }
 
 // failoverForResponse hides an empty waterfall from API output so LLMs that
@@ -391,7 +408,7 @@ func (a *API) deleteLLM(c *gin.Context) {
 		// Still a failover target of another LLM: the admin has to unlink it
 		// first, which is a conflict rather than a server fault.
 		var verr *services.LLMFailoverValidationError
-		if errors.As(err, &verr) {
+		if errors.As(err, &verr) || llmEmbedderConflict(err) {
 			c.JSON(http.StatusConflict, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`

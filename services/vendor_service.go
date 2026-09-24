@@ -56,11 +56,13 @@ func (s *Service) GetAvailableLLMDrivers() ([]VendorDriverInfo, error) {
 	return drivers, nil
 }
 
-// GetAvailableEmbedders returns actual available embedders from switches package
+// GetAvailableEmbedders lists the vendors whose drivers can embed (the
+// drivers' ProvidesEmbedder is the one source).
 func (s *Service) GetAvailableEmbedders() ([]VendorDriverInfo, error) {
-	embedders := make([]VendorDriverInfo, 0, len(switches.AVAILABLE_EMBEDDERS))
+	vendors := switches.EmbeddingVendors()
+	embedders := make([]VendorDriverInfo, 0, len(vendors))
 
-	for _, vendor := range switches.AVAILABLE_EMBEDDERS {
+	for _, vendor := range vendors {
 		var description string
 		var features []string
 
@@ -78,6 +80,9 @@ func (s *Service) GetAvailableEmbedders() ([]VendorDriverInfo, error) {
 		case models.GOOGLEAI:
 			description = "Google AI embedding models with advanced language understanding"
 			features = []string{"text-embedding", "multilingual", "semantic-search"}
+		case models.HUGGINGFACE:
+			description = "Hugging Face Inference API embedding models"
+			features = []string{"text-embedding", "open-models"}
 		default:
 			description = "Text embedding provider"
 			features = []string{"text-embedding"}

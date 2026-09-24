@@ -307,9 +307,17 @@ func (ds *DataSession) StoreEmbedding(dsID uint, docs []schema.Document) error {
 	return fmt.Errorf("no datasources found")
 }
 
+// getEmbedder builds the datasource's embedding client from its embedder,
+// which callers load with the datasource (Preload("Embedder.LLM")).
 func (ds *DataSession) getEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
-	e, err := switches.GetEmbedder(d)
-	return e, err
+	if d.Embedder == nil {
+		return nil, fmt.Errorf("datasource %q has no embedder", d.Name)
+	}
+	spec, err := d.Embedder.Spec(true)
+	if err != nil {
+		return nil, fmt.Errorf("datasource %q: %w", d.Name, err)
+	}
+	return switches.GetEmbedder(spec)
 }
 
 func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.EmbedderImpl) (vectorstores.VectorStore, error) {

@@ -282,7 +282,7 @@ func createTestLLM(t *testing.T, service *services.Service, name string) *models
 }
 
 func createTestDatasource(t *testing.T, service *services.Service, name string) *models.Datasource {
-	datasource, err := service.CreateDatasource(name, "Short desc", "Long desc", "icon.png", "https://example.com", 75, 1, []string{}, "conn_string", "source_type", "api_key", "dbname", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, err := service.CreateDatasource(name, "Short desc", "Long desc", "icon.png", "https://example.com", 75, 1, []string{}, "conn_string", "source_type", "api_key", "dbname", services.EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 	assert.NoError(t, err)
 	return datasource
 }

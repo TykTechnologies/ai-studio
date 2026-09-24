@@ -982,6 +982,15 @@ func (a *API) setupRoutes() {
 	v1.HandleFn("POST", "/model-routers/bulk", bulkActionPermission("model-routers"), a.bulkModelRouters)
 
 	// Semantic Router routes (Enterprise only)
+	// Embedders: reusable embedding configurations
+	v1.GET("/embedders/vendors", authz.Read("embedders"), a.listEmbedderVendors)
+	v1.POST("/embedders", authz.Write("embedders"), a.createEmbedder)
+	v1.GET("/embedders", authz.Read("embedders"), a.listEmbedders)
+	v1.GET("/embedders/:id", authz.Read("embedders"), a.getEmbedder)
+	v1.PATCH("/embedders/:id", authz.Write("embedders"), a.updateEmbedder)
+	v1.DELETE("/embedders/:id", authz.Delete("embedders"), a.deleteEmbedder)
+	v1.GET("/embedders/:id/dependents", authz.Read("embedders"), a.getEmbedderDependents)
+
 	v1.POST("/semantic-routers", authz.Write("semantic-routers"), a.createSemanticRouter)
 	v1.GET("/semantic-routers", authz.Read("semantic-routers"), a.listSemanticRouters)
 	v1.POST("/semantic-routers/test", authz.Write("semantic-routers"), a.testDraftSemanticRouter)

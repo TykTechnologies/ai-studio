@@ -370,7 +370,7 @@ func (v *Bedrock) GetDriver(_ *models.LLM, _ *models.LLMSettings, _ schema.Memor
 	return nil, fmt.Errorf("bedrock uses direct AWS SDK calls via Converse API; use the Bedrock-specific proxy handlers instead")
 }
 
-func (v *Bedrock) GetEmbedder(_ *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *Bedrock) GetEmbedder(_ *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	return nil, nil
 }
 

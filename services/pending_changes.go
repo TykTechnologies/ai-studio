@@ -78,6 +78,9 @@ var pendingChangeSources = []pendingChangeSource{
 	{typ: "plugin", model: &models.Plugin{}, nameExpr: "name", namespaced: true},
 	{typ: "model_router", model: &models.ModelRouter{}, nameExpr: "name", namespaced: true},
 	{typ: "semantic_router", model: &models.SemanticRouter{}, nameExpr: "name", namespaced: true},
+	// Embedders travel flattened inside the datasources and routers that use
+	// them; an edit changes those without touching their rows.
+	{typ: "embedder", model: &models.Embedder{}, nameExpr: "name", namespaced: false},
 	{typ: "model_price", model: &models.ModelPrice{}, nameExpr: "vendor || '/' || model_name", namespaced: false},
 	{typ: "oauth_client", model: &models.OAuthClient{}, nameExpr: "client_name", namespaced: false},
 	{typ: "access_token", model: &models.AccessToken{}, nameExpr: "client_id", namespaced: false},

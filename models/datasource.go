@@ -21,10 +21,12 @@ type Datasource struct {
 	DBConnAPIKey string `json:"db_conn_api_key"`
 	DBName       string `json:"db_name"`
 
-	EmbedVendor Vendor `json:"embed_vendor"`
-	EmbedUrl    string `json:"embed_url"`
-	EmbedAPIKey string `json:"embed_api_key"`
-	EmbedModel  string `json:"embed_model"`
+	// EmbedderID is the embedder that turns this datasource's text into
+	// vectors. The embed_vendor/url/api_key/model columns it replaced stay in
+	// the table (cleared by MigrateEmbedders) until a later release drops
+	// them; runtime code reads the embedder, never those columns.
+	EmbedderID *uint     `json:"embedder_id" gorm:"index"`
+	Embedder   *Embedder `json:"-" gorm:"foreignKey:EmbedderID"`
 
 	Files []FileStore `gorm:"many2many:datasource_filestores;" json:"files"`
 
@@ -37,9 +39,23 @@ type Datasource struct {
 
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
+
+	// ext carries JSON-only state (see datasource_json.go).
+	ext *datasourceExtra
 }
 
 type Datasources []Datasource
+
+// SetEmbedder links the datasource to an embedder (nil unlinks).
+func (d *Datasource) SetEmbedder(e *Embedder) {
+	d.Embedder = e
+	if e == nil {
+		d.EmbedderID = nil
+		return
+	}
+	id := e.ID
+	d.EmbedderID = &id
+}
 
 func NewDatasource() *Datasource {
 	return &Datasource{}
@@ -47,17 +63,17 @@ func NewDatasource() *Datasource {
 
 // Create a new datasource
 func (d *Datasource) Create(db *gorm.DB) error {
-	return db.Create(d).Error
+	return db.Omit("Embedder").Create(d).Error
 }
 
 // Get a datasource by ID
 func (d *Datasource) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Tags").Preload("Files").First(d, id).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Preload("Files").First(d, id).Error
 }
 
 // Update an existing datasource
 func (d *Datasource) Update(db *gorm.DB) error {
-	return db.Save(d).Error
+	return db.Omit("Embedder").Save(d).Error
 }
 
 // Delete a datasource
@@ -89,7 +105,7 @@ func (d *Datasources) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Preload("Tags").Find(d).Error
+	err := query.Preload("Tags").Preload("Embedder.LLM").Find(d).Error
 	return totalCount, totalPages, err
 }
 
@@ -122,18 +138,18 @@ func (d *Datasources) GetAllWithFilters(db *gorm.DB, pageSize int, pageNumber in
 		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := query.Preload("Tags").Find(d).Error
+	err := query.Preload("Tags").Preload("Embedder.LLM").Find(d).Error
 	return totalCount, totalPages, err
 }
 
 // Search datasources by name, short description and long description
 func (d *Datasources) Search(db *gorm.DB, query string) error {
-	return db.Preload("Tags").Where("name LIKE ? OR short_description LIKE ? OR long_description LIKE ?", "%"+query+"%", "%"+query+"%", "%"+query+"%").Find(d).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Where("name LIKE ? OR short_description LIKE ? OR long_description LIKE ?", "%"+query+"%", "%"+query+"%", "%"+query+"%").Find(d).Error
 }
 
 // Fetch datasources by tag
 func (d *Datasources) GetByTag(db *gorm.DB, tagName string) error {
-	return db.Preload("Tags").Joins("JOIN datasource_tags ON datasource_tags.datasource_id = datasources.id").
+	return db.Preload("Tags").Preload("Embedder.LLM").Joins("JOIN datasource_tags ON datasource_tags.datasource_id = datasources.id").
 		Joins("JOIN tags ON tags.id = datasource_tags.tag_id").
 		Where("tags.name = ?", tagName).
 		Find(d).Error
@@ -179,24 +195,24 @@ func (d *Datasource) RemoveFileStore(db *gorm.DB, fileStore *FileStore) error {
 
 // Filter datasources by minimum privacy score
 func (d *Datasources) GetByMinPrivacyScore(db *gorm.DB, minScore int) error {
-	return db.Preload("Tags").Where("privacy_score >= ?", minScore).Find(d).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Where("privacy_score >= ?", minScore).Find(d).Error
 }
 
 // Filter datasources by maximum privacy score
 func (d *Datasources) GetByMaxPrivacyScore(db *gorm.DB, maxScore int) error {
-	return db.Preload("Tags").Where("privacy_score <= ?", maxScore).Find(d).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Where("privacy_score <= ?", maxScore).Find(d).Error
 }
 
 // Filter datasources by privacy score range
 func (d *Datasources) GetByPrivacyScoreRange(db *gorm.DB, minScore, maxScore int) error {
-	return db.Preload("Tags").Where("privacy_score BETWEEN ? AND ?", minScore, maxScore).Find(d).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Where("privacy_score BETWEEN ? AND ?", minScore, maxScore).Find(d).Error
 }
 
 // Get all datasources belonging to a specific user
 func (d *Datasources) GetByUserID(db *gorm.DB, userID uint) error {
-	return db.Preload("Tags").Where("user_id = ?", userID).Find(d).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Where("user_id = ?", userID).Find(d).Error
 }
 
 func (d *Datasources) GetActiveDataSources(db *gorm.DB) error {
-	return db.Preload("Tags").Where("active = ?", true).Find(d).Error
+	return db.Preload("Tags").Preload("Embedder.LLM").Where("active = ?", true).Find(d).Error
 }

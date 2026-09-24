@@ -187,6 +187,12 @@ Each feature specification below provides detailed documentation on the individu
 - Granted to Apps and published in LLM catalogues like LLMs; access to the LLMs behind them only through the router
 - Routing decision (route, reason, score) in response headers and analytics
 
+### [Embedders](Embedders.md)
+- Reusable embedding configurations (linked to an LLM, or standalone with an API-compatibility client) that datasources embed with
+- One source for which vendors can embed (the drivers' `ProvidesEmbedder`)
+- Datasource `embed_*` API fields kept as a copy-on-write facade; startup migration moves existing settings onto embedders
+- Model locked while datasources use it; privacy and delete guards; flattened into the edge snapshot (no proto change)
+
 ### [Model Pricing System](Pricing.md)
 - Cost definition for various LLM models
 - Accurate tracking of token usage and costs

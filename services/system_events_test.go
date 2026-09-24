@@ -609,7 +609,7 @@ func TestSystemEvents_Datasource_Created(t *testing.T) {
 
 	datasource, err := service.CreateDatasource("Test Datasource", "Short desc", "Long desc", "icon.png",
 		"https://example.com", 75, user.ID, []string{}, "conn_string", "source_type",
-		"db-key", "db1", "embed_vendor", "embed_url", "embed-key", "embed_model", true)
+		"db-key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed-key", Model: "embed_model"}, true)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -642,7 +642,7 @@ func TestSystemEvents_Datasource_Updated(t *testing.T) {
 
 	datasource, err := service.CreateDatasource("Test Datasource 2", "Short desc", "Long desc", "icon.png",
 		"https://example.com", 75, user.ID, []string{}, "conn_string", "source_type",
-		"db-key", "db1", "embed_vendor", "embed_url", "embed-key", "embed_model", true)
+		"db-key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed-key", Model: "embed_model"}, true)
 	require.NoError(t, err)
 
 	collector := NewTestEventCollector()
@@ -652,7 +652,7 @@ func TestSystemEvents_Datasource_Updated(t *testing.T) {
 
 	_, err = service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated short", "Updated long", "new-icon.png",
 		"https://updated.com", 80, "new_conn_string", "new_source_type",
-		"new-db-key", "db2", "new_embed_vendor", "new_embed_url", "new-embed-key", "new_embed_model", false, []string{}, user.ID)
+		"new-db-key", "db2", EmbedderInput{Vendor: "new_embed_vendor", URL: "new_embed_url", APIKey: "new-embed-key", Model: "new_embed_model"}, false, []string{}, user.ID)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -685,7 +685,7 @@ func TestSystemEvents_Datasource_Deleted(t *testing.T) {
 
 	datasource, err := service.CreateDatasource("Test Datasource 3", "Short desc", "Long desc", "icon.png",
 		"https://example.com", 75, user.ID, []string{}, "conn_string", "source_type",
-		"db-key", "db1", "embed_vendor", "embed_url", "embed-key", "embed_model", true)
+		"db-key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed-key", Model: "embed_model"}, true)
 	require.NoError(t, err)
 
 	collector := NewTestEventCollector()

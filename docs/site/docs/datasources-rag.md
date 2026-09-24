@@ -145,11 +145,7 @@ Administrators configure Data Sources via the UI or API:
     *   Select the database type (e.g., `pinecone`).
     *   Provide connection details (e.g., endpoint/connection string, namespace/index name).
     *   Reference a [Secret](./secrets.md) containing the API key/credentials.
-3.  **Configure Embedding Service:**
-    *   Select the vendor/type (e.g., `openai`, `local`).
-    *   Specify the model name (if applicable).
-    *   Provide the service URL (if applicable, for local models).
-    *   Reference a [Secret](./secrets.md) containing the API key (if applicable).
+3.  **Choose an Embedder:** Pick the [Embedder](./embedders.md) that embeds this data source's documents and queries, or create one inline. An embedder is either linked to an LLM provider (reusing its connection and credentials) or standalone (its own API compatibility, URL, model and [Secret](./secrets.md)-referenced API key). Its model cannot change while data sources use it.
 4.  **Upload Files:** Upload documents to be chunked, embedded, and indexed into the vector store.
 
 ## Organizing & Assigning Data Sources (Admin)

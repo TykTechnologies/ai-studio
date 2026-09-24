@@ -66,6 +66,12 @@ const (
 	TopicSemanticRouterUpdated = "system.semantic_router.updated"
 	TopicSemanticRouterDeleted = "system.semantic_router.deleted"
 
+	// Embedder events. The payload object is the embedder with its key
+	// redacted.
+	TopicEmbedderCreated = "system.embedder.created"
+	TopicEmbedderUpdated = "system.embedder.updated"
+	TopicEmbedderDeleted = "system.embedder.deleted"
+
 	// Governed metadata events (Enterprise). Payload object: {object_type, object_id, values, validation_status, source}
 	TopicGovernedMetadataUpdated = "system.governed_metadata.updated"
 	TopicGovernedMetadataDeleted = "system.governed_metadata.deleted"
@@ -296,4 +302,19 @@ func (e *SystemEventEmitter) EmitSemanticRouterUpdated(router interface{}, objec
 // EmitSemanticRouterDeleted emits an event when a SemanticRouter is deleted
 func (e *SystemEventEmitter) EmitSemanticRouterDeleted(objectID uint, userID uint) {
 	e.EmitObjectEvent(TopicSemanticRouterDeleted, "semantic_router", "deleted", objectID, userID, nil)
+}
+
+// EmitEmbedderCreated emits an event when an Embedder is created
+func (e *SystemEventEmitter) EmitEmbedderCreated(embedder interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicEmbedderCreated, "embedder", "created", objectID, userID, embedder)
+}
+
+// EmitEmbedderUpdated emits an event when an Embedder is updated
+func (e *SystemEventEmitter) EmitEmbedderUpdated(embedder interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicEmbedderUpdated, "embedder", "updated", objectID, userID, embedder)
+}
+
+// EmitEmbedderDeleted emits an event when an Embedder is deleted
+func (e *SystemEventEmitter) EmitEmbedderDeleted(objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicEmbedderDeleted, "embedder", "deleted", objectID, userID, nil)
 }

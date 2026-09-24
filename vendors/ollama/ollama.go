@@ -44,19 +44,19 @@ func (v *Ollama) GetDriver(LLMConfig *models.LLM, settings *models.LLMSettings, 
 	return llm, nil
 }
 
-func (v *Ollama) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *Ollama) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	var llm embeddings.EmbedderClient
 	var err error
 
 	opts := []ollama.Option{}
-	if d.EmbedUrl != "" {
-		opts = append(opts, ollama.WithServerURL(d.EmbedUrl))
+	if spec.Endpoint != "" {
+		opts = append(opts, ollama.WithServerURL(spec.Endpoint))
 	}
-	if d.EmbedModel == "" {
+	if spec.Model == "" {
 		return nil, fmt.Errorf("missing embed model")
 	}
 
-	opts = append(opts, ollama.WithModel(d.EmbedModel))
+	opts = append(opts, ollama.WithModel(spec.Model))
 	llm, err = ollama.New(opts...)
 
 	if err != nil {

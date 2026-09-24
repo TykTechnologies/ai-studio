@@ -90,7 +90,7 @@ func TestAPIKeysNeverExposedInResponses(t *testing.T) {
 			PrivacyScore:     75,
 			UserID:           user.ID,
 			DBConnAPIKey:     "sensitive-db-key-123",
-			EmbedAPIKey:      "sensitive-embed-key-456",
+			Embedder:         &models.Embedder{Name: "Sensitive", Vendor: models.OPENAI, APIKey: "sensitive-embed-key-456", ModelName: "m"},
 			Active:           true,
 		}
 		err = db.Create(testDatasource).Error
@@ -110,10 +110,10 @@ func TestAPIKeysNeverExposedInResponses(t *testing.T) {
 
 		// Verify in database that the original keys were preserved
 		var datasourceInDB models.Datasource
-		err = db.First(&datasourceInDB, 1).Error
+		err = db.Preload("Embedder").First(&datasourceInDB, 1).Error
 		assert.NoError(t, err)
 		assert.Equal(t, "sensitive-db-key-123", datasourceInDB.DBConnAPIKey, "Original DB API key should be preserved")
-		assert.Equal(t, "sensitive-embed-key-456", datasourceInDB.EmbedAPIKey, "Original embed API key should be preserved")
+		assert.Equal(t, "sensitive-embed-key-456", datasourceInDB.Embedder.APIKey, "Original embed API key should be preserved")
 	})
 
 	t.Run("SecretReferences_Still_Work_Correctly", func(t *testing.T) {

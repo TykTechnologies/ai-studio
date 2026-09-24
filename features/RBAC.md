@@ -64,7 +64,7 @@ The catalogue lives in core (`pkg/authz/catalogue.go`) so both editions share on
 |---|---|
 | Analytics | `analytics`, `proxy-logs` (S) |
 | Plugins | `plugins`, `marketplace` |
-| LLM management | `llms`, `model-prices`, `model-routers` |
+| LLM management | `llms`, `model-prices`, `model-routers`, `semantic-routers`, `embedders` |
 | Context management | `datasources`, `tools`, `filters`, `filestores`, `tags` |
 | Community | `submissions`, `attestation-templates` |
 | Access | `users`, `groups`, `roles`, `sso-profiles` (S) |

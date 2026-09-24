@@ -91,6 +91,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedUrl         string   `json:"embed_url"`
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
+				EmbedderID       *uint    `json:"embedder_id,omitempty"`
 				Active           bool     `json:"active"`
 				Namespace        string   `json:"namespace"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
@@ -114,6 +115,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedUrl         string   `json:"embed_url"`
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
+				EmbedderID       *uint    `json:"embedder_id,omitempty"`
 				Active           bool     `json:"active"`
 				Namespace        string   `json:"namespace"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
@@ -195,7 +197,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	ds, err := service.GetDatasourceByID(uint(1))
 	assert.NoError(t, err)
 	assert.Equal(t, "$SECRET/DB_KEY", ds.DBConnAPIKey)
-	assert.Equal(t, "$SECRET/EMBED_KEY", ds.EmbedAPIKey)
+	assert.Equal(t, "$SECRET/EMBED_KEY", ds.FlattenedEmbed().APIKey)
 }
 
 func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
@@ -224,7 +226,7 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 		Name:             "Direct Keys Datasource",
 		ShortDescription: "Test datasource with direct API keys",
 		DBConnAPIKey:     "direct-db-key-123",
-		EmbedAPIKey:      "direct-embed-key-456",
+		Embedder:         &models.Embedder{Name: "Direct", Vendor: models.OPENAI, APIKey: "direct-embed-key-456", ModelName: "m", PrivacyScore: 100},
 		PrivacyScore:     75,
 		Active:           true,
 	}
@@ -234,7 +236,7 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 		Name:             "Secret Ref Datasource",
 		ShortDescription: "Test datasource with secret reference",
 		DBConnAPIKey:     "direct-db-key-789",
-		EmbedAPIKey:      "$SECRET/TEST_EMBED_KEY",
+		Embedder:         &models.Embedder{Name: "SecretRef", Vendor: models.OPENAI, APIKey: "$SECRET/TEST_EMBED_KEY", ModelName: "m", PrivacyScore: 100},
 		PrivacyScore:     80,
 		Active:           true,
 	}
@@ -244,7 +246,7 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 		Name:             "Empty Keys Datasource",
 		ShortDescription: "Test datasource with no API keys",
 		DBConnAPIKey:     "",
-		EmbedAPIKey:      "",
+		Embedder:         &models.Embedder{Name: "NoKey", Vendor: models.OPENAI, ModelName: "m", PrivacyScore: 100},
 		PrivacyScore:     85,
 		Active:           true,
 	}

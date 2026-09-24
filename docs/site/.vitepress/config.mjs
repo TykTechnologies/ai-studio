@@ -47,6 +47,7 @@ export default defineConfig({
           { text: 'Semantic Router (Enterprise)', link: '/docs/semantic-router' }, // Enterprise semantic routing
           { text: 'Tools & Extensibility', link: '/docs/tools' },
           { text: 'Data Sources & RAG', link: '/docs/datasources-rag' },
+          { text: 'Embedders', link: '/docs/embedders' },
           { text: 'Filters & Policies', link: '/docs/filters' },
           { text: 'Guardrails', link: '/docs/guardrails' }
         ]

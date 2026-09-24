@@ -74,8 +74,7 @@ func (c *Clients) resolved(id uint) (*models.LLM, error) {
 
 // SupportsEmbeddings reports whether the vendor offers embeddings.
 func SupportsEmbeddings(vendor models.Vendor) bool {
-	v, ok := switches.VendorMap[vendor]
-	return ok && v().ProvidesEmbedder()
+	return switches.SupportsEmbeddings(vendor)
 }
 
 func (c *Clients) embedder(llm *models.LLM, model string) (*embeddings.EmbedderImpl, error) {
@@ -90,11 +89,11 @@ func (c *Clients) embedder(llm *models.LLM, model string) (*embeddings.EmbedderI
 	}
 	c.mu.Unlock()
 
-	e, err := switches.GetEmbedder(&models.Datasource{
-		EmbedVendor: llm.Vendor,
-		EmbedUrl:    llm.APIEndpoint,
-		EmbedAPIKey: llm.APIKey,
-		EmbedModel:  model,
+	e, err := switches.GetEmbedder(&models.EmbedderSpec{
+		Vendor:   llm.Vendor,
+		Endpoint: llm.APIEndpoint,
+		APIKey:   llm.APIKey,
+		Model:    model,
 	})
 	if err != nil {
 		return nil, err

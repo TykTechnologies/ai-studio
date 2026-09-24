@@ -183,7 +183,9 @@ var catalogSources = []catalogSource{
 		typ: CatalogItemDatasource, table: "datasources",
 		kindCol: "datasources.db_source_type", privacyCol: "datasources.privacy_score", communityCol: "datasources.community_submitted",
 		catalogueIDCol: "data_catalogue_data_sources.data_catalogue_id", catalogueNameCol: "data_catalogues.name",
-		searchCols:  []string{"datasources.name", "datasources.short_description", "datasources.long_description", "datasources.embed_model"},
+		searchCols: []string{"datasources.name", "datasources.short_description", "datasources.long_description",
+			// The embedding model lives on the datasource's embedder.
+			"(SELECT embedders.model FROM embedders WHERE embedders.id = datasources.embedder_id)"},
 		extraSearch: "EXISTS (SELECT 1 FROM datasource_tags dt JOIN tags ON tags.id = dt.tag_id WHERE dt.datasource_id = datasources.id AND LOWER(tags.name) LIKE ? ESCAPE '\\')",
 		base:        models.AccessibleDatasourceQuery,
 	},

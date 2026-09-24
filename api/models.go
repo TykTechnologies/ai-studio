@@ -334,8 +334,12 @@ type DatasourceInput struct {
 			EmbedUrl         string   `json:"embed_url"`
 			EmbedAPIKey      string   `json:"embed_api_key"`
 			EmbedModel       string   `json:"embed_model"`
-			Active           bool     `json:"active"`
-			Namespace        string   `json:"namespace"`
+			// EmbedderID links an embedder and takes precedence over the
+			// embed_* fields (0 unlinks). Without it, the embed_* fields are
+			// resolved to a matching embedder.
+			EmbedderID *uint  `json:"embedder_id,omitempty"`
+			Active     bool   `json:"active"`
+			Namespace  string `json:"namespace"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
@@ -369,6 +373,8 @@ type DatasourceResponse struct {
 		EmbedAPIKey      string              `json:"embed_api_key"`
 		HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 		EmbedModel       string              `json:"embed_model"`
+		EmbedderID       *uint               `json:"embedder_id"`
+		EmbedderName     string              `json:"embedder_name"`
 		Active           bool                `json:"active"`
 		Namespace        string              `json:"namespace"`
 		Files            []FileStoreResponse `json:"files"`

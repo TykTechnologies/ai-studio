@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -37,13 +38,6 @@ var AVAILABLE_LLM_DRIVERS = []models.Vendor{
 	models.VERTEX,
 	models.GOOGLEAI,
 	models.BEDROCK,
-}
-
-var AVAILABLE_EMBEDDERS = []models.Vendor{
-	models.OPENAI,
-	models.OLLAMA,
-	models.VERTEX,
-	models.GOOGLEAI,
 }
 
 type newVendorFunc func() models.LLMVendorProvider
@@ -196,8 +190,32 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 	}
 }
 
-func GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
-	v, ok := VendorMap[d.EmbedVendor]
+// EmbeddingVendors lists the vendors whose drivers can embed, in a stable
+// order. It is the one source for "which vendors serve embeddings": the
+// embedder vendor lists, validation and the admin UI all derive from it.
+func EmbeddingVendors() []models.Vendor {
+	var out []models.Vendor
+	for vendor, v := range VendorMap {
+		if v().ProvidesEmbedder() {
+			out = append(out, vendor)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// SupportsEmbeddings reports whether the vendor's driver can embed.
+func SupportsEmbeddings(vendor models.Vendor) bool {
+	v, ok := VendorMap[vendor]
+	return ok && v().ProvidesEmbedder()
+}
+
+// GetEmbedder builds an embedding client for a resolved embedder.
+func GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
+	if spec == nil {
+		return nil, fmt.Errorf("no embedder configured")
+	}
+	v, ok := VendorMap[spec.Vendor]
 	if !ok {
 		return nil, fmt.Errorf("unsupported vendor")
 	}
@@ -207,7 +225,7 @@ func GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
 		return nil, fmt.Errorf("vendor does not provide an embedder")
 	}
 
-	return vn.GetEmbedder(d)
+	return vn.GetEmbedder(spec)
 }
 
 func AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {

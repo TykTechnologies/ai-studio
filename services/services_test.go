@@ -1472,33 +1472,33 @@ func TestSmartAPIKeyUpdateLogic(t *testing.T) {
 		// Create a datasource with initial API keys
 		datasource, err := service.CreateDatasource("Test Datasource", "Short desc", "Long desc", "icon.png",
 			"https://example.com", 75, user.ID, []string{}, "conn_string", "source_type",
-			"initial-db-key", "db1", "embed_vendor", "embed_url", "initial-embed-key", "embed_model", true)
+			"initial-db-key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "initial-embed-key", Model: "embed_model"}, true)
 		assert.NoError(t, err)
 		assert.Equal(t, "initial-db-key", datasource.DBConnAPIKey)
-		assert.Equal(t, "initial-embed-key", datasource.EmbedAPIKey)
+		assert.Equal(t, "initial-embed-key", datasource.FlattenedEmbed().APIKey)
 
 		// Test 1: Update with [redacted] should preserve existing keys
 		updatedDS1, err := service.UpdateDatasource(datasource.ID, "Test Datasource", "Short desc", "Long desc", "icon.png",
 			"https://example.com", 75, "conn_string", "source_type", "[redacted]", "db1",
-			"embed_vendor", "embed_url", "[redacted]", "embed_model", true, []string{}, user.ID)
+			EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "[redacted]", Model: "embed_model"}, true, []string{}, user.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, "initial-db-key", updatedDS1.DBConnAPIKey, "DB API key should be preserved when [redacted] is sent")
-		assert.Equal(t, "initial-embed-key", updatedDS1.EmbedAPIKey, "Embed API key should be preserved when [redacted] is sent")
+		assert.Equal(t, "initial-embed-key", updatedDS1.FlattenedEmbed().APIKey, "Embed API key should be preserved when [redacted] is sent")
 
 		// Test 2: Update with empty strings should clear the keys
 		updatedDS2, err := service.UpdateDatasource(datasource.ID, "Test Datasource", "Short desc", "Long desc", "icon.png",
 			"https://example.com", 75, "conn_string", "source_type", "", "db1",
-			"embed_vendor", "embed_url", "", "embed_model", true, []string{}, user.ID)
+			EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "", Model: "embed_model"}, true, []string{}, user.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, "", updatedDS2.DBConnAPIKey, "DB API key should be cleared when empty string is sent")
-		assert.Equal(t, "", updatedDS2.EmbedAPIKey, "Embed API key should be cleared when empty string is sent")
+		assert.Equal(t, "", updatedDS2.FlattenedEmbed().APIKey, "Embed API key should be cleared when empty string is sent")
 
 		// Test 3: Update with new keys should update the keys
 		updatedDS3, err := service.UpdateDatasource(datasource.ID, "Test Datasource", "Short desc", "Long desc", "icon.png",
 			"https://example.com", 75, "conn_string", "source_type", "new-db-key", "db1",
-			"embed_vendor", "embed_url", "new-embed-key", "embed_model", true, []string{}, user.ID)
+			EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "new-embed-key", Model: "embed_model"}, true, []string{}, user.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, "new-db-key", updatedDS3.DBConnAPIKey, "DB API key should be updated when new value is sent")
-		assert.Equal(t, "new-embed-key", updatedDS3.EmbedAPIKey, "Embed API key should be updated when new value is sent")
+		assert.Equal(t, "new-embed-key", updatedDS3.FlattenedEmbed().APIKey, "Embed API key should be updated when new value is sent")
 	})
 }

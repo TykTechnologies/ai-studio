@@ -632,10 +632,12 @@ func (s *Service) createDatasourceFromPayload(payload models.JSONMap, submitterI
 		getString("db_source_type"),
 		getString("db_conn_api_key"),
 		getString("db_name"),
-		getString("embed_vendor"),
-		getString("embed_url"),
-		getString("embed_api_key"),
-		getString("embed_model"),
+		EmbedderInput{
+			Vendor: getString("embed_vendor"),
+			URL:    getString("embed_url"),
+			APIKey: getString("embed_api_key"),
+			Model:  getString("embed_model"),
+		},
 		getBool("active"),
 	)
 	if err != nil {
