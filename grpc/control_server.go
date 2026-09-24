@@ -1849,9 +1849,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Semantic Routers (Enterprise). The configuration travels as JSON; the
-	// edge compiles it with the engine.
+	// edge compiles it with the engine. The router's embedder is flattened
+	// in: a linked one as an LLM reference, a standalone one inline with its
+	// key encrypted (fail-closed: a key that cannot be encrypted keeps the
+	// router off the edge).
 	var semanticRouters []models.SemanticRouter
-	semanticQuery := s.db.Where("active = ?", true)
+	semanticQuery := s.db.Preload("Embedder.LLM").Where("active = ?", true)
 	if namespace == "" {
 		semanticQuery = semanticQuery.Where("namespace = ''")
 	} else {
@@ -1861,7 +1864,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		log.Warn().Err(err).Msg("Failed to get Semantic Routers")
 	}
 	for _, router := range semanticRouters {
-		cfg, err := router.ConfigJSON()
+		cfg, err := router.EdgeConfigJSON(s.db, s.encryptForMicrogateway)
 		if err != nil {
 			log.Error().Err(err).Uint("router_id", router.ID).Msg("Failed to encode Semantic Router; not synced")
 			continue

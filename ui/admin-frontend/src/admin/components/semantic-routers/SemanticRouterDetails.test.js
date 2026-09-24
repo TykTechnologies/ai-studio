@@ -31,6 +31,8 @@ const router = {
     namespace: "",
     models: ["smart/auto", "smart/simple", "smart/complex"],
     catalogues: [{ id: 4, name: "Platform" }],
+    embedder_id: 3,
+    embedder_name: "OpenAI small",
     settings: {
       mode: "shadow",
       allow_explicit_route: true,
@@ -98,6 +100,7 @@ describe("SemanticRouterDetails", () => {
     expect(screen.getByTestId("router-settings")).toHaveTextContent("Shadow");
     expect(screen.getByTestId("router-settings")).toHaveTextContent("All user messages");
     expect(screen.getByTestId("router-catalogues")).toHaveTextContent("Platform");
+    expect(screen.getByRole("link", { name: "OpenAI small" })).toHaveAttribute("href", "/admin/embedders/3");
     // Read-only: no toggle, no edit, no test panel.
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Deactivate" })).not.toBeInTheDocument();

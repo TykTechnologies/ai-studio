@@ -1,11 +1,13 @@
 package grpc
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,4 +97,51 @@ func TestConfigChange_EmbedderEditMarksEdgesPending(t *testing.T) {
 	require.NoError(t, db.Model(e).Update("api_key", "sk-2").Error)
 	server.onConfigurationChanged(topicEmbedderUpdated, eventbridge.Event{ID: "2"})
 	assert.Equal(t, models.EdgeSyncStatusPending, syncOf())
+}
+
+func snapshotRouterConfig(t *testing.T, server *ControlServer, slug string) sr.Config {
+	t.Helper()
+	snap, err := server.getConfigurationSnapshot("default")
+	require.NoError(t, err)
+	for _, r := range snap.SemanticRouters {
+		if r.Slug == slug {
+			var cfg sr.Config
+			require.NoError(t, json.Unmarshal([]byte(r.ConfigJson), &cfg))
+			return cfg
+		}
+	}
+	t.Fatalf("semantic router %q not in snapshot", slug)
+	return sr.Config{}
+}
+
+// Routers reach edges with their embedder flattened in: a linked embedder as
+// the {llm_id, model} reference older edges understand, a standalone one
+// inline with its key encrypted.
+func TestSnapshot_FlattensRouterEmbedders(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	key := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	llm := &models.LLM{Name: "OpenAI", Vendor: models.OPENAI, APIKey: "sk-llm", Active: true}
+	require.NoError(t, db.Create(llm).Error)
+
+	mk := func(slug string, e *models.Embedder) {
+		require.NoError(t, db.Create(e).Error)
+		r := &models.SemanticRouter{Name: slug, Slug: slug, Active: true, EmbedderID: &e.ID,
+			Settings: sr.Settings{DefaultRoute: "a", Embedding: &sr.ModelRef{TimeoutMs: 700}},
+			Routes:   []sr.Route{{Name: "a", Utterances: []string{"hi"}, Target: sr.Target{Type: sr.TargetLLM, LLMID: llm.ID, Model: "m"}}}}
+		require.NoError(t, r.Create(db))
+	}
+	mk("linked", &models.Embedder{Name: "linked", LLMID: &llm.ID, ModelName: "text-embedding-3-small"})
+	mk("inline", &models.Embedder{Name: "inline", Vendor: models.OLLAMA, Endpoint: "http://ollama:11434", APIKey: "ollama-key", ModelName: "nomic"})
+
+	linked := snapshotRouterConfig(t, server, "linked")
+	assert.Equal(t, &sr.ModelRef{LLMID: llm.ID, Model: "text-embedding-3-small", TimeoutMs: 700}, linked.Settings.Embedding)
+
+	inline := snapshotRouterConfig(t, server, "inline").Settings.Embedding
+	require.NotNil(t, inline)
+	assert.True(t, inline.Inline())
+	assert.Equal(t, "ollama", inline.Vendor)
+	assert.Equal(t, "http://ollama:11434", inline.Endpoint)
+	assert.Equal(t, 700, inline.TimeoutMs)
+	assert.Equal(t, "ollama-key", decryptLikeMicrogateway(t, key, inline.APIKeyEncrypted))
+	require.NoError(t, sr.Validate(snapshotRouterConfig(t, server, "inline")))
 }

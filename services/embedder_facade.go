@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 	"gorm.io/gorm"
 )
 
@@ -193,35 +194,18 @@ func (s *Service) FindOrCreateLinkedEmbedder(llmID uint, model string, userID ui
 }
 
 func (s *Service) findOrCreateLinkedEmbedder(tx *gorm.DB, llmID uint, model string, userID uint) (*models.Embedder, error) {
-	var e models.Embedder
-	err := tx.Preload("LLM").Where("llm_id = ? AND model = ?", llmID, model).Order("id").First(&e).Error
-	if err == nil {
-		return &e, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
 	var llm models.LLM
-	if err := tx.First(&llm, llmID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("%w: LLM %d does not exist", ErrEmbedderInvalid, llmID)
-		}
-		return nil, err
+	if err := tx.First(&llm, llmID).Error; err == nil && !switches.SupportsEmbeddings(llm.Vendor) {
+		return nil, fmt.Errorf("%w: vendor %q does not provide embeddings", ErrEmbedderInvalid, llm.Vendor)
 	}
-	name, err := models.UniqueEmbedderName(tx, llm.Name, model)
+	e, created, err := models.FindOrCreateLinkedEmbedder(tx, llmID, model, userID)
 	if err != nil {
 		return nil, err
 	}
-	id := llmID
-	e = models.Embedder{Name: name, LLMID: &id, ModelName: model, UserID: userID}
-	if err := s.validateEmbedder(tx, &e); err != nil {
-		return nil, err
+	if created {
+		s.emitEmbedder(e, "created", userID)
 	}
-	if err := e.Create(tx); err != nil {
-		return nil, err
-	}
-	s.emitEmbedder(&e, "created", userID)
-	return &e, nil
+	return e, nil
 }
 
 // applyHookEmbedEdits re-resolves the embedder of a datasource a plugin hook

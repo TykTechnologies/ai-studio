@@ -102,8 +102,8 @@ func Validate(cfg Config) error {
 	if !seen[s.DefaultRoute] {
 		return invalid("settings.default_route", "%q is not one of the routes", s.DefaultRoute)
 	}
-	if needsEmbedding && (s.Embedding == nil || s.Embedding.LLMID == 0 || strings.TrimSpace(s.Embedding.Model) == "") {
-		return invalid("settings.embedding", "routes with example utterances need an embedding LLM and model")
+	if needsEmbedding && (s.Embedding == nil || (s.Embedding.LLMID == 0 && !s.Embedding.Inline()) || strings.TrimSpace(s.Embedding.Model) == "") {
+		return invalid("settings.embedding", "routes with example utterances need an embedder")
 	}
 	if s.Judge.Enabled {
 		if s.Judge.ModelRef.LLMID == 0 || strings.TrimSpace(s.Judge.ModelRef.Model) == "" {

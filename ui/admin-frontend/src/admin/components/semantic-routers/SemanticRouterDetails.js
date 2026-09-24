@@ -291,9 +291,18 @@ const SemanticRouterDetails = () => {
                 </Fact>
                 <Fact label="Explicit routes">{settings.allow_explicit_route ? "Allowed" : "Off"}</Fact>
                 <Fact label="Embeddings">
-                  {embedding?.llm_id
-                    ? `${embedding.model} on ${nameOf(llms, embedding.llm_id, `LLM #${embedding.llm_id}`)}`
-                    : "Off"}
+                  {attributes.embedder_id ? (
+                    <>
+                      <Link to={`/admin/embedders/${attributes.embedder_id}`}>
+                        {attributes.embedder_name || `Embedder #${attributes.embedder_id}`}
+                      </Link>
+                      {embedding?.model ? ` (${embedding.model})` : ""}
+                    </>
+                  ) : embedding?.llm_id ? (
+                    `${embedding.model} on ${nameOf(llms, embedding.llm_id, `LLM #${embedding.llm_id}`)}`
+                  ) : (
+                    "Off"
+                  )}
                 </Fact>
                 <Fact label="LLM judge">
                   {judge.enabled

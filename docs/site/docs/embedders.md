@@ -1,6 +1,6 @@
 # Embedders
 
-An **Embedder** is a saved embedding configuration: which client to call, where, with which credentials and which model. [Data Sources](./datasources-rag.md) embed their documents and queries with one, and several data sources can share the same embedder.
+An **Embedder** is a saved embedding configuration: which client to call, where, with which credentials and which model. [Data Sources](./datasources-rag.md) embed their documents and queries with one, [Semantic Routers](./semantic-router.md) embed their example prompts and requests with one, and any number of them can share the same embedder.
 
 Most people never need to open the Embedders page: when you configure a data source, pick an existing embedder or create one inline. The page is there to review, fix and clean up embedders.
 
@@ -20,7 +20,7 @@ API keys can be [Secrets](./secrets.md) references (`$SECRET/NAME`), as on LLM p
 
 - **The model is locked while data sources use it.** A data source's stored vectors came from its embedder's model; embedding new queries with another model would silently return poor matches. To change model, create a new embedder, point the data source at it and re-process its embeddings. You can always rotate the endpoint or key.
 - **Privacy.** An embedder sees the text it embeds, so its privacy score must be at least the data source's.
-- **Deleting.** An embedder in use cannot be deleted; the error lists the data sources that use it. An LLM provider that embedders are linked to cannot be deleted either.
+- **Deleting.** An embedder in use cannot be deleted; the error lists the data sources and semantic routers that use it. An LLM provider that embedders are linked to cannot be deleted either.
 
 ## API
 
@@ -34,4 +34,8 @@ The `embedders` permission (LLM management group) controls this page and API. Cr
 
 ## Upgrading
 
-On first start after upgrading, AI Studio moves each data source's embedding settings onto embedders. Data sources with identical settings share one embedder, which takes the highest privacy score among them. Nothing needs to be re-indexed.
+On first start after upgrading, AI Studio moves each data source's embedding settings onto embedders. Data sources with identical settings share one embedder, which takes the highest privacy score among them. Semantic Routers that named an embedding LLM and model are linked to an embedder that uses that LLM with that model. Nothing needs to be re-indexed.
+
+The Semantic Router API still accepts `settings.embedding` as `{llm_id, model}` (saved as the matching linked embedder) and still returns that shape, alongside `embedder_id` and `embedder_name`.
+
+Edges receive a router's embedder inside its configuration. Edges older than this release understand embedders that use an LLM provider, but not standalone ones; upgrade edges before giving a router a standalone embedder.

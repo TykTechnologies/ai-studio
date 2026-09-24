@@ -82,3 +82,18 @@ func TestEffectiveMode(t *testing.T) {
 	assert.Equal(t, ModeEnforce, Settings{}.EffectiveMode())
 	assert.Equal(t, ModeShadow, Settings{Mode: ModeShadow}.EffectiveMode())
 }
+
+// The embedding stage may name an LLM or carry a standalone embedder inline;
+// a timeout alone is not an embedder.
+func TestValidate_EmbeddingReferences(t *testing.T) {
+	base := func(emb *ModelRef) Config {
+		return Config{Settings: Settings{DefaultRoute: "a", Embedding: emb}, Routes: []Route{
+			{Name: "a", Utterances: []string{"hello"}, Target: Target{Type: TargetLLM, LLMID: 1, Model: "m"}},
+		}}
+	}
+	assert.NoError(t, Validate(base(&ModelRef{LLMID: 2, Model: "e"})))
+	assert.NoError(t, Validate(base(&ModelRef{Vendor: "openai", Endpoint: "https://x", Model: "e"})))
+	assert.Error(t, Validate(base(&ModelRef{TimeoutMs: 900})))
+	assert.Error(t, Validate(base(&ModelRef{Vendor: "openai"})), "the model is still required")
+	assert.Error(t, Validate(base(nil)))
+}

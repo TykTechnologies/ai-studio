@@ -34,6 +34,11 @@ type SemanticRouterAttributes struct {
 
 	Settings sr.Settings `json:"settings"`
 	Routes   []sr.Route  `json:"routes"`
+
+	// EmbedderID is the embedder of the embedding stage (0 or omitted: none).
+	// A settings.embedding naming an LLM ({llm_id, model}) is still accepted
+	// and saved as the embedder linked to that LLM with that model.
+	EmbedderID *uint `json:"embedder_id"`
 }
 
 // SemanticRouterInput is the JSON:API body of a create or update.
@@ -86,7 +91,43 @@ func attributesToSemanticRouter(in *SemanticRouterAttributes, activeIfOmitted bo
 		LogoURL:          in.LogoURL,
 		Settings:         in.Settings,
 		Routes:           in.Routes,
+		EmbedderID:       nonZero(in.EmbedderID),
 	}
+}
+
+func nonZero(id *uint) *uint {
+	if id == nil || *id == 0 {
+		return nil
+	}
+	return id
+}
+
+// linkLegacyEmbedding saves an embedding stage given the old way (an LLM and
+// model in settings.embedding) as the embedder linked to that LLM with that
+// model, found or created, keeping only the timeout in settings. The router
+// is validated first, so an invalid router (or the Community Edition) never
+// creates an embedder as a side effect.
+func (a *API) linkLegacyEmbedding(c *gin.Context, router *models.SemanticRouter) error {
+	ref := router.Settings.Embedding
+	if router.EmbedderID != nil || ref == nil || ref.LLMID == 0 {
+		return nil
+	}
+	if err := a.semanticRouters().ValidateRouter(router); err != nil {
+		return err
+	}
+	e, err := a.service.FindOrCreateLinkedEmbedder(ref.LLMID, ref.Model, currentUserID(c))
+	if err != nil {
+		return err
+	}
+	id := e.ID
+	router.EmbedderID = &id
+	router.Embedder = e
+	if ref.TimeoutMs > 0 {
+		router.Settings.Embedding = &sr.ModelRef{TimeoutMs: ref.TimeoutMs}
+	} else {
+		router.Settings.Embedding = nil
+	}
+	return nil
 }
 
 func parseSemanticRouterID(c *gin.Context) (uint, bool) {
@@ -123,6 +164,10 @@ func (a *API) createSemanticRouter(c *gin.Context) {
 	}
 	// Creating a router already active is the publish action.
 	if !a.requirePublishToCreateLive(c, "semantic-routers", router.Active) {
+		return
+	}
+	if err := a.linkLegacyEmbedding(c, router); err != nil {
+		respondSemanticRouterError(c, err)
 		return
 	}
 	if err := a.semanticRouters().CreateRouter(router); err != nil {
@@ -194,6 +239,10 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 	}
 	// Changing the live switch through an update is the publish action.
 	if !a.requirePublishIfChanged(c, "semantic-routers", existing.Active, router.Active) {
+		return
+	}
+	if err := a.linkLegacyEmbedding(c, router); err != nil {
+		respondSemanticRouterError(c, err)
 		return
 	}
 	if err := a.semanticRouters().UpdateRouter(router); err != nil {
@@ -486,7 +535,9 @@ func serializeSemanticRouter(r *models.SemanticRouter) map[string]interface{} {
 			"short_description": r.ShortDescription,
 			"long_description":  r.LongDescription,
 			"logo_url":          r.LogoURL,
-			"settings":          r.Settings,
+			"settings":          settingsWithEmbedder(r),
+			"embedder_id":       r.EmbedderID,
+			"embedder_name":     routerEmbedderName(r),
 			"routes":            routes,
 			"models":            sr.ModelsFor(r.Slug, r.Config()),
 			"catalogues":        routerCatalogueRefs(r.Catalogues),
@@ -494,6 +545,33 @@ func serializeSemanticRouter(r *models.SemanticRouter) map[string]interface{} {
 			"updated_at":        r.UpdatedAt,
 		},
 	}
+}
+
+// settingsWithEmbedder is the router's settings as the API shows them: the
+// embedder is flattened into settings.embedding ({llm_id, model} for a linked
+// embedder, {model} for a standalone one) so clients reading the old shape
+// keep working.
+func settingsWithEmbedder(r *models.SemanticRouter) sr.Settings {
+	s := r.Settings
+	if r.Embedder == nil {
+		return s
+	}
+	ref := sr.ModelRef{Model: r.Embedder.ModelName}
+	if s.Embedding != nil {
+		ref.TimeoutMs = s.Embedding.TimeoutMs
+	}
+	if r.Embedder.IsLinked() {
+		ref.LLMID = *r.Embedder.LLMID
+	}
+	s.Embedding = &ref
+	return s
+}
+
+func routerEmbedderName(r *models.SemanticRouter) string {
+	if r.Embedder == nil {
+		return ""
+	}
+	return r.Embedder.Name
 }
 
 // respondSemanticRouterError maps a Semantic Router service error to its
@@ -506,7 +584,7 @@ func respondSemanticRouterError(c *gin.Context, err error) {
 		simpleError(c, http.StatusPaymentRequired, "Payment Required", err.Error())
 	case errors.Is(err, semantic_router.ErrNotFound):
 		simpleError(c, http.StatusNotFound, "Not Found", "Semantic router not found")
-	case errors.As(err, &verr), errors.Is(err, semantic_router.ErrInvalid),
+	case errors.As(err, &verr), errors.Is(err, semantic_router.ErrInvalid), errors.Is(err, services.ErrEmbedderInvalid),
 		errors.Is(err, models.ErrRouteSlugTaken), errors.Is(err, models.ErrUnsafeLogoURL):
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 	default:

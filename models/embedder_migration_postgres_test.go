@@ -81,3 +81,22 @@ func TestMigrateEmbedders_ConcurrentReplicas_PostgreSQL(t *testing.T) {
 	require.NoError(t, db.Where("vendor = ?", "openai").First(&shared).Error)
 	assert.Equal(t, 19, shared.PrivacyScore)
 }
+
+// The router privacy score is a correlated subquery over a derived table;
+// check it runs on Postgres as it does on SQLite.
+func TestSemanticRouterPrivacy_StandaloneEmbedder_PostgreSQL(t *testing.T) {
+	db, _ := setupIsolatedPostgres(t)
+	route, _ := routerFixtures(t, db)
+	e := &Embedder{Name: "standalone", Vendor: OLLAMA, ModelName: "nomic", PrivacyScore: 25}
+	require.NoError(t, e.Create(db))
+	r := routerWithExamples("pg", route.ID)
+	r.EmbedderID = &e.ID
+	require.NoError(t, r.Create(db))
+	plain := routerWithExamples("pg-plain", route.ID)
+	require.NoError(t, plain.Create(db))
+
+	scores, err := SemanticRouterPrivacyScores(db, []uint{r.ID, plain.ID})
+	require.NoError(t, err)
+	assert.Equal(t, 25, scores[r.ID])
+	assert.Equal(t, 80, scores[plain.ID])
+}

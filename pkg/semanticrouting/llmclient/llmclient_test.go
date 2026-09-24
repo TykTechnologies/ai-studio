@@ -98,3 +98,43 @@ func TestSupportsEmbeddings(t *testing.T) {
 	assert.False(t, SupportsEmbeddings(models.ANTHROPIC))
 	assert.False(t, SupportsEmbeddings(models.BEDROCK))
 }
+
+// A standalone embedder travels inline in the reference: on the hub with its
+// key resolved, on edges encrypted and decrypted by the injected Decrypter.
+func TestClients_InlineEmbedder(t *testing.T) {
+	stub := &openAIStub{}
+	srv := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer srv.Close()
+	noLLMs := func(id uint) (*models.LLM, error) { return nil, errors.New("no LLMs here") }
+
+	hubRef := sr.ModelRef{EmbedderID: 4, Vendor: "openai", Endpoint: srv.URL + "/v1", APIKey: "sk-hub", Model: "m1"}
+	require.True(t, hubRef.Inline())
+	_, err := New(noLLMs).Embed(context.Background(), hubRef, []string{"a"})
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer sk-hub", stub.auth[len(stub.auth)-1])
+
+	edgeRef := sr.ModelRef{EmbedderID: 4, Vendor: "openai", Endpoint: srv.URL + "/v1", APIKeyEncrypted: "enc(sk-edge)", Model: "m1"}
+	_, err = New(noLLMs).Embed(context.Background(), edgeRef, []string{"a"})
+	assert.ErrorContains(t, err, "no decrypter", "an encrypted key needs a decrypter")
+
+	decrypt := func(s string) (string, error) { return strings.TrimSuffix(strings.TrimPrefix(s, "enc("), ")"), nil }
+	edge := New(noLLMs, WithDecrypter(decrypt))
+	_, err = edge.Embed(context.Background(), edgeRef, []string{"a"})
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer sk-edge", stub.auth[len(stub.auth)-1])
+	assert.Equal(t, "m1", stub.requests[len(stub.requests)-1]["model"])
+
+	// A changed key is a new client, not a stale cached one.
+	rotated := edgeRef
+	rotated.APIKeyEncrypted = "enc(sk-rotated)"
+	_, err = edge.Embed(context.Background(), rotated, []string{"a"})
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer sk-rotated", stub.auth[len(stub.auth)-1])
+
+	_, err = edge.Embed(context.Background(), sr.ModelRef{Vendor: "anthropic", Model: "x"}, []string{"a"})
+	assert.ErrorIs(t, err, ErrNoEmbeddings)
+
+	failing := New(noLLMs, WithDecrypter(func(string) (string, error) { return "", errors.New("bad key") }))
+	_, err = failing.Embed(context.Background(), edgeRef, []string{"a"})
+	assert.ErrorContains(t, err, "decrypt embedder key")
+}

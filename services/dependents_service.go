@@ -238,6 +238,10 @@ func (s *Service) GetEmbedderDependents(embedderID uint) (*Dependents, error) {
 		"datasources.embedder_id = ?", embedderID); err != nil {
 		return nil, err
 	}
+	if d.SemanticRouters, err = dependentRefs(s.DB, &models.SemanticRouter{}, "semantic_routers", "",
+		"semantic_routers.embedder_id = ?", embedderID); err != nil {
+		return nil, err
+	}
 	return d.finalize(), nil
 }
 
