@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
@@ -80,6 +81,9 @@ func main() {
 		Str("build_time", BuildTime).
 		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Msg("Starting Microgateway")
+
+	// Report every configured path (grep 'startup path'); problems are WARNs.
+	pathcheck.Log(log.Logger, "microgateway", pathcheck.Check(config.StartupPaths(cfg, *envFile)))
 
 	// Connect to database
 	dbConfig := database.DatabaseConfig{

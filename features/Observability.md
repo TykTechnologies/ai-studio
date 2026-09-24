@@ -216,6 +216,36 @@ either side of the hub-spoke pair. Studio equivalents live on
 `config.AppConf` (`TracingEnabled`, `TracingEndpoint`); the Microgateway's are on
 `ObservabilityConfig`.
 
+### Startup path report
+
+`pkg/pathcheck`. Right after logging starts, both binaries log every
+filesystem path they are configured with, one line each with the message
+`startup path`, so `grep 'startup path'` over the container log shows them
+all. A first line gives the working directory, which relative paths resolve
+against, and the process uid/gid. A last line counts the problems.
+
+Each line carries `name` (the env var or flag), `source` (`set`, `default`,
+`unset`), `path`, `resolved` (absolute) and `status`: `ok`, `unset`,
+`will_create`, `missing`, `not_readable`, `not_writable`, `wrong_type` or
+`in_memory`. Problems are logged at WARN. A path that was set, or is
+required in the current mode, must work. An absent default *file* (the
+default `.env`) is only INFO, but a default directory or database the binary
+will write to must be usable. Writability is tested by creating and removing
+a temporary file. SQLite DSNs are reduced to their file, so no DSN is logged.
+SQLite creates the database file but not its directory, so a missing
+directory is `missing`.
+
+The lists are `microgateway/internal/config/startup_paths.go`
+(`StartupPaths`) and `startup/paths.go` (`Paths`). Entries for features that
+are off are left out: TLS key pairs only with TLS on, the Studio control gRPC
+key pair only in control mode, the audit file only with file storage.
+`PLUGINS_CONFIG_PATH` is required on an edge without a plugin config service,
+because the analytics pulse to the control plane is loaded from it and the
+file loader treats a missing file as "no plugins" without an error. That is
+how an edge whose env file still pointed at the pre-distroless `/app` layout
+served traffic for two weeks without reporting analytics. The report never
+blocks startup.
+
 ## Design Decisions
 
 **Only metrics with a genuine counterpart were renamed.** Cost, policy blocks,
@@ -247,6 +277,8 @@ Envoy AI Gateway and other inference gateways.
 | End-to-end streaming metrics through an assembled gateway | `microgateway/tests/integration/streaming_metrics_test.go` |
 | Helm chart invariants | `tests/helm_chart_test.go` |
 | Server-Timing header, trailer, loopback merge, off by default | `proxy/server_timing_test.go` |
+| Startup path statuses, permissions, SQLite DSNs, log levels | `pkg/pathcheck/pathcheck_test.go` |
+| Which paths each binary reports per mode | `microgateway/internal/config/startup_paths_test.go`, `startup/paths_test.go` |
 
 Two assertions are worth preserving deliberately, because both were arrived at
 after a weaker version failed to catch a seeded regression:

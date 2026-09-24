@@ -317,6 +317,9 @@ curl -s http://localhost:9091/health
 
 # Check AI Studio logs for successful edge connection
 docker compose logs tyk-ai-studio | grep -i "edge\|grpc"
+
+# Check every configured file path (problems are logged as WRN)
+docker compose logs tyk-ai-studio microgateway | grep "startup path"
 ```
 
 Access points:
@@ -376,6 +379,18 @@ docker compose logs <service-name>
 - Verify `EDGE_AUTH_TOKEN` matches `GRPC_AUTH_TOKEN`
 - Verify `ENCRYPTION_KEY` matches `MICROGATEWAY_ENCRYPTION_KEY`
 - Check that `GATEWAY_MODE=control` is set in `studio.env`
+
+### Edge analytics, plugins or files silently missing
+
+Some path settings fail quietly: a `PLUGINS_CONFIG_PATH` that points at a file the container does not have loads no data collection plugins, so the edge serves traffic but never sends analytics to AI Studio. Both AI Studio and the Microgateway log every configured path once at startup:
+
+```bash
+docker compose logs microgateway | grep "startup path"
+```
+
+Each line gives the setting (`name`), whether it was `set` or the built-in `default` (`source`), the absolute path it resolves to (`resolved`, relative paths resolve against the `working_dir` on the first line) and a `status`: `ok`, `unset`, `will_create`, `missing`, `not_readable`, `not_writable` or `wrong_type`. Problems are logged at `WRN`, and the last line counts them. The images run as a non-root user (the `uid` on the first line), so a mounted file must be readable, and a mounted directory writable, by that user.
+
+After an image upgrade, check that paths in your env files still match the image's layout (the Microgateway's working directory is `/opt/tyk-microgateway`).
 
 ### Database connection errors
 
