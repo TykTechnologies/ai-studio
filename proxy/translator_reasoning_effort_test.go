@@ -26,7 +26,7 @@ func TestBridge_ReasoningEffortPassThrough(t *testing.T) {
 	}
 
 	t.Run("openai", func(t *testing.T) {
-		rec := &bodyRecorder{}
+		rec := newBodyRecorder(t)
 		h := newEndpointShapeHarness(t, models.OPENAI, "", rec.wrap(serveOpenAI))
 		for _, stream := range []bool{false, true} {
 			for _, effort := range []string{"none", "minimal", "xhigh"} {
@@ -42,7 +42,7 @@ func TestBridge_ReasoningEffortPassThrough(t *testing.T) {
 	})
 
 	t.Run("anthropic", func(t *testing.T) {
-		rec := &bodyRecorder{}
+		rec := newBodyRecorder(t)
 		h := newEndpointShapeHarness(t, models.ANTHROPIC, "", rec.wrap(serveAnthropic(t)))
 		post(h, "claude-sonnet-5", `"reasoning_effort":"high",`, false)
 		assert.NotContains(t, rec.body(), "reasoning_effort")
