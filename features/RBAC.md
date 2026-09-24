@@ -76,6 +76,8 @@ The catalogue lives in core (`pkg/authz/catalogue.go`) so both editions share on
 
 Sensitive resources are split out so `read` on them can be withheld independently (a Viewer never reads transcripts, proxy logs, audit records, exports, credentials or identity provider secrets). Privileged resources (`users`, `groups`, `roles`, `sso-profiles`, `plugins`) are flagged because write access to them can grant access to other people; the role editor warns on them.
 
+Linking an embedder to an LLM (`POST/PATCH /embedders` with an `llm_id` that is new) also needs `llms:read`: a linked embedder spends the LLM's credentials (see [Embedders](Embedders.md)).
+
 Governed metadata on an object is authorised by that object's permission: `PUT /metadata/objects/llm/:id` needs `llms:write`, not `metadata:write` (`api/authz_routes.go` → `metadataObjectPermission`). The one GET that writes, `GET /model-prices/by-name` (get-or-create), is annotated `model-prices:write`.
 
 ### System roles

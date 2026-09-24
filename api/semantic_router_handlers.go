@@ -170,6 +170,10 @@ func (a *API) createSemanticRouter(c *gin.Context) {
 		respondSemanticRouterError(c, err)
 		return
 	}
+	if err := a.service.CheckEmbedderForNamespace(router.EmbedderID, router.Namespace); err != nil {
+		respondSemanticRouterError(c, err)
+		return
+	}
 	if err := a.semanticRouters().CreateRouter(router); err != nil {
 		respondSemanticRouterError(c, err)
 		return
@@ -242,6 +246,10 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 		return
 	}
 	if err := a.linkLegacyEmbedding(c, router); err != nil {
+		respondSemanticRouterError(c, err)
+		return
+	}
+	if err := a.service.CheckEmbedderForNamespace(router.EmbedderID, router.Namespace); err != nil {
 		respondSemanticRouterError(c, err)
 		return
 	}

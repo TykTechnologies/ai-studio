@@ -28,37 +28,10 @@ type EmbedderInput struct {
 	// Vertex configuration without its own URL takes them.
 	VectorConn   string
 	VectorAPIKey string
-}
 
-// LegacyEmbedFields is a datasource's embedder flattened into the fields the
-// datasource API, gRPC service, object hooks and edge snapshot carry.
-type LegacyEmbedFields struct {
-	Vendor models.Vendor
-	URL    string
-	APIKey string
-	Model  string
-}
-
-// FlattenDatasourceEmbedding returns the datasource's embedder as the legacy
-// inline fields. With resolveSecrets the key and endpoint are resolved (for
-// runtime and edge use); without, references are returned as stored (for API
-// responses). A datasource without a (resolvable) embedder flattens to empty
-// fields. The datasource must have Embedder (and its LLM) preloaded.
-func FlattenDatasourceEmbedding(ds *models.Datasource, resolveSecrets bool) LegacyEmbedFields {
-	if ds == nil {
-		return LegacyEmbedFields{}
-	}
-	f := ds.EmbedFields(resolveSecrets)
-	return LegacyEmbedFields{Vendor: models.Vendor(f.Vendor), URL: f.URL, APIKey: f.APIKey, Model: f.Model}
-}
-
-// DatasourceEmbedderSpec resolves the datasource's embedder for runtime use.
-// The datasource must have Embedder (and its LLM) preloaded.
-func DatasourceEmbedderSpec(ds *models.Datasource) (*models.EmbedderSpec, error) {
-	if ds == nil || ds.Embedder == nil {
-		return nil, errors.New("datasource has no embedder")
-	}
-	return ds.Embedder.Spec(true)
+	// Namespace is the datasource's namespace: an embedder linked to an LLM
+	// scoped to another namespace is refused (models.UsableInNamespace).
+	Namespace string
 }
 
 // resolveDatasourceEmbedder decides which embedder a datasource write links
@@ -79,6 +52,19 @@ func DatasourceEmbedderSpec(ds *models.Datasource) (*models.EmbedderSpec, error)
 // A shared embedder is never modified through a datasource: a change always
 // moves this datasource to another embedder, leaving the others as they were.
 func (s *Service) resolveDatasourceEmbedder(tx *gorm.DB, current *models.Embedder, in EmbedderInput, datasourceName string, privacyScore int, userID uint) (*models.Embedder, error) {
+	e, err := s.pickDatasourceEmbedder(tx, current, in, datasourceName, privacyScore, userID)
+	if err != nil || e == nil {
+		return e, err
+	}
+	if err := e.UsableInNamespace(in.Namespace); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrEmbedderInvalid, err)
+	}
+	return e, nil
+}
+
+// pickDatasourceEmbedder is resolveDatasourceEmbedder without the namespace
+// check.
+func (s *Service) pickDatasourceEmbedder(tx *gorm.DB, current *models.Embedder, in EmbedderInput, datasourceName string, privacyScore int, userID uint) (*models.Embedder, error) {
 	if in.EmbedderID != nil {
 		if *in.EmbedderID == 0 {
 			return nil, nil
@@ -148,42 +134,53 @@ func (s *Service) resolveDatasourceEmbedder(tx *gorm.DB, current *models.Embedde
 // findOrCreateStandaloneEmbedder returns a standalone embedder with exactly
 // this configuration and a privacy score of at least minPrivacy, creating one
 // (named "<vendor> · <model>") when there is none.
-func (s *Service) findOrCreateStandaloneEmbedder(tx *gorm.DB, spec models.EmbedderSpec, minPrivacy int, userID uint) (*models.Embedder, error) {
+//
+// Concurrent writes with the same configuration create one embedder: the
+// find-or-create holds an advisory lock on it (models.LockEmbedderConfig).
+func (s *Service) findOrCreateStandaloneEmbedder(db *gorm.DB, spec models.EmbedderSpec, minPrivacy int, userID uint) (*models.Embedder, error) {
 	var e models.Embedder
-	err := tx.Where("llm_id IS NULL AND vendor = ? AND endpoint = ? AND api_key = ? AND model = ? AND privacy_score >= ?",
-		spec.Vendor, spec.Endpoint, spec.APIKey, spec.Model, minPrivacy).
-		Order("id").First(&e).Error
-	if err == nil {
-		return &e, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	name, err := models.UniqueEmbedderName(tx, string(spec.Vendor), spec.Model)
+	created := false
+	err := db.Transaction(func(tx *gorm.DB) error {
+		if err := models.LockEmbedderConfig(tx, "standalone", string(spec.Vendor), spec.Endpoint, spec.APIKey, spec.Model); err != nil {
+			return err
+		}
+		ferr := tx.Where("llm_id IS NULL AND vendor = ? AND endpoint = ? AND api_key = ? AND model = ? AND privacy_score >= ?",
+			spec.Vendor, spec.Endpoint, spec.APIKey, spec.Model, minPrivacy).
+			Order("id").First(&e).Error
+		if ferr == nil {
+			return nil
+		}
+		if !errors.Is(ferr, gorm.ErrRecordNotFound) {
+			return ferr
+		}
+		e = models.Embedder{
+			Vendor:       spec.Vendor,
+			Endpoint:     spec.Endpoint,
+			APIKey:       spec.APIKey,
+			ModelName:    spec.Model,
+			PrivacyScore: minPrivacy,
+			UserID:       userID,
+		}
+		// Not validated: the legacy datasource fields never were (a
+		// datasource could name a vendor that cannot embed, or no model
+		// yet), and a write through them keeps working as it did. The
+		// embedder shows up in the Embedders list, where it can be fixed;
+		// the log says why it cannot embed yet.
+		if err := models.CreateWithDefaultName(tx, &e, string(spec.Vendor), spec.Model); err != nil {
+			return err
+		}
+		created = true
+		if err := s.validateEmbedder(tx, &e); err != nil {
+			logger.Warn(fmt.Sprintf("embedder %q (id %d) was created from datasource embed_* fields but cannot embed yet: %v", e.Name, e.ID, err))
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	e = models.Embedder{
-		Name:         name,
-		Vendor:       spec.Vendor,
-		Endpoint:     spec.Endpoint,
-		APIKey:       spec.APIKey,
-		ModelName:    spec.Model,
-		PrivacyScore: minPrivacy,
-		UserID:       userID,
+	if created {
+		s.emitEmbedder(&e, "created", userID)
 	}
-	// Not validated: the legacy datasource fields never were (a datasource
-	// could name a vendor that cannot embed, or no model yet), and a write
-	// through them keeps working as it did. The embedder shows up in the
-	// Embedders list, where it can be fixed; the log says why it cannot
-	// embed yet.
-	if err := e.Create(tx); err != nil {
-		return nil, err
-	}
-	if err := s.validateEmbedder(tx, &e); err != nil {
-		logger.Warn(fmt.Sprintf("embedder %q (id %d) was created from datasource embed_* fields but cannot embed yet: %v", e.Name, e.ID, err))
-	}
-	s.emitEmbedder(&e, "created", userID)
 	return &e, nil
 }
 
@@ -211,7 +208,9 @@ func (s *Service) findOrCreateLinkedEmbedder(tx *gorm.DB, llmID uint, model stri
 // applyHookEmbedEdits re-resolves the embedder of a datasource a plugin hook
 // returned modified. Hooks see the legacy embed_* keys; when the plugin
 // changed them, the datasource moves to a matching embedder (as a legacy API
-// write would). A hook that only changed embedder_id links that embedder.
+// write would). A hook that only changed embedder_id links that embedder,
+// and one that returned neither (a plugin building the object itself) keeps
+// the embedder the datasource had: silence is not a request to unlink.
 func (s *Service) applyHookEmbedEdits(tx *gorm.DB, original *models.Embedder, modified *models.Datasource, userID uint) error {
 	var in EmbedderInput
 	if le, ok := modified.LegacyEmbedInput(); ok {
@@ -222,10 +221,13 @@ func (s *Service) applyHookEmbedEdits(tx *gorm.DB, original *models.Embedder, mo
 		if originalID(original) != idOf(modified.EmbedderID) {
 			in = EmbedderInput{EmbedderID: embedderIDOrZero(modified.EmbedderID)}
 		}
-	} else {
+	} else if modified.EmbedderID != nil {
 		in = EmbedderInput{EmbedderID: embedderIDOrZero(modified.EmbedderID)}
+	} else {
+		keep := originalID(original)
+		in = EmbedderInput{EmbedderID: &keep}
 	}
-	in.VectorConn, in.VectorAPIKey = modified.DBConnString, modified.DBConnAPIKey
+	in.VectorConn, in.VectorAPIKey, in.Namespace = modified.DBConnString, modified.DBConnAPIKey, modified.Namespace
 	e, err := s.resolveDatasourceEmbedder(tx, original, in, modified.Name, modified.PrivacyScore, userID)
 	if err != nil {
 		return err

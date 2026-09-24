@@ -169,15 +169,15 @@ func TestLLMGuards_LinkedEmbedders(t *testing.T) {
 
 	// With no datasource on it yet, the LLM can still change vendor to one
 	// that embeds, but not to one that cannot.
-	assert.NoError(t, s.CheckLLMUpdateForEmbedders(llm, models.OLLAMA, 10))
-	assert.True(t, errors.As(s.CheckLLMUpdateForEmbedders(llm, models.ANTHROPIC, 80), &conflict))
+	assert.NoError(t, s.CheckLLMUpdateForEmbedders(llm, models.OLLAMA, 10, ""))
+	assert.True(t, errors.As(s.CheckLLMUpdateForEmbedders(llm, models.ANTHROPIC, 80, ""), &conflict))
 
 	newDatasourceOn(t, s, "Docs", 70, e.ID)
-	assert.True(t, errors.As(s.CheckLLMUpdateForEmbedders(llm, models.OLLAMA, 80), &conflict),
+	assert.True(t, errors.As(s.CheckLLMUpdateForEmbedders(llm, models.OLLAMA, 80, ""), &conflict),
 		"a vendor change moves the vectors to another space")
 	var privacy *EmbedderPrivacyError
-	assert.True(t, errors.As(s.CheckLLMUpdateForEmbedders(llm, models.OPENAI, 50), &privacy))
-	assert.NoError(t, s.CheckLLMUpdateForEmbedders(llm, models.OPENAI, 70))
+	assert.True(t, errors.As(s.CheckLLMUpdateForEmbedders(llm, models.OPENAI, 50, ""), &privacy))
+	assert.NoError(t, s.CheckLLMUpdateForEmbedders(llm, models.OPENAI, 70, ""))
 }
 
 func TestEmbeddingVendors_ComeFromDrivers(t *testing.T) {

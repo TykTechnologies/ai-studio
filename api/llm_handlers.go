@@ -356,7 +356,8 @@ func respondLLMServiceError(c *gin.Context, err error) {
 func llmEmbedderConflict(err error) bool {
 	var conflict *services.LLMEmbedderConflictError
 	var privacy *services.EmbedderPrivacyError
-	return errors.As(err, &conflict) || errors.As(err, &privacy)
+	var namespace *services.EmbedderNamespaceError
+	return errors.As(err, &conflict) || errors.As(err, &privacy) || errors.As(err, &namespace)
 }
 
 // failoverForResponse hides an empty waterfall from API output so LLMs that

@@ -18,7 +18,7 @@ Embedders are managed in the admin UI and API only. They are not exposed in the 
 | `model` | Always required (column `model`, Go field `ModelName`). |
 | `privacy_score` | Standalone only; a linked embedder uses its LLM's. |
 
-`Datasource.EmbedderID` references it. The old `embed_*` columns stay in the table, cleared, until a later release drops them; the Go fields are gone, so no code can read them.
+`Datasource.EmbedderID` references it. The old `embed_*` columns stay in the table but are **cleared** by the migration (the values move to embedders); a later release drops them. The Go fields are gone, so no code can read them. Clearing means a downgrade cannot use them: see *Upgrading and downgrading*.
 
 **Which vendors can embed** has one source: the vendor drivers' `ProvidesEmbedder()`. `switches.EmbeddingVendors()` derives the list (OpenAI, Ollama, Google AI, Vertex, Hugging Face today; not Anthropic, Bedrock). `GET /vendors/embedders` and `GET /embedders/vendors` serve it; `switches.AVAILABLE_EMBEDDERS` is gone, which also adds Hugging Face to the datasource vendor list.
 
@@ -44,6 +44,12 @@ The datasource REST API, gRPC management API (and so the SDK), submissions and o
 - Embedders created this way are **not** validated, matching the old fields (a datasource could name a vendor that cannot embed, or no model). They appear in the Embedders list to be fixed. `POST/PATCH /embedders` is strict.
 - Plugin hooks that edit `embed_*` in a returned object move the datasource the same way (`applyHookEmbedEdits`).
 - Submission approval and version rollback resolve payload `embed_*`/`embedder_id` keys instead of writing columns; a pre-Embedders snapshot rolls back to the matching embedder.
+- A Vertex configuration without its own URL takes `project:location` and the key from the vector store fields, as the old Vertex embedder read them (the portal submission form still sends Vertex settings that way).
+- Plugin hooks: edited `embed_*` keys move the datasource; a changed `embedder_id` links that embedder (0 unlinks); an object with **neither** keeps the embedder it had.
+- Edge cases, pinned by `TestLegacyEmbedFields_DocumentedEdges`:
+  - a model (or URL) sent without a vendor to a datasource that has **no** embedder is ignored: there is nothing to merge it onto;
+  - an empty `embed_api_key` clears the key, as it always did, which now means moving the datasource to a keyless copy of its embedder (partial PATCH clients that omit the field lose the key, exactly as before).
+- Concurrent writes with the same configuration create one embedder: find-or-create holds a Postgres advisory lock on the configuration (and on the default name, so different configurations never collide on `"<vendor> · <model>"`). See `models/embedder_concurrency.go`; covered by the `_Postgres` concurrency tests.
 
 ## Migration
 
@@ -52,8 +58,17 @@ The datasource REST API, gRPC management API (and so the SDK), submissions and o
 - selects datasources with inline settings and no embedder (so a second run finds nothing);
 - groups identical `(vendor, endpoint, key, model)` (keys are plain values or references, never ciphertext, so string equality is exact); a Vertex row without an endpoint takes `db_conn_string`/`db_conn_api_key`, as the old Vertex embedder did;
 - creates one standalone embedder per group with the group's highest privacy score, links the datasources and clears their columns;
-- runs in one transaction under `pg_advisory_xact_lock` on Postgres, so replicas starting together migrate once;
+- clears the columns (without creating embedders) on soft-deleted datasources and on settings without a vendor, so no key lingers there;
+- links stored Semantic Routers that name an embedding LLM (`{llm_id, model}`) to the matching linked embedder; a router whose LLM is gone is left as it was;
+- runs in **one** transaction under `pg_advisory_xact_lock` on Postgres, so replicas starting together migrate once, and a failure part way leaves nothing changed (Studio then fails to start with the error, and the next start retries);
 - does nothing on a database created without the columns.
+
+## Upgrading and downgrading
+
+- **Back up the database before upgrading.** The migration moves datasource embedding settings onto embedders and clears the old columns.
+- **Downgrading is a database restore.** A binary from before Embedders reads the (now empty) `embed_*` columns, so its datasources have no embedder: RAG and `/datasource/*` embedding fail. To go back, restore the pre-upgrade backup; data created since the upgrade is lost.
+- **Upgrade all Studio replicas together** (stop the old ones, then start the new). During a rolling deploy an old replica reads the cleared columns (its RAG fails), and datasources it creates keep inline settings until a new replica restarts and migrates them.
+- **Edges**: an edge from before this release still serves datasources (the proto is unchanged) and routers whose embedder uses an LLM provider. It cannot serve a router with a **standalone** embedder (it ignores the inline fields): upgrade edges before giving a router one.
 
 ## Rules
 
@@ -61,6 +76,9 @@ The datasource REST API, gRPC management API (and so the SDK), submissions and o
 - **Privacy**: a datasource needs `embedder privacy ≥ datasource privacy`. Enforced on datasource writes with an explicit embedder (400), on embedder updates (409), and on LLM updates that lower the score of an LLM linked embedders use (409).
 - **Delete**: refused while datasources (or routers) use the embedder (409 with the list). Deleting an LLM with linked embedders is refused (409); changing its vendor is refused when datasources embed through it, or to a vendor that cannot embed.
 - **Dependents**: `GET /embedders/:id/dependents`; LLM dependents list `embedders`; secret dependents list embedders.
+- **Linking needs `llms:read`**: creating an embedder linked to an LLM, or relinking one, needs `llms:read` besides `embedders:write` (403 otherwise): a linked embedder spends the LLM's credentials, and any datasource using it does too. Editing a linked embedder without changing its LLM does not.
+- **Namespaces**: an embedder linked to an LLM scoped to a namespace only serves datasources and routers **in that namespace** (a global LLM serves all; `models.Embedder.UsableInNamespace`). Otherwise the LLM's key would reach edges that never receive the LLM. Enforced on datasource writes (400), router saves (400), embedder relinks and LLM namespace moves that would strand consumers (409). As a backstop for rows saved before the rule, the edge snapshot sends such a datasource without embedding settings and leaves such a router out (logged).
+- **Inactive LLM**: a linked embedder still uses an **inactive** LLM's connection for datasources (on the hub and at the edge, where it travels flattened). A router's linked embedder reaches edges as an LLM reference, and edges only receive active LLMs, so there the router's embedding stage falls back (the hub's test panel still embeds). Deactivate the LLM only if that is intended.
 
 ## API
 
@@ -104,5 +122,5 @@ Edges get no Embedder objects and the proto is unchanged. The snapshot flattens 
 
 ## Follow-ups
 
-- Drop the `embed_*` datasource columns after a rollback window.
+- Drop the `embed_*` datasource columns in a later release (they are already empty; downgrade needs a backup either way).
 - A RESTful datasource API that deprecates the `embed_*` fields.

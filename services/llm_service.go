@@ -284,7 +284,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	// Embedders linked to this LLM take its vendor and privacy score; a
 	// change that would break the datasources embedding through it is
 	// refused.
-	if err := s.CheckLLMUpdateForEmbedders(llm, vendor, privacyScore); err != nil {
+	if err := s.CheckLLMUpdateForEmbedders(llm, vendor, privacyScore, namespace); err != nil {
 		return nil, err
 	}
 

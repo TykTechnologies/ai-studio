@@ -83,6 +83,9 @@ func MigrateEmbedders(db *gorm.DB) error {
 			Scan(&rows).Error; err != nil {
 			return err
 		}
+		if err := clearStaleEmbedColumns(tx); err != nil {
+			return err
+		}
 		if len(rows) == 0 {
 			return nil
 		}
@@ -142,6 +145,24 @@ func MigrateEmbedders(db *gorm.DB) error {
 		log.Printf("embedder migration: moved %d datasource(s) onto %d embedder(s)", len(rows), len(order))
 		return nil
 	})
+}
+
+// clearStaleEmbedColumns empties the retired columns on rows the migration
+// does not move: soft-deleted datasources, and settings without a vendor
+// (never usable). Either way their keys would otherwise stay in columns
+// nothing reads, outside the secret reference index.
+func clearStaleEmbedColumns(tx *gorm.DB) error {
+	res := tx.Table("datasources").
+		Where("embedder_id IS NULL AND (deleted_at IS NOT NULL OR COALESCE(embed_vendor, '') = '')").
+		Where("COALESCE(embed_vendor, '') <> '' OR COALESCE(embed_url, '') <> '' OR COALESCE(embed_api_key, '') <> '' OR COALESCE(embed_model, '') <> ''").
+		Updates(map[string]interface{}{"embed_vendor": "", "embed_url": "", "embed_api_key": "", "embed_model": ""})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("embedder migration: cleared embedding settings on %d deleted or vendorless datasource(s)", res.RowsAffected)
+	}
+	return nil
 }
 
 // migrateRouterEmbedders moves Semantic Routers whose embedding stage names
