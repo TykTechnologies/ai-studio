@@ -28,6 +28,12 @@ let embedders = [
     logo: "/logos/google-ai.png",
     helpText: "",
   },
+  {
+    code: "huggingface",
+    name: "Hugging Face",
+    logo: null,
+    helpText: "",
+  },
 ];
 
 let vectorStores = [

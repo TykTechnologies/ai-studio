@@ -85,6 +85,9 @@ import ModelRouterList from "./pages/ModelRouterList";
 import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
 import ModelRouterForm from "./components/model-routers/ModelRouterForm";
 import SemanticRouterList from "./pages/SemanticRouterList";
+import EmbedderList from "./pages/EmbedderList";
+import EmbedderDetails from "./components/embedders/EmbedderDetails";
+import EmbedderForm from "./components/embedders/EmbedderForm";
 import SemanticRouterDetails from "./components/semantic-routers/SemanticRouterDetails";
 import SemanticRouterForm from "./components/semantic-routers/SemanticRouterForm";
 
@@ -162,6 +165,11 @@ const mainAdminRoutes = [
   { path: "marketplace-settings", element: <MarketplaceSettings />, permission: P.MARKETPLACE_WRITE },
 
   { path: "model-prices", element: <ModelPriceList />, permission: P.MODEL_PRICES_READ },
+  { path: "embedders", element: <EmbedderList />, permission: P.EMBEDDERS_READ },
+  { path: "embedders/new", element: <EmbedderForm />, permission: P.EMBEDDERS_WRITE },
+  { path: "embedders/edit/:id", element: <EmbedderForm />, permission: P.EMBEDDERS_WRITE },
+  { path: "embedders/:id/edit", element: <EditRedirect to="embedders/edit" /> },
+  { path: "embedders/:id", element: <EmbedderDetails />, permission: P.EMBEDDERS_READ },
   { path: "model-prices/:id", element: <ModelPriceDetail />, permission: P.MODEL_PRICES_READ },
   { path: "model-prices/edit/:id", element: <ModelPriceForm />, permission: P.MODEL_PRICES_WRITE },
   { path: "model-prices/new", element: <ModelPriceForm />, permission: P.MODEL_PRICES_WRITE },

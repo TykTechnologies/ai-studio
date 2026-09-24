@@ -156,21 +156,25 @@ const DatasourceList = () => {
       ),
     },
     {
-      field: "embed_vendor",
-      headerName: "Embed Vendor",
+      field: "embedder",
+      headerName: "Embedder",
       renderCell: (datasource) => (
         <Box sx={{ display: "flex", alignItems: "center" }}>
-          <img
-            src={getEmbedderLogo(datasource.attributes.embed_vendor)}
-            alt={getEmbedderName(datasource.attributes.embed_vendor)}
-            style={{
-              width: 24,
-              height: 24,
-              marginRight: 8,
-              objectFit: "contain",
-            }}
-          />
-          {getEmbedderName(datasource.attributes.embed_vendor)}
+          {datasource.attributes.embed_vendor && (
+            <img
+              src={getEmbedderLogo(datasource.attributes.embed_vendor)}
+              alt={getEmbedderName(datasource.attributes.embed_vendor)}
+              style={{
+                width: 24,
+                height: 24,
+                marginRight: 8,
+                objectFit: "contain",
+              }}
+            />
+          )}
+          {datasource.attributes.embedder_name ||
+            getEmbedderName(datasource.attributes.embed_vendor) ||
+            "Not set"}
         </Box>
       ),
     },

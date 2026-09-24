@@ -3,7 +3,7 @@ import Section from "../common/Section";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -162,22 +162,31 @@ const DatasourceDetails = () => {
               </Box>
             </Grid>
             <Grid item xs={3}>
-              <FieldLabel>Embedding Service Vendor:</FieldLabel>
+              <FieldLabel>Embedder:</FieldLabel>
             </Grid>
             <Grid item xs={9}>
-              <Box sx={{ display: "flex", alignItems: "center" }}>
-                <img
-                  src={getEmbedderLogo(datasource.attributes.embed_vendor)}
-                  alt={getEmbedderName(datasource.attributes.embed_vendor)}
-                  style={{
-                    width: 24,
-                    height: 24,
-                    marginRight: 8,
-                    objectFit: "contain",
-                  }}
-                />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {datasource.attributes.embed_vendor && (
+                  <img
+                    src={getEmbedderLogo(datasource.attributes.embed_vendor)}
+                    alt={getEmbedderName(datasource.attributes.embed_vendor)}
+                    style={{ width: 24, height: 24, objectFit: "contain" }}
+                  />
+                )}
                 <FieldValue>
-                  {getEmbedderName(datasource.attributes.embed_vendor)}
+                  {datasource.attributes.embedder_id ? (
+                    <Link
+                      component={RouterLink}
+                      to={`/admin/embedders/${datasource.attributes.embedder_id}`}
+                    >
+                      {datasource.attributes.embedder_name ||
+                        `Embedder #${datasource.attributes.embedder_id}`}
+                    </Link>
+                  ) : (
+                    "Not set"
+                  )}
+                  {datasource.attributes.embed_model &&
+                    ` · ${datasource.attributes.embed_model} (${getEmbedderName(datasource.attributes.embed_vendor)})`}
                 </FieldValue>
               </Box>
             </Grid>
@@ -264,58 +273,6 @@ const DatasourceDetails = () => {
                           copyToClipboard(
                             datasource.attributes.db_conn_api_key,
                             "DB Connection API Key",
-                          )
-                        }
-                      >
-                        <ContentCopyIcon />
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                </Box>
-              </Grid>
-            </Grid>
-          </AccordionDetails>
-        </StyledAccordion>
-
-        <StyledAccordion>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography>Embedding Service Details</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2}>
-              <Grid item xs={3}>
-                <FieldLabel>Model:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <FieldValue>
-                  {datasource.attributes.embed_model || "Not set"}
-                </FieldValue>
-              </Grid>
-              <Grid item xs={3}>
-                <FieldLabel>Service URL:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <FieldValue>
-                  {datasource.attributes.embed_url || "Not set"}
-                </FieldValue>
-              </Grid>
-              <Grid item xs={3}>
-                <FieldLabel>API Key:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <FieldValue>
-                    {datasource.attributes.embed_api_key
-                      ? "*".repeat(20)
-                      : "Not set"}
-                  </FieldValue>
-                  {datasource.attributes.embed_api_key && (
-                    <Tooltip title="Copy to clipboard" placement="top">
-                      <IconButton
-                        onClick={() =>
-                          copyToClipboard(
-                            datasource.attributes.embed_api_key,
-                            "Embed API Key",
                           )
                         }
                       >

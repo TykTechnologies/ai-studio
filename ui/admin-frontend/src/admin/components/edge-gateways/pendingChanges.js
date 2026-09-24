@@ -14,7 +14,7 @@ export const CHANGE_TYPES = [
   { type: 'model_price', label: 'Model prices', path: (id) => `/admin/model-prices/${id}` },
   { type: 'model_router', label: 'Model routers', path: (id) => `/admin/model-routers/${id}` },
   { type: 'semantic_router', label: 'Semantic routers', path: (id) => `/admin/semantic-routers/${id}` },
-  { type: 'embedder', label: 'Embedders', path: null },
+  { type: 'embedder', label: 'Embedders', path: (id) => `/admin/embedders/${id}` },
   { type: 'plugin', label: 'Plugins', path: (id) => `/admin/plugins/${id}` },
   { type: 'oauth_client', label: 'OAuth clients', path: null },
   { type: 'access_token', label: 'Access tokens', path: null },

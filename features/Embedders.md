@@ -80,6 +80,13 @@ RBAC resource `embedders` (group LLM management, actions CRUD). Built-in roles f
 
 Events: `system.embedder.created|updated|deleted` (payload redacted). They are config topics for edge sync and appear in the webhook topic list; embedders are a pending-change source (global).
 
+## Admin UI
+
+- **LLM management → Embedders** (`/admin/embedders`, `embedders:read`): list with the connection (LLM provider or API compatibility) and privacy level; detail page with a "Used by" section; add/edit form (`embedders:write`); delete through the dependents-aware confirmation, with the server's 409 shown when it is refused.
+- `EmbedderFormFields` holds the fields for both the page and the dialog: a mode toggle (**Use an LLM provider** / **Standalone**; switching clears the other mode's fields), an LLM picker limited to vendors that embed, an **API compatibility** select from `/embedders/vendors` (vendor defaults for model and URL), endpoint (labelled *Project and location* for Vertex), key (secret-reference aware), model and privacy level. When datasources use the embedder the model and compatibility are disabled with the reason.
+- **`EmbedderPicker`** is the reusable picker + inline creator (`EmbedderCreateDialog`). It lists embedders with their model, connection and privacy, flags one below the form's required privacy level, and offers **New embedder** only with `embedders:write`. Without `embedders:read` it shows the saved embedder's name read-only.
+- The **data source form** uses the picker instead of the vendor/URL/key/model inputs and saves `embedder_id` (the flattened `embed_*` fields are not sent back). Data source list and detail show the embedder, linking to its page. The portal submission form keeps the legacy fields.
+
 ## Edges
 
 Edges get no Embedder objects and the proto is unchanged. The snapshot flattens each datasource's embedder into `embed_vendor/url/api_key_encrypted/model` (a linked embedder resolves its LLM's connection); editing an embedder or its LLM changes those values, so the checksum moves and edges reload. The microgateway rebuilds an in-memory standalone embedder from the fields (`gateway_adapter.convertDatabaseDatasourceToModel`), falling back to the vector store fields for Vertex from an older hub.
@@ -88,4 +95,4 @@ Edges get no Embedder objects and the proto is unchanged. The snapshot flattens 
 
 - Drop the `embed_*` datasource columns after a rollback window.
 - A RESTful datasource API that deprecates the `embed_*` fields.
-- Admin UI (list, detail, form, reusable inline creator) and the Semantic Router switch-over ship separately.
+- The Semantic Router switch-over (routers reference an embedder; the form uses `EmbedderPicker`) ships separately.

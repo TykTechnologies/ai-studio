@@ -9,6 +9,7 @@ import { AdminCataloguesPage } from '@pom/Admin_catalogues_page';
 import { AdminGroupsPage } from '@pom/Admin_groups_page';
 import { AdminRolesPage } from '@pom/Admin_roles_page';
 import { AIPortalPage } from '@pom/AI_portal_page';
+import { AdminEmbeddersPage } from '@pom/Admin_embedders_page';
 
 export const test = base.extend<{
     loginPage: LoginPage;
@@ -21,6 +22,7 @@ export const test = base.extend<{
     adminGroupsPage: AdminGroupsPage;
     adminRolesPage: AdminRolesPage;
     aiPortalPage: AIPortalPage;
+    adminEmbeddersPage: AdminEmbeddersPage;
     }>({
     loginPage: async ({ page }, use) => {
         const loginPage = new LoginPage(page);
@@ -53,6 +55,9 @@ export const test = base.extend<{
     adminGroupsPage: async ({ page }, use) => {
         const adminGroupsPage = new AdminGroupsPage(page);
         await use(adminGroupsPage);
+    },
+    adminEmbeddersPage: async ({ page }, use) => {
+        await use(new AdminEmbeddersPage(page));
     },
     adminRolesPage: async ({ page }, use) => {
         const adminRolesPage = new AdminRolesPage(page);

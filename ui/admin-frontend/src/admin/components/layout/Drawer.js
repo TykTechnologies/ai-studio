@@ -146,6 +146,7 @@ const Drawer = () => {
       subItems: [
         { id: 'llms', text: 'LLM providers', path: '/admin/llms', permission: P.LLMS_READ },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices', permission: P.MODEL_PRICES_READ },
+        { id: 'embedders', text: 'Embedders', path: '/admin/embedders', permission: P.EMBEDDERS_READ },
         ...(features.feature_model_router
           ? [{ id: 'model-routers', text: 'Model Routers', path: '/admin/model-routers', permission: P.MODEL_ROUTERS_READ }]
           : []),
