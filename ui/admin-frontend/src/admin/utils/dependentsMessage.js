@@ -17,6 +17,7 @@ export const DEPENDENT_GROUPS = [
   { key: "model_routers", singular: "model router", plural: "model routers", label: "Model routers", path: "model-routers" },
   { key: "semantic_routers", singular: "semantic router", plural: "semantic routers", label: "Semantic routers", path: "semantic-routers" },
   { key: "chats", singular: "chat", plural: "chats", label: "Chats", path: "chats" },
+  { key: "embedders", singular: "embedder", plural: "embedders", label: "Embedders", path: "embedders" },
 ];
 
 // The `catalogues` group means a different catalogue type depending on what

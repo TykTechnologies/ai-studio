@@ -54,11 +54,9 @@ import {
 import {
   getVendorData,
   getVectorStoreHelpText,
-  getEmbedderHelpText,
-  getEmbedderDefaultModel,
-  getEmbedderDefaultUrl,
   fetchVendors,
 } from "../../utils/vendorUtils";
+import EmbedderPicker from "../embedders/EmbedderPicker";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import PublishSwitch from "../rbac/PublishSwitch";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
@@ -78,13 +76,11 @@ const DatasourceForm = () => {
     short_description: "",
     long_description: "",
     db_source_type: "",
-    embed_vendor: "",
+    embedder_id: "",
+    embedder_name: "",
     privacy_score: 0,
     db_conn_string: "",
     db_conn_api_key: "",
-    embed_api_key: "",
-    embed_url: "",
-    embed_model: "",
     icon: "",
     url: "",
     active: false,
@@ -96,7 +92,6 @@ const DatasourceForm = () => {
 
   const [users, setUsers] = useState([]);
   const [vectorStores, setVectorStores] = useState([]);
-  const [embedders, setEmbedders] = useState([]);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -104,21 +99,18 @@ const DatasourceForm = () => {
     severity: "success",
   });
   const [showDbConnApiKey, setShowDbConnApiKey] = useState(false);
-  const [showEmbedApiKey, setShowEmbedApiKey] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [files, setFiles] = useState([]);
   const navigate = useNavigate();
   const { id } = useParams();
   const [vectorStoreHelpText, setVectorStoreHelpText] = useState("");
-  const [embedderHelpText, setEmbedderHelpText] = useState("");
   const [loaded, setLoaded] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     const loadVendors = async () => {
-      const { embedders, vectorStores } = await fetchVendors();
+      const { vectorStores } = await fetchVendors();
       setVectorStores(vectorStores.map((vs) => vs.code));
-      setEmbedders(embedders.map((e) => e.code));
     };
     loadVendors();
     fetchUsers();
@@ -130,6 +122,8 @@ const DatasourceForm = () => {
           const datasourceData = response.data.data.attributes;
           setDatasource({
             ...datasourceData,
+            embedder_id: datasourceData.embedder_id ? String(datasourceData.embedder_id) : "",
+            embedder_name: datasourceData.embedder_name || "",
             tags: datasourceData.tags
               ? datasourceData.tags.map((tag) => tag.attributes.name)
               : [],
@@ -140,7 +134,6 @@ const DatasourceForm = () => {
           setVectorStoreHelpText(
             getVectorStoreHelpText(datasourceData.db_source_type),
           );
-          setEmbedderHelpText(getEmbedderHelpText(datasourceData.embed_vendor));
           setLoaded(true);
         } catch (error) {
           console.error("Error fetching datasource:", error);
@@ -252,25 +245,6 @@ const DatasourceForm = () => {
     if (name === "privacy_score") {
       const numValue = Math.min(Math.max(parseInt(value) || 0, 0), 100);
       setDatasource((prev) => ({ ...prev, [name]: numValue }));
-    } else if (name === "embed_vendor") {
-      const defaultModel = getEmbedderDefaultModel(value);
-      const defaultUrl = getEmbedderDefaultUrl(value);
-      const previousDefaultModel = getEmbedderDefaultModel(datasource.embed_vendor);
-      const previousDefaultUrl = getEmbedderDefaultUrl(datasource.embed_vendor);
-      setDatasource((prev) => ({
-        ...prev,
-        embed_vendor: value,
-        // Update if: empty, or still matches the previous vendor's default
-        embed_model:
-          !prev.embed_model || prev.embed_model === previousDefaultModel
-            ? defaultModel
-            : prev.embed_model,
-        embed_url:
-          !prev.embed_url || prev.embed_url === previousDefaultUrl
-            ? defaultUrl
-            : prev.embed_url,
-      }));
-      setEmbedderHelpText(getEmbedderHelpText(value));
     } else {
       setDatasource((prev) => ({ ...prev, [name]: value }));
     }
@@ -308,8 +282,8 @@ const DatasourceForm = () => {
     if (!datasource.name.trim()) newErrors.name = "Name is required";
     if (!datasource.db_source_type.trim())
       newErrors.db_source_type = "Vector Database Type is required";
-    if (!datasource.embed_vendor.trim())
-      newErrors.embed_vendor = "Embedding Service Vendor is required";
+    if (!datasource.embedder_id)
+      newErrors.embedder_id = "Pick the embedder, or create one";
     if (!isValidPrivacyScore(datasource.privacy_score))
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
     if (!datasource.user_id) newErrors.user_id = "User is required";
@@ -330,13 +304,10 @@ const DatasourceForm = () => {
       short_description: datasource.short_description,
       long_description: datasource.long_description,
       db_source_type: datasource.db_source_type,
-      embed_vendor: datasource.embed_vendor,
+      embedder_id: datasource.embedder_id,
       privacy_score: datasource.privacy_score,
       db_conn_string: datasource.db_conn_string,
       db_conn_api_key: datasource.db_conn_api_key,
-      embed_api_key: datasource.embed_api_key,
-      embed_url: datasource.embed_url,
-      embed_model: datasource.embed_model,
       icon: datasource.icon,
       url: datasource.url,
       active: datasource.active,
@@ -359,7 +330,7 @@ const DatasourceForm = () => {
     "name",
     "user_id",
     "db_source_type",
-    "embed_vendor",
+    "embedder_id",
     "privacy_score",
   ];
 
@@ -379,12 +350,24 @@ const DatasourceForm = () => {
       return;
     }
 
+    // The embedder is sent by id; the legacy embed_* fields (still in the
+    // fetched record) are left out so they cannot override it.
+    const {
+      embed_vendor: _vendor,
+      embed_url: _url,
+      embed_api_key: _key,
+      embed_model: _model,
+      has_embed_api_key: _hasKey,
+      embedder_name: _embedderName,
+      ...fields
+    } = datasource;
     const datasourceData = {
       data: {
         type: "datasources",
         ...(id && { id }),
         attributes: {
-          ...datasource,
+          ...fields,
+          embedder_id: Number(datasource.embedder_id),
           privacy_score: Number(datasource.privacy_score),
           active: Boolean(datasource.active),
           tags: datasource.tags,
@@ -594,62 +577,24 @@ const DatasourceForm = () => {
               )}
             </Grid>
             <Grid item xs={12}>
-              <FormControl
-                id="datasource-field-embed_vendor"
-                fullWidth
-                required
-                error={!!errors.embed_vendor}
-              >
-                <InputLabel id="datasourceform-embedding-service-vendor-label">
-                  Embedding Service Vendor
-                </InputLabel>
-                <Select
-                  labelId="datasourceform-embedding-service-vendor-label"
-                  name="embed_vendor"
-                  value={datasource.embed_vendor}
-                  onChange={handleChange}
-                >
-                  {embedders.map((code) => {
-                    const vendorData = getVendorData(code, "embedder");
-                    return (
-                      <MenuItem key={code} value={code}>
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <img
-                            src={vendorData.logo}
-                            alt={vendorData.name}
-                            style={{
-                              width: 24,
-                              height: 24,
-                              marginRight: 8,
-                              objectFit: "contain",
-                            }}
-                          />
-                          {vendorData.name}
-                        </Box>
-                      </MenuItem>
-                    );
-                  })}
-                </Select>
-                {errors.embed_vendor && (
-                  <FormHelperText>{errors.embed_vendor}</FormHelperText>
-                )}
-              </FormControl>
-              {embedderHelpText && (
-                <Paper
-                  elevation={0}
-                  sx={{
-                    mt: 1,
-                    p: 1,
-                    bgcolor: "info.light",
-                    color: "info.contrastText",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  <InfoIcon sx={{ mr: 1 }} />
-                  <Typography variant="body2">{embedderHelpText}</Typography>
-                </Paper>
-              )}
+              <Box id="datasource-field-embedder_id">
+                <EmbedderPicker
+                  id="datasourceform-embedder"
+                  value={datasource.embedder_id}
+                  currentName={datasource.embedder_name}
+                  minPrivacy={Number(datasource.privacy_score) || 0}
+                  required
+                  error={errors.embedder_id}
+                  helperText="Turns this data source's documents and queries into vectors. Pick an existing one or create one."
+                  onChange={(value, row) =>
+                    setDatasource((prev) => ({
+                      ...prev,
+                      embedder_id: value,
+                      embedder_name: row?.attributes?.name || prev.embedder_name,
+                    }))
+                  }
+                />
+              </Box>
             </Grid>
             <Grid item xs={12}>
               {/* One privacy control everywhere (UX review M4): a named level
@@ -714,60 +659,6 @@ const DatasourceForm = () => {
                             edge="end"
                           >
                             {showDbConnApiKey ? (
-                              <VisibilityOff />
-                            ) : (
-                              <Visibility />
-                            )}
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            </AccordionDetails>
-          </StyledAccordion>
-
-          <StyledAccordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Embedding Service Details</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Model"
-                    name="embed_model"
-                    value={datasource.embed_model}
-                    onChange={handleChange}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Service URL"
-                    name="embed_url"
-                    value={datasource.embed_url}
-                    onChange={handleChange}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="API Key"
-                    name="embed_api_key"
-                    type={showEmbedApiKey ? "text" : "password"}
-                    value={datasource.embed_api_key}
-                    onChange={handleChange}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={() => setShowEmbedApiKey(!showEmbedApiKey)}
-                            edge="end"
-                          >
-                            {showEmbedApiKey ? (
                               <VisibilityOff />
                             ) : (
                               <Visibility />

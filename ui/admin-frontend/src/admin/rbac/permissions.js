@@ -50,6 +50,9 @@ export const P = Object.freeze({
   SEMANTIC_ROUTERS_WRITE: p('semantic-routers', 'write'),
   SEMANTIC_ROUTERS_DELETE: p('semantic-routers', 'delete'),
   SEMANTIC_ROUTERS_PUBLISH: p('semantic-routers', 'publish'),
+  EMBEDDERS_READ: p('embedders', 'read'),
+  EMBEDDERS_WRITE: p('embedders', 'write'),
+  EMBEDDERS_DELETE: p('embedders', 'delete'),
 
   // Context management
   DATASOURCES_READ: p('datasources', 'read'),

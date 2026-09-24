@@ -41,7 +41,8 @@ const DS = {
   governed_metadata_status: "valid",
   attributes: {
     name: "docs", short_description: "d", long_description: "", icon: "", url: "", privacy_score: 10, user_id: 1, tags: [],
-    db_conn_string: "", db_source_type: "qdrant", db_conn_api_key: "", db_name: "", embed_vendor: "openai", embed_url: "", embed_api_key: "", embed_model: "m",
+    db_conn_string: "", db_source_type: "qdrant", db_conn_api_key: "", db_name: "", embed_vendor: "openai", embed_url: "", embed_api_key: "[redacted]", embed_model: "m",
+    embedder_id: 3, embedder_name: "Docs embedder",
     active: true, namespace: "", files: [],
   },
 };
@@ -84,6 +85,10 @@ describe("DatasourceForm governed metadata embedding", () => {
     const attrs = apiClient.patch.mock.calls[0][1].data.attributes;
     expect(attrs.governed_metadata).toEqual({});
     expect(attrs.governed_metadata_status).toBeUndefined();
+    // The embedder goes by id; the flattened legacy fields are not sent back.
+    expect(attrs.embedder_id).toBe(3);
+    expect(attrs).not.toHaveProperty("embed_vendor");
+    expect(attrs).not.toHaveProperty("embed_api_key");
   });
 
   it("reports success when the data source and its metadata both saved", async () => {
