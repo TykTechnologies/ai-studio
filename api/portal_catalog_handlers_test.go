@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -461,4 +462,39 @@ func TestCleanText(t *testing.T) {
 	}
 	assert.Equal(t, []string{"gpt-4o", "x"}, cleanTexts([]string{"gpt-4o", "<b>x</b>"}))
 	assert.Equal(t, []string{}, cleanTexts(nil))
+}
+
+// Portal search matches a data source by its embedder's model (a LEFT JOIN
+// on embedders), in the per-type and the mixed listing, without repeating
+// rows; a data source with no embedder still lists.
+func TestPortalCatalog_SearchByEmbedderModel(t *testing.T) {
+	api, _, service := setupTestAPIForCommonTests(t)
+	user := createTestUser(t, service)
+	dataCat := createTestDataCatalogue(t, service)
+	giveUserTeam(t, service, "Platform", user.ID, nil, []uint{dataCat.ID}, nil)
+
+	withModel, err := service.CreateDatasource("Handbook", "s", "", "", "", 0, user.ID, nil, "", "pgvector", "", "db",
+		services.EmbedderInput{Vendor: "ollama", URL: "http://ollama:11434", Model: "nomic-embed-text"}, true)
+	require.NoError(t, err)
+	require.NoError(t, service.AddDatasourceToDataCatalogue(dataCat.ID, withModel.ID))
+	bare, err := service.CreateDatasource("Bare", "s", "", "", "", 0, user.ID, nil, "", "pgvector", "", "db",
+		services.EmbedderInput{}, true)
+	require.NoError(t, err)
+	require.NoError(t, service.AddDatasourceToDataCatalogue(dataCat.ID, bare.ID))
+
+	names := func(query string) []string {
+		w := portalGetQuery(t, api.getPortalCatalog, user, query)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var list CatalogListResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+		out := []string{}
+		for _, item := range list.Data {
+			out = append(out, item.Attributes.Name)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"Handbook"}, names("type=datasource&q=nomic"))
+	assert.Equal(t, []string{"Handbook"}, names("q=nomic"))
+	assert.ElementsMatch(t, []string{"Handbook", "Bare"}, names("type=datasource"))
+	assert.Equal(t, []string{"Bare"}, names("type=datasource&q=bare"))
 }

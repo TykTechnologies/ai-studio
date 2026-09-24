@@ -168,6 +168,9 @@ type catalogSource struct {
 	// extraSearch is an optional clause with one "?" for the LIKE pattern
 	// (tags live in a join table).
 	extraSearch string
+	// searchJoins are joins the searchCols need, added only when the query
+	// has search terms. They must be one-to-one, so no row is repeated.
+	searchJoins []string
 	base        func(db *gorm.DB, userID uint) *gorm.DB
 }
 
@@ -183,9 +186,10 @@ var catalogSources = []catalogSource{
 		typ: CatalogItemDatasource, table: "datasources",
 		kindCol: "datasources.db_source_type", privacyCol: "datasources.privacy_score", communityCol: "datasources.community_submitted",
 		catalogueIDCol: "data_catalogue_data_sources.data_catalogue_id", catalogueNameCol: "data_catalogues.name",
+		// The embedding model lives on the datasource's embedder.
 		searchCols: []string{"datasources.name", "datasources.short_description", "datasources.long_description",
-			// The embedding model lives on the datasource's embedder.
-			"(SELECT embedders.model FROM embedders WHERE embedders.id = datasources.embedder_id)"},
+			"COALESCE(embedders.model, '')"},
+		searchJoins: []string{"LEFT JOIN embedders ON embedders.id = datasources.embedder_id AND embedders.deleted_at IS NULL"},
 		extraSearch: "EXISTS (SELECT 1 FROM datasource_tags dt JOIN tags ON tags.id = dt.tag_id WHERE dt.datasource_id = datasources.id AND LOWER(tags.name) LIKE ? ESCAPE '\\')",
 		base:        models.AccessibleDatasourceQuery,
 	},
@@ -290,6 +294,11 @@ func (src catalogSource) scope(q catalogQuery) func(*gorm.DB) *gorm.DB {
 			db = db.Where(src.catalogueIDCol+" = ?", id)
 		}
 		typeName := strings.ToLower(catalogTypeNames[src.typ])
+		if len(q.Terms) > 0 {
+			for _, join := range src.searchJoins {
+				db = db.Joins(join)
+			}
+		}
 		for _, term := range q.Terms {
 			if strings.Contains(typeName, term) {
 				continue // "tool" is satisfied by every tool

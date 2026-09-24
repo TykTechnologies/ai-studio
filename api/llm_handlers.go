@@ -405,8 +405,10 @@ func (a *API) deleteLLM(c *gin.Context) {
 
 	err = a.service.DeleteLLM(uint(id))
 	if err != nil {
-		// Still a failover target of another LLM: the admin has to unlink it
-		// first, which is a conflict rather than a server fault.
+		// Still a failover target of another LLM, or linked to embedders:
+		// the admin has to unlink it first, which is a conflict rather than a
+		// server fault. (This handler answers itself; respondLLMServiceError
+		// maps update errors, where a failover problem is a 400.)
 		var verr *services.LLMFailoverValidationError
 		if errors.As(err, &verr) || llmEmbedderConflict(err) {
 			c.JSON(http.StatusConflict, ErrorResponse{

@@ -198,6 +198,8 @@ func (a *API) listEmbedders(c *gin.Context) {
 		respondEmbedderError(c, err)
 		return
 	}
+	// ListEmbedders preloads each embedder's LLM (Embedders.GetAll), so
+	// serializing linked embedders runs no further queries.
 	out := make([]map[string]interface{}, len(embedders))
 	for i := range embedders {
 		out[i] = serializeEmbedder(&embedders[i])
