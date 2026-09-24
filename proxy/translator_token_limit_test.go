@@ -1,10 +1,11 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 
@@ -15,19 +16,34 @@ import (
 
 // bodyRecorder wraps a fake vendor and keeps the last request body it saw.
 type bodyRecorder struct {
+	t    *testing.T
 	mu   sync.Mutex
 	last map[string]any
 }
 
+func newBodyRecorder(t *testing.T) *bodyRecorder {
+	return &bodyRecorder{t: t}
+}
+
+// wrap records each request body before serve answers it. The handler runs on
+// the server's goroutine, where require (t.FailNow) must not be called, so an
+// unreadable body fails the test with assert and answers 400.
 func (b *bodyRecorder) wrap(serve func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		raw, _ := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
+		if !assert.NoError(b.t, err, "read upstream request body") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		var body map[string]any
-		_ = json.Unmarshal(raw, &body)
+		if err := json.Unmarshal(raw, &body); !assert.NoError(b.t, err, "upstream request body is not JSON: %s", raw) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		b.mu.Lock()
 		b.last = body
 		b.mu.Unlock()
-		r.Body = io.NopCloser(strings.NewReader(string(raw)))
+		r.Body = io.NopCloser(bytes.NewReader(raw))
 		serve(w, r)
 	}
 }
@@ -43,6 +59,12 @@ func (b *bodyRecorder) body() map[string]any {
 // The Main Ingress and the /ai/ bridge must honour either, whatever the
 // upstream vendor, and max_completion_tokens wins when a client sends both.
 func TestBridge_HonoursMaxTokensAndMaxCompletionTokens(t *testing.T) {
+	// Distinct values, and neither is a driver default (Anthropic's is 2048),
+	// so the upstream body shows which field the cap came from.
+	const (
+		maxTokens           = 37
+		maxCompletionTokens = 41
+	)
 	vendors := []struct {
 		name   string
 		vendor models.Vendor
@@ -58,13 +80,14 @@ func TestBridge_HonoursMaxTokensAndMaxCompletionTokens(t *testing.T) {
 		limits string
 		want   float64
 	}{
-		{"max_tokens", `"max_tokens":37`, 37},
-		{"max_completion_tokens", `"max_completion_tokens":41`, 41},
-		{"both: max_completion_tokens wins", `"max_tokens":37,"max_completion_tokens":41`, 41},
+		{"max_tokens", fmt.Sprintf(`"max_tokens":%d`, maxTokens), maxTokens},
+		{"max_completion_tokens", fmt.Sprintf(`"max_completion_tokens":%d`, maxCompletionTokens), maxCompletionTokens},
+		{"both: max_completion_tokens wins",
+			fmt.Sprintf(`"max_tokens":%d,"max_completion_tokens":%d`, maxTokens, maxCompletionTokens), maxCompletionTokens},
 	}
 	for _, v := range vendors {
 		t.Run(v.name, func(t *testing.T) {
-			rec := &bodyRecorder{}
+			rec := newBodyRecorder(t)
 			h := newEndpointShapeHarness(t, v.vendor, "", rec.wrap(v.serve))
 			for _, c := range cases {
 				t.Run(c.name, func(t *testing.T) {
