@@ -122,6 +122,37 @@ func TestPendingChanges(t *testing.T) {
 	})
 }
 
+// Semantic Routers ship in the snapshot, so a change to one is a pending
+// change like any other router's.
+func TestPendingChanges_SemanticRouters(t *testing.T) {
+	db := apitest.SetupTestDB(t)
+	svc := services.NewSyncStatusService(db)
+
+	push := time.Now().Add(-time.Hour)
+	before := push.Add(-time.Hour)
+	after := push.Add(10 * time.Minute)
+
+	untouched := &models.SemanticRouter{Name: "Untouched", Slug: "untouched", Namespace: "edge-1"}
+	edited := &models.SemanticRouter{Name: "Edited", Slug: "edited", Namespace: "edge-1"}
+	global := &models.SemanticRouter{Name: "Global", Slug: "global-router"}
+	elsewhere := &models.SemanticRouter{Name: "Elsewhere", Slug: "elsewhere", Namespace: "edge-2"}
+	for _, m := range []*models.SemanticRouter{untouched, edited, global, elsewhere} {
+		require.NoError(t, db.Create(m).Error)
+	}
+	setTimes(t, db, &models.SemanticRouter{}, untouched.ID, before, before)
+	setTimes(t, db, &models.SemanticRouter{}, edited.ID, before, after)
+	setTimes(t, db, &models.SemanticRouter{}, global.ID, after, after)
+	setTimes(t, db, &models.SemanticRouter{}, elsewhere.ID, after, after)
+	require.NoError(t, models.MarkNamespacePushed(db, "edge-1", push))
+
+	pc, err := svc.GetPendingChanges("edge-1")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"semantic_router:Edited": services.PendingChangeUpdated,
+		"semantic_router:Global": services.PendingChangeCreated,
+	}, changeKeys(pc))
+}
+
 func TestMarkNamespacePushed_UpdatesOrCreatesRow(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	now := time.Now()

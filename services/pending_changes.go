@@ -21,7 +21,7 @@ const maxPendingChanges = 200
 
 // PendingChange is one object that changed since the last push.
 type PendingChange struct {
-	Type   string    `json:"type"`   // llm, app, filter, tool, datasource, plugin, model_router, model_price, oauth_client, access_token
+	Type   string    `json:"type"`   // llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token
 	ID     uint      `json:"id"`     // object id
 	Name   string    `json:"name"`   // display name at the time of the query
 	Change string    `json:"change"` // created | updated | deleted
@@ -77,6 +77,7 @@ var pendingChangeSources = []pendingChangeSource{
 	{typ: "datasource", model: &models.Datasource{}, nameExpr: "name", namespaced: true},
 	{typ: "plugin", model: &models.Plugin{}, nameExpr: "name", namespaced: true},
 	{typ: "model_router", model: &models.ModelRouter{}, nameExpr: "name", namespaced: true},
+	{typ: "semantic_router", model: &models.SemanticRouter{}, nameExpr: "name", namespaced: true},
 	{typ: "model_price", model: &models.ModelPrice{}, nameExpr: "vendor || '/' || model_name", namespaced: false},
 	{typ: "oauth_client", model: &models.OAuthClient{}, nameExpr: "client_name", namespaced: false},
 	{typ: "access_token", model: &models.AccessToken{}, nameExpr: "client_id", namespaced: false},

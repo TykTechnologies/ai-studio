@@ -21,6 +21,7 @@ type ChatCompletionRequest struct {
 	LogProbs            *bool           `json:"logprobs,omitempty"`
 	TopLogProbs         *int            `json:"top_logprobs,omitempty"`
 	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
+	MaxTokens           *int            `json:"max_tokens,omitempty"`
 	N                   *int            `json:"n,omitempty"`
 	Modalities          []string        `json:"modalities,omitempty"`
 	Audio               *AudioConfig    `json:"audio,omitempty"`
@@ -96,8 +97,8 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 		options = append(options, llms.WithModel(model))
 	}
 
-	if r.MaxCompletionTokens != nil {
-		options = append(options, llms.WithMaxTokens(*r.MaxCompletionTokens))
+	if limit := r.OutputTokenLimit(); limit != nil {
+		options = append(options, llms.WithMaxTokens(*limit))
 	}
 
 	if r.N != nil {
@@ -159,6 +160,16 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 
 // CompletionCount is the number of completions the caller asked for: the
 // request's `n`, defaulting to OpenAI's own default of 1.
+// OutputTokenLimit is the cap on generated tokens the client asked for:
+// max_completion_tokens when set, otherwise max_tokens (the older name, still
+// what most clients send); nil when neither is.
+func (r *ChatCompletionRequest) OutputTokenLimit() *int {
+	if r.MaxCompletionTokens != nil {
+		return r.MaxCompletionTokens
+	}
+	return r.MaxTokens
+}
+
 func (r *ChatCompletionRequest) CompletionCount() int {
 	if r == nil || r.N == nil || *r.N < 1 {
 		return 1
