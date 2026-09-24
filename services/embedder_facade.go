@@ -18,6 +18,14 @@ type EmbedderInput struct {
 	URL        string
 	APIKey     string
 	Model      string
+
+	// VectorConn and VectorAPIKey are the datasource's vector store
+	// connection string and key. The Vertex embedder used to read its
+	// project:location and key from them, and clients (the portal's
+	// submission form among them) still send Vertex settings that way: a
+	// Vertex configuration without its own URL takes them.
+	VectorConn   string
+	VectorAPIKey string
 }
 
 // LegacyEmbedFields is a datasource's embedder flattened into the fields the
@@ -104,6 +112,12 @@ func (s *Service) resolveDatasourceEmbedder(tx *gorm.DB, current *models.Embedde
 	}
 	if in.Model != "" {
 		want.Model = in.Model
+	}
+	if want.Vendor == models.VERTEX && want.Endpoint == "" {
+		want.Endpoint = in.VectorConn
+		if want.APIKey == "" {
+			want.APIKey = in.VectorAPIKey
+		}
 	}
 
 	if want.Vendor == "" {
@@ -222,6 +236,7 @@ func (s *Service) applyHookEmbedEdits(tx *gorm.DB, original *models.Embedder, mo
 	} else {
 		in = EmbedderInput{EmbedderID: embedderIDOrZero(modified.EmbedderID)}
 	}
+	in.VectorConn, in.VectorAPIKey = modified.DBConnString, modified.DBConnAPIKey
 	e, err := s.resolveDatasourceEmbedder(tx, original, in, modified.Name, modified.PrivacyScore, userID)
 	if err != nil {
 		return err

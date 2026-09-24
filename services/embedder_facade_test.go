@@ -241,3 +241,23 @@ func TestActiveDatasources_ResolveEmbedderSecrets(t *testing.T) {
 	assert.Equal(t, "sk-real", spec.APIKey)
 	assert.Equal(t, "$SECRET/EMB", active[0].FlattenedEmbed().APIKey, "API reads keep the reference")
 }
+
+// Legacy clients (the portal submission form's Vertex help among them) put
+// Vertex's project:location and key in the vector store fields; a Vertex
+// embed configuration without its own URL takes them, as the Vertex embedder
+// used to read them there.
+func TestLegacyEmbedFields_VertexTakesVectorStoreConnection(t *testing.T) {
+	s := setupEmbedderService(t)
+	ds, err := s.CreateDatasource("V", "", "", "", "", 10, 1, nil, "my-project:us-central1", "pgvector", "vertex-key", "db",
+		legacy("vertex", "", "", "text-embedding-004"), true)
+	require.NoError(t, err)
+	flat := ds.FlattenedEmbed()
+	assert.Equal(t, "my-project:us-central1", flat.URL)
+	assert.Equal(t, "vertex-key", flat.APIKey)
+
+	explicit, err := s.CreateDatasource("V2", "", "", "", "", 10, 1, nil, "ignored:conn", "pgvector", "k", "db",
+		legacy("vertex", "other-project:europe-west4", "own-key", "text-embedding-004"), true)
+	require.NoError(t, err)
+	assert.Equal(t, "other-project:europe-west4", explicit.FlattenedEmbed().URL, "its own URL wins")
+	assert.Equal(t, "own-key", explicit.FlattenedEmbed().APIKey)
+}

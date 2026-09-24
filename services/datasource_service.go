@@ -42,6 +42,7 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 	// The embedder is resolved on the caller's connection (it may be a
 	// transaction) so an embedder created for this datasource commits or
 	// rolls back with it.
+	embed.VectorConn, embed.VectorAPIKey = dbConnString, dbConnAPIKey
 	embedder, err := s.resolveDatasourceEmbedder(db, nil, embed, name, privacyScore, userID)
 	if err != nil {
 		return nil, err
@@ -158,6 +159,7 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	// the current embedder (empty vendor/url/model keep it, "[redacted]"
 	// keeps the key, "" clears it). A change never edits a shared embedder;
 	// it moves this datasource to one that matches.
+	embed.VectorConn, embed.VectorAPIKey = datasource.DBConnString, datasource.DBConnAPIKey
 	embedder, err := s.resolveDatasourceEmbedder(s.DB, datasource.Embedder, embed, name, privacyScore, userID)
 	if err != nil {
 		return nil, err
