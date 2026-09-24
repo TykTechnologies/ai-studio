@@ -3,12 +3,14 @@ package grpc
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -118,4 +120,42 @@ func TestSimpleEdgeClient_StopEndsReconnection(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("reconnect loop kept running after Stop")
 	}
+}
+
+// A stream that drops again right after a reconnect starts a second
+// reconnection while the first is still unwinding. Only one may run: the
+// guard is a single atomic step, so concurrent callers do not race on the
+// client's reconnection state (run with -race).
+func TestSimpleEdgeClient_ConcurrentReconnectionsRunOnce(t *testing.T) {
+	client := NewSimpleEdgeClient(&config.Config{
+		HubSpoke: config.HubSpokeConfig{
+			EdgeID:          "concurrent-edge",
+			EdgeNamespace:   "test",
+			ControlEndpoint: "127.0.0.1:1",
+			AllowInsecure:   true,
+		},
+	}, "test", "hash", "time")
+	client.reconnectInterval = 5 * time.Millisecond
+
+	const callers = 8
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			client.attemptReconnection()
+		}()
+	}
+	require.Eventually(t, client.reconnecting.Load, time.Second, time.Millisecond, "one reconnection is running")
+	time.Sleep(30 * time.Millisecond)
+	close(client.stopCh)
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("reconnection did not stop")
+	}
+	assert.False(t, client.reconnecting.Load())
 }
