@@ -341,6 +341,8 @@ func init() {
 		Description: "Publish sets a router active; only active routers are served."})
 	Register(Resource{Key: "semantic-routers", Label: "Semantic routers", Group: "LLM management", Actions: crudp,
 		Description: "Routers that pick a model from what the prompt says. Publish sets a router active; only active routers are served."})
+	Register(Resource{Key: "embedders", Label: "Embedders", Group: "LLM management", Actions: crud,
+		Description: "Reusable embedding configurations that data sources and semantic routers embed with. Creating one inline from those forms also needs this permission."})
 
 	// Context management
 	Register(Resource{Key: "datasources", Label: "Data sources", Group: "Context management", Actions: crudxp,

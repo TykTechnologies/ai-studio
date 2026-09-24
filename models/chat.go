@@ -111,7 +111,7 @@ func (c *Chat) Get(db *gorm.DB, id uint) error {
 		Preload("Filters").
 		Preload("DefaultTools").
 		Preload("ExtraContext").
-		Preload("DefaultDataSource").
+		Preload("DefaultDataSource").Preload("DefaultDataSource.Embedder.LLM").
 		First(c, id).Error
 
 	if err != nil {

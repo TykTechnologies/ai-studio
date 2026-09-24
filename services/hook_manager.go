@@ -234,7 +234,7 @@ func (m *HookManager) sanitizeObject(objectType ObjectType, object interface{}, 
 			if ds, ok := object.(*models.Datasource); ok {
 				sanitized := *ds
 				sanitized.DBConnAPIKey = "[REDACTED]"
-				sanitized.EmbedAPIKey = "[REDACTED]"
+				sanitized.RedactEmbedKey()
 				sanitized.DBConnString = "[REDACTED]"
 				return &sanitized
 			}

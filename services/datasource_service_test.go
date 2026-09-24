@@ -27,7 +27,7 @@ func TestCreateDatasource(t *testing.T) {
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
-	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, err := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, datasource)
 	assert.NotZero(t, datasource.ID)
@@ -40,7 +40,7 @@ func TestGetDatasourceByID(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	fetchedDatasource, err := service.GetDatasourceByID(datasource.ID)
 	assert.NoError(t, err)
@@ -53,9 +53,9 @@ func TestUpdateDatasource(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
-	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", "updated_embed_vendor", "updated_embed_url", "updated_embed_api_key", "updated_embed_model", true, []string{"AI", "ML"}, 0)
+	updatedDatasource, err := service.UpdateDatasource(datasource.ID, "Updated Datasource", "Updated Short", "Updated Long", "updated-icon.png", "https://updated-example.com", 80, "updated_conn_string", "updated_source_type", "updated_api_key", "updated_db_name", EmbedderInput{Vendor: "updated_embed_vendor", URL: "updated_embed_url", APIKey: "updated_embed_api_key", Model: "updated_embed_model"}, true, []string{"AI", "ML"}, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, datasource.ID, updatedDatasource.ID)
 	assert.Equal(t, "Updated Datasource", updatedDatasource.Name)
@@ -67,7 +67,7 @@ func TestGetAllDatasources(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	allDatasources, _, _, err := service.GetAllDatasources(10, 1, true)
 	assert.NoError(t, err)
@@ -80,7 +80,7 @@ func TestSearchDatasources(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	searchedDatasources, err := service.SearchDatasources("Test")
 	assert.NoError(t, err)
@@ -93,7 +93,7 @@ func TestGetDatasourcesByTag(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	datasourcesByTag, err := service.GetDatasourcesByTag("AI")
 	assert.NoError(t, err)
@@ -106,7 +106,7 @@ func TestAddTagsToDatasource(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	err := service.AddTagsToDatasource(datasource.ID, []string{"NLP"})
 	assert.NoError(t, err)
@@ -119,7 +119,7 @@ func TestGetDatasourcesByPrivacyScoreRange(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	datasourcesByScore, err := service.GetDatasourcesByPrivacyScoreRange(70, 80)
 	assert.NoError(t, err)
@@ -132,7 +132,7 @@ func TestGetDatasourcesByUserID(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	datasourcesByUser, err := service.GetDatasourcesByUserID(user.ID)
 	assert.NoError(t, err)
@@ -145,7 +145,7 @@ func TestDeleteDatasource(t *testing.T) {
 	service := NewService(db)
 
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
-	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
+	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"}, true)
 
 	err := service.DeleteDatasource(datasource.ID)
 	assert.NoError(t, err)
@@ -162,9 +162,9 @@ func TestDatasourceService_MultipleDatasourcesScenario(t *testing.T) {
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 
 	// Create multiple datasources
-	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://ds1.com", 60, user.ID, []string{"AI", "ML"}, "conn_string1", "source_type1", "api_key1", "db1", "embed_vendor1", "embed_url1", "embed_api_key1", "embed_model1", true)
-	ds2, _ := service.CreateDatasource("Datasource 2", "Short 2", "Long 2", "icon2.png", "https://ds2.com", 75, user.ID, []string{"NLP", "ML"}, "conn_string2", "source_type2", "api_key2", "db2", "embed_vendor2", "embed_url2", "embed_api_key2", "embed_model2", true)
-	ds3, _ := service.CreateDatasource("Datasource 3", "Short 3", "Long 3", "icon3.png", "https://ds3.com", 90, user.ID, []string{"AI", "NLP"}, "conn_string3", "source_type3", "api_key3", "db3", "embed_vendor3", "embed_url3", "embed_api_key3", "embed_model3", true)
+	ds1, _ := service.CreateDatasource("Datasource 1", "Short 1", "Long 1", "icon1.png", "https://ds1.com", 60, user.ID, []string{"AI", "ML"}, "conn_string1", "source_type1", "api_key1", "db1", EmbedderInput{Vendor: "embed_vendor1", URL: "embed_url1", APIKey: "embed_api_key1", Model: "embed_model1"}, true)
+	ds2, _ := service.CreateDatasource("Datasource 2", "Short 2", "Long 2", "icon2.png", "https://ds2.com", 75, user.ID, []string{"NLP", "ML"}, "conn_string2", "source_type2", "api_key2", "db2", EmbedderInput{Vendor: "embed_vendor2", URL: "embed_url2", APIKey: "embed_api_key2", Model: "embed_model2"}, true)
+	ds3, _ := service.CreateDatasource("Datasource 3", "Short 3", "Long 3", "icon3.png", "https://ds3.com", 90, user.ID, []string{"AI", "NLP"}, "conn_string3", "source_type3", "api_key3", "db3", EmbedderInput{Vendor: "embed_vendor3", URL: "embed_url3", APIKey: "embed_api_key3", Model: "embed_model3"}, true)
 
 	// Test GetAllDatasources
 	allDatasources, _, _, err := service.GetAllDatasources(10, 1, true)
@@ -230,15 +230,13 @@ func TestGetDatasourceByIDResolved_ResolvesSecrets(t *testing.T) {
 	datasource, err := service.CreateDatasource(
 		"Secret DS", "Short", "Long", "icon.png", "https://example.com", 75, user.ID,
 		[]string{}, "conn_string", "source_type",
-		"$SECRET/DBCONN_KEY", "db1", "openai", "https://api.openai.com",
-		"$SECRET/EMBED_KEY", "text-embedding-3-small", true,
-	)
+		"$SECRET/DBCONN_KEY", "db1", EmbedderInput{Vendor: "openai", URL: "https://api.openai.com", APIKey: "$SECRET/EMBED_KEY", Model: "text-embedding-3-small"}, true)
 	assert.NoError(t, err)
 
 	// GetDatasourceByID should preserve references (for API responses)
 	preserved, err := service.GetDatasourceByID(datasource.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, "$SECRET/EMBED_KEY", preserved.EmbedAPIKey,
+	assert.Equal(t, "$SECRET/EMBED_KEY", preserved.FlattenedEmbed().APIKey,
 		"GetDatasourceByID should preserve secret references")
 	assert.Equal(t, "$SECRET/DBCONN_KEY", preserved.DBConnAPIKey,
 		"GetDatasourceByID should preserve secret references")
@@ -246,7 +244,7 @@ func TestGetDatasourceByIDResolved_ResolvesSecrets(t *testing.T) {
 	// GetDatasourceByIDResolved should resolve to actual values
 	resolved, err := service.GetDatasourceByIDResolved(datasource.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, "sk-embed-real-key", resolved.EmbedAPIKey,
+	assert.Equal(t, "sk-embed-real-key", resolved.EmbedFields(true).APIKey,
 		"GetDatasourceByIDResolved should resolve EmbedAPIKey to actual secret value")
 	assert.Equal(t, "dbconn-real-key", resolved.DBConnAPIKey,
 		"GetDatasourceByIDResolved should resolve DBConnAPIKey to actual secret value")

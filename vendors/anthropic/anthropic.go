@@ -50,7 +50,7 @@ func (v *Anthropic) GetDriver(LLMConfig *models.LLM, settings *models.LLMSetting
 	return llm, nil
 }
 
-func (v *Anthropic) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *Anthropic) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	return nil, nil
 }
 

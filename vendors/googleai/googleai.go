@@ -48,11 +48,11 @@ func (v *GoogleAI) GetDriver(LLMConfig *models.LLM, settings *models.LLMSettings
 	return llm, nil
 }
 
-func (v *GoogleAI) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *GoogleAI) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	var llm embeddings.EmbedderClient
 	var err error
 
-	llm, err = setupGoogleAIEmbedClient(d)
+	llm, err = setupGoogleAIEmbedClient(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -228,13 +228,13 @@ func setupGoogleDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 	return llm, nil
 }
 
-func setupGoogleAIEmbedClient(d *models.Datasource) (embeddings.EmbedderClient, error) {
+func setupGoogleAIEmbedClient(spec *models.EmbedderSpec) (embeddings.EmbedderClient, error) {
 	var opts = make([]googleai.Option, 0)
-	if d.EmbedAPIKey != "" {
-		opts = append(opts, googleai.WithAPIKey(d.EmbedAPIKey))
+	if spec.APIKey != "" {
+		opts = append(opts, googleai.WithAPIKey(spec.APIKey))
 	}
 
-	opts = append(opts, googleai.WithDefaultEmbeddingModel(d.EmbedModel))
+	opts = append(opts, googleai.WithDefaultEmbeddingModel(spec.Model))
 
 	llm, err := googleai.New(context.Background(), opts...)
 

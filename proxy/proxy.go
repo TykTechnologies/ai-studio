@@ -1471,7 +1471,7 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 		return
 	}
 
-	if ds.EmbedVendor == "" || ds.EmbedModel == "" {
+	if embed := ds.EmbedFields(false); embed.Vendor == "" || embed.Model == "" {
 		respondWithError(w, http.StatusBadRequest, "datasource does not have an embedder configured", nil, false)
 		return
 	}

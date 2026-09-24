@@ -34,16 +34,16 @@ func (v *HuggingFace) GetDriver(LLMConfig *models.LLM, settings *models.LLMSetti
 	return llm, nil
 }
 
-func (v *HuggingFace) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *HuggingFace) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	var llm embeddings.EmbedderClient
 	var err error
 
 	opts := []huggingface.Option{}
-	if d.EmbedAPIKey != "" {
-		opts = append(opts, huggingface.WithToken(d.EmbedAPIKey))
+	if spec.APIKey != "" {
+		opts = append(opts, huggingface.WithToken(spec.APIKey))
 	}
 
-	llm, err = NewHFWrapper(d.EmbedModel, opts...)
+	llm, err = NewHFWrapper(spec.Model, opts...)
 
 	e, err := embeddings.NewEmbedder(llm)
 	if err != nil {

@@ -12,7 +12,7 @@ import (
 type LLMVendorProvider interface {
 	GetTokenCounts(choice *llms.ContentChoice) (int, int, int)
 	GetDriver(LLMConfig *LLM, settings *LLMSettings, mem schema.Memory, streamingFunc func(ctx context.Context, chunk []byte) error) (llms.Model, error)
-	GetEmbedder(d *Datasource) (*embeddings.EmbedderImpl, error)
+	GetEmbedder(spec *EmbedderSpec) (*embeddings.EmbedderImpl, error)
 	AnalyzeResponse(llm *LLM, app *App, statusCode int, body []byte, r *http.Request) (*LLM, *App, ITokenResponse, error)
 	AnalyzeStreamingResponse(llm *LLM, app *App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*LLM, *App, ITokenResponse, error)
 	ProxySetAuthHeader(r *http.Request, llm *LLM) error

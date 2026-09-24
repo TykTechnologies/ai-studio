@@ -242,14 +242,17 @@ func TestSecretReferences(t *testing.T) {
 	tool := &models.Tool{Name: "CRM", AuthKey: "$SECRET/CRM_TOKEN", Active: true}
 	require.NoError(t, db.Create(tool).Error)
 
-	ds := &models.Datasource{Name: "Vectors", EmbedAPIKey: "$SECRET/OPENAI_KEY", DBConnAPIKey: "$SECRET/PGVECTOR", Active: true}
+	ds := &models.Datasource{Name: "Vectors", DBConnAPIKey: "$SECRET/PGVECTOR", Active: true}
 	require.NoError(t, db.Create(ds).Error)
+	emb := &models.Embedder{Name: "Vectors embedder", Vendor: models.OPENAI, APIKey: "$SECRET/OPENAI_KEY", ModelName: "text-embedding-3-small"}
+	require.NoError(t, db.Create(emb).Error)
 
 	refs, err := s.SecretReferences()
 	require.NoError(t, err)
 
+	// The datasource's embedding key now lives on its embedder.
 	assert.Equal(t, []SecretReference{
-		{Type: "datasource", ID: ds.ID, Name: "Vectors"},
+		{Type: "embedder", ID: emb.ID, Name: "Vectors embedder"},
 		{Type: "llm", ID: openai.ID, Name: "OpenAI Prod"},
 	}, refs["OPENAI_KEY"])
 	assert.Equal(t, []SecretReference{{Type: "llm", ID: bedrock.ID, Name: "Bedrock"}}, refs["AWS_SECRET"])
@@ -261,7 +264,8 @@ func TestSecretReferences(t *testing.T) {
 	deps, err := s.GetSecretDependents("OPENAI_KEY")
 	require.NoError(t, err)
 	assert.Equal(t, []DependentRef{{ID: openai.ID, Name: "OpenAI Prod"}}, deps.LLMs)
-	assert.Equal(t, []DependentRef{{ID: ds.ID, Name: "Vectors"}}, deps.Datasources)
+	assert.Equal(t, []DependentRef{{ID: emb.ID, Name: "Vectors embedder"}}, deps.Embedders)
+	assert.Empty(t, deps.Datasources)
 	assert.Empty(t, deps.Tools)
 	assert.Equal(t, 2, deps.Total)
 

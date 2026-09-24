@@ -230,16 +230,16 @@ func (s *Service) TestDatasourceConnectivity(embedVendor, embedURL, embedAPIKey,
 		return result, nil
 	}
 
-	// Build a temporary datasource model for the switches package
-	ds := &models.Datasource{
-		EmbedVendor: models.Vendor(embedVendor),
-		EmbedUrl:    embedURL,
-		EmbedAPIKey: embedAPIKey,
-		EmbedModel:  embedModel,
+	// Build a temporary embedder spec for the switches package
+	spec := &models.EmbedderSpec{
+		Vendor:   models.Vendor(embedVendor),
+		Endpoint: embedURL,
+		APIKey:   embedAPIKey,
+		Model:    embedModel,
 	}
 
 	// Step 1: Validate that the embedder can be created
-	embedder, err := switches.GetEmbedder(ds)
+	embedder, err := switches.GetEmbedder(spec)
 	if err != nil {
 		result.EmbedderValid = false
 		result.EmbedderError = err.Error()

@@ -153,6 +153,30 @@ func TestPendingChanges_SemanticRouters(t *testing.T) {
 	}, changeKeys(pc))
 }
 
+// Embedders reach edges flattened into the datasources that use them, so an
+// embedder edit is a pending change for every namespace (they are global).
+func TestPendingChanges_Embedders(t *testing.T) {
+	db := apitest.SetupTestDB(t)
+	svc := services.NewSyncStatusService(db)
+
+	push := time.Now().Add(-time.Hour)
+	before := push.Add(-time.Hour)
+	after := push.Add(10 * time.Minute)
+
+	untouched := &models.Embedder{Name: "Untouched", Vendor: models.OPENAI, ModelName: "m"}
+	edited := &models.Embedder{Name: "Rotated", Vendor: models.OPENAI, ModelName: "m"}
+	for _, m := range []*models.Embedder{untouched, edited} {
+		require.NoError(t, db.Create(m).Error)
+	}
+	setTimes(t, db, &models.Embedder{}, untouched.ID, before, before)
+	setTimes(t, db, &models.Embedder{}, edited.ID, before, after)
+	require.NoError(t, models.MarkNamespacePushed(db, "edge-1", push))
+
+	pc, err := svc.GetPendingChanges("edge-1")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"embedder:Rotated": services.PendingChangeUpdated}, changeKeys(pc))
+}
+
 func TestMarkNamespacePushed_UpdatesOrCreatesRow(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	now := time.Now()

@@ -54,7 +54,7 @@ func TestCreateDatasource_DefaultCatalogueIsEditionAware(t *testing.T) {
 	service := NewService(db)
 
 	ds, err := service.CreateDatasource("Edition DS", "Short", "Long", "icon.png", "https://example.com",
-		75, 1, []string{}, "conn", "type", "key", "db", "vendor", "url", "ekey", "model", true)
+		75, 1, []string{}, "conn", "type", "key", "db", EmbedderInput{Vendor: "vendor", URL: "url", APIKey: "ekey", Model: "model"}, true)
 	require.NoError(t, err)
 
 	var count int64

@@ -32,6 +32,7 @@ const (
 	SecretRefObjectLLM        = "llm"
 	SecretRefObjectTool       = "tool"
 	SecretRefObjectDatasource = "datasource"
+	SecretRefObjectEmbedder   = "embedder"
 )
 
 // SecretNameFromReference returns the secret name a $SECRET/<name> reference
@@ -179,11 +180,11 @@ func (d *Datasource) AfterSave(tx *gorm.DB) error {
 	}
 	var fresh Datasource
 	if err := tx.Session(&gorm.Session{NewDB: true}).
-		Select("id", "name", "db_conn_api_key", "embed_api_key").
+		Select("id", "name", "db_conn_api_key").
 		First(&fresh, d.ID).Error; err != nil {
 		return err
 	}
-	return syncSecretReferences(tx, SecretRefObjectDatasource, fresh.ID, fresh.Name, []string{fresh.DBConnAPIKey, fresh.EmbedAPIKey})
+	return syncSecretReferences(tx, SecretRefObjectDatasource, fresh.ID, fresh.Name, []string{fresh.DBConnAPIKey})
 }
 
 // AfterDelete drops the datasource's secret references.
@@ -192,6 +193,33 @@ func (d *Datasource) AfterDelete(tx *gorm.DB) error {
 		return nil
 	}
 	return clearSecretReferences(tx, SecretRefObjectDatasource, d.ID)
+}
+
+// AfterSave keeps the secret_references rows for this embedder current. A
+// linked embedder carries no credentials of its own (its LLM's are indexed
+// under the LLM).
+func (e *Embedder) AfterSave(tx *gorm.DB) error {
+	if e.ID == 0 {
+		return nil
+	}
+	if !secretReferenceIndexAvailable(tx) {
+		return nil
+	}
+	var fresh Embedder
+	if err := tx.Session(&gorm.Session{NewDB: true}).
+		Select("id", "name", "api_key", "endpoint").
+		First(&fresh, e.ID).Error; err != nil {
+		return err
+	}
+	return syncSecretReferences(tx, SecretRefObjectEmbedder, fresh.ID, fresh.Name, []string{fresh.APIKey, fresh.Endpoint})
+}
+
+// AfterDelete drops the embedder's secret references.
+func (e *Embedder) AfterDelete(tx *gorm.DB) error {
+	if e.ID == 0 {
+		return nil
+	}
+	return clearSecretReferences(tx, SecretRefObjectEmbedder, e.ID)
 }
 
 // BackfillSecretReferences rebuilds secret_references from the object tables.
@@ -235,13 +263,25 @@ func BackfillSecretReferences(db *gorm.DB) error {
 		}
 
 		var datasources []Datasource
-		if err := tx.Select("id", "name", "db_conn_api_key", "embed_api_key").
-			Where("db_conn_api_key LIKE ?"+esc+" OR embed_api_key LIKE ?"+esc, prefix, prefix).
+		if err := tx.Select("id", "name", "db_conn_api_key").
+			Where("db_conn_api_key LIKE ?"+esc, prefix).
 			Find(&datasources).Error; err != nil {
 			return err
 		}
 		for _, d := range datasources {
-			if err := syncSecretReferences(tx, SecretRefObjectDatasource, d.ID, d.Name, []string{d.DBConnAPIKey, d.EmbedAPIKey}); err != nil {
+			if err := syncSecretReferences(tx, SecretRefObjectDatasource, d.ID, d.Name, []string{d.DBConnAPIKey}); err != nil {
+				return err
+			}
+		}
+
+		var embedders []Embedder
+		if err := tx.Select("id", "name", "api_key", "endpoint").
+			Where("api_key LIKE ?"+esc+" OR endpoint LIKE ?"+esc, prefix, prefix).
+			Find(&embedders).Error; err != nil {
+			return err
+		}
+		for _, e := range embedders {
+			if err := syncSecretReferences(tx, SecretRefObjectEmbedder, e.ID, e.Name, []string{e.APIKey, e.Endpoint}); err != nil {
 				return err
 			}
 		}

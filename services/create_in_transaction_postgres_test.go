@@ -126,7 +126,7 @@ func TestCreateDatasourceWithDB_InTransaction_DoesNotDeadlock(t *testing.T) {
 	err := runWithinDeadline(t, "CreateDatasourceWithDB inside a transaction", func() error {
 		var createErr error
 		ds, createErr = s.CreateDatasourceWithDB(tx, name, "short", "long", "", "https://example.com",
-			3, 0, nil, "", "", "", "", "", "", "", "", false)
+			3, 0, nil, "", "", "", "", EmbedderInput{Vendor: "", URL: "", APIKey: "", Model: ""}, false)
 		return createErr
 	})
 	if err != nil {

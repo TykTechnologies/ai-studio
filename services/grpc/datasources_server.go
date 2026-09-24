@@ -138,10 +138,12 @@ func (s *DatasourcesServer) CreateDatasource(ctx context.Context, req *pb.Create
 		req.GetDbSourceType(),
 		req.GetDbConnApiKey(),
 		req.GetDbName(),
-		req.GetEmbedVendor(),
-		req.GetEmbedUrl(),
-		req.GetEmbedApiKey(),
-		req.GetEmbedModel(),
+		services.EmbedderInput{
+			Vendor: req.GetEmbedVendor(),
+			URL:    req.GetEmbedUrl(),
+			APIKey: req.GetEmbedApiKey(),
+			Model:  req.GetEmbedModel(),
+		},
 		req.GetActive(),
 	)
 	if err != nil {
@@ -214,10 +216,12 @@ func (s *DatasourcesServer) UpdateDatasource(ctx context.Context, req *pb.Update
 		req.GetDbSourceType(),
 		req.GetDbConnApiKey(),
 		req.GetDbName(),
-		req.GetEmbedVendor(),
-		req.GetEmbedUrl(),
-		req.GetEmbedApiKey(),
-		req.GetEmbedModel(),
+		services.EmbedderInput{
+			Vendor: req.GetEmbedVendor(),
+			URL:    req.GetEmbedUrl(),
+			APIKey: req.GetEmbedApiKey(),
+			Model:  req.GetEmbedModel(),
+		},
 		req.GetActive(),
 		req.GetTagNames(),
 		uint(req.GetUserId()),
@@ -395,6 +399,7 @@ func convertDatasourceToPB(datasource *models.Datasource) *pb.DatasourceInfo {
 		}
 	}
 
+	embed := datasource.FlattenedEmbed()
 	return &pb.DatasourceInfo{
 		Id:               uint32(datasource.ID),
 		Name:             datasource.Name,
@@ -407,11 +412,11 @@ func convertDatasourceToPB(datasource *models.Datasource) *pb.DatasourceInfo {
 		Tags:             pbTags,
 		DbSourceType:     datasource.DBSourceType,
 		DbName:           datasource.DBName,
-		EmbedVendor:      string(datasource.EmbedVendor),
-		EmbedModel:       datasource.EmbedModel,
+		EmbedVendor:      embed.Vendor,
+		EmbedModel:       embed.Model,
 		Active:           datasource.Active,
 		HasDbConnApiKey:  datasource.DBConnAPIKey != "",
-		HasEmbedApiKey:   datasource.EmbedAPIKey != "",
+		HasEmbedApiKey:   embed.APIKey != "",
 		CreatedAt:        timestamppb.New(datasource.CreatedAt),
 		UpdatedAt:        timestamppb.New(datasource.UpdatedAt),
 		Metadata:         metadata, // Plugin-stored data
@@ -432,7 +437,8 @@ func (s *DatasourcesServer) GenerateEmbedding(ctx context.Context, req *pb.Gener
 	}
 
 	// Check if datasource has embedder configured
-	if datasource.EmbedVendor == "" || datasource.EmbedModel == "" {
+	embed := datasource.FlattenedEmbed()
+	if embed.Vendor == "" || embed.Model == "" {
 		return &pb.GenerateEmbeddingResponse{
 			Success:      false,
 			ErrorMessage: "datasource does not have embedder configured",
@@ -450,13 +456,13 @@ func (s *DatasourcesServer) GenerateEmbedding(ctx context.Context, req *pb.Gener
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("embed_vendor", string(datasource.EmbedVendor)).
-			Str("embed_model", datasource.EmbedModel).
-			Str("embed_url", datasource.EmbedUrl).
+			Str("embed_vendor", embed.Vendor).
+			Str("embed_model", embed.Model).
+			Str("embed_url", embed.URL).
 			Msg("Failed to generate embeddings")
 		return &pb.GenerateEmbeddingResponse{
 			Success:      false,
-			ErrorMessage: fmt.Sprintf("failed to generate embeddings with %s/%s: %v", datasource.EmbedVendor, datasource.EmbedModel, err),
+			ErrorMessage: fmt.Sprintf("failed to generate embeddings with %s/%s: %v", embed.Vendor, embed.Model, err),
 		}, nil
 	}
 
@@ -546,7 +552,7 @@ func (s *DatasourcesServer) ProcessAndStoreDocuments(ctx context.Context, req *p
 	}
 
 	// Check if datasource has both embedder and vector store configured
-	if datasource.EmbedVendor == "" || datasource.EmbedModel == "" {
+	if embed := datasource.FlattenedEmbed(); embed.Vendor == "" || embed.Model == "" {
 		return &pb.ProcessAndStoreResponse{
 			Success:      false,
 			ErrorMessage: "datasource does not have embedder configured",

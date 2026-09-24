@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -86,15 +87,12 @@ func (a *API) createDatasource(c *gin.Context) {
 		input.Data.Attributes.DBSourceType,
 		input.Data.Attributes.DBConnAPIKey,
 		input.Data.Attributes.DBName,
-		input.Data.Attributes.EmbedVendor,
-		input.Data.Attributes.EmbedUrl,
-		input.Data.Attributes.EmbedAPIKey,
-		input.Data.Attributes.EmbedModel,
+		datasourceEmbedderInput(&input),
 		input.Data.Attributes.Active,
 		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(datasourceWriteStatus(err), ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -243,17 +241,14 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.DBSourceType,
 		input.Data.Attributes.DBConnAPIKey,
 		input.Data.Attributes.DBName,
-		input.Data.Attributes.EmbedVendor,
-		input.Data.Attributes.EmbedUrl,
-		input.Data.Attributes.EmbedAPIKey,
-		input.Data.Attributes.EmbedModel,
+		datasourceEmbedderInput(&input),
 		input.Data.Attributes.Active,
 		input.Data.Attributes.Tags,
 		input.Data.Attributes.UserID,
 		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
+		c.JSON(datasourceWriteStatus(err), ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -646,6 +641,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 	if datasource == nil {
 		datasource = &models.Datasource{}
 	}
+	embed := datasource.FlattenedEmbed()
 	return DatasourceResponse{
 		Type: "datasources",
 		ID:   strconv.FormatUint(uint64(datasource.ID), 10),
@@ -668,6 +664,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			EmbedAPIKey      string              `json:"embed_api_key"`
 			HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 			EmbedModel       string              `json:"embed_model"`
+			EmbedderID       *uint               `json:"embedder_id"`
+			EmbedderName     string              `json:"embedder_name"`
 			Active           bool                `json:"active"`
 			Namespace        string              `json:"namespace"`
 			Files            []FileStoreResponse `json:"files"`
@@ -685,11 +683,13 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			DBConnAPIKey:     services.REDACTED_VALUE,
 			HasDBConnAPIKey:  datasource.DBConnAPIKey != "",
 			DBName:           datasource.DBName,
-			EmbedVendor:      string(datasource.EmbedVendor),
-			EmbedUrl:         datasource.EmbedUrl,
+			EmbedVendor:      embed.Vendor,
+			EmbedUrl:         embed.URL,
 			EmbedAPIKey:      services.REDACTED_VALUE,
-			HasEmbedAPIKey:   datasource.EmbedAPIKey != "",
-			EmbedModel:       datasource.EmbedModel,
+			HasEmbedAPIKey:   embed.APIKey != "",
+			EmbedModel:       embed.Model,
+			EmbedderID:       datasource.EmbedderID,
+			EmbedderName:     embedderName(datasource),
 			Active:           datasource.Active,
 			Namespace:        datasource.Namespace,
 			Files:            serializeFileStores(datasource.Files),
@@ -703,4 +703,35 @@ func serializeDatasources(datasources models.Datasources) []DatasourceResponse {
 		result[i] = serializeDatasource(&datasource)
 	}
 	return result
+}
+
+// datasourceEmbedderInput is the embedder a datasource write names: an
+// explicit embedder_id, else the legacy embed_* fields.
+func datasourceEmbedderInput(input *DatasourceInput) services.EmbedderInput {
+	a := input.Data.Attributes
+	return services.EmbedderInput{
+		EmbedderID: a.EmbedderID,
+		Vendor:     a.EmbedVendor,
+		URL:        a.EmbedUrl,
+		APIKey:     a.EmbedAPIKey,
+		Model:      a.EmbedModel,
+	}
+}
+
+// embedderName is the name of the datasource's embedder, if loaded.
+func embedderName(ds *models.Datasource) string {
+	if ds.Embedder == nil {
+		return ""
+	}
+	return ds.Embedder.Name
+}
+
+// datasourceWriteStatus maps a datasource create/update error to a status:
+// an unusable embedder choice is the caller's error.
+func datasourceWriteStatus(err error) int {
+	var privacy *services.EmbedderPrivacyError
+	if errors.As(err, &privacy) || errors.Is(err, services.ErrEmbedderInvalid) {
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
 }

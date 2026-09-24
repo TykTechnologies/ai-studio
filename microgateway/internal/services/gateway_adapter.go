@@ -1177,7 +1177,27 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 		}
 	}
 
-	return models.Datasource{
+	// The hub sends the datasource's embedder flattened into the embed_*
+	// fields; rebuild it as a standalone embedder in memory. A hub from before
+	// Embedders sent Vertex's project:location and key only in the vector
+	// store fields, which the Vertex embedder used to read.
+	var embedder *models.Embedder
+	if dbDS.EmbedVendor != "" {
+		embedder = &models.Embedder{
+			Vendor:    models.Vendor(dbDS.EmbedVendor),
+			Endpoint:  dbDS.EmbedUrl,
+			APIKey:    embedAPIKey,
+			ModelName: dbDS.EmbedModel,
+		}
+		if embedder.Vendor == models.VERTEX && embedder.Endpoint == "" {
+			embedder.Endpoint = connString
+			if embedder.APIKey == "" {
+				embedder.APIKey = connAPIKey
+			}
+		}
+	}
+
+	ds := models.Datasource{
 		Model:            gorm.Model{ID: dbDS.ID, CreatedAt: dbDS.CreatedAt, UpdatedAt: dbDS.UpdatedAt},
 		ID:               dbDS.ID,
 		Name:             dbDS.Name,
@@ -1190,11 +1210,9 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 		DBConnString:     connString,
 		DBConnAPIKey:     connAPIKey,
 		DBName:           dbDS.DBName,
-		EmbedVendor:      models.Vendor(dbDS.EmbedVendor),
-		EmbedUrl:         dbDS.EmbedUrl,
-		EmbedAPIKey:      embedAPIKey,
-		EmbedModel:       dbDS.EmbedModel,
 		Active:           dbDS.Active,
 		Namespace:        dbDS.Namespace,
 	}
+	ds.Embedder = embedder
+	return ds
 }

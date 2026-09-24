@@ -11,16 +11,16 @@ import (
 )
 
 // CreateDatasource creates a new datasource using the default DB connection.
-func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, namespace ...string) (*models.Datasource, error) {
+func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName string, embed EmbedderInput, active bool, namespace ...string) (*models.Datasource, error) {
 	ns := ""
 	if len(namespace) > 0 {
 		ns = namespace[0]
 	}
-	return s.CreateDatasourceWithDB(s.DB, name, shortDesc, longDesc, icon, url, privacyScore, userID, tagNames, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel, active, ns)
+	return s.CreateDatasourceWithDB(s.DB, name, shortDesc, longDesc, icon, url, privacyScore, userID, tagNames, dbConnString, dbSourceType, dbConnAPIKey, dbName, embed, active, ns)
 }
 
 // CreateDatasourceWithDB creates a new datasource using the provided DB connection (supports transactions).
-func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, namespace ...string) (*models.Datasource, error) {
+func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName string, embed EmbedderInput, active bool, namespace ...string) (*models.Datasource, error) {
 	datasource := &models.Datasource{
 		Name:             name,
 		ShortDescription: shortDesc,
@@ -33,15 +33,21 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 		DBSourceType:     dbSourceType,
 		DBConnAPIKey:     dbConnAPIKey,
 		DBName:           dbName,
-		EmbedVendor:      models.Vendor(embedVendor),
-		EmbedUrl:         embedUrl,
-		EmbedAPIKey:      embedAPIKey,
-		EmbedModel:       embedModel,
 		Active:           active,
 	}
 	if len(namespace) > 0 {
 		datasource.Namespace = namespace[0]
 	}
+
+	// The embedder is resolved on the caller's connection (it may be a
+	// transaction) so an embedder created for this datasource commits or
+	// rolls back with it.
+	embed.VectorConn, embed.VectorAPIKey = dbConnString, dbConnAPIKey
+	embedder, err := s.resolveDatasourceEmbedder(db, nil, embed, name, privacyScore, userID)
+	if err != nil {
+		return nil, err
+	}
+	datasource.SetEmbedder(embedder)
 
 	// Execute "before_create" hooks
 	if s.HookManager != nil {
@@ -64,6 +70,9 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 		// Use modified object if hooks modified it
 		if hookResult.ModifiedObject != nil {
 			if modified, ok := hookResult.ModifiedObject.(*models.Datasource); ok {
+				if err := s.applyHookEmbedEdits(db, datasource.Embedder, modified, userID); err != nil {
+					return nil, err
+				}
 				datasource = modified
 			}
 		}
@@ -117,7 +126,7 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 	return datasource, nil
 }
 
-func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, tagNames []string, userID uint, namespace ...string) (*models.Datasource, error) {
+func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName string, embed EmbedderInput, active bool, tagNames []string, userID uint, namespace ...string) (*models.Datasource, error) {
 	datasource, err := s.GetDatasourceByID(id)
 	if err != nil {
 		return nil, err
@@ -146,26 +155,16 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		datasource.DBConnAPIKey = dbConnAPIKey
 	}
 
-	if embedVendor != "" {
-		datasource.EmbedVendor = models.Vendor(embedVendor)
+	// The embedder: an explicit id, or the legacy inline fields merged onto
+	// the current embedder (empty vendor/url/model keep it, "[redacted]"
+	// keeps the key, "" clears it). A change never edits a shared embedder;
+	// it moves this datasource to one that matches.
+	embed.VectorConn, embed.VectorAPIKey = datasource.DBConnString, datasource.DBConnAPIKey
+	embedder, err := s.resolveDatasourceEmbedder(s.DB, datasource.Embedder, embed, name, privacyScore, userID)
+	if err != nil {
+		return nil, err
 	}
-
-	// Smart embed URL update - preserve if empty
-	if embedUrl != "" {
-		datasource.EmbedUrl = embedUrl
-	}
-
-	// Smart embed API key update logic
-	if embedAPIKey == "[redacted]" {
-		// Don't update API key if it's the redacted placeholder
-	} else {
-		// Empty string clears the key, any other value updates it
-		datasource.EmbedAPIKey = embedAPIKey
-	}
-
-	if embedModel != "" {
-		datasource.EmbedModel = embedModel
-	}
+	datasource.SetEmbedder(embedder)
 	datasource.DBName = dbName
 	datasource.Active = active
 	datasource.UserID = userID
@@ -199,6 +198,9 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		// Use modified object if hooks modified it
 		if hookResult.ModifiedObject != nil {
 			if modified, ok := hookResult.ModifiedObject.(*models.Datasource); ok {
+				if err := s.applyHookEmbedEdits(s.DB, datasource.Embedder, modified, userID); err != nil {
+					return nil, err
+				}
 				datasource = modified
 			}
 		}
@@ -251,13 +253,13 @@ func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
 	}
 
 	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey, true) // preserve reference for API responses
-	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey, true)   // preserve reference for API responses
 	return datasource, nil
 }
 
 // GetDatasourceByIDResolved returns a datasource with all secret references
 // resolved to their actual values. Use this for internal operations (embedding,
-// vector store access) where the actual API keys are needed.
+// vector store access) where the actual API keys are needed. The embedder's
+// references are resolved when its spec is taken (DatasourceEmbedderSpec).
 func (s *Service) GetDatasourceByIDResolved(id uint) (*models.Datasource, error) {
 	datasource := models.NewDatasource()
 	if err := datasource.Get(s.DB, id); err != nil {
@@ -265,7 +267,6 @@ func (s *Service) GetDatasourceByIDResolved(id uint) (*models.Datasource, error)
 	}
 
 	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey, false) // resolve actual value for internal use
-	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey, false)   // resolve actual value for internal use
 	return datasource, nil
 }
 
@@ -335,8 +336,8 @@ func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, 
 		tagNames[i] = tag.Name
 	}
 
-	// Create cloned datasource with "Copy of" prefix and inactive status
-	// IMPORTANT: This preserves API keys (DBConnAPIKey, EmbedAPIKey)
+	// Create cloned datasource with "Copy of" prefix and inactive status.
+	// It keeps the vector store key and shares the source's embedder.
 	cloned, err := s.CreateDatasource(
 		fmt.Sprintf("Copy of %s", source.Name), // New name
 		source.ShortDescription,
@@ -350,10 +351,7 @@ func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, 
 		source.DBSourceType,
 		source.DBConnAPIKey, // API key preserved
 		source.DBName,
-		string(source.EmbedVendor), // Convert Vendor to string
-		source.EmbedUrl,
-		source.EmbedAPIKey, // API key preserved
-		source.EmbedModel,
+		EmbedderInput{EmbedderID: embedderIDOrZero(source.EmbedderID)},
 		false, // Start inactive for safety
 	)
 
@@ -403,7 +401,6 @@ func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
 
 	for i := range datasources {
 		datasources[i].DBConnAPIKey = secrets.GetValue(datasources[i].DBConnAPIKey, true) // preserve reference for API responses
-		datasources[i].EmbedAPIKey = secrets.GetValue(datasources[i].EmbedAPIKey, true)   // preserve reference for API responses
 	}
 
 	return datasources, nil
@@ -533,3 +530,13 @@ func (s *Service) ensureDatasourceInDefaultCatalogueTx(db *gorm.DB, datasource *
 // TODO:
 // - StartProcessingFiles method (Starts RAG with DataSourceSession)
 // - Make sure chats with default DS load them on init
+
+// embedderIDOrZero turns a nullable embedder id into an explicit
+// EmbedderInput id (0 = none).
+func embedderIDOrZero(id *uint) *uint {
+	v := uint(0)
+	if id != nil {
+		v = *id
+	}
+	return &v
+}

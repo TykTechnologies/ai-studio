@@ -631,8 +631,7 @@ func TestE2E_UpdateWorkflow_FailureScenarios(t *testing.T) {
 	// Create an admin-curated (non-community) datasource
 	adminDS, err := svc.CreateDatasource(
 		"Admin DS", "Short", "Long", "", "", 50, admin.ID, nil,
-		"conn", "pgvector", "", "db", "openai", "", "", "text-embedding-3-small", true,
-	)
+		"conn", "pgvector", "", "db", EmbedderInput{Vendor: "openai", URL: "", APIKey: "", Model: "text-embedding-3-small"}, true)
 	require.NoError(t, err)
 
 	t.Run("CannotUpdateNonOwnedResource", func(t *testing.T) {

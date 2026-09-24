@@ -281,6 +281,13 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 		return nil, err
 	}
 
+	// Embedders linked to this LLM take its vendor and privacy score; a
+	// change that would break the datasources embedding through it is
+	// refused.
+	if err := s.CheckLLMUpdateForEmbedders(llm, vendor, privacyScore); err != nil {
+		return nil, err
+	}
+
 	if models.LLMRouteSlug(name) != models.LLMRouteSlug(llm.Name) {
 		if err := models.CheckLLMRouteSlug(s.DB, name); err != nil {
 			return nil, err
@@ -480,6 +487,11 @@ func (s *Service) DeleteLLM(id uint) error {
 	} else if len(referrers) > 0 {
 		return &LLMFailoverValidationError{Index: -1, Field: "targets",
 			Detail: fmt.Sprintf("LLM %q is a failover target of: %v; remove it from those waterfalls first", llm.Name, referrers)}
+	}
+
+	// Embedders linked to the LLM would lose their connection.
+	if err := s.CheckLLMDeleteForEmbedders(id); err != nil {
+		return err
 	}
 
 	// Execute "before_delete" hooks

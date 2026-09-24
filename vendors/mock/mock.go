@@ -70,7 +70,7 @@ func (v *Mock) GetDriver(LLMConfig *models.LLM, settings *models.LLMSettings, me
 	return llm, nil
 }
 
-func (v *Mock) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *Mock) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	return nil, nil
 }
 

@@ -12,7 +12,7 @@ import (
 )
 
 // TestAddDatasourceResolvesSecrets verifies that when a datasource is added to
-// a chat session, the EmbedAPIKey and DBConnAPIKey fields are resolved from
+// a chat session, its embedder key and DBConnAPIKey are resolved from
 // $SECRET/NAME references to their actual decrypted values.
 func TestAddDatasourceResolvesSecrets(t *testing.T) {
 	os.Setenv("TYK_AI_SECRET_KEY", "test-encryption-key-for-secrets")
@@ -39,8 +39,8 @@ func TestAddDatasourceResolvesSecrets(t *testing.T) {
 
 	// Create a datasource with secret references
 	ds := &models.Datasource{
-		Name:        "Test Datasource",
-		EmbedAPIKey: "$SECRET/TEST_EMBED_KEY",
+		Name:         "Test Datasource",
+		Embedder:     &models.Embedder{Name: "Test embedder", Vendor: models.OPENAI, APIKey: "$SECRET/TEST_EMBED_KEY", ModelName: "m"},
 		DBConnAPIKey: "$SECRET/TEST_DBCONN_KEY",
 	}
 	err = db.Create(ds).Error
@@ -73,8 +73,8 @@ func TestAddDatasourceResolvesSecrets(t *testing.T) {
 	addedDS, ok := cs.datasources[ds.ID]
 	require.True(t, ok, "Datasource should be in the session")
 
-	assert.Equal(t, "sk-embed-actual-key-12345", addedDS.EmbedAPIKey,
-		"EmbedAPIKey should be resolved from secret reference to actual value")
+	assert.Equal(t, "sk-embed-actual-key-12345", addedDS.EmbedFields(true).APIKey,
+		"The embedder key should resolve from its secret reference to the actual value")
 	assert.Equal(t, "dbconn-actual-key-67890", addedDS.DBConnAPIKey,
 		"DBConnAPIKey should be resolved from secret reference to actual value")
 }
@@ -88,7 +88,7 @@ func TestAddDatasourcePlainKeysUnchanged(t *testing.T) {
 
 	ds := &models.Datasource{
 		Name:         "Plain Key Datasource",
-		EmbedAPIKey:  "sk-plain-embed-key",
+		Embedder:     &models.Embedder{Name: "Plain embedder", Vendor: models.OPENAI, APIKey: "sk-plain-embed-key", ModelName: "m"},
 		DBConnAPIKey: "plain-dbconn-key",
 	}
 	err := db.Create(ds).Error
@@ -115,8 +115,8 @@ func TestAddDatasourcePlainKeysUnchanged(t *testing.T) {
 	require.NoError(t, err)
 
 	addedDS := cs.datasources[ds.ID]
-	assert.Equal(t, "sk-plain-embed-key", addedDS.EmbedAPIKey,
-		"Plain EmbedAPIKey should be passed through unchanged")
+	assert.Equal(t, "sk-plain-embed-key", addedDS.EmbedFields(true).APIKey,
+		"A plain embedder key should be passed through unchanged")
 	assert.Equal(t, "plain-dbconn-key", addedDS.DBConnAPIKey,
 		"Plain DBConnAPIKey should be passed through unchanged")
 }

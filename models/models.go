@@ -92,6 +92,8 @@ func InitModels(db *gorm.DB) error {
 		// Semantic Router Models (Enterprise)
 		&SemanticRouter{},       // Semantic router configurations
 		&SemanticRouterTarget{}, // What each semantic router may send text to
+		// Embedders: reusable embedding configurations
+		&Embedder{},
 		// Scheduler Models
 		&PluginSchedule{},          // Plugin scheduled tasks
 		&PluginScheduleExecution{}, // Schedule execution history
@@ -152,6 +154,12 @@ func InitModels(db *gorm.DB) error {
 	// Migration: one namespace_sync_status row per logical namespace
 	// (legacy "" / "global" rows fold into "default").
 	if err := MergeLegacyNamespaceSyncStatus(db); err != nil {
+		return err
+	}
+
+	// Migration: move datasource embedding settings onto Embedder rows
+	// (runs until no datasource carries inline settings).
+	if err := MigrateEmbedders(db); err != nil {
 		return err
 	}
 

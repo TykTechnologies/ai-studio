@@ -180,8 +180,8 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 		return fmt.Errorf("user does not have access to datasource %s", ds.Name)
 	}
 
-	// Resolve secret references for embedding and DB connection API keys
-	ds.EmbedAPIKey = secrets.GetValue(ds.EmbedAPIKey, false)
+	// Resolve secret references for the DB connection API key (the
+	// embedder's are resolved when its spec is taken)
 	ds.DBConnAPIKey = secrets.GetValue(ds.DBConnAPIKey, false)
 
 	cs.stateMu.Lock()

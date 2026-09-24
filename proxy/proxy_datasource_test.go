@@ -192,10 +192,9 @@ func TestHandleDatasourceMetadataQuery(t *testing.T) {
 
 func TestHandleDatasourceGenerateEmbedding(t *testing.T) {
 	dsWithEmbedder := &models.Datasource{
-		Name:        "Test DS",
-		Active:      true,
-		EmbedVendor: "openai",
-		EmbedModel:  "text-embedding-3-small",
+		Name:     "Test DS",
+		Active:   true,
+		Embedder: &models.Embedder{Vendor: "openai", ModelName: "text-embedding-3-small"},
 	}
 	dsWithEmbedder.ID = 1
 
@@ -296,7 +295,7 @@ func TestDatasourceAccessControl(t *testing.T) {
 	})
 
 	t.Run("access check applies to embeddings endpoint", func(t *testing.T) {
-		dsEmbed := &models.Datasource{Name: "Test DS", Active: true, EmbedVendor: "openai", EmbedModel: "m"}
+		dsEmbed := &models.Datasource{Name: "Test DS", Active: true, Embedder: &models.Embedder{Vendor: "openai", ModelName: "m"}}
 		dsEmbed.ID = 1
 		p := newTestProxyWithDatasource(t, dsEmbed)
 		vars := map[string]string{"dsSlug": "test-ds"}

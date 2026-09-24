@@ -306,7 +306,7 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 		memberships, objectType = models.LLMCatalogueMemberships, models.GovernedObjectTypeLLM
 	case CatalogItemDatasource:
 		var datasources []models.Datasource
-		if err := query.Preload("Tags").Find(&datasources).Error; err != nil {
+		if err := query.Preload("Tags").Preload("Embedder.LLM").Find(&datasources).Error; err != nil {
 			return nil, err
 		}
 		items = make([]CatalogItem, len(datasources))
@@ -427,6 +427,7 @@ func llmCatalogItem(llm *models.LLM) CatalogItem {
 }
 
 func datasourceCatalogItem(ds *models.Datasource) CatalogItem {
+	embed := ds.FlattenedEmbed()
 	tags := make([]string, 0, len(ds.Tags))
 	for _, tag := range ds.Tags {
 		tags = append(tags, cleanText(tag.Name))
@@ -444,8 +445,8 @@ func datasourceCatalogItem(ds *models.Datasource) CatalogItem {
 		CreatedAt:           timePtr(ds.CreatedAt),
 		UpdatedAt:           timePtr(ds.UpdatedAt),
 		AccessGrantedViaApp: true,
-		EmbedVendor:         string(ds.EmbedVendor),
-		EmbedModel:          cleanText(ds.EmbedModel),
+		EmbedVendor:         embed.Vendor,
+		EmbedModel:          cleanText(embed.Model),
 	}}
 }
 

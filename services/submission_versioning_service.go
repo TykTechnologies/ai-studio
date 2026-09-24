@@ -133,8 +133,9 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 			getString("name"), getString("short_description"), getString("long_description"),
 			getString("icon"), getString("url"), privacyScore, submission.SubmitterID, tagNames,
 			getString("db_conn_string"), getString("db_source_type"), getString("db_conn_api_key"),
-			getString("db_name"), getString("embed_vendor"), getString("embed_url"),
-			getString("embed_api_key"), getString("embed_model"),
+			getString("db_name"),
+			EmbedderInput{Vendor: getString("embed_vendor"), URL: getString("embed_url"),
+				APIKey: getString("embed_api_key"), Model: getString("embed_model")},
 			// Approved resources are published into the Default catalogue but
 			// arrive INACTIVE: an administrator activates them deliberately.
 			// The contributor's own `active` flag is not trusted for this --
@@ -243,7 +244,7 @@ func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Su
 
 	switch submission.ResourceType {
 	case models.SubmissionResourceTypeDatasource:
-		return tx.Model(&models.Datasource{}).Where("id = ?", targetID).Updates(updates).Error
+		return s.applyDatasourceUpdates(tx, targetID, updates, privacyScore)
 	case models.SubmissionResourceTypeTool:
 		return tx.Model(&models.Tool{}).Where("id = ?", targetID).Updates(updates).Error
 	}
@@ -443,7 +444,78 @@ func (s *Service) snapshotTool(id uint) (models.JSONMap, error) {
 func (s *Service) applyDatasourceUpdate(id uint, payload models.JSONMap, privacyScore int) error {
 	updates := payloadToUpdatesMap(payload)
 	updates["privacy_score"] = privacyScore
-	return s.DB.Model(&models.Datasource{}).Where("id = ?", id).Updates(updates).Error
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		return s.applyDatasourceUpdates(tx, id, updates, privacyScore)
+	})
+}
+
+// applyDatasourceUpdates writes a payload's column updates to a datasource.
+// Payloads (submissions and version snapshots) describe the embedder with the
+// legacy embed_* keys and embedder_id; those never reach the table as
+// columns but are resolved to an embedder the way a datasource API write is.
+func (s *Service) applyDatasourceUpdates(tx *gorm.DB, id uint, updates map[string]interface{}, privacyScore int) error {
+	in, touched := embedderInputFromUpdates(updates)
+	if err := tx.Model(&models.Datasource{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return err
+	}
+	if !touched {
+		return nil
+	}
+	var ds models.Datasource
+	if err := tx.Preload("Embedder.LLM").First(&ds, id).Error; err != nil {
+		return err
+	}
+	in.VectorConn, in.VectorAPIKey = ds.DBConnString, ds.DBConnAPIKey
+	e, err := s.resolveDatasourceEmbedder(tx, ds.Embedder, in, ds.Name, privacyScore, 0)
+	if err != nil {
+		return err
+	}
+	ds.SetEmbedder(e)
+	return tx.Model(&models.Datasource{}).Where("id = ?", id).Update("embedder_id", ds.EmbedderID).Error
+}
+
+// embedderInputFromUpdates takes the embedder keys out of an updates map.
+// The legacy fields win over embedder_id when both are present (a version
+// snapshot carries both): they describe the configuration itself, so a
+// rollback finds or recreates a matching embedder even if the one the
+// snapshot named is gone. A missing key (dropped as "[redacted]") keeps the
+// stored key.
+func embedderInputFromUpdates(updates map[string]interface{}) (EmbedderInput, bool) {
+	str := func(k string) (string, bool) {
+		v, ok := updates[k]
+		if !ok {
+			return "", false
+		}
+		delete(updates, k)
+		sv, _ := v.(string)
+		return sv, true
+	}
+	vendor, hasVendor := str("embed_vendor")
+	url, hasURL := str("embed_url")
+	key, hasKey := str("embed_api_key")
+	model, hasModel := str("embed_model")
+	rawID, hasID := updates["embedder_id"]
+	delete(updates, "embedder_id")
+
+	if hasVendor || hasURL || hasKey || hasModel {
+		if !hasKey {
+			key = RedactedEmbedderKey
+		}
+		return EmbedderInput{Vendor: vendor, URL: url, APIKey: key, Model: model}, true
+	}
+	if hasID {
+		id := uint(0)
+		switch v := rawID.(type) {
+		case float64:
+			id = uint(v)
+		case int:
+			id = uint(v)
+		case uint:
+			id = v
+		}
+		return EmbedderInput{EmbedderID: &id}, true
+	}
+	return EmbedderInput{}, false
 }
 
 func (s *Service) applyToolUpdate(id uint, payload models.JSONMap, privacyScore int) error {

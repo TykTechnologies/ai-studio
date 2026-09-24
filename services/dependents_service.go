@@ -32,7 +32,9 @@ type Dependents struct {
 	// SemanticRouters that route to, hand off to, or classify with the object.
 	SemanticRouters []DependentRef `json:"semantic_routers"`
 	Chats           []DependentRef `json:"chats"`
-	Total           int            `json:"total"`
+	// Embedders linked to the object (an LLM).
+	Embedders []DependentRef `json:"embedders"`
+	Total     int            `json:"total"`
 }
 
 func newDependents() *Dependents {
@@ -46,12 +48,13 @@ func newDependents() *Dependents {
 		ModelRouters:    []DependentRef{},
 		SemanticRouters: []DependentRef{},
 		Chats:           []DependentRef{},
+		Embedders:       []DependentRef{},
 	}
 }
 
 func (d *Dependents) finalize() *Dependents {
 	d.Total = len(d.Apps) + len(d.Catalogues) + len(d.LLMs) + len(d.Tools) +
-		len(d.Datasources) + len(d.Agents) + len(d.ModelRouters) + len(d.SemanticRouters) + len(d.Chats)
+		len(d.Datasources) + len(d.Agents) + len(d.ModelRouters) + len(d.SemanticRouters) + len(d.Chats) + len(d.Embedders)
 	return d
 }
 
@@ -122,6 +125,10 @@ func (s *Service) GetLLMDependents(llmID uint) (*Dependents, error) {
 	}
 	if d.Chats, err = dependentRefs(s.DB, &models.Chat{}, "chats", "",
 		"chats.llm_id = ?", llmID); err != nil {
+		return nil, err
+	}
+	if d.Embedders, err = dependentRefs(s.DB, &models.Embedder{}, "embedders", "",
+		"embedders.llm_id = ?", llmID); err != nil {
 		return nil, err
 	}
 
@@ -218,6 +225,19 @@ func (s *Service) GetDatasourceDependents(datasourceID uint) (*Dependents, error
 		return nil, err
 	}
 
+	return d.finalize(), nil
+}
+
+// GetEmbedderDependents lists the datasources and Semantic Routers that
+// embed with an embedder.
+func (s *Service) GetEmbedderDependents(embedderID uint) (*Dependents, error) {
+	d := newDependents()
+	var err error
+
+	if d.Datasources, err = dependentRefs(s.DB, &models.Datasource{}, "datasources", "",
+		"datasources.embedder_id = ?", embedderID); err != nil {
+		return nil, err
+	}
 	return d.finalize(), nil
 }
 
@@ -323,6 +343,8 @@ func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {
 			d.Tools = append(d.Tools, item)
 		case "datasource":
 			d.Datasources = append(d.Datasources, item)
+		case models.SecretRefObjectEmbedder:
+			d.Embedders = append(d.Embedders, item)
 		}
 	}
 	return d.finalize(), nil

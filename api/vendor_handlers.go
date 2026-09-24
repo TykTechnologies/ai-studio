@@ -36,8 +36,9 @@ func (a *API) getAvailableLLMDrivers(c *gin.Context) {
 // @Router /vendors/embedders [get]
 // @Security BearerAuth
 func (a *API) getAvailableEmbedders(c *gin.Context) {
-	vendors := make([]string, len(switches.AVAILABLE_EMBEDDERS))
-	for i, vendor := range switches.AVAILABLE_EMBEDDERS {
+	embedders := switches.EmbeddingVendors()
+	vendors := make([]string, len(embedders))
+	for i, vendor := range embedders {
 		vendors[i] = string(vendor)
 	}
 

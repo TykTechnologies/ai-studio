@@ -528,7 +528,8 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 		// Secrets should be "decrypted" (noop crypto returns input)
 		assert.Equal(t, "encrypted-conn-string", datasources[0].DBConnString)
 		assert.Equal(t, "encrypted-conn-key", datasources[0].DBConnAPIKey)
-		assert.Equal(t, "encrypted-embed-key", datasources[0].EmbedAPIKey)
+		require.NotNil(t, datasources[0].Embedder)
+		assert.Equal(t, "encrypted-embed-key", datasources[0].Embedder.APIKey)
 	})
 
 	t.Run("GetDatasourceByID", func(t *testing.T) {

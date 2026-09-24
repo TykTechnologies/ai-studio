@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -143,12 +144,8 @@ func TestDataCatalogueEndpoints(t *testing.T) {
 		"source_type",
 		"api_key",
 		"db1",
-		"embed_vendor",
-		"embed_url",
-		"embed_api_key",
-		"embed_model",
-		true,
-	)
+		services.EmbedderInput{Vendor: "embed_vendor", URL: "embed_url", APIKey: "embed_api_key", Model: "embed_model"},
+		true)
 	assert.NoError(t, err)
 
 	addDatasourceInput := DataCatalogueDatasourceInput{
@@ -313,12 +310,8 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 		"source_type1",
 		"api_key1",
 		"db1",
-		"embed_vendor1",
-		"embed_url1",
-		"embed_api_key1",
-		"embed_model1",
-		true,
-	)
+		services.EmbedderInput{Vendor: "embed_vendor1", URL: "embed_url1", APIKey: "embed_api_key1", Model: "embed_model1"},
+		true)
 	ds2, _ := api.service.CreateDatasource(
 		"Datasource 2",
 		"Short 2",
@@ -332,12 +325,8 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 		"source_type2",
 		"api_key2",
 		"db2",
-		"embed_vendor2",
-		"embed_url2",
-		"embed_api_key2",
-		"embed_model2",
-		true,
-	)
+		services.EmbedderInput{Vendor: "embed_vendor2", URL: "embed_url2", APIKey: "embed_api_key2", Model: "embed_model2"},
+		true)
 
 	addDatasourceToDataCatalogue := func(dcID string, dsID uint) {
 		input := DataCatalogueDatasourceInput{

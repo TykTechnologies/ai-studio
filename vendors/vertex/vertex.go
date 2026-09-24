@@ -41,11 +41,11 @@ func (v *Vertex) GetDriver(LLMConfig *models.LLM, settings *models.LLMSettings, 
 	return llm, nil
 }
 
-func (v *Vertex) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, error) {
+func (v *Vertex) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	var llm embeddings.EmbedderClient
 	var err error
 
-	llm, err = setupVertexEmbedClient(d)
+	llm, err = setupVertexEmbedClient(spec)
 
 	if err != nil {
 		return nil, err
@@ -124,9 +124,9 @@ func setupVertexDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 	return llm, nil
 }
 
-func setupVertexEmbedClient(d *models.Datasource) (embeddings.EmbedderClient, error) {
-	// format for project and location is split with a colon
-	split := strings.Split(d.DBConnString, ":")
+func setupVertexEmbedClient(spec *models.EmbedderSpec) (embeddings.EmbedderClient, error) {
+	// The endpoint names the project and location, split with a colon.
+	split := strings.Split(spec.Endpoint, ":")
 	if len(split) != 2 {
 		return nil, fmt.Errorf("Connection string endpoint format (must be project:location)")
 	}
@@ -142,7 +142,7 @@ func setupVertexEmbedClient(d *models.Datasource) (embeddings.EmbedderClient, er
 		ctx,
 		googleai.WithCloudProject(project),
 		googleai.WithCloudLocation(location),
-		googleai.WithAPIKey(d.DBConnAPIKey),
+		googleai.WithAPIKey(spec.APIKey),
 	)
 
 	if err != nil {

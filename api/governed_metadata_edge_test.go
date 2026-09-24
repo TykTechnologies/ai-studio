@@ -206,7 +206,7 @@ func TestGovernedMetadataHandlers_HookRejectionOnUpdate(t *testing.T) {
 	require.NoError(t, db.Create(llm).Error)
 	tool := &models.Tool{Name: "old-tool", Description: "d", ToolType: "REST", OASSpec: `{"openapi": "3.0.0"}`, PrivacyScore: 10}
 	require.NoError(t, db.Create(tool).Error)
-	ds := &models.Datasource{Name: "old-ds", ShortDescription: "d", DBSourceType: "qdrant", EmbedVendor: "openai", EmbedModel: "m", PrivacyScore: 10}
+	ds := &models.Datasource{Name: "old-ds", ShortDescription: "d", DBSourceType: "qdrant", Embedder: &models.Embedder{Name: "old-emb", Vendor: "openai", ModelName: "m"}, PrivacyScore: 10}
 	require.NoError(t, db.Create(ds).Error)
 
 	governed := map[string]interface{}{"owner": "me"}
