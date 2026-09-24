@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
@@ -62,7 +63,11 @@ type SimpleEdgeClient struct {
 	connected bool
 
 	// Reconnection handling
-	reconnecting      bool
+	// reconnecting guards attemptReconnection: a stream that drops again
+	// right after a reconnect starts a second attempt while the first is
+	// still unwinding, so the check and set must be one atomic step.
+	// reconnectAttempts is only touched by the goroutine holding it.
+	reconnecting      atomic.Bool
 	reconnectAttempts int
 	maxReconnects     int
 	reconnectInterval time.Duration
@@ -883,15 +888,11 @@ func (c *SimpleEdgeClient) collectBasicMetrics() *pb.EdgeMetrics {
 
 // attemptReconnection handles automatic reconnection to control server with exponential backoff
 func (c *SimpleEdgeClient) attemptReconnection() {
-	if c.reconnecting {
+	if !c.reconnecting.CompareAndSwap(false, true) {
 		return // Already attempting reconnection
 	}
-
-	c.reconnecting = true
 	c.reconnectAttempts = 0
-	defer func() {
-		c.reconnecting = false
-	}()
+	defer c.reconnecting.Store(false)
 
 	log.Debug().Msg("Starting automatic reconnection to control server with exponential backoff")
 
