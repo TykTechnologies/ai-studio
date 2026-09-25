@@ -23,6 +23,8 @@
 #   BENCH_AZ           <region>a
 #   BENCH_NAME         gwbench (tags + state dir; run several side by side)
 #   BENCH_REF          v2.2.0-rc10.1 (images tag, and the source of the tools)
+#   BENCH_TOOLS_REF    $BENCH_REF (build gwbench/mockllm from another ref, e.g. a
+#                      newer analysis; the manifests record this ref's SHA)
 #   BENCH_STUDIO_IMAGE / BENCH_GATEWAY_IMAGE   default tykio/*-ent:$BENCH_REF
 #   BENCH_TYPE_{LOADGEN,GATEWAY,MOCK,HUB}      c7i.2xlarge c7i.xlarge c7i.2xlarge m7i.xlarge
 #   BENCH_ENV_FILE     dev/.env.secrets (must hold TYK_AI_LICENSE)
@@ -42,6 +44,7 @@ REGION=${BENCH_AWS_REGION:-ap-southeast-2}
 AZ=${BENCH_AZ:-${REGION}a}
 NAME=${BENCH_NAME:-gwbench}
 REF=${BENCH_REF:-v2.2.0-rc10.1}
+TOOLS_REF=${BENCH_TOOLS_REF:-$REF}
 STUDIO_IMAGE=${BENCH_STUDIO_IMAGE:-tykio/tyk-ai-studio-ent:$REF}
 GATEWAY_IMAGE=${BENCH_GATEWAY_IMAGE:-tykio/tyk-microgateway-ent:$REF}
 ENV_FILE=${BENCH_ENV_FILE:-$REPO_ROOT/dev/.env.secrets}
@@ -235,13 +238,13 @@ ensure_secrets() {
   } > "$f"
 }
 
-# build_tools compiles gwbench and mockllm for linux/amd64 from $REF, so the
-# load generator and mock match the release under test.
+# build_tools compiles gwbench and mockllm for linux/amd64 from $TOOLS_REF
+# (default $REF), so the load generator and mock match the release under test.
 build_tools() {
   local src=$STATE/src sha
-  sha=$(git -C "$REPO_ROOT" rev-parse "$REF^{commit}") || die "unknown ref $REF (git fetch --tags?)"
+  sha=$(git -C "$REPO_ROOT" rev-parse "$TOOLS_REF^{commit}") || die "unknown ref $TOOLS_REF (git fetch?)"
   if [ -f "$STATE/bin/.sha" ] && [ "$(cat "$STATE/bin/.sha")" = "$sha" ]; then return; fi
-  log "building gwbench + mockllm from $REF ($sha)"
+  log "building gwbench + mockllm from $TOOLS_REF ($sha)"
   rm -rf "$src"; mkdir -p "$src" "$STATE/bin"
   git -C "$REPO_ROOT" archive "$sha" | tar -x -C "$src"
   # The root module's replace directive needs the enterprise submodule's go.mod.
