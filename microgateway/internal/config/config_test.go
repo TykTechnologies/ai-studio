@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEffectiveRetentionDays(t *testing.T) {
+	assert.Equal(t, DefaultEdgeRetentionDays, AnalyticsConfig{}.EffectiveRetentionDays(true))
+	assert.Equal(t, DefaultRetentionDays, AnalyticsConfig{}.EffectiveRetentionDays(false))
+	assert.Equal(t, 30, AnalyticsConfig{RetentionDays: 30}.EffectiveRetentionDays(true))
+	assert.Equal(t, 30, AnalyticsConfig{RetentionDays: 30}.EffectiveRetentionDays(false))
+}
+
 func TestLoad_WithDefaults(t *testing.T) {
 	t.Run("DefaultConfig", func(t *testing.T) {
 		// Clear any existing env vars
@@ -186,7 +193,7 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "InvalidRetentionDays",
 			modifyConfig: func(c *Config) {
-				c.Analytics.RetentionDays = 0
+				c.Analytics.RetentionDays = -1
 			},
 			expectError:   true,
 			errorContains: "analytics retention days must be at least 1",

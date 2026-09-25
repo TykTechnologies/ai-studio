@@ -1768,6 +1768,24 @@ func (pm *PluginManager) BufferComplianceEvents(events []plugins.ComplianceEvent
 	log.Debug().Int("count", len(events)).Msg("No analytics pulse plugin found for compliance events - events dropped")
 }
 
+// HasAnalyticsPulse reports whether the built-in analytics pulse plugin is
+// loaded, that is whether this gateway sends its analytics to the control
+// plane.
+func (pm *PluginManager) HasAnalyticsPulse() bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	for _, globalPlugin := range pm.globalDataPlugins {
+		if globalPlugin.LoadedPlugin == nil || globalPlugin.LoadedPlugin.BuiltinPlugin == nil {
+			continue
+		}
+		if _, ok := globalPlugin.LoadedPlugin.BuiltinPlugin.(*plugins.AnalyticsPulsePlugin); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // BufferToolCalls forwards tool operation calls to the built-in analytics pulse
 // plugin for batch transmission to the control plane during the next pulse.
 func (pm *PluginManager) BufferToolCalls(calls []plugins.ToolCallBuffer) {

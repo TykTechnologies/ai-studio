@@ -274,6 +274,15 @@ func (sc *ServiceContainer) StartAnalyticsWriter(acfg *config.AnalyticsConfig) {
 		queueSize, batchSize, interval = acfg.WriterQueueSize, acfg.WriterBatchSize, acfg.WriterFlushInterval
 	}
 	w := NewAnalyticsWriter(sc.Writer(), queueSize, batchSize, interval)
+	if acfg != nil {
+		// Evaluated on every retention pass: the pulse is loaded after
+		// the writer starts.
+		analytics := *acfg
+		pm := sc.PluginManager
+		w.SetRetention(func() int {
+			return analytics.EffectiveRetentionDays(pm != nil && pm.HasAnalyticsPulse())
+		})
+	}
 	ledger := NewBudgetLedger(sc.DB)
 	w.SetLedger(ledger)
 	if s, ok := sc.BudgetService.(ledgerSetter); ok {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -44,7 +43,7 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 		if removedShared {
 			log.Printf("SQLite: ignoring cache=shared in DATABASE_DSN for a file database; it causes table-level lock errors under concurrent load")
 		}
-		db, err = gorm.Open(sqlite.Open(dsn), gormConfig)
+		db, err = gorm.Open(openSQLite(dsn), gormConfig)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", config.Type)
 	}
@@ -90,7 +89,7 @@ func OpenWriter(config DatabaseConfig, db *gorm.DB) (*gorm.DB, error) {
 		return db, nil
 	}
 	dsn, _ := normalizeSQLiteDSN(config.DSN)
-	w, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: getGormLogger(config.LogLevel)})
+	w, err := gorm.Open(openSQLite(dsn), &gorm.Config{Logger: getGormLogger(config.LogLevel)})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database writer: %w", err)
 	}
