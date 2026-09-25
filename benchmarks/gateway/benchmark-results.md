@@ -1,55 +1,83 @@
-# AI Gateway benchmark results: v2.2.0-rc10.1
+# AI Gateway benchmark results
 
-Measured 25 September 2026 on AWS (ap-southeast-2, Sydney), with the released
-`tykio/tyk-microgateway-ent:v2.2.0-rc10.1` image running as an edge gateway on
-**one 4-vCPU machine** (c7i.xlarge). 2.47 million requests over about 2.5
-hours, 18 runs, every one VALID under the suite's own checks.
+Measured 25 September 2026 on AWS (ap-southeast-2, Sydney), with the Enterprise
+edge gateway running on **one 4-vCPU machine** (c7i.xlarge) under its full
+production policy: app credential authentication, access checks, a monthly
+budget enforced on every request, cost accounting, and analytics shipped to the
+control plane. Two builds were measured:
+
+- **v2.2.0-rc10.1**, the released image: the full suite, about 2.5 million
+  requests in 18 complete runs, every one VALID under the suite's own checks,
+  plus a real-vendor run that was stopped after three of its eight cells.
+- **main at 0b0af5de**: rc10.1 plus the edge fix that stops it storing request
+  and response bodies against its settings (#612), with the rc10.1 image's
+  binary replaced by one built from main. Used for the throughput figures: six
+  more runs, all VALID.
 
 ## Summary
 
-**The gateway adds well under a millisecond to a request, and it holds that
-up to about 365 streaming requests per second on 4 vCPU.**
+**Under full production policy the gateway adds about half a millisecond to a
+request, and streaming traffic stays stable from idle to the edge of capacity,
+through bursts and over an hour of sustained load.**
 
-| What you want to know | Result on one 4-vCPU gateway |
+### Latency under real policy load
+
+| | One 4-vCPU gateway, every request authenticated, budgeted and recorded |
 |---|---|
-| Latency the gateway adds (native `/llm/call`, `/llm/rest`, `/llm/stream`), unloaded | **0.52–0.63 ms p50, 0.81–1.01 ms p99**, including the extra network hop |
-| Of that, the gateway's own processing (its Server-Timing header) | **0.30 ms p50, 0.7–0.9 ms p99** |
-| Latency the OpenAI-compatible endpoints add (`/ai/…` shim, unified `/v1`) | **0.91–1.07 ms p50, 1.49–1.88 ms p99** |
-| End-user overhead against real OpenAI and Anthropic (paired, from Sydney) | _S3 in progress; filled in when it completes_ |
-| Sustained streaming load, realistic LLM responses (300 ms to first token, 4.3 s streams) | **365 req/s** (range 316–367 over 3 runs), about **1,600 concurrent streams**, gateway p99 ≤ 3 ms; 0 errors |
-| Sustained non-streaming load (upstream answers in 20 ms) | **~1,000 req/s** (range 998–1,182 over 3 runs); 0 errors |
-| 3× burst (130 → 390 req/s for 30 s, just above capacity) | 0 errors; gateway p99 peaked at 15 ms for 5 s, back to 1 ms immediately |
-| One hour at 70% of capacity (257 req/s, 835,059 requests) | 0 errors; latency and memory flat from first minute to last |
-| Analytics delivered to the control plane | 2,092,205 of 2,092,206 gateway responses recorded (one lost, in one run) |
+| Added by the gateway, native endpoints (`/llm/call`, `/llm/rest`, `/llm/stream`) | **0.52–0.63 ms p50, 0.81–1.01 ms p99**, including the extra network hop |
+| Of that, the gateway's own processing (its `Server-Timing` header) | **0.30 ms p50**, 0.7–0.9 ms p99 |
+| Added by the OpenAI-compatible endpoints (`/ai/…` shim, unified `/v1`) | 0.91–1.07 ms p50, 1.49–1.88 ms p99 |
+| Added under streaming load, up to ~365 new streams per second | gateway's own p99 **under 3 ms**; time to first token p50 within 1–8 ms of the upstream's |
+| Against real OpenAI, from Sydney (200 paired requests per cell) | **not measurable**: +5 ms [−9, +32] streaming, −12 ms [−30, +6] non-streaming, against 720–1,250 ms vendor response times |
 
-What these numbers mean for sizing:
+### Streaming stability
+
+| | Result |
+|---|---|
+| One hour at 257 streaming req/s (835,059 requests, 4.3 s streams) | **0 errors**; time to first token 301–305 ms p50 in every 5-minute window; gateway p99 0.96–1.03 ms throughout; memory flat (+33 MB) |
+| 3× burst (130 → 390 req/s for 30 s, just above capacity) | **0 errors**; gateway p99 peaked at 15 ms for 5 s and was back to 1 ms as soon as the burst ended |
+| Concurrent streams on one node | about **1,600** (365 new streams/s × 4.3 s), 0 errors in every streaming run |
+| Analytics delivered to the control plane (rc10.1 runs) | 2,092,205 of 2,092,206 gateway responses (one lost, in one run) |
+
+What this means in practice:
 
 - **Latency is not the constraint.** A chat user waits hundreds of
-  milliseconds to seconds for the first token from the model. The gateway adds
-  under a millisecond at p50, and its own p99 stays within a few milliseconds
-  until the node runs out of CPU.
-- **Plan capacity per node, and scale out.** One 4-vCPU edge sustains about
-  365 new streaming requests per second with realistic stream lengths, or about
-  1,000 short non-streaming requests per second. Each edge serves requests
-  from its own copy of the configuration, so capacity grows with the number of
-  nodes behind a load balancer.
-- **Run below the knee.** At about 400 streaming req/s the node's CPU is
-  saturated and latency rises sharply. The soak at 70% of capacity (257 req/s)
-  ran for an hour without any drift.
+  milliseconds to seconds for a model's first token. The gateway adds about
+  half a millisecond, and against a real vendor its effect is smaller than the
+  vendor's own variation from one request to the next.
+- **Streams do not degrade before the node is full.** Up to about 365 new
+  streams per second (about 1,600 open at once), time to first token through
+  the gateway tracks the upstream's. Past that the 4 vCPUs are saturated; add
+  nodes behind a load balancer, each serving from its own copy of the
+  configuration.
 
-Two findings qualify these numbers. They are described under
-[Behaviour to know about](#behaviour-to-know-about):
+### Throughput: read with care
 
-1. **rc10.1 edges store request and response bodies in their local database
-   even when configured not to**, and the database grows quickly under load
-   (3 GB plus a 6.9 GB write-ahead log after 40 minutes of benchmark traffic).
-   After the heaviest runs this caused about 80 seconds of slower requests
-   (p99 up to 21 ms) and is the likely reason one of three capacity runs
-   reached 316 rather than ~365 req/s. It is fixed on main after rc10.1
-   (956683b4).
-2. **Non-streaming throughput is not CPU-bound.** The REST ceiling was reached
-   with the gateway at 2–2.4 of its 4 cores. The limit is elsewhere, most likely
-   the edge's per-request database writes.
+Request-rate figures are where gateway comparisons usually start, but these
+are not yet a like-for-like number, so they are not the headline:
+
+- With full policy, the non-streaming ceiling on main is **about 1,190 req/s
+  on a freshly started edge, falling to 640–730 req/s** once the edge's local
+  database has grown over a few minutes of load (rc10.1: about 1,000 req/s).
+  The gateway reaches it using 1–2.4 of its 4 cores: the limit is the edge's
+  per-request writes to its local SQLite database, not CPU. Work to remove it
+  is under way.
+- Published gateway throughput figures are usually measured with an instant
+  upstream and no authentication, logging or accounting. With what
+  configuration alone can remove (instant upstream, no budget, no cost
+  accounting, no analytics shipping, `LOG_LEVEL=error`), the ceiling is
+  **about 1,545 req/s on a fresh edge**, with the gateway adding 0.5–0.7 ms at
+  p50 up to 1,450 req/s. It falls to 720–820 req/s once the database has
+  grown, about the same as with full policy. Authentication and the edge's
+  local analytics record cannot be switched off by configuration, so this is
+  still not a no-auth figure. A benchmark-only build that removes them is in
+  progress for that comparison.
+- Until the SQLite ceiling is removed, size non-streaming capacity from the
+  full-policy figure.
+
+See [Throughput](#throughput) for the runs, and
+[Behaviour to know about](#behaviour-to-know-about) for the findings behind
+these caveats.
 
 ## What was measured, and why
 
@@ -65,6 +93,7 @@ with scenarios S0–S7:
 | S3 | What does an end user see against real vendors? | paired ABBA blocks | OpenAI, Anthropic |
 | S4 | How many streaming requests can one node sustain? | Poisson arrivals, +50 req/s per minute | mock: 300 ms TTFT (p99 900 ms), 200 tokens at 50 tokens/s |
 | S5 | How many short requests can one node sustain? | Poisson arrivals, +100 req/s per 30 s | mock: 20 ms |
+| S5m | The same, under minimal configuration (no budget, no cost accounting, no analytics shipping, `LOG_LEVEL=error`) | as S5 | mock, instant |
 | S6 | Does it absorb a burst and recover? | base → 3× for 30 s → base | as S4 |
 | S7 | Does it drift over time? | 1 hour constant at 70% of S4 | as S4 |
 
@@ -129,8 +158,14 @@ down with [`cloud/aws.sh`](cloud/aws.sh).
 - **Versions**: gateway and Studio images v2.2.0-rc10.1 (commit 5ee92c69). The
   load generator and mock were built from the same commit; the load generator
   was replaced mid-suite with a build carrying the capacity-analysis fix (#611),
-  which changes analysis only, not measurement. Every report was then
-  regenerated from the raw data with `gwbench report` at main 956683b4.
+  which changes analysis only, not measurement. Every rc10.1 report was then
+  regenerated from the raw data with `gwbench report` using that analysis.
+- **The main build** (throughput runs only): the rc10.1 image with its
+  `tyk-microgateway` binary replaced by one built from main 0b0af5de the way
+  the release builds it (CGO, `-tags=enterprise`, Debian glibc), using
+  `aws.sh build-gateway`. Studio stayed on the rc10.1 image; main differs from
+  rc10.1 only by the edge fix (#612) and benchmark tooling. The edge was started
+  with an empty database before each set of three runs.
 - **Repeats**: S0–S2 and S4–S5 ran three times each, as the runbook requires.
   Tables give the median of the three runs and the range. S6 and S7 were sized
   from the first S4 run (367 req/s) and ran once.
@@ -162,7 +197,7 @@ loopback.
 
 The high ends of the p99 ranges for the native endpoints come from the second of
 the three runs, which started right after the heaviest load test. See
-[finding 1](#1-edge-database-stalls-after-heavy-load).
+[finding 1](#1-rc101-edges-store-request-and-response-bodies).
 
 ### S2: prompt size and stream length
 
@@ -192,8 +227,9 @@ time to first token with a tail to 900 ms, then 200 tokens at 50 tokens/s.
 
 Median **365 req/s**. At that rate about 1,600 streams are open at once
 (365 req/s × 4.3 s per stream). Below the knee, time to first token through the
-gateway stays within a few milliseconds of the upstream's (p50 301–314 ms against
-the upstream's 300 ms), and the gateway's own p99 stays under 3 ms:
+gateway stays within 1–8 ms (p50) of the upstream's as the gateway observed it
+(301–314 ms through the gateway; the mock's nominal median is 300 ms), and the
+gateway's own p99 stays under 3 ms:
 
 | Offered load (run 3) | 38 | 136 | 228 | 315 | 365 | 409 req/s |
 |---|---|---|---|---|---|---|
@@ -202,20 +238,36 @@ the upstream's 300 ms), and the gateway's own p99 stays under 3 ms:
 
 There were no errors in any run, and every request reached Studio's analytics.
 
-### S5: request-rate ceiling
+### Throughput
 
-Short non-streaming requests (upstream answers in 20 ms), +100 req/s every 30 s.
+Short non-streaming requests, +100 req/s every 30 s until the SLO or the stop
+condition ends the ramp. Every run below was VALID with **no errors**.
 
-| Run | Sustained | Ended by | Gateway CPU max |
+**S5, full policy, upstream answers in 20 ms.** Three runs on each build, one
+after the other on the same edge:
+
+| Build | Run 1 | Run 2 | Run 3 | Gateway CPU at the ceiling |
+|---|---|---|---|---|
+| v2.2.0-rc10.1 (released image) | 1,182 req/s | 998 req/s | 1,009 req/s | 2.0–2.4 cores |
+| main 0b0af5de, edge started fresh before run 1 | **1,190 req/s** | 636 req/s | 727 req/s | 2.3, then 1.1–1.3 cores |
+
+**S5m, minimal configuration, instant upstream** (main 0b0af5de, a fresh edge
+before run 1, no budget, no model price, no analytics shipping,
+`LOG_LEVEL=error`; authentication and the edge's local analytics record still
+run):
+
+| Run 1 | Run 2 | Run 3 | Gateway CPU at the ceiling |
 |---|---|---|---|
-| 1 | 1,182 req/s | stop condition in the next step | 2.37 cores |
-| 2 | 998 req/s | breach at 1,093 req/s (p99 +132 ms at 95% confidence) | 2.30 |
-| 3 | 1,009 req/s | stop condition in the next step | 1.96 |
+| **1,545 req/s** (breach at 1,637) | 723 req/s | 815 req/s | 2.4, then 1.0–1.1 cores |
 
-Median **~1,000 req/s**, with no errors. The p99 overhead rises steadily from
-about 1 ms at 75 req/s to about 20 ms near the ceiling, and then latency
-collapses within one step. The gateway never used more than 2.4 of its 4 cores,
-so this ceiling is not CPU (see [finding 2](#2-rest-throughput-is-not-cpu-bound)).
+Below the ceiling the gateway is fast. In the first S5m run it added 0.5–0.7 ms
+at p50 from 360 to 1,450 req/s (p99 3–13 ms), and in the first full-policy
+run 0.6–0.9 ms at p50 up to 1,190 req/s. The ceiling itself is set by the
+edge's local database, and it drops once that database has grown: see
+[finding 2](#2-the-edges-local-database-sets-the-throughput-ceiling). The
+rc10.1 runs followed S0–S2 and a streaming ramp on the same edge rather than a
+fresh one, and that build also stored bodies, so they are not directly
+comparable with either main set.
 
 ### S6: burst
 
@@ -248,39 +300,72 @@ worth watching over longer soaks.
 
 ### S3: real vendors
 
-_In progress. This section is filled in when the run completes._
+Paired ABBA blocks from the load generator in Sydney to OpenAI, directly and
+through the gateway, 200 pairs per cell after 5 warm-up blocks. The suite was
+stopped during the fourth cell (unified `/v1`), so the run is marked INVALID
+as a whole and Anthropic was not reached. The three completed cells have no
+errors and are reported as measured:
+
+| Cell | Paired overhead, median of within-block differences [95% CI] | Vendor response time (direct, p50) | Gateway's own time p50 |
+|---|---|---|---|
+| streaming, 64 tokens | TTFT **+5.2 ms** [−9.0, +31.5] | TTFT 722 ms, total 1,141 ms | 0.62 ms |
+| non-streaming, 64 tokens | **−11.7 ms** [−30.0, +5.8] | 1,245 ms | 0.72 ms |
+| streaming, 512 tokens | TTFT **−8.0 ms** [−18.6, +5.3] | TTFT 802 ms, total 4,009 ms | 1.04 ms |
+
+Every interval contains zero: against a real vendor, the gateway's effect is
+smaller than the vendor's own variation between two requests sent seconds
+apart. The gateway's own account of its time (0.6–1.0 ms) is the better
+measure of what it adds. The absolute times include the round trip from
+Sydney to OpenAI's API.
 
 ## Behaviour to know about
 
-### 1. Edge database stalls after heavy load
+### 1. rc10.1 edges store request and response bodies
 
 rc10.1 edges store up to `ANALYTICS_MAX_BODY_SIZE` (4 KB) of every request and
 response body in their local SQLite database, even when
 `ANALYTICS_STORE_REQUESTS` and `ANALYTICS_STORE_RESPONSES` are false (their
-default). Rows are kept for `ANALYTICS_RETENTION_DAYS` (90 by default).
+default), and keep them for `ANALYTICS_RETENTION_DAYS` (90 by default).
 
 - **Storage**: after 40 minutes of benchmark traffic the edge database was
-  3.0 GB plus a 6.9 GB write-ahead log, and 12.9 GB after the soak. The
-  write-ahead log never shrank. Size the edge's disk for this on rc10.1.
-- **Latency**: right after the S5 burst, database writes on the edge took 1.1–2.6
-  seconds each. For about 80 seconds, requests waited for the database before
-  they were sent upstream: the second S1 run measured 2.2 ms p50 and 12–21 ms p99
-  overhead on the native endpoints while the gateway's CPU was nearly idle. The
-  lower second S4 run (316 req/s) is most likely the same effect.
-- **Privacy**: prompts and responses are kept on the edge although the settings
-  say they are not.
+  3.0 GB plus a 6.9 GB write-ahead log, and 12.9 GB after the soak.
+- **Latency**: right after the heaviest load test, database writes on the edge
+  took 1.1–2.6 seconds each, and for about 80 seconds requests waited for the
+  database before they were sent upstream. The second S1 run measured 2.2 ms
+  p50 and 12–21 ms p99 overhead on the native endpoints while the gateway's CPU
+  was nearly idle, and the second S4 run reached 316 rather than ~365 req/s.
+- **Privacy**: prompts and responses were kept on the edge although the
+  settings said they were not.
 
-Fixed on main after rc10.1: the edge now honours `ANALYTICS_STORE_REQUESTS` /
-`ANALYTICS_STORE_RESPONSES` (956683b4). A re-run on a build with the fix will
-show how much of the variation above it removes.
+**Fixed on main** (#612): bodies are stored only when those settings are on.
+On main the edge database stayed at about 200 MB over the same kind of load.
 
-### 2. REST throughput is not CPU-bound
+### 2. The edge's local database sets the throughput ceiling
 
-The request-rate ceiling (S5) was reached with the gateway at 2.0–2.4 of 4 cores,
-whereas streaming (S4) saturated the CPU. Each request also writes analytics,
-budget and proxy-log rows to the edge's SQLite database, one write each, and
-those writes serialise. That is the most likely limit; it has not been
-profiled yet.
+On main the non-streaming ceiling is not CPU: the gateway reached it using 1–2.4
+of its 4 cores, and simple indexed lookups (the app for the budget check, the
+model price, the OAuth token check) were logged taking over a second. What we
+found:
+
+- **Every request writes to SQLite several times**, after the response: an
+  analytics insert, an update that merges in token counts, and with a priced
+  model a budget-usage upsert and update. SQLite has a single writer. The disk
+  wrote about 45 KB per request at 1,000–1,200 req/s.
+- **Those writes run in one goroutine per request, with no limit, sharing the
+  request path's 25 database connections.** Under load, writers waiting for the
+  write lock (up to the 5 s busy timeout) hold connections, and the request
+  path's reads queue for one.
+- **The write-ahead log is starved of checkpoints under constant load** and
+  grows without bound: 7.3 GB after 20 minutes on main, beside a 198 MB
+  database. It resets when traffic stops, but the file never shrinks, and the
+  larger it gets, the slower the edge's reads and checkpoints.
+
+That is why a fresh edge sustains about 1,190 req/s with full policy (1,545
+with the minimal configuration) and the same edge a few minutes later about
+650–820 in both. Streaming (S4) sends about a third as many requests per
+second, so it stays below this limit. Work on a bounded, batched writer with
+its own connections and managed checkpoints is under way; the throughput
+figures will be re-measured on that build.
 
 ### 3. Other behaviour
 
@@ -304,7 +389,21 @@ benchmarks/gateway/cloud/aws.sh suite VENDORS=1
 benchmarks/gateway/cloud/aws.sh fetch && benchmarks/gateway/cloud/aws.sh down
 ```
 
+The throughput runs on another build, and the minimal configuration:
+
+```bash
+IMG=$(benchmarks/gateway/cloud/aws.sh build-gateway main | tail -1)
+BENCH_GATEWAY_IMAGE=$IMG benchmarks/gateway/cloud/aws.sh deploy      # fresh edge
+benchmarks/gateway/cloud/aws.sh seed
+benchmarks/gateway/cloud/aws.sh run benchmarks/gateway/scenarios/s5-throughput-ceiling.yaml   # x3
+
+BENCH_GATEWAY_IMAGE=$IMG BENCH_PLUGINS_CONFIG_PATH= BENCH_LOG_LEVEL=error benchmarks/gateway/cloud/aws.sh deploy
+benchmarks/gateway/cloud/aws.sh seed -minimal
+benchmarks/gateway/cloud/aws.sh run -no-analytics-check benchmarks/gateway/scenarios/s5m-minimal-config.yaml   # x3
+```
+
 See [RUNBOOK-cloud.md](RUNBOOK-cloud.md). The report and summary of every run
-behind this document are in [`published/v2.2.0-rc10.1/`](published/v2.2.0-rc10.1/).
+behind this document are in [`published/v2.2.0-rc10.1/`](published/v2.2.0-rc10.1/)
+and [`published/main-0b0af5de/`](published/main-0b0af5de/).
 The raw per-request data (about 1 GB) is kept outside the repository. Any
 report can be regenerated from it with `gwbench report <run-dir>`.

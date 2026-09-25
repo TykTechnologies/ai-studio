@@ -80,17 +80,20 @@ Standards-based AI component integration:
 
 ## Gateway Performance
 
-Measured on v2.2.0-rc10.1 with the released Enterprise edge gateway on **one
-4-vCPU AWS machine** (c7i.xlarge), production configuration, against a mock
-LLM and against real OpenAI and Anthropic:
+Measured on v2.2.0-rc10.1 with the Enterprise edge gateway on **one 4-vCPU AWS
+machine** (c7i.xlarge), with every request authenticated, checked against a
+budget, cost-accounted and recorded in analytics:
 
-| | One 4-vCPU gateway |
+| | One 4-vCPU gateway, full production policy |
 |---|---|
-| Latency added per request (native endpoints) | **0.5–0.6 ms p50, under 1 ms p99**, including the network hop |
-| Latency added (OpenAI-compatible `/v1` and `/ai` endpoints) | ~1 ms p50, under 2 ms p99 |
-| Sustained streaming load (realistic 4 s LLM streams) | **~365 req/s**, about 1,600 concurrent streams, 0 errors |
-| Sustained non-streaming load | **~1,000 req/s**, 0 errors |
-| 3× burst, and 1 hour at 70% of capacity | 0 errors; latency and memory flat |
+| Latency added per request (native endpoints) | **0.5–0.6 ms p50, about 1 ms p99**, including the network hop |
+| Latency added against real OpenAI (paired) | not measurable against the vendor's own variation (0.6–1.0 ms by the gateway's own timing) |
+| Streaming up to ~365 new streams/s (~1,600 open) | time to first token within a few ms of the upstream's; 0 errors |
+| 1 hour at 70% of capacity, and a 3× burst | 0 errors; latency and memory flat; recovered from the burst immediately |
+
+Non-streaming throughput is currently limited by the edge's local database
+rather than CPU. The report explains the figures and the work under way to
+remove that limit.
 
 Full method, per-scenario data and known limitations:
 [benchmarks/gateway/benchmark-results.md](benchmarks/gateway/benchmark-results.md).
