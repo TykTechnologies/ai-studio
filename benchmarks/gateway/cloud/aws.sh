@@ -29,6 +29,7 @@
 #   BENCH_TOOLS_REF    $BENCH_REF (build gwbench/mockllm from another ref, e.g. a
 #                      newer analysis; the manifests record this ref's SHA)
 #   BENCH_STUDIO_IMAGE / BENCH_GATEWAY_IMAGE   default tykio/*-ent:$BENCH_REF
+#   BENCH_ENABLE_PROFILING  false; true serves pprof on <gateway private ip>:6060
 #   BENCH_LOG_LEVEL    info; BENCH_PLUGINS_CONFIG_PATH= (set, empty) turns the
 #                      analytics pulse off (both for scenario s5m)
 #   BENCH_TYPE_{LOADGEN,GATEWAY,MOCK,HUB}      c7i.2xlarge c7i.xlarge c7i.2xlarge m7i.xlarge
@@ -300,6 +301,10 @@ cmd_deploy() {
      # analytics pulse off.
      echo "BENCH_LOG_LEVEL=${BENCH_LOG_LEVEL:-info}"
      echo "BENCH_PLUGINS_CONFIG_PATH=${BENCH_PLUGINS_CONFIG_PATH-/bench/analytics-pulse.yaml}"
+     # Profiling: BENCH_ENABLE_PROFILING=true serves pprof on the gateway's
+     # private address, port 6060 (see cloud/pprof-watch.sh).
+     echo "BENCH_ENABLE_PROFILING=${BENCH_ENABLE_PROFILING:-false}"
+     echo "BENCH_PROFILING_ADDR=${BENCH_PROFILING_ADDR:-$( [ "${BENCH_ENABLE_PROFILING:-false}" = true ] && echo 0.0.0.0:6060 || echo 127.0.0.1:6060)}"
    } > "$benv")
 
   # hub + gateway: compose with the released images

@@ -98,6 +98,11 @@ services:
       METRICS_AUTH_TOKEN: ${BENCH_METRICS_TOKEN:?}
       GATEWAY_SERVER_TIMING: "true"
       ENABLE_TRACING: ${ENABLE_TRACING:-false}
+      # Opt-in pprof (mutex and block sampling on). Builds from before the
+      # listener existed ignore these. On the host network 0.0.0.0 is
+      # reachable only inside the benchmark security group.
+      ENABLE_PROFILING: ${BENCH_ENABLE_PROFILING:-false}
+      PROFILING_ADDR: ${BENCH_PROFILING_ADDR:-127.0.0.1:6060}
     volumes:
       - /opt/gwbench/data:/data
       - /opt/gwbench/analytics-pulse.yaml:/bench/analytics-pulse.yaml:ro
