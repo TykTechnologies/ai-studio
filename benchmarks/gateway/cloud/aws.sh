@@ -30,6 +30,7 @@
 #                      newer analysis; the manifests record this ref's SHA)
 #   BENCH_STUDIO_IMAGE / BENCH_GATEWAY_IMAGE   default tykio/*-ent:$BENCH_REF
 #   BENCH_ENABLE_PROFILING  false; true serves pprof on <gateway private ip>:6060
+#   BENCH_GATEWAY_ENV  extra edge settings, "KEY=VALUE KEY2=VALUE2"
 #   BENCH_LOG_LEVEL    info; BENCH_PLUGINS_CONFIG_PATH= (set, empty) turns the
 #                      analytics pulse off (both for scenario s5m)
 #   BENCH_TYPE_{LOADGEN,GATEWAY,MOCK,HUB}      c7i.2xlarge c7i.xlarge c7i.2xlarge m7i.xlarge
@@ -317,10 +318,17 @@ cmd_deploy() {
      echo "BENCH_PROFILING_ADDR=${BENCH_PROFILING_ADDR:-$( [ "${BENCH_ENABLE_PROFILING:-false}" = true ] && echo 0.0.0.0:6060 || echo 127.0.0.1:6060)}"
    } > "$benv")
 
+  # Extra edge settings for the build under test: BENCH_GATEWAY_ENV is a
+  # space-separated list of KEY=VALUE pairs, written to the gateway's
+  # gateway-extra.env (empty when unset, so a redeploy clears earlier ones).
+  local genv=$STATE/gateway-extra.env
+  (umask 077; : > "$genv"; for kv in ${BENCH_GATEWAY_ENV:-}; do echo "$kv" >> "$genv"; done)
+
   # hub + gateway: compose with the released images
   for role in hub gateway; do
     rcp "$role" /opt/gwbench/ "$SCRIPT_DIR/docker-compose.yml" "$BENCH_DIR/compose/analytics-pulse.yaml"
     rcp "$role" /opt/gwbench/bench.env "$benv"
+    if [ "$role" = gateway ]; then rcp gateway /opt/gwbench/gateway-extra.env "$genv"; fi
     # --ignore-pull-failures: an image from build-gateway exists only locally.
     rsh "$role" "chmod 600 /opt/gwbench/bench.env && sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile $role pull -q --ignore-pull-failures"
   done

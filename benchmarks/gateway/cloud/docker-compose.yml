@@ -103,6 +103,11 @@ services:
       # reachable only inside the benchmark security group.
       ENABLE_PROFILING: ${BENCH_ENABLE_PROFILING:-false}
       PROFILING_ADDR: ${BENCH_PROFILING_ADDR:-127.0.0.1:6060}
+    # Extra settings for the build under test (BENCH_GATEWAY_ENV in aws.sh),
+    # e.g. OVERLOAD_MEMORY_LIMIT=1GiB. They override the values above.
+    env_file:
+      - path: /opt/gwbench/gateway-extra.env
+        required: false
     volumes:
       - /opt/gwbench/data:/data
       - /opt/gwbench/analytics-pulse.yaml:/bench/analytics-pulse.yaml:ro
