@@ -20,6 +20,35 @@ Four Linux VMs of the same instance family, in one availability zone:
 - The hub is off the request path, but the edge sends analytics to it and
   refreshes tokens from it, so it must not be starved.
 
+## Scripted on AWS
+
+`cloud/aws.sh` does everything below on AWS, repeatably. It needs the AWS
+CLI (authenticated), `jq`, Go, and the licence file. It creates a VPC of its
+own, one cluster placement group, and the four VMs above (c7i/m7i, Ubuntu
+24.04); runs the **released** Studio and microgateway images for the ref under
+test; and builds `gwbench` and `mockllm` from the same git ref. SSH is open to
+your public IP only; everything else is private to the benchmark VMs.
+
+```bash
+export BENCH_NAME=rc10-1 BENCH_REF=v2.2.0-rc10.1     # BENCH_AWS_REGION=ap-southeast-2 by default
+benchmarks/gateway/cloud/aws.sh up          # VPC, placement group, 4 VMs (~5 min)
+benchmarks/gateway/cloud/aws.sh deploy      # tools, secrets, services; measures ping p99 into the label
+benchmarks/gateway/cloud/aws.sh seed -vendors
+benchmarks/gateway/cloud/aws.sh smoke       # optional quick check
+benchmarks/gateway/cloud/aws.sh suite VENDORS=1   # the whole sequence below, detached
+benchmarks/gateway/cloud/aws.sh logs        # or: status
+benchmarks/gateway/cloud/aws.sh fetch       # -> results/aws-$BENCH_NAME/
+benchmarks/gateway/cloud/aws.sh down        # deletes everything tagged with $BENCH_NAME
+```
+
+Run `aws.sh` with no arguments for every setting. Per-deployment secrets, the
+SSH key and the built tools stay in `benchmarks/gateway/.cloud/<name>/`
+(gitignored). `down` finds resources by tag, so it cleans up even without that
+directory. For a variant (S8), set its variable when deploying, for example
+`EDGE_TOKEN_CACHE_ENABLED=false aws.sh deploy`, then re-seed.
+
+The rest of this runbook describes the same setup by hand.
+
 ## One-time setup (all VMs)
 
 1. Install Docker and clone this repository at the commit under test on each VM.
