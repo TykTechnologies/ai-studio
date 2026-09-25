@@ -6,7 +6,10 @@
 #
 #   aws.sh up                 create key pair, security group, placement group, VMs
 #   aws.sh build              build gwbench + mockllm (linux/amd64) from $BENCH_REF
+#   aws.sh build-gateway [ref]  edge binary from a git ref, swapped into the
+#                             released image (then BENCH_GATEWAY_IMAGE=... deploy)
 #   aws.sh deploy             build tools, copy config + secrets, start services
+#                             (the edge always starts with an empty database)
 #   aws.sh seed [-vendors]    configure Studio + edge (from loadgen)
 #   aws.sh smoke              quick S0/S1/S4 end-to-end check (not publishable)
 #   aws.sh suite [VAR=val..]  full runbook sequence in the background on loadgen
@@ -26,6 +29,8 @@
 #   BENCH_TOOLS_REF    $BENCH_REF (build gwbench/mockllm from another ref, e.g. a
 #                      newer analysis; the manifests record this ref's SHA)
 #   BENCH_STUDIO_IMAGE / BENCH_GATEWAY_IMAGE   default tykio/*-ent:$BENCH_REF
+#   BENCH_LOG_LEVEL    info; BENCH_PLUGINS_CONFIG_PATH= (set, empty) turns the
+#                      analytics pulse off (both for scenario s5m)
 #   BENCH_TYPE_{LOADGEN,GATEWAY,MOCK,HUB}      c7i.2xlarge c7i.xlarge c7i.2xlarge m7i.xlarge
 #   BENCH_ENV_FILE     dev/.env.secrets (must hold TYK_AI_LICENSE)
 #   BENCH_VENDORS_DIR  test-secrets (vendors.env, only for seed -vendors / S3)
@@ -291,20 +296,28 @@ cmd_deploy() {
      # S8 variants; the compose file's defaults apply when unset.
      echo "EDGE_TOKEN_CACHE_ENABLED=${EDGE_TOKEN_CACHE_ENABLED:-true}"
      echo "ENABLE_TRACING=${ENABLE_TRACING:-false}"
+     # Minimal-configuration variant (scenario s5m): set but empty turns the
+     # analytics pulse off.
+     echo "BENCH_LOG_LEVEL=${BENCH_LOG_LEVEL:-info}"
+     echo "BENCH_PLUGINS_CONFIG_PATH=${BENCH_PLUGINS_CONFIG_PATH-/bench/analytics-pulse.yaml}"
    } > "$benv")
 
   # hub + gateway: compose with the released images
   for role in hub gateway; do
     rcp "$role" /opt/gwbench/ "$SCRIPT_DIR/docker-compose.yml" "$BENCH_DIR/compose/analytics-pulse.yaml"
     rcp "$role" /opt/gwbench/bench.env "$benv"
-    rsh "$role" "chmod 600 /opt/gwbench/bench.env && sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile $role pull -q"
+    # --ignore-pull-failures: an image from build-gateway exists only locally.
+    rsh "$role" "chmod 600 /opt/gwbench/bench.env && sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile $role pull -q --ignore-pull-failures"
   done
   log "starting hub"
   rsh hub "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile hub up -d"
   wait_http hub "http://127.0.0.1:8080/health"
 
   log "starting mock"
-  rcp mock /opt/gwbench/ "$STATE/bin/mockllm"
+  # Upload beside the running binary and rename: overwriting it in place
+  # fails with "text file busy" on a redeploy.
+  rcp mock /opt/gwbench/mockllm.new "$STATE/bin/mockllm"
+  rsh mock "mv -f /opt/gwbench/mockllm.new /opt/gwbench/mockllm"
   rsh mock "sudo tee /etc/systemd/system/mockllm.service >/dev/null <<'EOF'
 [Unit]
 Description=gwbench mock LLM upstream
@@ -319,13 +332,19 @@ EOF
 sudo systemctl daemon-reload && sudo systemctl enable mockllm >/dev/null 2>&1 && sudo systemctl restart mockllm"
   wait_http mock "http://127.0.0.1:9999/stats"
 
-  log "starting gateway"
-  rsh gateway "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway up -d --force-recreate"
+  # Every deploy starts the edge with an empty database: what an earlier run
+  # left behind (analytics rows, a large write-ahead log) changes its latency.
+  # Re-seed afterwards so Studio pushes the configuration to the new edge.
+  log "starting gateway (fresh database)"
+  rsh gateway "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway down >/dev/null 2>&1; \
+    sudo find /opt/gwbench/data -mindepth 1 -delete && \
+    sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway up -d --force-recreate"
   wait_http gateway "http://127.0.0.1:8080/health"
 
   log "installing gwbench on loadgen"
   rsh loadgen "mkdir -p /opt/gwbench/bin /opt/gwbench/benchmarks/gateway/results /opt/gwbench/benchmarks/gateway/.state /opt/gwbench/test-secrets"
-  rcp loadgen /opt/gwbench/bin/ "$STATE/bin/gwbench"
+  rcp loadgen /opt/gwbench/bin/gwbench.new "$STATE/bin/gwbench"
+  rsh loadgen "mv -f /opt/gwbench/bin/gwbench.new /opt/gwbench/bin/gwbench"
   rcp loadgen /opt/gwbench/ "$STATE/bin/go.mod" "$SCRIPT_DIR/suite.sh"
   rsh loadgen "rm -rf /opt/gwbench/benchmarks/gateway/scenarios"
   scp -q -r -i "$KEY" "${SSH_OPTS[@]}" "$STATE/bin/scenarios" "ubuntu@$(ip loadgen public):/opt/gwbench/benchmarks/gateway/scenarios"
@@ -366,6 +385,37 @@ wait_http() { # wait_http <role> <url>, checked on that host
     sleep 5
   done
   log "$1 healthy"
+}
+
+# cmd_build_gateway builds the edge binary from a git ref the way the release
+# does (CGO, -tags=enterprise, Debian glibc toolchain) on the gateway VM, and
+# swaps it into the released image, so the image differs from the release only
+# by that binary. Prints the image name; deploy it with
+#   BENCH_GATEWAY_IMAGE=<name> aws.sh deploy && aws.sh seed
+cmd_build_gateway() {
+  local ref=${1:-main} sha ent_sha short base img
+  sha=$(git -C "$REPO_ROOT" rev-parse "$ref^{commit}") || die "unknown ref $ref"
+  short=${sha:0:8}
+  ent_sha=$(git -C "$REPO_ROOT" ls-tree "$sha" enterprise | awk '{print $3}')
+  base=${BENCH_GATEWAY_BASE:-tykio/tyk-microgateway-ent:$REF}
+  img=gwbench-microgateway:$short
+  log "building the edge from $ref ($short, enterprise $ent_sha) into $base"
+  git -C "$REPO_ROOT" archive "$sha" | gzip > "$STATE/src.tgz"
+  git -C "$REPO_ROOT/enterprise" archive --prefix=enterprise/ "$ent_sha" | gzip > "$STATE/ent.tgz" \
+    || die "cannot read enterprise@$ent_sha (git -C enterprise fetch?)"
+  rcp gateway /opt/gwbench/ "$STATE/src.tgz" "$STATE/ent.tgz"
+  rm -f "$STATE/src.tgz" "$STATE/ent.tgz"
+  rsh gateway "set -e; sudo rm -rf /opt/gwbench/src /opt/gwbench/img && mkdir -p /opt/gwbench/src /opt/gwbench/img && \
+    tar -xzf /opt/gwbench/src.tgz -C /opt/gwbench/src && tar -xzf /opt/gwbench/ent.tgz -C /opt/gwbench/src && rm /opt/gwbench/*.tgz && \
+    sudo docker run --rm -v /opt/gwbench/src:/src -v gwbench-gomod:/go/pkg/mod -v gwbench-gocache:/root/.cache \
+      -w /src/microgateway -e CGO_ENABLED=1 -e GOFLAGS=-tags=enterprise golang:1.26-bookworm \
+      go build -ldflags '-X main.Version=$ref-$short -X main.BuildHash=$sha -X main.BuildTime=$(date -u +%FT%TZ) -X main.BuiltBy=gwbench' \
+      -o /src/tyk-microgateway ./cmd/microgateway && \
+    sudo cp /opt/gwbench/src/tyk-microgateway /opt/gwbench/img/ && \
+    printf 'FROM $base\nCOPY --chown=999:999 tyk-microgateway /opt/tyk-microgateway/tyk-microgateway\n' > /opt/gwbench/img/Dockerfile && \
+    sudo docker build -q -t $img /opt/gwbench/img >/dev/null && sudo rm -rf /opt/gwbench/src"
+  log "built $img"
+  echo "$img"
 }
 
 # --- run --------------------------------------------------------------------
@@ -449,6 +499,7 @@ cmd_down() {
 cmd=${1:-}; shift || true
 case $cmd in
   build) mkdir -p "$STATE"; build_tools ;;
+  build-gateway) cmd_build_gateway "$@" ;;
   up|deploy|seed|smoke|suite|run|logs|status|fetch|ssh|tunnel|down) "cmd_$cmd" "$@" ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -1,0 +1,28 @@
+name: s5m-minimal-config
+title: "S5m · Request-rate ceiling, minimal configuration"
+description: >
+  S5 under the conditions gateway throughput figures are usually published
+  with: an upstream that answers instantly, no budget on the app, a model with
+  no price (so no cost or budget-usage accounting), no analytics shipped to the
+  control plane and LOG_LEVEL=error. It is what configuration alone can take off
+  the request path. Authentication and the edge's local analytics insert still
+  run on every request, so this is not a no-auth, no-logging figure. Needs
+  `gwbench seed -minimal`, a gateway deployed with BENCH_PLUGINS_CONFIG_PATH=
+  and BENCH_LOG_LEVEL=error, and `gwbench run -no-analytics-check`.
+mode: open
+baseline: direct
+timeout: 30s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: steps, start: 100, step: 100, max: 10000, hold: 30s}
+  warmup: 5s
+  max_in_flight: 20000
+  max_lag_ms: 2
+  stop: {max_error_rate: 0.02, max_p99_overhead_ms: 500, metric: total}
+cells:
+  - name: rest-instant
+    body: {format: openai, model: mock-unpriced, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway-minimal, path: /llm/call/min-instant/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions", weight: 0.1}

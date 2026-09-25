@@ -86,12 +86,14 @@ services:
       TYK_AI_LICENSE: ${TYK_AI_LICENSE}
       DATABASE_DSN: file:/data/microgateway.db?mode=rwc
       PORT: "8080"
-      LOG_LEVEL: info
+      # BENCH_LOG_LEVEL / BENCH_PLUGINS_CONFIG_PATH (empty: no analytics pulse)
+      # are for the minimal-configuration variant (scenario s5m).
+      LOG_LEVEL: ${BENCH_LOG_LEVEL:-info}
       LOG_FORMAT: json
       # The mock upstream is on a private address.
       ALLOW_INTERNAL_NETWORK_ACCESS: "true"
       # Analytics go to Studio on the analytics pulse, as in production.
-      PLUGINS_CONFIG_PATH: /bench/analytics-pulse.yaml
+      PLUGINS_CONFIG_PATH: ${BENCH_PLUGINS_CONFIG_PATH-/bench/analytics-pulse.yaml}
       ENABLE_METRICS: "true"
       METRICS_AUTH_TOKEN: ${BENCH_METRICS_TOKEN:?}
       GATEWAY_SERVER_TIMING: "true"

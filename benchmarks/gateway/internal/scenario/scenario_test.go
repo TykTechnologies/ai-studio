@@ -13,10 +13,11 @@ import (
 func fullEnv() Env {
 	return Env{
 		Targets: map[string]Target{
-			"gateway":   {BaseURL: "http://gw", Headers: map[string]string{"Authorization": "Bearer s"}},
-			"mock":      {BaseURL: "http://mock"},
-			"openai":    {BaseURL: "https://api.openai.com/v1"},
-			"anthropic": {BaseURL: "https://api.anthropic.com/v1"},
+			"gateway":         {BaseURL: "http://gw", Headers: map[string]string{"Authorization": "Bearer s"}},
+			"gateway-minimal": {BaseURL: "http://gw", Headers: map[string]string{"Authorization": "Bearer m"}},
+			"mock":            {BaseURL: "http://mock"},
+			"openai":          {BaseURL: "https://api.openai.com/v1"},
+			"anthropic":       {BaseURL: "https://api.anthropic.com/v1"},
 		},
 		State: &seed.State{Models: map[string]string{"mock": "mock-model", "openai": "gpt-x", "anthropic": "claude-x"}},
 	}

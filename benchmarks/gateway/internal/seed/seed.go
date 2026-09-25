@@ -31,6 +31,21 @@ var MockProfiles = map[string]string{
 // MockModel is the model name mock requests use (prices are seeded for it).
 const MockModel = "mock-model"
 
+// The minimal-configuration target (seed -minimal): an app with no budget and
+// an LLM on the instant mock whose model has no price, so the edge skips the
+// budget reads and, with cost zero, the budget-usage writes. It is what
+// configuration alone can take off the request path; authentication and the
+// analytics insert still run.
+// benchBudget is the main app's monthly budget: large enough never to block,
+// so the edge's budget check does its full work on every request.
+const benchBudget = 1_000_000.0
+
+const (
+	MinimalLLM   = "min-instant"
+	MinimalModel = "mock-unpriced"
+	MinimalApp   = "gateway-benchmark-minimal"
+)
+
 // Config is what Run needs.
 type Config struct {
 	StudioURL string
@@ -40,7 +55,9 @@ type Config struct {
 	// (e.g. http://mockllm:9999 inside compose).
 	MockUpstreamURL string
 	// Vendors adds real-vendor LLMs from test-secrets/vendors.env when true.
-	Vendors   bool
+	Vendors bool
+	// Minimal adds the minimal-configuration app and LLM (see MinimalApp).
+	Minimal   bool
 	Namespace string
 	MinEdges  int
 	// GatewayURL is the edge gateway as the load generator reaches it; used
@@ -60,6 +77,9 @@ type State struct {
 	LLMs      map[string]string `json:"llms"` // route slug -> vendor
 	Models    map[string]string `json:"models"`
 	Checksum  string            `json:"config_checksum"`
+	// MinimalAppSecret is set when seeded with Minimal.
+	MinimalAppID     int    `json:"minimal_app_id,omitempty"`
+	MinimalAppSecret string `json:"minimal_app_secret,omitempty"`
 }
 
 // Run seeds Studio and waits for the edges, then proves every route answers.
@@ -136,12 +156,27 @@ func Run(ctx context.Context, cfg Config, log func(string, ...any)) (*State, err
 		log("LLM %-16s -> %s", l.Name, redactEndpoint(l.Endpoint))
 	}
 
-	app, err := s.EnsureApp(ctx, "gateway-benchmark", userID, ids)
+	app, err := s.EnsureApp(ctx, "gateway-benchmark", userID, ids, benchBudget)
 	if err != nil {
 		return nil, err
 	}
 	state.AppID, state.AppSecret = app.ID, app.Secret
 	log("app %d has an active credential", app.ID)
+
+	if cfg.Minimal {
+		spec := LLMSpec{Name: MinimalLLM, Vendor: "openai", Endpoint: mock + "/p/" + url.PathEscape(MockProfiles["fast"]) + "/v1",
+			APIKey: "mock-key", DefaultModel: MinimalModel}
+		id, err := s.EnsureLLM(ctx, spec)
+		if err != nil {
+			return nil, err
+		}
+		minApp, err := s.EnsureApp(ctx, MinimalApp, userID, []int{id}, 0)
+		if err != nil {
+			return nil, err
+		}
+		state.MinimalAppID, state.MinimalAppSecret = minApp.ID, minApp.Secret
+		log("minimal configuration: LLM %s (model %s, no price), app %d without a budget", MinimalLLM, MinimalModel, minApp.ID)
+	}
 
 	ns := cfg.Namespace
 	if ns == "" {
@@ -157,6 +192,12 @@ func Run(ctx context.Context, cfg Config, log func(string, ...any)) (*State, err
 	if cfg.GatewayURL != "" {
 		if err := waitForRoutes(ctx, cfg.GatewayURL, app.Secret, state, 2*time.Minute); err != nil {
 			return nil, err
+		}
+		if state.MinimalAppSecret != "" {
+			minimal := &State{LLMs: map[string]string{MinimalLLM: "openai"}, Models: map[string]string{"mock": MinimalModel}}
+			if err := waitForRoutes(ctx, cfg.GatewayURL, state.MinimalAppSecret, minimal, 2*time.Minute); err != nil {
+				return nil, err
+			}
 		}
 		log("every seeded route answers through the gateway")
 	}
