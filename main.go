@@ -75,6 +75,9 @@ func main() {
 	// Warn loudly at startup if secrets encryption is not configured
 	secrets.WarnIfEncryptionUnconfigured()
 
+	// Report every configured path (grep 'startup path'); problems are WARNs.
+	startup.ReportPaths(appConf, *envFile)
+
 	// Perform connectivity tests before proceeding with initialization
 	if err := startup.TestConnectivity(appConf); err != nil {
 		logger.FatalErr("Connectivity tests failed", err)
