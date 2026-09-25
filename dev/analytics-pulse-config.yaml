@@ -32,7 +32,7 @@ data_collection_plugins:
 
       # Whether to include request/response bodies in pulse
       # Set to false in production for privacy/performance
-      include_request_response_data: true
+      include_request_response_data: true  # Forward stored bodies to the hub (needs ANALYTICS_STORE_REQUESTS/RESPONSES=true on the edge)
 
       # How long to keep analytics locally on edge before cleanup
       edge_retention_hours: 24

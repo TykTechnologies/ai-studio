@@ -171,15 +171,8 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 		}
 
 		// Add request/response bodies if configured
-		if h.config != nil {
-			if h.config.StoreRequestBodies {
-				event.RequestBody = h.truncateBody(proxyLog.RequestBody, h.config.MaxBodySize)
-			}
-
-			if h.config.StoreResponseBodies {
-				event.ResponseBody = h.truncateBody(proxyLog.ResponseBody, h.config.MaxBodySize)
-			}
-		}
+		event.RequestBody = h.requestBodyToStore(proxyLog.RequestBody)
+		event.ResponseBody = h.responseBodyToStore(proxyLog.ResponseBody)
 
 		events[i] = event
 	}
@@ -520,8 +513,8 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog
 		CreatedAt:    proxyLog.TimeStamp,
 
 		// Store request/response bodies immediately (if configured)
-		RequestBody:  h.truncateBodyIfConfigured(proxyLog.RequestBody),
-		ResponseBody: h.truncateBodyIfConfigured(proxyLog.ResponseBody),
+		RequestBody:  h.requestBodyToStore(proxyLog.RequestBody),
+		ResponseBody: h.responseBodyToStore(proxyLog.ResponseBody),
 
 		// NO PARSED DATA - will come from ChatRecord merge:
 		// PromptTokens, ResponseTokens, Cost, Model, Choices, ToolCalls, etc.
@@ -588,17 +581,21 @@ func (h *MicrogatewaAnalyticsHandler) truncateBody(body string, maxSize int) str
 	return body[:maxSize] + "... [truncated]"
 }
 
-// truncateBodyIfConfigured truncates body if storage is enabled in config
-func (h *MicrogatewaAnalyticsHandler) truncateBodyIfConfigured(body string) string {
-	if h.config == nil {
-		return body // No config, store as-is
+// requestBodyToStore returns the request body as it may be stored, or "" when
+// ANALYTICS_STORE_REQUESTS is off. The pulse forwards bodies read back from the
+// stored event, so this also decides whether the body leaves the gateway.
+func (h *MicrogatewaAnalyticsHandler) requestBodyToStore(body string) string {
+	if h.config == nil || !h.config.StoreRequestBodies {
+		return ""
 	}
+	return h.truncateBody(body, h.config.MaxBodySize)
+}
 
-	// Check if we should store bodies (both flags should be true by default)
-	if h.config.MaxBodySize <= 0 {
-		return "" // Disabled
+// responseBodyToStore is requestBodyToStore for ANALYTICS_STORE_RESPONSES.
+func (h *MicrogatewaAnalyticsHandler) responseBodyToStore(body string) string {
+	if h.config == nil || !h.config.StoreResponseBodies {
+		return ""
 	}
-
 	return h.truncateBody(body, h.config.MaxBodySize)
 }
 

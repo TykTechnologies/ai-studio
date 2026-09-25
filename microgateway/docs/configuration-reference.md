@@ -264,9 +264,9 @@ GRPC_AUTH_TOKEN="new-secure-token"
 | `ANALYTICS_FLUSH_INTERVAL` | duration | `10s` | Analytics flush interval |
 | `ANALYTICS_RETENTION_DAYS` | int | `90` | Analytics data retention |
 | `ANALYTICS_REALTIME` | bool | `false` | Enable real-time analytics |
-| `ANALYTICS_STORE_REQUESTS` | bool | `false` | Store request bodies |
-| `ANALYTICS_STORE_RESPONSES` | bool | `false` | Store response bodies |
-| `ANALYTICS_MAX_BODY_SIZE` | int | `4096` | Maximum body size to store |
+| `ANALYTICS_STORE_REQUESTS` | bool | `false` | Store request bodies on analytics events. The pulse can only forward bodies stored here, so this also gates `include_request_response_data` |
+| `ANALYTICS_STORE_RESPONSES` | bool | `false` | Store response bodies on analytics events (same pulse rule as requests) |
+| `ANALYTICS_MAX_BODY_SIZE` | int | `4096` | Maximum stored body size in bytes; `0` stores none |
 
 ### Connection Management
 

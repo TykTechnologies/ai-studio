@@ -188,6 +188,7 @@ analyticsPulse:
   maxBufferSize: 10000
   compressionEnabled: true
   includeProxySummaries: true
+  # Forwards stored bodies only: set ANALYTICS_STORE_REQUESTS/RESPONSES=true via extraEnv to store them
   includeRequestResponseData: true
   edgeRetentionHours: 24
   excludedVendors:

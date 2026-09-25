@@ -329,9 +329,14 @@ func (h *harness) boot() error {
 			EncryptionKey: "12345678901234567890123456789012",
 			JWTSecret:     "vendor-conformance-secret",
 		},
-		// Bodies are stored on the analytics event (MaxBodySize > 0) so the
-		// filter tests can read back exactly what the proxy logged.
-		Analytics:     config.AnalyticsConfig{Enabled: false, MaxBodySize: 65535},
+		// Bodies are stored on the analytics event (store flags on, MaxBodySize > 0)
+		// so the filter tests can read back exactly what the proxy logged.
+		Analytics: config.AnalyticsConfig{
+			Enabled:             false,
+			StoreRequestBodies:  true,
+			StoreResponseBodies: true,
+			MaxBodySize:         65535,
+		},
 		Observability: config.ObservabilityConfig{LogLevel: "error", LogFormat: "json"},
 	}
 

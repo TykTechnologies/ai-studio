@@ -322,7 +322,7 @@ data_collection_plugins:
       max_buffer_size: 10000
       compression_enabled: true
       include_proxy_summaries: true
-      include_request_response_data: true
+      include_request_response_data: true  # Forward stored bodies to the hub (needs ANALYTICS_STORE_REQUESTS/RESPONSES=true on the edge)
       edge_retention_hours: 24
       excluded_vendors: ["mock", "test"]
       timeout_seconds: 30
