@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"math"
-	"net"
 	"net/http"
 	"os"
 	"runtime/debug"
@@ -56,6 +55,10 @@ type Config struct {
 	MaxInflight int64
 	// SampleInterval is how often memory is sampled.
 	SampleInterval time.Duration
+	// Exempt reports requests that are never refused or counted: the
+	// gateway's own loopback hop (/ai/ to /llm/call/), whose outer request
+	// was already admitted. Nil exempts nothing.
+	Exempt func(*http.Request) bool
 }
 
 // hysteresis is how far below the threshold memory must fall before new
@@ -191,45 +194,48 @@ func (m *Manager) Stats() Stats {
 	}
 }
 
-// Middleware wraps a proxy handler: refused requests get 503 with Retry-After
-// and an OpenAI-shaped error, which the vendor SDKs retry. The gateway's own
-// loopback hop (/ai/ to /llm/call/) is not counted: its outer request already
-// was, and refusing the inner one could fail requests already admitted.
-func (m *Manager) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !m.cfg.Enabled || isLoopbackHop(r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		switch m.Acquire() {
-		case Memory:
-			refuse(w, "The gateway is overloaded (memory); retry shortly.")
-			return
-		case Inflight:
-			refuse(w, "The gateway is at its concurrent request limit; retry shortly.")
-			return
-		}
-		defer m.Release()
-		next.ServeHTTP(w, r)
-	})
+// Admission is Admit's decision.
+type Admission int
+
+const (
+	// Refused: the response has been written; stop the chain.
+	Refused Admission = iota
+	// Counted: proceed, then call Release.
+	Counted
+	// Exempted: proceed; nothing to release.
+	Exempted
+)
+
+// Admit decides on a proxy request. A refused request is answered here: 503
+// with Retry-After and an OpenAI-shaped error, which the vendor SDKs retry.
+// An admitted request must call Release when it finishes; an exempt one (the
+// gateway's own loopback hop) must not.
+func (m *Manager) Admit(w http.ResponseWriter, r *http.Request) Admission {
+	if !m.cfg.Enabled || (m.cfg.Exempt != nil && m.cfg.Exempt(r)) {
+		return Exempted
+	}
+	switch m.Acquire() {
+	case Memory:
+		refuse(w, "The gateway is overloaded (memory); retry shortly.")
+		return Refused
+	case Inflight:
+		refuse(w, "The gateway is at its concurrent request limit; retry shortly.")
+		return Refused
+	}
+	return Counted
 }
 
-// hdrInternalHop is the header the gateway sets on its /ai/ loopback hop.
-const hdrInternalHop = "X-Tyk-Internal-Hop"
-
-// isLoopbackHop reports whether r is the gateway calling itself: the hop
-// header over a loopback connection. The header alone could be sent by any
-// client.
-func isLoopbackHop(r *http.Request) bool {
-	if r.Header.Get(hdrInternalHop) == "" {
-		return false
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return false
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+// Middleware wraps a proxy handler with Admit.
+func (m *Manager) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch m.Admit(w, r) {
+		case Refused:
+			return
+		case Counted:
+			defer m.Release()
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func refuse(w http.ResponseWriter, message string) {

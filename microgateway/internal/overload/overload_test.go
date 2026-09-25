@@ -79,23 +79,43 @@ func TestInflightCap(t *testing.T) {
 	}
 }
 
-// The gateway's own /ai/ loopback hop is neither refused nor counted, but only
-// over a loopback connection: the header alone must not bypass shedding.
-func TestLoopbackHopExempt(t *testing.T) {
-	m := New(Config{Enabled: true, MemoryLimit: 1000, Threshold: 0.85})
+// Requests the Exempt check picks out (the gateway's own loopback hop) are
+// neither refused nor counted; everything else is.
+func TestExemptRequestsBypassShedding(t *testing.T) {
+	m := New(Config{
+		Enabled: true, MemoryLimit: 1000, Threshold: 0.85, MaxInflight: 1,
+		Exempt: func(r *http.Request) bool { return r.Header.Get("X-Test-Exempt") == "yes" },
+	})
 	m.update(990)
 	h := m.Middleware(okHandler())
-	hop := map[string]string{hdrInternalHop: "1"}
 
-	if w := serve(h, "127.0.0.1:5555", hop); w.Code != http.StatusOK {
-		t.Fatalf("loopback hop refused: %d", w.Code)
+	if w := serve(h, "127.0.0.1:5555", map[string]string{"X-Test-Exempt": "yes"}); w.Code != http.StatusOK {
+		t.Fatalf("exempt request refused: %d", w.Code)
 	}
-	if w := serve(h, "[::1]:5555", hop); w.Code != http.StatusOK {
-		t.Fatalf("IPv6 loopback hop refused: %d", w.Code)
+	if w := serve(h, "127.0.0.1:5555", nil); w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("non-exempt request admitted while shedding: %d", w.Code)
 	}
-	if w := serve(h, "203.0.113.9:5555", hop); w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("external request with the hop header admitted: %d", w.Code)
+
+	// Below the threshold: an exempt request takes no in-flight slot.
+	m.update(100)
+	if got := m.Admit(httptest.NewRecorder(), withHeader("X-Test-Exempt", "yes")); got != Exempted {
+		t.Fatalf("exempt admission = %v", got)
 	}
+	if got := m.Admit(httptest.NewRecorder(), withHeader("X-Other", "x")); got != Counted {
+		t.Fatalf("first counted admission = %v", got)
+	}
+	if got := m.Admit(httptest.NewRecorder(), withHeader("X-Other", "x")); got != Refused {
+		t.Fatalf("second admission over MaxInflight 1 = %v", got)
+	}
+	if s := m.Stats(); s.Inflight != 1 {
+		t.Fatalf("inflight = %d, want 1 (exempt requests are not counted)", s.Inflight)
+	}
+}
+
+func withHeader(k, v string) *http.Request {
+	r := httptest.NewRequest(http.MethodPost, "/llm/x", nil)
+	r.Header.Set(k, v)
+	return r
 }
 
 func TestDisabledAdmitsEverything(t *testing.T) {

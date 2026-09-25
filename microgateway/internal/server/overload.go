@@ -6,6 +6,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
 
@@ -23,6 +24,9 @@ func newOverloadManager(cfg *config.Config) (*overload.Manager, context.CancelFu
 		MemoryLimit: limit,
 		Threshold:   cfg.Gateway.OverloadMemoryThreshold,
 		MaxInflight: cfg.Gateway.MaxInflightRequests,
+		// The gateway's own /ai/ loopback hop: its outer request was
+		// already admitted.
+		Exempt: proxy.IsInternalHop,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	m.Start(ctx)

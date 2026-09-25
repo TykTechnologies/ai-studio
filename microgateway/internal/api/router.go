@@ -89,19 +89,18 @@ func RequestIDMiddleware() gin.HandlerFunc {
 }
 
 // overloadMiddleware applies the overload manager to gin routes: a refused
-// request is answered by the manager and the chain stops; an admitted one
-// runs the rest of the chain and is released when it returns.
+// request has been answered and the chain stops; an admitted one runs the
+// rest of the chain and is released when it returns.
 func overloadMiddleware(m *overload.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		admitted := false
-		m.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			admitted = true
-			c.Request = r
-			c.Next()
-		})).ServeHTTP(c.Writer, c.Request)
-		if !admitted {
+		switch m.Admit(c.Writer, c.Request) {
+		case overload.Refused:
 			c.Abort()
+			return
+		case overload.Counted:
+			defer m.Release()
 		}
+		c.Next()
 	}
 }
 
