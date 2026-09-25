@@ -20,6 +20,32 @@ Four Linux VMs of the same instance family, in one availability zone:
 - The hub is off the request path, but the edge sends analytics to it and
   refreshes tokens from it, so it must not be starved.
 
+### Why these sizes
+
+The rule is that only the gateway may be the bottleneck. Every other
+machine is sized so it runs out of capacity well after the gateway does,
+and each run's validity checks confirm that it did.
+
+| VM | AWS type (aws.sh default) | Why |
+|---|---|---|
+| `gateway` | c7i.xlarge: 4 vCPU, 8 GiB | The machine under test. 4 vCPU is a common production size for one edge node (a VM, or a 4-core pod) and is small enough to reach the capacity knee with one load generator. Capacity grows by adding gateways behind a load balancer, so a per-node figure on a modest node is what sizing a deployment needs. The gateway gets the whole VM with no CPU limit, so the figure is "one 4-vCPU node". |
+| `loadgen` | c7i.2xlarge: 8 vCPU | Twice the gateway's CPU. Open-loop load must be released on schedule; if the generator falls behind, it hides the gateway's queue, and the run is marked INVALID (release-lag p99 over 1ms). With 4 CPUs locally it fell behind at about 300 streaming req/s. |
+| `mock` | c7i.2xlarge: 8 vCPU | The upstream serves the gateway's traffic plus the direct baseline arm, and in S4 it holds thousands of open streams (300ms TTFT, 200 tokens at 50 tokens/s, about 4s each). If it slowed down, both arms would slow down together and the overhead would look fine while the capacity figure was wrong. |
+| `hub` | m7i.xlarge: 4 vCPU, 16 GiB | Studio and Postgres are off the request path, but they ingest every analytics record the edge ships. The analytics completeness check fails if the hub falls behind, so it gets general-purpose memory headroom rather than being made cheap. |
+
+- **One CPU family (Intel Sapphire Rapids, c7i/m7i) on x86-64.** The machines
+  differ only in size, and x86-64 is what most deployments run. Graviton
+  (arm64 images are published too) would be a separate, labelled variant.
+- **Cluster placement group, one availability zone.** This keeps the
+  loadgen→gateway→mock network hops short and stable, so the overhead
+  measures the gateway rather than network jitter. A real deployment's hop
+  (client to gateway across an AZ, a VPC or the internet) adds its own RTT,
+  which is why S3 against real vendors is the end-user number.
+- **Region.** `aws.sh` defaults to ap-southeast-2 (Sydney). Overhead is a
+  difference between two arms, so the region does not change it. S3's
+  absolute latencies include the round trip from the region to the vendor
+  API, so quote them with the region.
+
 ## Scripted on AWS
 
 `cloud/aws.sh` does everything below on AWS, repeatably. It needs the AWS
