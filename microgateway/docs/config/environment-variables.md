@@ -159,7 +159,8 @@ Complete reference for all microgateway environment variables organized by funct
 | `METRICS_PATH` | /metrics | Prometheus metrics endpoint path |
 | `ENABLE_TRACING` | false | Enable distributed tracing |
 | `TRACING_ENDPOINT` | - | OpenTelemetry tracing endpoint |
-| `ENABLE_PROFILING` | false | Enable Go pprof endpoints |
+| `ENABLE_PROFILING` | false | Serve Go pprof endpoints (`/debug/pprof/`, with mutex and block sampling) on `PROFILING_ADDR` |
+| `PROFILING_ADDR` | 127.0.0.1:6060 | Listener for the pprof endpoints; bind wider only on a trusted network |
 
 ### Health Checks
 | Variable | Default | Description |

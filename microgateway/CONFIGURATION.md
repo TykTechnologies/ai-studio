@@ -109,7 +109,8 @@ In edge mode API tokens are validated on demand against the hub and the result i
 | `METRICS_ALLOW_UNAUTHENTICATED` | false | Explicitly serve `/metrics` without authentication (only for trusted networks, e.g. in-cluster Prometheus scraping) |
 | `ENABLE_TRACING` | false | Enable distributed tracing |
 | `TRACING_ENDPOINT` | - | OpenTelemetry tracing endpoint |
-| `ENABLE_PROFILING` | false | Enable Go pprof endpoints |
+| `ENABLE_PROFILING` | false | Serve Go pprof endpoints (`/debug/pprof/`, with mutex and block sampling) on `PROFILING_ADDR` |
+| `PROFILING_ADDR` | 127.0.0.1:6060 | Listener for the pprof endpoints; bind wider only on a trusted network |
 
 ## Configuration Files
 

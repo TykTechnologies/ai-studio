@@ -247,6 +247,10 @@ type ObservabilityConfig struct {
 	EnableTracing   bool   `env:"ENABLE_TRACING" envDefault:"false"`
 	TracingEndpoint string `env:"TRACING_ENDPOINT"`
 	EnableProfiling bool   `env:"ENABLE_PROFILING" envDefault:"false"`
+	// ProfilingAddr is where ENABLE_PROFILING serves /debug/pprof/, on a
+	// listener of its own. Loopback by default; bind wider only on a trusted
+	// network.
+	ProfilingAddr string `env:"PROFILING_ADDR" envDefault:"127.0.0.1:6060"`
 }
 
 // Load reads configuration from environment variables and .env file
