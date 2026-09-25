@@ -29,6 +29,8 @@
 #   BENCH_TOOLS_REF    $BENCH_REF (build gwbench/mockllm from another ref, e.g. a
 #                      newer analysis; the manifests record this ref's SHA)
 #   BENCH_STUDIO_IMAGE / BENCH_GATEWAY_IMAGE   default tykio/*-ent:$BENCH_REF
+#   BENCH_ENABLE_PROFILING  false; true serves pprof on <gateway private ip>:6060
+#   BENCH_GATEWAY_ENV  extra edge settings, "KEY=VALUE KEY2=VALUE2"
 #   BENCH_LOG_LEVEL    info; BENCH_PLUGINS_CONFIG_PATH= (set, empty) turns the
 #                      analytics pulse off (both for scenario s5m)
 #   BENCH_TYPE_{LOADGEN,GATEWAY,MOCK,HUB}      c7i.2xlarge c7i.xlarge c7i.2xlarge m7i.xlarge
@@ -72,7 +74,17 @@ type_for() {
 # request and response body, whatever ANALYTICS_STORE_* say, in rc10.1) for
 # ANALYTICS_RETENTION_DAYS: on the benchmark that is ~10 GB per 40 minutes
 # of load, so the gateway gets room for a full suite including the soak.
-disk_for() { case $1 in gateway) echo "${BENCH_DISK_GATEWAY:-200}" ;; *) echo 40 ;; esac; }
+# The hub's Postgres keeps every proxy log and analytics row (~0.5 KB each,
+# ~10M per S5 run at the ceiling) and the loadgen keeps ~1 GB of raw results
+# per S5 run: 40 GB filled both mid-suite on 2026-09-25.
+disk_for() {
+  case $1 in
+    gateway) echo "${BENCH_DISK_GATEWAY:-200}" ;;
+    hub) echo "${BENCH_DISK_HUB:-200}" ;;
+    loadgen) echo "${BENCH_DISK_LOADGEN:-200}" ;;
+    *) echo 40 ;;
+  esac
+}
 
 log() { echo "$(date +%H:%M:%S) $*" >&2; }
 die() { log "error: $*"; exit 1; }
@@ -300,12 +312,23 @@ cmd_deploy() {
      # analytics pulse off.
      echo "BENCH_LOG_LEVEL=${BENCH_LOG_LEVEL:-info}"
      echo "BENCH_PLUGINS_CONFIG_PATH=${BENCH_PLUGINS_CONFIG_PATH-/bench/analytics-pulse.yaml}"
+     # Profiling: BENCH_ENABLE_PROFILING=true serves pprof on the gateway's
+     # private address, port 6060 (see cloud/pprof-watch.sh).
+     echo "BENCH_ENABLE_PROFILING=${BENCH_ENABLE_PROFILING:-false}"
+     echo "BENCH_PROFILING_ADDR=${BENCH_PROFILING_ADDR:-$( [ "${BENCH_ENABLE_PROFILING:-false}" = true ] && echo 0.0.0.0:6060 || echo 127.0.0.1:6060)}"
    } > "$benv")
+
+  # Extra edge settings for the build under test: BENCH_GATEWAY_ENV is a
+  # space-separated list of KEY=VALUE pairs, written to the gateway's
+  # gateway-extra.env (empty when unset, so a redeploy clears earlier ones).
+  local genv=$STATE/gateway-extra.env
+  (umask 077; : > "$genv"; for kv in ${BENCH_GATEWAY_ENV:-}; do echo "$kv" >> "$genv"; done)
 
   # hub + gateway: compose with the released images
   for role in hub gateway; do
     rcp "$role" /opt/gwbench/ "$SCRIPT_DIR/docker-compose.yml" "$BENCH_DIR/compose/analytics-pulse.yaml"
     rcp "$role" /opt/gwbench/bench.env "$benv"
+    if [ "$role" = gateway ]; then rcp gateway /opt/gwbench/gateway-extra.env "$genv"; fi
     # --ignore-pull-failures: an image from build-gateway exists only locally.
     rsh "$role" "chmod 600 /opt/gwbench/bench.env && sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile $role pull -q --ignore-pull-failures"
   done
