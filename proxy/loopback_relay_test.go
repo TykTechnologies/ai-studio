@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,6 +69,30 @@ func TestLoopbackRelay_FailedRungHeadersDoNotLeak(t *testing.T) {
 		assert.Equal(t, "true", resp.Header.Get(hdrFailover))
 		assert.Empty(t, resp.Header.Get("X-Cache-Status"))
 	}
+}
+
+// A vendor or CDN can also send X-Cache-* headers on the inner hop, so the
+// relay caps what it copies onto the client response.
+func TestLoopbackRelay_CapsRelayedHeaders(t *testing.T) {
+	src := http.Header{}
+	for i := 0; i < 100; i++ {
+		src.Add(fmt.Sprintf("X-Cache-H%03d", i), "v")
+	}
+	relay := &loopbackRelay{}
+	relay.capture(src)
+	dst := http.Header{}
+	relay.applyTo(dst)
+	assert.Len(t, dst, maxRelayedHeaderValues)
+	assert.Equal(t, "v", dst.Get("X-Cache-H000"), "the cap keeps keys in sorted order")
+
+	big := http.Header{}
+	big.Set("X-Cache-A", strings.Repeat("a", maxRelayedHeaderBytes))
+	big.Set("X-Cache-Status", "HIT")
+	relay.capture(big)
+	dst = http.Header{}
+	relay.applyTo(dst)
+	assert.Empty(t, dst.Get("X-Cache-A"), "an oversized value is dropped")
+	assert.Equal(t, "HIT", dst.Get("X-Cache-Status"))
 }
 
 func TestIsRelayedLoopbackHeader(t *testing.T) {

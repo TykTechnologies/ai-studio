@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 
@@ -145,13 +146,35 @@ func isRelayedLoopbackHeader(key string) bool {
 		len(key) > len("X-Cache-") && strings.EqualFold(key[:len("X-Cache-")], "X-Cache-")
 }
 
+// Relayed headers can come from a vendor (or a CDN in front of it) as well as
+// a plugin, so how much is copied onto the client response is capped. The
+// cache plugin sets at most seven short values.
+const (
+	maxRelayedHeaderValues = 16
+	maxRelayedHeaderBytes  = 4 << 10
+)
+
 // capture keeps the relayed headers of the latest successful loopback
 // response. A driver that retries replaces the earlier response's headers.
+// Keys are taken in sorted order so the cap drops the same ones every time.
 func (l *loopbackRelay) capture(h http.Header) {
-	kept := make(http.Header)
-	for k, v := range h {
+	keys := make([]string, 0, len(h))
+	for k := range h {
 		if isRelayedLoopbackHeader(k) {
-			kept[k] = append([]string(nil), v...)
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	kept := make(http.Header)
+	values, size := 0, 0
+	for _, k := range keys {
+		for _, v := range h[k] {
+			if values == maxRelayedHeaderValues || size+len(k)+len(v) > maxRelayedHeaderBytes {
+				break
+			}
+			kept[k] = append(kept[k], v)
+			values++
+			size += len(k) + len(v)
 		}
 	}
 	l.mu.Lock()
