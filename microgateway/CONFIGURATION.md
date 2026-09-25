@@ -68,9 +68,9 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `ANALYTICS_ENABLED` | true | Enable analytics collection |
 | `ANALYTICS_BUFFER_SIZE` | 1000 | Analytics buffer size before flush |
 | `ANALYTICS_FLUSH_INTERVAL` | 10s | Automatic buffer flush interval |
-| `ANALYTICS_RETENTION_DAYS` | 7 with the analytics pulse, else 90 | Days to retain analytics data on the gateway; expired rows are deleted in chunks every 10 minutes |
+| `ANALYTICS_RETENTION_DAYS` | 7 with the analytics pulse, else 90 | Days to retain analytics data on the gateway; expired rows are deleted in chunks every 10 minutes, and every 250 ms while a backlog remains |
 | `ANALYTICS_REALTIME` | false | Enable real-time analytics processing |
-| `ANALYTICS_WRITER_QUEUE_SIZE` | 10000 | Analytics rows waiting to be written; rows beyond it are dropped and counted |
+| `ANALYTICS_WRITER_QUEUE_SIZE` | 50000 | Analytics rows waiting to be written; rows beyond it are dropped and counted |
 | `ANALYTICS_WRITER_BATCH_SIZE` | 500 | Rows written per transaction |
 | `ANALYTICS_WRITER_FLUSH_INTERVAL` | 100ms | Longest a row, or recorded budget usage, waits before it is written |
 

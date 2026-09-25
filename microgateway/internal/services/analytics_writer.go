@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultWriterQueueSize     = 10000
+	defaultWriterQueueSize     = 50000
 	defaultWriterBatchSize     = 500
 	defaultWriterFlushInterval = 100 * time.Millisecond
 	writerBusyRetries          = 3
@@ -28,7 +28,7 @@ const (
 	retentionChunk        = 5000
 	retentionFirstAfter   = time.Minute
 	retentionEvery        = 10 * time.Minute
-	retentionBacklogEvery = time.Second
+	retentionBacklogEvery = 250 * time.Millisecond
 )
 
 // AnalyticsWriter is the gateway's single writer for per-request data. It

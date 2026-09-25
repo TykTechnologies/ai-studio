@@ -196,7 +196,7 @@ type AnalyticsConfig struct {
 	// transaction per WriterBatchSize rows or WriterFlushInterval, whichever
 	// comes first. Rows arriving while WriterQueueSize are waiting are
 	// dropped and counted.
-	WriterQueueSize     int           `env:"ANALYTICS_WRITER_QUEUE_SIZE" envDefault:"10000"`
+	WriterQueueSize     int           `env:"ANALYTICS_WRITER_QUEUE_SIZE" envDefault:"50000"`
 	WriterBatchSize     int           `env:"ANALYTICS_WRITER_BATCH_SIZE" envDefault:"500"`
 	WriterFlushInterval time.Duration `env:"ANALYTICS_WRITER_FLUSH_INTERVAL" envDefault:"100ms"`
 }
