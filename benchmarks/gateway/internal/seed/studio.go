@@ -270,16 +270,20 @@ type App struct {
 	Secret string
 }
 
-// EnsureApp creates (or updates) the benchmark app with access to llmIDs and a
-// budget large enough never to block, activates its credential and returns the
+// EnsureApp creates (or updates) the benchmark app with access to llmIDs and
+// the given monthly budget (0: none), activates its credential and returns the
 // secret clients present as a Bearer token.
-func (s *Studio) EnsureApp(ctx context.Context, name string, userID int, llmIDs []int) (App, error) {
+func (s *Studio) EnsureApp(ctx context.Context, name string, userID int, llmIDs []int, budget float64) (App, error) {
 	now := time.Now().UTC()
 	attrs := map[string]any{
 		"name": name, "description": "Gateway latency benchmark", "user_id": userID, "llm_ids": llmIDs,
-		"monthly_budget":    1_000_000.0,
-		"budget_start_date": time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339),
-		"is_active":         true,
+		"is_active": true,
+	}
+	// A budget of 0 means none: the key is left out, which Studio reads as no
+	// limit (an explicit 0 would block every request).
+	if budget > 0 {
+		attrs["monthly_budget"] = budget
+		attrs["budget_start_date"] = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
 	}
 	var list jsonAPIList[appAttrs]
 	if err := s.mustOK(ctx, http.MethodGet, "/api/v1/apps?page_size=100&all=true", nil, &list, http.StatusOK); err != nil {

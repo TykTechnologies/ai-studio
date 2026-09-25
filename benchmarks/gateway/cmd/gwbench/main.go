@@ -90,13 +90,14 @@ func cmdSeed(ctx context.Context, args []string) error {
 	password := fs.String("password", env("GWBENCH_ADMIN_PASSWORD", "Bench#Admin2026"), "admin password")
 	mockUpstream := fs.String("mock-upstream", env("GWBENCH_MOCK_UPSTREAM_URL", "http://mockllm:9999"), "mock base URL as the *gateway* reaches it")
 	vendors := fs.Bool("vendors", false, "also seed real OpenAI/Anthropic LLMs from test-secrets/vendors.env")
+	minimal := fs.Bool("minimal", false, "also seed the minimal-configuration app and LLM (no budget, unpriced model, instant mock)")
 	minEdges := fs.Int("min-edges", 1, "edges that must be registered before pushing config")
 	timeout := fs.Duration("sync-timeout", 3*time.Minute, "how long to wait for edges to sync")
 	_ = fs.Parse(args)
 
 	st, err := seed.Run(ctx, seed.Config{
 		StudioURL: c.studio, Email: *email, Password: *password, MockUpstreamURL: *mockUpstream,
-		Vendors: *vendors, MinEdges: *minEdges, GatewayURL: c.gateway, SyncTimeout: *timeout,
+		Vendors: *vendors, Minimal: *minimal, MinEdges: *minEdges, GatewayURL: c.gateway, SyncTimeout: *timeout,
 	}, logf)
 	if err != nil {
 		return err
@@ -133,6 +134,9 @@ func cmdRun(ctx context.Context, args []string) error {
 	targets := map[string]scenario.Target{
 		"gateway": {BaseURL: c.gateway, Headers: map[string]string{"Authorization": "Bearer " + st.AppSecret}},
 		"mock":    {BaseURL: c.mock},
+	}
+	if st.MinimalAppSecret != "" {
+		targets["gateway-minimal"] = scenario.Target{BaseURL: c.gateway, Headers: map[string]string{"Authorization": "Bearer " + st.MinimalAppSecret}}
 	}
 	if *vendors {
 		vc, err := vendorconformance.Load()
