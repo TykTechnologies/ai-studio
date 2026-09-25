@@ -2,9 +2,13 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"io"
 	"net/http"
+	"sort"
+	"strings"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 )
@@ -105,5 +109,93 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// never what is enforced, so it needs no trust.
 	req.Header.Set(hdrInternalHop, "1")
 
-	return loopbackRoundTrip(t.underlying, req)
+	resp, err := loopbackRoundTrip(t.underlying, req)
+	if err == nil && resp.StatusCode < http.StatusMultipleChoices {
+		if relay := loopbackRelayFrom(req.Context()); relay != nil {
+			relay.capture(resp.Header)
+		}
+	}
+	return resp, err
+}
+
+// loopbackRelay carries the inner hop's plugin headers back to the /ai/
+// handler. The SDK driver consumes the loopback response itself, so without
+// it headers a plugin set on /llm/call/ (a cache hit's X-Cache-Status, for
+// example) never reach the client of the OpenAI-compatible endpoint.
+type loopbackRelay struct {
+	mu sync.Mutex
+	h  http.Header
+}
+
+type loopbackRelayKey struct{}
+
+func withLoopbackRelay(ctx context.Context, relay *loopbackRelay) context.Context {
+	return context.WithValue(ctx, loopbackRelayKey{}, relay)
+}
+
+func loopbackRelayFrom(ctx context.Context) *loopbackRelay {
+	relay, _ := ctx.Value(loopbackRelayKey{}).(*loopbackRelay)
+	return relay
+}
+
+// isRelayedLoopbackHeader reports whether an inner-hop response header is
+// passed on to the /ai/ client. Only the cache headers are: vendor and
+// transport headers describe the loopback response, not the translated one.
+func isRelayedLoopbackHeader(key string) bool {
+	return strings.EqualFold(key, "X-Cache") ||
+		len(key) > len("X-Cache-") && strings.EqualFold(key[:len("X-Cache-")], "X-Cache-")
+}
+
+// Relayed headers can come from a vendor (or a CDN in front of it) as well as
+// a plugin, so how much is copied onto the client response is capped. The
+// cache plugin sets at most seven short values.
+const (
+	maxRelayedHeaderValues = 16
+	maxRelayedHeaderBytes  = 4 << 10
+)
+
+// capture keeps the relayed headers of the latest successful loopback
+// response. A driver that retries replaces the earlier response's headers.
+// Keys are taken in sorted order so the cap drops the same ones every time.
+func (l *loopbackRelay) capture(h http.Header) {
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		if isRelayedLoopbackHeader(k) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	kept := make(http.Header)
+	values, size := 0, 0
+	for _, k := range keys {
+		for _, v := range h[k] {
+			if values == maxRelayedHeaderValues || size+len(k)+len(v) > maxRelayedHeaderBytes {
+				break
+			}
+			kept[k] = append(kept[k], v)
+			values++
+			size += len(k) + len(v)
+		}
+	}
+	l.mu.Lock()
+	l.h = kept
+	l.mu.Unlock()
+}
+
+// applyTo replaces any relayed headers in dst with the captured ones. It must
+// run before the response is committed.
+func (l *loopbackRelay) applyTo(dst http.Header) {
+	for k := range dst {
+		if isRelayedLoopbackHeader(k) {
+			delete(dst, k)
+		}
+	}
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for k, v := range l.h {
+		dst[k] = v
+	}
 }
