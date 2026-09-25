@@ -98,6 +98,16 @@ type GatewayConfig struct {
 	ServerTiming bool `env:"GATEWAY_SERVER_TIMING" envDefault:"false"`
 	PluginEndpointMaxBodySize    int64         `env:"PLUGIN_ENDPOINT_MAX_BODY_SIZE" envDefault:"1048576"`    // 1MB max request body for custom plugin endpoints
 	PluginEndpointStreamTimeout time.Duration `env:"PLUGIN_ENDPOINT_STREAM_TIMEOUT" envDefault:"5m"`       // Timeout for streaming plugin endpoints
+
+	// Overload shedding: new proxy requests get a 503 with Retry-After while
+	// Go memory (heap goal + stacks) is above OverloadMemoryThreshold of the
+	// memory limit, or MaxInflightRequests are in progress. The limit is
+	// OverloadMemoryLimit ("2GiB", "1536MiB", bytes), else GOMEMLIMIT, else
+	// the container's cgroup limit.
+	OverloadSheddingEnabled bool    `env:"OVERLOAD_SHEDDING_ENABLED" envDefault:"true"`
+	OverloadMemoryLimit     string  `env:"OVERLOAD_MEMORY_LIMIT"`
+	OverloadMemoryThreshold float64 `env:"OVERLOAD_MEMORY_THRESHOLD" envDefault:"0.85"`
+	MaxInflightRequests     int64   `env:"MAX_INFLIGHT_REQUESTS" envDefault:"0"`
 }
 
 // HubSpokeConfig holds hub-and-spoke architecture configuration

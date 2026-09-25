@@ -56,6 +56,10 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `GATEWAY_TIMEOUT` | 5m | Request timeout for upstream LLM calls (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | 10MB | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
+| `OVERLOAD_SHEDDING_ENABLED` | true | Refuse new proxy requests with `503` + `Retry-After: 1` (OpenAI-shaped error, code `overloaded`) while the gateway is overloaded, instead of risking an out-of-memory kill. Management, health, metrics and plugin endpoints are never refused |
+| `OVERLOAD_MEMORY_LIMIT` | auto | Memory limit shedding is judged against (`2GiB`, `1536MiB`, bytes). Unset: `GOMEMLIMIT`, else the container's cgroup limit; with neither, only `MAX_INFLIGHT_REQUESTS` applies |
+| `OVERLOAD_MEMORY_THRESHOLD` | 0.85 | Fraction of the limit at which shedding starts (Go heap goal + goroutine stacks); it stops 5 points below |
+| `MAX_INFLIGHT_REQUESTS` | 0 | Optional cap on concurrent proxy requests (0 = none). Size it for long streaming calls, which each hold a slot for their whole duration |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | /v1 | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`); move it when embedding in a host that owns `/v1` |
 | `GATEWAY_UNIFIED_ROUTER_DISABLED` | false | Remove the unified endpoint entirely; per-route endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected |
 | `GATEWAY_ENABLE_FILTERS` | true | Enable request/response filtering |

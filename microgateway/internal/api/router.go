@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
@@ -87,6 +88,23 @@ func RequestIDMiddleware() gin.HandlerFunc {
 	}
 }
 
+// overloadMiddleware applies the overload manager to gin routes: a refused
+// request is answered by the manager and the chain stops; an admitted one
+// runs the rest of the chain and is released when it returns.
+func overloadMiddleware(m *overload.Manager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		admitted := false
+		m.Middleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			admitted = true
+			c.Request = r
+			c.Next()
+		})).ServeHTTP(c.Writer, c.Request)
+		if !admitted {
+			c.Abort()
+		}
+	}
+}
+
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
 	AuthProvider              auth.AuthProvider
@@ -110,6 +128,10 @@ type RouterConfig struct {
 	Version                     string
 	BuildHash                 string
 	BuildTime                 string
+	// Overload, when set, refuses new proxy requests while the gateway is
+	// overloaded (see the overload package). Management, health, metrics
+	// and plugin endpoints are never refused.
+	Overload *overload.Manager
 }
 
 // SetupRouter configures and returns the main application router
@@ -276,6 +298,9 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	// Plugins are now integrated via hooks in the proxy layer, so router is a simple passthrough
 	if config.Gateway != nil {
 		gateway := router.Group("/")
+		if config.Overload != nil {
+			gateway.Use(overloadMiddleware(config.Overload))
+		}
 
 		log.Debug().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
 		// An unauthenticated MCP request to the edge answers with

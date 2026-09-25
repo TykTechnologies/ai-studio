@@ -60,6 +60,10 @@ TLS_KEY_PATH=/etc/certs/server.key
 | `GATEWAY_TIMEOUT` | duration | `5m` | Timeout for upstream LLM requests (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | bytes | `10MB` | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | bytes | `50MB` | Maximum response size |
+| `OVERLOAD_SHEDDING_ENABLED` | bool | `true` | Refuse new proxy requests with `503` + `Retry-After: 1` (OpenAI-shaped error, code `overloaded`) while the gateway is overloaded, instead of risking an out-of-memory kill. Management, health, metrics and plugin endpoints are never refused |
+| `OVERLOAD_MEMORY_LIMIT` | size | `auto` | Memory limit shedding is judged against (`2GiB`, `1536MiB`, bytes). Unset: `GOMEMLIMIT`, else the container's cgroup limit; with neither, only `MAX_INFLIGHT_REQUESTS` applies |
+| `OVERLOAD_MEMORY_THRESHOLD` | float | `0.85` | Fraction of the limit at which shedding starts (Go heap goal + goroutine stacks); it stops 5 points below |
+| `MAX_INFLIGHT_REQUESTS` | int | `0` | Optional cap on concurrent proxy requests (0 = none). Size it for long streaming calls, which each hold a slot for their whole duration |
 | `GATEWAY_ENABLE_FILTERS` | bool | `true` | Enable filter processing |
 | `GATEWAY_ENABLE_ANALYTICS` | bool | `true` | Enable analytics collection |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | string | `/v1` | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) |
