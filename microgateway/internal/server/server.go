@@ -64,6 +64,9 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 
 	// Create analytics handler for microgateway with plugin manager that has loaded plugins
 	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.Writer(), &cfg.Analytics, pluginManager, serviceContainer.BudgetService)
+	if serviceContainer.AnalyticsWriter != nil {
+		analyticsHandler.SetWriter(serviceContainer.AnalyticsWriter)
+	}
 	analyticsHandler.SetAsGlobalHandler()
 
 	// Debug: Verify plugin manager state after service container initialization

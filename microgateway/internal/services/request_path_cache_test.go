@@ -105,25 +105,3 @@ func TestModelPriceCachedIncludingMissing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0.005, p.CPT, "a price change invalidates the cache")
 }
-
-// Recording a proxy log and its chat record keeps no timer goroutine per
-// request; expired entries are swept on a later store.
-func TestPendingEventsSweptWithoutGoroutines(t *testing.T) {
-	h := &MicrogatewaAnalyticsHandler{pendingEvents: map[string]pendingEvent{}}
-
-	h.storeEventForMatching("a", 1)
-	id, ok := h.findEventForMerge("a")
-	require.True(t, ok)
-	assert.EqualValues(t, 1, id)
-	_, ok = h.findEventForMerge("a")
-	assert.False(t, ok, "a pending event merges once")
-
-	h.pendingEvents["old"] = pendingEvent{id: 2, at: time.Now().Add(-2 * pendingEventTTL)}
-	_, ok = h.findEventForMerge("old")
-	assert.False(t, ok, "expired events do not merge")
-
-	h.lastPendingSweep = time.Time{}
-	h.storeEventForMatching("b", 3)
-	_, present := h.pendingEvents["old"]
-	assert.False(t, present, "expired events are swept")
-}

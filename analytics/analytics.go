@@ -30,6 +30,33 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 		globalHandler.RecordProxyLog(ctx, log)
 	}
 
+	recordProxyLogMetrics(ctx, log)
+}
+
+// RecordExchange records a proxied request's proxy log together with its chat
+// record (nil when the response yielded no usage). A handler that implements
+// ExchangeRecorder gets both in one call; any other handler gets
+// RecordProxyLog followed by RecordChatRecord, as before.
+func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
+	if er, ok := globalHandler.(ExchangeRecorder); ok {
+		er.RecordExchange(ctx, log, rec)
+	} else if globalHandler != nil {
+		globalHandler.RecordProxyLog(ctx, log)
+		if rec != nil {
+			globalHandler.RecordChatRecord(ctx, rec)
+		}
+	}
+
+	recordProxyLogMetrics(ctx, log)
+	if rec != nil {
+		recordChatRecordMetrics(ctx, rec)
+	}
+}
+
+func recordProxyLogMetrics(ctx context.Context, log *models.ProxyLog) {
 	metrics.RecordRequest(ctx,
 		fmt.Sprintf("%d", log.AppID),
 		log.Vendor,
@@ -204,6 +231,10 @@ func RecordChatRecord(ctx context.Context, record *models.LLMChatRecord) {
 		globalHandler.RecordChatRecord(ctx, record)
 	}
 
+	recordChatRecordMetrics(ctx, record)
+}
+
+func recordChatRecordMetrics(ctx context.Context, record *models.LLMChatRecord) {
 	appID := fmt.Sprintf("%d", record.AppID)
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "prompt", record.PromptTokens)
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "completion", record.ResponseTokens)

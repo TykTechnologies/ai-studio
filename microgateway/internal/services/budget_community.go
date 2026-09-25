@@ -23,6 +23,14 @@ type CommunityBudgetService struct {
 	pluginManager *plugins.PluginManager
 	// writeRepo carries the usage writes; see SetWriteDB. Nil means repo.
 	writeRepo *database.Repository
+	// ledger keeps usage in memory and writes it through the analytics
+	// writer; see SetLedger. Nil writes budget_usage directly.
+	ledger *BudgetLedger
+}
+
+// SetLedger moves usage recording to the ledger.
+func (s *CommunityBudgetService) SetLedger(l *BudgetLedger) {
+	s.ledger = l
 }
 
 // SetWriteDB moves the usage writes to w, the gateway's writer handle.
@@ -96,6 +104,12 @@ func (s *CommunityBudgetService) RecordUsage(appID uint, llmID *uint, tokens int
 			log.Debug().Msg("Budget database storage replaced by plugin - skipping database write")
 			return nil
 		}
+	}
+
+	if s.ledger != nil {
+		// Written with the next analytics batch.
+		s.ledger.Add(appID, periodStart, periodEnd, tokens, cost, promptTokens, completionTokens)
+		return nil
 	}
 
 	// Get or create usage record

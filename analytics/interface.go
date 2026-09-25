@@ -33,6 +33,16 @@ type AnalyticsHandler interface {
 	RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent)
 }
 
+// ExchangeRecorder is implemented by handlers that record a proxied request's
+// proxy log and its chat record together. The gateway produces both for one
+// request; a handler that stores them as one row needs them in one call
+// rather than having to pair two separate calls up again.
+type ExchangeRecorder interface {
+	// RecordExchange records one proxied request. rec is nil when the
+	// response yielded no usage (an error, or nothing to parse).
+	RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord)
+}
+
 var (
 	globalHandler AnalyticsHandler
 	// Synchronizes access to the globalHandler variable.

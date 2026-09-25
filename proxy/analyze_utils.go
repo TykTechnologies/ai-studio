@@ -57,8 +57,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.
 	ctx := context.WithoutCancel(r.Context())
-	analytics.RecordProxyLog(ctx, l)
-	AnalyzeCompletionResponse(service, llm, app, response, ctx, r, time.Now())
+	analyzeExchange(service, llm, app, response, ctx, r, l, time.Now())
 }
 
 func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time, contentEncoding string) {
@@ -95,11 +94,29 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.
 	ctx := context.WithoutCancel(r.Context())
-	analytics.RecordProxyLog(ctx, l)
-	AnalyzeCompletionResponse(service, llm, app, response, ctx, r, timestamp)
+	analyzeExchange(service, llm, app, response, ctx, r, l, timestamp)
+}
+
+// analyzeExchange records a request's proxy log and chat record in one call
+// (analytics.RecordExchange), then runs the steps that follow a chat record.
+func analyzeExchange(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, ctx context.Context, r *http.Request, l *models.ProxyLog, timestamp time.Time) {
+	rec := buildChatRecord(service, llm, app, response, r, timestamp)
+	analytics.RecordExchange(ctx, l, rec)
+	afterChatRecord(service, llm, app, rec, ctx, r, timestamp)
 }
 
 func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, ctx context.Context, r *http.Request, timestamp time.Time) {
+	rec := buildChatRecord(service, llm, app, response, r, timestamp)
+
+	// Record the chat record with retries
+	analytics.RecordChatRecord(ctx, rec)
+
+	afterChatRecord(service, llm, app, rec, ctx, r, timestamp)
+}
+
+// buildChatRecord turns a parsed response into the request's chat record,
+// priced from the model's price.
+func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, r *http.Request, timestamp time.Time) *models.LLMChatRecord {
 	var pt, rt, choices, tools int
 	// Get model from response, fallback to context if not available
 	model := ""
@@ -147,7 +164,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	}
 
 	// Use actual timestamp for the record, not budget start dates
-	rec := &models.LLMChatRecord{
+	return &models.LLMChatRecord{
 		LLMID:                  llm.ID,
 		Name:                   model, // Set the model name from the response
 		Vendor:                 string(llm.Vendor),
@@ -168,15 +185,16 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 		Currency:        currency, // Set the currency (defaults to USD if no price found)
 		InteractionType: models.ProxyInteraction,
 	}
+}
 
-	// Record the chat record with retries
-	analytics.RecordChatRecord(ctx, rec)
-
+// afterChatRecord runs what follows a recorded chat record: the
+// time-per-output-token metric and the budget analysis.
+func afterChatRecord(service services.ServiceInterface, llm *models.LLM, app *models.App, rec *models.LLMChatRecord, ctx context.Context, r *http.Request, timestamp time.Time) {
 	// time-per-output-token needs both the streaming landmarks and the completion
 	// token count, and this is the only point where both are in hand. The timing
 	// is absent on non-streaming requests, which correctly skips the metric.
 	if elapsed, ok := streamTimingFrom(r.Context()).sinceFirstToken(timestamp); ok {
-		metrics.ObserveTimePerOutputToken(ctx, string(llm.Vendor), model, elapsed.Seconds(), rt)
+		metrics.ObserveTimePerOutputToken(ctx, string(llm.Vendor), rec.Name, elapsed.Seconds(), rec.ResponseTokens)
 	}
 	// time.Sleep(200 * time.Millisecond) // Removed: Unreliable fixed sleep. Test should handle waiting.
 

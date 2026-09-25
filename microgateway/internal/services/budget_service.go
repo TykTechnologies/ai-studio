@@ -31,6 +31,15 @@ type DatabaseBudgetService struct {
 	// apps caches the budget fields of each App. The check and the usage
 	// recording both read them on every request.
 	apps *database.GenCache[uint, budgetApp]
+	// ledger keeps usage in memory and writes it through the analytics
+	// writer; see SetLedger. Nil reads and writes budget_usage directly.
+	ledger *BudgetLedger
+}
+
+// SetLedger moves usage recording and the spend read of the budget check to
+// the ledger.
+func (s *DatabaseBudgetService) SetLedger(l *BudgetLedger) {
+	s.ledger = l
 }
 
 // budgetApp is the part of an App the budget needs. found is false for an
@@ -176,15 +185,24 @@ func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estim
 	periodStart, periodEnd := s.calculateBudgetPeriod(app.budgetStartDate, now)
 
 	// Get current usage for this period
-	usage, err := s.repo.GetBudgetUsage(appID, llmID, periodStart, periodEnd)
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, monthlyBudget, fmt.Errorf("%w: reading budget usage: %v", services.ErrBudgetCheckUnavailable, err)
-	}
-
 	currentCost := 0.0
-	if usage != nil {
+	if s.ledger != nil {
+		// Stored usage plus what has been recorded but not yet written.
+		spent, err := s.ledger.Spent(appID, periodStart, periodEnd)
+		if err != nil {
+			return 0, monthlyBudget, fmt.Errorf("%w: reading budget usage: %v", services.ErrBudgetCheckUnavailable, err)
+		}
 		// Convert from stored format (dollars * 10000) to dollars for comparison
-		currentCost = usage.TotalCost / 10000.0
+		currentCost = spent / 10000.0
+	} else {
+		usage, err := s.repo.GetBudgetUsage(appID, llmID, periodStart, periodEnd)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, monthlyBudget, fmt.Errorf("%w: reading budget usage: %v", services.ErrBudgetCheckUnavailable, err)
+		}
+		if usage != nil {
+			// Convert from stored format (dollars * 10000) to dollars for comparison
+			currentCost = usage.TotalCost / 10000.0
+		}
 	}
 
 	// Check if request would exceed budget
@@ -241,6 +259,12 @@ func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int6
 			log.Debug().Msg("Budget database storage replaced by plugin - skipping database write")
 			return nil
 		}
+	}
+
+	if s.ledger != nil {
+		// Written with the next analytics batch.
+		s.ledger.Add(appID, periodStart, periodEnd, tokens, cost, promptTokens, completionTokens)
+		return nil
 	}
 
 	// Get or create usage record

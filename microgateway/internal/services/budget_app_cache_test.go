@@ -48,3 +48,28 @@ func TestBudgetAppReadCachedUntilAppChanges(t *testing.T) {
 	_, _, err = svc.CheckBudgetStatus(app.ID+100, nil, 0)
 	assert.ErrorContains(t, err, "app not found or inactive")
 }
+
+// With the ledger, the check sees spend recorded but not yet written, so a
+// request over budget is refused without waiting for the writer.
+func TestBudgetCheckSeesUnflushedLedgerSpend(t *testing.T) {
+	db, repo := setupBudgetServiceTestDB(t)
+	svc := NewDatabaseBudgetService(db, repo, nil).(*DatabaseBudgetService)
+	svc.SetLedger(NewBudgetLedger(db))
+
+	app := &database.App{Name: "budgeted", IsActive: true, MonthlyBudget: 1}
+	require.NoError(t, db.Create(app).Error)
+
+	_, _, err := svc.CheckBudgetStatus(app.ID, nil, 0)
+	require.NoError(t, err)
+
+	// $1.20 in stored units (dollars * 10000), recorded but not flushed.
+	require.NoError(t, svc.RecordUsage(app.ID, nil, 100, 12000, 50, 50))
+	var rows int64
+	require.NoError(t, db.Model(&database.BudgetUsage{}).Count(&rows).Error)
+	assert.Zero(t, rows, "the ledger defers the write")
+
+	usage, limit, err := svc.CheckBudgetStatus(app.ID, nil, 0)
+	assert.Error(t, err)
+	assert.InDelta(t, 1.2, usage, 1e-9)
+	assert.Equal(t, 1.0, limit)
+}

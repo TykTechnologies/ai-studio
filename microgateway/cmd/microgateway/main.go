@@ -370,6 +370,8 @@ func main() {
 		}()
 	}
 	serviceContainer.SetWriteDB(writeDB)
+	// One writer batches analytics rows and budget usage onto writeDB.
+	serviceContainer.StartAnalyticsWriter(&cfg.Analytics)
 
 	// Create admin token if requested
 	if *createAdminToken {
