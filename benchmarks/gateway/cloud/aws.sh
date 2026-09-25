@@ -63,6 +63,12 @@ type_for() {
   esac
 }
 
+# The edge keeps analytics rows (with up to ANALYTICS_MAX_BODY_SIZE of each
+# request and response body, whatever ANALYTICS_STORE_* say, in rc10.1) for
+# ANALYTICS_RETENTION_DAYS: on the benchmark that is ~10 GB per 40 minutes
+# of load, so the gateway gets room for a full suite including the soak.
+disk_for() { case $1 in gateway) echo "${BENCH_DISK_GATEWAY:-200}" ;; *) echo 40 ;; esac; }
+
 log() { echo "$(date +%H:%M:%S) $*" >&2; }
 die() { log "error: $*"; exit 1; }
 awsr() { aws --region "$REGION" "$@"; }
@@ -203,7 +209,7 @@ cmd_up() {
       --key-name "$NAME" --security-group-ids "$sg" --subnet-id "$subnet" \
       --placement "GroupName=$NAME" \
       --user-data "fileb://$SCRIPT_DIR/host-init.sh" \
-      --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=40,VolumeType=gp3,DeleteOnTermination=true}" \
+      --block-device-mappings "DeviceName=/dev/sda1,Ebs={VolumeSize=$(disk_for "$role"),VolumeType=gp3,DeleteOnTermination=true}" \
       --metadata-options HttpTokens=required \
       --instance-initiated-shutdown-behavior terminate \
       --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$NAME-$role},{Key=$TAG_KEY,Value=$NAME},{Key=gwbench:role,Value=$role}]" \
