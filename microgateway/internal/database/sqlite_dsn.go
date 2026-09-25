@@ -74,6 +74,20 @@ func normalizeSQLiteDSN(dsn string) (string, bool) {
 	return path + "?" + q.Encode(), removedShared
 }
 
+// SQLiteFilePath returns the database file a SQLite DSN opens, or false for an
+// in-memory database.
+func SQLiteFilePath(dsn string) (string, bool) {
+	if isInMemorySQLite(dsn) {
+		return "", false
+	}
+	path, _, _ := strings.Cut(dsn, "?")
+	path = strings.TrimPrefix(path, "file:")
+	if path == "" {
+		return "", false
+	}
+	return path, true
+}
+
 func isInMemorySQLite(dsn string) bool {
 	lower := strings.ToLower(dsn)
 	return strings.Contains(lower, ":memory:") || strings.Contains(lower, "mode=memory")

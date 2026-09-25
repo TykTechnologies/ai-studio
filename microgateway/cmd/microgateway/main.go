@@ -356,6 +356,21 @@ func main() {
 		}
 	}
 
+	// Background writes (analytics, budget usage) get their own connection so
+	// they never hold the connections request-path reads need.
+	writeDB, err := database.OpenWriter(dbConfig, db)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to open database writer")
+	}
+	if writeDB != db {
+		defer func() {
+			if err := database.Close(writeDB); err != nil {
+				log.Error().Err(err).Msg("Failed to close database writer")
+			}
+		}()
+	}
+	serviceContainer.SetWriteDB(writeDB)
+
 	// Create admin token if requested
 	if *createAdminToken {
 		token, err := createAdminTokenCommand(serviceContainer, *adminName, *adminExpires)

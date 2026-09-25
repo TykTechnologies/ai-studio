@@ -70,6 +70,44 @@ func TestConnectEnablesWAL(t *testing.T) {
 	}
 }
 
+func TestOpenWriterUsesOneConnectionForFileSQLite(t *testing.T) {
+	cfg := DatabaseConfig{
+		Type: "sqlite", DSN: "file:" + filepath.Join(t.TempDir(), "gw.db") + "?mode=rwc",
+		MaxOpenConns: 8, MaxIdleConns: 8, LogLevel: "silent",
+	}
+	db, err := Connect(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := OpenWriter(cfg, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w == db {
+		t.Fatal("file SQLite should get its own writer pool")
+	}
+	sqlDB, _ := w.DB()
+	if got := sqlDB.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("writer MaxOpenConnections = %d, want 1", got)
+	}
+	var mode string
+	if err := w.Raw("PRAGMA journal_mode").Scan(&mode).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !strings.EqualFold(mode, "wal") {
+		t.Fatalf("writer journal_mode = %q, want wal", mode)
+	}
+
+	mem := DatabaseConfig{Type: "sqlite", DSN: "file::memory:?cache=shared", MaxOpenConns: 1, MaxIdleConns: 1, LogLevel: "silent"}
+	mdb, err := Connect(mem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mw, err := OpenWriter(mem, mdb); err != nil || mw != mdb {
+		t.Fatalf("in-memory SQLite should share its pool, got %v, %v", mw == mdb, err)
+	}
+}
+
 func TestConfigWritesBumpGenerationRuntimeWritesDoNot(t *testing.T) {
 	db := openTestDB(t)
 
