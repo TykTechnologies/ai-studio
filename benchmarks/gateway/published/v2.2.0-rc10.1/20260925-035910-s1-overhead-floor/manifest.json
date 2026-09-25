@@ -1,0 +1,433 @@
+{
+  "scenario": {
+    "Name": "s1-overhead-floor",
+    "Title": "S1 · Gateway overhead floor, unloaded, per endpoint",
+    "Description": "One request at a time against an upstream that answers immediately, so the difference between the gateway arm and the direct arm is the gateway's own cost: authentication, policy, request handling and the extra network hop. Arms alternate request by request so both see the same conditions. Every public LLM endpoint is covered, streaming and non-streaming. The /ai/ shim and the unified /v1 endpoint translate to the OpenAI format through an internal second hop, so expect them to cost more than the native /llm/ routes.\n",
+    "Mode": "closed",
+    "Timeout": 30000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 1,
+      "Requests": 5000,
+      "WarmupRequests": 300
+    },
+    "Open": {
+      "Arrival": "",
+      "Rate": {
+        "Kind": "",
+        "RPS": 0,
+        "Duration": 0,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 0,
+        "Peak": 0,
+        "At": 0,
+        "Width": 0
+      },
+      "Warmup": 0,
+      "MaxInFlight": 0,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 0,
+      "MaxLagMS": 0
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "llm-rest",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/rest/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "llm-stream",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/stream/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "llm-call-rest",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "llm-call-stream",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "anthropic-native-stream",
+        "Body": {
+          "format": "anthropic",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-anthropic/v1/messages",
+            "Weight": 0,
+            "Headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/messages",
+            "Weight": 0,
+            "Headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "ai-shim-rest",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/ai/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "ai-shim-stream",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/ai/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "unified-rest",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": "mock-fast/mock-model"
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "unified-stream",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": "mock-fast/mock-model"
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "aws ap-southeast-2 ap-southeast-2a, cluster PG; gateway c7i.xlarge (whole VM), loadgen c7i.2xlarge, mock c7i.2xlarge, hub m7i.xlarge; images tykio/tyk-ai-studio-ent:v2.2.0-rc10.1 + tykio/tyk-microgateway-ent:v2.2.0-rc10.1; ping p99 0.610ms",
+  "started_at": "2026-09-25T03:59:10.803024546Z",
+  "finished_at": "2026-09-25T04:00:56.739361547Z",
+  "cells": [
+    {
+      "name": "llm-rest",
+      "started": "2026-09-25T03:59:10.811367581Z",
+      "finished": "2026-09-25T03:59:21.376395147Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "llm-stream",
+      "started": "2026-09-25T03:59:21.378532978Z",
+      "finished": "2026-09-25T03:59:32.105733177Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "llm-call-rest",
+      "started": "2026-09-25T03:59:32.107842076Z",
+      "finished": "2026-09-25T03:59:41.977999666Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "llm-call-stream",
+      "started": "2026-09-25T03:59:41.980129281Z",
+      "finished": "2026-09-25T03:59:52.606253309Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "anthropic-native-stream",
+      "started": "2026-09-25T03:59:52.608770246Z",
+      "finished": "2026-09-25T04:00:03.393094094Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "ai-shim-rest",
+      "started": "2026-09-25T04:00:03.395414606Z",
+      "finished": "2026-09-25T04:00:16.34298876Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "ai-shim-stream",
+      "started": "2026-09-25T04:00:16.345160997Z",
+      "finished": "2026-09-25T04:00:30.013177341Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "unified-rest",
+      "started": "2026-09-25T04:00:30.015320629Z",
+      "finished": "2026-09-25T04:00:42.925115865Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "unified-stream",
+      "started": "2026-09-25T04:00:42.927240277Z",
+      "finished": "2026-09-25T04:00:56.737214339Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "5ee92c69a04e4c62968d0c1301eea0abdee70592",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "2e465ba8c45d1ecd473ef18c78e91c6a6c9f8fd4f230932d0a84a100b7e922ff",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-25T03:56:25.944591542Z"
+  },
+  "analytics": {
+    "before": 26020,
+    "after": 73720,
+    "expected": 47700,
+    "settled": true
+  }
+}

@@ -1,0 +1,1295 @@
+{
+  "analytics": {
+    "after": 530218,
+    "before": 521818,
+    "expected": 8400,
+    "settled": true
+  },
+  "baseline": "direct",
+  "cells": [
+    {
+      "arms": [
+        {
+          "achieved_rps": 489.35847040432105,
+          "arm": "gateway",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.236,
+            "mean": 0.005721999999999898,
+            "min": 0.001,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.007,
+            "p99": 0.016,
+            "p99_9": 0.04218500000004073,
+            "stdev": 0.007460476928454379
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {
+            "gw": {
+              "max": 6.351,
+              "mean": 0.31767150000000005,
+              "min": 0.19300000000000006,
+              "n": 2000,
+              "p50": 0.31,
+              "p90": 0.35910000000000014,
+              "p99": 0.68002,
+              "p99_9": 1.792109000000024,
+              "stdev": 0.16396161925203714
+            },
+            "gw-pre": {
+              "max": 6.335,
+              "mean": 0.3066339999999994,
+              "min": 0.182,
+              "n": 2000,
+              "p50": 0.299,
+              "p90": 0.348,
+              "p99": 0.6680499999999999,
+              "p99_9": 1.7721150000000254,
+              "stdev": 0.16359283005070854
+            },
+            "upstream": {
+              "max": 1.926,
+              "mean": 0.49418899999999893,
+              "min": 0.153,
+              "n": 2000,
+              "p50": 0.482,
+              "p90": 0.6581,
+              "p99": 0.7950200000000001,
+              "p99_9": 1.726132000000029,
+              "stdev": 0.13602533690088772
+            }
+          },
+          "total_ms": {
+            "max": 7.266,
+            "mean": 1.312459000000001,
+            "min": 0.659,
+            "n": 2000,
+            "p50": 1.3,
+            "p90": 1.565,
+            "p99": 1.89501,
+            "p99_9": 4.0076000000001315,
+            "stdev": 0.2805077188224952
+          },
+          "ttfb_ms": {
+            "max": 7.24,
+            "mean": 1.2865759999999984,
+            "min": 0.632,
+            "n": 2000,
+            "p50": 1.274,
+            "p90": 1.536,
+            "p99": 1.86703,
+            "p99_9": 3.983586000000129,
+            "stdev": 0.2796855541925611
+          },
+          "ttft_ms": {
+            "max": 7.266,
+            "mean": 1.3123890000000018,
+            "min": 0.659,
+            "n": 2000,
+            "p50": 1.3,
+            "p90": 1.5641,
+            "p99": 1.89501,
+            "p99_9": 4.0076000000001315,
+            "stdev": 0.2804985145753896
+          },
+          "upstream_new_conn_pct": 0
+        },
+        {
+          "achieved_rps": 489.35847040432105,
+          "arm": "direct",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.027,
+            "mean": 0.004867499999999949,
+            "min": 0.001,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.006,
+            "p99": 0.014009999999999983,
+            "p99_9": 0.027,
+            "stdev": 0.0021526596921018445
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {},
+          "total_ms": {
+            "max": 1.271,
+            "mean": 0.6081094999999992,
+            "min": 0.086,
+            "n": 2000,
+            "p50": 0.642,
+            "p90": 0.789,
+            "p99": 0.9240499999999999,
+            "p99_9": 1.084076000000017,
+            "stdev": 0.16458394669514392
+          },
+          "ttfb_ms": {
+            "max": 1.245,
+            "mean": 0.5852209999999999,
+            "min": 0.081,
+            "n": 2000,
+            "p50": 0.618,
+            "p90": 0.766,
+            "p99": 0.89903,
+            "p99_9": 1.059078000000017,
+            "stdev": 0.16299457708463844
+          },
+          "ttft_ms": {
+            "max": 1.271,
+            "mean": 0.6080529999999994,
+            "min": 0.086,
+            "n": 2000,
+            "p50": 0.642,
+            "p90": 0.789,
+            "p99": 0.9240499999999999,
+            "p99_9": 1.084076000000017,
+            "stdev": 0.1645864368379119
+          },
+          "upstream_new_conn_pct": 0
+        }
+      ],
+      "finished": "2026-09-25T04:23:44.926963309Z",
+      "name": "prompt-1kb",
+      "overhead": [
+        {
+          "arm": "gateway",
+          "metric": "ttft",
+          "p50": {
+            "estimate": 0.658,
+            "hi": 0.6699999999999999,
+            "level": 0.95,
+            "lo": 0.641
+          },
+          "p90": {
+            "estimate": 0.7751,
+            "hi": 0.7898999999999999,
+            "level": 0.95,
+            "lo": 0.76
+          },
+          "p99": {
+            "estimate": 0.9709600000000002,
+            "hi": 1.3950929999999997,
+            "level": 0.95,
+            "lo": 0.8731657499999996
+          }
+        },
+        {
+          "arm": "gateway",
+          "metric": "total",
+          "p50": {
+            "estimate": 0.658,
+            "hi": 0.6699999999999999,
+            "level": 0.95,
+            "lo": 0.641
+          },
+          "p90": {
+            "estimate": 0.7759999999999999,
+            "hi": 0.7898999999999999,
+            "level": 0.95,
+            "lo": 0.76
+          },
+          "p99": {
+            "estimate": 0.9709600000000002,
+            "hi": 1.3950022500000003,
+            "level": 0.95,
+            "lo": 0.8731907499999996
+          }
+        }
+      ],
+      "resources": {
+        "cpu_cores_avg": 0.7699920350396863,
+        "cpu_cores_max": 0.7800979529994412,
+        "goroutines_end": 2098,
+        "goroutines_max": 2098,
+        "goroutines_slope_per_hour": 0,
+        "goroutines_start": 42,
+        "open_fds_max": 65,
+        "rss_end_mb": 317.718528,
+        "rss_max_mb": 329.916416,
+        "rss_slope_mb_per_hour": 0,
+        "rss_start_mb": 329.916416,
+        "samples": 5,
+        "series": [
+          {
+            "cpu_cores": null,
+            "fds": 65,
+            "goroutines": 42,
+            "rss_mb": 329.916416,
+            "t_s": 0.000048199
+          },
+          {
+            "cpu_cores": 0.7598695417977074,
+            "fds": 65,
+            "goroutines": 562,
+            "rss_mb": 325.353472,
+            "t_s": 1.000219884
+          },
+          {
+            "cpu_cores": 0.7800979529994412,
+            "fds": 65,
+            "goroutines": 1074,
+            "rss_mb": 322.408448,
+            "t_s": 2.000094319
+          },
+          {
+            "cpu_cores": 0.7599919630849812,
+            "fds": 65,
+            "goroutines": 1583,
+            "rss_mb": 320.380928,
+            "t_s": 3.000104894
+          },
+          {
+            "cpu_cores": 0.7800086822766155,
+            "fds": 65,
+            "goroutines": 2098,
+            "rss_mb": 317.718528,
+            "t_s": 4.000093763
+          }
+        ]
+      },
+      "started": "2026-09-25T04:23:40.839979797Z"
+    },
+    {
+      "arms": [
+        {
+          "achieved_rps": 317.30000943713685,
+          "arm": "gateway",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.182,
+            "mean": 0.005208999999999949,
+            "min": 0.001,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.007,
+            "p99": 0.015,
+            "p99_9": 0.08908900000001958,
+            "stdev": 0.0062439826232942
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {
+            "gw": {
+              "max": 6.214,
+              "mean": 0.9231969999999989,
+              "min": 0.7110000000000001,
+              "n": 2000,
+              "p50": 0.854,
+              "p90": 1.006,
+              "p99": 2.34928,
+              "p99_9": 3.778531000000337,
+              "stdev": 0.29950766633093046
+            },
+            "gw-pre": {
+              "max": 6.196,
+              "mean": 0.9106814999999993,
+              "min": 0.699,
+              "n": 2000,
+              "p50": 0.842,
+              "p90": 0.994,
+              "p99": 2.292459999999999,
+              "p99_9": 3.761535000000338,
+              "stdev": 0.2976024463235308
+            },
+            "upstream": {
+              "max": 5.169,
+              "mean": 0.7767849999999986,
+              "min": 0.354,
+              "n": 2000,
+              "p50": 0.734,
+              "p90": 1.015,
+              "p99": 1.6171299999999997,
+              "p99_9": 2.9111310000002493,
+              "stdev": 0.254380718166688
+            }
+          },
+          "total_ms": {
+            "max": 7.976,
+            "mean": 2.1912005,
+            "min": 1.482,
+            "n": 2000,
+            "p50": 2.116,
+            "p90": 2.5061,
+            "p99": 4.40903,
+            "p99_9": 7.126254000000056,
+            "stdev": 0.4630494372091927
+          },
+          "ttfb_ms": {
+            "max": 7.95,
+            "mean": 2.1644315000000005,
+            "min": 1.455,
+            "n": 2000,
+            "p50": 2.091,
+            "p90": 2.4792,
+            "p99": 4.377059999999999,
+            "p99_9": 7.100256000000056,
+            "stdev": 0.46263919344101195
+          },
+          "ttft_ms": {
+            "max": 7.976,
+            "mean": 2.191144500000001,
+            "min": 1.482,
+            "n": 2000,
+            "p50": 2.116,
+            "p90": 2.5061,
+            "p99": 4.40903,
+            "p99_9": 7.126254000000056,
+            "stdev": 0.46305764826827994
+          },
+          "upstream_new_conn_pct": 0
+        },
+        {
+          "achieved_rps": 317.30000943713685,
+          "arm": "direct",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.242,
+            "mean": 0.005051999999999966,
+            "min": 0.001,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.006,
+            "p99": 0.012009999999999982,
+            "p99_9": 0.03719100000004205,
+            "stdev": 0.007479257717180229
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {},
+          "total_ms": {
+            "max": 2.215,
+            "mean": 0.7871425000000005,
+            "min": 0.315,
+            "n": 2000,
+            "p50": 0.773,
+            "p90": 1.0171,
+            "p99": 1.5143399999999994,
+            "p99_9": 1.8840580000000127,
+            "stdev": 0.20753984724324637
+          },
+          "ttfb_ms": {
+            "max": 2.19,
+            "mean": 0.7658205000000002,
+            "min": 0.307,
+            "n": 2000,
+            "p50": 0.75,
+            "p90": 0.9901,
+            "p99": 1.4923099999999994,
+            "p99_9": 1.8590580000000128,
+            "stdev": 0.20498470986819955
+          },
+          "ttft_ms": {
+            "max": 2.215,
+            "mean": 0.7870850000000005,
+            "min": 0.315,
+            "n": 2000,
+            "p50": 0.773,
+            "p90": 1.0171,
+            "p99": 1.5143399999999994,
+            "p99_9": 1.8840580000000127,
+            "stdev": 0.20753782010756525
+          },
+          "upstream_new_conn_pct": 0
+        }
+      ],
+      "finished": "2026-09-25T04:23:51.231077654Z",
+      "name": "prompt-32kb",
+      "overhead": [
+        {
+          "arm": "gateway",
+          "metric": "ttft",
+          "p50": {
+            "estimate": 1.343,
+            "hi": 1.3600124999999998,
+            "level": 0.95,
+            "lo": 1.3280000000000003
+          },
+          "p90": {
+            "estimate": 1.489,
+            "hi": 1.5330000000000001,
+            "level": 0.95,
+            "lo": 1.4549975
+          },
+          "p99": {
+            "estimate": 2.89469,
+            "hi": 3.1097727500000003,
+            "level": 0.95,
+            "lo": 2.4388817499999997
+          }
+        },
+        {
+          "arm": "gateway",
+          "metric": "total",
+          "p50": {
+            "estimate": 1.343,
+            "hi": 1.3605125,
+            "level": 0.95,
+            "lo": 1.3280000000000003
+          },
+          "p90": {
+            "estimate": 1.489,
+            "hi": 1.5330125000000003,
+            "level": 0.95,
+            "lo": 1.4549975
+          },
+          "p99": {
+            "estimate": 2.89469,
+            "hi": 3.1097727500000003,
+            "level": 0.95,
+            "lo": 2.4388817499999997
+          }
+        }
+      ],
+      "resources": {
+        "cpu_cores_avg": 0.9420854637753777,
+        "cpu_cores_max": 0.9604088364376192,
+        "goroutines_end": 4116,
+        "goroutines_max": 4116,
+        "goroutines_slope_per_hour": 0,
+        "goroutines_start": 2450,
+        "open_fds_max": 65,
+        "rss_end_mb": 316.010496,
+        "rss_max_mb": 323.538944,
+        "rss_slope_mb_per_hour": 0,
+        "rss_start_mb": 323.538944,
+        "samples": 6,
+        "series": [
+          {
+            "cpu_cores": null,
+            "fds": 65,
+            "goroutines": 2450,
+            "rss_mb": 323.538944,
+            "t_s": 0.912739505
+          },
+          {
+            "cpu_cores": 0.9504725369265039,
+            "fds": 65,
+            "goroutines": 2784,
+            "rss_mb": 320.753664,
+            "t_s": 1.912242345
+          },
+          {
+            "cpu_cores": 0.9198906360419076,
+            "fds": 65,
+            "goroutines": 3116,
+            "rss_mb": 319.500288,
+            "t_s": 2.912361233
+          },
+          {
+            "cpu_cores": 0.939516187683561,
+            "fds": 65,
+            "goroutines": 3453,
+            "rss_mb": 319.520768,
+            "t_s": 3.912876192
+          },
+          {
+            "cpu_cores": 0.9604088364376192,
+            "fds": 65,
+            "goroutines": 3777,
+            "rss_mb": 311.554048,
+            "t_s": 4.912450502
+          },
+          {
+            "cpu_cores": 0.940139121787297,
+            "fds": 65,
+            "goroutines": 4116,
+            "rss_mb": 316.010496,
+            "t_s": 5.912302522
+          }
+        ]
+      },
+      "started": "2026-09-25T04:23:44.927894734Z"
+    },
+    {
+      "arms": [
+        {
+          "achieved_rps": 97.045545029243,
+          "arm": "gateway",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.24,
+            "mean": 0.005844999999999926,
+            "min": 0.002,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.007,
+            "p99": 0.01,
+            "p99_9": 0.0300200000000044,
+            "stdev": 0.005562641009448659
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {
+            "gw": {
+              "max": 11.679,
+              "mean": 4.794812499999998,
+              "min": 3.9890000000000003,
+              "n": 2000,
+              "p50": 4.334,
+              "p90": 6.215100000000002,
+              "p99": 10.86235,
+              "p99_9": 11.478191000000042,
+              "stdev": 1.3851947185662206
+            },
+            "gw-pre": {
+              "max": 11.668,
+              "mean": 4.780771000000007,
+              "min": 3.977,
+              "n": 2000,
+              "p50": 4.321,
+              "p90": 6.194700000000003,
+              "p99": 10.85232,
+              "p99_9": 11.465192000000043,
+              "stdev": 1.38414145359461
+            },
+            "upstream": {
+              "max": 4.341,
+              "mean": 2.1596954999999998,
+              "min": 1.575,
+              "n": 2000,
+              "p50": 1.993,
+              "p90": 2.8372,
+              "p99": 3.18505,
+              "p99_9": 3.904086000000019,
+              "stdev": 0.4112916881967709
+            }
+          },
+          "total_ms": {
+            "max": 15.083,
+            "mean": 7.540185500000019,
+            "min": 6.2,
+            "n": 2000,
+            "p50": 7.016,
+            "p90": 9.1441,
+            "p99": 13.569180000000001,
+            "p99_9": 14.417080000000018,
+            "stdev": 1.4470150040997325
+          },
+          "ttfb_ms": {
+            "max": 15.055,
+            "mean": 7.513370000000013,
+            "min": 6.173,
+            "n": 2000,
+            "p50": 6.9905,
+            "p90": 9.1171,
+            "p99": 13.537230000000001,
+            "p99_9": 14.390080000000019,
+            "stdev": 1.4468846619893367
+          },
+          "ttft_ms": {
+            "max": 15.083,
+            "mean": 7.54014100000002,
+            "min": 6.2,
+            "n": 2000,
+            "p50": 7.016,
+            "p90": 9.144,
+            "p99": 13.569180000000001,
+            "p99_9": 14.417080000000018,
+            "stdev": 1.4470167905449474
+          },
+          "upstream_new_conn_pct": 0
+        },
+        {
+          "achieved_rps": 97.045545029243,
+          "arm": "direct",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.16,
+            "mean": 0.005094999999999963,
+            "min": 0.004,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.006,
+            "p99": 0.009039999999999928,
+            "p99_9": 0.02601100000000242,
+            "stdev": 0.003905761769488767
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {},
+          "total_ms": {
+            "max": 3.759,
+            "mean": 2.2316420000000035,
+            "min": 1.565,
+            "n": 2000,
+            "p50": 2.073,
+            "p90": 2.8724,
+            "p99": 3.24808,
+            "p99_9": 3.5660900000000195,
+            "stdev": 0.39590127157663935
+          },
+          "ttfb_ms": {
+            "max": 3.735,
+            "mean": 2.207205000000003,
+            "min": 1.542,
+            "n": 2000,
+            "p50": 2.0495,
+            "p90": 2.8471,
+            "p99": 3.22608,
+            "p99_9": 3.54309000000002,
+            "stdev": 0.39577343262907405
+          },
+          "ttft_ms": {
+            "max": 3.759,
+            "mean": 2.2315850000000017,
+            "min": 1.565,
+            "n": 2000,
+            "p50": 2.073,
+            "p90": 2.8724,
+            "p99": 3.24808,
+            "p99_9": 3.5660900000000195,
+            "stdev": 0.39589531289849883
+          },
+          "upstream_new_conn_pct": 0
+        }
+      ],
+      "finished": "2026-09-25T04:24:11.840860416Z",
+      "name": "prompt-256kb",
+      "overhead": [
+        {
+          "arm": "gateway",
+          "metric": "ttft",
+          "p50": {
+            "estimate": 4.943,
+            "hi": 4.973512500000001,
+            "level": 0.95,
+            "lo": 4.9175
+          },
+          "p90": {
+            "estimate": 6.2716,
+            "hi": 6.8439274999999995,
+            "level": 0.95,
+            "lo": 5.851697499999999
+          },
+          "p99": {
+            "estimate": 10.321100000000001,
+            "hi": 10.50799,
+            "level": 0.95,
+            "lo": 9.969679250000002
+          }
+        },
+        {
+          "arm": "gateway",
+          "metric": "total",
+          "p50": {
+            "estimate": 4.943,
+            "hi": 4.973012500000001,
+            "level": 0.95,
+            "lo": 4.9175
+          },
+          "p90": {
+            "estimate": 6.2717,
+            "hi": 6.8439274999999995,
+            "level": 0.95,
+            "lo": 5.851697499999999
+          },
+          "p99": {
+            "estimate": 10.321100000000001,
+            "hi": 10.50799,
+            "level": 0.95,
+            "lo": 9.969679250000002
+          }
+        }
+      ],
+      "resources": {
+        "cpu_cores_avg": 0.9369908989747466,
+        "cpu_cores_max": 0.9894394588000519,
+        "goroutines_end": 1059,
+        "goroutines_max": 3786,
+        "goroutines_slope_per_hour": 0,
+        "goroutines_start": 3786,
+        "open_fds_max": 65,
+        "rss_end_mb": 320.311296,
+        "rss_max_mb": 324.468736,
+        "rss_slope_mb_per_hour": 0,
+        "rss_start_mb": 318.902272,
+        "samples": 21,
+        "series": [
+          {
+            "cpu_cores": null,
+            "fds": 65,
+            "goroutines": 3786,
+            "rss_mb": 318.902272,
+            "t_s": 0.608138663
+          },
+          {
+            "cpu_cores": 0.9799190626048959,
+            "fds": 65,
+            "goroutines": 3376,
+            "rss_mb": 321.82272,
+            "t_s": 1.608221259
+          },
+          {
+            "cpu_cores": 0.9894394588000519,
+            "fds": 65,
+            "goroutines": 2970,
+            "rss_mb": 323.145728,
+            "t_s": 2.608787783
+          },
+          {
+            "cpu_cores": 0.9702124231590157,
+            "fds": 65,
+            "goroutines": 2555,
+            "rss_mb": 323.9936,
+            "t_s": 3.608568838
+          },
+          {
+            "cpu_cores": 0.9801805178856358,
+            "fds": 65,
+            "goroutines": 2308,
+            "rss_mb": 321.96608,
+            "t_s": 4.60838467
+          },
+          {
+            "cpu_cores": 0.9601015950705225,
+            "fds": 65,
+            "goroutines": 2074,
+            "rss_mb": 322.92864,
+            "t_s": 5.608278853
+          },
+          {
+            "cpu_cores": 0.9302061420529975,
+            "fds": 65,
+            "goroutines": 1845,
+            "rss_mb": 323.874816,
+            "t_s": 6.608057244
+          },
+          {
+            "cpu_cores": 0.9594503606313919,
+            "fds": 65,
+            "goroutines": 1611,
+            "rss_mb": 323.424256,
+            "t_s": 7.608630113
+          },
+          {
+            "cpu_cores": 0.940455818244902,
+            "fds": 65,
+            "goroutines": 1388,
+            "rss_mb": 323.960832,
+            "t_s": 8.608145435
+          },
+          {
+            "cpu_cores": 0.9292354306631272,
+            "fds": 65,
+            "goroutines": 1157,
+            "rss_mb": 322.727936,
+            "t_s": 9.608968229
+          },
+          {
+            "cpu_cores": 0.9203713330180933,
+            "fds": 65,
+            "goroutines": 1068,
+            "rss_mb": 320.237568,
+            "t_s": 10.608564769
+          },
+          {
+            "cpu_cores": 0.9004606378428367,
+            "fds": 65,
+            "goroutines": 1066,
+            "rss_mb": 322.80576,
+            "t_s": 11.608053211
+          },
+          {
+            "cpu_cores": 0.9190628353031653,
+            "fds": 65,
+            "goroutines": 1067,
+            "rss_mb": 322.514944,
+            "t_s": 12.609072907
+          },
+          {
+            "cpu_cores": 0.9108551126015026,
+            "fds": 65,
+            "goroutines": 1067,
+            "rss_mb": 322.281472,
+            "t_s": 13.608134105
+          },
+          {
+            "cpu_cores": 0.900071305448824,
+            "fds": 62,
+            "goroutines": 1061,
+            "rss_mb": 324.468736,
+            "t_s": 14.608054883
+          },
+          {
+            "cpu_cores": 0.9293164589357061,
+            "fds": 62,
+            "goroutines": 1059,
+            "rss_mb": 319.594496,
+            "t_s": 15.608790414
+          },
+          {
+            "cpu_cores": 0.920462975387895,
+            "fds": 62,
+            "goroutines": 1059,
+            "rss_mb": 319.287296,
+            "t_s": 16.608287433
+          },
+          {
+            "cpu_cores": 0.92019372562432,
+            "fds": 62,
+            "goroutines": 1057,
+            "rss_mb": 320.446464,
+            "t_s": 17.608076906
+          },
+          {
+            "cpu_cores": 0.9095444046600664,
+            "fds": 62,
+            "goroutines": 1057,
+            "rss_mb": 322.834432,
+            "t_s": 18.608577811
+          },
+          {
+            "cpu_cores": 0.9399640106580155,
+            "fds": 62,
+            "goroutines": 1059,
+            "rss_mb": 321.527808,
+            "t_s": 19.608616099
+          },
+          {
+            "cpu_cores": 0.9303143709019642,
+            "fds": 62,
+            "goroutines": 1059,
+            "rss_mb": 320.311296,
+            "t_s": 20.60827818
+          }
+        ]
+      },
+      "started": "2026-09-25T04:23:51.231980334Z"
+    },
+    {
+      "arms": [
+        {
+          "achieved_rps": 153.42689388633326,
+          "arm": "gateway",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.093,
+            "mean": 0.006174999999999964,
+            "min": 0.003,
+            "n": 2000,
+            "p50": 0.006,
+            "p90": 0.007,
+            "p99": 0.016,
+            "p99_9": 0.04802800000000616,
+            "stdev": 0.0033559462153020213
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {
+            "gw": {
+              "max": 3.233,
+              "mean": 0.36306200000000033,
+              "min": 0.223,
+              "n": 2000,
+              "p50": 0.336,
+              "p90": 0.43610000000000004,
+              "p99": 1.0430999999999997,
+              "p99_9": 1.7180010000000001,
+              "stdev": 0.14829070825914883
+            },
+            "gw-pre": {
+              "max": 3.204,
+              "mean": 0.33494000000000046,
+              "min": 0.204,
+              "n": 2000,
+              "p50": 0.309,
+              "p90": 0.405,
+              "p99": 1.0101099999999998,
+              "p99_9": 1.6730010000000002,
+              "stdev": 0.1446838360011235
+            },
+            "gw-ttfb": {
+              "max": 3.211,
+              "mean": 0.3457199999999996,
+              "min": 0.216,
+              "n": 2000,
+              "p50": 0.32,
+              "p90": 0.4151,
+              "p99": 1.0152499999999995,
+              "p99_9": 1.6870050000000012,
+              "stdev": 0.14531605073081227
+            },
+            "upstream": {
+              "max": 3.517,
+              "mean": 1.6883030000000019,
+              "min": 1.091,
+              "n": 2000,
+              "p50": 1.601,
+              "p90": 2.227,
+              "p99": 2.90407,
+              "p99_9": 3.3171150000000256,
+              "stdev": 0.340698500423762
+            }
+          },
+          "total_ms": {
+            "max": 6.769,
+            "mean": 3.445336000000008,
+            "min": 2.648,
+            "n": 2000,
+            "p50": 3.3475,
+            "p90": 3.923,
+            "p99": 5.332,
+            "p99_9": 6.568005,
+            "stdev": 0.4467458036781098
+          },
+          "ttfb_ms": {
+            "max": 4.148,
+            "mean": 1.24216,
+            "min": 0.618,
+            "n": 2000,
+            "p50": 1.1815,
+            "p90": 1.5662,
+            "p99": 3.0014499999999993,
+            "p99_9": 3.9281850000000404,
+            "stdev": 0.36632313249370435
+          },
+          "ttft_ms": {
+            "max": 4.2,
+            "mean": 1.3110725000000025,
+            "min": 0.679,
+            "n": 2000,
+            "p50": 1.25,
+            "p90": 1.6521,
+            "p99": 3.0974299999999992,
+            "p99_9": 3.9772220000000487,
+            "stdev": 0.37350131893174093
+          },
+          "upstream_new_conn_pct": 0
+        },
+        {
+          "achieved_rps": 153.42689388633326,
+          "arm": "direct",
+          "error_kinds": {},
+          "errors": 0,
+          "lag_ms": {
+            "max": 0.175,
+            "mean": 0.006134500000000012,
+            "min": 0.003,
+            "n": 2000,
+            "p50": 0.005,
+            "p90": 0.006,
+            "p99": 0.019009999999999982,
+            "p99_9": 0.09506100000001343,
+            "stdev": 0.006646307978870674
+          },
+          "rate_limited": 0,
+          "requests": 2000,
+          "server_timing_ms": {},
+          "total_ms": {
+            "max": 4.244,
+            "mean": 2.7251460000000054,
+            "min": 2.105,
+            "n": 2000,
+            "p50": 2.667,
+            "p90": 3.14,
+            "p99": 3.53602,
+            "p99_9": 3.817003000000001,
+            "stdev": 0.2782986843015973
+          },
+          "ttfb_ms": {
+            "max": 1.416,
+            "mean": 0.5528255000000004,
+            "min": 0.183,
+            "n": 2000,
+            "p50": 0.548,
+            "p90": 0.7431,
+            "p99": 0.9280799999999999,
+            "p99_9": 1.0970560000000122,
+            "stdev": 0.14762461871161583
+          },
+          "ttft_ms": {
+            "max": 1.487,
+            "mean": 0.6239490000000002,
+            "min": 0.207,
+            "n": 2000,
+            "p50": 0.622,
+            "p90": 0.835,
+            "p99": 1.0770499999999998,
+            "p99_9": 1.2260320000000071,
+            "stdev": 0.16763880636356257
+          },
+          "upstream_new_conn_pct": 0
+        }
+      ],
+      "finished": "2026-09-25T04:24:24.877284318Z",
+      "name": "stream-1000-chunks",
+      "overhead": [
+        {
+          "arm": "gateway",
+          "metric": "ttft",
+          "p50": {
+            "estimate": 0.628,
+            "hi": 0.6435,
+            "level": 0.95,
+            "lo": 0.6129874999999999
+          },
+          "p90": {
+            "estimate": 0.8170999999999999,
+            "hi": 0.8480000000000001,
+            "level": 0.95,
+            "lo": 0.7830000000000001
+          },
+          "p99": {
+            "estimate": 2.0203799999999994,
+            "hi": 2.3329625000000003,
+            "level": 0.95,
+            "lo": 1.5255364999999992
+          }
+        },
+        {
+          "arm": "gateway",
+          "metric": "total",
+          "p50": {
+            "estimate": 0.6805000000000003,
+            "hi": 0.7000125000000001,
+            "level": 0.95,
+            "lo": 0.6590000000000003
+          },
+          "p90": {
+            "estimate": 0.7829999999999999,
+            "hi": 0.8465125000000002,
+            "level": 0.95,
+            "lo": 0.7299975
+          },
+          "p99": {
+            "estimate": 1.7959799999999997,
+            "hi": 2.0140812499999994,
+            "level": 0.95,
+            "lo": 1.3846937500000003
+          }
+        }
+      ],
+      "resources": {
+        "cpu_cores_avg": 1.1616856102752176,
+        "cpu_cores_max": 1.201060797314265,
+        "goroutines_end": 1658,
+        "goroutines_max": 1658,
+        "goroutines_slope_per_hour": 0,
+        "goroutines_start": 1115,
+        "open_fds_max": 62,
+        "rss_end_mb": 321.286144,
+        "rss_max_mb": 321.286144,
+        "rss_slope_mb_per_hour": 0,
+        "rss_start_mb": 320.38912,
+        "samples": 13,
+        "series": [
+          {
+            "cpu_cores": null,
+            "fds": 62,
+            "goroutines": 1115,
+            "rss_mb": 320.38912,
+            "t_s": 0.998710033
+          },
+          {
+            "cpu_cores": 1.1704903043426782,
+            "fds": 62,
+            "goroutines": 1177,
+            "rss_mb": 319.279104,
+            "t_s": 1.998291145
+          },
+          {
+            "cpu_cores": 1.12998202424584,
+            "fds": 62,
+            "goroutines": 1235,
+            "rss_mb": 317.960192,
+            "t_s": 2.998307053
+          },
+          {
+            "cpu_cores": 1.1300368776235736,
+            "fds": 62,
+            "goroutines": 1293,
+            "rss_mb": 318.877696,
+            "t_s": 3.998274419
+          },
+          {
+            "cpu_cores": 1.169954065263335,
+            "fds": 62,
+            "goroutines": 1351,
+            "rss_mb": 319.533056,
+            "t_s": 4.998313681
+          },
+          {
+            "cpu_cores": 1.1400338134030057,
+            "fds": 62,
+            "goroutines": 1413,
+            "rss_mb": 320.45056,
+            "t_s": 5.998284021
+          },
+          {
+            "cpu_cores": 1.1797560005045273,
+            "fds": 62,
+            "goroutines": 1475,
+            "rss_mb": 321.10592,
+            "t_s": 6.998490843
+          },
+          {
+            "cpu_cores": 1.1796685685764892,
+            "fds": 62,
+            "goroutines": 1531,
+            "rss_mb": 320.69632,
+            "t_s": 7.998771796
+          },
+          {
+            "cpu_cores": 1.1395476258022526,
+            "fds": 62,
+            "goroutines": 1592,
+            "rss_mb": 320.04096,
+            "t_s": 8.999168773
+          },
+          {
+            "cpu_cores": 1.201060797314265,
+            "fds": 62,
+            "goroutines": 1650,
+            "rss_mb": 319.188992,
+            "t_s": 9.998285556
+          },
+          {
+            "cpu_cores": 1.1595720286342441,
+            "fds": 62,
+            "goroutines": 1655,
+            "rss_mb": 320.761856,
+            "t_s": 10.998654633
+          },
+          {
+            "cpu_cores": 1.1804518616268196,
+            "fds": 62,
+            "goroutines": 1654,
+            "rss_mb": 321.024,
+            "t_s": 11.998271846
+          },
+          {
+            "cpu_cores": 1.1596733559655807,
+            "fds": 62,
+            "goroutines": 1658,
+            "rss_mb": 321.286144,
+            "t_s": 12.998553515
+          }
+        ]
+      },
+      "started": "2026-09-25T04:24:11.841760041Z"
+    }
+  ],
+  "checks": [
+    {
+      "cell": "prompt-1kb",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-1kb",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (direct)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-1kb",
+      "detail": "black-box median overhead 0.658ms vs Server-Timing gw median 0.310ms; the gap is network and kernel time outside the gateway process",
+      "name": "Server-Timing agrees with black-box overhead (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-32kb",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-32kb",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (direct)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-32kb",
+      "detail": "black-box median overhead 1.343ms vs Server-Timing gw median 0.854ms; the gap is network and kernel time outside the gateway process",
+      "name": "Server-Timing agrees with black-box overhead (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-256kb",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-256kb",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (direct)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "prompt-256kb",
+      "detail": "black-box median overhead 4.943ms vs Server-Timing gw median 4.334ms; the gap is network and kernel time outside the gateway process",
+      "name": "Server-Timing agrees with black-box overhead (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "stream-1000-chunks",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "stream-1000-chunks",
+      "detail": "0 of 2000 failed (0.000%)",
+      "name": "error rate (direct)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "cell": "stream-1000-chunks",
+      "detail": "black-box median overhead 0.681ms vs Server-Timing gw median 0.336ms; the gap is network and kernel time outside the gateway process",
+      "name": "Server-Timing agrees with black-box overhead (gateway)",
+      "passed": true,
+      "severity": "warn"
+    },
+    {
+      "detail": "Studio gained 8400 proxy-log rows for 8400 gateway responses",
+      "name": "analytics recorded every gateway request",
+      "passed": true,
+      "severity": "warn"
+    }
+  ],
+  "description": "The gateway reads and inspects request bodies (model validation, filters, analytics) and relays every streamed chunk. This scenario checks how its overhead grows with a large prompt (long context) and with a long stream of small chunks. It uses the native /llm/call/ route, unloaded, one request at a time.\n",
+  "finished_at": "2026-09-25T04:24:24.878147314Z",
+  "git_sha": "5ee92c69a04e4c62968d0c1301eea0abdee70592",
+  "label": "aws ap-southeast-2 ap-southeast-2a, cluster PG; gateway c7i.xlarge (whole VM), loadgen c7i.2xlarge, mock c7i.2xlarge, hub m7i.xlarge; images tykio/tyk-ai-studio-ent:v2.2.0-rc10.1 + tykio/tyk-microgateway-ent:v2.2.0-rc10.1; ping p99 0.610ms",
+  "load_generator": {
+    "arch": "amd64",
+    "cpus": 8,
+    "go": "go1.26.6",
+    "hostname": "ip-10-77-1-242",
+    "kernel": "Linux 7.0.0-1013-aws",
+    "os": "linux"
+  },
+  "mode": "closed",
+  "quick": false,
+  "scenario": "s2-payload-size",
+  "started_at": "2026-09-25T04:23:40.801483219Z",
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "title": "S2 · Sensitivity to request and response size",
+  "valid": true
+}

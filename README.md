@@ -78,6 +78,25 @@ Standards-based AI component integration:
 - **Standardized interactions**: Following Model Context Protocol specifications
 - **Secure connections**: All MCP traffic routed through the AI Gateway for visibility
 
+## Gateway Performance
+
+Measured on v2.2.0-rc10.1 with the released Enterprise edge gateway on **one
+4-vCPU AWS machine** (c7i.xlarge), production configuration, against a mock
+LLM and against real OpenAI and Anthropic:
+
+| | One 4-vCPU gateway |
+|---|---|
+| Latency added per request (native endpoints) | **0.5–0.6 ms p50, under 1 ms p99**, including the network hop |
+| Latency added (OpenAI-compatible `/v1` and `/ai` endpoints) | ~1 ms p50, under 2 ms p99 |
+| Sustained streaming load (realistic 4 s LLM streams) | **~365 req/s**, about 1,600 concurrent streams, 0 errors |
+| Sustained non-streaming load | **~1,000 req/s**, 0 errors |
+| 3× burst, and 1 hour at 70% of capacity | 0 errors; latency and memory flat |
+
+Full method, per-scenario data and known limitations:
+[benchmarks/gateway/benchmark-results.md](benchmarks/gateway/benchmark-results.md).
+To reproduce on your own AWS account, see
+[benchmarks/gateway/RUNBOOK-cloud.md](benchmarks/gateway/RUNBOOK-cloud.md).
+
 ## Real-World Applications
 
 **Software Development**
