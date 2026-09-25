@@ -73,7 +73,17 @@ type_for() {
 # request and response body, whatever ANALYTICS_STORE_* say, in rc10.1) for
 # ANALYTICS_RETENTION_DAYS: on the benchmark that is ~10 GB per 40 minutes
 # of load, so the gateway gets room for a full suite including the soak.
-disk_for() { case $1 in gateway) echo "${BENCH_DISK_GATEWAY:-200}" ;; *) echo 40 ;; esac; }
+# The hub's Postgres keeps every proxy log and analytics row (~0.5 KB each,
+# ~10M per S5 run at the ceiling) and the loadgen keeps ~1 GB of raw results
+# per S5 run: 40 GB filled both mid-suite on 2026-09-25.
+disk_for() {
+  case $1 in
+    gateway) echo "${BENCH_DISK_GATEWAY:-200}" ;;
+    hub) echo "${BENCH_DISK_HUB:-200}" ;;
+    loadgen) echo "${BENCH_DISK_LOADGEN:-200}" ;;
+    *) echo 40 ;;
+  esac
+}
 
 log() { echo "$(date +%H:%M:%S) $*" >&2; }
 die() { log "error: $*"; exit 1; }
