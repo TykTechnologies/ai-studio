@@ -226,10 +226,10 @@ func build(s *Summary) *document {
 						continue
 					}
 					wr = append(wr, []string{f0(w.StartS), arm, f1(st.RPS), fmt.Sprint(st.N), pct(st.ErrorRate),
-						f2(st.TTFTP50), f2(st.TTFTP99), f2(st.TotalP99), f3(st.GWP99)})
+						f2(st.TTFTP50), f2(st.TTFTP99), f2(st.TTFTP99OverLo), f2(st.TotalP99), f3(st.GWP99)})
 				}
 			}
-			d.add(table{[]string{"t (s)", "Arm", "req/s", "n", "Errors", "TTFT p50", "TTFT p99", "Total p99", "gw p99"}, wr})
+			d.add(table{[]string{"t (s)", "Arm", "req/s", "n", "Errors", "TTFT p50", "TTFT p99", "p99 over baseline ≥ (95%)", "Total p99", "gw p99"}, wr})
 		}
 		if c.Knee != nil {
 			k := c.Knee
@@ -243,7 +243,8 @@ func build(s *Summary) *document {
 				txt += " No breach within the ramp: the ceiling is above the highest rate tested."
 			}
 			txt += fmt.Sprintf(" A step breaches on errors, or on p99 overhead measured by the gateway's Server-Timing or "+
-				"against the baseline pooled over the ramp; latency is judged only from %d or more samples.", kneeMinSamples)
+				"against the baseline pooled over the ramp (only when the 95%% confidence interval of the difference is "+
+				"wholly above the SLO); latency is judged only from %d or more samples.", kneeMinSamples)
 			d.add(heading{3, "Capacity"}, para{txt})
 		}
 		if r := c.Resources; r != nil {

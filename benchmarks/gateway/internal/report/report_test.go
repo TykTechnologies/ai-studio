@@ -136,9 +136,9 @@ func TestErrorsAreCountedNotTimed(t *testing.T) {
 
 func TestKneeFindsFirstBreach(t *testing.T) {
 	ws := []Window{
-		{BaselineCumN: 300, BaselineCumTTFTP99: 300, Arms: map[string]WinStat{"gateway": {N: 500, RPS: 100, TTFTP99: 310, GWTTFBP99: math.NaN()}}},
-		{BaselineCumN: 300, BaselineCumTTFTP99: 300, Arms: map[string]WinStat{"gateway": {N: 500, RPS: 200, TTFTP99: 320, GWTTFBP99: math.NaN()}}},
-		{BaselineCumN: 300, BaselineCumTTFTP99: 300, Arms: map[string]WinStat{"gateway": {N: 500, RPS: 300, TTFTP99: 400, GWTTFBP99: math.NaN()}}},
+		{BaselineCumN: 300, BaselineCumTTFTP99: 300, Arms: map[string]WinStat{"gateway": {N: 500, RPS: 100, TTFTP99: 310, TTFTP99OverLo: 2, GWTTFBP99: math.NaN()}}},
+		{BaselineCumN: 300, BaselineCumTTFTP99: 300, Arms: map[string]WinStat{"gateway": {N: 500, RPS: 200, TTFTP99: 320, TTFTP99OverLo: 12, GWTTFBP99: math.NaN()}}},
+		{BaselineCumN: 300, BaselineCumTTFTP99: 300, Arms: map[string]WinStat{"gateway": {N: 500, RPS: 300, TTFTP99: 400, TTFTP99OverLo: 80, GWTTFBP99: math.NaN()}}},
 	}
 	k := knee(ws, "direct", 0.001, 25)
 	if k.SustainedRPS != 200 || k.BrokeAtRPS != 300 {
@@ -170,6 +170,55 @@ func TestKneeIgnoresThinWindowsForLatency(t *testing.T) {
 	k := knee(ws, "direct", 0.001, 25)
 	if k.SustainedRPS != 100 || k.BrokeAtRPS != 150 {
 		t.Fatalf("%+v", k)
+	}
+}
+
+// A point estimate of the p99 difference over the baseline's p99 is not
+// enough: against an upstream with a heavy-tailed TTFT, both p99s move by tens
+// of milliseconds between samples. A step breaches only when the difference's
+// confidence interval lies above the SLO.
+func TestKneeNeedsCIAboveSLO(t *testing.T) {
+	ws := []Window{
+		{BaselineCumN: 700, BaselineCumTTFTP99: 795, Arms: map[string]WinStat{"gateway": {N: 5000, RPS: 90, TTFTP99: 897, TTFTP99OverLo: -20, GWTTFBP99: 0.9}}},
+		{BaselineCumN: 900, BaselineCumTTFTP99: 800, Arms: map[string]WinStat{"gateway": {N: 8000, RPS: 140, TTFTP99: 1100, TTFTP99OverLo: 180, GWTTFBP99: 0.9}}},
+	}
+	k := knee(ws, "direct", 0.001, 25)
+	if k.SustainedRPS != 90 || k.BrokeAtRPS != 140 {
+		t.Fatalf("%+v", k)
+	}
+}
+
+// heavyTail draws TTFTs shaped like the mock's realistic profile: 300ms
+// median with a long tail to about 900ms at p99.
+func heavyTail(r *rand.Rand) float64 {
+	return 300 * math.Exp(0.47*r.NormFloat64())
+}
+
+// Same upstream distribution on both arms, 10% baseline weight: the noise in
+// the p99s alone must not produce a breach. With a real shift it must.
+func TestWindowsKneeIgnoresTailNoise(t *testing.T) {
+	build := func(shift float64) []rec {
+		r := rand.New(rand.NewPCG(7, 11))
+		start := time.Unix(0, 0)
+		var recs []rec
+		for w := 0; w < 5; w++ {
+			for i := 0; i < 3000; i++ {
+				at := start.Add(time.Duration(w)*time.Minute + time.Duration(i)*20*time.Millisecond).UnixNano()
+				recs = append(recs, rec{arm: "gateway", ok: true, ttft: heavyTail(r) + shift, intended: at, gw: math.NaN(), gwTTFB: math.NaN()})
+				if i%10 == 0 {
+					recs = append(recs, rec{arm: "direct", ok: true, ttft: heavyTail(r), intended: at, gw: math.NaN(), gwTTFB: math.NaN()})
+				}
+			}
+		}
+		return recs
+	}
+	k := knee(windows(build(0), time.Unix(0, 0), time.Minute, "direct"), "direct", 0.001, 25)
+	if k.BrokeAtRPS != 0 {
+		t.Fatalf("identical distributions breached: %+v", k)
+	}
+	k = knee(windows(build(300), time.Unix(0, 0), time.Minute, "direct"), "direct", 0.001, 25)
+	if k.BrokeAtRPS == 0 {
+		t.Fatalf("a 300ms shift did not breach: %+v", k)
 	}
 }
 

@@ -137,6 +137,10 @@ type WinStat struct {
 	TotalP50  float64 `json:"total_p50"`
 	TotalP99  float64 `json:"total_p99"`
 	GWP99     float64 `json:"gw_p99"`
+	// TTFTP99OverLo is the lower end of the 95% bootstrap interval for this
+	// arm's p99 TTFT minus the pooled baseline's; NaN for the baseline arm
+	// and when either side has fewer than kneeMinSamples.
+	TTFTP99OverLo float64 `json:"ttft_p99_overhead_lo"`
 	// GWTTFBP99 is the gateway's own p99 share of time to first byte
 	// (Server-Timing gw-ttfb); NaN when the gateway did not report it.
 	GWTTFBP99 float64 `json:"gw_ttfb_p99"`
@@ -520,12 +524,17 @@ func windows(recs []rec, start time.Time, win time.Duration, baseline string) []
 				}
 			}
 			ttft, total := values(rs, "ttft"), values(rs, "total")
+			overLo := math.NaN()
+			if arm != baseline && len(ttft) >= kneeMinSamples && len(baseCum) >= kneeMinSamples {
+				overLo = stats.DiffOfPercentiles(baseCum, ttft, 99, 0.95, uint64(i)+1).Lo
+			}
 			w.Arms[arm] = WinStat{
 				N: len(rs), RPS: float64(len(rs)) / win.Seconds(), ErrorRate: float64(errs) / float64(len(rs)),
 				TTFTP50: stats.Percentile(ttft, 50), TTFTP99: stats.Percentile(ttft, 99),
 				TotalP50: stats.Percentile(total, 50), TotalP99: stats.Percentile(total, 99),
-				GWP99:     stats.Percentile(gw, 99),
-				GWTTFBP99: stats.Percentile(gwTTFB, 99),
+				GWP99:         stats.Percentile(gw, 99),
+				GWTTFBP99:     stats.Percentile(gwTTFB, 99),
+				TTFTP99OverLo: overLo,
 			}
 		}
 		w.OfferedRS = float64(n) / win.Seconds()
@@ -551,7 +560,11 @@ const kneeMinSamples = 200
 //     (a full accept backlog at saturation);
 //   - the measured arm's p99 TTFT against the baseline's p99 pooled over the
 //     ramp so far, which sees everything but is only trusted once both sides
-//     have kneeMinSamples.
+//     have kneeMinSamples, and only when the 95% bootstrap interval of the
+//     difference lies wholly above the SLO. Against an upstream with a heavy
+//     TTFT tail, the p99s of two identical distributions differ by tens of
+//     milliseconds from sampling alone (the baseline is ~10% of traffic), so
+//     a point estimate would call noise a breach.
 //
 // Rates are the measured arm's own request rate.
 func knee(ws []Window, baseline string, maxErr, slo float64) *Knee {
@@ -573,8 +586,9 @@ func knee(ws []Window, baseline string, maxErr, slo float64) *Knee {
 			case st.N >= kneeMinSamples && !math.IsNaN(st.GWTTFBP99) && st.GWTTFBP99 > slo:
 				reason = fmt.Sprintf("%s Server-Timing p99 gateway time to first byte %.1fms (SLO %.0fms)", arm, st.GWTTFBP99, slo)
 			case st.N >= kneeMinSamples && w.BaselineCumN >= kneeMinSamples &&
-				!math.IsNaN(w.BaselineCumTTFTP99) && st.TTFTP99-w.BaselineCumTTFTP99 > slo:
-				reason = fmt.Sprintf("%s p99 TTFT %.1fms above baseline (SLO %.0fms)", arm, st.TTFTP99-w.BaselineCumTTFTP99, slo)
+				!math.IsNaN(st.TTFTP99OverLo) && st.TTFTP99OverLo > slo:
+				reason = fmt.Sprintf("%s p99 TTFT %.1fms above baseline, at least %.1fms at 95%% confidence (SLO %.0fms)",
+					arm, st.TTFTP99-w.BaselineCumTTFTP99, st.TTFTP99OverLo, slo)
 			}
 			if reason != "" {
 				k.BrokeAtRPS, k.Reason = st.RPS, reason
