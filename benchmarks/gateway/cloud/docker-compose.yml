@@ -1,0 +1,107 @@
+# Benchmark services on dedicated VMs, driven by aws.sh. Each VM starts one
+# profile: `hub` (Postgres + Studio) or `gateway` (the edge microgateway). The
+# mock upstream and the load generator run as plain binaries.
+#
+# Every service uses the host network, so Docker's bridge NAT is not in the
+# measured path. The released images are used as published (STUDIO_IMAGE,
+# GATEWAY_IMAGE); nothing here is built.
+#
+# aws.sh writes /opt/gwbench/bench.env (mode 600) on each VM with the licence,
+# the per-deployment secrets and the hosts' private addresses.
+name: gwbench
+
+services:
+  postgres:
+    profiles: ["hub"]
+    image: postgres:16-alpine
+    network_mode: host
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${BENCH_PG_PASSWORD:?}
+      POSTGRES_DB: midsommar
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-c", "max_connections=300", "-c", "shared_buffers=1GB"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+
+  studio:
+    profiles: ["hub"]
+    image: ${STUDIO_IMAGE:?}
+    network_mode: host
+    environment:
+      DATABASE_TYPE: postgres
+      DATABASE_URL: postgres://postgres:${BENCH_PG_PASSWORD}@127.0.0.1:5432/midsommar?sslmode=disable
+      TYK_AI_SECRET_KEY: ${BENCH_SECRET_KEY:?}
+      # Must equal the edge's ENCRYPTION_KEY: LLM credentials are encrypted
+      # with it for the edge.
+      MICROGATEWAY_ENCRYPTION_KEY: ${BENCH_SECRET_KEY}
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:?}
+      GATEWAY_MODE: control
+      GRPC_PORT: "50051"
+      GRPC_HOST: 0.0.0.0
+      # Plaintext hub-edge link inside the benchmark security group. It
+      # carries config and analytics, not client requests.
+      GRPC_TLS_INSECURE: "true"
+      GRPC_AUTH_TOKEN: ${BENCH_GRPC_TOKEN:?}
+      ALLOW_REGISTRATIONS: "true"
+      SITE_URL: http://${HUB_IP:?}:8080
+      LOG_LEVEL: info
+      ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      MARKETPLACE_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+      # The image runs as uid 65532 with a root-owned WORKDIR, so every
+      # path Studio writes to is set absolute, inside the mounted /data.
+      BRANDING_STORAGE_PATH: /data/branding
+      EXPORT_STORAGE_PATH: /data/exports
+      AUDIT_FILE_PATH: /data/audit/audit.log
+    volumes:
+      - /opt/gwbench/data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  gateway:
+    profiles: ["gateway"]
+    image: ${GATEWAY_IMAGE:?}
+    network_mode: host
+    environment:
+      GATEWAY_MODE: edge
+      CONTROL_ENDPOINT: ${HUB_IP}:50051
+      EDGE_ID: bench-edge-1
+      EDGE_NAMESPACE: default
+      EDGE_AUTH_TOKEN: ${BENCH_GRPC_TOKEN}
+      EDGE_ALLOW_INSECURE: "true"
+      EDGE_TLS_ENABLED: "false"
+      # Short heartbeats so config pushes are confirmed quickly when seeding.
+      EDGE_HEARTBEAT_INTERVAL: 5s
+      # The production default; the S8 variant turns it off to show the cold path.
+      EDGE_TOKEN_CACHE_ENABLED: ${EDGE_TOKEN_CACHE_ENABLED:-true}
+      ENCRYPTION_KEY: ${BENCH_SECRET_KEY}
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE}
+      DATABASE_DSN: file:/data/microgateway.db?mode=rwc
+      PORT: "8080"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      # The mock upstream is on a private address.
+      ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      # Analytics go to Studio on the analytics pulse, as in production.
+      PLUGINS_CONFIG_PATH: /bench/analytics-pulse.yaml
+      ENABLE_METRICS: "true"
+      METRICS_AUTH_TOKEN: ${BENCH_METRICS_TOKEN:?}
+      GATEWAY_SERVER_TIMING: "true"
+      ENABLE_TRACING: ${ENABLE_TRACING:-false}
+    volumes:
+      - /opt/gwbench/data:/data
+      - /opt/gwbench/analytics-pulse.yaml:/bench/analytics-pulse.yaml:ro
+    ulimits:
+      nofile: {soft: 1048576, hard: 1048576}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
