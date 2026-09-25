@@ -85,9 +85,9 @@ func (p *Proxy) newInternalRoutingClient(originalAuth string, extra http.Header)
 // driver for a's LLM and asks it for a's model. The request is copied so the
 // caller's req.Model is never mutated (the handler echoes it and the comment
 // on ToLangchainOptions explains why that matters). streamingFunc is nil on
-// the buffered path.
+// the buffered path. relay, when set, receives the inner hop's cache headers.
 func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAttempt, req *ChatCompletionRequest,
-	streamingFunc func(context.Context, []byte) error) (*llms.ContentResponse, error) {
+	streamingFunc func(context.Context, []byte) error, relay *loopbackRelay) (*llms.ContentResponse, error) {
 	// Create internal routing HTTP client
 	// This routes SDK requests through /llm/call/ for plugin hook execution
 	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.loopbackHeaders(r.Context(), a))
@@ -131,6 +131,9 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	// Server-Timing recorder (if any) across for the loopback transport.
 	if rt := timingFrom(r.Context()); rt != nil {
 		ctx = withRequestTiming(ctx, rt)
+	}
+	if relay != nil {
+		ctx = withLoopbackRelay(ctx, relay)
 	}
 
 	// SDK call routes through /llm/call/ which executes all plugin hooks
@@ -311,6 +314,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		respBody []byte // set directly by a Bedrock rung, which builds its own response
 		served   llmAttempt
 		last     attemptFailure
+		relay    *loopbackRelay // the served rung's cache headers
 	)
 	for i, a := range plan.attempts {
 		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
@@ -325,10 +329,11 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 			last = fail
 		} else {
 			var err error
-			resp, err = p.runDriverAttempt(actx, r, a, &req, nil)
+			attemptRelay := &loopbackRelay{}
+			resp, err = p.runDriverAttempt(actx, r, a, &req, nil, attemptRelay)
 			if err == nil {
 				cancel()
-				served = a
+				served, relay = a, attemptRelay
 				break
 			}
 			last = classifyDriverError(err, actx) // before cancel: the deadline is what we ask about
@@ -351,6 +356,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	setServedHeaders(w, served)
+	relay.applyTo(w.Header())
 
 	if respBody == nil {
 		// Extract token usage from ContentResponse
@@ -568,10 +574,16 @@ func (p *Proxy) handleChatCompletionStream(
 		}
 	}
 
+	// relay holds the cache headers of the attempt in flight; they go out
+	// with the first frame, when the header map is committed.
+	var relay *loopbackRelay
 	send := func(chunk ChatCompletionChunk) error {
 		jsonBytes, err := json.Marshal(chunk)
 		if err != nil {
 			return fmt.Errorf("failed to marshal chunk: %w", err)
+		}
+		if framesSent == 0 {
+			relay.applyTo(w.Header())
 		}
 		fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
 		flusher.Flush()
@@ -625,7 +637,8 @@ func (p *Proxy) handleChatCompletionStream(
 
 		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
 		var err error
-		resp, err = p.runDriverAttempt(actx, r, a, req, streamingFunc)
+		relay = &loopbackRelay{}
+		resp, err = p.runDriverAttempt(actx, r, a, req, streamingFunc, relay)
 		if err == nil {
 			cancel()
 			served = a
