@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -10,21 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/gorm"
 )
-
-// failQueriesOn makes every SELECT on table fail, as a hub database that has
-// run out of disk or lost its connection does.
-func failQueriesOn(t *testing.T, db *gorm.DB, table string) {
-	t.Helper()
-	name := "test:fail_" + table
-	require.NoError(t, db.Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
-		if tx.Statement.Table == table {
-			_ = tx.AddError(errors.New("pq: could not extend file: No space left on device"))
-		}
-	}))
-	t.Cleanup(func() { _ = db.Callback().Query().Remove(name) })
-}
 
 // A hub database fault is not a verdict on the token. It must reach the edge
 // as an error, which the edge treats as "hub unavailable" (stale-grace
@@ -32,13 +17,17 @@ func failQueriesOn(t *testing.T, db *gorm.DB, table string) {
 // cached entry and refuse the request with 401. The app lookup used to turn
 // every error into "Associated app not found or inactive"; during a hub disk
 // outage that sent edges into a 401 storm for valid credentials.
+//
+// The fault is a dropped table, so every query on it fails at the database.
+// (Injecting it with a GORM callback would race the control server's
+// background goroutines, which query the same handle.)
 func TestControlServer_ValidateToken_DatabaseErrorsAreNotRejections(t *testing.T) {
 	for _, table := range []string{"credentials", "apps"} {
 		t.Run(table, func(t *testing.T) {
 			server, db := setupTestServer(t, nil)
 			token := "db-fault-token-" + table
 			createTestCredentialAndApp(db, token)
-			failQueriesOn(t, db, table)
+			require.NoError(t, db.Exec("DROP TABLE "+table).Error)
 
 			resp, err := server.ValidateToken(context.Background(), &pb.TokenValidationRequest{
 				Token: token, EdgeId: "edge-001", EdgeNamespace: "test",
