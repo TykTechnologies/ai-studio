@@ -80,20 +80,20 @@ Standards-based AI component integration:
 
 ## Gateway Performance
 
-Measured on v2.2.0-rc10.1 with the Enterprise edge gateway on **one 4-vCPU AWS
-machine** (c7i.xlarge), with every request authenticated, checked against a
+Measured on Tyk AI Studio 2.2 with the Enterprise edge gateway on **one 4-vCPU
+AWS machine** (c7i.xlarge), with every request authenticated, checked against a
 budget, cost-accounted and recorded in analytics:
 
 | | One 4-vCPU gateway, full production policy |
 |---|---|
-| Latency added per request (native endpoints) | **0.5–0.6 ms p50, about 1 ms p99**, including the network hop |
-| Latency added against real OpenAI (paired) | not measurable against the vendor's own variation (0.6–1.0 ms by the gateway's own timing) |
-| Streaming up to ~365 new streams/s (~1,600 open) | time to first token within a few ms of the upstream's; 0 errors |
-| 1 hour at 70% of capacity, and a 3× burst | 0 errors; latency and memory flat; recovered from the burst immediately |
+| Latency added per request (native endpoints) | **0.54–0.58 ms p50, under 0.9 ms p99**, including the network hop; the gateway's own share is 0.13–0.16 ms |
+| Latency added against real OpenAI and Anthropic (paired) | not measurable against the vendors' own variation; 0.3–1.8 ms by the gateway's own timing |
+| Non-streaming capacity (20 ms upstream) | **~8,550 req/s**, adding ~0.5 ms p50 up to 6,000 req/s; 0 errors |
+| Streaming capacity (300 ms to first token, 4.3 s streams) | **~690 new streams/s** (~3,000 open); time to first token within ~15 ms of the upstream's up to 450/s; 0 errors |
+| 1 hour at 377 streams/s, and a 3× burst | 0 errors; latency and memory flat for the hour; recovered from the burst within 5 s |
 
-Non-streaming throughput is currently limited by the edge's local database
-rather than CPU. The report explains the figures and the work under way to
-remove that limit.
+Both limits are the node's CPU, so capacity grows with the number of edges.
+Every analytics record reached the control plane.
 
 Full method, per-scenario data and known limitations:
 [benchmarks/gateway/benchmark-results.md](benchmarks/gateway/benchmark-results.md).
