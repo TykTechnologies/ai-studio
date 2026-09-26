@@ -359,7 +359,11 @@ sudo systemctl daemon-reload && sudo systemctl enable mockllm >/dev/null 2>&1 &&
   # left behind (analytics rows, a large write-ahead log) changes its latency.
   # Re-seed afterwards so Studio pushes the configuration to the new edge.
   log "starting gateway (fresh database)"
-  rsh gateway "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway down >/dev/null 2>&1; \
+  # The previous edge's log goes to /opt/gwbench/edge-logs/ first: down
+  # removes the container, and its log with it.
+  rsh gateway "sudo mkdir -p /opt/gwbench/edge-logs && \
+    { sudo docker logs --timestamps gwbench-gateway-1 2>&1 | sudo tee /opt/gwbench/edge-logs/gateway-\$(date -u +%Y%m%d-%H%M%S).log >/dev/null || true; }; \
+    sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway down >/dev/null 2>&1; \
     sudo find /opt/gwbench/data -mindepth 1 -delete && \
     sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway up -d --force-recreate"
   wait_http gateway "http://127.0.0.1:8080/health"
