@@ -23,7 +23,8 @@ import (
 type MicrogatewaAnalyticsHandler struct {
 	db            *gorm.DB
 	config        *config.AnalyticsConfig
-	pendingEvents map[string]uint // Map request ID to event ID for matching
+	pendingEvents map[string]pendingEvent // Match key -> proxy log event awaiting its chat record
+	lastPendingSweep time.Time
 	mu            sync.RWMutex
 	pluginManager *plugins.PluginManager // For global data collection plugins
 	budgetService BudgetServiceInterface // For recording budget usage
@@ -51,7 +52,7 @@ func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.Analyti
 	return &MicrogatewaAnalyticsHandler{
 		db:            db,
 		config:        analyticsConfig,
-		pendingEvents: make(map[string]uint),
+		pendingEvents: make(map[string]pendingEvent),
 		pluginManager: pluginManager,
 		budgetService: budgetService,
 		chatRecordBatchChan: make(chan []*models.LLMChatRecord, batchBufferSize),
@@ -599,65 +600,50 @@ func (h *MicrogatewaAnalyticsHandler) responseBodyToStore(body string) string {
 	return h.truncateBody(body, h.config.MaxBodySize)
 }
 
+// pendingEventTTL is how long a proxy log's event waits for its chat record.
+// The two are recorded microseconds apart on the same goroutine.
+const pendingEventTTL = 10 * time.Second
+
+// pendingEvent is a proxy log's event waiting for its chat record.
+type pendingEvent struct {
+	id uint
+	at time.Time
+}
+
 // storeEventForMatching stores an event ID for later matching with chat record
+//
+// Expired entries are swept here, at most once per second, instead of by a
+// timer goroutine per event: at a thousand requests a second those were ten
+// thousand sleeping goroutines.
 func (h *MicrogatewaAnalyticsHandler) storeEventForMatching(matchKey string, eventID uint) {
+	now := time.Now()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.pendingEvents[matchKey] = eventID
+	h.pendingEvents[matchKey] = pendingEvent{id: eventID, at: now}
 
-	// Clean up old entries (older than 10 seconds)
-	// This prevents memory leaks from unmatched events
-	go func() {
-		time.Sleep(10 * time.Second)
-		h.mu.Lock()
-		delete(h.pendingEvents, matchKey)
-		h.mu.Unlock()
-	}()
+	if now.Sub(h.lastPendingSweep) < time.Second {
+		return
+	}
+	h.lastPendingSweep = now
+	for key, e := range h.pendingEvents {
+		if now.Sub(e.at) > pendingEventTTL {
+			delete(h.pendingEvents, key)
+		}
+	}
 }
 
 // findEventForMerge finds a pending event ID for merging chat record data
 func (h *MicrogatewaAnalyticsHandler) findEventForMerge(matchKey string) (uint, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	eventID, exists := h.pendingEvents[matchKey]
-	if exists {
-		// Remove from pending map after finding (one-time merge)
-		go func() {
-			h.mu.Lock()
-			delete(h.pendingEvents, matchKey)
-			h.mu.Unlock()
-		}()
+	e, exists := h.pendingEvents[matchKey]
+	if !exists || time.Since(e.at) > pendingEventTTL {
+		return 0, false
 	}
-
-	return eventID, exists
-}
-
-// findEventForMatching finds an event ID by request pattern matching
-func (h *MicrogatewaAnalyticsHandler) findEventForMatching(proxyLog *models.ProxyLog) (uint, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	
-	// Try to match by pattern (app ID and timestamp closeness)
-	expectedPattern := fmt.Sprintf("req_%d_", proxyLog.AppID)
-	
-	for requestID, eventID := range h.pendingEvents {
-		if len(requestID) >= len(expectedPattern) && requestID[:len(expectedPattern)] == expectedPattern {
-			// Check if timestamps are close (within 10 seconds)
-			var event database.AnalyticsEvent
-			if err := h.db.First(&event, eventID).Error; err == nil {
-				timeDiff := proxyLog.TimeStamp.Sub(event.CreatedAt)
-				if timeDiff < 0 {
-					timeDiff = -timeDiff
-				}
-				if timeDiff < 10*time.Second {
-					return eventID, true
-				}
-			}
-		}
-	}
-	
-	return 0, false
+	// Remove from pending map after finding (one-time merge)
+	delete(h.pendingEvents, matchKey)
+	return e.id, true
 }
 
 // RecordToolCall implements the midsommar analytics interface

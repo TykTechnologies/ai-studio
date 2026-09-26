@@ -21,6 +21,20 @@ type CommunityBudgetService struct {
 	db            *gorm.DB
 	repo          *database.Repository
 	pluginManager *plugins.PluginManager
+	// writeRepo carries the usage writes; see SetWriteDB. Nil means repo.
+	writeRepo *database.Repository
+}
+
+// SetWriteDB moves the usage writes to w, the gateway's writer handle.
+func (s *CommunityBudgetService) SetWriteDB(w *gorm.DB) {
+	s.writeRepo = database.NewRepository(w)
+}
+
+func (s *CommunityBudgetService) usageRepo() *database.Repository {
+	if s.writeRepo != nil {
+		return s.writeRepo
+	}
+	return s.repo
 }
 
 // NewDatabaseBudgetService creates a community budget service.
@@ -85,13 +99,13 @@ func (s *CommunityBudgetService) RecordUsage(appID uint, llmID *uint, tokens int
 	}
 
 	// Get or create usage record
-	usage, err := s.repo.GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)
+	usage, err := s.usageRepo().GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)
 	if err != nil {
 		return fmt.Errorf("failed to get/create budget usage: %w", err)
 	}
 
 	// Update usage statistics
-	err = s.repo.UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
+	err = s.usageRepo().UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
 	if err != nil {
 		return fmt.Errorf("failed to update budget usage: %w", err)
 	}

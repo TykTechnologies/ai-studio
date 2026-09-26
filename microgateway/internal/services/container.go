@@ -22,6 +22,9 @@ type ServiceContainer struct {
 	// Database
 	DB         *gorm.DB
 	Repository *database.Repository
+	// WriteDB carries the background writes (analytics events, budget
+	// usage); see database.OpenWriter. Nil means DB.
+	WriteDB *gorm.DB
 
 	// Core services
 	GatewayService   GatewayServiceInterface
@@ -231,6 +234,30 @@ func (sc *ServiceContainer) Cleanup() {
 
 	// Simple cleanup - no complex operations needed
 	log.Debug().Msg("Service container cleanup completed")
+}
+
+// writeDBSetter is implemented by services that can move their background
+// writes to the writer handle.
+type writeDBSetter interface {
+	SetWriteDB(*gorm.DB)
+}
+
+// SetWriteDB routes the background writes of the analytics handler and the
+// budget service to w (see database.OpenWriter).
+func (sc *ServiceContainer) SetWriteDB(w *gorm.DB) {
+	sc.WriteDB = w
+	if s, ok := sc.BudgetService.(writeDBSetter); ok {
+		s.SetWriteDB(w)
+	}
+}
+
+// Writer returns the handle for background writes: WriteDB, or DB when none
+// was set.
+func (sc *ServiceContainer) Writer() *gorm.DB {
+	if sc.WriteDB != nil {
+		return sc.WriteDB
+	}
+	return sc.DB
 }
 
 // GetEdgeID returns the edge ID (for plugin context)

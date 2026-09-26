@@ -26,6 +26,20 @@ type DatabaseBudgetService struct {
 	// budgetBlocks is the control plane's budget verdict per App; nil
 	// means the shared edge set filled by the budget sync.
 	budgetBlocks *BudgetBlocks
+	// writeRepo carries the usage writes; see SetWriteDB. Nil means repo.
+	writeRepo *database.Repository
+	// apps caches the budget fields of each App. The check and the usage
+	// recording both read them on every request.
+	apps *database.GenCache[uint, budgetApp]
+}
+
+// budgetApp is the part of an App the budget needs. found is false for an
+// App that does not exist, which is cached like any other answer.
+type budgetApp struct {
+	found           bool
+	isActive        bool
+	monthlyBudget   float64
+	budgetStartDate *time.Time
 }
 
 // NewDatabaseBudgetService creates a new database-backed budget service
@@ -34,7 +48,41 @@ func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository, pluginMana
 		db:            db,
 		repo:          repo,
 		pluginManager: pluginManager,
+		apps:          database.NewGenCache[uint, budgetApp](),
 	}
+}
+
+// SetWriteDB moves the usage writes to w, the gateway's writer handle.
+func (s *DatabaseBudgetService) SetWriteDB(w *gorm.DB) {
+	s.writeRepo = database.NewRepository(w)
+}
+
+func (s *DatabaseBudgetService) usageRepo() *database.Repository {
+	if s.writeRepo != nil {
+		return s.writeRepo
+	}
+	return s.repo
+}
+
+// budgetApp returns the budget fields of an App, from the config-generation
+// cache. A missing App is a result, not an error; errors are lookup failures.
+func (s *DatabaseBudgetService) budgetApp(appID uint) (budgetApp, error) {
+	return s.apps.Load(appID, func() (budgetApp, error) {
+		var app database.App
+		err := s.db.Where("id = ?", appID).First(&app).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return budgetApp{}, nil
+		}
+		if err != nil {
+			return budgetApp{}, err
+		}
+		return budgetApp{
+			found:           true,
+			isActive:        app.IsActive,
+			monthlyBudget:   app.MonthlyBudget,
+			budgetStartDate: app.BudgetStartDate,
+		}, nil
+	})
 }
 
 // calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
@@ -110,23 +158,22 @@ func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estim
 	}
 
 	// Get app's monthly budget and budget_start_date
-	var app database.App
-	err := s.db.Where("id = ? AND is_active = ?", appID, true).First(&app).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return 0, 0, fmt.Errorf("app not found or inactive: %w", err)
-	}
+	app, err := s.budgetApp(appID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("%w: reading app %d: %v", services.ErrBudgetCheckUnavailable, appID, err)
 	}
+	if !app.found || !app.isActive {
+		return 0, 0, fmt.Errorf("app not found or inactive: %w", gorm.ErrRecordNotFound)
+	}
 
-	monthlyBudget := app.MonthlyBudget
+	monthlyBudget := app.monthlyBudget
 	if monthlyBudget <= 0 {
 		return 0, 0, nil // No budget limit set
 	}
 
 	// Calculate budget period using app's custom budget_start_date
 	now := time.Now()
-	periodStart, periodEnd := s.calculateBudgetPeriod(app.BudgetStartDate, now)
+	periodStart, periodEnd := s.calculateBudgetPeriod(app.budgetStartDate, now)
 
 	// Get current usage for this period
 	usage, err := s.repo.GetBudgetUsage(appID, llmID, periodStart, periodEnd)
@@ -154,13 +201,13 @@ func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int6
 	now := time.Now()
 
 	// Get app to determine custom budget period
-	var app database.App
-	if err := s.db.Where("id = ?", appID).First(&app).Error; err != nil {
+	app, err := s.budgetApp(appID)
+	if err != nil || !app.found {
 		// If app not found, fall back to calendar month
 		log.Warn().Err(err).Uint("app_id", appID).Msg("App not found for budget period calculation, using calendar month")
 	}
 
-	periodStart, periodEnd := s.calculateBudgetPeriod(app.BudgetStartDate, now)
+	periodStart, periodEnd := s.calculateBudgetPeriod(app.budgetStartDate, now)
 
 	// Execute budget usage data collection plugins
 	if s.pluginManager != nil {
@@ -197,13 +244,13 @@ func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int6
 	}
 
 	// Get or create usage record
-	usage, err := s.repo.GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)
+	usage, err := s.usageRepo().GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)
 	if err != nil {
 		return fmt.Errorf("failed to get/create budget usage: %w", err)
 	}
 
 	// Update usage statistics - cost is already in stored format (dollars * 10000) from proxy layer
-	err = s.repo.UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
+	err = s.usageRepo().UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
 	if err != nil {
 		return fmt.Errorf("failed to update budget usage: %w", err)
 	}

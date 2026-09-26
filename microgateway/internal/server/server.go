@@ -63,7 +63,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	pluginManager := serviceContainer.PluginManager
 
 	// Create analytics handler for microgateway with plugin manager that has loaded plugins
-	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.DB, &cfg.Analytics, pluginManager, serviceContainer.BudgetService)
+	analyticsHandler := services.NewMicrogatewaAnalyticsHandler(serviceContainer.Writer(), &cfg.Analytics, pluginManager, serviceContainer.BudgetService)
 	analyticsHandler.SetAsGlobalHandler()
 
 	// Debug: Verify plugin manager state after service container initialization
@@ -134,6 +134,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	var metricsHandler http.Handler
 	if cfg.Observability.EnableMetrics {
 		metricsHandler = metrics.Init()
+		registerDatabaseMetrics(cfg, serviceContainer)
 		log.Info().Msg("Prometheus metrics enabled")
 	}
 
