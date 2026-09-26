@@ -162,8 +162,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	if !isErr && (inputTokens > 0 || outputTokens > 0) {
 		responseText := textBuffer.String()
 		go func() {
-			recordBedrockProxyLog(p, llm, app, modelID, reqBody, responseText, r, startTime)
-			recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, startTime)
+			recordBedrockStreamAnalytics(p, llm, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, startTime)
 		}()
 	}
 }

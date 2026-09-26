@@ -3,6 +3,7 @@ package services
 
 import (
 	"crypto/rand"
+	"errors"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
@@ -84,6 +85,14 @@ type GatewayServiceAdapter struct {
 	filterService  FilterServiceInterface
 	pluginService  PluginServiceInterface
 	pluginManager  PluginManagerInterface
+
+	// modelPrices caches GetModelPriceByModelNameAndVendor per vendor and
+	// model name until the configuration changes.
+	modelPrices *database.GenCache[string, models.ModelPrice]
+	// accessTokensPresent caches whether the edge holds any OAuth access
+	// tokens. The proxy tries every Bearer credential as an OAuth token
+	// first, and most edges hold none.
+	accessTokensPresent *database.GenCache[struct{}, bool]
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface
@@ -106,6 +115,9 @@ func NewGatewayServiceAdapter(
 		filterService:  filterService,
 		pluginService:  pluginService,
 		pluginManager:  pluginManager,
+
+		modelPrices:         database.NewGenCache[string, models.ModelPrice](),
+		accessTokensPresent: database.NewGenCache[struct{}, bool](),
 	}
 
 	// Optional DB parameter for tool/datasource/OAuth queries
@@ -564,6 +576,17 @@ func (a *GatewayServiceAdapter) GetValidAccessTokenByToken(token string) (*model
 		return nil, fmt.Errorf("OAuth access tokens not available (no DB)")
 	}
 
+	// Most edges hold no OAuth tokens: skip the per-token lookup then. Only
+	// the config sync writes access_tokens, and it invalidates this answer.
+	present, err := a.accessTokensPresent.Load(struct{}{}, func() (bool, error) {
+		var ids []uint
+		err := a.db.Model(&database.AccessTokenEdge{}).Limit(1).Pluck("id", &ids).Error
+		return len(ids) > 0, err
+	})
+	if err == nil && !present {
+		return nil, fmt.Errorf("invalid or expired access token")
+	}
+
 	// Compute SHA-256 hash of the presented token for indexed lookup
 	h := sha256.Sum256([]byte(token))
 	tokenHash := fmt.Sprintf("%x", h[:])
@@ -821,27 +844,43 @@ func (a *GatewayServiceAdapter) CallToolOperation(toolID uint, operationID strin
 }
 
 // GetModelPriceByModelNameAndVendor returns model pricing from database
+//
+// It runs after every response, so the answer is cached per model and vendor
+// until the configuration changes. A model without a price is cached too: the
+// model name comes from the response, and an unpriced model would otherwise
+// cost a query on every request. Lookup failures are not cached.
 func (a *GatewayServiceAdapter) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
+	price, err := a.modelPrices.Load(vendor+"\x00"+modelName, func() (models.ModelPrice, error) {
+		return a.loadModelPrice(modelName, vendor)
+	})
+	if err != nil {
+		// Same zero pricing as a missing price, but not cached.
+		log.Debug().Err(err).Str("model", modelName).Str("vendor", vendor).Msg("Pricing lookup failed, using zero rates")
+		zero := zeroModelPrice(modelName, vendor)
+		return &zero, nil
+	}
+	return &price, nil
+}
+
+// loadModelPrice reads a price from the database. A missing price is the zero
+// price, not an error.
+func (a *GatewayServiceAdapter) loadModelPrice(modelName, vendor string) (models.ModelPrice, error) {
 	// Look up pricing in database using management service
 	dbPrice, err := a.management.GetModelPrice(modelName, vendor)
-	
-	if err != nil {
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		// Return zero pricing if not found (matches AI Studio behavior which auto-creates
 		// a zero-priced record). Using non-zero defaults would cause phantom costs in
 		// dashboards when no price has been explicitly configured.
 		log.Debug().Str("model", modelName).Str("vendor", vendor).Msg("No pricing found, using zero rates")
-		return &models.ModelPrice{
-			ID:        0,
-			ModelName: modelName,
-			Vendor:    vendor,
-			CPT:       0,
-			CPIT:      0,
-			Currency:  "USD",
-		}, nil
+		return zeroModelPrice(modelName, vendor), nil
+	}
+	if err != nil {
+		return models.ModelPrice{}, err
 	}
 
 	// Convert database model to midsommar model
-	return &models.ModelPrice{
+	return models.ModelPrice{
 		ID:           dbPrice.ID,
 		ModelName:    dbPrice.ModelName,
 		Vendor:       dbPrice.Vendor,
@@ -851,6 +890,17 @@ func (a *GatewayServiceAdapter) GetModelPriceByModelNameAndVendor(modelName, ven
 		CacheReadPT:  dbPrice.CacheReadPT,
 		Currency:     dbPrice.Currency,
 	}, nil
+}
+
+func zeroModelPrice(modelName, vendor string) models.ModelPrice {
+	return models.ModelPrice{
+		ID:        0,
+		ModelName: modelName,
+		Vendor:    vendor,
+		CPT:       0,
+		CPIT:      0,
+		Currency:  "USD",
+	}
 }
 
 // GetFilterByID returns a filter by ID

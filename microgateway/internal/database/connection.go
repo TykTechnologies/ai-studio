@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -44,7 +43,7 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 		if removedShared {
 			log.Printf("SQLite: ignoring cache=shared in DATABASE_DSN for a file database; it causes table-level lock errors under concurrent load")
 		}
-		db, err = gorm.Open(sqlite.Open(dsn), gormConfig)
+		db, err = gorm.Open(openSQLite(dsn), gormConfig)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", config.Type)
 	}
@@ -73,6 +72,41 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+// OpenWriter returns the handle for the gateway's background writes (analytics
+// events, budget usage). For a file-backed SQLite database it is a second pool
+// on the same file holding one connection. SQLite has a single writer, so more
+// connections only queue on the write lock, and while they wait (up to
+// busy_timeout) they hold connections from the pool that serves request-path
+// reads. With their own connection, the background writes wait for each other
+// instead, and the request path always finds a free connection.
+//
+// For Postgres and in-memory SQLite it returns db: Postgres has no single
+// writer, and a second pool would not see an in-memory database.
+func OpenWriter(config DatabaseConfig, db *gorm.DB) (*gorm.DB, error) {
+	if config.Type != "sqlite" || isInMemorySQLite(config.DSN) {
+		return db, nil
+	}
+	dsn, _ := normalizeSQLiteDSN(config.DSN)
+	w, err := gorm.Open(openSQLite(dsn), &gorm.Config{Logger: getGormLogger(config.LogLevel)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database writer: %w", err)
+	}
+	if err := EnsureConfigGenerationCallbacks(w); err != nil {
+		return nil, fmt.Errorf("failed to register config generation callbacks on writer: %w", err)
+	}
+	sqlDB, err := w.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB for writer: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database writer: %w", err)
+	}
+	return w, nil
 }
 
 // Migrate runs auto-migration for all models

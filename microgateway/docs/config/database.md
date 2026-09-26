@@ -32,6 +32,15 @@ while analytics and budget writes run alongside. Shared-cache mode turned that
 into "database table is locked" errors under load, and those reached clients as
 authentication and budget failures. In-memory DSNs are left unchanged.
 
+**Every connection** also sets `PRAGMA journal_size_limit` to 64 MB. After a checkpoint, the write-ahead log (`<db>-wal`) then shrinks back to that size instead of keeping the size of its largest burst.
+
+**Per-request data** (analytics rows and budget usage) goes through one writer goroutine on its own connection. It writes in batches, one transaction per 500 rows or per 100 ms (`ANALYTICS_WRITER_*`), so request-path reads never queue behind writes.
+
+**Metrics.** The `/metrics` endpoint exports:
+- the size of the database and its log: `microgateway_sqlite_db_bytes` and `microgateway_sqlite_wal_bytes`
+- both connection pools: `go_sql_*{db_name="main"|"writer"}`
+- the writer: `microgateway_analytics_writer_*`
+
 #### SQLite Pros and Cons
 **Pros:**
 - Zero external dependencies

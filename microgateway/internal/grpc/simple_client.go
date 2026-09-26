@@ -223,6 +223,9 @@ func (c *SimpleEdgeClient) GetEventBus() eventbridge.Bus {
 }
 
 // ValidateTokenOnDemand validates a token by calling the control instance
+// tokenValidationTimeout bounds an on-demand token validation call.
+const tokenValidationTimeout = 5 * time.Second
+
 func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidationResponse, error) {
 	if c.conn == nil || c.client == nil {
 		return nil, fmt.Errorf("not connected to control instance")
@@ -235,7 +238,10 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 
 	log.Debug().Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: making on-demand token validation request to control")
 
-	ctx := context.Background()
+	// Requests wait for this call, so it must not hang on a slow or stuck
+	// control instance.
+	ctx, cancel := context.WithTimeout(context.Background(), tokenValidationTimeout)
+	defer cancel()
 
 	// Create token validation request
 	req := &pb.TokenValidationRequest{

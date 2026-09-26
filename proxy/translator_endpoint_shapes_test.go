@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -85,8 +87,15 @@ func newEndpointShapeHarness(t *testing.T, vendor models.Vendor, endpointSuffix 
 	// cleanups registered above) close the fake vendor, stop analytics and
 	// close the DB. Without the wait, an analyzer still recording when the next
 	// test resets the global analytics handler is a data race.
+	//
+	// Shutdown, not Close: Close does not wait for handlers still running (a
+	// streaming response the client has finished reading, or the unified
+	// endpoint's loopback hop), and one of them starting its analyzer while
+	// waitForAnalyzers waits is itself a race (WaitGroup Add during Wait).
 	t.Cleanup(func() {
-		_ = srv.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
 		p.waitForAnalyzers()
 	})
 	return h

@@ -449,8 +449,7 @@ func (p *Proxy) bedrockPumpStream(
 	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
 	responseText := textBuffer.String()
 	p.goAnalyze(func() {
-		recordBedrockProxyLog(p, conf, app, modelID, reqBody, responseText, r, timestamp)
-		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp)
+		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp)
 	})
 }
 
@@ -570,18 +569,18 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 		proxyLog.ResponseBody = ""
 	}
 	applyFailoverMarker(proxyLog, r.Context())
-	ctx := context.WithoutCancel(r.Context())
-	analytics.RecordProxyLog(ctx, proxyLog)
 
-	// Record chat analytics
+	// Chat analytics, recorded with the proxy log
+	var record *models.LLMChatRecord
 	if output.Usage != nil {
-		recordBedrockChatRecord(p, llm, app, modelID,
+		record = bedrockChatRecord(p, llm, app, modelID,
 			int(aws.ToInt32(output.Usage.InputTokens)),
 			int(aws.ToInt32(output.Usage.OutputTokens)),
 			int(aws.ToInt32(output.Usage.CacheWriteInputTokens)),
 			int(aws.ToInt32(output.Usage.CacheReadInputTokens)),
-			r, timestamp)
+			timestamp)
 	}
+	recordBedrockExchange(p, llm, app, proxyLog, record, r)
 }
 
 // recordBedrockFailedAttempt leaves a ProxyLog for a Bedrock rung that failed
@@ -614,9 +613,28 @@ func recordBedrockFailedAttempt(llm *models.LLM, app *models.App, modelID string
 	analytics.RecordProxyLog(context.WithoutCancel(r.Context()), proxyLog)
 }
 
-// recordBedrockProxyLog records a proxy log entry for Bedrock streaming paths where
-// recordBedrockAnalytics (which expects a ConverseOutput) cannot be used.
-func recordBedrockProxyLog(p *Proxy, llm *models.LLM, app *models.App, modelID string, reqBody []byte, responseText string, r *http.Request, timestamp time.Time) {
+// recordBedrockStreamAnalytics records the proxy log and chat record for
+// Bedrock streaming paths where recordBedrockAnalytics (which expects a
+// ConverseOutput) cannot be used.
+func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, reqBody []byte, responseText string, promptTokens, responseTokens, cacheWriteTokens, cacheReadTokens int, r *http.Request, timestamp time.Time) {
+	proxyLog := bedrockProxyLog(llm, app, modelID, reqBody, responseText, r, timestamp)
+	record := bedrockChatRecord(p, llm, app, modelID, promptTokens, responseTokens, cacheWriteTokens, cacheReadTokens, timestamp)
+	recordBedrockExchange(p, llm, app, proxyLog, record, r)
+}
+
+// recordBedrockExchange records a Bedrock request's proxy log with its chat
+// record (nil when there was no usage), then triggers the budget analysis.
+func recordBedrockExchange(p *Proxy, llm *models.LLM, app *models.App, proxyLog *models.ProxyLog, record *models.LLMChatRecord, r *http.Request) {
+	ctx := context.WithoutCancel(r.Context())
+	analytics.RecordExchange(ctx, proxyLog, record)
+	if record != nil {
+		// Trigger budget analysis
+		p.budgetService.AnalyzeBudgetUsage(app, llm)
+	}
+}
+
+// bedrockProxyLog builds the proxy log entry for a Bedrock streaming path.
+func bedrockProxyLog(llm *models.LLM, app *models.App, modelID string, reqBody []byte, responseText string, r *http.Request, timestamp time.Time) *models.ProxyLog {
 	const maxBodySize = 65535
 
 	proxyLog := &models.ProxyLog{
@@ -635,15 +653,15 @@ func recordBedrockProxyLog(p *Proxy, llm *models.LLM, app *models.App, modelID s
 		proxyLog.ResponseBody = ""
 	}
 	applyFailoverMarker(proxyLog, r.Context())
-	ctx := context.WithoutCancel(r.Context())
-	analytics.RecordProxyLog(ctx, proxyLog)
+	return proxyLog
 }
 
-// recordBedrockChatRecord is the single place that calculates cost and records an LLMChatRecord
+// bedrockChatRecord is the single place that calculates cost and builds an LLMChatRecord
 // for all Bedrock paths (non-streaming /ai/, streaming /ai/, and streaming /llm/stream/).
-func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, cacheWriteTokens int, cacheReadTokens int, r *http.Request, timestamp time.Time) {
+// It returns nil when the response reported no usage.
+func bedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, cacheWriteTokens int, cacheReadTokens int, timestamp time.Time) *models.LLMChatRecord {
 	if promptTokens == 0 && responseTokens == 0 && cacheWriteTokens == 0 && cacheReadTokens == 0 {
-		return
+		return nil
 	}
 
 	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelID, string(llm.Vendor))
@@ -674,9 +692,5 @@ func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID
 		UserID:                 app.UserID,
 		InteractionType:        models.ProxyInteraction,
 	}
-	ctx := context.WithoutCancel(r.Context())
-	analytics.RecordChatRecord(ctx, record)
-
-	// Trigger budget analysis
-	p.budgetService.AnalyzeBudgetUsage(app, llm)
+	return record
 }

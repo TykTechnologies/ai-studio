@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync/atomic"
 
@@ -19,6 +20,7 @@ import (
 var (
 	initialized atomic.Bool
 	handler     http.Handler
+	registry    *prometheus.Registry
 
 	// Counters
 	requestsTotal    otelmetric.Int64Counter
@@ -42,7 +44,7 @@ var (
 // Init creates the OTEL-to-Prometheus bridge, registers all instruments,
 // and returns an http.Handler that serves the /metrics endpoint.
 func Init() http.Handler {
-	registry := prometheus.NewRegistry()
+	registry = prometheus.NewRegistry()
 	// Standard Go runtime and process metrics (goroutines, heap, RSS, open
 	// FDs, CPU), so capacity and soak runs can watch for leaks.
 	registry.MustRegister(
@@ -160,6 +162,21 @@ func Init() http.Handler {
 	initialized.Store(true)
 
 	return handler
+}
+
+// Register adds collectors to the registry Init created, for metrics that
+// come from outside this package (connection pools, file sizes). It returns
+// an error when Init has not been called.
+func Register(cs ...prometheus.Collector) error {
+	if !initialized.Load() {
+		return errors.New("metrics not initialized")
+	}
+	for _, c := range cs {
+		if err := registry.Register(c); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Handler returns the Prometheus HTTP handler. Returns nil if Init() has not been called.

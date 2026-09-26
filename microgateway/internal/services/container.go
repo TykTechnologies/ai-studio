@@ -22,6 +22,13 @@ type ServiceContainer struct {
 	// Database
 	DB         *gorm.DB
 	Repository *database.Repository
+	// WriteDB carries the background writes (analytics events, budget
+	// usage); see database.OpenWriter. Nil means DB.
+	WriteDB *gorm.DB
+	// AnalyticsWriter batches the analytics rows and budget usage onto
+	// WriteDB; see StartAnalyticsWriter.
+	AnalyticsWriter *AnalyticsWriter
+	BudgetLedger    *BudgetLedger
 
 	// Core services
 	GatewayService   GatewayServiceInterface
@@ -229,8 +236,71 @@ func (sc *ServiceContainer) StopBackgroundTasks() {
 func (sc *ServiceContainer) Cleanup() {
 	log.Debug().Msg("Starting service container cleanup")
 
-	// Simple cleanup - no complex operations needed
+	// Write what the analytics writer still holds.
+	if sc.AnalyticsWriter != nil {
+		sc.AnalyticsWriter.Stop()
+	}
+
 	log.Debug().Msg("Service container cleanup completed")
+}
+
+// writeDBSetter is implemented by services that can move their background
+// writes to the writer handle.
+type writeDBSetter interface {
+	SetWriteDB(*gorm.DB)
+}
+
+// SetWriteDB routes the background writes of the analytics handler and the
+// budget service to w (see database.OpenWriter).
+func (sc *ServiceContainer) SetWriteDB(w *gorm.DB) {
+	sc.WriteDB = w
+	if s, ok := sc.BudgetService.(writeDBSetter); ok {
+		s.SetWriteDB(w)
+	}
+}
+
+// ledgerSetter is implemented by budget services that can record usage in
+// the ledger.
+type ledgerSetter interface {
+	SetLedger(*BudgetLedger)
+}
+
+// StartAnalyticsWriter starts the single writer for analytics rows and budget
+// usage on the writer handle, and moves the budget service's usage recording
+// to an in-memory ledger that the writer flushes. Call it after SetWriteDB.
+func (sc *ServiceContainer) StartAnalyticsWriter(acfg *config.AnalyticsConfig) {
+	queueSize, batchSize, interval := 0, 0, time.Duration(0)
+	if acfg != nil {
+		queueSize, batchSize, interval = acfg.WriterQueueSize, acfg.WriterBatchSize, acfg.WriterFlushInterval
+	}
+	w := NewAnalyticsWriter(sc.Writer(), queueSize, batchSize, interval)
+	if acfg != nil {
+		// Evaluated on every retention pass: the pulse is loaded after
+		// the writer starts.
+		analytics := *acfg
+		pm := sc.PluginManager
+		w.SetRetention(func() int {
+			return analytics.EffectiveRetentionDays(pm != nil && pm.HasAnalyticsPulse())
+		})
+	}
+	ledger := NewBudgetLedger(sc.DB)
+	w.SetLedger(ledger)
+	if s, ok := sc.BudgetService.(ledgerSetter); ok {
+		s.SetLedger(ledger)
+	}
+	edgeBudgetLedger.Store(ledger)
+	w.Start()
+	sc.AnalyticsWriter = w
+	sc.BudgetLedger = ledger
+}
+
+// Writer returns the handle for background writes: WriteDB, or DB when none
+// was set.
+func (sc *ServiceContainer) Writer() *gorm.DB {
+	if sc.WriteDB != nil {
+		return sc.WriteDB
+	}
+	return sc.DB
 }
 
 // GetEdgeID returns the edge ID (for plugin context)

@@ -241,9 +241,9 @@ JAEGER_TAGS=environment=production,region=us-west-1
 
 ### pprof Configuration
 ```bash
-# Enable Go pprof endpoints
+# Enable Go pprof endpoints, served on their own listener (not the API port)
 ENABLE_PROFILING=true
-PROFILING_PATH=/debug/pprof
+PROFILING_ADDR=127.0.0.1:6060   # default; bind wider only on a trusted network
 
 # Available profiling endpoints:
 # - /debug/pprof/profile (CPU profile)
@@ -256,16 +256,20 @@ PROFILING_PATH=/debug/pprof
 ### Profiling Usage
 ```bash
 # CPU profiling
-go tool pprof http://localhost:8080/debug/pprof/profile?seconds=30
+go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
 
 # Memory profiling
-go tool pprof http://localhost:8080/debug/pprof/heap
+go tool pprof http://localhost:6060/debug/pprof/heap
 
 # Goroutine analysis
-go tool pprof http://localhost:8080/debug/pprof/goroutine
+go tool pprof http://localhost:6060/debug/pprof/goroutine
 
 # Generate profiling report
-go tool pprof -http=:8081 http://localhost:8080/debug/pprof/profile
+go tool pprof -http=:8081 http://localhost:6060/debug/pprof/profile
+
+# Where goroutines wait on locks and channels
+go tool pprof http://localhost:6060/debug/pprof/mutex
+go tool pprof http://localhost:6060/debug/pprof/block
 ```
 
 ## Monitoring Integration

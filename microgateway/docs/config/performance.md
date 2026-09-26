@@ -80,6 +80,43 @@ mgw system metrics | grep cache_hit_ratio
 mgw system metrics | grep cache_evictions_total
 ```
 
+## Overload Protection
+
+Past its CPU capacity, a gateway accepts requests faster than it can finish them. Each waiting request holds memory. Without a limit, the backlog grows until the process is killed for running out of memory, and that drops every request in flight.
+
+The gateway sheds load before that happens:
+- **When:** while Go memory (heap goal plus goroutine stacks) is above `OVERLOAD_MEMORY_THRESHOLD` (default 85%) of the memory limit.
+- **How:** new proxy requests get `503` with `Retry-After: 1` and an OpenAI-shaped error (`code: "overloaded"`). The vendor SDKs retry that response automatically.
+- **Recovery:** requests are admitted again once memory falls 5 points below the threshold.
+- **What's exempt:** health, metrics, the management API and plugin endpoints are never refused.
+
+The memory limit comes from the first of these that is set:
+1. `OVERLOAD_MEMORY_LIMIT`
+2. `GOMEMLIMIT`
+3. the container's cgroup memory limit
+
+**Set a container memory limit (or `OVERLOAD_MEMORY_LIMIT`) in production.** Without one, only the optional `MAX_INFLIGHT_REQUESTS` cap applies.
+
+`MAX_INFLIGHT_REQUESTS` caps concurrent proxy requests. Streaming calls hold a slot for their whole duration, so size it for your longest streams. For example, 200 req/s of 60 s streams is 12,000 concurrent requests.
+
+**Go runtime defaults.** The gateway's live heap is small (tens of MB), so at Go's default `GOGC=100` the collector ran about 20 times a second under load. A 4-vCPU edge running `GOGC=400` measured:
+- sustained throughput up from ~7,100 to ~8,100 req/s
+- p50 overhead at 7,500 req/s down from +2.8 ms to +0.6 ms
+- no more one-window p99 spikes, where GC had drafted requests into ~100 ms mark assists
+- a cost of 100–200 MB more memory
+
+Unless you set them, the gateway therefore applies:
+- `GOGC=400`
+- a soft `GOMEMLIMIT` at 90% of the memory limit, when one is known, so the larger heap never outgrows the container
+
+Shedding at 85% comes before the collector has to work hard near that soft limit. The applied values are logged at startup (`Go runtime tuning`).
+
+Monitor it with:
+- `microgateway_overload_shedding`
+- `microgateway_overload_memory_bytes` and `microgateway_overload_memory_limit_bytes`
+- `microgateway_overload_inflight_requests`
+- `microgateway_overload_rejected_{memory,inflight}_total`
+
 ## Gateway Performance
 
 ### Request Processing
