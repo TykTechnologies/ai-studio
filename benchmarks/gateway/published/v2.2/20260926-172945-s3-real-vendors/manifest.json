@@ -1,0 +1,416 @@
+{
+  "scenario": {
+    "Name": "s3-real-vendors",
+    "Title": "S3 · Real-world overhead against OpenAI and Anthropic",
+    "Description": "The end-user view: the same request sent straight to the vendor, and through the gateway to the same vendor, from the same host. Vendor latency varies by hundreds of milliseconds from one request to the next, far more than the gateway adds, so requests are sent in ABBA blocks (direct, gateway, gateway, direct, or the reverse, chosen at random) and the overhead is the median of the within-block differences. Both arms see the same vendor conditions within a block. The prompt makes every reply run to max_tokens, so output length is the same in both arms. Compare the paired overhead with the gateway's own Server-Timing: they should agree to within the network hop to the gateway. Needs test-secrets/vendors.env and `--vendors` on both seed and run.\n",
+    "Mode": "paired",
+    "Timeout": 120000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 0,
+      "Requests": 0,
+      "WarmupRequests": 0
+    },
+    "Open": {
+      "Arrival": "",
+      "Rate": {
+        "Kind": "",
+        "RPS": 0,
+        "Duration": 0,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 0,
+        "Peak": 0,
+        "At": 0,
+        "Width": 0
+      },
+      "Warmup": 0,
+      "MaxInFlight": 0,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 0,
+      "MaxLagMS": 0
+    },
+    "Paired": {
+      "Blocks": 200,
+      "WarmupBlocks": 5,
+      "Workers": 2,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "openai-stream-64",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "{model:openai}",
+          "max_tokens": 0,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "max_completion_tokens": 64,
+            "max_tokens": null,
+            "reasoning_effort": "none"
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/bench-openai/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "openai",
+            "Path": "/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "openai"
+        ]
+      },
+      {
+        "Name": "openai-rest-64",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "{model:openai}",
+          "max_tokens": 0,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "max_completion_tokens": 64,
+            "max_tokens": null,
+            "reasoning_effort": "none"
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/bench-openai/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "openai",
+            "Path": "/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "openai"
+        ]
+      },
+      {
+        "Name": "openai-stream-512",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "{model:openai}",
+          "max_tokens": 0,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "max_completion_tokens": 512,
+            "max_tokens": null,
+            "reasoning_effort": "none"
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/bench-openai/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "openai",
+            "Path": "/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "openai"
+        ]
+      },
+      {
+        "Name": "openai-unified-stream",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "{model:openai}",
+          "max_tokens": 0,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "max_completion_tokens": 1024,
+            "max_tokens": null
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": "bench-openai/{model:openai}"
+          },
+          {
+            "Name": "direct",
+            "Target": "openai",
+            "Path": "/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "openai"
+        ]
+      },
+      {
+        "Name": "anthropic-stream-64",
+        "Body": {
+          "format": "anthropic",
+          "stream": true,
+          "model": "{model:anthropic}",
+          "max_tokens": 64,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "thinking": {
+              "type": "disabled"
+            }
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/bench-anthropic/v1/messages",
+            "Weight": 0,
+            "Headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "anthropic",
+            "Path": "/messages",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "anthropic"
+        ]
+      },
+      {
+        "Name": "anthropic-rest-64",
+        "Body": {
+          "format": "anthropic",
+          "stream": false,
+          "model": "{model:anthropic}",
+          "max_tokens": 64,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "thinking": {
+              "type": "disabled"
+            }
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/bench-anthropic/v1/messages",
+            "Weight": 0,
+            "Headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "anthropic",
+            "Path": "/messages",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "anthropic"
+        ]
+      },
+      {
+        "Name": "anthropic-stream-512",
+        "Body": {
+          "format": "anthropic",
+          "stream": true,
+          "model": "{model:anthropic}",
+          "max_tokens": 512,
+          "prompt_bytes": 0,
+          "prompt": "Count from 1 to 2000 in words, separated by commas. Output only the numbers.",
+          "extra": {
+            "thinking": {
+              "type": "disabled"
+            }
+          }
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/bench-anthropic/v1/messages",
+            "Weight": 0,
+            "Headers": {
+              "anthropic-version": "2023-06-01"
+            },
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "anthropic",
+            "Path": "/messages",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": [
+          "anthropic"
+        ]
+      }
+    ]
+  },
+  "quick": false,
+  "label": "main-adaptive-c94e0f17: v2.2 release build (edge + Studio from main c94e0f17; adaptive GOGC; defaults, no tuning env); empty hub; c7i.xlarge edge",
+  "started_at": "2026-09-26T17:29:45.029605049Z",
+  "finished_at": "2026-09-26T19:46:51.443081515Z",
+  "cells": [
+    {
+      "name": "openai-stream-64",
+      "started": "2026-09-26T17:29:46.40805598Z",
+      "finished": "2026-09-26T17:37:22.016554065Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "openai-rest-64",
+      "started": "2026-09-26T17:37:22.016743878Z",
+      "finished": "2026-09-26T17:44:55.65679243Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "openai-stream-512",
+      "started": "2026-09-26T17:44:55.656953682Z",
+      "finished": "2026-09-26T18:09:56.210052201Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "openai-unified-stream",
+      "started": "2026-09-26T18:09:56.210258353Z",
+      "finished": "2026-09-26T18:55:14.761236191Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "anthropic-stream-64",
+      "started": "2026-09-26T18:55:14.761433735Z",
+      "finished": "2026-09-26T19:06:53.821539946Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "anthropic-rest-64",
+      "started": "2026-09-26T19:06:53.821707401Z",
+      "finished": "2026-09-26T19:18:36.333030949Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "anthropic-stream-512",
+      "started": "2026-09-26T19:18:36.333205748Z",
+      "finished": "2026-09-26T19:46:51.44291179Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "anthropic": "https://api.anthropic.com/v1",
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999",
+    "openai": "https://api.openai.com/v1"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "c94e0f17684edfb8b9617668d753809fbc30050d",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "29e0b109fca86ba356870172035a883edf33a5a685c4a9fa5c8d322aa2745137",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-26T12:25:45.692410096Z"
+  },
+  "analytics": {
+    "before": 44654526,
+    "after": 44657396,
+    "expected": 2870,
+    "settled": true
+  }
+}

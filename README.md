@@ -78,6 +78,28 @@ Standards-based AI component integration:
 - **Standardized interactions**: Following Model Context Protocol specifications
 - **Secure connections**: All MCP traffic routed through the AI Gateway for visibility
 
+## Gateway Performance
+
+Measured on Tyk AI Studio 2.2 with the Enterprise edge gateway on **one 4-vCPU
+AWS machine** (c7i.xlarge), with every request authenticated, checked against a
+budget, cost-accounted and recorded in analytics:
+
+| | One 4-vCPU gateway, full production policy |
+|---|---|
+| Latency added per request (native endpoints) | **0.54–0.58 ms p50, under 0.9 ms p99**, including the network hop; the gateway's own share is 0.13–0.16 ms |
+| Latency added against real OpenAI and Anthropic (paired) | not measurable against the vendors' own variation; 0.3–1.8 ms by the gateway's own timing |
+| Non-streaming capacity (20 ms upstream) | **~8,550 req/s**, adding ~0.5 ms p50 up to 6,000 req/s; 0 errors |
+| Streaming capacity (300 ms to first token, 4.3 s streams) | **~690 new streams/s** (~3,000 open); time to first token within ~15 ms of the upstream's up to 450/s; 0 errors |
+| 1 hour at 377 streams/s, and a 3× burst | 0 errors; latency and memory flat for the hour; recovered from the burst within 5 s |
+
+Both limits are the node's CPU, so capacity grows with the number of edges.
+Every analytics record reached the control plane.
+
+Full method, per-scenario data and known limitations:
+[benchmarks/gateway/benchmark-results.md](benchmarks/gateway/benchmark-results.md).
+To reproduce on your own AWS account, see
+[benchmarks/gateway/RUNBOOK-cloud.md](benchmarks/gateway/RUNBOOK-cloud.md).
+
 ## Real-World Applications
 
 **Software Development**

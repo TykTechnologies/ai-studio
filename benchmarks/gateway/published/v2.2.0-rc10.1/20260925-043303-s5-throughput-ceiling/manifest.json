@@ -1,0 +1,128 @@
+{
+  "scenario": {
+    "Name": "s5-throughput-ceiling",
+    "Title": "S5 · Request-rate ceiling with a fast upstream",
+    "Description": "The complement of S4: short requests against an upstream that answers in 20ms, so the gateway's per-request cost (authentication, policy, analytics), not the number of open streams, sets the limit. The rate steps up every 30 seconds until p99 overhead or errors breach the limits.\n",
+    "Mode": "open",
+    "Timeout": 30000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 25,
+    "Closed": {
+      "Concurrency": 0,
+      "Requests": 0,
+      "WarmupRequests": 0
+    },
+    "Open": {
+      "Arrival": "poisson",
+      "Rate": {
+        "Kind": "steps",
+        "RPS": 0,
+        "Duration": 0,
+        "Start": 100,
+        "Step": 100,
+        "Max": 10000,
+        "Hold": 30000000000,
+        "Base": 0,
+        "Peak": 0,
+        "At": 0,
+        "Width": 0
+      },
+      "Warmup": 5000000000,
+      "MaxInFlight": 20000,
+      "Stop": {
+        "MaxErrorRate": 0.02,
+        "MaxP99OverheadMS": 500,
+        "Metric": "total"
+      },
+      "ReportWindow": 0,
+      "MaxLagMS": 2
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "rest-20ms",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-20ms/v1/chat/completions",
+            "Weight": 1,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:20ms}/v1/chat/completions",
+            "Weight": 0.1,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "aws ap-southeast-2 ap-southeast-2a, cluster PG; gateway c7i.xlarge (whole VM), loadgen c7i.2xlarge, mock c7i.2xlarge, hub m7i.xlarge; images tykio/tyk-ai-studio-ent:v2.2.0-rc10.1 + tykio/tyk-microgateway-ent:v2.2.0-rc10.1; ping p99 0.610ms",
+  "started_at": "2026-09-25T04:33:03.40204722Z",
+  "finished_at": "2026-09-25T04:39:39.663097472Z",
+  "cells": [
+    {
+      "name": "rest-20ms",
+      "started": "2026-09-25T04:33:03.439817243Z",
+      "finished": "2026-09-25T04:39:39.606377921Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "5ee92c69a04e4c62968d0c1301eea0abdee70592",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "2e465ba8c45d1ecd473ef18c78e91c6a6c9f8fd4f230932d0a84a100b7e922ff",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-25T03:56:25.944591542Z"
+  },
+  "stopped_by": {
+    "rest-20ms": "gateway p99 total is 1446.6ms above direct over the last 10s"
+  },
+  "analytics": {
+    "before": 625847,
+    "after": 850137,
+    "expected": 224290,
+    "settled": true
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "scenario": {
+    "Name": "s6-spike",
+    "Title": "S6 · Burst to three times the base rate",
+    "Description": "Steady traffic at a base rate, a 30-second burst to three times that, then back to base. It shows whether the gateway absorbs a burst (latency rises, then recovers) or falters (errors, or latency that stays high after the burst). The rates below assume a knee of about 200 req/s. Scale them from your S4 result: --rate-scale \u003csustained_rps / 200\u003e.\n",
+    "Mode": "open",
+    "Timeout": 60000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 0,
+      "Requests": 0,
+      "WarmupRequests": 0
+    },
+    "Open": {
+      "Arrival": "poisson",
+      "Rate": {
+        "Kind": "spike",
+        "RPS": 0,
+        "Duration": 180000000000,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 207.54999999999998,
+        "Peak": 622.65,
+        "At": 60000000000,
+        "Width": 30000000000
+      },
+      "Warmup": 10000000000,
+      "MaxInFlight": 30000,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 5000000000,
+      "MaxLagMS": 5
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "stream-realistic",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 200,
+          "prompt_bytes": 2048
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-realistic/v1/chat/completions",
+            "Weight": 1,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:realistic}/v1/chat/completions",
+            "Weight": 0.1,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "main-adaptive-c94e0f17: v2.2 release build (edge + Studio from main c94e0f17; adaptive GOGC; defaults, no tuning env); empty hub; c7i.xlarge edge",
+  "started_at": "2026-09-26T16:24:24.068282648Z",
+  "finished_at": "2026-09-26T16:27:45.80101335Z",
+  "cells": [
+    {
+      "name": "stream-realistic",
+      "started": "2026-09-26T16:24:40.670631318Z",
+      "finished": "2026-09-26T16:27:45.78719128Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "c94e0f17684edfb8b9617668d753809fbc30050d",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "29e0b109fca86ba356870172035a883edf33a5a685c4a9fa5c8d322aa2745137",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-26T12:25:45.692410096Z"
+  },
+  "analytics": {
+    "before": 43249367,
+    "after": 43294558,
+    "expected": 45191,
+    "settled": true
+  }
+}
