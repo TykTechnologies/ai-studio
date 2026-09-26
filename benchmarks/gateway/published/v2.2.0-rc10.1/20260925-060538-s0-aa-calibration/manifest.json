@@ -1,0 +1,165 @@
+{
+  "scenario": {
+    "Name": "s0-aa-calibration",
+    "Title": "S0 · A/A calibration: direct vs direct",
+    "Description": "Both arms send the same request straight to the mock upstream. Any difference between them is measurement noise, so this run sets the noise floor for every other scenario. The run is INVALID unless the 95% confidence interval for the median difference contains zero. Run it first, on the same hosts, every time.\n",
+    "Mode": "closed",
+    "Timeout": 30000000000,
+    "Baseline": "direct-a",
+    "ColdConn": false,
+    "Calibration": true,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 1,
+      "Requests": 3000,
+      "WarmupRequests": 200
+    },
+    "Open": {
+      "Arrival": "",
+      "Rate": {
+        "Kind": "",
+        "RPS": 0,
+        "Duration": 0,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 0,
+        "Peak": 0,
+        "At": 0,
+        "Width": 0
+      },
+      "Warmup": 0,
+      "MaxInFlight": 0,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 0,
+      "MaxLagMS": 0
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "rest",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "direct-a",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct-b",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "stream",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "direct-a",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct-b",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "aws ap-southeast-2 ap-southeast-2a, cluster PG; gateway c7i.xlarge (whole VM), loadgen c7i.2xlarge, mock c7i.2xlarge, hub m7i.xlarge; images tykio/tyk-ai-studio-ent:v2.2.0-rc10.1 + tykio/tyk-microgateway-ent:v2.2.0-rc10.1; ping p99 0.610ms",
+  "started_at": "2026-09-25T06:05:38.968884364Z",
+  "finished_at": "2026-09-25T06:05:47.287350806Z",
+  "cells": [
+    {
+      "name": "rest",
+      "started": "2026-09-25T06:05:39.081597678Z",
+      "finished": "2026-09-25T06:05:43.035928247Z",
+      "arms": [
+        "direct-a",
+        "direct-b"
+      ]
+    },
+    {
+      "name": "stream",
+      "started": "2026-09-25T06:05:43.03723204Z",
+      "finished": "2026-09-25T06:05:47.286064131Z",
+      "arms": [
+        "direct-a",
+        "direct-b"
+      ]
+    }
+  ],
+  "targets": {
+    "anthropic": "https://api.anthropic.com/v1",
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999",
+    "openai": "https://api.openai.com/v1"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "5ee92c69a04e4c62968d0c1301eea0abdee70592",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "2e465ba8c45d1ecd473ef18c78e91c6a6c9f8fd4f230932d0a84a100b7e922ff",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-25T03:56:25.944591542Z"
+  },
+  "analytics": {
+    "before": 2118225,
+    "after": 2118225,
+    "expected": 0,
+    "settled": true
+  }
+}

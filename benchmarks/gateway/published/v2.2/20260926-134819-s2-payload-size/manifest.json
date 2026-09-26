@@ -1,0 +1,239 @@
+{
+  "scenario": {
+    "Name": "s2-payload-size",
+    "Title": "S2 · Sensitivity to request and response size",
+    "Description": "The gateway reads and inspects request bodies (model validation, filters, analytics) and relays every streamed chunk. This scenario checks how its overhead grows with a large prompt (long context) and with a long stream of small chunks. It uses the native /llm/call/ route, unloaded, one request at a time.\n",
+    "Mode": "closed",
+    "Timeout": 60000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 1,
+      "Requests": 2000,
+      "WarmupRequests": 100
+    },
+    "Open": {
+      "Arrival": "",
+      "Rate": {
+        "Kind": "",
+        "RPS": 0,
+        "Duration": 0,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 0,
+        "Peak": 0,
+        "At": 0,
+        "Width": 0
+      },
+      "Warmup": 0,
+      "MaxInFlight": 0,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 0,
+      "MaxLagMS": 0
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "prompt-1kb",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "prompt-32kb",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 32768
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "prompt-256kb",
+        "Body": {
+          "format": "openai",
+          "stream": false,
+          "model": "mock-model",
+          "max_tokens": 16,
+          "prompt_bytes": 262144
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-fast/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:fast}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      },
+      {
+        "Name": "stream-1000-chunks",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 1000,
+          "prompt_bytes": 1024
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-long/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:long}/v1/chat/completions",
+            "Weight": 0,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "main-adaptive-c94e0f17: v2.2 release build (edge + Studio from main c94e0f17; adaptive GOGC; defaults, no tuning env); empty hub; c7i.xlarge edge",
+  "started_at": "2026-09-26T13:48:19.416462933Z",
+  "finished_at": "2026-09-26T13:49:04.898924851Z",
+  "cells": [
+    {
+      "name": "prompt-1kb",
+      "started": "2026-09-26T13:48:20.006740252Z",
+      "finished": "2026-09-26T13:48:23.979618492Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "prompt-32kb",
+      "started": "2026-09-26T13:48:23.980422632Z",
+      "finished": "2026-09-26T13:48:30.229472874Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "prompt-256kb",
+      "started": "2026-09-26T13:48:30.230372822Z",
+      "finished": "2026-09-26T13:48:51.794370387Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    },
+    {
+      "name": "stream-1000-chunks",
+      "started": "2026-09-26T13:48:51.795228125Z",
+      "finished": "2026-09-26T13:49:04.898069032Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "c94e0f17684edfb8b9617668d753809fbc30050d",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "29e0b109fca86ba356870172035a883edf33a5a685c4a9fa5c8d322aa2745137",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-26T12:25:45.692410096Z"
+  },
+  "analytics": {
+    "before": 14458892,
+    "after": 14467292,
+    "expected": 8400,
+    "settled": true
+  }
+}
