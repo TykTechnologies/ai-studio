@@ -2,9 +2,18 @@ package models
 
 import (
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 )
+
+// tokenTotalsSettleAfter is how long rows must have been visible before they
+// are folded into the settled totals. One telemetry collection reads the
+// totals several times within a second (LLM, App and Chat stats); a window
+// counted in reads rather than time would settle rows those reads had only
+// just seen. The repeated reads themselves are cheap: MAX(id) on the primary
+// key and a sum over the rows added since the last settle.
+const tokenTotalsSettleAfter = time.Minute
 
 // TokenTotals keeps running sums of llm_chat_records.total_tokens, overall
 // and per interaction type, for usage telemetry.
@@ -13,20 +22,24 @@ import (
 // at start-up and every hour. At ~100M rows each sum is a full scan of the
 // largest table, which on a busy hub kept the database busy for minutes. The
 // tracker sums the table once, in one grouped pass, and afterwards reads only
-// the rows added since, found by id. llm_chat_records rows are only ever
-// inserted, never updated or deleted.
+// the rows added since, found by id. This relies on llm_chat_records rows
+// being insert-only (see LLMChatRecord).
 //
-// Rows are folded into the settled totals one read after they were first
-// seen, so a row whose transaction commits after rows with higher ids (several
-// hub replicas writing to one database) is still counted if it commits before
-// the next read.
+// Rows are folded into the settled totals only once they have been visible
+// for tokenTotalsSettleAfter, and until then are summed afresh on each read,
+// so a row whose transaction commits after rows with higher ids (several hub
+// replicas writing to one database) is still counted if it commits within
+// that window.
 type TokenTotals struct {
 	mu          sync.Mutex
+	now         func() time.Time
 	initialized bool
 	// Rows with id <= settledID are included in settled.
 	settledID uint
-	// pendingID is the highest id seen at the last read.
+	// pendingID is the highest id seen when pendingAt was taken; rows up to
+	// it settle once pendingAt is tokenTotalsSettleAfter old.
 	pendingID uint
+	pendingAt time.Time
 	settled   tokenSums
 }
 
@@ -46,7 +59,7 @@ func (s *tokenSums) add(o tokenSums) {
 }
 
 // NewTokenTotals returns an empty tracker.
-func NewTokenTotals() *TokenTotals { return &TokenTotals{} }
+func NewTokenTotals() *TokenTotals { return &TokenTotals{now: time.Now} }
 
 // Read returns the tokens of every llm_chat_records row, overall and by
 // interaction type.
@@ -54,6 +67,7 @@ func (t *TokenTotals) Read(db *gorm.DB) (all int64, byType map[InteractionType]i
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	now := t.now()
 	var maxID uint
 	if err := db.Model(&LLMChatRecord{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
 		return 0, nil, err
@@ -65,8 +79,8 @@ func (t *TokenTotals) Read(db *gorm.DB) (all int64, byType map[InteractionType]i
 			return 0, nil, err
 		}
 		t.settled.add(sums)
-		t.settledID, t.pendingID, t.initialized = maxID, maxID, true
-	} else if t.pendingID > t.settledID {
+		t.settledID, t.pendingID, t.pendingAt, t.initialized = maxID, maxID, now, true
+	} else if t.pendingID > t.settledID && now.Sub(t.pendingAt) >= tokenTotalsSettleAfter {
 		sums, err := sumTokens(db, t.settledID, t.pendingID)
 		if err != nil {
 			return 0, nil, err
@@ -84,9 +98,11 @@ func (t *TokenTotals) Read(db *gorm.DB) (all int64, byType map[InteractionType]i
 		}
 		total.add(recent)
 	}
-	if maxID > t.pendingID {
-		t.pendingID = maxID
+	// Start the next settle window once the previous one has settled.
+	if t.pendingID == t.settledID && maxID > t.pendingID {
+		t.pendingID, t.pendingAt = maxID, now
 	}
+
 	return total.all, total.byType, nil
 }
 

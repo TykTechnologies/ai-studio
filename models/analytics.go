@@ -14,7 +14,12 @@ const (
 	ProxyInteraction InteractionType = "proxy"
 )
 
-// LLMChatRecord logs usage for cost and analytics
+// LLMChatRecord logs usage for cost and analytics.
+//
+// Rows are insert-only: never update or delete them. The hub budget sync
+// (grpc budgetUsageTracker) and usage telemetry (TokenTotals) read only the
+// rows added since their last pass, found by id, so a changed or removed row
+// would stay counted as it was.
 type LLMChatRecord struct {
 	gorm.Model
 	ID     uint `gorm:"primaryKey"`

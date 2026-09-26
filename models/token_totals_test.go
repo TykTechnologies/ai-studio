@@ -2,6 +2,7 @@ package models
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,34 +33,44 @@ func TestTokenTotalsReadsOnlyNewRowsAfterTheFirstPass(t *testing.T) {
 		}
 	}))
 
+	clock := time.Unix(1_700_000_000, 0)
 	tt := NewTokenTotals()
-	all, byType, err := tt.Read(db)
-	require.NoError(t, err)
+	tt.now = func() time.Time { return clock }
+	read := func() (int64, map[InteractionType]int64) {
+		t.Helper()
+		all, byType, err := tt.Read(db)
+		require.NoError(t, err)
+		return all, byType
+	}
+
+	all, byType := read()
 	assert.EqualValues(t, 15, all)
 	assert.EqualValues(t, 10, byType[ProxyInteraction])
 	assert.EqualValues(t, 5, byType[ChatInteraction])
 
 	add(3, ProxyInteraction, 7)
-	all, byType, err = tt.Read(db)
-	require.NoError(t, err)
+	all, byType = read()
 	assert.EqualValues(t, 22, all)
 	assert.EqualValues(t, 17, byType[ProxyInteraction])
 
 	// A row that commits late with a lower id than one already seen is still
-	// counted, as long as it lands before the next read settles its window.
+	// counted when it lands inside the settle window, however many reads
+	// happen in between (one collection reads three times in a second).
 	add(5, ChatInteraction, 1)
-	_, _, err = tt.Read(db)
-	require.NoError(t, err)
+	read() // sees id 5
+	read()
+	read()
 	add(4, ChatInteraction, 2)
-	all, byType, err = tt.Read(db)
-	require.NoError(t, err)
+	clock = clock.Add(tokenTotalsSettleAfter)
+	read() // settles up to id 3
+	clock = clock.Add(tokenTotalsSettleAfter)
+	all, byType = read() // settles up to id 5, including the late id 4
 	assert.EqualValues(t, 25, all)
 	assert.EqualValues(t, 8, byType[ChatInteraction])
 
-	// Reading again without new rows changes nothing.
-	all, _, err = tt.Read(db)
-	require.NoError(t, err)
-	assert.EqualValues(t, 25, all)
+	clock = clock.Add(tokenTotalsSettleAfter)
+	all, _ = read()
+	assert.EqualValues(t, 25, all, "reading again without new rows changes nothing")
 
 	assert.Equal(t, 1, unboundedScans, "only the first read sums from id 0")
 }
