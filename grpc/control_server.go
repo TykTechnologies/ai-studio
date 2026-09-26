@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -790,6 +791,14 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	var app models.App
 	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).
 		Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").Preload("SemanticRouters").First(&app).Error; err != nil {
+		// Only a missing or inactive App is a rejection. Any other error is
+		// the hub's own fault and goes back as one: the edge then treats the
+		// hub as unavailable (keeping its cache, and its stale grace if
+		// configured) instead of refusing a valid credential with 401.
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Error().Err(err).Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app lookup database error during token validation")
+			return nil, status.Error(codes.Internal, "token validation failed")
+		}
 		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
