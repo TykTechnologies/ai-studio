@@ -95,6 +95,7 @@ func main() {
 	log.Info().
 		Int("gogc", tuning.GCPercent).
 		Bool("gogc_default_applied", tuning.GCPercentSet).
+		Bool("gogc_adaptive", tuning.GCPercentAdaptive).
 		Uint64("memory_limit_bytes", tuning.MemoryLimit).
 		Uint64("gomemlimit_set_bytes", tuning.SoftLimit).
 		Msg("Go runtime tuning")
