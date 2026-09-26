@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -93,6 +94,18 @@ func TestSQLiteConnectionsLimitJournalSize(t *testing.T) {
 		if limit != SQLiteJournalSizeLimit {
 			t.Fatalf("%s journal_size_limit = %d, want %d", name, limit, SQLiteJournalSizeLimit)
 		}
+	}
+}
+
+// SQLite connections are never recycled: a pool that opened together under
+// load otherwise expired together every DB_CONN_MAX_LIFETIME and reopened
+// cold. Server databases keep the configured lifetime.
+func TestConnMaxLifetimeOnlyForServerDatabases(t *testing.T) {
+	if got := connMaxLifetime(DatabaseConfig{Type: "sqlite", ConnMaxLifetime: 5 * time.Minute}); got != 0 {
+		t.Fatalf("sqlite lifetime = %v, want 0", got)
+	}
+	if got := connMaxLifetime(DatabaseConfig{Type: "postgres", ConnMaxLifetime: 5 * time.Minute}); got != 5*time.Minute {
+		t.Fatalf("postgres lifetime = %v, want 5m", got)
 	}
 }
 

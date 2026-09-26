@@ -175,6 +175,8 @@ DB_CONN_MAX_LIFETIME=1h
 mgw system metrics | grep db_connections
 ```
 
+`DB_CONN_MAX_LIFETIME` applies to PostgreSQL only. SQLite connections are never recycled: they are handles on a local file, and a pool that opened together under load expired together, reopening every connection cold (seen as small request pile-ups every 5 minutes).
+
 ### Query Performance
 ```bash
 # Enable query logging for analysis

@@ -31,6 +31,8 @@ DB_CONN_MAX_LIFETIME=1h
 mgw system metrics | grep db_connections_in_use
 ```
 
+`DB_CONN_MAX_LIFETIME` applies to PostgreSQL only. SQLite connections are never recycled: they are handles on a local file, and a pool that opened together under load expired together, reopening every connection cold (seen as small request pile-ups every 5 minutes).
+
 ### Query Optimization
 ```bash
 # Enable query performance monitoring
@@ -105,8 +107,8 @@ The memory limit comes from the first of these that is set:
 - no more one-window p99 spikes, where GC had drafted requests into ~100 ms mark assists
 - a cost of 100–200 MB more memory
 
-Unless you set them, the gateway therefore applies:
-- `GOGC=400`
+A fixed 400 is too much once the live heap is large: with thousands of streams in flight (live heap ~0.4 GB) it roughly doubled memory. So unless you set them, the gateway applies:
+- an adaptive `GOGC`, re-read every second from the live heap, so the heap goal is about the live heap plus 256 MB: 400 for a small live heap, tapering to Go's default of 100 as it grows (reported as `microgateway_gogc`)
 - a soft `GOMEMLIMIT` at 90% of the memory limit, when one is known, so the larger heap never outgrows the container
 
 Shedding at 85% comes before the collector has to work hard near that soft limit. The applied values are logged at startup (`Go runtime tuning`).
