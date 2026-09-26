@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/gin-gonic/gin"
@@ -26,7 +27,10 @@ type Server struct {
 	router        *gin.Engine
 	server        *http.Server
 	traceShutdown tracing.Shutdown
-	
+	// overload refuses new proxy requests while the gateway is overloaded.
+	overload     *overload.Manager
+	stopOverload context.CancelFunc
+
 	// Build information
 	version   string
 	buildHash string
@@ -156,6 +160,9 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		log.Info().Str("endpoint", cfg.Observability.TracingEndpoint).Msg("OpenTelemetry tracing enabled")
 	}
 
+	// Refuse new proxy requests while overloaded rather than run out of memory.
+	overloadManager, stopOverload := newOverloadManager(cfg)
+
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
 		AuthProvider:                serviceContainer.AuthProvider,
@@ -175,6 +182,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		Version:                     version,
 		BuildHash:                   buildHash,
 		BuildTime:                   buildTime,
+		Overload:                    overloadManager,
 	}
 
 	router := api.SetupRouter(routerConfig)
@@ -196,6 +204,8 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		router:        router,
 		server:        server,
 		traceShutdown: traceShutdown,
+		overload:      overloadManager,
+		stopOverload:  stopOverload,
 		version:       version,
 		buildHash:     buildHash,
 		buildTime:     buildTime,
@@ -227,6 +237,7 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 		Version:                     s.version,
 		BuildHash:                   s.buildHash,
 		BuildTime:                   s.buildTime,
+		Overload:                    s.overload,
 	}
 
 	// Recreate router with reload coordinator
@@ -261,6 +272,9 @@ func (s *Server) Start() error {
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	log.Debug().Msg("Shutting down unified server...")
+	if s.stopOverload != nil {
+		s.stopOverload()
+	}
 
 	// Shutdown plugin manager first
 	if s.pluginManager != nil {
