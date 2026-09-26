@@ -351,6 +351,20 @@ func (l *live) add(r probe.Result) {
 
 const stopWindow = 10 * time.Second
 
+// The p99 stop check compares the measured arm's p99 over the stop window with
+// the baseline's p99 over its most recent stopBaselineSamples requests, pooled
+// across the ramp so far. The baseline is ~10% of traffic, so at the bottom of
+// a ramp the stop window holds ~20 of its requests, whose "p99" is their
+// maximum: against a heavy-tailed upstream that stopped S4 at 21 req/s on a
+// gateway adding under a millisecond. The check also waits for
+// stopMinBaseline pooled and stopMinArm windowed samples, enough for a p99 to
+// be more than the largest value or two.
+const (
+	stopBaselineSamples = 2000
+	stopMinBaseline     = 200
+	stopMinArm          = 500
+)
+
 // stopper returns the ramp stop check, or nil when no condition is set.
 func (l *live) stopper(s scenario.Stop, onStop func(string)) func() bool {
 	if s.MaxErrorRate <= 0 && s.MaxP99OverheadMS <= 0 {
@@ -370,6 +384,17 @@ func (l *live) stopper(s scenario.Stop, onStop func(string)) func() bool {
 		}
 		l.recent = kept
 		window := append([]probe.Result(nil), kept...)
+		var base []float64
+		if b := l.byArm[l.baseline]; b != nil {
+			src := b.total
+			if s.Metric == "ttft" {
+				src = b.ttft
+			}
+			if len(src) > stopBaselineSamples {
+				src = src[len(src)-stopBaselineSamples:]
+			}
+			base = append(base, src...)
+		}
 		l.mu.Unlock()
 
 		byArm := map[string][]float64{}
@@ -395,11 +420,10 @@ func (l *live) stopper(s scenario.Stop, onStop func(string)) func() bool {
 				onStop(fmt.Sprintf("%s error rate %.2f%% over the last %v", arm, 100*rate, stopWindow))
 				return true
 			}
-			base := byArm[l.baseline]
-			if s.MaxP99OverheadMS > 0 && len(base) >= 20 && len(byArm[arm]) >= 50 {
+			if s.MaxP99OverheadMS > 0 && len(base) >= stopMinBaseline && len(byArm[arm]) >= stopMinArm {
 				over := stats.Percentile(byArm[arm], 99) - stats.Percentile(base, 99)
 				if over > s.MaxP99OverheadMS {
-					onStop(fmt.Sprintf("%s p99 %s is %.1fms above %s over the last %v", arm, metricName(s.Metric), over, l.baseline, stopWindow))
+					onStop(fmt.Sprintf("%s p99 %s over the last %v is %.1fms above %s's recent p99", arm, metricName(s.Metric), stopWindow, over, l.baseline))
 					return true
 				}
 			}
