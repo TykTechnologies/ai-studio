@@ -1428,7 +1428,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if monthlyBudget > 0 {
 			// Calculate budget period using app's BudgetStartDate (handles mid-period resets)
 			now := time.Now()
-			periodStart, _ := calculateBudgetPeriod(app.BudgetStartDate, now)
+			periodStart, periodEnd := calculateBudgetPeriod(app.BudgetStartDate, now)
 
 			// The budget sync's latest figure when it has one: summing the
 			// whole period here, for every budgeted App on every snapshot,
@@ -1438,7 +1438,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				currentPeriodUsage = usage
 			} else if err := s.db.Model(&models.LLMChatRecord{}).
 				Select("COALESCE(SUM(cost), 0)").
-				Where("app_id = ? AND time_stamp >= ?", app.ID, periodStart).
+				Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", app.ID, periodStart, periodEnd).
 				Scan(&totalCostCents).Error; err != nil {
 				log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
 			} else {
