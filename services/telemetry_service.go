@@ -7,12 +7,22 @@ import (
 
 type TelemetryService struct {
 	DB *gorm.DB
+	// tokens keeps the token sums incrementally, so each collection reads
+	// only the chat records added since the last one.
+	tokens *models.TokenTotals
 }
 
 func NewTelemetryService(db *gorm.DB) *TelemetryService {
 	return &TelemetryService{
-		DB: db,
+		DB:     db,
+		tokens: models.NewTokenTotals(),
 	}
+}
+
+// tokenTotals returns the tokens of every chat record, overall and by
+// interaction type.
+func (s *TelemetryService) tokenTotals() (int64, map[models.InteractionType]int64, error) {
+	return s.tokens.Read(s.DB)
 }
 
 func (s *TelemetryService) GetLLMStats() (map[string]interface{}, error) {
@@ -26,7 +36,7 @@ func (s *TelemetryService) GetLLMStats() (map[string]interface{}, error) {
 
 	stats["llms_count"] = llmCount
 
-	totalTokens, err := models.GetTotalTokens(s.DB)
+	totalTokens, _, err := s.tokenTotals()
 	if err != nil {
 		return nil, err
 	}
@@ -47,12 +57,12 @@ func (s *TelemetryService) GetAppStats() (map[string]interface{}, error) {
 
 	stats["apps_count"] = appCount
 
-	proxyTokens, err := models.GetTotalTokensByInteractionType(s.DB, models.ProxyInteraction)
+	_, byType, err := s.tokenTotals()
 	if err != nil {
 		return nil, err
 	}
 
-	stats["total_tokens"] = proxyTokens
+	stats["total_tokens"] = byType[models.ProxyInteraction]
 
 	return stats, nil
 }
@@ -91,12 +101,12 @@ func (s *TelemetryService) GetChatStats() (map[string]interface{}, error) {
 
 	stats["chats_count"] = chatCount
 
-	chatTokens, err := models.GetTotalTokensByInteractionType(s.DB, models.ChatInteraction)
+	_, byType, err := s.tokenTotals()
 	if err != nil {
 		return nil, err
 	}
 
-	stats["total_tokens"] = chatTokens
+	stats["total_tokens"] = byType[models.ChatInteraction]
 
 	return stats, nil
 }
