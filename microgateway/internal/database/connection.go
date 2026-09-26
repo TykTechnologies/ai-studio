@@ -64,7 +64,7 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 
 	sqlDB.SetMaxOpenConns(config.MaxOpenConns)
 	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(config.ConnMaxLifetime)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime(config))
 
 	// Test connection
 	if err := sqlDB.Ping(); err != nil {
@@ -72,6 +72,20 @@ func Connect(config DatabaseConfig) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+// connMaxLifetime is DB_CONN_MAX_LIFETIME for a server database and 0 (never
+// recycle) for SQLite. Recycling lets a server database rebalance
+// connections; a SQLite connection is a handle on a local file, and
+// recycling only discarded its page cache. Worse, a pool whose connections
+// all opened together under load then expired together every lifetime (5 min
+// by default): on AWS the edge showed small request pile-ups exactly 301 s
+// apart while every connection reopened cold.
+func connMaxLifetime(config DatabaseConfig) time.Duration {
+	if config.Type == "sqlite" {
+		return 0
+	}
+	return config.ConnMaxLifetime
 }
 
 // OpenWriter returns the handle for the gateway's background writes (analytics

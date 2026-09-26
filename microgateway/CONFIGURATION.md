@@ -35,7 +35,7 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `DATABASE_DSN` | file:./data/microgateway.db | Database connection string |
 | `DB_MAX_OPEN_CONNS` | 25 | Maximum open database connections |
 | `DB_MAX_IDLE_CONNS` | 25 | Maximum idle database connections |
-| `DB_CONN_MAX_LIFETIME` | 5m | Maximum connection lifetime |
+| `DB_CONN_MAX_LIFETIME` | 5m | Maximum connection lifetime (PostgreSQL only: SQLite connections are never recycled, since reopening them together only discarded their page caches) |
 | `DB_AUTO_MIGRATE` | true | Run migrations automatically on startup |
 | `DB_LOG_LEVEL` | warn | Database logging level |
 
@@ -60,7 +60,7 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `OVERLOAD_MEMORY_LIMIT` | auto | Memory limit shedding is judged against (`2GiB`, `1536MiB`, bytes). Unset: `GOMEMLIMIT`, else the container's cgroup limit; with neither, only `MAX_INFLIGHT_REQUESTS` applies |
 | `OVERLOAD_MEMORY_THRESHOLD` | 0.85 | Fraction of the limit at which shedding starts (Go heap goal + goroutine stacks); it stops 5 points below |
 | `MAX_INFLIGHT_REQUESTS` | 0 | Optional cap on concurrent proxy requests (0 = none). Size it for long streaming calls, which each hold a slot for their whole duration |
-| `GOGC` | 400 (gateway default) | Go garbage-collector target. The gateway uses 400 when unset: at Go's default of 100 its small heap made the collector run ~20 times a second under load, costing ~1,000 req/s of capacity on 4 vCPU and causing p99 spikes. Set it to override |
+| `GOGC` | adaptive, 100–400 (gateway default) | Go garbage-collector target. Unset, the gateway adapts it every second so the heap goal is about the live heap plus 256 MB: 400 for a small live heap (REST traffic), tapering towards 100 as it grows (thousands of streams in flight). At Go's default of 100 the small heap made the collector run ~20 times a second under load, costing ~1,000 req/s of capacity on 4 vCPU and causing p99 spikes; a fixed 400 doubled memory under heavy streaming. Set it to override (a fixed value is not adapted) |
 | `GOMEMLIMIT` | 90% of the memory limit | Go soft memory limit. Unset and a memory limit known (`OVERLOAD_MEMORY_LIMIT` or the container's): the gateway sets 90% of it, so the larger heap never outgrows the container. Set it to override |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | /v1 | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`); move it when embedding in a host that owns `/v1` |
 | `GATEWAY_UNIFIED_ROUTER_DISABLED` | false | Remove the unified endpoint entirely; per-route endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected |
