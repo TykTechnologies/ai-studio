@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/grpc"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/licensing"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -81,6 +83,21 @@ func main() {
 		Str("build_time", BuildTime).
 		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Msg("Starting Microgateway")
+
+	// Garbage-collector defaults (GOGC, a soft GOMEMLIMIT under the memory
+	// limit) unless the operator set them. Overload shedding judges against
+	// the real limit, not the soft one set here.
+	explicitLimit, _ := overload.ParseBytes(cfg.Gateway.OverloadMemoryLimit)
+	tuning := overload.TuneRuntime(explicitLimit)
+	if cfg.Gateway.OverloadMemoryLimit == "" && tuning.MemoryLimit > 0 {
+		cfg.Gateway.OverloadMemoryLimit = strconv.FormatUint(tuning.MemoryLimit, 10)
+	}
+	log.Info().
+		Int("gogc", tuning.GCPercent).
+		Bool("gogc_default_applied", tuning.GCPercentSet).
+		Uint64("memory_limit_bytes", tuning.MemoryLimit).
+		Uint64("gomemlimit_set_bytes", tuning.SoftLimit).
+		Msg("Go runtime tuning")
 
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	pathcheck.Log(log.Logger, "microgateway", pathcheck.Check(config.StartupPaths(cfg, *envFile)))
