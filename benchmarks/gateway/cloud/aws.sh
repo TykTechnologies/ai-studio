@@ -8,6 +8,8 @@
 #   aws.sh build              build gwbench + mockllm (linux/amd64) from $BENCH_REF
 #   aws.sh build-gateway [ref]  edge binary from a git ref, swapped into the
 #                             released image (then BENCH_GATEWAY_IMAGE=... deploy)
+#   aws.sh build-studio [ref]   Studio from a git ref (local build, needs Docker and
+#                             Node), swapped into the released image and pinned
 #   aws.sh deploy             build tools, copy config + secrets, start services
 #                             (the edge always starts with an empty database)
 #   aws.sh seed [-vendors]    configure Studio + edge (from loadgen)
@@ -29,6 +31,7 @@
 #   BENCH_TOOLS_REF    $BENCH_REF (build gwbench/mockllm from another ref, e.g. a
 #                      newer analysis; the manifests record this ref's SHA)
 #   BENCH_STUDIO_IMAGE / BENCH_GATEWAY_IMAGE   default tykio/*-ent:$BENCH_REF
+#   BENCH_FRESH_HUB    1 deletes the hub's Postgres volume on deploy (empty Studio)
 #   BENCH_ENABLE_PROFILING  false; true serves pprof on <gateway private ip>:6060
 #   BENCH_GATEWAY_ENV  extra edge settings, "KEY=VALUE KEY2=VALUE2"
 #   BENCH_LOG_LEVEL    info; BENCH_PLUGINS_CONFIG_PATH= (set, empty) turns the
@@ -52,12 +55,14 @@ AZ=${BENCH_AZ:-${REGION}a}
 NAME=${BENCH_NAME:-gwbench}
 REF=${BENCH_REF:-v2.2.0-rc10.1}
 TOOLS_REF=${BENCH_TOOLS_REF:-$REF}
-STUDIO_IMAGE=${BENCH_STUDIO_IMAGE:-tykio/tyk-ai-studio-ent:$REF}
+STATE=$BENCH_DIR/.cloud/$NAME
+# build-studio pins its image in $STATE/studio-image, so every later deploy
+# keeps it until the file is removed; BENCH_STUDIO_IMAGE still overrides.
+STUDIO_IMAGE=${BENCH_STUDIO_IMAGE:-$(cat "$STATE/studio-image" 2>/dev/null || echo "tykio/tyk-ai-studio-ent:$REF")}
 GATEWAY_IMAGE=${BENCH_GATEWAY_IMAGE:-tykio/tyk-microgateway-ent:$REF}
 ENV_FILE=${BENCH_ENV_FILE:-$REPO_ROOT/dev/.env.secrets}
 VENDORS_DIR=${BENCH_VENDORS_DIR:-$REPO_ROOT/test-secrets}
 ROLES=(loadgen gateway mock hub)
-STATE=$BENCH_DIR/.cloud/$NAME
 KEY=$STATE/id_ed25519
 TAG_KEY=gwbench:deployment
 
@@ -332,6 +337,12 @@ cmd_deploy() {
     # --ignore-pull-failures: an image from build-gateway exists only locally.
     rsh "$role" "chmod 600 /opt/gwbench/bench.env && sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile $role pull -q --ignore-pull-failures"
   done
+  # BENCH_FRESH_HUB=1 deletes the hub's Postgres volume first: an empty
+  # Studio, as a new deployment starts. Everything Studio held is lost.
+  if [ "${BENCH_FRESH_HUB:-0}" = 1 ]; then
+    log "BENCH_FRESH_HUB=1: removing the hub's containers and Postgres volume"
+    rsh hub "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile hub down -v"
+  fi
   log "starting hub"
   rsh hub "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile hub up -d"
   wait_http hub "http://127.0.0.1:8080/health"
@@ -359,7 +370,11 @@ sudo systemctl daemon-reload && sudo systemctl enable mockllm >/dev/null 2>&1 &&
   # left behind (analytics rows, a large write-ahead log) changes its latency.
   # Re-seed afterwards so Studio pushes the configuration to the new edge.
   log "starting gateway (fresh database)"
-  rsh gateway "sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway down >/dev/null 2>&1; \
+  # The previous edge's log goes to /opt/gwbench/edge-logs/ first: down
+  # removes the container, and its log with it.
+  rsh gateway "sudo mkdir -p /opt/gwbench/edge-logs && \
+    { sudo docker logs --timestamps gwbench-gateway-1 2>&1 | sudo tee /opt/gwbench/edge-logs/gateway-\$(date -u +%Y%m%d-%H%M%S).log >/dev/null || true; }; \
+    sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway down >/dev/null 2>&1; \
     sudo find /opt/gwbench/data -mindepth 1 -delete && \
     sudo docker compose -f /opt/gwbench/docker-compose.yml --env-file /opt/gwbench/bench.env --profile gateway up -d --force-recreate"
   wait_http gateway "http://127.0.0.1:8080/health"
@@ -438,6 +453,42 @@ cmd_build_gateway() {
     printf 'FROM $base\nCOPY --chown=999:999 tyk-microgateway /opt/tyk-microgateway/tyk-microgateway\n' > /opt/gwbench/img/Dockerfile && \
     sudo docker build -q -t $img /opt/gwbench/img >/dev/null && sudo rm -rf /opt/gwbench/src"
   log "built $img"
+  echo "$img"
+}
+
+# cmd_build_studio builds Studio from a git ref the way the release does (the
+# admin frontend and docs site it embeds, then CGO, -tags=enterprise, Debian
+# glibc) and swaps the binary into the released Studio image on the hub. The
+# frontend and docs build natively here, the binary in a linux/amd64
+# container (Docker), so no VM under measurement is loaded. It pins the
+# image for later deploys ($STATE/studio-image); the next deploy starts it.
+cmd_build_studio() {
+  local ref=${1:-main} sha ent_sha short base img src=$STATE/studio-src
+  sha=$(git -C "$REPO_ROOT" rev-parse "$ref^{commit}") || die "unknown ref $ref"
+  short=${sha:0:8}
+  ent_sha=$(git -C "$REPO_ROOT" ls-tree "$sha" enterprise | awk '{print $3}')
+  base=${BENCH_STUDIO_BASE:-tykio/tyk-ai-studio-ent:$REF}
+  img=gwbench-studio:$short
+  log "building Studio from $ref ($short, enterprise $ent_sha) into $base"
+  rm -rf "$src"; mkdir -p "$src/enterprise"
+  git -C "$REPO_ROOT" archive "$sha" | tar -x -C "$src"
+  git -C "$REPO_ROOT/enterprise" archive "$ent_sha" | tar -x -C "$src/enterprise" \
+    || die "cannot read enterprise@$ent_sha (git -C enterprise fetch?)"
+  (cd "$src/ui/admin-frontend" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null &&
+    PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build >/dev/null) || die "frontend build failed"
+  (cd "$src/docs/site" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null && npm run docs:build >/dev/null) \
+    || die "docs build failed"
+  docker run --rm --platform linux/amd64 -v "$src:/src" -v gwbench-gomod-amd64:/go/pkg/mod \
+    -v gwbench-gocache-amd64:/root/.cache -w /src -e CGO_ENABLED=1 -e GOFLAGS=-tags=enterprise golang:1.26-bookworm \
+    go build -ldflags "-X main.Version=$ref-$short -X main.BuildHash=$sha -X main.BuildTime=$(date -u +%FT%TZ) -X main.BuiltBy=gwbench" \
+    -o /src/tyk-ai-studio . || die "studio build failed"
+  rsh hub "rm -rf /opt/gwbench/studio-img && mkdir -p /opt/gwbench/studio-img"
+  rcp hub /opt/gwbench/studio-img/ "$src/tyk-ai-studio"
+  rsh hub "printf 'FROM $base\nCOPY --chown=999:999 tyk-ai-studio /opt/tyk-ai-studio/tyk-ai-studio\n' > /opt/gwbench/studio-img/Dockerfile && \
+    sudo docker build -q -t $img /opt/gwbench/studio-img >/dev/null && rm -f /opt/gwbench/studio-img/tyk-ai-studio"
+  echo "$img" > "$STATE/studio-image"
+  rm -rf "$src"
+  log "built $img; pinned for the next deploy (rm $STATE/studio-image to go back)"
   echo "$img"
 }
 
@@ -523,6 +574,7 @@ cmd=${1:-}; shift || true
 case $cmd in
   build) mkdir -p "$STATE"; build_tools ;;
   build-gateway) cmd_build_gateway "$@" ;;
+  build-studio) cmd_build_studio "$@" ;;
   up|deploy|seed|smoke|suite|run|logs|status|fetch|ssh|tunnel|down) "cmd_$cmd" "$@" ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 2 ;;
 esac
