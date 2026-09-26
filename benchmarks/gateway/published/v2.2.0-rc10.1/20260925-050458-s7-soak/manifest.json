@@ -1,0 +1,125 @@
+{
+  "scenario": {
+    "Name": "s7-soak",
+    "Title": "S7 · One-hour soak at 70% of capacity",
+    "Description": "Constant Poisson load for an hour at about 70% of the S4 capacity. A healthy gateway shows flat p99 latency across the 5-minute windows, a stable goroutine count, bounded memory, no errors, and analytics for every request. Growth in any of them is a leak or a queue that does not drain. The rate below assumes a knee of about 200 req/s. Scale it from your S4 result: --rate-scale \u003csustained_rps / 200\u003e.\n",
+    "Mode": "open",
+    "Timeout": 60000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 0,
+      "Requests": 0,
+      "WarmupRequests": 0
+    },
+    "Open": {
+      "Arrival": "poisson",
+      "Rate": {
+        "Kind": "constant",
+        "RPS": 257.18,
+        "Duration": 3600000000000,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 0,
+        "Peak": 0,
+        "At": 0,
+        "Width": 0
+      },
+      "Warmup": 30000000000,
+      "MaxInFlight": 30000,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 300000000000,
+      "MaxLagMS": 5
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0.05,
+    "Cells": [
+      {
+        "Name": "stream-realistic",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 200,
+          "prompt_bytes": 2048
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-realistic/v1/chat/completions",
+            "Weight": 1,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:realistic}/v1/chat/completions",
+            "Weight": 0.1,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "aws ap-southeast-2 ap-southeast-2a, cluster PG; gateway c7i.xlarge (whole VM), loadgen c7i.2xlarge, mock c7i.2xlarge, hub m7i.xlarge; images tykio/tyk-ai-studio-ent:v2.2.0-rc10.1 + tykio/tyk-microgateway-ent:v2.2.0-rc10.1; ping p99 0.610ms",
+  "started_at": "2026-09-25T05:04:58.036835383Z",
+  "finished_at": "2026-09-25T06:05:03.267671009Z",
+  "cells": [
+    {
+      "name": "stream-realistic",
+      "started": "2026-09-25T05:04:58.103032932Z",
+      "finished": "2026-09-25T06:05:02.92228292Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "5ee92c69a04e4c62968d0c1301eea0abdee70592",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "2e465ba8c45d1ecd473ef18c78e91c6a6c9f8fd4f230932d0a84a100b7e922ff",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-25T03:56:25.944591542Z"
+  },
+  "analytics": {
+    "before": 1276252,
+    "after": 2118225,
+    "expected": 841973,
+    "settled": true
+  }
+}

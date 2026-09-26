@@ -1,0 +1,125 @@
+{
+  "scenario": {
+    "Name": "s6-spike",
+    "Title": "S6 · Burst to three times the base rate",
+    "Description": "Steady traffic at a base rate, a 30-second burst to three times that, then back to base. It shows whether the gateway absorbs a burst (latency rises, then recovers) or falters (errors, or latency that stays high after the burst). The rates below assume a knee of about 200 req/s. Scale them from your S4 result: --rate-scale \u003csustained_rps / 200\u003e.\n",
+    "Mode": "open",
+    "Timeout": 60000000000,
+    "Baseline": "direct",
+    "ColdConn": false,
+    "Calibration": false,
+    "OverheadSLOMS": 0,
+    "Closed": {
+      "Concurrency": 0,
+      "Requests": 0,
+      "WarmupRequests": 0
+    },
+    "Open": {
+      "Arrival": "poisson",
+      "Rate": {
+        "Kind": "spike",
+        "RPS": 0,
+        "Duration": 180000000000,
+        "Start": 0,
+        "Step": 0,
+        "Max": 0,
+        "Hold": 0,
+        "Base": 128.59,
+        "Peak": 385.77,
+        "At": 60000000000,
+        "Width": 30000000000
+      },
+      "Warmup": 10000000000,
+      "MaxInFlight": 30000,
+      "Stop": {
+        "MaxErrorRate": 0,
+        "MaxP99OverheadMS": 0,
+        "Metric": ""
+      },
+      "ReportWindow": 5000000000,
+      "MaxLagMS": 5
+    },
+    "Paired": {
+      "Blocks": 0,
+      "WarmupBlocks": 0,
+      "Workers": 0,
+      "Gap": 0
+    },
+    "QuickScale": 0,
+    "Cells": [
+      {
+        "Name": "stream-realistic",
+        "Body": {
+          "format": "openai",
+          "stream": true,
+          "model": "mock-model",
+          "max_tokens": 200,
+          "prompt_bytes": 2048
+        },
+        "Arms": [
+          {
+            "Name": "gateway",
+            "Target": "gateway",
+            "Path": "/llm/call/mock-realistic/v1/chat/completions",
+            "Weight": 1,
+            "Headers": null,
+            "Model": ""
+          },
+          {
+            "Name": "direct",
+            "Target": "mock",
+            "Path": "{mock:realistic}/v1/chat/completions",
+            "Weight": 0.1,
+            "Headers": null,
+            "Model": ""
+          }
+        ],
+        "Requires": null
+      }
+    ]
+  },
+  "quick": false,
+  "label": "aws ap-southeast-2 ap-southeast-2a, cluster PG; gateway c7i.xlarge (whole VM), loadgen c7i.2xlarge, mock c7i.2xlarge, hub m7i.xlarge; images tykio/tyk-ai-studio-ent:v2.2.0-rc10.1 + tykio/tyk-microgateway-ent:v2.2.0-rc10.1; ping p99 0.610ms",
+  "started_at": "2026-09-25T05:01:36.610664918Z",
+  "finished_at": "2026-09-25T05:04:41.115657908Z",
+  "cells": [
+    {
+      "name": "stream-realistic",
+      "started": "2026-09-25T05:01:36.675202986Z",
+      "finished": "2026-09-25T05:04:41.107442054Z",
+      "arms": [
+        "gateway",
+        "direct"
+      ]
+    }
+  ],
+  "targets": {
+    "gateway": "http://10.77.1.175:8080",
+    "mock": "http://10.77.1.50:9999"
+  },
+  "load_generator": {
+    "hostname": "ip-10-77-1-242",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 8,
+    "kernel": "Linux 7.0.0-1013-aws",
+    "go": "go1.26.6"
+  },
+  "git_sha": "5ee92c69a04e4c62968d0c1301eea0abdee70592",
+  "seed": {
+    "app_id": 1,
+    "config_checksum": "2e465ba8c45d1ecd473ef18c78e91c6a6c9f8fd4f230932d0a84a100b7e922ff",
+    "models": {
+      "anthropic": "claude-sonnet-5",
+      "mock": "mock-model",
+      "openai": "gpt-5.6-luna"
+    },
+    "seeded_at": "2026-09-25T03:56:25.944591542Z"
+  },
+  "analytics": {
+    "before": 1248229,
+    "after": 1276252,
+    "expected": 28023,
+    "settled": true
+  }
+}

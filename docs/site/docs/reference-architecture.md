@@ -5,7 +5,7 @@ weight: 1
 
 # Reference Architecture
 
-This page describes the recommended production deployment of Tyk AI Studio: one **control plane** (AI Studio) managing a fleet of **data-plane** gateways (the Microgateway, running in edge mode). It shows how the pieces connect, what happens when one of them fails, and how to size the data plane using the measured performance of v2.2.0-rc10.1.
+This page describes the recommended production deployment of Tyk AI Studio: one **control plane** (AI Studio) managing a fleet of **data-plane** gateways (the Microgateway, running in edge mode). It shows how the pieces connect, what happens when one of them fails, and how to size the data plane using the measured performance of Tyk AI Studio 2.2.
 
 Two deployment shapes are left out on purpose:
 
@@ -18,9 +18,9 @@ Both work, but neither gives you central configuration with independently scaled
 
 ## The short version
 
-- **Studio is the brain, not the pipe.** Application traffic to LLMs goes through the Microgateways. Studio holds configuration, identity, the portal, chat and analytics, and it is only on a request's path when an edge meets an access token it has not seen in the last five minutes.
+- **Studio is the brain, not the pipe.** Application traffic to LLMs goes through the Microgateways. Studio holds configuration, identity, the portal, chat and analytics, and it is only on a request's path when an edge meets an access token it has not validated in the last five minutes. Tokens in use are revalidated in the background before their cache entry expires.
 - **Edges connect out; Studio never connects in.** Each edge opens one long-lived gRPC connection to Studio on port 50051. Edges can therefore sit in private networks, other clouds or on-premises with outbound-only access.
-- **Scale the data plane horizontally.** One 4-vCPU edge sustained **~365 streaming requests per second** (about 1,600 concurrent streams) or **~1,000 short non-streaming requests per second**, adding **0.5–0.6 ms at p50**. Add nodes behind a load balancer for more.
+- **Scale the data plane horizontally.** One 4-vCPU edge sustained **~690 streaming requests per second** (about 3,000 concurrent streams) or **~8,500 short non-streaming requests per second**, adding **about 0.55 ms at p50**. Both limits are CPU. Add nodes behind a load balancer for more.
 - **Run one Studio instance and make its database highly available.** In 2.2 the control plane is designed to run as a single active instance. Its availability comes from a managed, replicated PostgreSQL and a fast restart, not from multiple replicas. Running edges keep serving while Studio is down, but new edges cannot start.
 
 ## The picture
@@ -60,7 +60,7 @@ Each edge pool serves one **namespace**. A single-region deployment has one pool
 |---|---|---|---|
 | **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One instance, `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
 | **PostgreSQL** | System of record for configuration, credentials and all analytics shipped from edges | Managed service or HA cluster, PostgreSQL 14+ | Everything that matters |
-| **Microgateway (edge)** | Data plane: authenticates requests, applies access control, filters, guardrails, plugins and budgets, proxies to the LLM, records analytics (`GATEWAY_MODE=edge`) | N stateless-by-design nodes per namespace, `tykio/tyk-microgateway-ent` | A local SQLite file per node: a cache of the configuration snapshot, budget counters and queued analytics. Rebuilt from Studio on every start. |
+| **Microgateway (edge)** | Data plane: authenticates requests, applies access control, filters, guardrails, plugins and budgets, proxies to the LLM, records analytics (`GATEWAY_MODE=edge`) | N stateless-by-design nodes per namespace, `tykio/tyk-microgateway-ent` | A local SQLite file per node: a cache of the configuration snapshot, budget counters, and a local copy of recent analytics (`ANALYTICS_RETENTION_DAYS`). Configuration is rebuilt from Studio on every start. |
 | **Load balancer** | Spreads application traffic across the edges of one pool | Any L7 load balancer or Kubernetes Ingress/Gateway | None |
 | **Observability stack** (optional) | Prometheus scrapes, OTLP trace collector | Your existing tooling | Yours |
 | **OCI registry** (optional) | Source of gateway plugins distributed as OCI artifacts | Your registry, or the plugin marketplace's | Plugin images |
@@ -95,8 +95,8 @@ Everything between an edge and Studio goes over the single gRPC connection that 
 |---|---|---|---|
 | **Configuration snapshot** | Studio → edge | At edge start, and when an admin pushes configuration | Global objects plus the edge's own namespace: LLMs, Apps, filters, plugins, model prices, routers, tools, datasources. Secrets in the snapshot are encrypted with `MICROGATEWAY_ENCRYPTION_KEY`. Pushes are manual: admins decide when a change reaches the data plane. |
 | **Heartbeat** | edge → Studio | Every 30 s (`EDGE_HEARTBEAT_INTERVAL`) | Reports the loaded configuration checksum, so Studio can show each edge as In Sync, Pending or Stale. Also carries queued [edge-to-control plugin payloads](./plugins-edge-to-control.md). |
-| **Token validation** | edge → Studio → edge | On a cache miss | Credentials are never bulk-synced. An edge asks Studio about a token the first time it sees it and caches the answer in memory for 5 minutes (`EDGE_TOKEN_CACHE_TTL`). A token revoked in Studio stops working on every edge within that TTL. |
-| **Analytics pulse** | edge → Studio | Every 10 s in the Helm chart and packaged example (`interval_seconds` in the file at `PLUGINS_CONFIG_PATH`), or sooner when the buffer fills | Token usage, cost, proxy logs and budget events. Up to 1,000 records per batch, buffered in memory. |
+| **Token validation** | edge → Studio → edge | On a cache miss, and ahead of expiry for tokens in use | Credentials are never bulk-synced. An edge asks Studio about a token the first time it sees it and caches the answer in memory for 5 minutes (`EDGE_TOKEN_CACHE_TTL`). Requests that miss together share one call, which times out after 5 s. From 80% of the TTL, the first request to use an entry triggers one background revalidation and is served from the cache, so a busy token never expires under load. A token revoked in Studio stops working on every edge within that TTL. |
+| **Analytics pulse** | edge → Studio | Every 10 s in the Helm chart and packaged example (`interval_seconds` in the file at `PLUGINS_CONFIG_PATH`), or sooner when the buffer fills | Token usage, cost, proxy logs and budget events. Up to 1,000 records per batch, buffered in memory (`max_buffer_size`, 10,000 records; each request adds two to three). A busy edge fills the buffer before the interval and sends early, logging `Analytics buffer is full` at WARN each time: size `max_buffer_size` to about three times your peak request rate times `interval_seconds` to keep the interval. |
 | **Budget sync** | Studio → edge | Every 30 s (`BUDGET_SYNC_INTERVAL`, set on Studio) | Estate-wide spend per App and the current block list, so every edge enforces budgets on the total, not just its own traffic. |
 
 > **Set `PLUGINS_CONFIG_PATH`.** The analytics pulse is loaded from that file. An edge without it serves traffic normally but never reports analytics, so dashboards and budgets stay empty. If the file omits `interval_seconds`, the pulse runs every 5 minutes. Both Studio and the Microgateway log each configured path at startup (`grep 'startup path'`).
@@ -105,14 +105,14 @@ Everything between an edge and Studio goes over the single gRPC connection that 
 
 For an application calling `POST /llm/call/{llm-slug}/v1/chat/completions` on an edge:
 
-1. **Authenticate.** The edge looks up the App credential in its in-memory token cache. On a miss it asks Studio over gRPC (the only step that can involve the control plane) and caches the result.
+1. **Authenticate.** The edge looks up the App credential in its in-memory token cache. On a miss it asks Studio over gRPC (the only step that can involve the control plane) and caches the result; concurrent misses for one token share that call.
 2. **Authorise.** It checks that the App may use this LLM, using the Apps and LLMs from its local snapshot.
 3. **Budget.** Enterprise edges check the App's spend against its budget from local counters, which Studio's budget sync keeps aligned with the estate-wide total.
 4. **Policy.** Filters, guardrails and plugins run in-process (plugins as local subprocesses).
 5. **Proxy.** The edge forwards the request to the upstream provider and relays the response, streaming chunk by chunk for SSE.
-6. **Record.** Usage, cost and the proxy log are written to the edge's local database and queued for the next analytics pulse.
+6. **Record.** Usage, cost and the proxy log are queued for the next analytics pulse and for the edge's local database, which a single background writer updates in batches, off the request path.
 
-Steps 1–4 and 6 are what the benchmark's "0.30 ms of the gateway's own processing" measures.
+Steps 1–4 and 6 are what the benchmark's "0.13–0.16 ms of the gateway's own processing" measures.
 
 ## Failure behaviour
 
@@ -123,7 +123,9 @@ Plan the control plane's availability around this table.
 | **Studio unreachable, edges running** | Edges keep serving from their loaded configuration and reconnect in the background (5 s backoff doubling to at most 5 minutes). Tokens validated in the last 5 minutes keep working. Budgets are enforced on local counters. Analytics buffer in memory and are sent after reconnection. | Short Studio outages (restarts, upgrades, a database failover) are invisible to cached callers. |
 | **A token the edge has not seen, while Studio is down** | Rejected: validation fails closed. | If availability matters more than prompt revocation, set `EDGE_TOKEN_CACHE_STALE_GRACE` (for example `30m`) to keep serving expired cache entries while Studio is unreachable. An explicit rejection from Studio always wins. |
 | **An edge starts while Studio is down** | The edge exits: it will not serve without a configuration from Studio, and it does not reuse the snapshot left in its local database. On Kubernetes the pod crash-loops until Studio is back. | Run enough edges to carry peak load **without** autoscaling, so that a Studio outage during a scale-up or a node replacement does not remove capacity. Treat Studio's availability as a prerequisite for scale-out. |
-| **Studio down for a long time** | Buffered analytics older than 24 hours (`edge_retention_hours`) or beyond 10,000 records (`max_buffer_size`) are dropped with a warning. Budget blocks decided by the estate-wide total stop updating. | Keep Studio outages well under a day. |
+| **Studio down for a long time** | Buffered analytics older than 24 hours (`edge_retention_hours`) or beyond 10,000 records (`max_buffer_size`) are dropped from the pulse with a warning; the edge's local database keeps its copy. Budget blocks decided by the estate-wide total stop updating. | Keep Studio outages short. Each request buffers two to three records, so at 400 req/s the default 10,000 hold only about 9 seconds of traffic: raise `max_buffer_size` in the pulse file if Studio's analytics must survive an outage of more than a few seconds. |
+| **An edge is pushed past its capacity** | Latency rises as the CPU fills. If Go memory passes 85% of the memory limit (`OVERLOAD_MEMORY_THRESHOLD`), new requests get 503 with `Retry-After: 1`, which vendor SDKs retry, until it falls; requests in flight complete. `MAX_INFLIGHT_REQUESTS` adds an optional cap. | Size for peak with the planning figure below, and alert on `microgateway_overload_shedding`. |
+| **An upstream provider fails** | A refused or dropped upstream connection is answered with 502, a timed-out one with 504. | Use LLM fallbacks or routers if a provider's availability matters. |
 | **An edge crashes or is killed** | Other edges carry the traffic. That edge's in-memory analytics buffer (up to one pulse interval of records) is lost; graceful shutdown flushes it. | Use graceful termination (the chart's 40 s grace period is enough). |
 | **PostgreSQL fails over** | Studio's readiness probe (`/ready`) fails until the database is back; Studio does not need restarting. Edges are unaffected apart from the token-miss and analytics behaviour above. | Use a managed or replicated PostgreSQL with automatic failover. |
 
@@ -144,7 +146,8 @@ On Kubernetes, use a single-replica Deployment with the `Recreate` strategy (so 
 ### Database
 
 - **PostgreSQL in production**, 14 or later (`DATABASE_TYPE=postgres`, `DATABASE_URL`). Use a managed service or a replicated cluster with automatic failover and point-in-time recovery. SQLite is for development.
-- **Plan for analytics growth.** Every request handled by any edge becomes rows in Studio's analytics tables (`llm_chat_records`, `proxy_logs`, `tool_call_records`). In 2.2, Studio does not prune them. At the benchmark's soak rate (257 req/s) that is over 22 million requests a day. Size storage for your retention period and prune old rows with a scheduled job, or partition the tables by time.
+- **Plan for analytics growth.** Every request handled by any edge becomes rows in Studio's analytics tables (`llm_chat_records`, `proxy_logs`, `tool_call_records`). In 2.2, Studio does not prune them. At 400 req/s, the planning figure of one streaming edge, that is about 35 million requests a day. Studio stored about 700 bytes per request across `llm_chat_records` and `proxy_logs` with bodies off, so about 25 GB a day at that rate. Size storage for your retention period and prune old rows with a scheduled job, or partition the tables by time.
+- **Table size does not slow Studio's periodic work.** The budget sync (every 30 s) and usage telemetry read only rows added since their last pass. They sum the current period once at start-up, so the first pass after a restart on a very large database takes longer.
 - **Bodies are opt-in.** Request and response bodies are stored only when `ANALYTICS_STORE_REQUESTS` / `ANALYTICS_STORE_RESPONSES` are set on the edges (up to `ANALYTICS_MAX_BODY_SIZE`, 4 KB each). Leave them off unless you need them: they multiply database size and they copy prompts into the control plane's region (see [Data residency](#data-residency)).
 
 ### Persistent files
@@ -166,56 +169,58 @@ Rotate the edge token without downtime: set the new value as `GRPC_AUTH_TOKEN_NE
 
 ### Measured performance
 
-From the rc10.1 benchmark: `tykio/tyk-microgateway-ent:v2.2.0-rc10.1` in edge mode on one **c7i.xlarge (4 vCPU, 8 GiB)** on AWS, connected to Studio, with analytics shipping and a budget on the App. The full method and results are in the benchmark report (`benchmarks/gateway/benchmark-results.md` in the source repository).
+From the 2.2 benchmark: the Enterprise Microgateway in edge mode, built from the 2.2 release commit and run with its default settings, on one **c7i.xlarge (4 vCPU, 8 GiB)** on AWS, connected to Studio, with analytics shipping, a budget on the App and a priced model. The full method and results are in the benchmark report (`benchmarks/gateway/benchmark-results.md` in the source repository).
 
 | | One 4-vCPU edge |
 |---|---|
-| Latency added, native endpoints (`/llm/call`, `/llm/rest`, `/llm/stream`), including one network hop | **0.52–0.63 ms p50, 0.81–1.01 ms p99** |
-| Of which, the gateway's own processing | 0.30 ms p50, 0.7–0.9 ms p99 |
-| Latency added, OpenAI-compatible endpoints (`/ai/…`, unified `/v1`) | 0.91–1.07 ms p50, 1.49–1.88 ms p99 |
-| Streaming capacity (300 ms to first token, 4.3 s streams) | **~365 req/s**, ~1,600 concurrent streams, gateway p99 ≤ 3 ms, 0 errors |
-| Non-streaming capacity (upstream answers in 20 ms) | **~1,000 req/s**, 0 errors |
-| 3× burst to just above capacity for 30 s | 0 errors; gateway p99 peaked at 15 ms, recovered immediately |
-| One hour at 70% of capacity (257 req/s) | 0 errors; no latency or memory drift; resident memory 477–600 MB |
+| Latency added, native endpoints (`/llm/call`, `/llm/rest`, `/llm/stream`), including one network hop | **0.54–0.58 ms p50, 0.75–0.84 ms p99** |
+| Of which, the gateway's own processing | 0.13–0.16 ms p50, 0.18–0.23 ms p99 |
+| Latency added, OpenAI-compatible endpoints (`/ai/…`, unified `/v1`) | 0.77–0.93 ms p50, 1.05–1.25 ms p99 |
+| Non-streaming capacity (upstream answers in 20 ms) | **~8,550 req/s** at 3.5 cores, 0 errors; +0.55 ms p50 and +8 ms p99 at 6,000 req/s |
+| Streaming capacity (300 ms to first token, 4.3 s streams) | **~690 req/s**, ~3,000 concurrent streams, all 4 cores, 0 errors; time to first token within ~15 ms of the upstream's up to 450 req/s |
+| 3× burst to 570 req/s for 30 s | 0 errors; gateway p99 peaked at 1.5 ms, recovered immediately |
+| One hour at 377 streaming req/s | 0 errors; no latency, memory or goroutine drift; gateway p99 0.52–0.55 ms throughout |
+| Memory (RSS) | 560–650 MB at 377 streaming req/s; up to 1.45 GB at streaming saturation; under 0.9 GB at the non-streaming ceiling |
 | Cost of prompt size | about 0.02 ms per KB (a 256 KB prompt adds ~5 ms) |
 
 Two things to take from this:
 
-1. **Latency is not the sizing constraint.** A model takes hundreds of milliseconds to seconds to produce its first token; the gateway adds under a millisecond until the node runs out of CPU. Where you place the edge relative to your applications and your providers matters far more than the gateway itself.
-2. **Size by throughput per node, and scale out.** Each edge serves from its own copy of the configuration, so capacity grows linearly with the number of nodes.
+1. **Latency is not the sizing constraint.** A model takes hundreds of milliseconds to seconds to produce its first token; the gateway adds about half a millisecond until the node runs out of CPU. Where you place the edge relative to your applications and your providers matters far more than the gateway itself.
+2. **Size by throughput per node, and scale out.** Both limits are CPU, and each edge serves from its own copy of the configuration, so capacity grows linearly with the number of nodes.
 
 ### Sizing the edge pool
 
 1. **Estimate peak request rate per namespace**, split into streaming and non-streaming. Chat and agent traffic is mostly streaming.
-2. **Use a planning figure of 70% of measured capacity per 4-vCPU node:** about **255 streaming req/s** or **700 non-streaming req/s**. This is the rate the one-hour soak ran at without drift, and it leaves room for bursts.
+2. **Use a planning figure per 4-vCPU node of about 400 streaming req/s or 6,000 non-streaming req/s**, about 60% and 70% of measured capacity. At those rates latency is flat (time to first token within ~10 ms of the upstream's, non-streaming p50 within ~0.6 ms of direct), the one-hour soak held 377 streaming req/s without drift, and there is room for bursts.
 3. **Nodes = ceiling(peak ÷ planning figure) + 1**, and never fewer than 2 per pool, spread across availability zones. The extra node covers a node or zone loss and rolling upgrades.
 
 | Peak load (one namespace) | Calculation | Edges (4 vCPU) |
 |---|---|---|
-| 50 streaming req/s (a few thousand interactive users) | 50 ÷ 255 → 1, +1 | **2** (the minimum) |
-| 400 streaming req/s | 400 ÷ 255 → 2, +1 | **3** |
-| 1,200 streaming req/s | 1,200 ÷ 255 → 5, +1 | **6** |
-| 2,000 non-streaming req/s (batch classification) | 2,000 ÷ 700 → 3, +1 | **4** |
+| 50 streaming req/s (a few thousand interactive users) | 50 ÷ 400 → 1, +1 | **2** (the minimum) |
+| 1,200 streaming req/s | 1,200 ÷ 400 → 3, +1 | **4** |
+| 5,000 streaming req/s | 5,000 ÷ 400 → 13, +1 | **14** |
+| 20,000 non-streaming req/s (batch classification) | 20,000 ÷ 6,000 → 4, +1 | **5** |
 
 Adjust for your traffic:
 
 - **Long streams.** The benchmark's streams lasted 4.3 s. Reasoning models and long generations keep streams open for 30 s or more, so the same request rate means many more concurrent streams (concurrent streams ≈ request rate × stream duration). Check concurrency as well as rate, and measure with your own stream profile if it is far from the benchmark's.
 - **Large prompts.** RAG and agent workloads with prompts of tens or hundreds of KB spend more CPU per request. Lower the planning figure, or measure.
 - **Policy you add.** The benchmark ran with a budget but no filters, guardrails or plugins. Guardrails that call a model, and plugins that do real work, add their own cost.
-- **OpenAI-compatible endpoints** (`/ai/…`, `/v1`) do a second internal pass and add about 0.4 ms more than the native endpoints. Their capacity was not measured separately.
+- **OpenAI-compatible endpoints** (`/ai/…`, `/v1`) do a second internal pass and add about 0.3 ms more than the native endpoints. Their capacity was not measured separately; expect it to be lower, since each request is handled twice.
 
 ### Node shape
 
-- **4 vCPU and 2 GiB of memory per edge** matches the benchmarked node with headroom: resident memory stayed at 477–600 MB at 70% load. Larger nodes help streaming (which is CPU-bound) but not non-streaming throughput, which topped out at 2–2.4 cores. More nodes is the better lever in both cases.
+- **4 vCPU and a 4 GiB memory limit per edge** matches the benchmarked node with headroom. Memory stayed under 650 MB through the one-hour soak and reached 1.45 GB at streaming saturation, so a 4 GiB limit keeps overload protection out of the way until the CPU is full. Larger nodes should help both kinds of traffic, since both are CPU-bound, but only 4 vCPU was measured; more nodes is the proven lever.
+- **Leave headroom above the working set for overload protection.** In a container with a memory limit, the edge sets a soft `GOMEMLIMIT` at 90% of it and starts refusing new requests at 85% (see [Failure behaviour](#failure-behaviour)). With a limit close to the working set, shedding would start before the CPU is used.
+- **Garbage collection.** With `GOGC` unset the edge adapts it to its live heap, from 400 down to Go's default of 100 as open streams grow (`microgateway_gogc`). For streaming-heavy edges with memory to spare, `GOGC=400` measured about 9% more streaming capacity for about 2.4 times the memory (3.4 GB at saturation).
 - **The Helm chart's default resources (500m CPU, 512 MiB limit) are for evaluation.** Set requests and limits for production. A 512 MiB limit is below the benchmarked working set.
-- **Local disk for the SQLite file**, one per node, never shared between nodes. The edge rewrites its tables on every sync and its queued data carries no node identity, so two edges cannot share one database. A node-local volume (Kubernetes `emptyDir` or a small PVC) is right: the file is a cache, rebuilt from Studio on every start.
-- **Disk space.** v2.2.0-rc10.1 edges store request and response bodies locally even when `ANALYTICS_STORE_REQUESTS/RESPONSES` are off. Under benchmark load the file grew to about 13 GB in an hour, and the database stalls it caused slowed requests after the heaviest runs. This is fixed after rc10.1. On rc10.1, give the data volume generous space and monitor it, or upgrade. In all 2.2 builds the local analytics table is not pruned on the edge (`ANALYTICS_RETENTION_DAYS` is not yet enforced), so the file grows until the node is replaced. Size the volume for the time between restarts, and monitor it.
+- **Local disk for the SQLite file**, one per node, never shared between nodes. The edge rewrites its tables on every sync and its queued data carries no node identity, so two edges cannot share one database. A node-local volume (Kubernetes `emptyDir` or a PVC) is right: configuration is rebuilt from Studio on every start.
+- **Disk space.** The edge keeps one analytics row per request (about 360 bytes) for `ANALYTICS_RETENTION_DAYS`: 7 days by default when the analytics pulse ships every row to Studio, 90 days otherwise. At a steady 1,000 req/s that is about 31 GB a day, so about 220 GB for the default week. The rows back the edge's own analytics API; Studio's dashboards and budgets use the copies shipped to Studio. Set `ANALYTICS_RETENTION_DAYS=1` on busy edges unless you query the edge directly, and size the volume for your retention. The write-ahead log is capped at 64 MB. Watch `microgateway_sqlite_db_bytes`.
 
 ### Autoscaling
 
-Autoscaling on CPU works well for streaming traffic, which saturates CPU at its limit. The chart's HPA (off by default) targets 75% CPU, which matches the 70% planning point. Two cautions:
+Autoscaling on CPU works for both kinds of traffic, since both reach their limit with the CPU nearly full (all 4 cores for streaming, 3.5 for non-streaming). The chart's HPA (off by default) targets 75% CPU, which is close to the planning point. One caution:
 
-- Non-streaming traffic reaches its limit at about 60% CPU on a 4-vCPU node, before a CPU target fires. For REST-heavy pools, scale on request rate, or size statically.
 - New edges need Studio to start. Set `minReplicas` to cover normal peak load, and let autoscaling handle bursts above it.
 
 ### Load balancing
@@ -302,11 +307,13 @@ Watch at least:
 
 | Signal | Where | Why |
 |---|---|---|
-| Edge CPU against 70% of the node | infrastructure metrics | The streaming capacity limit |
+| Edge CPU against 70% of the node | infrastructure metrics | The capacity limit, streaming and non-streaming |
 | `gen_ai_server_time_to_first_token_seconds` and request duration, by edge | edge metrics | What users feel; mostly the provider |
 | Gateway overhead (`Server-Timing`, enabled with `GATEWAY_SERVER_TIMING=true`) | response headers, sampled | Should stay near 1 ms p99 below the knee |
 | Edge sync status (In Sync / Pending / Stale / Disconnected) | Studio → Edge Gateways, or `GET /api/v1/sync/status` | An edge that has stopped receiving configuration or heartbeating |
-| Edge data volume usage | infrastructure metrics | Local database growth (see [Node shape](#node-shape)) |
+| Edge data volume usage, `microgateway_sqlite_db_bytes` | infrastructure and edge metrics | Local database growth (see [Node shape](#node-shape)) |
+| `microgateway_overload_shedding`, `microgateway_overload_rejected_memory_total` | edge metrics | The edge is refusing requests to protect its memory: add capacity |
+| `microgateway_analytics_writer_events_dropped_total` | edge metrics | Local analytics rows dropped because the writer's queue was full (0 throughout the benchmark) |
 | PostgreSQL storage and analytics table sizes | database metrics | Analytics growth; prune on schedule |
 | `aistudio_policy_blocks_total` | edge metrics | Budget, filter and access blocks |
 
@@ -326,8 +333,8 @@ Watch at least:
 
 - [ ] `GATEWAY_MODE=edge`, `CONTROL_ENDPOINT`, `EDGE_NAMESPACE`, `EDGE_AUTH_TOKEN`, `ENCRYPTION_KEY`, `TYK_AI_LICENSE`; a unique `EDGE_ID` per node (the Helm chart uses the pod name)
 - [ ] `PLUGINS_CONFIG_PATH` pointing at an analytics-pulse file that exists, with `interval_seconds` set; confirm with `grep 'startup path'`
-- [ ] Nodes sized with the method above: at least 2, across zones, with 4 vCPU and 2 GiB each or equivalent
-- [ ] Node-local SQLite volume with room to grow, and monitoring on it
+- [ ] Nodes sized with the method above: at least 2, across zones, with 4 vCPU and a 4 GiB memory limit each or equivalent
+- [ ] Node-local SQLite volume sized for `ANALYTICS_RETENTION_DAYS` (about 31 GB per day per 1,000 req/s), and monitoring on it
 - [ ] Load balancer: `/ready` health checks, idle timeout above your longest stream, no SSE buffering, `/metrics` protected
 - [ ] `minReplicas` covers normal peak; autoscaling for bursts only
 - [ ] Decide on `EDGE_TOKEN_CACHE_STALE_GRACE` (availability during a Studio outage versus prompt revocation)
