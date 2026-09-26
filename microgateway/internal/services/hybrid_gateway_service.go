@@ -4,12 +4,14 @@ package services
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -19,7 +21,17 @@ type TokenCacheEntry struct {
 	Result    *TokenValidationResult
 	CachedAt  time.Time
 	ExpiresAt time.Time
+	// refreshing is set once a request has started this entry's
+	// refresh-ahead, so only one revalidation runs per entry.
+	refreshing atomic.Bool
 }
+
+// refreshAheadFraction is how far through its TTL a cached validation must be
+// before a request starts revalidating it in the background. The entry is
+// served meanwhile and still expires at its TTL, so revocation takes effect no
+// later than before; the difference is that a busy token no longer expires
+// under load with every in-flight request missing at once.
+const refreshAheadFraction = 0.8
 
 // HybridGatewayService wraps DatabaseGatewayService and overrides token validation
 // for on-demand validation while keeping all other operations local (database-backed)
@@ -33,6 +45,12 @@ type HybridGatewayService struct {
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
+
+	// validations makes concurrent validations of one token share a single
+	// call to the control instance (and a single App upsert).
+	validations singleflight.Group
+	// warnings rate-limits the warnings for failed validations.
+	warnings warnLimiter
 
 	// apps caches GetAppByTokenID, which runs on every authenticated request
 	// (the app with its LLMs, tools and datasources: five or more queries).
@@ -76,19 +94,49 @@ func (h *HybridGatewayService) SetEdgeClient(edgeClient interface{}) {
 }
 
 // ValidateAPIToken overrides DatabaseGatewayService to use cached on-demand validation
+//
+// A cached result is served until its TTL; from refreshAheadFraction of the
+// TTL on, the first request to see it starts one background revalidation.
+// Validations that do reach the control instance are shared per token: the
+// requests that miss together wait for one call. Before this, a busy token's
+// entry expired every TTL with every in-flight request missing at once, each
+// calling the hub and rewriting the App in SQLite, which stalled the gateway
+// for about a second every five minutes under load and, with a slow hub,
+// refused valid requests.
 func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationResult, error) {
+	if h.cacheConfig.TokenCacheEnabled {
+		if cachedResult, refresh := h.cachedForRequest(token); cachedResult != nil {
+			if refresh {
+				go h.refreshAhead(token)
+			}
+			return cachedResult, nil
+		}
+	}
+
+	v, err, _ := h.validations.Do(token, func() (interface{}, error) {
+		return h.validateWithControl(token)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*TokenValidationResult), nil
+}
+
+// refreshAhead revalidates a token whose cached result is near its expiry.
+// Success replaces the entry; a rejection removes it (validateWithControl);
+// any other failure leaves it to expire at its TTL as before.
+func (h *HybridGatewayService) refreshAhead(token string) {
+	_, _, _ = h.validations.Do(token, func() (interface{}, error) {
+		return h.validateWithControl(token)
+	})
+}
+
+// validateWithControl validates a token with the control instance, caches the
+// result and makes sure its App is in local SQLite.
+func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidationResult, error) {
 	tokenPrefix := token
 	if len(token) > 8 {
 		tokenPrefix = token[:8]
-	}
-
-	// Check cache first if enabled
-	if h.cacheConfig.TokenCacheEnabled {
-		if cachedResult := h.getFromCache(token); cachedResult != nil {
-			log.Debug().Str("token_prefix", tokenPrefix).Msg("Token validation cache HIT - returning cached result")
-			return cachedResult, nil
-		}
-		log.Debug().Str("token_prefix", tokenPrefix).Msg("Token validation cache MISS - calling control instance")
 	}
 
 	log.Debug().Str("token_prefix", tokenPrefix).Msg("HybridGatewayService: using on-demand token validation")
@@ -117,12 +165,16 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 	if edgeClient, ok := h.edgeClient.(interface{ ValidateTokenOnDemand(string) (*pb.TokenValidationResponse, error) }); ok {
 		resp, err := edgeClient.ValidateTokenOnDemand(token)
 		if err != nil {
-			log.Debug().Err(err).Str("token_prefix", tokenPrefix).Msg("On-demand token validation failed")
+			if h.warnings.allow("control-call") {
+				log.Warn().Err(err).Msg("Token validation: call to the control instance failed")
+			}
 			return staleFallback(fmt.Errorf("token validation failed: %w", err))
 		}
 
 		if !resp.Valid {
-			log.Debug().Str("token_prefix", tokenPrefix).Str("error", resp.ErrorMessage).Msg("Token validation rejected by control")
+			if h.warnings.allow("rejected") {
+				log.Warn().Str("reason", resp.ErrorMessage).Msg("Token validation: rejected by the control instance")
+			}
 			// The hub has spoken: whatever we cached for this token is no longer true.
 			h.removeFromCache(token)
 			return nil, fmt.Errorf("invalid token: %s", resp.ErrorMessage)
@@ -156,6 +208,9 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 
 			var dbApp database.App
 			if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").Preload("ModelRouters").Preload("SemanticRouters").First(&dbApp).Error; err != nil {
+				if h.warnings.allow("app-missing") {
+					log.Warn().Err(err).Uint32("app_id", resp.AppId).Msg("Token validation: the control instance accepted the token but its App is not in local SQLite")
+				}
 				return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
 			}
 
@@ -213,6 +268,48 @@ func (h *HybridGatewayService) loadAppByTokenID(tokenID uint) (*database.App, er
 		Msg("Successfully found app with LLM relationships from synced SQLite")
 
 	return &app, nil
+}
+
+// cachedForRequest returns the cached result for a token if it is still valid,
+// and whether this request should start its refresh-ahead: the entry is past
+// refreshAheadFraction of its TTL and no refresh has been started for it.
+func (h *HybridGatewayService) cachedForRequest(token string) (*TokenValidationResult, bool) {
+	h.cacheMutex.RLock()
+	entry, exists := h.tokenCache[token]
+	h.cacheMutex.RUnlock()
+	if !exists {
+		return nil, false
+	}
+	now := time.Now()
+	if now.After(entry.ExpiresAt) {
+		return nil, false
+	}
+	ttl := entry.ExpiresAt.Sub(entry.CachedAt)
+	due := now.Sub(entry.CachedAt) >= time.Duration(float64(ttl)*refreshAheadFraction)
+	return entry.Result, due && entry.refreshing.CompareAndSwap(false, true)
+}
+
+// warnLimiter lets a warning through at most once per warnInterval per key,
+// so a failure that hits every request does not flood the log.
+type warnLimiter struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+const warnInterval = 10 * time.Second
+
+func (l *warnLimiter) allow(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	if l.last == nil {
+		l.last = map[string]time.Time{}
+	}
+	if now.Sub(l.last[key]) < warnInterval {
+		return false
+	}
+	l.last[key] = now
+	return true
 }
 
 // getFromCache retrieves a token validation result from cache if valid
