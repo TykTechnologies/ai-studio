@@ -61,3 +61,20 @@ type TeamChecker interface {
 type TeamAware interface {
 	SetTeamChecker(TeamChecker)
 }
+
+// AppPeriodSpend is an App's spend in its current budget period, as the hub's
+// budget sync computed it.
+type AppPeriodSpend struct {
+	// Spent is in dollars.
+	Spent       float64
+	PeriodStart time.Time
+}
+
+// SpendAnalyzer is implemented by edge budget sources that can raise budget
+// alerts from spend the budget sync already has. The sync hands it the Apps
+// whose spend moved since the last cycle; without it, the source re-reads
+// each App's spend for its whole period, which on a busy hub is a scan of
+// llm_chat_records per App every cycle.
+type SpendAnalyzer interface {
+	AnalyzeAppSpend(spend map[uint]AppPeriodSpend)
+}

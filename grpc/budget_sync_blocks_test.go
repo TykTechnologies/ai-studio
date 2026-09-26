@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -99,4 +100,39 @@ func TestBudgetSyncService_AnalyzesAppsWhoseEdgeSpendMoved(t *testing.T) {
 	require.Len(t, src.analyzed, 2, "first sync and the sync after app 2 spent")
 	assert.ElementsMatch(t, []uint{1, 2}, src.analyzed[0])
 	assert.Equal(t, []uint{2}, src.analyzed[1])
+}
+
+// spendAnalyzingBudget also implements budget.SpendAnalyzer.
+type spendAnalyzingBudget struct {
+	fakeEdgeBudget
+	spend []map[uint]budget.AppPeriodSpend
+}
+
+func (f *spendAnalyzingBudget) AnalyzeAppSpend(spend map[uint]budget.AppPeriodSpend) {
+	f.mu.Lock()
+	f.spend = append(f.spend, spend)
+	f.mu.Unlock()
+}
+
+// A source that can use the sync's own figures gets them, instead of being
+// asked to re-read every moved App's spend for its whole period.
+func TestBudgetSyncService_HandsSpendToSpendAnalyzer(t *testing.T) {
+	db := setupBudgetSyncTestDB(t)
+	svc := NewBudgetSyncService(db, eventbridge.NewBus())
+	src := &spendAnalyzingBudget{fakeEdgeBudget: fakeEdgeBudget{blocks: map[uint]string{}}}
+	svc.SetEdgeBudgetSource(src)
+
+	now := time.Now()
+	require.NoError(t, db.Create(&models.App{ID: 1, Name: "a"}).Error)
+	require.NoError(t, db.Create(&models.LLMChatRecord{AppID: 1, Cost: 25000, TimeStamp: now}).Error)
+	svc.aggregateAndPublish()
+
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	assert.Empty(t, src.analyzed, "AnalyzeApps is not called when the spend is handed over")
+	require.Len(t, src.spend, 1)
+	got := src.spend[0][1]
+	assert.InDelta(t, 2.5, got.Spent, 1e-9)
+	wantStart, _ := calculateBudgetPeriod(nil, now)
+	assert.True(t, got.PeriodStart.Equal(wantStart))
 }

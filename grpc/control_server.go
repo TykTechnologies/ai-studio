@@ -1430,9 +1430,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			now := time.Now()
 			periodStart, _ := calculateBudgetPeriod(app.BudgetStartDate, now)
 
-			// Query total cost from llm_chat_records for this app in the current period
+			// The budget sync's latest figure when it has one: summing the
+			// whole period here, for every budgeted App on every snapshot,
+			// is a scan of the App's period each time.
 			var totalCostCents float64
-			if err := s.db.Model(&models.LLMChatRecord{}).
+			if usage, ok := s.budgetSyncService.PeriodUsage(app.ID, periodStart); ok {
+				currentPeriodUsage = usage
+			} else if err := s.db.Model(&models.LLMChatRecord{}).
 				Select("COALESCE(SUM(cost), 0)").
 				Where("app_id = ? AND time_stamp >= ?", app.ID, periodStart).
 				Scan(&totalCostCents).Error; err != nil {
