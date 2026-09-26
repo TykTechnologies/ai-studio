@@ -176,3 +176,28 @@ func TestRecordProxyLogWithoutChatRecordIsOneRow(t *testing.T) {
 	assert.Equal(t, 401, events[0].StatusCode)
 	assert.Zero(t, events[0].TotalTokens)
 }
+
+// Retention deletes expired rows in chunks and keeps the rest.
+func TestAnalyticsWriterRetentionDeletesInChunks(t *testing.T) {
+	db, wdb := openWriterTestDB(t)
+	old := time.Now().AddDate(0, 0, -10)
+	rows := make([]*database.AnalyticsEvent, 0, retentionChunk+1010)
+	for i := 0; i < retentionChunk+1000; i++ {
+		rows = append(rows, &database.AnalyticsEvent{RequestID: fmt.Sprintf("old-%d", i), AppID: 1, TimeStamp: old, CreatedAt: old})
+	}
+	for i := 0; i < 10; i++ {
+		rows = append(rows, &database.AnalyticsEvent{RequestID: fmt.Sprintf("new-%d", i), AppID: 1, TimeStamp: time.Now(), CreatedAt: time.Now()})
+	}
+	require.NoError(t, db.CreateInBatches(rows, 500).Error)
+
+	w := NewAnalyticsWriter(wdb, 10, 500, time.Hour)
+	w.SetRetention(func() int { return 7 })
+	assert.Equal(t, retentionChunk, w.deleteExpired())
+	assert.Equal(t, 1000, w.deleteExpired())
+	assert.Equal(t, 0, w.deleteExpired())
+	assert.EqualValues(t, 10, countEvents(t, db))
+	assert.EqualValues(t, retentionChunk+1000, w.Stats().Expired)
+
+	w.SetRetention(func() int { return 0 })
+	assert.Equal(t, 0, w.deleteExpired(), "0 keeps everything")
+}

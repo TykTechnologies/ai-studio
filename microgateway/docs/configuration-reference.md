@@ -262,12 +262,12 @@ GRPC_AUTH_TOKEN="new-secure-token"
 | `ANALYTICS_ENABLED` | bool | `true` | Enable analytics collection |
 | `ANALYTICS_BUFFER_SIZE` | int | `1000` | Analytics buffer size |
 | `ANALYTICS_FLUSH_INTERVAL` | duration | `10s` | Analytics flush interval |
-| `ANALYTICS_RETENTION_DAYS` | int | `90` | Analytics data retention |
+| `ANALYTICS_RETENTION_DAYS` | int | `7` with the analytics pulse, else `90` | Days of analytics rows kept on the gateway. Expired rows are deleted in chunks of 5,000: every 10 minutes, and every 250 ms while a backlog remains. An edge whose analytics pulse sends every row to the control plane keeps 7 days by default |
 | `ANALYTICS_REALTIME` | bool | `false` | Enable real-time analytics |
 | `ANALYTICS_STORE_REQUESTS` | bool | `false` | Store request bodies on analytics events. The pulse can only forward bodies stored here, so this also gates `include_request_response_data` |
 | `ANALYTICS_STORE_RESPONSES` | bool | `false` | Store response bodies on analytics events (same pulse rule as requests) |
 | `ANALYTICS_MAX_BODY_SIZE` | int | `4096` | Maximum stored body size in bytes; `0` stores none |
-| `ANALYTICS_WRITER_QUEUE_SIZE` | int | `10000` | Analytics rows waiting to be written. When the queue is full, rows are dropped and counted in `microgateway_analytics_writer_events_dropped_total`. The analytics pulse and budget accounting are unaffected |
+| `ANALYTICS_WRITER_QUEUE_SIZE` | int | `50000` | Analytics rows waiting to be written. When the queue is full, rows are dropped and counted in `microgateway_analytics_writer_events_dropped_total`. The analytics pulse and budget accounting are unaffected |
 | `ANALYTICS_WRITER_BATCH_SIZE` | int | `500` | Rows written per transaction |
 | `ANALYTICS_WRITER_FLUSH_INTERVAL` | duration | `100ms` | Longest a row, or recorded budget usage, waits before it is written |
 

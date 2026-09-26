@@ -34,7 +34,13 @@ type AnalyticsPulsePlugin struct {
 	bufferMutex        sync.RWMutex
 
 	// Pulse management
+	// timerMu guards pulseTimer: the timer's own callback, a buffer-full
+	// flush and Stop all replace or stop it.
+	timerMu         sync.Mutex
 	pulseTimer      *time.Timer
+	// flushQueued is set while a buffer-full flush is waiting to run, so a
+	// full buffer starts one flush rather than one per record added.
+	flushQueued atomic.Bool
 	sequenceNumber  uint64
 	lastPulseTime   time.Time
 	ctx             context.Context
@@ -373,12 +379,12 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 			log.Debug().
 				Int("total_buffered", totalBuffered).
 				Msg("Analytics buffer is full but the last pulse failed recently - waiting for backoff")
-		} else {
+		} else if p.flushQueued.CompareAndSwap(false, true) {
 			log.Warn().
 				Int("total_buffered", totalBuffered).
 				Int("max_buffer_size", p.config.MaxBufferSize).
 				Msg("Analytics buffer is full, triggering immediate pulse")
-			go p.sendPulseNow()
+			go p.flushFullBuffer()
 		}
 	}
 
@@ -460,8 +466,14 @@ func (p *AnalyticsPulsePlugin) BufferToolCalls(calls []ToolCallBuffer) {
 
 // schedulePulse schedules the next pulse
 func (p *AnalyticsPulsePlugin) schedulePulse() {
+	p.timerMu.Lock()
+	defer p.timerMu.Unlock()
 	if p.pulseTimer != nil {
 		p.pulseTimer.Stop()
+	}
+	if p.stopping() {
+		p.pulseTimer = nil
+		return
 	}
 
 	interval := time.Duration(p.config.IntervalSeconds) * time.Second
@@ -477,11 +489,28 @@ func (p *AnalyticsPulsePlugin) schedulePulse() {
 
 // sendPulseNow sends a pulse immediately
 func (p *AnalyticsPulsePlugin) sendPulseNow() {
+	p.stopTimer()
+	p.sendPulse()
+	p.schedulePulse()
+}
+
+func (p *AnalyticsPulsePlugin) stopTimer() {
+	p.timerMu.Lock()
+	defer p.timerMu.Unlock()
 	if p.pulseTimer != nil {
 		p.pulseTimer.Stop()
 	}
-	p.sendPulse()
-	p.schedulePulse()
+}
+
+// flushFullBuffer sends a pulse for a full buffer. A pulse already in flight
+// is waited for, not skipped: the records that filled the buffer arrived after
+// it took its snapshot.
+func (p *AnalyticsPulsePlugin) flushFullBuffer() {
+	defer p.flushQueued.Store(false)
+	for p.sending.Load() && !p.stopping() {
+		time.Sleep(10 * time.Millisecond)
+	}
+	p.sendPulseNow()
 }
 
 // pulseSnapshot is one pulse's worth of buffered data, taken out of the
@@ -529,20 +558,23 @@ func (p *AnalyticsPulsePlugin) stopping() bool {
 
 // takeSnapshotLocked moves everything buffered into a snapshot. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) takeSnapshotLocked() pulseSnapshot {
+	// The buffers themselves become the snapshot and fresh ones start empty:
+	// copying up to MaxBufferSize large records here held the lock every
+	// recording request waits on.
 	snap := pulseSnapshot{
-		analytics:  append([]database.AnalyticsEvent(nil), p.analyticsBuffer...),
-		metadata:   append([]AnalyticsMetadata(nil), p.analyticsMetadata...),
-		budget:     append([]BudgetUsageBuffer(nil), p.budgetBuffer...),
-		proxy:      append([]ProxyLogBuffer(nil), p.proxyBuffer...),
-		compliance: append([]ComplianceEventBuffer(nil), p.complianceBuffer...),
-		toolCalls:  append([]ToolCallBuffer(nil), p.toolCallBuffer...),
+		analytics:  p.analyticsBuffer,
+		metadata:   p.analyticsMetadata,
+		budget:     p.budgetBuffer,
+		proxy:      p.proxyBuffer,
+		compliance: p.complianceBuffer,
+		toolCalls:  p.toolCallBuffer,
 	}
-	p.analyticsBuffer = p.analyticsBuffer[:0]
-	p.analyticsMetadata = p.analyticsMetadata[:0]
-	p.budgetBuffer = p.budgetBuffer[:0]
-	p.proxyBuffer = p.proxyBuffer[:0]
-	p.complianceBuffer = p.complianceBuffer[:0]
-	p.toolCallBuffer = p.toolCallBuffer[:0]
+	p.analyticsBuffer = nil
+	p.analyticsMetadata = nil
+	p.budgetBuffer = nil
+	p.proxyBuffer = nil
+	p.complianceBuffer = nil
+	p.toolCallBuffer = nil
 	return snap
 }
 
@@ -959,12 +991,10 @@ func (p *AnalyticsPulsePlugin) Stop() error {
 		p.cancel()
 	}
 
-	if p.pulseTimer != nil {
-		p.pulseTimer.Stop()
-	}
+	p.stopTimer()
 
 	// Send any remaining buffered data
-	p.sendPulseNow()
+	p.sendPulse()
 
 	log.Debug().
 		Uint64("total_pulses_sent", p.totalPulsesSent).

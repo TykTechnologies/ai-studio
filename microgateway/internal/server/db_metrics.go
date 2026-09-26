@@ -40,6 +40,8 @@ func registerDatabaseMetrics(cfg *config.Config, sc *services.ServiceContainer) 
 				func(s services.AnalyticsWriterStats) float64 { return float64(s.Dropped) }},
 			{"microgateway_analytics_writer_events_failed_total", "Analytics rows dropped because their batch failed", true,
 				func(s services.AnalyticsWriterStats) float64 { return float64(s.Failed) }},
+			{"microgateway_analytics_writer_events_expired_total", "Analytics rows deleted by retention", true,
+				func(s services.AnalyticsWriterStats) float64 { return float64(s.Expired) }},
 			{"microgateway_analytics_writer_batches_total", "Writer transactions", true,
 				func(s services.AnalyticsWriterStats) float64 { return float64(s.Batches) }},
 			{"microgateway_analytics_writer_commit_seconds_total", "Time spent in writer transactions", true,

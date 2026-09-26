@@ -72,4 +72,16 @@ func TestAnalyticsWriterPostgres(t *testing.T) {
 	spent, err := ledger.Spent(app.ID, start, end)
 	require.NoError(t, err)
 	assert.Equal(t, 300.0, spent)
+
+	// Retention: the chunked delete's subquery.
+	old := time.Now().AddDate(0, 0, -30)
+	require.NoError(t, db.Create(&database.AnalyticsEvent{RequestID: id("pg-old"), AppID: app.ID, TimeStamp: old, CreatedAt: old}).Error)
+	w = NewAnalyticsWriter(wdb, 10, 500, time.Hour)
+	w.SetRetention(func() int { return 7 })
+	assert.GreaterOrEqual(t, w.deleteExpired(), 1)
+	var n int64
+	require.NoError(t, db.Model(&database.AnalyticsEvent{}).Where("request_id = ?", id("pg-old")).Count(&n).Error)
+	assert.Zero(t, n)
+	require.NoError(t, db.Model(&database.AnalyticsEvent{}).Where("app_id = ?", app.ID).Count(&n).Error)
+	assert.EqualValues(t, 3, n, "recent rows are kept")
 }

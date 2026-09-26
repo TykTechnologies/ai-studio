@@ -181,7 +181,10 @@ type AnalyticsConfig struct {
 	Enabled             bool          `env:"ANALYTICS_ENABLED" envDefault:"true"`
 	BufferSize          int           `env:"ANALYTICS_BUFFER_SIZE" envDefault:"1000"`
 	FlushInterval       time.Duration `env:"ANALYTICS_FLUSH_INTERVAL" envDefault:"10s"`
-	RetentionDays       int           `env:"ANALYTICS_RETENTION_DAYS" envDefault:"90"`
+	// RetentionDays is how long analytics rows are kept. 0 (unset) keeps 7
+	// days on an edge that sends analytics to the control plane (the
+	// analytics pulse) and 90 days otherwise; see EffectiveRetentionDays.
+	RetentionDays       int           `env:"ANALYTICS_RETENTION_DAYS"`
 	EnableRealtime      bool          `env:"ANALYTICS_REALTIME" envDefault:"false"`
 	
 	// Detailed payload storage (disabled by default for privacy/storage)
@@ -193,9 +196,31 @@ type AnalyticsConfig struct {
 	// transaction per WriterBatchSize rows or WriterFlushInterval, whichever
 	// comes first. Rows arriving while WriterQueueSize are waiting are
 	// dropped and counted.
-	WriterQueueSize     int           `env:"ANALYTICS_WRITER_QUEUE_SIZE" envDefault:"10000"`
+	WriterQueueSize     int           `env:"ANALYTICS_WRITER_QUEUE_SIZE" envDefault:"50000"`
 	WriterBatchSize     int           `env:"ANALYTICS_WRITER_BATCH_SIZE" envDefault:"500"`
 	WriterFlushInterval time.Duration `env:"ANALYTICS_WRITER_FLUSH_INTERVAL" envDefault:"100ms"`
+}
+
+// Default analytics retention when ANALYTICS_RETENTION_DAYS is not set.
+const (
+	// DefaultEdgeRetentionDays applies on an edge whose analytics pulse sends
+	// every row to the control plane, which keeps the long-term copy.
+	DefaultEdgeRetentionDays = 7
+	// DefaultRetentionDays applies everywhere else.
+	DefaultRetentionDays = 90
+)
+
+// EffectiveRetentionDays returns how many days of analytics rows to keep:
+// ANALYTICS_RETENTION_DAYS when set, otherwise DefaultEdgeRetentionDays when
+// the analytics pulse runs and DefaultRetentionDays when it does not.
+func (a AnalyticsConfig) EffectiveRetentionDays(pulseRunning bool) int {
+	if a.RetentionDays > 0 {
+		return a.RetentionDays
+	}
+	if pulseRunning {
+		return DefaultEdgeRetentionDays
+	}
+	return DefaultRetentionDays
 }
 
 // SecurityConfig holds security-related configuration
@@ -222,6 +247,10 @@ type ObservabilityConfig struct {
 	EnableTracing   bool   `env:"ENABLE_TRACING" envDefault:"false"`
 	TracingEndpoint string `env:"TRACING_ENDPOINT"`
 	EnableProfiling bool   `env:"ENABLE_PROFILING" envDefault:"false"`
+	// ProfilingAddr is where ENABLE_PROFILING serves /debug/pprof/, on a
+	// listener of its own. Loopback by default; bind wider only on a trusted
+	// network.
+	ProfilingAddr string `env:"PROFILING_ADDR" envDefault:"127.0.0.1:6060"`
 }
 
 // Load reads configuration from environment variables and .env file
@@ -287,8 +316,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("analytics buffer size must be positive: %d", c.Analytics.BufferSize)
 	}
 
-	if c.Analytics.RetentionDays < 1 {
-		return fmt.Errorf("analytics retention days must be at least 1: %d", c.Analytics.RetentionDays)
+	if c.Analytics.RetentionDays < 0 {
+		return fmt.Errorf("analytics retention days must be at least 1, or 0 for the default: %d", c.Analytics.RetentionDays)
 	}
 
 	// Validate security configuration

@@ -70,6 +70,32 @@ func TestConnectEnablesWAL(t *testing.T) {
 	}
 }
 
+// Every connection caps the write-ahead log's size, so the file shrinks back
+// after a burst instead of keeping its largest size.
+func TestSQLiteConnectionsLimitJournalSize(t *testing.T) {
+	cfg := DatabaseConfig{
+		Type: "sqlite", DSN: "file:" + filepath.Join(t.TempDir(), "gw.db") + "?mode=rwc",
+		MaxOpenConns: 4, MaxIdleConns: 4, LogLevel: "silent",
+	}
+	db, err := Connect(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := OpenWriter(cfg, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, h := range map[string]*gorm.DB{"main": db, "writer": w} {
+		var limit int64
+		if err := h.Raw("PRAGMA journal_size_limit").Scan(&limit).Error; err != nil {
+			t.Fatal(err)
+		}
+		if limit != SQLiteJournalSizeLimit {
+			t.Fatalf("%s journal_size_limit = %d, want %d", name, limit, SQLiteJournalSizeLimit)
+		}
+	}
+}
+
 func TestOpenWriterUsesOneConnectionForFileSQLite(t *testing.T) {
 	cfg := DatabaseConfig{
 		Type: "sqlite", DSN: "file:" + filepath.Join(t.TempDir(), "gw.db") + "?mode=rwc",

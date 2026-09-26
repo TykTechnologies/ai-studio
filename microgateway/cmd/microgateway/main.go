@@ -399,6 +399,8 @@ func main() {
 		}
 	}
 
+	server.StartProfiling(&cfg.Observability)
+
 	// Create and configure server
 	srv, err := server.New(cfg, serviceContainer, Version, BuildHash, BuildTime)
 	if err != nil {

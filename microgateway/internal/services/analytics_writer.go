@@ -13,13 +13,22 @@ import (
 )
 
 const (
-	defaultWriterQueueSize     = 10000
+	defaultWriterQueueSize     = 50000
 	defaultWriterBatchSize     = 500
 	defaultWriterFlushInterval = 100 * time.Millisecond
 	writerBusyRetries          = 3
 	// writerMaxRowFailures ends a row-by-row retry of a failed batch when
 	// no row gets through.
 	writerMaxRowFailures = 10
+
+	// Retention deletes expired rows in chunks, one chunk per pass so the
+	// writer never holds the write lock for long. A full chunk means more
+	// are due and the next pass follows retentionBacklogEvery later;
+	// otherwise the next is retentionEvery later.
+	retentionChunk        = 5000
+	retentionFirstAfter   = time.Minute
+	retentionEvery        = 10 * time.Minute
+	retentionBacklogEvery = 250 * time.Millisecond
 )
 
 // AnalyticsWriter is the gateway's single writer for per-request data. It
@@ -40,6 +49,9 @@ type AnalyticsWriter struct {
 	batchSize int
 	interval  time.Duration
 	ledger    *BudgetLedger
+	// retentionDays returns how many days of rows to keep; nil or <= 0
+	// keeps everything.
+	retentionDays func() int
 
 	stop     chan struct{}
 	done     chan struct{}
@@ -47,6 +59,7 @@ type AnalyticsWriter struct {
 	started  atomic.Bool
 
 	written     atomic.Uint64
+	expired     atomic.Uint64
 	dropped     atomic.Uint64
 	failed      atomic.Uint64
 	batches     atomic.Uint64
@@ -78,6 +91,10 @@ func NewAnalyticsWriter(db *gorm.DB, queueSize, batchSize int, interval time.Dur
 // SetLedger makes each batch also write the ledger's accumulated budget usage.
 // Call it before Start.
 func (w *AnalyticsWriter) SetLedger(l *BudgetLedger) { w.ledger = l }
+
+// SetRetention makes the writer delete rows older than days() days. Call it
+// before Start.
+func (w *AnalyticsWriter) SetRetention(days func() int) { w.retentionDays = days }
 
 // Start runs the writer until Stop.
 func (w *AnalyticsWriter) Start() {
@@ -115,6 +132,7 @@ func (w *AnalyticsWriter) run() {
 
 	batch := make([]*database.AnalyticsEvent, 0, w.batchSize)
 	lastRefresh := time.Now()
+	nextRetention := time.Now().Add(retentionFirstAfter)
 	for {
 		select {
 		case e := <-w.queue:
@@ -129,6 +147,13 @@ func (w *AnalyticsWriter) run() {
 			if w.ledger != nil && time.Since(lastRefresh) >= ledgerRefreshInterval {
 				w.ledger.refresh()
 				lastRefresh = time.Now()
+			}
+			if w.retentionDays != nil && !time.Now().Before(nextRetention) {
+				if w.deleteExpired() == retentionChunk {
+					nextRetention = time.Now().Add(retentionBacklogEvery)
+				} else {
+					nextRetention = time.Now().Add(retentionEvery)
+				}
 			}
 		case <-w.stop:
 			for drained := false; !drained; {
@@ -232,6 +257,32 @@ func insertEvents(tx *gorm.DB, events []*database.AnalyticsEvent) error {
 	return tx.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(events, 100).Error
 }
 
+// deleteExpired deletes up to retentionChunk rows older than the retention
+// period and returns how many it deleted.
+func (w *AnalyticsWriter) deleteExpired() int {
+	days := w.retentionDays()
+	if days <= 0 {
+		return 0
+	}
+	cutoff := time.Now().AddDate(0, 0, -days)
+	var deleted int64
+	err := w.withBusyRetry(func(tx *gorm.DB) error {
+		expired := tx.Model(&database.AnalyticsEvent{}).Select("id").Where("time_stamp < ?", cutoff).Limit(retentionChunk)
+		res := tx.Where("id IN (?)", expired).Delete(&database.AnalyticsEvent{})
+		deleted = res.RowsAffected
+		return res.Error
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("Analytics writer: deleting expired analytics rows failed")
+		return 0
+	}
+	if deleted > 0 {
+		w.expired.Add(uint64(deleted))
+		log.Debug().Int64("deleted", deleted).Int("retention_days", days).Msg("Analytics writer: deleted expired analytics rows")
+	}
+	return int(deleted)
+}
+
 func isBusyError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "sqlite_busy") || strings.Contains(msg, "database table is locked")
@@ -239,8 +290,8 @@ func isBusyError(err error) bool {
 
 // AnalyticsWriterStats is a snapshot of the writer's counters.
 type AnalyticsWriterStats struct {
-	Queued, Written, Dropped, Failed, Batches uint64
-	CommitSeconds                             float64
+	Queued, Written, Dropped, Failed, Batches, Expired uint64
+	CommitSeconds                                      float64
 }
 
 // Stats returns the writer's counters.
@@ -251,6 +302,7 @@ func (w *AnalyticsWriter) Stats() AnalyticsWriterStats {
 		Dropped:       w.dropped.Load(),
 		Failed:        w.failed.Load(),
 		Batches:       w.batches.Load(),
+		Expired:       w.expired.Load(),
 		CommitSeconds: float64(w.commitNanos.Load()) / 1e9,
 	}
 }
