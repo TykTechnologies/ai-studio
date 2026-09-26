@@ -21,6 +21,28 @@ type CommunityBudgetService struct {
 	db            *gorm.DB
 	repo          *database.Repository
 	pluginManager *plugins.PluginManager
+	// writeRepo carries the usage writes; see SetWriteDB. Nil means repo.
+	writeRepo *database.Repository
+	// ledger keeps usage in memory and writes it through the analytics
+	// writer; see SetLedger. Nil writes budget_usage directly.
+	ledger *BudgetLedger
+}
+
+// SetLedger moves usage recording to the ledger.
+func (s *CommunityBudgetService) SetLedger(l *BudgetLedger) {
+	s.ledger = l
+}
+
+// SetWriteDB moves the usage writes to w, the gateway's writer handle.
+func (s *CommunityBudgetService) SetWriteDB(w *gorm.DB) {
+	s.writeRepo = database.NewRepository(w)
+}
+
+func (s *CommunityBudgetService) usageRepo() *database.Repository {
+	if s.writeRepo != nil {
+		return s.writeRepo
+	}
+	return s.repo
 }
 
 // NewDatabaseBudgetService creates a community budget service.
@@ -84,14 +106,20 @@ func (s *CommunityBudgetService) RecordUsage(appID uint, llmID *uint, tokens int
 		}
 	}
 
+	if s.ledger != nil {
+		// Written with the next analytics batch.
+		s.ledger.Add(appID, periodStart, periodEnd, tokens, cost, promptTokens, completionTokens)
+		return nil
+	}
+
 	// Get or create usage record
-	usage, err := s.repo.GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)
+	usage, err := s.usageRepo().GetOrCreateBudgetUsage(appID, llmID, periodStart, periodEnd)
 	if err != nil {
 		return fmt.Errorf("failed to get/create budget usage: %w", err)
 	}
 
 	// Update usage statistics
-	err = s.repo.UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
+	err = s.usageRepo().UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
 	if err != nil {
 		return fmt.Errorf("failed to update budget usage: %w", err)
 	}

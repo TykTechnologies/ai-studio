@@ -504,11 +504,14 @@ func (p *Proxy) recordTranslatorAnalytics(
 		proxyLog.RequestBody = ""
 		proxyLog.ResponseBody = ""
 	}
-	analytics.RecordProxyLog(r.Context(), proxyLog)
-
-	// 2. Record chat analytics (if successful)
+	// 2. Chat analytics (if successful), recorded with the proxy log
+	var rec *models.LLMChatRecord
 	if statusCode == http.StatusOK && contentResp != nil {
-		recordTranslatorChatAnalytics(p.gatewayService, llm, app, contentResp, r, timestamp)
+		rec = translatorChatRecord(p.gatewayService, llm, app, contentResp, r, timestamp)
+	}
+	analytics.RecordExchange(r.Context(), proxyLog, rec)
+	if rec != nil {
+		analyzeTranslatorBudget(p.gatewayService, llm, app)
 	}
 }
 
@@ -780,15 +783,15 @@ func (p *Proxy) sendStreamError(w http.ResponseWriter, flusher http.Flusher, mes
 	flusher.Flush()
 }
 
-// recordTranslatorChatAnalytics records detailed chat analytics for /ai/ endpoint requests
-func recordTranslatorChatAnalytics(
+// translatorChatRecord builds the chat record for an /ai/ endpoint request
+func translatorChatRecord(
 	service services.ServiceInterface,
 	llm *models.LLM,
 	app *models.App,
 	contentResp *llms.ContentResponse,
 	r *http.Request,
 	timestamp time.Time,
-) {
+) *models.LLMChatRecord {
 	// Extract token counts
 	var promptTokens, responseTokens, totalTokens int
 	for _, choice := range contentResp.Choices {
@@ -834,8 +837,12 @@ func recordTranslatorChatAnalytics(
 		InteractionType: models.ProxyInteraction,
 	}
 
-	analytics.RecordChatRecord(r.Context(), rec)
+	return rec
+}
 
+// analyzeTranslatorBudget runs the budget analysis after an /ai/ request's
+// chat record is recorded.
+func analyzeTranslatorBudget(service services.ServiceInterface, llm *models.LLM, app *models.App) {
 	// Budget analysis
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
 		s.Budget.AnalyzeBudgetUsage(app, llm)

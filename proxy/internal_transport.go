@@ -107,7 +107,7 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// OpenAI error envelope the driver on this side can read (see
 	// respondPolicyBlock). The marker changes only the error body's shape,
 	// never what is enforced, so it needs no trust.
-	req.Header.Set(hdrInternalHop, "1")
+	req.Header.Set(hdrInternalHop, internalHopToken)
 
 	resp, err := loopbackRoundTrip(t.underlying, req)
 	if err == nil && resp.StatusCode < http.StatusMultipleChoices {

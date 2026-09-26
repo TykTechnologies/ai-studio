@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // AppBudgetData contains budget usage and period info for a single app
@@ -72,6 +73,9 @@ type BudgetSyncHandler struct {
 	// blocksUnsaved is set when persisting the blocks failed, so the next
 	// sync writes them even if the set is unchanged.
 	blocksUnsaved bool
+	// ledger is raised with the control plane's figures; nil means the
+	// gateway's shared ledger.
+	ledger *BudgetLedger
 }
 
 func (h *BudgetSyncHandler) budgetBlocks() *BudgetBlocks {
@@ -213,53 +217,61 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 
 // updateLocalBudget updates the local budget_usage table for a single app.
 // Uses max(control_value, local_value) to ensure budget never decreases.
+//
+// The max is taken by the database in one statement: reading the row and
+// writing it back lost the increments the gateway's writer made in between.
+// The ledger, which the budget check reads, is raised to the same floor.
 func (h *BudgetSyncHandler) updateLocalBudget(appID uint, usageDollars float64, periodStart, periodEnd time.Time) {
 	// Convert from dollars to stored format (dollars * 10000)
 	storedCostFromControl := usageDollars * 10000
 
-	// Get current local value
-	var localUsage database.BudgetUsage
-	err := h.db.Where("app_id = ? AND period_start = ?", appID, periodStart).First(&localUsage).Error
-
-	// Determine final cost using max(control, local)
-	finalCost := storedCostFromControl
-	if err == nil && localUsage.TotalCost > storedCostFromControl {
-		// Local value is higher than control - keep local value
-		// This can happen if edge has processed requests since control's last aggregation
-		finalCost = localUsage.TotalCost
-		log.Debug().
-			Uint("app_id", appID).
-			Float64("control_cost", storedCostFromControl).
-			Float64("local_cost", localUsage.TotalCost).
-			Msg("Keeping higher local budget value")
+	now := time.Now()
+	maxExpr := "MAX(total_cost, ?)"
+	if h.db.Dialector.Name() == "postgres" {
+		maxExpr = "GREATEST(total_cost, ?)"
+	}
+	raise := func() (int64, error) {
+		res := h.db.Model(&database.BudgetUsage{}).
+			Where("app_id = ? AND period_start = ?", appID, periodStart).
+			Updates(map[string]interface{}{
+				"total_cost": gorm.Expr(maxExpr, storedCostFromControl),
+				"updated_at": now,
+			})
+		return res.RowsAffected, res.Error
 	}
 
-	// Upsert the budget_usage record
-	now := time.Now()
-	if err == gorm.ErrRecordNotFound {
-		// Create new record
+	n, err := raise()
+	if err == nil && n == 0 {
+		// Create new record; if the writer created it meanwhile, raise that.
 		newUsage := &database.BudgetUsage{
 			AppID:       appID,
 			PeriodStart: periodStart,
 			PeriodEnd:   periodEnd,
-			TotalCost:   finalCost,
+			TotalCost:   storedCostFromControl,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		if createErr := h.db.Create(newUsage).Error; createErr != nil {
-			log.Error().Err(createErr).Uint("app_id", appID).Msg("Failed to create budget usage from sync")
+		res := h.db.Clauses(clause.OnConflict{DoNothing: true}).Create(newUsage)
+		err = res.Error
+		if err == nil && res.RowsAffected == 0 {
+			_, err = raise()
 		}
-	} else if err == nil {
-		// Update existing record
-		if updateErr := h.db.Model(&localUsage).Updates(map[string]interface{}{
-			"total_cost": finalCost,
-			"updated_at": now,
-		}).Error; updateErr != nil {
-			log.Error().Err(updateErr).Uint("app_id", appID).Msg("Failed to update budget usage from sync")
-		}
-	} else {
-		log.Error().Err(err).Uint("app_id", appID).Msg("Failed to query local budget usage")
 	}
+	if err != nil {
+		log.Error().Err(err).Uint("app_id", appID).Msg("Failed to update budget usage from sync")
+		return
+	}
+
+	if ledger := h.budgetLedger(); ledger != nil {
+		ledger.Reconcile(appID, periodStart, storedCostFromControl)
+	}
+}
+
+func (h *BudgetSyncHandler) budgetLedger() *BudgetLedger {
+	if h.ledger != nil {
+		return h.ledger
+	}
+	return edgeBudgetLedger.Load()
 }
 
 // GetLastSequenceNumber returns the last processed sequence number (for testing)

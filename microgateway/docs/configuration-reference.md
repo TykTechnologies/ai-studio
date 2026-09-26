@@ -60,6 +60,12 @@ TLS_KEY_PATH=/etc/certs/server.key
 | `GATEWAY_TIMEOUT` | duration | `5m` | Timeout for upstream LLM requests (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | bytes | `10MB` | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | bytes | `50MB` | Maximum response size |
+| `OVERLOAD_SHEDDING_ENABLED` | bool | `true` | Refuse new proxy requests with `503` + `Retry-After: 1` (OpenAI-shaped error, code `overloaded`) while the gateway is overloaded, instead of risking an out-of-memory kill. Management, health, metrics and plugin endpoints are never refused |
+| `OVERLOAD_MEMORY_LIMIT` | size | `auto` | Memory limit shedding is judged against (`2GiB`, `1536MiB`, bytes). Unset: `GOMEMLIMIT`, else the container's cgroup limit; with neither, only `MAX_INFLIGHT_REQUESTS` applies |
+| `OVERLOAD_MEMORY_THRESHOLD` | float | `0.85` | Fraction of the limit at which shedding starts (Go heap goal + goroutine stacks); it stops 5 points below |
+| `MAX_INFLIGHT_REQUESTS` | int | `0` | Optional cap on concurrent proxy requests (0 = none). Size it for long streaming calls, which each hold a slot for their whole duration |
+| `GOGC` | int | adaptive, 100–400 (gateway default) | Go garbage-collector target. Unset, the gateway adapts it every second so the heap goal is about the live heap plus 256 MB: 400 for a small live heap (REST traffic), tapering towards 100 as it grows (thousands of streams in flight). At Go's default of 100 the small heap made the collector run ~20 times a second under load, costing ~1,000 req/s of capacity on 4 vCPU and causing p99 spikes; a fixed 400 doubled memory under heavy streaming. Set it to override (a fixed value is not adapted) |
+| `GOMEMLIMIT` | size | 90% of the memory limit | Go soft memory limit. Unset and a memory limit known (`OVERLOAD_MEMORY_LIMIT` or the container's): the gateway sets 90% of it, so the larger heap never outgrows the container. Set it to override |
 | `GATEWAY_ENABLE_FILTERS` | bool | `true` | Enable filter processing |
 | `GATEWAY_ENABLE_ANALYTICS` | bool | `true` | Enable analytics collection |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | string | `/v1` | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) |
@@ -75,7 +81,7 @@ TLS_KEY_PATH=/etc/certs/server.key
 | `DATABASE_DSN` | string | `file:./data/microgateway.db` | Database connection string |
 | `DB_MAX_OPEN_CONNS` | int | `25` | Maximum open database connections |
 | `DB_MAX_IDLE_CONNS` | int | `25` | Maximum idle database connections |
-| `DB_CONN_MAX_LIFETIME` | duration | `5m` | Maximum connection lifetime |
+| `DB_CONN_MAX_LIFETIME` | duration | `5m` | Maximum connection lifetime (PostgreSQL only: SQLite connections are never recycled, since reopening them together only discarded their page caches) |
 | `DB_AUTO_MIGRATE` | bool | `true` | Automatically run database migrations |
 | `DB_LOG_LEVEL` | string | `warn` | Database logging level |
 
@@ -262,11 +268,14 @@ GRPC_AUTH_TOKEN="new-secure-token"
 | `ANALYTICS_ENABLED` | bool | `true` | Enable analytics collection |
 | `ANALYTICS_BUFFER_SIZE` | int | `1000` | Analytics buffer size |
 | `ANALYTICS_FLUSH_INTERVAL` | duration | `10s` | Analytics flush interval |
-| `ANALYTICS_RETENTION_DAYS` | int | `90` | Analytics data retention |
+| `ANALYTICS_RETENTION_DAYS` | int | `7` with the analytics pulse, else `90` | Days of analytics rows kept on the gateway. Expired rows are deleted in chunks of 5,000: every 10 minutes, and every 250 ms while a backlog remains. An edge whose analytics pulse sends every row to the control plane keeps 7 days by default |
 | `ANALYTICS_REALTIME` | bool | `false` | Enable real-time analytics |
 | `ANALYTICS_STORE_REQUESTS` | bool | `false` | Store request bodies on analytics events. The pulse can only forward bodies stored here, so this also gates `include_request_response_data` |
 | `ANALYTICS_STORE_RESPONSES` | bool | `false` | Store response bodies on analytics events (same pulse rule as requests) |
 | `ANALYTICS_MAX_BODY_SIZE` | int | `4096` | Maximum stored body size in bytes; `0` stores none |
+| `ANALYTICS_WRITER_QUEUE_SIZE` | int | `50000` | Analytics rows waiting to be written. When the queue is full, rows are dropped and counted in `microgateway_analytics_writer_events_dropped_total`. The analytics pulse and budget accounting are unaffected |
+| `ANALYTICS_WRITER_BATCH_SIZE` | int | `500` | Rows written per transaction |
+| `ANALYTICS_WRITER_FLUSH_INTERVAL` | duration | `100ms` | Longest a row, or recorded budget usage, waits before it is written |
 
 ### Connection Management
 

@@ -1663,12 +1663,17 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 
 // ExecuteDataCollectionPlugins executes global data collection plugins for the specified hook type
 func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data interface{}) error {
+	// Pick the plugins under the read lock, then run them without it. The
+	// calls can take up to 30 s; holding the lock through them stalls every
+	// other hook call as soon as a writer queues for the lock, and the
+	// failure path's own Lock below used to deadlock against this RLock.
+	type target struct {
+		name   string
+		plugin *GlobalPlugin
+	}
+	var targets []target
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	executedCount := 0
-
-	// Find plugins that handle this hook type
+	totalPlugins := len(pm.globalDataPlugins)
 	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
 		if !pm.pluginHandlesHookType(hookTypes, hookType) {
 			log.Debug().
@@ -1688,6 +1693,14 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 			log.Warn().Str("plugin", pluginName).Msg("Plugin is unhealthy - skipping")
 			continue
 		}
+		targets = append(targets, target{name: pluginName, plugin: globalPlugin})
+	}
+	pm.mu.RUnlock()
+
+	executedCount := 0
+
+	for _, t := range targets {
+		pluginName, globalPlugin := t.name, t.plugin
 
 		log.Debug().
 			Str("plugin", pluginName).
@@ -1730,7 +1743,7 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 	log.Debug().
 		Str("hook_type", hookType).
 		Int("executed_count", executedCount).
-		Int("total_plugins", len(pm.globalDataPlugins)).
+		Int("total_plugins", totalPlugins).
 		Msg("Data collection plugin execution summary")
 
 	return nil
@@ -1753,6 +1766,24 @@ func (pm *PluginManager) BufferComplianceEvents(events []plugins.ComplianceEvent
 	}
 
 	log.Debug().Int("count", len(events)).Msg("No analytics pulse plugin found for compliance events - events dropped")
+}
+
+// HasAnalyticsPulse reports whether the built-in analytics pulse plugin is
+// loaded, that is whether this gateway sends its analytics to the control
+// plane.
+func (pm *PluginManager) HasAnalyticsPulse() bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	for _, globalPlugin := range pm.globalDataPlugins {
+		if globalPlugin.LoadedPlugin == nil || globalPlugin.LoadedPlugin.BuiltinPlugin == nil {
+			continue
+		}
+		if _, ok := globalPlugin.LoadedPlugin.BuiltinPlugin.(*plugins.AnalyticsPulsePlugin); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // BufferToolCalls forwards tool operation calls to the built-in analytics pulse

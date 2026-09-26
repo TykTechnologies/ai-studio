@@ -284,19 +284,3 @@ func (s *DatabaseAnalyticsService) convertToAnalyticsEvent(record interface{}) (
 
 	return event, nil
 }
-
-// CleanupOldEvents removes analytics events older than retention period
-func (s *DatabaseAnalyticsService) CleanupOldEvents() error {
-	cutoffDate := time.Now().AddDate(0, 0, -s.config.RetentionDays)
-	
-	result := s.db.Where("created_at < ?", cutoffDate).Delete(&database.AnalyticsEvent{})
-	if result.Error != nil {
-		return fmt.Errorf("failed to cleanup old events: %w", result.Error)
-	}
-
-	if result.RowsAffected > 0 {
-		log.Info().Int64("deleted", result.RowsAffected).Msg("Cleaned up old analytics events")
-	}
-
-	return nil
-}

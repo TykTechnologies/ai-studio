@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -67,6 +68,82 @@ func TestConnectEnablesWAL(t *testing.T) {
 	}
 	if !strings.EqualFold(mode, "wal") {
 		t.Fatalf("journal_mode = %q, want wal", mode)
+	}
+}
+
+// Every connection caps the write-ahead log's size, so the file shrinks back
+// after a burst instead of keeping its largest size.
+func TestSQLiteConnectionsLimitJournalSize(t *testing.T) {
+	cfg := DatabaseConfig{
+		Type: "sqlite", DSN: "file:" + filepath.Join(t.TempDir(), "gw.db") + "?mode=rwc",
+		MaxOpenConns: 4, MaxIdleConns: 4, LogLevel: "silent",
+	}
+	db, err := Connect(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := OpenWriter(cfg, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, h := range map[string]*gorm.DB{"main": db, "writer": w} {
+		var limit int64
+		if err := h.Raw("PRAGMA journal_size_limit").Scan(&limit).Error; err != nil {
+			t.Fatal(err)
+		}
+		if limit != SQLiteJournalSizeLimit {
+			t.Fatalf("%s journal_size_limit = %d, want %d", name, limit, SQLiteJournalSizeLimit)
+		}
+	}
+}
+
+// SQLite connections are never recycled: a pool that opened together under
+// load otherwise expired together every DB_CONN_MAX_LIFETIME and reopened
+// cold. Server databases keep the configured lifetime.
+func TestConnMaxLifetimeOnlyForServerDatabases(t *testing.T) {
+	if got := connMaxLifetime(DatabaseConfig{Type: "sqlite", ConnMaxLifetime: 5 * time.Minute}); got != 0 {
+		t.Fatalf("sqlite lifetime = %v, want 0", got)
+	}
+	if got := connMaxLifetime(DatabaseConfig{Type: "postgres", ConnMaxLifetime: 5 * time.Minute}); got != 5*time.Minute {
+		t.Fatalf("postgres lifetime = %v, want 5m", got)
+	}
+}
+
+func TestOpenWriterUsesOneConnectionForFileSQLite(t *testing.T) {
+	cfg := DatabaseConfig{
+		Type: "sqlite", DSN: "file:" + filepath.Join(t.TempDir(), "gw.db") + "?mode=rwc",
+		MaxOpenConns: 8, MaxIdleConns: 8, LogLevel: "silent",
+	}
+	db, err := Connect(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := OpenWriter(cfg, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w == db {
+		t.Fatal("file SQLite should get its own writer pool")
+	}
+	sqlDB, _ := w.DB()
+	if got := sqlDB.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("writer MaxOpenConnections = %d, want 1", got)
+	}
+	var mode string
+	if err := w.Raw("PRAGMA journal_mode").Scan(&mode).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !strings.EqualFold(mode, "wal") {
+		t.Fatalf("writer journal_mode = %q, want wal", mode)
+	}
+
+	mem := DatabaseConfig{Type: "sqlite", DSN: "file::memory:?cache=shared", MaxOpenConns: 1, MaxIdleConns: 1, LogLevel: "silent"}
+	mdb, err := Connect(mem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mw, err := OpenWriter(mem, mdb); err != nil || mw != mdb {
+		t.Fatalf("in-memory SQLite should share its pool, got %v, %v", mw == mdb, err)
 	}
 }
 

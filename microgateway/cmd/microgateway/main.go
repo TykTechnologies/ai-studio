@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/grpc"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/licensing"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -81,6 +83,22 @@ func main() {
 		Str("build_time", BuildTime).
 		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Msg("Starting Microgateway")
+
+	// Garbage-collector defaults (GOGC, a soft GOMEMLIMIT under the memory
+	// limit) unless the operator set them. Overload shedding judges against
+	// the real limit, not the soft one set here.
+	explicitLimit, _ := overload.ParseBytes(cfg.Gateway.OverloadMemoryLimit)
+	tuning := overload.TuneRuntime(explicitLimit)
+	if cfg.Gateway.OverloadMemoryLimit == "" && tuning.MemoryLimit > 0 {
+		cfg.Gateway.OverloadMemoryLimit = strconv.FormatUint(tuning.MemoryLimit, 10)
+	}
+	log.Info().
+		Int("gogc", tuning.GCPercent).
+		Bool("gogc_default_applied", tuning.GCPercentSet).
+		Bool("gogc_adaptive", tuning.GCPercentAdaptive).
+		Uint64("memory_limit_bytes", tuning.MemoryLimit).
+		Uint64("gomemlimit_set_bytes", tuning.SoftLimit).
+		Msg("Go runtime tuning")
 
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	pathcheck.Log(log.Logger, "microgateway", pathcheck.Check(config.StartupPaths(cfg, *envFile)))
@@ -356,6 +374,23 @@ func main() {
 		}
 	}
 
+	// Background writes (analytics, budget usage) get their own connection so
+	// they never hold the connections request-path reads need.
+	writeDB, err := database.OpenWriter(dbConfig, db)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to open database writer")
+	}
+	if writeDB != db {
+		defer func() {
+			if err := database.Close(writeDB); err != nil {
+				log.Error().Err(err).Msg("Failed to close database writer")
+			}
+		}()
+	}
+	serviceContainer.SetWriteDB(writeDB)
+	// One writer batches analytics rows and budget usage onto writeDB.
+	serviceContainer.StartAnalyticsWriter(&cfg.Analytics)
+
 	// Create admin token if requested
 	if *createAdminToken {
 		token, err := createAdminTokenCommand(serviceContainer, *adminName, *adminExpires)
@@ -381,6 +416,8 @@ func main() {
 			log.Debug().Msg("Licensing service wired to management server for plugin access")
 		}
 	}
+
+	server.StartProfiling(&cfg.Observability)
 
 	// Create and configure server
 	srv, err := server.New(cfg, serviceContainer, Version, BuildHash, BuildTime)

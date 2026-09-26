@@ -37,7 +37,7 @@ Complete reference for all microgateway environment variables organized by funct
 |----------|---------|-------------|
 | `DB_MAX_OPEN_CONNS` | 25 | Maximum open database connections |
 | `DB_MAX_IDLE_CONNS` | 25 | Maximum idle database connections |
-| `DB_CONN_MAX_LIFETIME` | 5m | Maximum connection lifetime |
+| `DB_CONN_MAX_LIFETIME` | 5m | Maximum connection lifetime (PostgreSQL only: SQLite connections are never recycled, since reopening them together only discarded their page caches) |
 
 ## Security Configuration
 
@@ -74,6 +74,12 @@ Complete reference for all microgateway environment variables organized by funct
 | `GATEWAY_TIMEOUT` | 5m | Request timeout for upstream LLM calls (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | 10MB | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
+| `OVERLOAD_SHEDDING_ENABLED` | true | Refuse new proxy requests with `503` + `Retry-After: 1` (OpenAI-shaped error, code `overloaded`) while the gateway is overloaded, instead of risking an out-of-memory kill. Management, health, metrics and plugin endpoints are never refused |
+| `OVERLOAD_MEMORY_LIMIT` | auto | Memory limit shedding is judged against (`2GiB`, `1536MiB`, bytes). Unset: `GOMEMLIMIT`, else the container's cgroup limit; with neither, only `MAX_INFLIGHT_REQUESTS` applies |
+| `OVERLOAD_MEMORY_THRESHOLD` | 0.85 | Fraction of the limit at which shedding starts (Go heap goal + goroutine stacks); it stops 5 points below |
+| `MAX_INFLIGHT_REQUESTS` | 0 | Optional cap on concurrent proxy requests (0 = none). Size it for long streaming calls, which each hold a slot for their whole duration |
+| `GOGC` | adaptive, 100–400 (gateway default) | Go garbage-collector target. Unset, the gateway adapts it every second so the heap goal is about the live heap plus 256 MB: 400 for a small live heap (REST traffic), tapering towards 100 as it grows (thousands of streams in flight). At Go's default of 100 the small heap made the collector run ~20 times a second under load, costing ~1,000 req/s of capacity on 4 vCPU and causing p99 spikes; a fixed 400 doubled memory under heavy streaming. Set it to override (a fixed value is not adapted) |
+| `GOMEMLIMIT` | 90% of the memory limit | Go soft memory limit. Unset and a memory limit known (`OVERLOAD_MEMORY_LIMIT` or the container's): the gateway sets 90% of it, so the larger heap never outgrows the container. Set it to override |
 
 ### Unified Endpoint
 | Variable | Default | Description |
@@ -96,8 +102,11 @@ Complete reference for all microgateway environment variables organized by funct
 | `ANALYTICS_ENABLED` | true | Enable analytics collection |
 | `ANALYTICS_BUFFER_SIZE` | 1000 | Analytics buffer size before flush |
 | `ANALYTICS_FLUSH_INTERVAL` | 10s | Automatic buffer flush interval |
-| `ANALYTICS_RETENTION_DAYS` | 90 | Days to retain analytics data |
+| `ANALYTICS_RETENTION_DAYS` | 7 with the analytics pulse, else 90 | Days to retain analytics data on the gateway; expired rows are deleted in chunks every 10 minutes, and every 250 ms while a backlog remains |
 | `ANALYTICS_REALTIME` | false | Enable real-time analytics processing |
+| `ANALYTICS_WRITER_QUEUE_SIZE` | 50000 | Analytics rows waiting to be written; rows beyond it are dropped and counted |
+| `ANALYTICS_WRITER_BATCH_SIZE` | 500 | Rows written per transaction |
+| `ANALYTICS_WRITER_FLUSH_INTERVAL` | 100ms | Longest a row, or recorded budget usage, waits before it is written |
 
 ### Performance
 | Variable | Default | Description |
@@ -156,7 +165,8 @@ Complete reference for all microgateway environment variables organized by funct
 | `METRICS_PATH` | /metrics | Prometheus metrics endpoint path |
 | `ENABLE_TRACING` | false | Enable distributed tracing |
 | `TRACING_ENDPOINT` | - | OpenTelemetry tracing endpoint |
-| `ENABLE_PROFILING` | false | Enable Go pprof endpoints |
+| `ENABLE_PROFILING` | false | Serve Go pprof endpoints (`/debug/pprof/`, with mutex and block sampling) on `PROFILING_ADDR` |
+| `PROFILING_ADDR` | 127.0.0.1:6060 | Listener for the pprof endpoints; bind wider only on a trusted network |
 
 ### Health Checks
 | Variable | Default | Description |
