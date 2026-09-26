@@ -234,6 +234,18 @@ func (c *Config) llmTimeout() time.Duration {
 	return 5 * time.Minute
 }
 
+// upstreamTransportStatus is the status for a vendor call that failed before
+// any response arrived: 504 when it timed out, else 502 (connection refused or
+// reset, EOF). Both are the upstream's failure, not the gateway's, so they are
+// never 500; this matches what httputil.ReverseProxy returns on the REST path.
+func upstreamTransportStatus(err error) int {
+	var te interface{ Timeout() bool }
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &te) && te.Timeout()) {
+		return http.StatusGatewayTimeout
+	}
+	return http.StatusBadGateway
+}
+
 func (c *Config) serverReadTimeout() time.Duration {
 	if c != nil && c.ServerReadTimeout > 0 {
 		return c.ServerReadTimeout
@@ -917,6 +929,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		ModifyResponse: func(resp *http.Response) error {
 			respStatus = resp.StatusCode
 			return nil
+		},
+		// No response arrived. The default handler wrote a bare 502 even on a
+		// timeout and left respStatus at 200, so metrics and the span
+		// recorded a success.
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+			respStatus = upstreamTransportStatus(err)
+			respondWithError(w, respStatus, "failed to make upstream request", err, false)
 		},
 	}
 
@@ -1655,7 +1674,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to make upstream request for streaming", err, false)
+		respStatus = upstreamTransportStatus(err)
+		respondWithError(w, respStatus, "failed to make upstream request for streaming", err, false)
 		return
 	}
 	defer resp.Body.Close()
