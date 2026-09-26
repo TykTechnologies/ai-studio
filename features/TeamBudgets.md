@@ -98,7 +98,15 @@ The API and the embedded gateway share one budget service, so resets clear the c
 
 ### Edge gateways (microgateway)
 
-Edge traffic never passes Studio's budget check. Edges enforce App budgets locally from the synced App config and their own `budget_usage`. On top of that, the budget sync (`budget.sync`, every 30 s, `BUDGET_SYNC_INTERVAL`) now carries `blocks`: the complete map of App ID to reason for Apps that must be refused (`EdgeBlocks` on the Enterprise budget service). An App is listed when:
+Edge traffic never passes Studio's budget check. Edges enforce App budgets locally from the synced App config and their own `budget_usage`.
+
+The edge keeps each App's usage for the current period in an in-memory ledger (`BudgetLedger`, `microgateway/internal/services/budget_ledger.go`):
+- **Recording:** each request adds to the ledger. The analytics writer applies the amounts to `budget_usage` as increments, in the same batched transaction as the analytics rows (at most `ANALYTICS_WRITER_FLUSH_INTERVAL`, 100 ms, later).
+- **The check:** it reads stored usage plus the amounts not yet written, so a request's cost counts as soon as it is recorded.
+- **Re-reading the store:** the ledger re-reads the stored total every 5 s. That picks up other gateways sharing the database, and the budget sync.
+- **The budget sync:** it raises `budget_usage` to the control plane's figure with one `MAX`/`GREATEST` update, and raises the ledger to match.
+
+On top of that, the budget sync (`budget.sync`, every 30 s, `BUDGET_SYNC_INTERVAL`) now carries `blocks`: the complete map of App ID to reason for Apps that must be refused (`EdgeBlocks` on the Enterprise budget service). An App is listed when:
 
 - its budget is 0, or
 - its team is `hard_block` and has reached its budget.

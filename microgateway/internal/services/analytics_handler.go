@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
@@ -23,8 +24,10 @@ import (
 type MicrogatewaAnalyticsHandler struct {
 	db            *gorm.DB
 	config        *config.AnalyticsConfig
-	pendingEvents map[string]pendingEvent // Match key -> proxy log event awaiting its chat record
-	lastPendingSweep time.Time
+	// writer takes the analytics rows; nil writes each row directly.
+	writer *AnalyticsWriter
+	// lastIDNanos keeps request IDs unique (nextRequestID).
+	lastIDNanos atomic.Int64
 	mu            sync.RWMutex
 	pluginManager *plugins.PluginManager // For global data collection plugins
 	budgetService BudgetServiceInterface // For recording budget usage
@@ -52,7 +55,6 @@ func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.Analyti
 	return &MicrogatewaAnalyticsHandler{
 		db:            db,
 		config:        analyticsConfig,
-		pendingEvents: make(map[string]pendingEvent),
 		pluginManager: pluginManager,
 		budgetService: budgetService,
 		chatRecordBatchChan: make(chan []*models.LLMChatRecord, batchBufferSize),
@@ -193,6 +195,11 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 	}
 }
 
+// SetWriter hands the handler's rows to w instead of writing each directly.
+func (h *MicrogatewaAnalyticsHandler) SetWriter(w *AnalyticsWriter) {
+	h.writer = w
+}
+
 // Stop gracefully shuts down the analytics handler
 func (h *MicrogatewaAnalyticsHandler) Stop() {
 	if h.cancel != nil {
@@ -200,8 +207,90 @@ func (h *MicrogatewaAnalyticsHandler) Stop() {
 	}
 }
 
+// RecordExchange implements analytics.ExchangeRecorder: a proxied request's
+// proxy log and its chat record (nil when the response yielded no usage)
+// become one analytics row, built in memory and handed to the writer.
+//
+// The two used to arrive as separate calls, and the row was inserted from the
+// proxy log, updated from the chat record and read back for the pulse: three
+// statements per request, paired up again by app and second, which merged
+// concurrent requests into each other's rows.
+func (h *MicrogatewaAnalyticsHandler) RecordExchange(_ context.Context, proxyLog *models.ProxyLog, record *models.LLMChatRecord) {
+	requestID := h.nextRequestID("proxy", proxyLog.AppID)
+
+	// Execute data collection plugins for proxy logs
+	if h.pluginManager != nil {
+		pluginData := &interfaces.ProxyLogData{
+			AppID:        proxyLog.AppID,
+			UserID:       proxyLog.UserID,
+			Vendor:       proxyLog.Vendor,
+			RequestBody:  []byte(proxyLog.RequestBody),
+			ResponseBody: []byte(proxyLog.ResponseBody),
+			ResponseCode: proxyLog.ResponseCode,
+			Timestamp:    proxyLog.TimeStamp,
+			RequestID:    requestID,
+		}
+		if err := h.pluginManager.ExecuteDataCollectionPlugins("proxy_log", pluginData); err != nil {
+			log.Error().Err(err).Msg("Failed to execute proxy log data collection plugins")
+		}
+	}
+
+	event := h.eventFromProxyLog(proxyLog, requestID)
+	if record != nil {
+		applyChatRecord(event, record)
+
+		// Budget usage needs the parsed cost, so it is recorded with the
+		// chat record.
+		h.recordBudgetUsage(record)
+
+		// Analytics plugins (the pulse) get the complete row.
+		if h.pluginManager != nil {
+			analyticsData := &interfaces.AnalyticsData{
+				LLMID:                  record.LLMID,
+				ModelName:              record.Name,
+				Vendor:                 record.Vendor,
+				PromptTokens:           record.PromptTokens,
+				ResponseTokens:         record.ResponseTokens,
+				TotalTokens:            record.TotalTokens,
+				CacheWritePromptTokens: record.CacheWritePromptTokens,
+				CacheReadPromptTokens:  record.CacheReadPromptTokens,
+				Cost:                   record.Cost,
+				Currency:               record.Currency,
+				AppID:                  record.AppID,
+				UserID:                 record.UserID,
+				Timestamp:              record.TimeStamp,
+				ToolCalls:              record.ToolCalls,
+				Choices:                record.Choices,
+				RequestID:              requestID,
+				StatusCode:             event.StatusCode, // Pass actual HTTP status code (e.g., 403 for budget exceeded)
+				// Bodies as stored: empty unless ANALYTICS_STORE_REQUESTS/RESPONSES
+				RequestBody:         event.RequestBody,
+				ResponseBody:        event.ResponseBody,
+				FailoverFromLLMID:   event.FailoverFromLLMID,
+				FailoverAttempt:     event.FailoverAttempt,
+				RouterKind:          event.RouterKind,
+				RouterSlug:          event.RouterSlug,
+				RouterPool:          event.RouterPoolName,
+				Route:               event.Route,
+				RouteReason:         event.RouteReason,
+				RouterSourceModel:   event.RouterSourceModel,
+				RouterTargetModel:   event.RouterTargetModel,
+				RouterSelectionAlgo: event.RouterSelectionAlgo,
+				RouteScore:          event.RouteScore,
+				ShadowRoute:         event.ShadowRoute,
+			}
+			if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
+				log.Error().Err(err).Msg("Failed to execute analytics plugins for exchange")
+			}
+		}
+	}
+
+	h.store(event)
+}
+
 // RecordChatRecord implements the midsommar analytics interface
-// Merges ChatRecord data into existing ProxyLog event (deduplication) or creates standalone event
+// Records a chat record that arrived without a proxy log (a standalone chat
+// interaction); proxied requests come through RecordExchange.
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
 	log.Debug().
 		Uint("app_id", record.AppID).
@@ -209,139 +298,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 		Str("model", record.Name).
 		Str("interaction_type", string(record.InteractionType)).
 		Int("total_tokens", record.TotalTokens).
-		Msg("Recording chat record analytics - attempting merge with proxy log event")
+		Msg("Recording standalone chat record analytics")
 
-	// Try to find matching ProxyLog event created ~microseconds ago
-	matchKey := fmt.Sprintf("pending_%d_%d", record.AppID, record.TimeStamp.Unix())
-	existingEventID, found := h.findEventForMerge(matchKey)
-
-	if found {
-		// MERGE: Update existing event with ChatRecord data (richer token/cost info)
-		log.Debug().
-			Uint("existing_event_id", existingEventID).
-			Str("match_key", matchKey).
-			Msg("Found matching proxy log event - merging chat record data")
-
-		// Update the existing event with ALL parsed data from ChatRecord
-		// ChatRecord data comes from vendor-specific parsers and is ALWAYS correct
-		llmIDUint := uint(record.LLMID)
-		updates := map[string]interface{}{
-			"llm_id":                    &llmIDUint,                    // From embedded gateway
-			"name":                      record.Name,                   // Model name from vendor parser
-			"vendor":                    record.Vendor,                 // Vendor from embedded gateway
-			"interaction_type":          string(record.InteractionType), // Chat vs proxy
-			"prompt_tokens":             record.PromptTokens,           // From vendor parser (works for streaming!)
-			"response_tokens":           record.ResponseTokens,         // From vendor parser (works for streaming!)
-			"total_tokens":              record.TotalTokens,            // From vendor parser
-			"cache_write_prompt_tokens": record.CacheWritePromptTokens, // From vendor parser
-			"cache_read_prompt_tokens":  record.CacheReadPromptTokens,  // From vendor parser
-			"cost":                      record.Cost,                   // Already in AI Studio format (dollars * 10000) from proxy layer
-			"currency":                  record.Currency,               // From pricing lookup
-			"choices":                   record.Choices,                // From vendor parser
-			"tool_calls":                record.ToolCalls,              // From vendor parser
-			"chat_id":                   record.ChatID,                 // From session
-			"total_time_ms":             record.TotalTimeMS,            // From timing capture
-		}
-
-		if err := h.db.Model(&database.AnalyticsEvent{}).Where("id = ?", existingEventID).Updates(updates).Error; err != nil {
-			log.Error().Err(err).Uint("event_id", existingEventID).Msg("Failed to merge chat record into existing event")
-			return
-		}
-
-		log.Debug().
-			Uint("event_id", existingEventID).
-			Str("model", record.Name).
-			Int("prompt_tokens", record.PromptTokens).
-			Int("response_tokens", record.ResponseTokens).
-			Float64("cost", record.Cost).
-			Msg("Successfully merged chat record into proxy log event")
-
-		// Record budget usage if budget service is available and cost > 0
-		// This must happen AFTER merge, when we have accurate cost/token data from vendor parser
-		if h.budgetService != nil && record.Cost > 0 {
-			if err := h.budgetService.RecordUsage(
-				record.AppID,
-				&record.LLMID,
-				int64(record.TotalTokens),
-				record.Cost,
-				int64(record.PromptTokens),
-				int64(record.ResponseTokens),
-			); err != nil {
-				log.Warn().Err(err).
-					Uint("app_id", record.AppID).
-					Float64("cost", record.Cost).
-					Msg("Failed to record budget usage after merge")
-				// Don't fail analytics recording if budget recording fails
-			} else {
-				log.Debug().
-					Uint("app_id", record.AppID).
-					Float64("cost", record.Cost).
-					Int("total_tokens", record.TotalTokens).
-					Msg("Budget usage recorded successfully after merge")
-			}
-		}
-
-		// NOW execute analytics plugins with the MERGED data for pulse transmission
-		if h.pluginManager != nil {
-			// Fetch the merged event from database to get request/response bodies
-			var mergedEvent database.AnalyticsEvent
-			if err := h.db.First(&mergedEvent, existingEventID).Error; err != nil {
-				log.Error().Err(err).Msg("Failed to fetch merged event for plugin execution")
-			} else {
-				analyticsData := &interfaces.AnalyticsData{
-					LLMID:                  record.LLMID,
-					ModelName:              record.Name,
-					Vendor:                 record.Vendor,
-					PromptTokens:           record.PromptTokens,
-					ResponseTokens:         record.ResponseTokens,
-					TotalTokens:            record.TotalTokens,
-					CacheWritePromptTokens: record.CacheWritePromptTokens,
-					CacheReadPromptTokens:  record.CacheReadPromptTokens,
-					Cost:                   record.Cost,
-					Currency:               record.Currency,
-					AppID:                  record.AppID,
-					UserID:                 record.UserID,
-					Timestamp:              record.TimeStamp,
-					ToolCalls:              record.ToolCalls,
-					Choices:                record.Choices,
-					RequestID:              fmt.Sprintf("proxy_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
-					StatusCode:             mergedEvent.StatusCode, // Pass actual HTTP status code (e.g., 403 for budget exceeded)
-					// Include request/response bodies from the merged event
-					RequestBody:            mergedEvent.RequestBody,
-					ResponseBody:           mergedEvent.ResponseBody,
-					// Failover marker set by the proxy log merge above
-					FailoverFromLLMID:      mergedEvent.FailoverFromLLMID,
-					FailoverAttempt:        mergedEvent.FailoverAttempt,
-					// Routing decision set by the proxy log merge above
-					RouterKind:             mergedEvent.RouterKind,
-					RouterSlug:             mergedEvent.RouterSlug,
-					RouterPool:             mergedEvent.RouterPoolName,
-					Route:                  mergedEvent.Route,
-					RouteReason:            mergedEvent.RouteReason,
-					RouterSourceModel:      mergedEvent.RouterSourceModel,
-					RouterTargetModel:      mergedEvent.RouterTargetModel,
-					RouterSelectionAlgo:    mergedEvent.RouterSelectionAlgo,
-					RouteScore:             mergedEvent.RouteScore,
-					ShadowRoute:            mergedEvent.ShadowRoute,
-				}
-
-				// Execute analytics plugins (this buffers data in pulse plugin)
-				if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
-					log.Error().Err(err).Msg("Failed to execute analytics plugins after merge")
-				} else {
-					log.Debug().Msg("Analytics plugins executed with merged data - event buffered for pulse")
-				}
-			}
-		}
-
-		return // Done - event merged, budget recorded, and plugins executed
-	}
-
-	// NO MATCH: This is a standalone chat interaction (not via proxy)
-	// Create new analytics event from ChatRecord only
-	log.Debug().
-		Str("match_key", matchKey).
-		Msg("No matching proxy log found - creating standalone chat analytics event")
+	requestID := h.nextRequestID("chat", record.AppID)
 
 	// Execute analytics data collection plugins
 	if h.pluginManager != nil {
@@ -361,7 +320,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 			Timestamp:              record.TimeStamp,
 			ToolCalls:              record.ToolCalls,
 			Choices:                record.Choices,
-			RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+			RequestID:              requestID,
 			StatusCode:             200, // Standalone chat interactions are successful by definition
 		}
 
@@ -379,147 +338,40 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 
 	// Create analytics event from chat record (standalone chat interaction)
 	event := &database.AnalyticsEvent{
-		RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
-		AppID:                  record.AppID,
-		LLMID:                  &record.LLMID,
-
-		// Fields matching LLMChatRecord for parity
-		UserID:                 record.UserID,
-		Name:                   record.Name,
-		Vendor:                 record.Vendor,
-		InteractionType:        string(record.InteractionType),
-		Choices:                record.Choices,
-		ToolCalls:              record.ToolCalls,
-		ChatID:                 record.ChatID,
-		Currency:               record.Currency,
+		RequestID: requestID,
+		AppID:     record.AppID,
 
 		// Request/Response details
-		Endpoint:               "/v1/chat/completions",
-		Method:                 "POST",
-		StatusCode:             200, // Determined from success of chat interaction
+		Endpoint:   "/v1/chat/completions",
+		Method:     "POST",
+		StatusCode: 200, // Determined from success of chat interaction
 
-		// Token tracking
-		PromptTokens:           record.PromptTokens,
-		ResponseTokens:         record.ResponseTokens,
-		TotalTokens:            record.TotalTokens,
-		CacheWritePromptTokens: record.CacheWritePromptTokens,
-		CacheReadPromptTokens:  record.CacheReadPromptTokens,
-
-		// Cost and timing
-		Cost:                   record.Cost, // Already in AI Studio format (dollars * 10000) from proxy layer
-		TotalTimeMS:            record.TotalTimeMS,
-
-		ErrorMessage:           "",
-		TimeStamp:              record.TimeStamp,
-		CreatedAt:              record.TimeStamp,
+		ErrorMessage: "",
+		TimeStamp:    record.TimeStamp,
+		CreatedAt:    record.TimeStamp,
 	}
-
-	// Write to database
-	if err := h.db.Create(event).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to create standalone chat analytics event")
-	} else {
-		log.Debug().
-			Uint("event_id", event.ID).
-			Str("request_id", event.RequestID).
-			Int("total_tokens", event.TotalTokens).
-			Float64("cost", event.Cost).
-			Msg("Standalone chat analytics event created (no proxy log match)")
-	}
+	applyChatRecord(event, record)
+	h.store(event)
 
 	// Record budget usage for standalone events if budget service is available and cost > 0
-	if h.budgetService != nil && record.Cost > 0 {
-		if err := h.budgetService.RecordUsage(
-			record.AppID,
-			&record.LLMID,
-			int64(record.TotalTokens),
-			record.Cost,
-			int64(record.PromptTokens),
-			int64(record.ResponseTokens),
-		); err != nil {
-			log.Warn().Err(err).
-				Uint("app_id", record.AppID).
-				Float64("cost", record.Cost).
-				Msg("Failed to record budget usage for standalone event")
-			// Don't fail analytics recording if budget recording fails
-		} else {
-			log.Debug().
-				Uint("app_id", record.AppID).
-				Float64("cost", record.Cost).
-				Int("total_tokens", record.TotalTokens).
-				Msg("Budget usage recorded successfully for standalone event")
-		}
-	}
+	h.recordBudgetUsage(record)
 }
 
-// RecordChatLogEntry implements the midsommar analytics interface
-// For detailed logging - we can store this in analytics metadata or ignore for now
-func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(_ context.Context, entry *models.LLMChatLogEntry) {
-	log.Debug().
-		Str("prompt", entry.Prompt[:min(50, len(entry.Prompt))]).
-		Str("vendor", entry.Vendor).
-		Msg("Chat log entry (stored in analytics metadata)")
-	
-	// For now, we'll just log this - could store in analytics event metadata if needed
-}
-
-// RecordProxyLog implements the midsommar analytics interface
-// Creates analytics events directly from AI Gateway proxy logs
-// This is called FIRST for each request, creating a pending event that may be enriched by RecordChatRecord
-func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog *models.ProxyLog) {
-	log.Debug().
-		Uint("app_id", proxyLog.AppID).
-		Uint("user_id", proxyLog.UserID).
-		Str("vendor", proxyLog.Vendor).
-		Int("response_code", proxyLog.ResponseCode).
-		Time("proxy_timestamp", proxyLog.TimeStamp).
-		Int("request_body_size", len(proxyLog.RequestBody)).
-		Int("response_body_size", len(proxyLog.ResponseBody)).
-		Msg("Processing proxy log - creating pending analytics event")
-
-	// Execute data collection plugins for proxy logs
-	if h.pluginManager != nil {
-		// Convert to plugin format
-		pluginData := &interfaces.ProxyLogData{
-			AppID:        proxyLog.AppID,
-			UserID:       proxyLog.UserID,
-			Vendor:       proxyLog.Vendor,
-			RequestBody:  []byte(proxyLog.RequestBody),
-			ResponseBody: []byte(proxyLog.ResponseBody),
-			ResponseCode: proxyLog.ResponseCode,
-			Timestamp:    proxyLog.TimeStamp,
-			RequestID:    fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
-		}
-		
-		// Execute proxy log plugins
-		if err := h.pluginManager.ExecuteDataCollectionPlugins("proxy_log", pluginData); err != nil {
-			log.Error().Err(err).Msg("Failed to execute proxy log data collection plugins")
-		}
-		
-		// Note: proxy log replacement only affects proxy log storage, not analytics processing
-		// We continue with analytics processing regardless of proxy log replacement
-	}
-
-	// Note: ProxyLog contains RAW request/response bodies but NO parsed token data
-	// We create a skeleton event here that will be enriched by RecordChatRecord merge
-	// The embedded gateway's vendor-specific parsers extract ALL analytics data
-
-	// Create skeleton analytics event (will be enriched when ChatRecord arrives)
+// eventFromProxyLog builds the analytics row for a proxied request from its
+// proxy log.
+func (h *MicrogatewaAnalyticsHandler) eventFromProxyLog(proxyLog *models.ProxyLog, requestID string) *database.AnalyticsEvent {
 	event := &database.AnalyticsEvent{
-		RequestID:    fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
-		AppID:        proxyLog.AppID,
-		UserID:       proxyLog.UserID,
-		Vendor:       proxyLog.Vendor,
-		StatusCode:   proxyLog.ResponseCode,
-		TimeStamp:    proxyLog.TimeStamp,
-		CreatedAt:    proxyLog.TimeStamp,
+		RequestID:  requestID,
+		AppID:      proxyLog.AppID,
+		UserID:     proxyLog.UserID,
+		Vendor:     proxyLog.Vendor,
+		StatusCode: proxyLog.ResponseCode,
+		TimeStamp:  proxyLog.TimeStamp,
+		CreatedAt:  proxyLog.TimeStamp,
 
-		// Store request/response bodies immediately (if configured)
+		// Store request/response bodies (if configured)
 		RequestBody:  h.requestBodyToStore(proxyLog.RequestBody),
 		ResponseBody: h.responseBodyToStore(proxyLog.ResponseBody),
-
-		// NO PARSED DATA - will come from ChatRecord merge:
-		// PromptTokens, ResponseTokens, Cost, Model, Choices, ToolCalls, etc.
-		// All set to zero/empty until ChatRecord enriches this event
 	}
 
 	// Attribute the event to the specific LLM entry (not just the vendor type)
@@ -550,23 +402,98 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog
 	event.RouterSelectionAlgo = proxyLog.RouteSelection
 	event.RouteScore = proxyLog.RouteScore
 	event.ShadowRoute = proxyLog.ShadowRoute
+	return event
+}
 
-	// Create the analytics event and store for potential merge with ChatRecord
-	if err := h.db.Create(event).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to create analytics event from proxy log")
+// applyChatRecord fills the row's parsed usage from the chat record. The chat
+// record's data comes from the vendor-specific parsers.
+func applyChatRecord(event *database.AnalyticsEvent, record *models.LLMChatRecord) {
+	llmID := record.LLMID
+	event.LLMID = &llmID
+	event.UserID = record.UserID
+	event.Name = record.Name
+	event.Vendor = record.Vendor
+	event.InteractionType = string(record.InteractionType)
+	event.PromptTokens = record.PromptTokens
+	event.ResponseTokens = record.ResponseTokens
+	event.TotalTokens = record.TotalTokens
+	event.CacheWritePromptTokens = record.CacheWritePromptTokens
+	event.CacheReadPromptTokens = record.CacheReadPromptTokens
+	event.Cost = record.Cost // Already in AI Studio format (dollars * 10000) from proxy layer
+	event.Currency = record.Currency
+	event.Choices = record.Choices
+	event.ToolCalls = record.ToolCalls
+	event.ChatID = record.ChatID
+	event.TotalTimeMS = record.TotalTimeMS
+}
+
+// recordBudgetUsage records a priced request against its App's budget.
+func (h *MicrogatewaAnalyticsHandler) recordBudgetUsage(record *models.LLMChatRecord) {
+	if h.budgetService == nil || record.Cost <= 0 {
 		return
 	}
+	if err := h.budgetService.RecordUsage(
+		record.AppID,
+		&record.LLMID,
+		int64(record.TotalTokens),
+		record.Cost,
+		int64(record.PromptTokens),
+		int64(record.ResponseTokens),
+	); err != nil {
+		log.Warn().Err(err).
+			Uint("app_id", record.AppID).
+			Float64("cost", record.Cost).
+			Msg("Failed to record budget usage")
+		// Don't fail analytics recording if budget recording fails
+	}
+}
 
-	// Store event ID for matching with incoming ChatRecord (uses AppID+Timestamp key)
-	h.storeEventForMatching(fmt.Sprintf("pending_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.Unix()), event.ID)
+// store hands the row to the writer, or writes it directly when the handler
+// has none.
+func (h *MicrogatewaAnalyticsHandler) store(event *database.AnalyticsEvent) {
+	if h.writer != nil {
+		h.writer.Enqueue(event)
+		return
+	}
+	if err := h.db.Create(event).Error; err != nil {
+		log.Error().Err(err).Str("request_id", event.RequestID).Msg("Failed to create analytics event")
+	}
+}
 
+// nextRequestID returns a request ID unique within this process:
+// <prefix>_<app>_<nanoseconds>, the nanoseconds taken from the clock but
+// never repeated. Clock-derived IDs alone collided under load, and the
+// request_id column is unique.
+func (h *MicrogatewaAnalyticsHandler) nextRequestID(prefix string, appID uint) string {
+	now := time.Now().UnixNano()
+	for {
+		last := h.lastIDNanos.Load()
+		n := now
+		if n <= last {
+			n = last + 1
+		}
+		if h.lastIDNanos.CompareAndSwap(last, n) {
+			return fmt.Sprintf("%s_%d_%d", prefix, appID, n)
+		}
+	}
+}
+
+// RecordChatLogEntry implements the midsommar analytics interface
+// For detailed logging - we can store this in analytics metadata or ignore for now
+func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(_ context.Context, entry *models.LLMChatLogEntry) {
 	log.Debug().
-		Uint("event_id", event.ID).
-		Str("request_id", event.RequestID).
-		Msg("Skeleton analytics event created from proxy log (awaiting ChatRecord merge for tokens/cost)")
+		Str("prompt", entry.Prompt[:min(50, len(entry.Prompt))]).
+		Str("vendor", entry.Vendor).
+		Msg("Chat log entry (stored in analytics metadata)")
+	
+	// For now, we'll just log this - could store in analytics event metadata if needed
+}
 
-	// NOTE: Budget recording happens in RecordChatRecord where we have actual cost/token data
-	// ProxyLog creates skeleton events; ChatRecord enriches them with parsed vendor data
+// RecordProxyLog implements the midsommar analytics interface
+// Records a proxy log that has no chat record (a refused or failed request);
+// proxied requests with usage come through RecordExchange.
+func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(ctx context.Context, proxyLog *models.ProxyLog) {
+	h.RecordExchange(ctx, proxyLog, nil)
 }
 
 // truncateBody truncates request/response bodies to the configured maximum size
@@ -598,52 +525,6 @@ func (h *MicrogatewaAnalyticsHandler) responseBodyToStore(body string) string {
 		return ""
 	}
 	return h.truncateBody(body, h.config.MaxBodySize)
-}
-
-// pendingEventTTL is how long a proxy log's event waits for its chat record.
-// The two are recorded microseconds apart on the same goroutine.
-const pendingEventTTL = 10 * time.Second
-
-// pendingEvent is a proxy log's event waiting for its chat record.
-type pendingEvent struct {
-	id uint
-	at time.Time
-}
-
-// storeEventForMatching stores an event ID for later matching with chat record
-//
-// Expired entries are swept here, at most once per second, instead of by a
-// timer goroutine per event: at a thousand requests a second those were ten
-// thousand sleeping goroutines.
-func (h *MicrogatewaAnalyticsHandler) storeEventForMatching(matchKey string, eventID uint) {
-	now := time.Now()
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.pendingEvents[matchKey] = pendingEvent{id: eventID, at: now}
-
-	if now.Sub(h.lastPendingSweep) < time.Second {
-		return
-	}
-	h.lastPendingSweep = now
-	for key, e := range h.pendingEvents {
-		if now.Sub(e.at) > pendingEventTTL {
-			delete(h.pendingEvents, key)
-		}
-	}
-}
-
-// findEventForMerge finds a pending event ID for merging chat record data
-func (h *MicrogatewaAnalyticsHandler) findEventForMerge(matchKey string) (uint, bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	e, exists := h.pendingEvents[matchKey]
-	if !exists || time.Since(e.at) > pendingEventTTL {
-		return 0, false
-	}
-	// Remove from pending map after finding (one-time merge)
-	delete(h.pendingEvents, matchKey)
-	return e.id, true
 }
 
 // RecordToolCall implements the midsommar analytics interface

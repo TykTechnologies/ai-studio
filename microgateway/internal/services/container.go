@@ -25,6 +25,10 @@ type ServiceContainer struct {
 	// WriteDB carries the background writes (analytics events, budget
 	// usage); see database.OpenWriter. Nil means DB.
 	WriteDB *gorm.DB
+	// AnalyticsWriter batches the analytics rows and budget usage onto
+	// WriteDB; see StartAnalyticsWriter.
+	AnalyticsWriter *AnalyticsWriter
+	BudgetLedger    *BudgetLedger
 
 	// Core services
 	GatewayService   GatewayServiceInterface
@@ -232,7 +236,11 @@ func (sc *ServiceContainer) StopBackgroundTasks() {
 func (sc *ServiceContainer) Cleanup() {
 	log.Debug().Msg("Starting service container cleanup")
 
-	// Simple cleanup - no complex operations needed
+	// Write what the analytics writer still holds.
+	if sc.AnalyticsWriter != nil {
+		sc.AnalyticsWriter.Stop()
+	}
+
 	log.Debug().Msg("Service container cleanup completed")
 }
 
@@ -249,6 +257,32 @@ func (sc *ServiceContainer) SetWriteDB(w *gorm.DB) {
 	if s, ok := sc.BudgetService.(writeDBSetter); ok {
 		s.SetWriteDB(w)
 	}
+}
+
+// ledgerSetter is implemented by budget services that can record usage in
+// the ledger.
+type ledgerSetter interface {
+	SetLedger(*BudgetLedger)
+}
+
+// StartAnalyticsWriter starts the single writer for analytics rows and budget
+// usage on the writer handle, and moves the budget service's usage recording
+// to an in-memory ledger that the writer flushes. Call it after SetWriteDB.
+func (sc *ServiceContainer) StartAnalyticsWriter(acfg *config.AnalyticsConfig) {
+	queueSize, batchSize, interval := 0, 0, time.Duration(0)
+	if acfg != nil {
+		queueSize, batchSize, interval = acfg.WriterQueueSize, acfg.WriterBatchSize, acfg.WriterFlushInterval
+	}
+	w := NewAnalyticsWriter(sc.Writer(), queueSize, batchSize, interval)
+	ledger := NewBudgetLedger(sc.DB)
+	w.SetLedger(ledger)
+	if s, ok := sc.BudgetService.(ledgerSetter); ok {
+		s.SetLedger(ledger)
+	}
+	edgeBudgetLedger.Store(ledger)
+	w.Start()
+	sc.AnalyticsWriter = w
+	sc.BudgetLedger = ledger
 }
 
 // Writer returns the handle for background writes: WriteDB, or DB when none

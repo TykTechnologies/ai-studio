@@ -188,6 +188,14 @@ type AnalyticsConfig struct {
 	StoreRequestBodies  bool          `env:"ANALYTICS_STORE_REQUESTS" envDefault:"false"`
 	StoreResponseBodies bool          `env:"ANALYTICS_STORE_RESPONSES" envDefault:"false"`
 	MaxBodySize         int           `env:"ANALYTICS_MAX_BODY_SIZE" envDefault:"4096"`
+
+	// The writer batches analytics rows and budget usage into one
+	// transaction per WriterBatchSize rows or WriterFlushInterval, whichever
+	// comes first. Rows arriving while WriterQueueSize are waiting are
+	// dropped and counted.
+	WriterQueueSize     int           `env:"ANALYTICS_WRITER_QUEUE_SIZE" envDefault:"10000"`
+	WriterBatchSize     int           `env:"ANALYTICS_WRITER_BATCH_SIZE" envDefault:"500"`
+	WriterFlushInterval time.Duration `env:"ANALYTICS_WRITER_FLUSH_INTERVAL" envDefault:"100ms"`
 }
 
 // SecurityConfig holds security-related configuration
