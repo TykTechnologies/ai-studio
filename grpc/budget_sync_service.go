@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -80,6 +81,10 @@ type BudgetSyncService struct {
 	cancel         context.CancelFunc
 	done           chan struct{}
 	budgetSource   atomic.Value // EdgeBudgetSource
+	// usage keeps each App's spend for its budget period between cycles;
+	// published is the latest cycle's figures, for other readers.
+	usage     *budgetUsageTracker
+	published atomic.Pointer[map[uint]appPeriodUsage]
 	// lastUsage is each App's usage at the previous sync; Apps whose usage
 	// moved are analysed for alerts. Only the sync goroutine touches it.
 	lastUsage map[uint32]float64
@@ -118,6 +123,7 @@ func NewBudgetSyncService(db *gorm.DB, eventBus eventbridge.Bus) *BudgetSyncServ
 		eventBus:     eventBus,
 		syncInterval: interval,
 		done:         make(chan struct{}),
+		usage:        newBudgetUsageTracker(),
 	}
 }
 
@@ -146,6 +152,25 @@ func (s *BudgetSyncService) Start() {
 			}
 		}
 	}()
+}
+
+// PeriodUsage returns an App's spend in dollars for the budget period starting
+// at periodStart, as of the latest sync cycle (at most one interval old). It
+// reports false before the first cycle, for an App the cycle did not see, or
+// when the App's period has changed since.
+func (s *BudgetSyncService) PeriodUsage(appID uint, periodStart time.Time) (float64, bool) {
+	if s == nil {
+		return 0, false
+	}
+	p := s.published.Load()
+	if p == nil {
+		return 0, false
+	}
+	u, ok := (*p)[appID]
+	if !ok || !u.start.Equal(periodStart) {
+		return 0, false
+	}
+	return u.cost / 10000.0, true
 }
 
 // Stop gracefully stops the budget sync service.
@@ -226,24 +251,22 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	appBudgets := make(map[uint32]AppBudgetData)
 	appUsages := make(map[uint32]float64) // Legacy field for backwards compatibility
 
+	// Each App's spend in its own period, read incrementally (see
+	// budgetUsageTracker): summing every period in full on every cycle
+	// kept the database scanning continuously on a busy hub.
+	spend, err := s.usage.usage(s.db, apps, now)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to query budget usage")
+		return
+	}
+	s.published.Store(&spend)
+
 	for _, app := range apps {
-		periodStart, periodEnd := calculateBudgetPeriod(app.BudgetStartDate, now)
-
-		// Query usage for this app's specific period
-		var totalCost float64
-		err := s.db.Raw(`
-			SELECT COALESCE(SUM(cost), 0) as total_cost
-			FROM llm_chat_records
-			WHERE app_id = ? AND time_stamp >= ? AND time_stamp <= ?
-		`, app.ID, periodStart, periodEnd).Scan(&totalCost).Error
-
-		if err != nil {
-			log.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to query app budget usage")
-			continue
-		}
+		u := spend[app.ID]
+		periodStart, periodEnd := u.start, u.end
 
 		// Convert from stored format (dollars * 10000) to dollars
-		usageDollars := totalCost / 10000.0
+		usageDollars := u.cost / 10000.0
 
 		// Only include apps with usage > 0
 		if usageDollars > 0 {
@@ -287,7 +310,18 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		}
 		s.lastUsage = next
 		if len(moved) > 0 {
-			src.AnalyzeApps(moved)
+			// Hand over the spend just computed when the source can use
+			// it; otherwise it re-reads each App's whole period.
+			if an, ok := src.(budget.SpendAnalyzer); ok {
+				spend := make(map[uint]budget.AppPeriodSpend, len(moved))
+				for _, id := range moved {
+					data := appBudgets[uint32(id)]
+					spend[id] = budget.AppPeriodSpend{Spent: data.Usage, PeriodStart: data.PeriodStart}
+				}
+				an.AnalyzeAppSpend(spend)
+			} else {
+				src.AnalyzeApps(moved)
+			}
 		}
 	}
 
