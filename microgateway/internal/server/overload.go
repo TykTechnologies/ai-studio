@@ -50,6 +50,8 @@ func newOverloadManager(cfg *config.Config) (*overload.Manager, context.CancelFu
 				func(s overload.Stats) float64 { return float64(s.MemoryBytes) }},
 			{"microgateway_overload_memory_limit_bytes", "Memory limit shedding is judged against (0: none)", false,
 				func(s overload.Stats) float64 { return float64(s.MemoryLimitBytes) }},
+			{"microgateway_gogc", "GOGC in effect (adapted to the live heap unless GOGC is set)", false,
+				func(overload.Stats) float64 { return float64(overload.CurrentGCPercent()) }},
 			{"microgateway_overload_rejected_memory_total", "Proxy requests refused because memory was above the threshold", true,
 				func(s overload.Stats) float64 { return float64(s.RejectedMemory) }},
 			{"microgateway_overload_rejected_inflight_total", "Proxy requests refused at MAX_INFLIGHT_REQUESTS", true,

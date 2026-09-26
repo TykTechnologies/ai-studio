@@ -99,6 +99,18 @@ The memory limit comes from the first of these that is set:
 
 `MAX_INFLIGHT_REQUESTS` caps concurrent proxy requests. Streaming calls hold a slot for their whole duration, so size it for your longest streams. For example, 200 req/s of 60 s streams is 12,000 concurrent requests.
 
+**Go runtime defaults.** The gateway's live heap is small (tens of MB), so at Go's default `GOGC=100` the collector ran about 20 times a second under load. A 4-vCPU edge running `GOGC=400` measured:
+- sustained throughput up from ~7,100 to ~8,100 req/s
+- p50 overhead at 7,500 req/s down from +2.8 ms to +0.6 ms
+- no more one-window p99 spikes, where GC had drafted requests into ~100 ms mark assists
+- a cost of 100–200 MB more memory
+
+Unless you set them, the gateway therefore applies:
+- `GOGC=400`
+- a soft `GOMEMLIMIT` at 90% of the memory limit, when one is known, so the larger heap never outgrows the container
+
+Shedding at 85% comes before the collector has to work hard near that soft limit. The applied values are logged at startup (`Go runtime tuning`).
+
 Monitor it with:
 - `microgateway_overload_shedding`
 - `microgateway_overload_memory_bytes` and `microgateway_overload_memory_limit_bytes`

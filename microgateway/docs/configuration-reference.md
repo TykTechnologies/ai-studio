@@ -64,6 +64,8 @@ TLS_KEY_PATH=/etc/certs/server.key
 | `OVERLOAD_MEMORY_LIMIT` | size | `auto` | Memory limit shedding is judged against (`2GiB`, `1536MiB`, bytes). Unset: `GOMEMLIMIT`, else the container's cgroup limit; with neither, only `MAX_INFLIGHT_REQUESTS` applies |
 | `OVERLOAD_MEMORY_THRESHOLD` | float | `0.85` | Fraction of the limit at which shedding starts (Go heap goal + goroutine stacks); it stops 5 points below |
 | `MAX_INFLIGHT_REQUESTS` | int | `0` | Optional cap on concurrent proxy requests (0 = none). Size it for long streaming calls, which each hold a slot for their whole duration |
+| `GOGC` | int | 400 (gateway default) | Go garbage-collector target. The gateway uses 400 when unset: at Go's default of 100 its small heap made the collector run ~20 times a second under load, costing ~1,000 req/s of capacity on 4 vCPU and causing p99 spikes. Set it to override |
+| `GOMEMLIMIT` | size | 90% of the memory limit | Go soft memory limit. Unset and a memory limit known (`OVERLOAD_MEMORY_LIMIT` or the container's): the gateway sets 90% of it, so the larger heap never outgrows the container. Set it to override |
 | `GATEWAY_ENABLE_FILTERS` | bool | `true` | Enable filter processing |
 | `GATEWAY_ENABLE_ANALYTICS` | bool | `true` | Enable analytics collection |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | string | `/v1` | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) |
