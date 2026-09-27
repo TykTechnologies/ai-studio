@@ -207,7 +207,7 @@ function App() {
       <EditionProvider>
         <PermissionsProvider identity={me}>
         <SyncStatusProvider>
-        <NotificationProvider>
+        <NotificationProvider enabled={isAuthenticated}>
           <ThemeProvider theme={theme}>
             <CssBaseline />
           {/* Inject custom CSS if provided */}
