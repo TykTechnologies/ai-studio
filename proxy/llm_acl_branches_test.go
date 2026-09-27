@@ -173,12 +173,15 @@ func TestLLMACL_APIKeyCustomAuthBranch(t *testing.T) {
 }
 
 // TestLLMACL_APIKeyBranch pins that CheckAPICredential, now built on the shared
-// check, still refuses an ungranted route as it always has (401).
+// check, refuses an ungranted route. It answers 403 like every other branch;
+// until 2026-09-27 it answered 401, telling the caller to fix a working key.
 func TestLLMACL_APIKeyBranch(t *testing.T) {
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 
 	resp, body := h.post("/ai/fallback/v1/chat/completions", failoverChatBody, "Authorization", h.apiKey)
-	require.Equal(t, http.StatusUnauthorized, resp.StatusCode, "body: %s", body)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
+	require.Contains(t, string(body), "not found or not supported by your access rights")
+	assert.Empty(t, h.fallbackVendor.calls())
 
 	// A granted route clears the outer hop. (Its inner /llm/call/ hop cannot
 	// re-authenticate a non-bearer key for an OpenAI LLM - that predates this

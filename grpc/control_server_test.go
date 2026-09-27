@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -742,6 +743,24 @@ func TestControlServer_ValidateToken(t *testing.T) {
 
 				// Force update IsActive to false (due to GORM default behavior)
 				db.Model(inactiveApp).Update("is_active", false)
+			},
+			expectErr: false,
+			validate: func(t *testing.T, response *pb.TokenValidationResponse) {
+				assert.False(t, response.Valid)
+				// Named as such, so the edge can answer 403 "app is inactive" like
+				// the embedded gateway instead of a 401 for a bad key.
+				assert.Equal(t, services.AppInactiveMessage, response.ErrorMessage)
+			},
+		},
+		{
+			name: "credential without an app",
+			request: &pb.TokenValidationRequest{
+				Token:         "orphan-token",
+				EdgeId:        "edge-001",
+				EdgeNamespace: "test",
+			},
+			setupDB: func() {
+				db.Create(&models.Credential{KeyID: "orphan-key-id", Secret: "orphan-token", Active: true})
 			},
 			expectErr: false,
 			validate: func(t *testing.T, response *pb.TokenValidationResponse) {

@@ -13,6 +13,23 @@ import (
 // room to spare. Wrap it with %w.
 var ErrBudgetCheckUnavailable = errors.New("budget check unavailable")
 
+// ErrCredentialCheckUnavailable marks a GetCredentialBySecret error that is
+// not a verdict on the credential: it could not be checked (the microgateway's
+// control plane was unreachable, or failed while looking it up). The gateway
+// answers a retryable 503 rather than a 401 that tells the client its key is
+// wrong. Wrap it with %w.
+var ErrCredentialCheckUnavailable = errors.New("credential check unavailable")
+
+// ErrAppInactive marks a GetCredentialBySecret error for a credential whose
+// App is switched off. The gateway answers 403 "app is inactive", as it does
+// when it finds the inactive App itself. Wrap it with %w.
+var ErrAppInactive = errors.New(AppInactiveMessage)
+
+// AppInactiveMessage is the refusal for an App whose live switch is off. The
+// control plane sends it as the error message of a rejected token validation,
+// which is how a microgateway tells an inactive App from an unknown token.
+const AppInactiveMessage = "app is inactive"
+
 // BudgetServiceInterface defines budget operations needed by the application.
 // This interface allows implementations to use databases, files, or other storage backends.
 type BudgetServiceInterface interface {

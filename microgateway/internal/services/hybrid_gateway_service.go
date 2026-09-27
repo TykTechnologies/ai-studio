@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/datatypes"
@@ -145,7 +146,12 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 	// configured grace an entry that has only just expired is still served,
 	// so a control-plane outage does not take every edge request down with
 	// it. An explicit rejection below never comes through here.
+	//
+	// Past the grace the error is marked coresvc.ErrCredentialCheckUnavailable,
+	// so the proxy answers a retryable 503 rather than a 401 that tells the
+	// client its key is wrong.
 	staleFallback := func(cause error) (*TokenValidationResult, error) {
+		cause = fmt.Errorf("%w: %w", coresvc.ErrCredentialCheckUnavailable, cause)
 		if stale, age := h.getStaleFromCache(token); stale != nil {
 			log.Warn().
 				Str("token_prefix", tokenPrefix).
@@ -177,6 +183,11 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 			}
 			// The hub has spoken: whatever we cached for this token is no longer true.
 			h.removeFromCache(token)
+			// The hub names an inactive App, so the edge can refuse it the way
+			// the embedded gateway does (403 "app is inactive"), not as a bad key.
+			if resp.ErrorMessage == coresvc.AppInactiveMessage {
+				return nil, fmt.Errorf("invalid token: %w", coresvc.ErrAppInactive)
+			}
 			return nil, fmt.Errorf("invalid token: %s", resp.ErrorMessage)
 		}
 
@@ -211,7 +222,9 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 				if h.warnings.allow("app-missing") {
 					log.Warn().Err(err).Uint32("app_id", resp.AppId).Msg("Token validation: the control instance accepted the token but its App is not in local SQLite")
 				}
-				return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
+				// The hub accepted the token; the edge just cannot serve its App
+				// yet. That is not a rejection of the key.
+				return nil, fmt.Errorf("%w: app %d not found in synced SQLite: %w", coresvc.ErrCredentialCheckUnavailable, resp.AppId, err)
 			}
 
 			app = &dbApp
