@@ -120,6 +120,8 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 				aggregate.Model = startMsg.Message.Model
 				aggregate.CacheWritePromptTokens = startMsg.Message.Usage.CacheCreationInputTokens
 				aggregate.CacheReadPromptTokens = startMsg.Message.Usage.CacheReadInputTokens
+				// Until a message_delta arrives, message_start's count is all we have.
+				aggregate.CompletionTokens = startMsg.Message.Usage.OutputTokens
 
 			case "message_delta":
 				deltaMsg := &responses.AnthropicStreamingChunkDelta{}
@@ -130,12 +132,12 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 
 				logrus.WithField("output_tokens", deltaMsg.Usage.OutputTokens).Debug("Processing message_delta")
 
-				// For streaming, we need to add both the initial output token from message_start
-				// and the delta output tokens
-				if startMsg != nil && aggregate.CompletionTokens == 0 {
-					aggregate.CompletionTokens = startMsg.Message.Usage.OutputTokens
+				// message_delta's usage is cumulative: its output_tokens is the
+				// running total for the turn, already including the tokens
+				// message_start reported. Take it, never add it.
+				if deltaMsg.Usage.OutputTokens > 0 {
+					aggregate.CompletionTokens = deltaMsg.Usage.OutputTokens
 				}
-				aggregate.CompletionTokens += deltaMsg.Usage.OutputTokens
 
 			case "content_block_start":
 				startBlock := &responses.AnthropicStreamingChunkCBStart{}
