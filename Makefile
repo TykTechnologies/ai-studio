@@ -298,6 +298,8 @@ GORELEASER_FLAGS ?= --snapshot --skip=sign --skip=publish --clean
 
 # Internal helper: run goreleaser inside the cross-compilation Docker container.
 # Usage: $(call run_goreleaser,<goreleaser-config>,<goflags>)
+# EDITION (ent when the goflags carry the enterprise tag, else ce) names the
+# packages: the goreleaser templates add -ee for ent.
 # This matches CI exactly: same image, same env vars, same goreleaser invocation.
 # NOTE: does NOT use --clean to allow building both components into the same dist/.
 # Use `make clean-dist` to reset before a fresh build.
@@ -305,6 +307,7 @@ define run_goreleaser
 	docker run --rm --platform linux/amd64 \
 		-e CGO_ENABLED=1 \
 		-e GOFLAGS='$(2)' \
+		-e EDITION='$(if $(findstring enterprise,$(2)),ent,ce)' \
 		-e PACKAGECLOUD_REPO=local/dev \
 		-e DEBVERS='unused' \
 		-e RPMVERS='unused' \
@@ -375,9 +378,10 @@ package-ent: build-frontend build-docs
 # Package smoke tests
 test-package-smoke: package-ce
 	@echo "🧪 Running package smoke tests (CE)..."
-	docker compose -f tests/packaging/compose.yml up -d --build --wait
-	cd tests/packaging && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
-		(docker compose -f ../../tests/packaging/compose.yml logs && exit 1)
+	docker compose -f tests/packaging/compose.yml up -d --build --wait || \
+		(docker compose -f tests/packaging/compose.yml logs; docker compose -f tests/packaging/compose.yml down -v; exit 1)
+	cd tests/packaging && npm ci && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
+		(docker compose -f ../../tests/packaging/compose.yml logs; docker compose -f ../../tests/packaging/compose.yml down -v; exit 1)
 	docker compose -f tests/packaging/compose.yml down -v
 	@echo "✅ Package smoke tests passed"
 
@@ -389,9 +393,10 @@ test-package-smoke-ent: package-ent
 		echo "⚠️  Warning: TYK_AI_LICENSE not set. ENT smoke tests may fail."; \
 		echo "   Set it in dev/.env.secrets or export TYK_AI_LICENSE=..."; \
 	fi
-	docker compose -f tests/packaging/compose.yml up -d --build --wait
-	cd tests/packaging && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
-		(docker compose -f ../../tests/packaging/compose.yml logs && exit 1)
+	docker compose -f tests/packaging/compose.yml up -d --build --wait || \
+		(docker compose -f tests/packaging/compose.yml logs; docker compose -f tests/packaging/compose.yml down -v; exit 1)
+	cd tests/packaging && npm ci && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
+		(docker compose -f ../../tests/packaging/compose.yml logs; docker compose -f ../../tests/packaging/compose.yml down -v; exit 1)
 	docker compose -f tests/packaging/compose.yml down -v
 	@echo "✅ Package smoke tests passed"
 

@@ -42,9 +42,10 @@ test.describe('Package Installation Smoke Tests', () => {
 
   test('AI Studio UI loads, register first user, and login', async ({ page }) => {
     await test.step('Register first user (becomes admin)', async () => {
-      // Navigate directly to register page
-      await page.goto(`${STUDIO_URL}/register`);
-      await page.waitForSelector('input', { timeout: 15000 });
+      // Reach the sign-up form the way a new user does: from the login page.
+      await page.goto(`${STUDIO_URL}/login`);
+      await page.getByRole('link', { name: 'Sign up' }).click();
+      await page.getByRole('textbox', { name: 'Name' }).waitFor({ timeout: 15000 });
 
       // Fill registration form using role-based selectors (matches the actual UI)
       await page.getByRole('textbox', { name: 'Name' }).fill(TEST_ADMIN.name);
@@ -80,54 +81,15 @@ test.describe('Package Installation Smoke Tests', () => {
       await loginViaUI(page);
     });
 
-    await test.step('Dismiss quick-start wizard if present', async () => {
-      // The first-time login shows a quick-start dialog that blocks the UI
-      // Try multiple dismiss strategies
-      const dismissSelectors = [
-        'button:has-text("Explore by myself")',
-        'button:has-text("Skip quick start")',
-        'button:has-text("Skip")',
-        'button:has-text("Close")',
-        '[aria-label="close"]',
-      ];
-      for (const selector of dismissSelectors) {
-        const btn = page.locator(selector).first();
-        if (await btn.isVisible({ timeout: 1000 }).catch(() => false)) {
-          await btn.click({ force: true });
-          await page.waitForTimeout(1000);
-          break;
-        }
-      }
-      // If dialog is still there, press Escape to close it
-      const dialog = page.locator('[role="presentation"].MuiDialog-root');
-      if (await dialog.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(1000);
-      }
-    });
-
-    await test.step('Navigate to Edge Gateways via sidebar AI Portal', async () => {
-      // Click "AI Portal" in the sidebar (not the top tab) - it's a drawer
-      // The sidebar link is inside the nav/drawer area
-      const sidebarPortalLink = page.locator('.sidebar a:has-text("AI Portal"), nav a:has-text("AI Portal"), [data-testid="portal-sidebar"]').first();
-      if (await sidebarPortalLink.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await sidebarPortalLink.click();
-      } else {
-        // Fallback: click the second "AI Portal" text (first is the top tab)
-        await page.getByText('AI Portal').nth(1).click();
-      }
-      await page.waitForLoadState('networkidle', { timeout: 10000 });
-
-      // Now find and click Edge Gateways in the expanded drawer
-      const edgeLink = page.getByText(/Edge Gateway/i).first();
-      await edgeLink.click();
-      await page.waitForLoadState('networkidle', { timeout: 15000 });
-      await page.waitForTimeout(3000);
+    await test.step('Open Edge Gateways', async () => {
+      // The page lives under a sidebar section whose name has changed with
+      // navigation clean-ups; the route is the stable contract.
+      await page.goto(`${STUDIO_URL}/admin/edge-gateways`);
     });
 
     await test.step('Verify smoke-test-edge appears', async () => {
-      const pageContent = await page.textContent('body', { timeout: 10000 });
-      expect(pageContent).toContain('smoke-test-edge');
+      // The edge registers on its first heartbeat; allow for a slow start.
+      await expect(page.getByText('smoke-test-edge').first()).toBeVisible({ timeout: 30000 });
     });
   });
 

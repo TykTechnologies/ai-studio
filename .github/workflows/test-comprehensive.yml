@@ -28,6 +28,11 @@ on:
         required: true
         default: false
         type: boolean
+      include_package_smoke:
+        description: 'Include package smoke tests (build ENT .deb packages, install, drive them)'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -270,11 +275,53 @@ jobs:
         run: docker compose -f tests/compose.yml down -v --remove-orphans
 
   # ==========================================================================
+  # Package Smoke Tests (ENT .deb build + install)
+  # ==========================================================================
+  package-smoke:
+    name: Package Smoke Tests (ENT)
+    needs: full-tests
+    if: github.event.inputs.include_package_smoke == 'true'
+    runs-on: ubuntu-latest-m-2
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Pre-fetch Go modules
+        # The goreleaser container mounts the host module cache and has no
+        # credentials of its own.
+        run: |
+          mkdir -p ~/go/pkg/mod ~/.cache/go-build
+          go mod download
+          (cd microgateway && go mod download)
+
+      - name: Build packages and run smoke tests
+        env:
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+        run: make test-package-smoke-ent
+
+  # ==========================================================================
   # Test Summary
   # ==========================================================================
   summary:
     name: Test Summary
-    needs: [full-tests, plugin-e2e, plugin-full-integration, ui-e2e]
+    needs: [full-tests, plugin-e2e, plugin-full-integration, ui-e2e, package-smoke]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -287,6 +334,7 @@ jobs:
           echo "- Plugin E2E: ${{ github.event.inputs.include_plugin_e2e }}" >> $GITHUB_STEP_SUMMARY
           echo "- UI E2E: ${{ github.event.inputs.include_ui_e2e }}" >> $GITHUB_STEP_SUMMARY
           echo "- Full Integration: ${{ github.event.inputs.include_full_integration }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Package Smoke: ${{ github.event.inputs.include_package_smoke }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Results" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
@@ -295,3 +343,4 @@ jobs:
           echo "| Plugin E2E | ${{ needs.plugin-e2e.result == 'success' && ':white_check_mark: Passed' || (needs.plugin-e2e.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Full Integration | ${{ needs.plugin-full-integration.result == 'success' && ':white_check_mark: Passed' || (needs.plugin-full-integration.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| UI E2E | ${{ needs.ui-e2e.result == 'success' && ':white_check_mark: Passed' || (needs.ui-e2e.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Package Smoke | ${{ needs.package-smoke.result == 'success' && ':white_check_mark: Passed' || (needs.package-smoke.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY

@@ -147,6 +147,9 @@ nfpms:
         type: config|noreplace
       - src: ci/install/microgateway/data/analytics-pulse-config.yaml
         dst: /opt/tyk-microgateway/examples/analytics-pulse-config.yaml
+      - src: ci/install/microgateway/data/analytics-pulse-config.yaml
+        dst: /opt/tyk-microgateway/config/analytics-pulse-config.yaml
+        type: config|noreplace
       - src: ci/install/microgateway/data/PORTS.md
         dst: /opt/tyk-microgateway/PORTS.md
     scripts:
@@ -193,6 +196,9 @@ nfpms:
         type: config|noreplace
       - src: ci/install/microgateway/data/analytics-pulse-config.yaml
         dst: /opt/tyk-microgateway/examples/analytics-pulse-config.yaml
+      - src: ci/install/microgateway/data/analytics-pulse-config.yaml
+        dst: /opt/tyk-microgateway/config/analytics-pulse-config.yaml
+        type: config|noreplace
       - src: ci/install/microgateway/data/PORTS.md
         dst: /opt/tyk-microgateway/PORTS.md
     scripts:

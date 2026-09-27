@@ -14,4 +14,9 @@ EXPOSE 8080 9090
 
 WORKDIR /opt/tyk-microgateway/
 
+# In edge mode the analytics pulse (edge analytics, proxy logs and spend to the
+# control plane) is loaded from this file; other modes skip it. Override the
+# variable to use your own file, or set it empty to run without the pulse.
+ENV PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml
+
 ENTRYPOINT ["/opt/tyk-microgateway/tyk-microgateway"]
