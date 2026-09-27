@@ -297,8 +297,9 @@ func (s *MicrogatewayManagementServer) StoreApp(ctx context.Context, req *pb.Sto
 			app.Metadata = datatypes.JSON(req.Metadata)
 		}
 
-		// Upsert the app record
-		if upsertErr := tx.Where("id = ?", req.AppId).
+		// Upsert the app record. Unscoped: a config sync may have retired
+		// (soft-deleted) the App; storing it brings it back.
+		if upsertErr := tx.Unscoped().Where("id = ?", req.AppId).
 			Assign(map[string]interface{}{
 				"name":              app.Name,
 				"description":       app.Description,
@@ -311,6 +312,7 @@ func (s *MicrogatewayManagementServer) StoreApp(ctx context.Context, req *pb.Sto
 				"namespace":         app.Namespace,
 				"metadata":          app.Metadata,
 				"updated_at":        app.UpdatedAt,
+				"deleted_at":        nil,
 			}).
 			FirstOrCreate(app).Error; upsertErr != nil {
 			return fmt.Errorf("failed to upsert app: %w", upsertErr)

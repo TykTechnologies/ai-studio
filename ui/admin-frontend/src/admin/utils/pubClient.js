@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getBaseUrl, fetchCSRFToken } from "./urlUtils";
+import { redirectToLogin } from "./authRedirect";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -15,10 +16,9 @@ pubClient.interceptors.response.use(
       // Clear any stored auth data
       localStorage.clear();
 
-      // Only redirect if we're not already on the login page
-      if (!window.location.pathname.includes("/login")) {
-        window.location.href = "/login";
-      }
+      // Leave public pages (login, sign-up, password reset) where they are:
+      // a 401 there is expected, not an expired session.
+      redirectToLogin();
       return Promise.reject(error);
     }
     return Promise.reject(error);

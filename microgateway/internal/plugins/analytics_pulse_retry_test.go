@@ -60,7 +60,7 @@ func newRetryPlugin(client *fakeSyncClient, cfg PulsePluginConfig) *AnalyticsPul
 		config:         &cfg,
 		edgeID:         "edge-1",
 		edgeNamespace:  "test",
-		grpcClient:     client,
+		clients:        staticClient{client},
 		sequenceNumber: 1,
 		lastPulseTime:  time.Now(),
 		retryInterval:  time.Millisecond,

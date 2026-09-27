@@ -4,6 +4,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -17,12 +18,21 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// PulseClientSource hands out the client of the edge's current connection to
+// the control server (the edge client's GetGRPCClient). The connection is
+// replaced whenever the edge reconnects, so the pulse asks for it on every
+// send instead of keeping one: a kept client belongs to a connection the
+// reconnect has closed, and every pulse through it fails.
+type PulseClientSource interface {
+	GetGRPCClient() pb.ConfigurationSyncServiceClient
+}
+
 // AnalyticsPulsePlugin is a built-in data collection plugin that sends analytics data to control server
 type AnalyticsPulsePlugin struct {
-	config         *PulsePluginConfig
-	edgeID         string
-	edgeNamespace  string
-	grpcClient     pb.ConfigurationSyncServiceClient
+	config        *PulsePluginConfig
+	edgeID        string
+	edgeNamespace string
+	clients       PulseClientSource
 
 	// Buffered data
 	analyticsBuffer    []database.AnalyticsEvent
@@ -141,10 +151,11 @@ type ToolCallBuffer struct {
 	Timestamp   time.Time
 }
 
-// NewAnalyticsPulsePlugin creates a new built-in analytics pulse plugin
+// NewAnalyticsPulsePlugin creates a new built-in analytics pulse plugin.
+// clients is asked for the control client on every send (see PulseClientSource).
 func NewAnalyticsPulsePlugin(
 	edgeID, edgeNamespace string,
-	grpcClient pb.ConfigurationSyncServiceClient,
+	clients PulseClientSource,
 	config map[string]interface{},
 ) (*AnalyticsPulsePlugin, error) {
 	// Parse configuration
@@ -159,7 +170,7 @@ func NewAnalyticsPulsePlugin(
 		config:         pluginConfig,
 		edgeID:         edgeID,
 		edgeNamespace:  edgeNamespace,
-		grpcClient:     grpcClient,
+		clients:        clients,
 		ctx:            ctx,
 		cancel:         cancel,
 		sequenceNumber: 1,
@@ -685,15 +696,25 @@ func (p *AnalyticsPulsePlugin) restoreSnapshotLocked(snap pulseSnapshot, now tim
 	}
 }
 
+// errNotConnected fails a pulse attempt while the edge has no connection to
+// the control server (between a dropped connection and the reconnect).
+var errNotConnected = errors.New("not connected to the control server")
+
 // sendWithRetry sends one pulse, retrying transport failures up to MaxRetries
 // times with retryWait between attempts. Once the plugin is stopping only the
 // attempt in progress is made, so a shutdown does not sit through the ladder.
 func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceNum uint64) (*pb.AnalyticsPulseResponse, error) {
 	var lastErr error
 	for attempt := 0; ; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.TimeoutSeconds)*time.Second)
-		resp, err := p.grpcClient.SendAnalyticsPulse(ctx, pulse)
-		cancel()
+		var resp *pb.AnalyticsPulseResponse
+		var err error
+		if client := p.clients.GetGRPCClient(); client == nil {
+			err = errNotConnected
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.TimeoutSeconds)*time.Second)
+			resp, err = client.SendAnalyticsPulse(ctx, pulse)
+			cancel()
+		}
 		if err == nil {
 			return resp, nil
 		}
@@ -993,7 +1014,14 @@ func (p *AnalyticsPulsePlugin) Stop() error {
 
 	p.stopTimer()
 
-	// Send any remaining buffered data
+	// Send any remaining buffered data. A pulse still in flight only carries
+	// its own snapshot, and sendPulse skips while one is in flight, so wait
+	// for it (the cancel above cuts its retry ladder short) before sending
+	// what arrived since.
+	deadline := time.Now().Add(time.Duration(p.config.TimeoutSeconds+1) * time.Second)
+	for p.sending.Load() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 	p.sendPulse()
 
 	log.Debug().

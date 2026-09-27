@@ -206,19 +206,14 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/midsommar_test?sslmode=disable
     steps:
+      # The enterprise submodule is checked out for the audit suite below;
+      # the other packages are built without the enterprise tag.
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 2
-
-      - name: Create enterprise stub for CE builds
-        run: |
-          mkdir -p enterprise
-          cat > enterprise/go.mod << 'EOF'
-          module github.com/TykTechnologies/midsommar/v2/enterprise
-
-          go 1.26.6
-          EOF
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -251,6 +246,36 @@ jobs:
           go test -v -race -p 1 -count=1 \
             -run 'PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue' \
             ./models/ ./services/
+
+      # Packages whose Postgres-gated tests used to run nowhere: the chat
+      # queue (LISTEN/NOTIFY), config and startup.
+      - name: Run chat queue, config and startup Postgres tests
+        run: |
+          go test -v -race -p 1 -count=1 ./chat_session/ ./config/ ./startup/
+
+      # The edge and the enterprise audit suite get databases of their own:
+      # the edge schema has its own apps/llms tables.
+      - name: Create edge and audit databases
+        run: |
+          command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE mgw_test'
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE audit_test'
+
+      # Analytics writer, budget ledger and budget sync against Postgres
+      # (ON CONFLICT, GREATEST, enforced foreign keys).
+      - name: Run microgateway Postgres tests
+        working-directory: microgateway
+        env:
+          MGW_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/mgw_test?sslmode=disable
+        run: |
+          go test -v -race -count=1 -run 'Postgres' ./internal/services/
+
+      - name: Run enterprise audit Postgres tests
+        working-directory: enterprise
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/audit_test?sslmode=disable
+        run: |
+          go test -tags enterprise -v -race -count=1 ./features/audit/...
 
   # ==========================================================================
   # Documentation Build

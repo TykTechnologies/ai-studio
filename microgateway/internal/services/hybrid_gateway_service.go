@@ -520,8 +520,9 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 		}
 
 		// Upsert: Create if not exists, Update if exists
-		// Use Clauses for proper upsert with all fields
-		if err := tx.Where("id = ?", pbApp.Id).
+		// Use Clauses for proper upsert with all fields. Unscoped: a sync may
+		// have retired (soft-deleted) the App; the hub says it is back.
+		if err := tx.Unscoped().Where("id = ?", pbApp.Id).
 			Assign(map[string]interface{}{
 				"name":              app.Name,
 				"description":       app.Description,
@@ -534,6 +535,7 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 				"namespace":         app.Namespace,
 				"metadata":          app.Metadata,
 				"updated_at":        time.Now(),
+				"deleted_at":        nil,
 			}).
 			FirstOrCreate(app).Error; err != nil {
 			return fmt.Errorf("failed to upsert app: %w", err)

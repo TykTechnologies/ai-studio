@@ -41,7 +41,7 @@ func (s *slowSyncClient) recordCount() int {
 func TestAnalyticsPulse_FullBufferQueuesOneFlush(t *testing.T) {
 	client := &slowSyncClient{delay: 50 * time.Millisecond}
 	p := newRetryPlugin(&client.fakeSyncClient, PulsePluginConfig{MaxBufferSize: 10})
-	p.grpcClient = client
+	p.clients = staticClient{client}
 
 	const n = 500
 	var wg sync.WaitGroup

@@ -136,6 +136,13 @@ When you push configuration:
 4. Edges report the new checksum in their next heartbeat
 5. The sync status updates to reflect the new state
 
+How an edge applies a snapshot:
+
+- **In one transaction.** A snapshot that fails to apply leaves the previous configuration in place.
+- **Apps and LLMs are updated in place.** An App or LLM the snapshot no longer has is retired: the edge stops serving it, but keeps the row, so its analytics and budget usage stay valid (Postgres edges enforce those references). An App that comes back is served again.
+- **Apps newer than the snapshot are kept.** An edge can learn of an App from token validation after the snapshot was taken; the snapshot does not remove it.
+- **Spend is never lowered.** The snapshot carries each App's spend as Studio knows it, which can lag behind the edge's own. The edge takes the higher of the two figures.
+
 ### Monitoring Push Results
 
 After pushing configuration:
@@ -258,6 +265,14 @@ Triggers a configuration reload for all edges or a specific namespace:
 - Check edge gateway logs for connection errors
 - Ensure firewall rules allow gRPC traffic (default port 50051)
 - After a control plane restart or outage, edges reconnect on their own, retrying with exponential backoff (5 seconds doubling to at most 5 minutes). Edges older than the fix of 2026-09-24 stopped retrying after the first failed attempt and needed a restart once the outage lasted longer than about 5 seconds.
+
+### Edge Analytics Missing in AI Studio
+
+Edges send analytics and spend to the control plane in the analytics pulse, which is loaded from `PLUGINS_CONFIG_PATH`. If an edge serves traffic but AI Studio shows none of it:
+
+- Check that `PLUGINS_CONFIG_PATH` points at an existing pulse config; the startup path report flags it when it doesn't.
+- Check the edge logs for `Failed to send analytics pulse`.
+- Edges built before 2026-09-27 kept sending the pulse over their first connection to the control plane. After any AI Studio restart that connection was closed, so no further analytics arrived until the edge was restarted, and a graceful edge shutdown dropped what the pulse had buffered. Upgrade the edge, or restart it after each AI Studio restart.
 
 ### Edge Shows "Pending" After Push
 

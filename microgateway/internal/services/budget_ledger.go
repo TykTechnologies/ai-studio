@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -15,6 +16,11 @@ import (
 // usage of the ledger's entries. The re-read picks up writes the ledger did not
 // make: another gateway on a shared database, or a budget sync.
 const ledgerRefreshInterval = 5 * time.Second
+
+// ledgerGiveUpAfter bounds how long an App's usage that the database keeps
+// refusing is retried. After that it is no longer written, but it still
+// counts towards the App's budget until the period ends.
+const ledgerGiveUpAfter = 10 * time.Minute
 
 // edgeBudgetLedger is the gateway's ledger, shared by the budget service and
 // the budget sync handler; nil until StartAnalyticsWriter runs.
@@ -75,6 +81,9 @@ type ledgerEntry struct {
 	// flushes started and finished, to detect a read that overlapped one.
 	inflight usageTotals
 	flushes  uint64
+	// failingSince is when the entry's writes started failing; zero while
+	// they succeed.
+	failingSince time.Time
 }
 
 func (e *ledgerEntry) spent() float64 { return e.base + e.inflight.cost + e.pending.cost }
@@ -165,7 +174,9 @@ func (l *BudgetLedger) refresh() {
 			continue
 		}
 		l.mu.Lock()
-		if e.inflight.zero() {
+		// Spend within a period only grows: a lower stored figure (a
+		// stale write, usage the ledger gave up persisting) is not taken.
+		if e.inflight.zero() && stored > e.base {
 			e.base = stored
 		}
 		l.mu.Unlock()
@@ -208,6 +219,8 @@ func (l *BudgetLedger) Reconcile(appID uint, start time.Time, cost float64) {
 type ledgerFlush struct {
 	entries []*ledgerEntry
 	amounts []usageTotals
+	// gone marks entries whose App no longer exists, found by writeEach.
+	gone []bool
 }
 
 // take moves every entry's pending amounts to inflight and returns them.
@@ -236,13 +249,50 @@ func (l *BudgetLedger) take() *ledgerFlush {
 // finish settles a flush: on success the written amounts join the stored
 // total, otherwise they go back to pending for the next flush.
 func (l *BudgetLedger) finish(f *ledgerFlush, ok bool) {
+	if f.empty() {
+		return
+	}
+	oks := make([]bool, len(f.entries))
+	for i := range oks {
+		oks[i] = ok
+	}
+	l.finishEach(f, oks)
+}
+
+// finishEach settles a flush entry by entry. A written amount joins the
+// stored total. An unwritten one goes back to pending, except when its App no
+// longer exists (dropped: nothing will be charged to it again) or its writes
+// have failed for ledgerGiveUpAfter (no longer written, but still counted).
+func (l *BudgetLedger) finishEach(f *ledgerFlush, ok []bool) {
+	if f.empty() {
+		return
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	now := l.now()
 	for i, e := range f.entries {
-		if ok {
-			e.base += f.amounts[i].cost
-		} else {
-			e.pending.add(f.amounts[i])
+		a := f.amounts[i]
+		switch {
+		case ok[i]:
+			e.base += a.cost
+			e.failingSince = time.Time{}
+		case len(f.gone) > i && f.gone[i]:
+			log.Warn().Uint("app_id", e.appID).Float64("cost", a.cost).
+				Msg("Budget ledger: the App no longer exists; dropping its unwritten usage")
+			e.failingSince = time.Time{}
+		default:
+			if e.failingSince.IsZero() {
+				e.failingSince = now
+			}
+			if now.Sub(e.failingSince) >= ledgerGiveUpAfter {
+				log.Error().Uint("app_id", e.appID).Float64("cost", a.cost).
+					Dur("failing_for", now.Sub(e.failingSince)).
+					Msg("Budget ledger: giving up writing usage; it still counts towards the budget until the period ends")
+				e.base += a.cost
+				e.failingSince = time.Time{}
+			} else {
+				e.pending.add(a)
+			}
 		}
 		e.inflight = usageTotals{}
 		e.flushes++
@@ -255,29 +305,56 @@ func (f *ledgerFlush) write(tx *gorm.DB) error {
 	if f.empty() {
 		return nil
 	}
-	now := time.Now()
-	for i, e := range f.entries {
-		a := f.amounts[i]
-		// Create the period's row if it is missing, then add to it.
-		row := database.BudgetUsage{AppID: e.appID, PeriodStart: e.start, PeriodEnd: e.end, CreatedAt: now, UpdatedAt: now}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
-			return err
-		}
-		err := tx.Model(&database.BudgetUsage{}).
-			Where("app_id = ? AND period_start = ? AND period_end = ?", e.appID, e.start, e.end).
-			Updates(map[string]interface{}{
-				"tokens_used":       gorm.Expr("tokens_used + ?", a.tokens),
-				"requests_count":    gorm.Expr("requests_count + ?", a.requests),
-				"total_cost":        gorm.Expr("total_cost + ?", a.cost),
-				"prompt_tokens":     gorm.Expr("prompt_tokens + ?", a.prompt),
-				"completion_tokens": gorm.Expr("completion_tokens + ?", a.completion),
-				"updated_at":        now,
-			}).Error
-		if err != nil {
+	for i := range f.entries {
+		if err := f.writeEntry(tx, i); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// writeEntry adds entry i's amounts to its budget_usage row inside tx.
+func (f *ledgerFlush) writeEntry(tx *gorm.DB, i int) error {
+	e, a := f.entries[i], f.amounts[i]
+	now := time.Now()
+	// Create the period's row if it is missing, then add to it.
+	row := database.BudgetUsage{AppID: e.appID, PeriodStart: e.start, PeriodEnd: e.end, CreatedAt: now, UpdatedAt: now}
+	if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&row).Error; err != nil {
+		return err
+	}
+	return tx.Model(&database.BudgetUsage{}).
+		Where("app_id = ? AND period_start = ? AND period_end = ?", e.appID, e.start, e.end).
+		Updates(map[string]interface{}{
+			"tokens_used":       gorm.Expr("tokens_used + ?", a.tokens),
+			"requests_count":    gorm.Expr("requests_count + ?", a.requests),
+			"total_cost":        gorm.Expr("total_cost + ?", a.cost),
+			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", a.prompt),
+			"completion_tokens": gorm.Expr("completion_tokens + ?", a.completion),
+			"updated_at":        now,
+		}).Error
+}
+
+// writeEach writes every entry in a transaction of its own, run by run, so
+// one the database refuses (a foreign key to an App deleted meanwhile, on
+// databases that enforce them) costs only itself. It reports which entries
+// were written, and marks refused entries whose App is gone.
+func (f *ledgerFlush) writeEach(db *gorm.DB, run func(func(tx *gorm.DB) error) error) []bool {
+	oks := make([]bool, len(f.entries))
+	f.gone = make([]bool, len(f.entries))
+	for i, e := range f.entries {
+		err := run(func(tx *gorm.DB) error { return f.writeEntry(tx, i) })
+		if err == nil {
+			oks[i] = true
+			continue
+		}
+		var n int64
+		if cerr := db.Unscoped().Model(&database.App{}).Where("id = ?", e.appID).Count(&n).Error; cerr == nil && n == 0 {
+			f.gone[i] = true
+		} else {
+			log.Warn().Err(err).Uint("app_id", e.appID).Msg("Budget ledger: writing the App's usage failed; retrying with the next flush")
+		}
+	}
+	return oks
 }
 
 func (f *ledgerFlush) empty() bool { return f == nil || len(f.entries) == 0 }

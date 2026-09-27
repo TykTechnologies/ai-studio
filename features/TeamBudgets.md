@@ -94,7 +94,7 @@ Allocation applies only while the switch is on and the App's team is managed.
 - the App's or the LLM's own budget is 0, or has been reached; or
 - the App's team is `hard_block` and its spend this period (all of its Apps including deleted ones, plus its members' chat) has reached the team budget.
 
-The API and the embedded gateway share one budget service, so resets clear the cache the embedded gateway reads. They used to be separate instances.
+The API and the embedded gateway share one budget service, so resets clear the spend figures the embedded gateway checks against (see Spend tracking in `Budgeting.md`), and the spend the embedded gateway records counts in the same figures. They used to be separate instances.
 
 ### Edge gateways (microgateway)
 
@@ -103,8 +103,10 @@ Edge traffic never passes Studio's budget check. Edges enforce App budgets local
 The edge keeps each App's usage for the current period in an in-memory ledger (`BudgetLedger`, `microgateway/internal/services/budget_ledger.go`):
 - **Recording:** each request adds to the ledger. The analytics writer applies the amounts to `budget_usage` as increments, in the same batched transaction as the analytics rows (at most `ANALYTICS_WRITER_FLUSH_INTERVAL`, 100 ms, later).
 - **The check:** it reads stored usage plus the amounts not yet written, so a request's cost counts as soon as it is recorded.
-- **Re-reading the store:** the ledger re-reads the stored total every 5 s. That picks up other gateways sharing the database, and the budget sync.
+- **Re-reading the store:** the ledger re-reads the stored total every 5 s. That picks up other gateways sharing the database, and the budget sync. Within a period spend only grows: a lower stored figure is not taken.
 - **The budget sync:** it raises `budget_usage` to the control plane's figure with one `MAX`/`GREATEST` update, and raises the ledger to match.
+- **Config pushes:** the snapshot's `current_period_usage` goes through the same raise (`raiseStoredUsage`). Until 2026-09-27 it was assigned, so a push landing before the analytics pulse lowered the edge's spend to the hub's stale figure and reopened spent budgets.
+- **Unwritable usage:** when a batch fails, each App's usage is written in its own transaction, so one App the database refuses does not hold back the others. Usage of an App that no longer exists is dropped; usage the database keeps refusing for an existing App is retried for 10 minutes (`ledgerGiveUpAfter`), then no longer written but still counted until the period ends. Before, one failed entry failed every later flush, and no App's spend was persisted until restart.
 
 On top of that, the budget sync (`budget.sync`, every 30 s, `BUDGET_SYNC_INTERVAL`) now carries `blocks`: the complete map of App ID to reason for Apps that must be refused (`EdgeBlocks` on the Enterprise budget service). An App is listed when:
 
@@ -123,6 +125,11 @@ On top of that, the budget sync (`budget.sync`, every 30 s, `BUDGET_SYNC_INTERVA
 **Sequence numbers:** edges persist the highest `sequence_number` they have applied (`sync_states`) and drop anything lower. The hub seeds the sequence from the clock (`max(previous + 1, now in ns)`, `nextSequence`), so it keeps rising across Studio restarts and between Studio nodes. Until 2026-09-24 it was an in-memory counter from 1, so after a Studio restart edges ignored every budget sync, blocks included, until the counter caught up.
 
 **Lag:** a new block reaches edges within one pulse interval plus one sync interval. Edge spend has to reach Studio in the analytics pulse, and then the next budget sync carries the block. With the defaults that's up to about 40 s.
+
+**Pulse delivery across restarts:** team spend, alerts and blocks only see edge traffic that the pulse delivers. Two gaps closed on 2026-09-27:
+
+- **Studio restarts.** The pulse used to keep the gRPC client of the edge's first connection. After any Studio restart the edge reconnected on a new connection, but every pulse still went to the closed one and failed ("the client connection is closing"). From then on no edge spend reached Studio until the edge itself was restarted. The pulse now asks the edge client for the current connection on every send (`PulseClientSource`), so it follows reconnects.
+- **Edge shutdown.** A graceful edge shutdown used to drop what the pulse still buffered, up to one pulse interval. The edge now drains its requests, waits for their analysis, stops the plugins (the pulse sends its buffer then) and only after that closes its connection to Studio (`runShutdown` in `microgateway/cmd/microgateway/main.go`).
 
 Edge App-budget enforcement itself is unchanged. In live testing an App overshot its own budget by a few requests before the edge refused it; that comes from the edge's existing usage accounting, not from this feature.
 
