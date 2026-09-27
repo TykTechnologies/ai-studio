@@ -65,7 +65,7 @@ async function openPluginPage(page: Page, link: string, tag: string) {
     // same links as quick-link cards inside the plugin component.
     const item = page.locator(`a[href="${PAGES[link]}"]`).first();
     if (!(await item.isVisible().catch(() => false))) {
-        await page.getByRole('button', { name: SECTION }).click();
+        await page.getByRole('button', { name: SECTION, exact: true }).click();
     }
     await item.click();
     await expect(page.locator(tag)).toBeVisible({ timeout: 20000 });
@@ -125,6 +125,16 @@ test('Asset Catalog rows in the role editor are honoured end to end', async ({
         // registered with the now-approved rbac.register scope.
         await api(page, 'post', `/api/v1/plugins/${pluginId}/reload`, {});
         await expect.poll(async () => (await rpc(page, pluginId, 'admin_stats')).env.ok === true, { timeout: 90000, intervals: [2000] }).toBe(true);
+
+        // The sidebar reads plugin sections when the admin layout mounts (the
+        // Plugins page also tells it to refresh). A plugin installed through
+        // the API only appears after a reload; on a fresh database this page
+        // was opened before the plugin existed.
+        await expect.poll(async () => {
+            await page.reload();
+            await adminMainPage.dismissQuickStartModal();
+            return page.getByRole('button', { name: SECTION, exact: true }).isVisible();
+        }, { timeout: 90000, intervals: [2000] }).toBe(true);
     }
 
     // Per-type rows are registered at runtime for the seeded Agent and Prompt types.

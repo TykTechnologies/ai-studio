@@ -17,8 +17,11 @@ export const UNREAD_POLL_INTERVAL_MS = 60000;
  * latest page of notifications for the panel and the /notifications page.
  * One poll refreshes the count every minute; the list is (re)fetched on
  * demand by refresh() and grown by loadMore().
+ *
+ * `enabled` is false for a signed-out visitor: the provider wraps the public
+ * pages too, and polling an auth-only endpoint there only earns 401s.
  */
-export const NotificationProvider = ({ children }) => {
+export const NotificationProvider = ({ children, enabled = true }) => {
 	const [unreadCount, setUnreadCount] = useState(0);
 	const [items, setItems] = useState([]);
 	const [total, setTotal] = useState(0);
@@ -48,10 +51,11 @@ export const NotificationProvider = ({ children }) => {
 	// meant no polling while the icon was unmounted and two polls if it was
 	// rendered twice).
 	useEffect(() => {
+		if (!enabled) return undefined;
 		fetchUnreadCount();
 		const interval = setInterval(fetchUnreadCount, UNREAD_POLL_INTERVAL_MS);
 		return () => clearInterval(interval);
-	}, [fetchUnreadCount]);
+	}, [fetchUnreadCount, enabled]);
 
 	/**
 	 * Fetches the first page. `options.unread` narrows the list to unread
