@@ -63,6 +63,10 @@ func TestPreflightModelsCallable(t *testing.T) {
 				ctx, cancel := h.CallContext(context.Background())
 				defer cancel()
 
+				// A one-token cap can end the turn before the model writes
+				// anything; Anthropic then answers content: []. The gateway
+				// must still answer 200 with an empty choice, so this call
+				// also guards that translation.
 				body := vc.ChatRequest{
 					"model":      model,
 					"max_tokens": 1,
@@ -184,6 +188,11 @@ func TestPreflightAuthRejectsAnonymous(t *testing.T) {
 // slugIsConfigured reports whether a route slug belongs to a configured vendor.
 func (h *harness) slugIsConfigured(slug string) bool {
 	if h.filteredBedrock != nil && slug == filteredBedrockSlug {
+		return true
+	}
+	// The guardrailed route is the harness's own copy of the first vendor,
+	// associated with the same App, so /v1/models rightly lists it.
+	if h.guardrailed != nil && slug == h.guardrailed.Slug {
 		return true
 	}
 	for _, v := range h.cfg.Vendors {

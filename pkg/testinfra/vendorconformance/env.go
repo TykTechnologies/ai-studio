@@ -251,7 +251,7 @@ func Load() (*Config, error) {
 		IncludePrevModel:    envBool("VENDOR_TESTS_INCLUDE_PREV_MODEL", true),
 		StrictUnknownFields: envBool("VENDOR_TESTS_STRICT_UNKNOWN_FIELDS", false),
 		UpdateGolden:        envBool("VENDOR_TESTS_UPDATE_GOLDEN", false),
-		MaxTokens:           envInt("VENDOR_TESTS_MAX_TOKENS", 256),
+		MaxTokens:           envInt("VENDOR_TESTS_MAX_TOKENS", 2048),
 		Parallel:            envInt("VENDOR_TESTS_PARALLEL", 4),
 		RepoRoot:            root,
 		StudioBaseURL:       strings.TrimSpace(os.Getenv("VENDOR_TESTS_STUDIO_BASE_URL")),
