@@ -48,6 +48,15 @@ type Service interface {
 	NotifyBudgetUsage(usage *models.BudgetUsage, threshold int) error
 }
 
+// SpendRecorder is implemented by budget services that keep running spend
+// totals (Enterprise). The gateway reports the cost of each request it has
+// recorded, in dollars, so the next CheckBudget counts it at once instead of
+// when the analytics write reaches the database. The community stub enforces
+// nothing and does not implement it.
+type SpendRecorder interface {
+	RecordSpend(app *models.App, llm *models.LLM, cost float64)
+}
+
 // TeamChecker lets team budgets take part in every App budget check and
 // analysis. The team_budget service satisfies it.
 type TeamChecker interface {

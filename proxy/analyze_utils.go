@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/andybalholm/brotli"
 )
@@ -198,16 +199,36 @@ func afterChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 	}
 	// time.Sleep(200 * time.Millisecond) // Removed: Unreliable fixed sleep. Test should handle waiting.
 
-	// Budget analysis
+	analyzeBudget(budgetServiceOf(service), llm, app, rec)
+}
+
+// budgetServiceOf returns the budget service behind service, or nil.
+func budgetServiceOf(service services.ServiceInterface) services.BudgetServiceInterface {
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
-		s.Budget.AnalyzeBudgetUsage(app, llm)
-	} else if budgetService, ok := service.(interface {
+		return s.Budget
+	}
+	if budgetService, ok := service.(interface {
 		GetBudgetService() services.BudgetService
 	}); ok {
 		if bs := budgetService.GetBudgetService(); bs != nil {
-			bs.AnalyzeBudgetUsage(app, llm)
+			return bs
 		}
 	}
+	return nil
+}
+
+// analyzeBudget runs what follows a recorded chat record on the budget side:
+// the request's cost goes into the budget service's running totals (so the
+// next CheckBudget counts it without waiting for the analytics write to reach
+// the database), then the threshold analysis runs. rec may be nil.
+func analyzeBudget(bs services.BudgetServiceInterface, llm *models.LLM, app *models.App, rec *models.LLMChatRecord) {
+	if bs == nil {
+		return
+	}
+	if sr, ok := bs.(budget.SpendRecorder); ok && rec != nil && rec.Cost > 0 {
+		sr.RecordSpend(app, llm, rec.Cost/10000)
+	}
+	bs.AnalyzeBudgetUsage(app, llm)
 }
 
 func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error) {
