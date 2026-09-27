@@ -276,7 +276,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.stopOverload()
 	}
 
-	// Shutdown plugin manager first
+	// Drain first: the AI Gateway is mounted, so shutting down the main
+	// server finishes the requests in flight, and they still run their
+	// plugins and record analytics.
+	drainErr := s.server.Shutdown(ctx)
+
+	// A response is analysed after it is written; wait for that too, so its
+	// records reach the data collection plugins before they stop.
+	if w, ok := s.gateway.(interface{ WaitForAnalytics(context.Context) error }); ok {
+		if err := w.WaitForAnalytics(ctx); err != nil {
+			log.Warn().Err(err).Msg("Stopped waiting for response analysis to finish")
+		}
+	}
+
+	// Then the plugins. The analytics pulse sends what it still buffers to
+	// the control server here, so the edge client must still be connected
+	// (main.go stops it after this).
 	if s.pluginManager != nil {
 		log.Debug().Msg("Shutting down plugin manager...")
 		if err := s.pluginManager.Shutdown(ctx); err != nil {
@@ -286,9 +301,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	// The AI Gateway is mounted, so shutting down the main server handles everything
-	if err := s.server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("server shutdown failed: %w", err)
+	if drainErr != nil {
+		return fmt.Errorf("server shutdown failed: %w", drainErr)
 	}
 
 	// Flush any buffered spans once no more can be produced.

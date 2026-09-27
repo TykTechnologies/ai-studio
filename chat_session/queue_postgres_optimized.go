@@ -9,19 +9,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
 // OptimizedPostgreSQLQueue implements MessageQueue using PostgreSQL LISTEN/NOTIFY
-// This version reuses the existing database connection to avoid connection exhaustion
+// This version reuses the existing database connection to avoid connection exhaustion:
+// NOTIFY goes through the application's pool, and notifications arrive on the
+// process-wide shared listener (see queue_postgres_listener.go), so a session
+// holds no connection of its own.
 type OptimizedPostgreSQLQueue struct {
 	sessionID string
 	db        *gorm.DB
 	sqlDB     *sql.DB
 
-	// Single connection for LISTEN/NOTIFY operations
-	listenerConn *sql.Conn
+	// The process-wide LISTEN connection and this session's channels on it
+	listener      *sharedListener
+	subscriptions []channelSubscription
 
 	// Local channels for backward compatibility
 	messagesChan     chan *ChatResponse
@@ -48,8 +51,10 @@ func NewOptimizedPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQ
 		return nil, fmt.Errorf("failed to get SQL database: %w", err)
 	}
 
-	// Test the connection
-	if err := sqlDB.Ping(); err != nil {
+	// Test the connection, without waiting forever on an exhausted pool
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), queueTimeout(config))
+	defer pingCancel()
+	if err := sqlDB.PingContext(pingCtx); err != nil {
 		return nil, fmt.Errorf("database connection failed: %w", err)
 	}
 
@@ -70,7 +75,7 @@ func NewOptimizedPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQ
 		config:           config,
 	}
 
-	// Setup PostgreSQL listener using a single connection from the pool
+	// Register this session's channels on the shared listener
 	if err := psq.setupListener(); err != nil {
 		psq.Close()
 		return nil, fmt.Errorf("failed to setup listener: %w", err)
@@ -88,27 +93,27 @@ func NewOptimizedPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQ
 	return psq, nil
 }
 
-// setupListener sets up LISTEN commands using a single connection from the existing pool
+// setupListener registers this session's channels on the shared listener.
+// It used to take a connection from the pool per session and never read a
+// notification from it, so sessions exhausted the pool and received nothing.
 func (psq *OptimizedPostgreSQLQueue) setupListener() error {
-	// Get a single connection from the pool for LISTEN operations
-	conn, err := psq.sqlDB.Conn(psq.cancelCtx)
+	dsn, err := postgresDSN(psq.db)
 	if err != nil {
-		return fmt.Errorf("failed to get connection from pool: %w", err)
+		return err
 	}
-	psq.listenerConn = conn
-
-	// Listen to all channels for this session using the same connection
-	channels := []string{
-		psq.getChannelName(PostgreSQLMessageTypeChatResponse),
-		psq.getChannelName(PostgreSQLMessageTypeStream),
-		psq.getChannelName(PostgreSQLMessageTypeError),
-		psq.getChannelName(PostgreSQLMessageTypeLLMResponse),
+	listener, err := acquireSharedListener(dsn, psq.config)
+	if err != nil {
+		return err
 	}
+	psq.listener = listener
 
+	channels := psq.sessionChannels()
+	subs, err := subscribeSessionChannels(listener, channels, psq.handleNotification, queueTimeout(psq.config))
+	psq.subscriptions = subs
+	if err != nil {
+		return err
+	}
 	for _, channel := range channels {
-		if err := psq.listenToChannel(channel); err != nil {
-			return fmt.Errorf("failed to listen to channel %s: %w", channel, err)
-		}
 		slog.Debug("listening to PostgreSQL channel",
 			"channel", channel,
 			"session_id", psq.sessionID,
@@ -118,92 +123,28 @@ func (psq *OptimizedPostgreSQLQueue) setupListener() error {
 	return nil
 }
 
-// listenToChannel issues a LISTEN command on the existing connection
-func (psq *OptimizedPostgreSQLQueue) listenToChannel(channel string) error {
-	_, err := psq.listenerConn.ExecContext(psq.cancelCtx, "LISTEN "+pq.QuoteIdentifier(channel))
-	return err
-}
-
-// unlistenToChannel issues an UNLISTEN command on the existing connection
-func (psq *OptimizedPostgreSQLQueue) unlistenToChannel(channel string) error {
-	if psq.listenerConn != nil {
-		_, err := psq.listenerConn.ExecContext(psq.cancelCtx, "UNLISTEN "+pq.QuoteIdentifier(channel))
-		return err
+// sessionChannels lists this session's channel for every message type
+func (psq *OptimizedPostgreSQLQueue) sessionChannels() []string {
+	return []string{
+		psq.getChannelName(PostgreSQLMessageTypeChatResponse),
+		psq.getChannelName(PostgreSQLMessageTypeStream),
+		psq.getChannelName(PostgreSQLMessageTypeError),
+		psq.getChannelName(PostgreSQLMessageTypeLLMResponse),
 	}
-	return nil
 }
 
-// startConsumers starts goroutines to consume messages from PostgreSQL notifications
+// startConsumers has nothing to start: the shared listener dispatches
+// notifications to handleNotification
 func (psq *OptimizedPostgreSQLQueue) startConsumers() error {
-	// Start a single consumer that uses the shared connection
-	psq.consumerWG.Add(1)
-	go psq.consumeNotifications()
-
 	return nil
 }
 
-// consumeNotifications consumes PostgreSQL notifications using the shared connection
-func (psq *OptimizedPostgreSQLQueue) consumeNotifications() {
-	defer psq.consumerWG.Done()
-
-	// Create a custom listener that polls for notifications
-	for {
-		select {
-		case <-psq.cancelCtx.Done():
-			return
-		default:
-			// Poll for notifications with a timeout
-			if err := psq.pollNotifications(); err != nil {
-				if err == context.Canceled {
-					return
-				}
-				slog.Error("failed to poll notifications",
-					"session_id", psq.sessionID,
-					"error", err)
-
-				// Retry after a short delay
-				time.Sleep(psq.config.ReconnectInterval)
-			}
-		}
-	}
-}
-
-// pollNotifications checks for and processes any pending notifications
-func (psq *OptimizedPostgreSQLQueue) pollNotifications() error {
-	// Use a shorter timeout for polling to remain responsive
-	ctx, cancel := context.WithTimeout(psq.cancelCtx, 100*time.Millisecond)
-	defer cancel()
-
-	errChan := make(chan error, 1)
-
-	go func() {
-		// Check for notifications using a query with timeout
-		rows, err := psq.listenerConn.QueryContext(ctx, "SELECT 1")
-		if err != nil {
-			if err != context.DeadlineExceeded {
-				errChan <- err
-			}
-			return
-		}
-		rows.Close()
-
-		// Process any pending notifications by checking the connection
-		// This is a workaround since we can't directly access pq.Conn
-		var queueUsage float64
-		err = psq.listenerConn.QueryRowContext(ctx,
-			"SELECT pg_notification_queue_usage()").Scan(&queueUsage)
-		if err != nil && err != sql.ErrNoRows {
-			// Log the error but don't treat it as fatal
-			slog.Debug("notification queue check", "error", err)
-		}
-	}()
-
-	select {
-	case err := <-errChan:
-		return err
-	case <-ctx.Done():
-		// Timeout is normal, not an error
-		return nil
+// handleNotification routes a notification to this session's local channels
+func (psq *OptimizedPostgreSQLQueue) handleNotification(payload string) {
+	if err := routePostgreSQLNotification(payload, psq.sessionID, psq.messagesChan, psq.streamChan, psq.errorsChan, psq.llmResponsesChan); err != nil {
+		slog.Error("failed to handle notification",
+			"session_id", psq.sessionID,
+			"error", err)
 	}
 }
 
@@ -280,7 +221,10 @@ func (psq *OptimizedPostgreSQLQueue) publishToPostgreSQL(ctx context.Context, me
 	// Send NOTIFY command with timeout
 	channel := psq.getChannelName(messageType)
 
-	// Use the existing connection pool instead of creating new transactions
+	// Use the existing connection pool instead of creating new transactions,
+	// bounded so an exhausted pool cannot block the caller forever
+	ctx, cancel := withQueueDeadline(ctx, psq.config)
+	defer cancel()
 	_, err = psq.sqlDB.ExecContext(ctx, "SELECT pg_notify($1, $2)", channel, string(msgBytes))
 	if err != nil {
 		return fmt.Errorf("failed to notify: %w", err)
@@ -320,21 +264,13 @@ func (psq *OptimizedPostgreSQLQueue) Close() error {
 
 	psq.closed = true
 
-	// Unlisten from all channels
-	channels := []string{
-		psq.getChannelName(PostgreSQLMessageTypeChatResponse),
-		psq.getChannelName(PostgreSQLMessageTypeStream),
-		psq.getChannelName(PostgreSQLMessageTypeError),
-		psq.getChannelName(PostgreSQLMessageTypeLLMResponse),
-	}
-
-	for _, channel := range channels {
-		if err := psq.unlistenToChannel(channel); err != nil {
-			slog.Warn("error unlistening from channel",
-				"channel", channel,
-				"session_id", psq.sessionID,
-				"error", err)
-		}
+	// Leave the shared listener. Once this returns no notification is being
+	// routed to the local channels, so they can be closed below.
+	unsubscribeSessionChannels(psq.listener, psq.subscriptions, queueTimeout(psq.config))
+	psq.subscriptions = nil
+	if psq.listener != nil {
+		psq.listener.release()
+		psq.listener = nil
 	}
 
 	// Cancel context to stop consumers
@@ -342,15 +278,6 @@ func (psq *OptimizedPostgreSQLQueue) Close() error {
 
 	// Wait for all consumers to finish
 	psq.consumerWG.Wait()
-
-	// Close the listener connection (returns it to the pool)
-	if psq.listenerConn != nil {
-		if err := psq.listenerConn.Close(); err != nil {
-			slog.Warn("error closing listener connection",
-				"session_id", psq.sessionID,
-				"error", err)
-		}
-	}
 
 	// Close local channels
 	close(psq.messagesChan)

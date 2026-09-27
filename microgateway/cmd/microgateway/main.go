@@ -516,36 +516,76 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 
-	// Stop background tasks and hub-spoke services
-	log.Debug().Msg("Stopping background tasks")
-	serviceContainer.StopBackgroundTasks()
-
-	// Stop gRPC components
+	steps := shutdownSteps{
+		stopServer:     srv.Shutdown,
+		stopBackground: serviceContainer.StopBackgroundTasks,
+		cleanup:        serviceContainer.Cleanup,
+	}
 	if controlServer != nil {
-		log.Debug().Msg("Stopping gRPC control server")
-		controlServer.Stop()
+		steps.stopControlServer = controlServer.Stop
+	}
+	if edgeClient != nil {
+		steps.stopEdgeClient = func() { edgeClient.Stop() }
+	}
+	if hubSpokeContainer != nil {
+		steps.stopHubSpoke = hubSpokeContainer.StopHubSpokeServices
+	}
+	runShutdown(shutdownCtx, steps)
+
+	log.Info().Msg("Microgateway stopped gracefully")
+}
+
+// shutdownSteps are the parts of a running gateway that a graceful shutdown
+// stops. Nil steps are skipped.
+type shutdownSteps struct {
+	stopServer        func(context.Context) error
+	stopBackground    func()
+	stopControlServer func()
+	stopEdgeClient    func()
+	stopHubSpoke      func()
+	cleanup           func()
+}
+
+// runShutdown stops the gateway in dependency order. The server goes first:
+// it drains the requests in flight, waits for their analysis and then stops
+// the plugins, and the analytics pulse sends what it still buffers to the
+// control server through the edge client. Stopping the edge client earlier
+// (as this used to) closed that connection first, so every graceful shutdown
+// lost up to one pulse interval of edge analytics at the hub.
+func runShutdown(ctx context.Context, s shutdownSteps) {
+	if s.stopServer != nil {
+		if err := s.stopServer(ctx); err != nil {
+			log.Error().Err(err).Msg("Server shutdown error")
+		}
 	}
 
-	if edgeClient != nil {
+	// Stop background tasks and hub-spoke services
+	if s.stopBackground != nil {
+		log.Debug().Msg("Stopping background tasks")
+		s.stopBackground()
+	}
+
+	// Stop gRPC components
+	if s.stopControlServer != nil {
+		log.Debug().Msg("Stopping gRPC control server")
+		s.stopControlServer()
+	}
+
+	if s.stopEdgeClient != nil {
 		log.Debug().Msg("Stopping gRPC edge client")
-		edgeClient.Stop()
+		s.stopEdgeClient()
 	}
 
 	// Stop hub-spoke specific services
-	if hubSpokeContainer != nil {
+	if s.stopHubSpoke != nil {
 		log.Debug().Msg("Stopping hub-spoke services")
-		hubSpokeContainer.StopHubSpokeServices()
+		s.stopHubSpoke()
 	}
 
-	// Shutdown server
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Server shutdown error")
+	// Final cleanup: writes what the analytics writer still holds.
+	if s.cleanup != nil {
+		s.cleanup()
 	}
-
-	// Final cleanup
-	serviceContainer.Cleanup()
-
-	log.Info().Msg("Microgateway stopped gracefully")
 }
 
 // setupEarlyLogging sets up console logging before config is loaded

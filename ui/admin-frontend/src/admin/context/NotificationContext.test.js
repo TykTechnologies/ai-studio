@@ -105,6 +105,28 @@ describe("NotificationProvider", () => {
     expect(getUnreadCount).toHaveBeenCalledTimes(1);
   });
 
+  it("does not poll for a signed-out visitor, and starts once signed in", async () => {
+    jest.useFakeTimers();
+    const tree = (enabled) => (
+      <NotificationProvider enabled={enabled}>
+        <Consumer />
+      </NotificationProvider>
+    );
+    const { rerender } = render(tree(false));
+    await act(async () => {
+      jest.advanceTimersByTime(UNREAD_POLL_INTERVAL_MS * 3);
+      await Promise.resolve();
+    });
+    expect(getUnreadCount).not.toHaveBeenCalled();
+
+    rerender(tree(true));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getUnreadCount).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("unread")).toHaveTextContent("3");
+  });
+
   it("refresh loads the first page and loadMore appends the next one by offset", async () => {
     renderProvider();
     fireEvent.click(screen.getByText("refresh"));

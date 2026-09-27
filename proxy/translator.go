@@ -511,7 +511,7 @@ func (p *Proxy) recordTranslatorAnalytics(
 	}
 	analytics.RecordExchange(r.Context(), proxyLog, rec)
 	if rec != nil {
-		analyzeTranslatorBudget(p.gatewayService, llm, app)
+		analyzeTranslatorBudget(p.gatewayService, llm, app, rec)
 	}
 }
 
@@ -840,17 +840,8 @@ func translatorChatRecord(
 	return rec
 }
 
-// analyzeTranslatorBudget runs the budget analysis after an /ai/ request's
-// chat record is recorded.
-func analyzeTranslatorBudget(service services.ServiceInterface, llm *models.LLM, app *models.App) {
-	// Budget analysis
-	if s, ok := service.(*services.Service); ok && s.Budget != nil {
-		s.Budget.AnalyzeBudgetUsage(app, llm)
-	} else if budgetService, ok := service.(interface {
-		GetBudgetService() services.BudgetService
-	}); ok {
-		if bs := budgetService.GetBudgetService(); bs != nil {
-			bs.AnalyzeBudgetUsage(app, llm)
-		}
-	}
+// analyzeTranslatorBudget counts an /ai/ request's cost and runs the budget
+// analysis once its chat record is recorded.
+func analyzeTranslatorBudget(service services.ServiceInterface, llm *models.LLM, app *models.App, rec *models.LLMChatRecord) {
+	analyzeBudget(budgetServiceOf(service), llm, app, rec)
 }

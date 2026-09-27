@@ -21,7 +21,6 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
-	configpb "github.com/TykTechnologies/midsommar/v2/proto"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
@@ -829,6 +828,11 @@ func (pm *PluginManager) monitorPluginHealth(pluginID uint) {
 
 // Shutdown gracefully shuts down all loaded plugins
 func (pm *PluginManager) Shutdown(ctx context.Context) error {
+	// Global data collection plugins first: the analytics pulse sends its
+	// buffer to the control server on the way out, so the edge's connection
+	// to control must still be up (see the shutdown order in main.go).
+	pm.stopGlobalDataPlugins()
+
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -1599,13 +1603,11 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 		return nil, fmt.Errorf("edge client not available for built-in analytics pulse plugin")
 	}
 
-	// Get gRPC client from edge client
-	var grpcClient configpb.ConfigurationSyncServiceClient
-	if client, ok := pm.edgeClient.(interface {
-		GetGRPCClient() configpb.ConfigurationSyncServiceClient
-	}); ok {
-		grpcClient = client.GetGRPCClient()
-	} else {
+	// The pulse asks the edge client for its gRPC client on every send: a
+	// reconnect replaces the connection, and a client taken now would belong
+	// to the first one.
+	clients, ok := pm.edgeClient.(plugins.PulseClientSource)
+	if !ok {
 		return nil, fmt.Errorf("edge client does not provide gRPC client interface")
 	}
 
@@ -1622,7 +1624,7 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 	}
 
 	// Create the built-in analytics pulse plugin
-	pulsePlugin, err := plugins.NewAnalyticsPulsePlugin(edgeID, edgeNamespace, grpcClient, cfg.Config)
+	pulsePlugin, err := plugins.NewAnalyticsPulsePlugin(edgeID, edgeNamespace, clients, cfg.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create analytics pulse plugin: %w", err)
 	}
@@ -1991,18 +1993,32 @@ func (pm *PluginManager) pluginHandlesHookType(hookTypes []string, hookType stri
 
 // UnloadGlobalPlugins unloads all global data collection plugins
 func (pm *PluginManager) UnloadGlobalPlugins() {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	pm.stopGlobalDataPlugins()
+}
 
-	for name, plugin := range pm.globalDataPlugins {
+// stopGlobalDataPlugins unloads the global data collection plugins and stops
+// them: built-in ones through Shutdown (the analytics pulse sends what it
+// still buffers to the control server), external ones by killing the process.
+// The plugins are stopped outside the lock, since the pulse's final send is a
+// network call.
+func (pm *PluginManager) stopGlobalDataPlugins() {
+	pm.mu.Lock()
+	globals := pm.globalDataPlugins
+	pm.globalDataPlugins = make(map[string]*GlobalPlugin)
+	pm.dataCollectionHookTypes = make(map[string][]string)
+	pm.mu.Unlock()
+
+	for name, plugin := range globals {
+		if plugin.LoadedPlugin != nil && plugin.LoadedPlugin.BuiltinPlugin != nil {
+			if err := plugin.LoadedPlugin.BuiltinPlugin.Shutdown(); err != nil {
+				log.Error().Err(err).Str("plugin", name).Msg("Failed to stop built-in data collection plugin")
+			}
+		}
 		if plugin.Client != nil {
 			plugin.Client.Kill()
 		}
 		log.Debug().Str("plugin", name).Msg("Unloaded global data collection plugin")
 	}
-
-	pm.globalDataPlugins = make(map[string]*GlobalPlugin)
-	pm.dataCollectionHookTypes = make(map[string][]string)
 }
 
 // ShouldReplaceDatabaseStorage checks if any plugin is configured to replace database storage for the given hook type

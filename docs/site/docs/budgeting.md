@@ -45,7 +45,7 @@ In the UI the budget field is an explicit choice between "No limit" and "Fixed a
 
 Budget enforcement primarily occurs at the **[Proxy & API Gateway](./proxy.md)**:
 
-Most deployments serve traffic through [Microgateways](./edge-gateways.md); Studio's embedded gateway applies the same rules.
+Most deployments serve traffic through [Microgateways](./edge-gateways.md); Studio's embedded gateway applies the same rules. On the embedded gateway, a request's cost counts against its App and LLM budgets as soon as the request is recorded, so the next request is checked against it; spend recorded by other Studio instances and by Microgateways is picked up within a few seconds of reaching Studio's database. Only requests running at the same moment can take an App over its budget.
 
 1.  **Request Received:** The Proxy receives a request destined for an LLM.
 2.  **Cost Estimation:** Before forwarding the request, the Proxy might estimate the potential maximum cost (or rely on post-request cost calculation).

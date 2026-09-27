@@ -4,6 +4,7 @@ import { affectsGatewayConfig, notifyConfigChanged } from './configSyncNotifier'
 import { classifyAuthError } from './apiErrors';
 import { emitPermissionDenied } from './permissionDeniedBus';
 import { canAccessAdminNow } from './identityStore';
+import { redirectToLogin } from './authRedirect';
 
 let apiClientInstance = null;
 
@@ -40,8 +41,8 @@ const createApiClient = () => {
     (error) => {
       const status = error.response?.status;
       if (status === 401) {
-        // Handle unauthorized access
-        window.location.href = '/login';
+        // Handle unauthorized access (public pages stay where they are)
+        redirectToLogin();
         return Promise.reject(error);
       }
       if (status === 403 || status === 402) {

@@ -8,6 +8,9 @@ import (
 )
 
 func TestPostgreSQLQueueFactory_Integration(t *testing.T) {
+	// The first check needs DATABASE_URL unset; the Postgres CI job sets it.
+	t.Setenv("DATABASE_URL", "")
+
 	// Test creating PostgreSQL queue factory from configuration
 	cfg := config.QueueConfig{
 		Type:       "postgres",
