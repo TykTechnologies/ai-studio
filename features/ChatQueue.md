@@ -294,7 +294,29 @@ QUEUE_BUFFER_SIZE=200                        # Local channel buffer size (defaul
   - Configurable connection limits (max: 25, idle: 5)
   - Automatic connection recycling every 5 minutes
   - Better error handling and reconnection logic
-  - Note: Each session requires 2 connections (main + listener) but pool management prevents exhaustion
+- **One shared listener per database (2.2)**: every PostgreSQL queue in a process
+  receives notifications through a single `pq.Listener` connection per database
+  (`chat_session/queue_postgres_listener.go`). It is opened outside the
+  application's pool on the first session and closed with the last one.
+  - A session registers its four channels on that listener and holds no
+    connection of its own. NOTIFY goes through the application's pool.
+  - Sessions that share a session ID in one process each receive every
+    message; closing one does not silence the others.
+  - The DSN comes from the GORM dialector the queue was given, falling back
+    to `DATABASE_URL`. The deferred factory opens one pool per `DATABASE_URL`
+    and reuses it, rather than opening a pool per session.
+  - Before 2.2, the production (shared-pool) queue took one pool connection
+    per session for LISTEN and never read a notification from it. Sessions
+    received nothing, and once the pool was used up, creating a session blocked
+    forever. The standalone queue opened one listener connection per session.
+- **Bounded waits**: connecting the listener, LISTEN, the creation ping, and a
+  NOTIFY from a caller without a deadline are all bounded by
+  `POSTGRES_QUEUE_NOTIFY_TIMEOUT` (default 5s). An exhausted pool makes session
+  creation fail with an error instead of hanging.
+- **Reconnection**: `pq.Listener` reconnects on its own, starting at
+  `POSTGRES_QUEUE_RECONNECT_INTERVAL` and backing off up to that interval times
+  `POSTGRES_QUEUE_MAX_RECONNECT_RETRIES`, then re-issues every LISTEN.
+  Notifications sent while it is disconnected are lost (a warning is logged).
 
 #### Channel Naming Convention
 PostgreSQL queues use a structured channel naming convention:
@@ -310,7 +332,8 @@ Examples:
 
 #### Database Connection Requirements
 - **PostgreSQL Version**: 9.0+ (LISTEN/NOTIFY support)
-- **Connection Pooling**: Supported (each queue gets its own connection)
+- **Connection Pooling**: Supported. Sessions share the application's pool for NOTIFY, plus one listener connection per database per process
+- **Tests**: the Postgres-gated tests (`chat_session`, `config`, `startup`, the edge writer/ledger test and the enterprise audit suite) run in the CI "Go Postgres Tests" job
 - **SSL Support**: Full SSL/TLS support via DATABASE_URL parameters
 - **Authentication**: All PostgreSQL authentication methods supported
 
