@@ -624,6 +624,11 @@ func budgetDenial(err error, exceededMsg string) (int, string) {
 // since the cause of that is a database error.
 func budgetDenialError(status int, msg string, err error) *APIError {
 	apiErr := &APIError{Message: msg, Type: oaiErrorType(status), Code: "budget_check_unavailable"}
+	if errors.Is(err, services.ErrAppInactive) {
+		apiErr.Code = "app_inactive"
+		apiErr.Message = services.AppInactiveMessage
+		return apiErr
+	}
 	if status == http.StatusForbidden {
 		apiErr.Code = "budget_exceeded"
 		if detail := strings.TrimPrefix(err.Error(), "budget exceeded: "); detail != "" {

@@ -29,6 +29,15 @@ func TestBudgetDenial(t *testing.T) {
 	if status != http.StatusForbidden || msg != services.AppInactiveMessage {
 		t.Fatalf("an inactive App must be a 403 %q: %d %q", services.AppInactiveMessage, status, msg)
 	}
+	// The /ai/ loopback envelope is what /ai/ and /v1 callers see; it must
+	// name the inactive App, whatever message the caller passed in (the
+	// Bedrock rungs pass a fixed "Budget limit exceeded").
+	for _, m := range []string{msg, "Budget limit exceeded"} {
+		apiErr := budgetDenialError(status, m, inactive)
+		if apiErr.Code != "app_inactive" || apiErr.Message != services.AppInactiveMessage {
+			t.Fatalf("envelope for an inactive App must be app_inactive %q, got %+v", services.AppInactiveMessage, apiErr)
+		}
+	}
 }
 
 // The default transport keeps 2 idle connections per host; with more requests
