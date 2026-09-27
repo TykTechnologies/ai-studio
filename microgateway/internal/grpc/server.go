@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -724,7 +725,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		log.Info().Str("token_prefix", tokenPrefix).Uint("app_id", apiToken.AppID).Msg("Control server: token's app is inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
-			ErrorMessage: "Associated app is inactive",
+			ErrorMessage: coresvc.AppInactiveMessage, // edges answer 403 for this, not 401
 		}, nil
 	}
 

@@ -24,6 +24,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
@@ -789,7 +790,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 
 	// Get the associated app with LLM/Tool/Datasource relationships (preload for pull-on-miss sync)
 	var app models.App
-	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).
+	if err := s.db.Where("credential_id = ?", credential.ID).
 		Preload("LLMs").Preload("Tools").Preload("Datasources").Preload("ModelRouters").Preload("SemanticRouters").First(&app).Error; err != nil {
 		// Only a missing or inactive App is a rejection. Any other error is
 		// the hub's own fault and goes back as one: the edge then treats the
@@ -803,6 +804,15 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		return &pb.TokenValidationResponse{
 			Valid:        false,
 			ErrorMessage: "Associated app not found or inactive",
+		}, nil
+	}
+	if !app.IsActive {
+		// Said in so many words: the edge answers 403 "app is inactive" for
+		// this, as the embedded gateway does, rather than 401 for a bad key.
+		log.Debug().Str("token_prefix", tokenPrefix).Uint("app_id", app.ID).Msg("AI Studio control server: app is inactive")
+		return &pb.TokenValidationResponse{
+			Valid:        false,
+			ErrorMessage: services.AppInactiveMessage,
 		}, nil
 	}
 

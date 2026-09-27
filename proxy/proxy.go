@@ -579,6 +579,11 @@ func budgetDenial(err error, exceededMsg string) (int, string) {
 	if errors.Is(err, services.ErrBudgetCheckUnavailable) {
 		return http.StatusServiceUnavailable, "Budget check unavailable, retry shortly"
 	}
+	// An App the edge no longer has (a config push removed it while its token
+	// was still cached) is refused as the credential check refuses it.
+	if errors.Is(err, services.ErrAppInactive) {
+		return http.StatusForbidden, services.AppInactiveMessage
+	}
 	return http.StatusForbidden, exceededMsg
 }
 
@@ -846,7 +851,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
-		if status == http.StatusForbidden {
+		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
 			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
 		}
 		// Error body for analytics should be constructed carefully if needed
@@ -1585,7 +1590,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded for streaming")
-		if status == http.StatusForbidden {
+		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
 			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
 		}
 		p.goAnalyze(func() {

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -249,9 +250,51 @@ func (cv *CredentialValidator) authorizeTarget(w http.ResponseWriter, r *http.Re
 		Str("target_kind", t.kind).
 		Str("target_slug", t.slug).
 		Msg("Authorization denied: app is not granted the requested resource")
+	respondWithError(w, http.StatusForbidden, targetDeniedMessage(t), nil, false)
+	return false
+}
+
+// targetDeniedMessage is the 403 message for an app that is not granted t.
+func targetDeniedMessage(t gatewayTarget) string {
 	noun := map[string]string{targetLLM: "LLM", targetRoute: "vendor", targetDatasource: "datasource"}[t.kind]
-	respondWithError(w, http.StatusForbidden,
-		fmt.Sprintf("%s '%s' not found or not supported by your access rights", noun, t.slug), nil, false)
+	return fmt.Sprintf("%s '%s' not found or not supported by your access rights", noun, t.slug)
+}
+
+// credentialCheckRetryAfter is the Retry-After, in seconds, on a 503 for a
+// credential that could not be checked.
+const credentialCheckRetryAfter = "5"
+
+// respondCredentialCheckUnavailable answers a request whose credential could
+// not be checked (services.ErrCredentialCheckUnavailable) with a retryable 503
+// in the OpenAI error shape, like the gateway's overload refusal. A 401 here
+// would tell the client its key is wrong; SDKs do not retry those.
+func respondCredentialCheckUnavailable(w http.ResponseWriter, err error) {
+	log.Warn().Err(err).Msg("Credential could not be checked; answering 503")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Retry-After", credentialCheckRetryAfter)
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": map[string]string{
+			"message": "The gateway cannot check credentials right now; retry shortly.",
+			"type":    oaiErrorType(http.StatusServiceUnavailable),
+			"code":    "credential_check_unavailable",
+		},
+	})
+}
+
+// respondCredentialLookupError answers a GetCredentialBySecret error that is
+// not a plain rejection: a check that could not run (503) or an inactive App
+// (403). It reports false, having written nothing, for a plain rejection, which
+// each branch answers in its own words.
+func respondCredentialLookupError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, services.ErrCredentialCheckUnavailable):
+		respondCredentialCheckUnavailable(w, err)
+		return true
+	case errors.Is(err, services.ErrAppInactive):
+		respondWithError(w, http.StatusForbidden, services.AppInactiveMessage, nil, true)
+		return true
+	}
 	return false
 }
 
@@ -590,6 +633,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				}
 			}
 
+			// The app secret could not be checked, or belongs to an inactive
+			// App: neither is "invalid token".
+			if err != nil && respondCredentialLookupError(w, err) {
+				return
+			}
+
 			// Both OAuth token and app secret lookups failed
 			respondWithError(w, http.StatusUnauthorized, "Invalid or expired bearer token", nil, true)
 			return
@@ -760,9 +809,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		}
 
 		// === STANDARD API KEY VALIDATION (only if no auth plugin) ===
-		validAPIKey, reqWithCtx := cv.CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug, r)
-		if !validAPIKey {
-			respondWithError(w, http.StatusUnauthorized, "Invalid API key or insufficient permissions.", nil, true) // true for wwwAuth
+		denial, reqWithCtx := cv.checkAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug, r)
+		if denial != nil {
+			if denial.err != nil && respondCredentialLookupError(w, denial.err) {
+				return
+			}
+			respondWithError(w, denial.status, denial.message, nil, denial.status == http.StatusUnauthorized) // wwwAuth on 401 only
 			return
 		}
 		r = reqWithCtx
@@ -795,10 +847,36 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 
 // Renamed from CheckCredential to CheckAPICredential to differentiate
 func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug string, r *http.Request) (bool, *http.Request) {
+	denial, r := cv.checkAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug, r)
+	return denial == nil, r
+}
+
+// apiKeyDenial is why the API-key branch refused a request, as the response
+// to give. err, when set, is the credential lookup error, which may call for a
+// 503 or a 403 instead (respondCredentialLookupError).
+type apiKeyDenial struct {
+	status  int
+	message string
+	err     error
+}
+
+// apiKeyInvalid is the answer for a key that does not authenticate.
+var apiKeyInvalid = &apiKeyDenial{status: http.StatusUnauthorized, message: "Invalid API key or insufficient permissions."}
+
+// apiKeyTargetDenied is the answer for a valid key whose App is not granted t:
+// a 403, the same as every other authentication branch gives (authorizeTarget).
+// This branch used to answer 401, telling the caller to fix a key that works.
+func apiKeyTargetDenied(t gatewayTarget) *apiKeyDenial {
+	return &apiKeyDenial{status: http.StatusForbidden, message: targetDeniedMessage(t)}
+}
+
+// checkAPICredential is CheckAPICredential reporting why a request is refused;
+// a nil denial means it is allowed.
+func (cv *CredentialValidator) checkAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug string, r *http.Request) (*apiKeyDenial, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(apiKey) // API Key is the 'secret'
 	if err != nil {
 		log.Debug().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
-		return false, r
+		return &apiKeyDenial{status: apiKeyInvalid.status, message: apiKeyInvalid.message, err: err}, r
 	}
 	if !cred.Active {
 		log.Debug().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
@@ -813,7 +891,7 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 				ResponseBody: `{"error":"credential_inactive","detail":"API credential is inactive"}`,
 			})
 		}
-		return false, r
+		return apiKeyInvalid, r
 	}
 
 	log.Debug().
@@ -825,7 +903,7 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
 		log.Debug().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
-		return false, r
+		return &apiKeyDenial{status: apiKeyInvalid.status, message: apiKeyInvalid.message, err: err}, r
 	}
 
 	if !app.IsActive {
@@ -841,7 +919,7 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 			Vendor:       "auth",
 			ResponseBody: `{"error":"app_inactive","detail":"app is inactive"}`,
 		})
-		return false, r
+		return &apiKeyDenial{status: http.StatusForbidden, message: services.AppInactiveMessage}, r
 	}
 
 	log.Debug().
@@ -860,8 +938,16 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 
 	// The resource half of the check is shared with every other authentication
 	// branch (see targetAllowed), so the rules cannot drift between them again.
+	// A key that authenticates but is not granted the target is a 403.
+	check := func(t gatewayTarget) (*apiKeyDenial, *http.Request) {
+		if cv.targetAllowed(r, app, t) {
+			return nil, r
+		}
+		return apiKeyTargetDenied(t), r
+	}
+
 	if dsSlug != "" {
-		return cv.targetAllowed(r, app, gatewayTarget{kind: targetDatasource, slug: dsSlug}), r
+		return check(gatewayTarget{kind: targetDatasource, slug: dsSlug})
 	}
 
 	if llmSlug != "" {
@@ -873,26 +959,31 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 			Int("app_llm_count", len(app.LLMs)).
 			Bool("allowed", allowed).
 			Msg("CheckAPICredential: LLM access check")
-		return allowed, r
+		if !allowed {
+			return apiKeyTargetDenied(gatewayTarget{kind: targetLLM, slug: llmSlug}), r
+		}
+		return nil, r
 	}
 
 	if routeID != "" { // /ai/{routeID} and /anthropic/{routeID}: routeID is an LLM slug
-		return cv.targetAllowed(r, app, gatewayTarget{kind: targetRoute, slug: routeID}), r
+		return check(gatewayTarget{kind: targetRoute, slug: routeID})
 	}
 
 	if toolSlugContext := r.Context().Value("toolSlug"); toolSlugContext != nil {
 		if ts, ok := toolSlugContext.(string); ok && ts != "" {
+			// Tools answer 401 whether missing or not granted, as in
+			// authorizeToolAccess: the caller must not learn which.
 			tool, err := cv.service.GetToolBySlug(ts)
 			if err != nil {
-				return false, r
+				return apiKeyInvalid, r
 			}
 			if appHasTool(app, tool.ID) {
 				ctx := context.WithValue(r.Context(), "tool", tool) // Add full tool to context
-				return true, r.WithContext(ctx)
+				return nil, r.WithContext(ctx)
 			}
-			return false, r
+			return apiKeyInvalid, r
 		}
 	}
 
-	return false, r // Default to no access if no specific resource type matches
+	return apiKeyInvalid, r // Default to no access if no specific resource type matches
 }
