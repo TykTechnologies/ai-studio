@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -21,7 +20,10 @@ type PostgreSQLQueue struct {
 	sessionID string
 	db        *gorm.DB
 	sqlDB     *sql.DB
-	listener  *pq.Listener
+
+	// The process-wide LISTEN connection and this session's channels on it
+	listener      *sharedListener
+	subscriptions []channelSubscription
 
 	// Local channels for backward compatibility
 	messagesChan     chan *ChatResponse
@@ -82,8 +84,10 @@ func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) 
 		return nil, fmt.Errorf("failed to get SQL database: %w", err)
 	}
 
-	// Test the connection
-	if err := sqlDB.Ping(); err != nil {
+	// Test the connection, without waiting forever on an exhausted pool
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), queueTimeout(config))
+	defer pingCancel()
+	if err := sqlDB.PingContext(pingCtx); err != nil {
 		return nil, fmt.Errorf("database connection failed: %w", err)
 	}
 
@@ -120,10 +124,18 @@ func NewPostgreSQLQueue(sessionID string, db *gorm.DB, config PostgreSQLConfig) 
 	return psq, nil
 }
 
-// setupListener creates and configures the PostgreSQL listener
+// setupListener registers this session's channels on the process-wide shared
+// listener (see queue_postgres_listener.go) instead of opening a listener
+// connection per session.
 func (psq *PostgreSQLQueue) setupListener() error {
-	// Create PostgreSQL listener with reconnection handling
-	listener := psq.createListener()
+	dsn, err := postgresDSN(psq.db)
+	if err != nil {
+		return err
+	}
+	listener, err := acquireSharedListener(dsn, psq.config)
+	if err != nil {
+		return err
+	}
 	psq.listener = listener
 
 	// Listen to all channels for this session
@@ -134,150 +146,29 @@ func (psq *PostgreSQLQueue) setupListener() error {
 		psq.getChannelName(PostgreSQLMessageTypeLLMResponse),
 	}
 
+	subs, err := subscribeSessionChannels(listener, channels, psq.handleNotification, queueTimeout(psq.config))
+	psq.subscriptions = subs
+	if err != nil {
+		return err
+	}
 	for _, channel := range channels {
-		if err := listener.Listen(channel); err != nil {
-			return fmt.Errorf("failed to listen to channel %s: %w", channel, err)
-		}
 		slog.Debug("listening to PostgreSQL channel", "channel", channel, "session_id", psq.sessionID)
 	}
 
 	return nil
 }
 
-// createListener creates a PostgreSQL listener with proper error handling
-func (psq *PostgreSQLQueue) createListener() *pq.Listener {
-	// Get database connection string from environment or config
-	// We'll use the same database connection info as the main application
-	var dsn string
-
-	// Try to get DSN from environment first (most reliable)
-	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
-		dsn = databaseURL
-	} else {
-		// Fallback: construct DSN (this would need more sophisticated logic in production)
-		slog.Warn("DATABASE_URL not found, PostgreSQL queue may not work correctly", "session_id", psq.sessionID)
-		dsn = "postgres://localhost/midsommar?sslmode=disable" // fallback
-	}
-
-	return pq.NewListener(
-		dsn,
-		psq.config.ReconnectInterval,
-		psq.config.NotifyTimeout,
-		func(ev pq.ListenerEventType, err error) {
-			switch ev {
-			case pq.ListenerEventConnected:
-				slog.Info("PostgreSQL listener connected", "session_id", psq.sessionID)
-			case pq.ListenerEventDisconnected:
-				slog.Warn("PostgreSQL listener disconnected", "session_id", psq.sessionID, "error", err)
-			case pq.ListenerEventReconnected:
-				slog.Info("PostgreSQL listener reconnected", "session_id", psq.sessionID)
-			case pq.ListenerEventConnectionAttemptFailed:
-				slog.Error("PostgreSQL listener connection failed", "session_id", psq.sessionID, "error", err)
-			}
-		},
-	)
-}
-
-// startConsumers starts goroutines to consume messages from PostgreSQL notifications
+// startConsumers has nothing to start: the shared listener dispatches
+// notifications to handleNotification
 func (psq *PostgreSQLQueue) startConsumers() error {
-	// Start a single consumer that routes messages based on channel
-	psq.consumerWG.Add(1)
-	go psq.consumeNotifications()
-
 	return nil
 }
 
-// consumeNotifications consumes PostgreSQL notifications and routes them to appropriate channels
-func (psq *PostgreSQLQueue) consumeNotifications() {
-	defer psq.consumerWG.Done()
-
-	for {
-		select {
-		case <-psq.cancelCtx.Done():
-			return
-		case notification := <-psq.listener.Notify:
-			if notification == nil {
-				continue
-			}
-
-			if err := psq.handleNotification(notification); err != nil {
-				slog.Error("failed to handle notification", "session_id", psq.sessionID, "error", err)
-			}
-		}
+// handleNotification routes a notification payload to the appropriate channel
+func (psq *PostgreSQLQueue) handleNotification(payload string) {
+	if err := routePostgreSQLNotification(payload, psq.sessionID, psq.messagesChan, psq.streamChan, psq.errorsChan, psq.llmResponsesChan); err != nil {
+		slog.Error("failed to handle notification", "session_id", psq.sessionID, "error", err)
 	}
-}
-
-// handleNotification processes a PostgreSQL notification and routes it to the appropriate channel
-func (psq *PostgreSQLQueue) handleNotification(notification *pq.Notification) error {
-	// Deserialize the message
-	var pgMsg PostgreSQLMessage
-	if err := json.Unmarshal([]byte(notification.Extra), &pgMsg); err != nil {
-		return fmt.Errorf("failed to unmarshal notification: %w", err)
-	}
-
-	// Route to appropriate channel based on message type
-	switch pgMsg.Type {
-	case PostgreSQLMessageTypeChatResponse:
-		var chatResp ChatResponse
-		if err := json.Unmarshal(pgMsg.Data, &chatResp); err != nil {
-			return fmt.Errorf("failed to unmarshal ChatResponse: %w", err)
-		}
-
-		select {
-		case psq.messagesChan <- &chatResp:
-		default:
-			slog.Warn("message channel full, dropping message", "session_id", psq.sessionID)
-		}
-
-	case PostgreSQLMessageTypeStream:
-		var streamData []byte
-		if err := json.Unmarshal(pgMsg.Data, &streamData); err != nil {
-			return fmt.Errorf("failed to unmarshal stream data: %w", err)
-		}
-
-		select {
-		case psq.streamChan <- streamData:
-		default:
-			slog.Warn("stream channel full, dropping data", "session_id", psq.sessionID)
-		}
-
-	case PostgreSQLMessageTypeError:
-		var errorStr string
-		if err := json.Unmarshal(pgMsg.Data, &errorStr); err != nil {
-			return fmt.Errorf("failed to unmarshal error: %w", err)
-		}
-
-		select {
-		case psq.errorsChan <- fmt.Errorf("%s", errorStr):
-		default:
-			slog.Warn("error channel full, dropping error", "session_id", psq.sessionID)
-		}
-
-	case PostgreSQLMessageTypeLLMResponse:
-		// For LLM responses, we need to handle the serialization carefully
-		// Similar to NATS implementation, we create LLMResponseWrapper with nil Opts
-		var llmResp LLMResponseWrapperForNATS
-		if err := json.Unmarshal(pgMsg.Data, &llmResp); err != nil {
-			return fmt.Errorf("failed to unmarshal LLM response: %w", err)
-		}
-
-		// Convert to full wrapper
-		fullResp := &LLMResponseWrapper{
-			Response: convertFromNATSSafeResponse(llmResp.Response),
-			Opts:     nil, // Empty opts - will be regenerated from session state
-		}
-
-		select {
-		case psq.llmResponsesChan <- fullResp:
-		default:
-			slog.Warn("LLM response channel full, dropping response", "session_id", psq.sessionID)
-		}
-
-	default:
-		return fmt.Errorf("unknown message type: %s", pgMsg.Type)
-	}
-
-	return nil
 }
 
 // getChannelName returns the PostgreSQL channel name for a given message type
@@ -353,7 +244,10 @@ func (psq *PostgreSQLQueue) publishToPostgreSQL(ctx context.Context, messageType
 	// Send NOTIFY command with timeout
 	channel := psq.getChannelName(messageType)
 
-	// Use a transaction with timeout context
+	// Use a transaction with timeout context; a caller without a deadline
+	// gets the notify timeout, so an exhausted pool cannot block forever
+	ctx, cancel := withQueueDeadline(ctx, psq.config)
+	defer cancel()
 	tx, err := psq.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -405,18 +299,20 @@ func (psq *PostgreSQLQueue) Close() error {
 
 	psq.closed = true
 
+	// Leave the shared listener. Once this returns no notification is being
+	// routed to the local channels, so they can be closed below.
+	unsubscribeSessionChannels(psq.listener, psq.subscriptions, queueTimeout(psq.config))
+	psq.subscriptions = nil
+	if psq.listener != nil {
+		psq.listener.release()
+		psq.listener = nil
+	}
+
 	// Cancel context to stop consumers
 	psq.cancel()
 
 	// Wait for all consumers to finish
 	psq.consumerWG.Wait()
-
-	// Close PostgreSQL listener
-	if psq.listener != nil {
-		if err := psq.listener.Close(); err != nil {
-			slog.Warn("error closing PostgreSQL listener", "session_id", psq.sessionID, "error", err)
-		}
-	}
 
 	// Close local channels
 	close(psq.messagesChan)
@@ -478,6 +374,51 @@ func NewDefaultPostgreSQLQueue(sessionID string, db *gorm.DB) (MessageQueue, err
 // DeferredPostgreSQLQueueFactory creates PostgreSQL queues by connecting to the database at queue creation time
 type DeferredPostgreSQLQueueFactory struct {
 	config PostgreSQLConfig
+
+	// One pool per DATABASE_URL, opened on first use and shared by every
+	// queue; opening a pool per session leaked a pool with each one.
+	poolsMu sync.Mutex
+	pools   map[string]*gorm.DB
+}
+
+// poolFor returns the factory's pool for databaseURL, opening it if needed.
+func (f *DeferredPostgreSQLQueueFactory) poolFor(databaseURL string) (*gorm.DB, error) {
+	f.poolsMu.Lock()
+	defer f.poolsMu.Unlock()
+
+	if db, ok := f.pools[databaseURL]; ok {
+		return db, nil
+	}
+
+	// Import the required database packages
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
+	}
+
+	// Test the connection
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SQL database: %w", err)
+	}
+	pingCtx, cancel := context.WithTimeout(context.Background(), queueTimeout(f.config))
+	defer cancel()
+	if err := sqlDB.PingContext(pingCtx); err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("PostgreSQL database not accessible: %w", err)
+	}
+
+	// Configure connection pool to prevent exhaustion
+	// Limit connections per queue factory instance
+	sqlDB.SetMaxOpenConns(25)                 // Reduced from default to prevent exhaustion
+	sqlDB.SetMaxIdleConns(5)                  // Keep fewer idle connections
+	sqlDB.SetConnMaxLifetime(5 * time.Minute) // Recycle connections regularly
+
+	if f.pools == nil {
+		f.pools = map[string]*gorm.DB{}
+	}
+	f.pools[databaseURL] = db
+	return db, nil
 }
 
 // NewDeferredPostgreSQLQueueFactory creates a deferred PostgreSQL factory
@@ -495,26 +436,10 @@ func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config ma
 		return nil, fmt.Errorf("DATABASE_URL environment variable is required for PostgreSQL queues")
 	}
 
-	// Import the required database packages
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := f.poolFor(databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
+		return nil, err
 	}
-
-	// Test the connection
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get SQL database: %w", err)
-	}
-	if err := sqlDB.Ping(); err != nil {
-		return nil, fmt.Errorf("PostgreSQL database not accessible: %w", err)
-	}
-
-	// Configure connection pool to prevent exhaustion
-	// Limit connections per queue factory instance
-	sqlDB.SetMaxOpenConns(25)                 // Reduced from default to prevent exhaustion
-	sqlDB.SetMaxIdleConns(5)                  // Keep fewer idle connections
-	sqlDB.SetConnMaxLifetime(5 * time.Minute) // Recycle connections regularly
 
 	psqlConfig := f.config
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"gorm.io/driver/postgres"
@@ -62,12 +63,12 @@ func TestPostgreSQLConnectionReuse(t *testing.T) {
 
 	for i := 0; i < sessionCount; i++ {
 		sessionID := fmt.Sprintf("test-session-%d", i)
-		
-		queue, err := factory.CreateQueue(sessionID, nil)
+
+		// Each session used to pin a pool connection, so the fourth creation
+		// blocked forever on this 3-connection pool; fail instead of hanging.
+		queue, err := createQueueWithin(t, factory, sessionID, 15*time.Second)
 		if err != nil {
-			// Log but continue - PostgreSQL might not be fully accessible
-			t.Logf("Queue %d creation failed (may be expected): %v", i+1, err)
-			continue
+			t.Fatalf("Queue %d creation failed: %v", i+1, err)
 		}
 		
 		queues = append(queues, queue)
