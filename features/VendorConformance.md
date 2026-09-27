@@ -498,6 +498,44 @@ so any Bedrock model works there, not only Claude. The harness stores request
 bodies on analytics events (`MaxBodySize` in the gateway config) so the test
 can read them back; production defaults to 4 KB.
 
+### 7.11 An empty Anthropic turn became a 502 (2026-09-27)
+
+Anthropic answers `content: []` when a turn ends before the model writes
+anything: `claude-sonnet-5` does it for `"hi"` at `max_tokens: 1`
+(`stop_reason: max_tokens`), and an immediate `end_turn` does it too. That is a
+successful, billed response, but langchaingo's `processAnthropicResponse` turned
+it into `ErrEmptyResponse`, so the shim and the unified `/v1` path answered
+`502 failed to generate content err: no response`, buffered and streaming.
+Pre-flight caught it (`TestPreflightModelsCallable/anthropic/latest`).
+
+The fork (`lonelycode/langchaingo`, PR #3) now returns one empty choice that
+keeps the stop reason and the usage, so the client gets a normal
+`chat.completion` with an empty assistant message and `finish_reason:
+"length"` (or `"stop"`). `proxy/translator_empty_content_test.go` pins it on
+both surfaces. Bedrock's Converse path already returned an empty choice, and
+Gemini errors only when there are no candidates at all (a blocked prompt).
+
+Two harness fixes came with it:
+
+- `TestPreflightModelListingSchema` failed on every run since the guardrail
+  route was added (§9): `slugIsConfigured` did not know the harness's own
+  `-guarded` route, which is associated with the App, so `/v1/models` rightly
+  lists it.
+- `VENDOR_TESTS_MAX_TOKENS` now defaults to 2048 (was 256). Reasoning models
+  spend part of the cap thinking, and `json_mode` came back truncated at 256.
+
+### 7.12 Anthropic streaming overcounted output tokens (2026-09-27)
+
+`message_delta`'s `usage.output_tokens` is cumulative: it is the turn's
+running total and already includes what `message_start` reported. The
+streaming analyser added `message_start`'s count to it, so every streamed
+Anthropic response recorded one or more output tokens too many (11 instead of
+10 in the sweep), and was billed for them. It now takes the last
+`message_delta` total, falling back to `message_start`'s count when a stream
+ends before any delta. The Bedrock paths were not affected: the `/anthropic/`
+bridge emits `output_tokens: 0` in `message_start`, and the Bedrock analyser
+reads Converse metadata.
+
 ## 9. Guardrail provider conformance
 
 The same idea applied to the guardrail providers (see `features/Filters.md`
