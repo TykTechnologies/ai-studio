@@ -86,3 +86,38 @@ func TestRecordExchangeWithoutHandler(t *testing.T) {
 	withHandler(t, nil)
 	RecordExchange(context.Background(), &models.ProxyLog{AppID: 1}, &models.LLMChatRecord{AppID: 1})
 }
+
+// The proxy builds chat records without a latency; RecordExchange fills
+// total_time_ms from the request start the gateway put on the context.
+func TestRecordExchangeFillsLatencyFromTheRequestStart(t *testing.T) {
+	h := &exchangeHandler{}
+	withHandler(t, h)
+
+	start := time.Now().Add(-250 * time.Millisecond)
+	ctx := WithRequestStart(context.Background(), start)
+
+	rec := &models.LLMChatRecord{AppID: 1, TimeStamp: start.Add(120 * time.Millisecond)}
+	RecordExchange(ctx, &models.ProxyLog{AppID: 1}, rec)
+	if rec.TotalTimeMS != 120 {
+		t.Fatalf("TotalTimeMS = %d, want 120 (start to the record's timestamp)", rec.TotalTimeMS)
+	}
+
+	// A timestamp taken at the start of the request measures up to now.
+	rec = &models.LLMChatRecord{AppID: 1, TimeStamp: start}
+	RecordExchange(ctx, &models.ProxyLog{AppID: 1}, rec)
+	if rec.TotalTimeMS < 250 {
+		t.Fatalf("TotalTimeMS = %d, want >= 250", rec.TotalTimeMS)
+	}
+
+	// A latency the caller already set is kept, and no start means no guess.
+	rec = &models.LLMChatRecord{AppID: 1, TotalTimeMS: 7, TimeStamp: time.Now()}
+	RecordExchange(ctx, &models.ProxyLog{AppID: 1}, rec)
+	if rec.TotalTimeMS != 7 {
+		t.Fatalf("TotalTimeMS = %d, want the caller's 7", rec.TotalTimeMS)
+	}
+	rec = &models.LLMChatRecord{AppID: 1, TimeStamp: time.Now()}
+	RecordExchange(context.Background(), &models.ProxyLog{AppID: 1}, rec)
+	if rec.TotalTimeMS != 0 {
+		t.Fatalf("TotalTimeMS = %d without a start, want 0", rec.TotalTimeMS)
+	}
+}

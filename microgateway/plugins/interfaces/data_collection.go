@@ -57,6 +57,7 @@ type AnalyticsData struct {
 	Timestamp              time.Time `json:"timestamp"`
 	ToolCalls              int       `json:"tool_calls"`             // Number of tool calls in request
 	Choices                int       `json:"choices"`                // Number of response choices
+	TotalTimeMS            int       `json:"total_time_ms"`          // Request latency in milliseconds
 	RequestID              string    `json:"request_id"`             // Unique request identifier
 	StatusCode             int       `json:"status_code"`            // HTTP status code (e.g., 200, 403 for budget exceeded)
 

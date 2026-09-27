@@ -346,7 +346,7 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 
 		// Cost and timing
 		Cost:                   req.Cost,
-		TotalTimeMS:            0, // Not available
+		TotalTimeMS:            req.TotalTimeMS,
 
 		ErrorMessage:           "",
 		TimeStamp:              req.Timestamp,

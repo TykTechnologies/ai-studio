@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -181,4 +182,95 @@ func policyViolationBody(err error) []byte {
 		return []byte(`{"error":"policy_violation"}`)
 	}
 	return body
+}
+
+// parseLoopbackError reads a refusal body from the loopback hop as the error
+// the client should be given. It understands the error envelope every vendor
+// uses in one form or another ({"error":{"message":...}}: OpenAI's, the inner
+// hop's own for a policy or budget refusal, Anthropic's and Google's), and the
+// pass-through's own error body ({"status":...,"message":...,"error":"..."}),
+// which the credential check and the upstream failure paths write. Anything
+// else is left to the driver's error.
+func parseLoopbackError(status int, body []byte) (*APIError, bool) {
+	var envelope struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if json.Unmarshal(body, &envelope) != nil {
+		return nil, false
+	}
+	var inner struct {
+		Message string  `json:"message"`
+		Type    string  `json:"type"`
+		Code    any     `json:"code"`
+		Param   *string `json:"param"`
+	}
+	if json.Unmarshal(envelope.Error, &inner) == nil && inner.Message != "" {
+		apiErr := &APIError{Message: inner.Message, Type: inner.Type, Param: inner.Param}
+		// OpenAI's code is a string. Google puts the HTTP status there as a
+		// number, which tells the caller nothing the status does not.
+		if code, ok := inner.Code.(string); ok {
+			apiErr.Code = code
+		}
+		return apiErr, true
+	}
+	var passThrough struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	if json.Unmarshal(body, &passThrough) != nil || passThrough.Message == "" {
+		return nil, false
+	}
+	message := passThrough.Message
+	// The detail of a client error is the reason (which credential check or
+	// budget failed); the detail of a server error is our internals.
+	if status < http.StatusInternalServerError && passThrough.Error != "" && passThrough.Error != message {
+		message += ": " + passThrough.Error
+	}
+	return &APIError{Message: message}, true
+}
+
+// writeOAIError writes apiErr at status, filling in the type and code the
+// status implies when the error did not carry them.
+func writeOAIError(w http.ResponseWriter, status int, apiErr *APIError) {
+	if apiErr.Type == "" {
+		apiErr.Type = oaiErrorType(status)
+	}
+	if apiErr.Code == nil || apiErr.Code == "" {
+		apiErr.Code = oaiErrorCode(status)
+	}
+	apiErr.HTTPStatus = http.StatusText(status)
+	apiErr.HTTPStatusCode = status
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(OAIErrorResponse{Error: apiErr})
+}
+
+// respondAttemptFailure answers a request whose last attempt failed: with the
+// refusal the loopback hop wrote when it could be read, otherwise as
+// respondRelayingOAIError does from the driver's error.
+func respondAttemptFailure(w http.ResponseWriter, f attemptFailure, message string) {
+	if f.inner == nil {
+		respondRelayingOAIError(w, f.status, message, f.err)
+		return
+	}
+	inner := *f.inner
+	slog.Error("api client error", "message", inner.Message, "status", f.status)
+	writeOAIError(w, f.status, &inner)
+}
+
+// withLoopback takes the refusal the loopback hop answered the attempt with,
+// when the relay could read one, as the failure's reason and status. The
+// driver's own reading of it is what the waterfall had before; the status
+// the inner hop wrote is the same or better. A timeout or a driver that could
+// not be built is not a refusal and is left as it is.
+func (f attemptFailure) withLoopback(relay *loopbackRelay) attemptFailure {
+	if f.timedOut || f.driverError {
+		return f
+	}
+	inner, status, ok := relay.failure()
+	if !ok {
+		return f
+	}
+	f.inner, f.status, f.hasStatus = inner, status, true
+	return f
 }

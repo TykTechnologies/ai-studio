@@ -215,7 +215,7 @@ func (h *MicrogatewaAnalyticsHandler) Stop() {
 // proxy log, updated from the chat record and read back for the pulse: three
 // statements per request, paired up again by app and second, which merged
 // concurrent requests into each other's rows.
-func (h *MicrogatewaAnalyticsHandler) RecordExchange(_ context.Context, proxyLog *models.ProxyLog, record *models.LLMChatRecord) {
+func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyLog *models.ProxyLog, record *models.LLMChatRecord) {
 	requestID := h.nextRequestID("proxy", proxyLog.AppID)
 
 	// Execute data collection plugins for proxy logs
@@ -236,6 +236,11 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(_ context.Context, proxyLog
 	}
 
 	event := h.eventFromProxyLog(proxyLog, requestID)
+	// A row with no chat record (an error, a block) still took time; the
+	// proxy put the request's start on the context.
+	if ms, ok := analytics.RequestLatencyMS(ctx, proxyLog.TimeStamp); ok {
+		event.TotalTimeMS = ms
+	}
 	if record != nil {
 		applyChatRecord(event, record)
 
@@ -261,6 +266,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(_ context.Context, proxyLog
 				Timestamp:              record.TimeStamp,
 				ToolCalls:              record.ToolCalls,
 				Choices:                record.Choices,
+				TotalTimeMS:            event.TotalTimeMS,
 				RequestID:              requestID,
 				StatusCode:             event.StatusCode, // Pass actual HTTP status code (e.g., 403 for budget exceeded)
 				// Bodies as stored: empty unless ANALYTICS_STORE_REQUESTS/RESPONSES
@@ -320,6 +326,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 			Timestamp:              record.TimeStamp,
 			ToolCalls:              record.ToolCalls,
 			Choices:                record.Choices,
+			TotalTimeMS:            record.TotalTimeMS,
 			RequestID:              requestID,
 			StatusCode:             200, // Standalone chat interactions are successful by definition
 		}
@@ -424,7 +431,10 @@ func applyChatRecord(event *database.AnalyticsEvent, record *models.LLMChatRecor
 	event.Choices = record.Choices
 	event.ToolCalls = record.ToolCalls
 	event.ChatID = record.ChatID
-	event.TotalTimeMS = record.TotalTimeMS
+	// Keep the latency the row already has when the record carries none.
+	if record.TotalTimeMS > 0 {
+		event.TotalTimeMS = record.TotalTimeMS
+	}
 }
 
 // recordBudgetUsage records a priced request against its App's budget.

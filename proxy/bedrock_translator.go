@@ -38,7 +38,8 @@ func (p *Proxy) bedrockPrepare(r *http.Request, conf *models.LLM) (*models.App, 
 	// Check budget
 	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
 		status, msg := budgetDenial(err, "budget exceeded")
-		return app, attemptFailure{err: fmt.Errorf("%s: %w", msg, err), status: status, hasStatus: true}
+		return app, attemptFailure{err: fmt.Errorf("%s: %w", msg, err), status: status, hasStatus: true,
+			inner: budgetDenialError(status, "Budget limit exceeded", err)}
 	}
 	return app, attemptFailure{}
 }

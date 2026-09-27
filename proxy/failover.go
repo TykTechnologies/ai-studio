@@ -174,6 +174,11 @@ type attemptFailure struct {
 	// built: a problem with that rung's config, never with the request, so
 	// the next rung is always worth trying.
 	driverError bool
+	// inner is the refusal as the loopback hop wrote it (a budget or policy
+	// decision, an auth failure, the vendor's own error), when it could be
+	// read. The drivers keep little of it: Google's keeps no message at all.
+	// When set it is what the client is told.
+	inner *APIError
 }
 
 // errDriverSetup wraps a driver construction failure so classification can
