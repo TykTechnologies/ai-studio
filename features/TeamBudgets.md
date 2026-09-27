@@ -124,6 +124,11 @@ On top of that, the budget sync (`budget.sync`, every 30 s, `BUDGET_SYNC_INTERVA
 
 **Lag:** a new block reaches edges within one pulse interval plus one sync interval. Edge spend has to reach Studio in the analytics pulse, and then the next budget sync carries the block. With the defaults that's up to about 40 s.
 
+**Pulse delivery across restarts:** team spend, alerts and blocks only see edge traffic that the pulse delivers. Two gaps closed on 2026-09-27:
+
+- **Studio restarts.** The pulse used to keep the gRPC client of the edge's first connection. After any Studio restart the edge reconnected on a new connection, but every pulse still went to the closed one and failed ("the client connection is closing"). From then on no edge spend reached Studio until the edge itself was restarted. The pulse now asks the edge client for the current connection on every send (`PulseClientSource`), so it follows reconnects.
+- **Edge shutdown.** A graceful edge shutdown used to drop what the pulse still buffered, up to one pulse interval. The edge now drains its requests, waits for their analysis, stops the plugins (the pulse sends its buffer then) and only after that closes its connection to Studio (`runShutdown` in `microgateway/cmd/microgateway/main.go`).
+
 Edge App-budget enforcement itself is unchanged. In live testing an App overshot its own budget by a few requests before the edge refused it; that comes from the edge's existing usage accounting, not from this feature.
 
 ### Alerts for edge spend

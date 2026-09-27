@@ -1959,6 +1959,25 @@ func (p *Proxy) waitForAnalyzers() {
 	p.analyzers.Wait()
 }
 
+// WaitForAnalytics waits until the analysis of every response written so far
+// has finished, or ctx is done. It runs after the response is sent, so a host
+// shutting down calls it after draining its HTTP server and before stopping
+// whatever the analysis records into (the analytics handler, data collection
+// plugins such as the edge's analytics pulse).
+func (p *Proxy) WaitForAnalytics(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		p.analyzers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
 	AnalyzeResponse(p.gatewayService, llm, app, statusCode, body, reqBody, r)
 }
