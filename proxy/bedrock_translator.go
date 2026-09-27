@@ -628,8 +628,8 @@ func recordBedrockExchange(p *Proxy, llm *models.LLM, app *models.App, proxyLog 
 	ctx := context.WithoutCancel(r.Context())
 	analytics.RecordExchange(ctx, proxyLog, record)
 	if record != nil {
-		// Trigger budget analysis
-		p.budgetService.AnalyzeBudgetUsage(app, llm)
+		// Count the spend and trigger budget analysis
+		analyzeBudget(p.budgetService, llm, app, record)
 	}
 }
 

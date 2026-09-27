@@ -89,7 +89,7 @@ flowchart LR
 
 1.  Request hits the Proxy.
 2.  Proxy calls `BudgetService.CheckBudget`.
-3.  `CheckBudget` gets spending data (cache/DB).
+3.  `CheckBudget` gets the current period's spend (in-memory tracker; see Spend tracking).
 4.  If budget is okay, Proxy prepares to forward. If exceeded, Proxy returns 403.
 5.  Proxy fetches **Pricing** data (`model_prices`).
 6.  Proxy forwards request to LLM Vendor.
@@ -106,10 +106,16 @@ flowchart LR
 
 *   **Budget Period:** Defined by `budget_start_date` on App/LLM (managed via **App/LLM Management**). Defaults to 1st of the month if null. If `monthly_budget` is NULL/0, budget checks are skipped.
 *   **Cost Calculation:** Performed by the **Proxy**. Relies on `model_prices` (managed by **Pricing** feature). Cost stored as integer (actual_cost * 10000) in `llm_chat_records`. `BudgetService` reads this value and divides by 10000.0 for checks. Fallback creates 0-cost `model_price` if missing.
-*   **Caching:** `BudgetService` uses an in-memory `usageCache` (map, mutex-protected, ~5 min expiry) keyed by {EntityType, EntityID, PeriodStartDate}. Used by `CheckBudget`, `GetMonthlySpending`, `GetLLMMonthlySpending`.
+*   **Spend tracking (Enterprise, embedded gateway):** `BudgetService` keeps each budgeted App's and LLM's spend for its current period in memory, keyed by {EntityType, EntityID, PeriodStartDate} (`enterprise/features/budget/spend.go`, `periodSpend`). `CheckBudget`, `AnalyzeBudgetUsage` and current-period `GetMonthlySpending`/`GetLLMMonthlySpending` read it; other windows are summed from the database.
+    *   **First use:** the period is summed from `llm_chat_records`. If that read fails, `CheckBudget` returns an error wrapping `services.ErrBudgetCheckUnavailable` (the proxy answers 503); it no longer assumes nothing was spent.
+    *   **Spend recorded by this node** counts at once: after recording a chat record the proxy calls `RecordSpend` (`budget.SpendRecorder`) with the request's cost, so the next check sees it without waiting for the buffered analytics write. The proxy and the API must share one budget service (`Service.InitBudgets`, `main.go`).
+    *   **Spend stored elsewhere** (other Studio nodes, edge analytics pulses, the budget sync's per-App figure via `AnalyzeAppSpend`) is picked up by re-reading, at most every 2 s per App/LLM, only the rows added since the last read (by id, with a one-minute settle window for rows whose transactions commit out of id order, as in `models.TokenTotals`).
+    *   **Never double-counted, never lowered:** the figure is the larger of the database total and the previous figure plus the spend recorded since. Until this node's own rows reach the database, spend other nodes stored meanwhile can be under-counted by at most the smaller of the two.
+    *   **Bound:** on one node, a request is refused once the spend recorded before its check reaches the budget; requests whose analysis has not finished yet (in flight at the same time) can overshoot. Across several Studio nodes, add up to the refresh interval plus the other nodes' analytics flush delay. A failed re-read keeps enforcing the last figure. Idle trackers are evicted after 5 minutes.
+    *   Until 2026-09-27 the check cached a figure for 5 minutes, treated a cold cache as $0 spent and never added new spend to a cached figure, so an App on a $1 budget could spend several dollars before being refused.
 *   **Notification Deduplication:** Handled by the **Notification Service**. It checks the `notifications` table using a `baseNotificationID` (incorporating entity, period, budget, threshold) before sending and logs the notification upon successful sending.
 *   **Notification Recipients:** App alerts go to Owner (`app.UserID` lookup via **User Management**) + Admins (`models.NotifyAdmins` flag, checked against **User Management** data). LLM alerts go only to Admins.
-*   **Concurrency:** Slight budget overrun possible under high load before blocks activate consistently. Checking for existing 100% notifications mitigates prolonged overruns.
+*   **Concurrency:** Requests checked at the same moment can all pass before any of them is recorded, so a burst of concurrent requests can overshoot by what those requests cost (see Spend tracking for the bound).
 *   **API Endpoints:**
     *   `GET /analytics/budget-usage`: Aggregated view, uses `analytics.GetBudgetUsage` (part of **Analytics**).
     *   `GET /analytics/budget-usage-for-app?app_id=X`: Specific app view, uses `BudgetService.GetMonthlySpending`.

@@ -94,7 +94,7 @@ Allocation applies only while the switch is on and the App's team is managed.
 - the App's or the LLM's own budget is 0, or has been reached; or
 - the App's team is `hard_block` and its spend this period (all of its Apps including deleted ones, plus its members' chat) has reached the team budget.
 
-The API and the embedded gateway share one budget service, so resets clear the cache the embedded gateway reads. They used to be separate instances.
+The API and the embedded gateway share one budget service, so resets clear the spend figures the embedded gateway checks against (see Spend tracking in `Budgeting.md`), and the spend the embedded gateway records counts in the same figures. They used to be separate instances.
 
 ### Edge gateways (microgateway)
 

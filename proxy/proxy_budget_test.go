@@ -246,11 +246,12 @@ func TestBudgetCheck(t *testing.T) {
 
 		// Verify spending
 		waitUntilIdle(t, db)
-		spent, err := budgetService.GetMonthlySpending(app.ID, startOfMonth, now)
+		// The record is stamped with the real time, not the fixed now above.
+		spent, err := budgetService.GetMonthlySpending(app.ID, startOfMonth, time.Now())
 		require.NoError(t, err)
 		assert.InDelta(t, 25.0, spent, 0.1, "App spending should be $25.00")
 
-		llmSpent, err := budgetService.GetLLMMonthlySpending(llm.ID, startOfMonth, now)
+		llmSpent, err := budgetService.GetLLMMonthlySpending(llm.ID, startOfMonth, time.Now())
 		require.NoError(t, err)
 		assert.InDelta(t, 25.0, llmSpent, 0.1, "LLM spending should be $25.00")
 	})
