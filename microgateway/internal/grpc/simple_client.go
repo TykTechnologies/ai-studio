@@ -8,6 +8,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,11 @@ type SimpleEdgeClient struct {
 	conn        *grpc.ClientConn
 	client      pb.ConfigurationSyncServiceClient
 	configCache *pb.ConfigurationSnapshot
+	// connMu guards conn and client. A reconnect replaces both while token
+	// validation, the analytics pulse and the payload queue use them from
+	// other goroutines, so they are only read and written through
+	// connection and setConnection.
+	connMu sync.RWMutex
 
 	// Config checksum tracking for sync status
 	loadedChecksum string
@@ -116,12 +122,11 @@ func (c *SimpleEdgeClient) Start() error {
 		return fmt.Errorf("failed to connect to control server: %w", err)
 	}
 
-	c.conn = conn
-	c.client = pb.NewConfigurationSyncServiceClient(conn)
+	c.setConnection(conn)
 
 	// Wire the control payload queue's gRPC client if set
 	if c.controlPayloadQueue != nil {
-		c.controlPayloadQueue.SetGRPCClient(c.client, c.createAuthContext)
+		c.controlPayloadQueue.SetGRPCClient(c.GetGRPCClient(), c.createAuthContext)
 	}
 
 	// Test basic connectivity and register
@@ -162,8 +167,12 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	}
 
 	// Register with control (with authentication)
+	client := c.GetGRPCClient()
+	if client == nil {
+		return fmt.Errorf("not connected to control server")
+	}
 	authCtx := c.createAuthContext(ctx)
-	resp, err := c.client.RegisterEdge(authCtx, req)
+	resp, err := client.RegisterEdge(authCtx, req)
 	if err != nil {
 		return fmt.Errorf("registration failed: %w", err)
 	}
@@ -207,7 +216,8 @@ func (c *SimpleEdgeClient) SetOnConfigChange(callback func(*pb.ConfigurationSnap
 
 // IsConnected returns true if connected to control
 func (c *SimpleEdgeClient) IsConnected() bool {
-	return c.conn != nil
+	conn, _ := c.connection()
+	return conn != nil
 }
 
 // GetCurrentConfiguration returns the cached configuration
@@ -227,7 +237,8 @@ func (c *SimpleEdgeClient) GetEventBus() eventbridge.Bus {
 const tokenValidationTimeout = 5 * time.Second
 
 func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidationResponse, error) {
-	if c.conn == nil || c.client == nil {
+	conn, client := c.connection()
+	if conn == nil || client == nil {
 		return nil, fmt.Errorf("not connected to control instance")
 	}
 
@@ -252,7 +263,7 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 
 	// Call control instance (with authentication)
 	authCtx := c.createAuthContext(ctx)
-	resp, err := c.client.ValidateToken(authCtx, req)
+	resp, err := client.ValidateToken(authCtx, req)
 	if err != nil {
 		log.Debug().Err(err).Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: token validation gRPC call failed")
 		return nil, fmt.Errorf("token validation failed: %w", err)
@@ -277,8 +288,8 @@ func (c *SimpleEdgeClient) SetReloadHandler(handler interface{}) {
 func (c *SimpleEdgeClient) SetControlPayloadQueue(queue *ControlPayloadQueue) {
 	c.controlPayloadQueue = queue
 	// Wire the queue's gRPC client and auth context
-	if c.client != nil {
-		queue.SetGRPCClient(c.client, c.createAuthContext)
+	if client := c.GetGRPCClient(); client != nil {
+		queue.SetGRPCClient(client, c.createAuthContext)
 	}
 	log.Debug().Msg("Control payload queue set for edge client")
 }
@@ -294,9 +305,32 @@ func (c *SimpleEdgeClient) SetBudgetSyncHandler(handler BudgetSyncSubscriber) {
 	}
 }
 
-// GetGRPCClient returns the gRPC client for use by pulse manager
+// GetGRPCClient returns the client of the current connection to control, or
+// nil while disconnected. A reconnect replaces it (and closes the old one), so
+// callers must ask for it on every use and never keep it.
 func (c *SimpleEdgeClient) GetGRPCClient() pb.ConfigurationSyncServiceClient {
-	return c.client
+	_, client := c.connection()
+	return client
+}
+
+// connection returns the current connection and its client.
+func (c *SimpleEdgeClient) connection() (*grpc.ClientConn, pb.ConfigurationSyncServiceClient) {
+	c.connMu.RLock()
+	defer c.connMu.RUnlock()
+	return c.conn, c.client
+}
+
+// setConnection makes conn the current connection, with a new client on it;
+// nil clears both.
+func (c *SimpleEdgeClient) setConnection(conn *grpc.ClientConn) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	c.conn = conn
+	if conn == nil {
+		c.client = nil
+		return
+	}
+	c.client = pb.NewConfigurationSyncServiceClient(conn)
 }
 
 // GetEdgeID returns the edge ID
@@ -314,7 +348,8 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 	log.Debug().Msg("Requesting full configuration sync from control")
 
 	// Check if client is connected
-	if c.client == nil {
+	client := c.GetGRPCClient()
+	if client == nil {
 		return fmt.Errorf("not connected to control server")
 	}
 
@@ -328,7 +363,7 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 	}
 
 	authCtx := c.createAuthContext(ctx)
-	resp, err := c.client.GetFullConfiguration(authCtx, req)
+	resp, err := client.GetFullConfiguration(authCtx, req)
 	if err != nil {
 		return fmt.Errorf("failed to request full sync: %w", err)
 	}
@@ -363,8 +398,13 @@ func (c *SimpleEdgeClient) establishStream() error {
 	c.streamCancel = cancel
 
 	// Start streaming (with authentication)
+	client := c.GetGRPCClient()
+	if client == nil {
+		cancel()
+		return fmt.Errorf("failed to start streaming: not connected to control server")
+	}
 	authCtx := c.createAuthContext(ctx)
-	stream, err := c.client.SubscribeToChanges(authCtx)
+	stream, err := client.SubscribeToChanges(authCtx)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("failed to start streaming: %w", err)
@@ -781,9 +821,9 @@ func (c *SimpleEdgeClient) Stop() error {
 	}
 
 	// Close connection
-	if c.conn != nil {
+	if conn, _ := c.connection(); conn != nil {
 		log.Debug().Msg("Closing connection to control server")
-		return c.conn.Close()
+		return conn.Close()
 	}
 
 	return nil
@@ -1003,12 +1043,11 @@ func (c *SimpleEdgeClient) calculateBackoffDelay(baseDelay, maxDelay time.Durati
 // reconnectWithRetry attempts to reconnect with proper error handling
 func (c *SimpleEdgeClient) reconnectWithRetry() error {
 	// First, try to close the existing broken connection
-	if c.conn != nil {
-		if err := c.conn.Close(); err != nil {
+	if old, _ := c.connection(); old != nil {
+		c.setConnection(nil)
+		if err := old.Close(); err != nil {
 			log.Debug().Err(err).Msg("Error closing broken connection during reconnect")
 		}
-		c.conn = nil
-		c.client = nil
 	}
 
 	// Re-establish gRPC connection
@@ -1017,27 +1056,26 @@ func (c *SimpleEdgeClient) reconnectWithRetry() error {
 		return fmt.Errorf("failed to re-establish gRPC connection: %w", err)
 	}
 
-	c.conn = conn
-	c.client = pb.NewConfigurationSyncServiceClient(conn)
+	// Everything that talks to control (token validation, the analytics
+	// pulse, the payload queue) picks the new client up from here.
+	c.setConnection(conn)
 
 	// Re-wire the control payload queue's gRPC client if set
 	if c.controlPayloadQueue != nil {
-		c.controlPayloadQueue.SetGRPCClient(c.client, c.createAuthContext)
+		c.controlPayloadQueue.SetGRPCClient(c.GetGRPCClient(), c.createAuthContext)
 	}
 
 	// Test connectivity by registering with control
 	if err := c.registerWithControl(); err != nil {
+		c.setConnection(nil)
 		conn.Close()
-		c.conn = nil
-		c.client = nil
 		return fmt.Errorf("failed to re-register with control: %w", err)
 	}
 
 	// Re-establish stream
 	if err := c.establishStream(); err != nil {
+		c.setConnection(nil)
 		conn.Close()
-		c.conn = nil
-		c.client = nil
 		return fmt.Errorf("failed to re-establish stream: %w", err)
 	}
 

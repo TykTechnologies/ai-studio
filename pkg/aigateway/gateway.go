@@ -169,6 +169,13 @@ func (g *gateway) Stop(ctx context.Context) error {
 	return g.proxy.Stop(ctx)
 }
 
+// WaitForAnalytics waits for the analysis of responses already written (see
+// proxy.WaitForAnalytics). Hosts that mount Handler() call it on shutdown,
+// after draining their server.
+func (g *gateway) WaitForAnalytics(ctx context.Context) error {
+	return g.proxy.WaitForAnalytics(ctx)
+}
+
 // Handler returns the HTTP handler for integration with existing servers
 func (g *gateway) Handler() http.Handler {
 	return g.proxy.Handler()
