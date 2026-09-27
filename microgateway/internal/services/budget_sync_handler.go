@@ -10,7 +10,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // AppBudgetData contains budget usage and period info for a single app
@@ -225,39 +224,7 @@ func (h *BudgetSyncHandler) updateLocalBudget(appID uint, usageDollars float64, 
 	// Convert from dollars to stored format (dollars * 10000)
 	storedCostFromControl := usageDollars * 10000
 
-	now := time.Now()
-	maxExpr := "MAX(total_cost, ?)"
-	if h.db.Dialector.Name() == "postgres" {
-		maxExpr = "GREATEST(total_cost, ?)"
-	}
-	raise := func() (int64, error) {
-		res := h.db.Model(&database.BudgetUsage{}).
-			Where("app_id = ? AND period_start = ?", appID, periodStart).
-			Updates(map[string]interface{}{
-				"total_cost": gorm.Expr(maxExpr, storedCostFromControl),
-				"updated_at": now,
-			})
-		return res.RowsAffected, res.Error
-	}
-
-	n, err := raise()
-	if err == nil && n == 0 {
-		// Create new record; if the writer created it meanwhile, raise that.
-		newUsage := &database.BudgetUsage{
-			AppID:       appID,
-			PeriodStart: periodStart,
-			PeriodEnd:   periodEnd,
-			TotalCost:   storedCostFromControl,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
-		res := h.db.Clauses(clause.OnConflict{DoNothing: true}).Create(newUsage)
-		err = res.Error
-		if err == nil && res.RowsAffected == 0 {
-			_, err = raise()
-		}
-	}
-	if err != nil {
+	if err := raiseStoredUsage(h.db, appID, periodStart, periodEnd, storedCostFromControl); err != nil {
 		log.Error().Err(err).Uint("app_id", appID).Msg("Failed to update budget usage from sync")
 		return
 	}

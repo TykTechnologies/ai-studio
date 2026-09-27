@@ -458,6 +458,7 @@ func (s *DatabaseBudgetService) GetBudgetSummary() (map[string]interface{}, erro
 		LEFT JOIN budget_usage bu ON a.id = bu.app_id
 			AND bu.period_start >= ? AND bu.period_end <= ?
 		WHERE a.is_active = true
+			AND a.deleted_at IS NULL
 			AND a.monthly_budget > 0
 			AND COALESCE(bu.total_cost, 0) > a.monthly_budget * 10000
 		ORDER BY over_by_amount DESC
