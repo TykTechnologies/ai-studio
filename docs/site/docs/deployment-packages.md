@@ -252,7 +252,8 @@ The package installs:
 | `/opt/tyk-microgateway/tyk-microgateway` | Server binary |
 | `/opt/tyk-microgateway/mgw` | CLI tool |
 | `/opt/tyk-microgateway/data/` | Data directory (SQLite database) |
-| `/opt/tyk-microgateway/examples/analytics-pulse-config.yaml` | Analytics pulse example config |
+| `/opt/tyk-microgateway/config/analytics-pulse-config.yaml` | Analytics pulse config, enabled by default (kept on upgrade) |
+| `/opt/tyk-microgateway/examples/analytics-pulse-config.yaml` | Pristine copy of the analytics pulse config |
 | `/etc/default/tyk-microgateway` | Environment configuration (systemd) |
 | `/lib/systemd/system/tyk-microgateway.service` | Systemd service unit |
 
@@ -296,16 +297,9 @@ TYK_AI_LICENSE=your-license-key
 
 ### Configure Analytics Pulse
 
-To send analytics data from the Microgateway back to the AI Studio control plane, configure the analytics pulse plugin.
+The analytics pulse sends the Microgateway's analytics, proxy logs and budget spend back to the AI Studio control plane. Without it, AI Studio never sees edge traffic, and team budgets and budget alerts cannot count edge spend.
 
-Copy the example config:
-
-```bash
-sudo cp /opt/tyk-microgateway/examples/analytics-pulse-config.yaml /opt/tyk-microgateway/analytics-pulse-config.yaml
-sudo chown tyk:tyk /opt/tyk-microgateway/analytics-pulse-config.yaml
-```
-
-The default configuration is:
+New installs enable it: `/etc/default/tyk-microgateway` sets `PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml`, and the package installs that file as a config file, so your edits survive upgrades. The default configuration is:
 
 ```yaml
 version: "1.0"
@@ -330,11 +324,13 @@ data_collection_plugins:
       retry_interval_secs: 5
 ```
 
-Then enable it in `/etc/default/tyk-microgateway`:
-
-```env
-PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/analytics-pulse-config.yaml
-```
+> **Upgrading from an earlier package?** `/etc/default/tyk-microgateway` is a config file, so upgrades keep your copy, and copies from before 2.2 had `PLUGINS_CONFIG_PATH` commented out. Add the line yourself if it is missing:
+>
+> ```env
+> PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml
+> ```
+>
+> In edge mode, `grep 'startup path'` in the Microgateway log reports a missing or unreadable file.
 
 ### Start Microgateway
 
@@ -493,7 +489,7 @@ EDGE_ALLOW_INSECURE=false
 | `EDGE_NAMESPACE` | `default` | Namespace for config partitioning |
 | `EDGE_AUTH_TOKEN` | — | Must match AI Studio `GRPC_AUTH_TOKEN` |
 | `ENCRYPTION_KEY` | — | Must match AI Studio `MICROGATEWAY_ENCRYPTION_KEY` |
-| `PLUGINS_CONFIG_PATH` | — | Path to analytics pulse config YAML |
+| `PLUGINS_CONFIG_PATH` | `/opt/tyk-microgateway/config/analytics-pulse-config.yaml` (package and image) | Path to analytics pulse config YAML; required in edge mode |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, `error` |
 | `TYK_AI_LICENSE` | — | Enterprise license key |
 

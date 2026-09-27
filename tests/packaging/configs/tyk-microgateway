@@ -13,6 +13,8 @@ DB_AUTO_MIGRATE=true
 
 # Edge mode - connect to local AI Studio
 GATEWAY_MODE=edge
+# Same as the packaged default: the analytics pulse file the package ships
+PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml
 CONTROL_ENDPOINT=localhost:50051
 EDGE_ID=smoke-test-edge
 EDGE_NAMESPACE=default

@@ -142,7 +142,11 @@ ENABLE_PROFILING=false
 # OCI_PLUGINS_ALLOWED_REGISTRIES=docker.tyk.io
 
 # -----------------------------------------------------------------------------
-# Analytics Plugin Configuration (Optional)
+# Analytics Pulse (required in edge mode)
 # -----------------------------------------------------------------------------
-# Path to analytics pulse config for sending data to control plane
-# PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/examples/analytics-pulse-config.yaml
+# The analytics pulse sends this edge's analytics, proxy logs and budget spend
+# to the control plane. Without it the hub never sees edge traffic, and team
+# budgets and budget alerts cannot count edge spend. Comment out only when
+# GATEWAY_MODE is not "edge". The file is marked config(noreplace), so your
+# edits survive upgrades.
+PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml

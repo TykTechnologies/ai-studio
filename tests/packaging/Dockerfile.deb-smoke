@@ -12,12 +12,27 @@ RUN apt-get update && \
 # Create tyk user/group (normally done by package preinstall script)
 RUN groupadd -r tyk && useradd -r -g tyk -M -s /sbin/nologin -c "Tyk service user" tyk
 
-# Install packages from local debs
+# Install packages from local debs. dist/ holds one edition: CE packages are
+# tyk-ai-studio_*.deb, ENT packages tyk-ai-studio-ee_*.deb, and each has a FIPS
+# variant that is not under test here. Install exactly one package per
+# component and fail the build if that is not possible, so a wrong name can
+# never produce an image without binaries.
 COPY dist/tyk-ai-studio*${TARGETARCH}.deb /tmp/
 COPY dist/tyk-microgateway*${TARGETARCH}.deb /tmp/
-RUN dpkg -i /tmp/tyk-ai-studio_*${TARGETARCH}.deb /tmp/tyk-microgateway_*${TARGETARCH}.deb || \
-    apt-get -f install -y && \
-    rm -f /tmp/*.deb
+RUN set -e; \
+    rm -f /tmp/*fips*.deb; \
+    for c in tyk-ai-studio tyk-microgateway; do \
+      n=$(ls /tmp/${c}*_*${TARGETARCH}.deb | wc -l); \
+      if [ "$n" -ne 1 ]; then echo "expected one ${c} package, found ${n}:"; ls /tmp; exit 1; fi; \
+    done; \
+    dpkg -i /tmp/tyk-ai-studio*_*${TARGETARCH}.deb /tmp/tyk-microgateway*_*${TARGETARCH}.deb; \
+    rm -f /tmp/*.deb; \
+    test -x /opt/tyk-ai-studio/tyk-ai-studio; \
+    test -x /opt/tyk-microgateway/tyk-microgateway; \
+    # The packaged edge default must load the analytics pulse from a file the
+    # package ships; without it edges never report to the hub.
+    grep -q '^PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml$' /etc/default/tyk-microgateway; \
+    grep -q 'name: "analytics_pulse"' /opt/tyk-microgateway/config/analytics-pulse-config.yaml
 
 # Overlay smoke test configs (matching auth tokens, SQLite, correct ports)
 COPY tests/packaging/configs/tyk-ai-studio /etc/default/tyk-ai-studio
