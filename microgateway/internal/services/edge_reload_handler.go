@@ -160,7 +160,11 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 		Msg("Edge configuration reload completed successfully")
 }
 
-// safeUpdateSQLite performs safe SQLite update with backup/rollback capability
+// safeUpdateSQLite applies the configuration. SyncConfiguration runs in one
+// transaction, so a failed sync leaves the previous configuration in place.
+// (A separate copy-and-restore of the tables used to run on failure; its
+// restore deleted every App and LLM outside any transaction, which foreign
+// keys refuse on Postgres, and left the edge half-restored.)
 func (h *EdgeReloadHandler) safeUpdateSQLite(newConfig *pb.ConfigurationSnapshot) error {
 	log.Info().
 		Str("version", newConfig.Version).
@@ -169,123 +173,14 @@ func (h *EdgeReloadHandler) safeUpdateSQLite(newConfig *pb.ConfigurationSnapshot
 		Int("filter_count", len(newConfig.Filters)).
 		Int("plugin_count", len(newConfig.Plugins)).
 		Int("model_price_count", len(newConfig.ModelPrices)).
-		Msg("Starting safe SQLite configuration update")
+		Msg("Starting configuration update")
 
-	// Create backup tables first
-	if err := h.createBackupTables(); err != nil {
-		return fmt.Errorf("failed to create backup tables: %w", err)
-	}
-
-	// Attempt to sync new configuration
 	if err := h.syncService.SyncConfiguration(newConfig); err != nil {
-		log.Error().Err(err).Msg("Configuration sync failed, attempting rollback")
-		
-		// Attempt rollback from backup
-		if rollbackErr := h.restoreFromBackup(); rollbackErr != nil {
-			log.Error().Err(rollbackErr).Msg("CRITICAL: Rollback failed - edge may be in inconsistent state")
-			return fmt.Errorf("sync failed and rollback failed: sync_error=%v, rollback_error=%v", err, rollbackErr)
-		}
-		
-		log.Info().Msg("Successfully rolled back to previous configuration")
+		log.Error().Err(err).Msg("Configuration sync failed; the previous configuration is unchanged")
 		return fmt.Errorf("configuration sync failed, rolled back: %w", err)
 	}
 
-	// Cleanup backup tables on success
-	if err := h.cleanupBackupTables(); err != nil {
-		log.Warn().Err(err).Msg("Failed to cleanup backup tables (non-critical)")
-	}
-
-	log.Info().Str("version", newConfig.Version).Msg("Safe SQLite configuration update completed")
-	return nil
-}
-
-// createBackupTables creates backup copies of current configuration
-func (h *EdgeReloadHandler) createBackupTables() error {
-	log.Debug().Msg("Creating backup tables for safe configuration update")
-
-	// Create backup tables with _backup suffix
-	backupQueries := []string{
-		"CREATE TABLE IF NOT EXISTS llms_backup AS SELECT * FROM llms",
-		"CREATE TABLE IF NOT EXISTS apps_backup AS SELECT * FROM apps", 
-		"CREATE TABLE IF NOT EXISTS filters_backup AS SELECT * FROM filters",
-		"CREATE TABLE IF NOT EXISTS plugins_backup AS SELECT * FROM plugins",
-		"CREATE TABLE IF NOT EXISTS model_prices_backup AS SELECT * FROM model_prices",
-		"CREATE TABLE IF NOT EXISTS app_llms_backup AS SELECT * FROM app_llms",
-		"CREATE TABLE IF NOT EXISTS llm_filters_backup AS SELECT * FROM llm_filters",
-		"CREATE TABLE IF NOT EXISTS llm_plugins_backup AS SELECT * FROM llm_plugins",
-	}
-
-	for _, query := range backupQueries {
-		if err := h.db.Exec(query).Error; err != nil {
-			return fmt.Errorf("failed to create backup table: %w", err)
-		}
-	}
-
-	log.Debug().Msg("Backup tables created successfully")
-	return nil
-}
-
-// restoreFromBackup restores configuration from backup tables
-func (h *EdgeReloadHandler) restoreFromBackup() error {
-	log.Info().Msg("Restoring configuration from backup tables")
-
-	// Clear current tables and restore from backup
-	restoreQueries := []string{
-		// Clear join tables first (foreign key constraints)
-		"DELETE FROM app_llms",
-		"DELETE FROM llm_filters", 
-		"DELETE FROM llm_plugins",
-		
-		// Clear main tables
-		"DELETE FROM llms",
-		"DELETE FROM apps",
-		"DELETE FROM filters", 
-		"DELETE FROM plugins",
-		"DELETE FROM model_prices",
-		
-		// Restore from backup
-		"INSERT INTO llms SELECT * FROM llms_backup",
-		"INSERT INTO apps SELECT * FROM apps_backup",
-		"INSERT INTO filters SELECT * FROM filters_backup",
-		"INSERT INTO plugins SELECT * FROM plugins_backup", 
-		"INSERT INTO model_prices SELECT * FROM model_prices_backup",
-		"INSERT INTO app_llms SELECT * FROM app_llms_backup",
-		"INSERT INTO llm_filters SELECT * FROM llm_filters_backup",
-		"INSERT INTO llm_plugins SELECT * FROM llm_plugins_backup",
-	}
-
-	for _, query := range restoreQueries {
-		if err := h.db.Exec(query).Error; err != nil {
-			return fmt.Errorf("failed to restore from backup: %w", err)
-		}
-	}
-
-	log.Info().Msg("Configuration restored from backup successfully")
-	return nil
-}
-
-// cleanupBackupTables removes backup tables after successful update
-func (h *EdgeReloadHandler) cleanupBackupTables() error {
-	log.Debug().Msg("Cleaning up backup tables")
-
-	dropQueries := []string{
-		"DROP TABLE IF EXISTS llms_backup",
-		"DROP TABLE IF EXISTS apps_backup",
-		"DROP TABLE IF EXISTS filters_backup", 
-		"DROP TABLE IF EXISTS plugins_backup",
-		"DROP TABLE IF EXISTS model_prices_backup",
-		"DROP TABLE IF EXISTS app_llms_backup",
-		"DROP TABLE IF EXISTS llm_filters_backup",
-		"DROP TABLE IF EXISTS llm_plugins_backup",
-	}
-
-	for _, query := range dropQueries {
-		if err := h.db.Exec(query).Error; err != nil {
-			return fmt.Errorf("failed to drop backup table: %w", err)
-		}
-	}
-
-	log.Debug().Msg("Backup tables cleaned up successfully")
+	log.Info().Str("version", newConfig.Version).Msg("Configuration update completed")
 	return nil
 }
 

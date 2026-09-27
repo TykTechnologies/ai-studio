@@ -103,8 +103,10 @@ Edge traffic never passes Studio's budget check. Edges enforce App budgets local
 The edge keeps each App's usage for the current period in an in-memory ledger (`BudgetLedger`, `microgateway/internal/services/budget_ledger.go`):
 - **Recording:** each request adds to the ledger. The analytics writer applies the amounts to `budget_usage` as increments, in the same batched transaction as the analytics rows (at most `ANALYTICS_WRITER_FLUSH_INTERVAL`, 100 ms, later).
 - **The check:** it reads stored usage plus the amounts not yet written, so a request's cost counts as soon as it is recorded.
-- **Re-reading the store:** the ledger re-reads the stored total every 5 s. That picks up other gateways sharing the database, and the budget sync.
+- **Re-reading the store:** the ledger re-reads the stored total every 5 s. That picks up other gateways sharing the database, and the budget sync. Within a period spend only grows: a lower stored figure is not taken.
 - **The budget sync:** it raises `budget_usage` to the control plane's figure with one `MAX`/`GREATEST` update, and raises the ledger to match.
+- **Config pushes:** the snapshot's `current_period_usage` goes through the same raise (`raiseStoredUsage`). Until 2026-09-27 it was assigned, so a push landing before the analytics pulse lowered the edge's spend to the hub's stale figure and reopened spent budgets.
+- **Unwritable usage:** when a batch fails, each App's usage is written in its own transaction, so one App the database refuses does not hold back the others. Usage of an App that no longer exists is dropped; usage the database keeps refusing for an existing App is retried for 10 minutes (`ledgerGiveUpAfter`), then no longer written but still counted until the period ends. Before, one failed entry failed every later flush, and no App's spend was persisted until restart.
 
 On top of that, the budget sync (`budget.sync`, every 30 s, `BUDGET_SYNC_INTERVAL`) now carries `blocks`: the complete map of App ID to reason for Apps that must be refused (`EdgeBlocks` on the Enterprise budget service). An App is listed when:
 

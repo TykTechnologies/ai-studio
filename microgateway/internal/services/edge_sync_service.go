@@ -2,15 +2,20 @@
 package services
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // EdgeSyncService handles syncing flattened configuration to local SQLite
@@ -18,6 +23,44 @@ type EdgeSyncService struct {
 	db        *gorm.DB
 	namespace string
 }
+
+// appliedSnapshots holds, per database and namespace, a fingerprint of the
+// snapshot last applied. A reload hands the same pulled snapshot to both the
+// config callback and the reload handler; the second application is skipped.
+// The whole snapshot is hashed: the hub's checksum leaves out Apps.
+var appliedSnapshots sync.Map // appliedKey -> [sha256.Size]byte
+
+// snapshotFingerprint hashes the whole snapshot; ok is false when it cannot
+// be serialized, and then the snapshot is always applied.
+func snapshotFingerprint(config *pb.ConfigurationSnapshot) (sum [sha256.Size]byte, ok bool) {
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(config)
+	if err != nil {
+		return sum, false
+	}
+	return sha256.Sum256(b), true
+}
+
+type appliedKey struct {
+	config    *gorm.Config // shared by every session of one database
+	namespace string
+}
+
+// snapshotCutoff is when the snapshot was taken: an App created after it
+// cannot be in it. Hubs that do not send snapshot_time set the version to the
+// snapshot's Unix time. Zero when neither is known.
+func snapshotCutoff(config *pb.ConfigurationSnapshot) time.Time {
+	if config.SnapshotTime != nil {
+		return config.SnapshotTime.AsTime()
+	}
+	if secs, err := strconv.ParseInt(config.Version, 10, 64); err == nil && secs > 0 {
+		return time.Unix(secs, 0)
+	}
+	return time.Time{}
+}
+
+// namespaceScope selects the rows a snapshot for this edge covers: its
+// namespace and the global one.
+const namespaceScope = "(namespace = ? OR namespace = '')"
 
 // calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
 // If no budget_start_date is set, uses calendar month (1st to last day).
@@ -80,6 +123,13 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		Int("app_count", len(config.Apps)).
 		Msg("Starting configuration sync to local SQLite")
 
+	key := appliedKey{config: s.db.Config, namespace: s.namespace}
+	fingerprint, fingerprinted := snapshotFingerprint(config)
+	if applied, ok := appliedSnapshots.Load(key); ok && fingerprinted && applied.([sha256.Size]byte) == fingerprint {
+		log.Debug().Str("version", config.Version).Msg("Configuration snapshot already applied, skipping")
+		return nil
+	}
+
 	// Start transaction for atomic sync
 	tx := s.db.Begin()
 	if tx.Error != nil {
@@ -87,7 +137,17 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 	}
 	defer tx.Rollback()
 
-	// 1. Clear existing data for this namespace (and global)
+	// Apps the edge stored after the snapshot was taken (pull-on-miss) are
+	// not in it; they keep their rows and grants.
+	kept, err := s.appsNewerThan(tx, config.Apps, snapshotCutoff(config))
+	if err != nil {
+		return fmt.Errorf("failed to read local apps: %w", err)
+	}
+
+	// 1. Clear existing data for this namespace (and global). Apps and LLMs
+	// are updated in place instead (steps 2 and 3): analytics and budget rows
+	// reference them, and an App must never be missing while the snapshot
+	// still has it.
 	if err := s.clearExistingData(tx); err != nil {
 		return fmt.Errorf("failed to clear existing data: %w", err)
 	}
@@ -98,7 +158,8 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 	}
 
 	// 3. Sync Apps with embedded relationships (THE CRITICAL PART)
-	if err := s.syncApps(tx, config.Apps); err != nil {
+	raised, err := s.syncApps(tx, config.Apps, kept.appIDs)
+	if err != nil {
 		return fmt.Errorf("failed to sync Apps: %w", err)
 	}
 
@@ -145,7 +206,12 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync AccessTokens: %w", err)
 	}
 
-	// 10. Commit transaction
+	// 10. Restore the grants of the Apps newer than the snapshot
+	if err := kept.restore(tx); err != nil {
+		return fmt.Errorf("failed to restore grants of newer Apps: %w", err)
+	}
+
+	// 11. Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
@@ -153,6 +219,16 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 	// before this commit. Bump again so no request-path cache keeps an entry
 	// that was read from the pre-sync data in between.
 	database.BumpConfigGeneration()
+	if ledger := edgeBudgetLedger.Load(); ledger != nil {
+		for _, r := range raised {
+			ledger.Reconcile(r.appID, r.start, r.cost)
+		}
+	}
+	if fingerprinted {
+		appliedSnapshots.Store(key, fingerprint)
+	} else {
+		appliedSnapshots.Delete(key)
+	}
 
 	log.Debug().
 		Str("version", config.Version).
@@ -162,7 +238,12 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 	return nil
 }
 
-// clearExistingData clears existing configuration for this namespace
+// clearExistingData clears existing configuration for this namespace. Apps
+// and LLMs are not deleted here: syncApps and syncLLMs update them in place
+// and retire (soft-delete) those the snapshot no longer has. The grants of
+// Apps newer than the snapshot are cleared too, and restored at the end of
+// the sync (keptApps.restore), because the tools and routers they point at
+// are re-created in between.
 func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	log.Debug().Str("namespace", s.namespace).Msg("Clearing existing configuration data")
 
@@ -198,14 +279,6 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	}
 
 	// Clear main entity tables (after all join tables are cleared)
-	if err := tx.Exec("DELETE FROM apps WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
-		return fmt.Errorf("failed to clear apps: %w", err)
-	}
-
-	if err := tx.Exec("DELETE FROM llms WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
-		return fmt.Errorf("failed to clear llms: %w", err)
-	}
-
 	if err := tx.Exec("DELETE FROM filters WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear filters: %w", err)
 	}
@@ -255,11 +328,25 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	return nil
 }
 
-// syncLLMs syncs LLM entities and their join table relationships
+// syncLLMs syncs LLM entities and their join table relationships. LLMs are
+// updated in place and those missing from the snapshot are retired
+// (soft-deleted): analytics and budget rows reference them, and on Postgres
+// deleting them fails.
 func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 	log.Debug().Int("count", len(llms)).Msg("Syncing LLMs to local SQLite")
 
+	// Slugs are unique and may move between LLMs (or to a new one when one
+	// is deleted). Give every current LLM a unique placeholder first; the
+	// upserts below set the snapshot's slugs, and a retired LLM keeps its
+	// placeholder, which frees its slug.
+	if err := tx.Model(&database.LLM{}).Where(namespaceScope, s.namespace).
+		Update("slug", gorm.Expr("slug || '#' || id")).Error; err != nil {
+		return fmt.Errorf("failed to free LLM slugs: %w", err)
+	}
+
+	ids := make([]uint, 0, len(llms))
 	for _, pbLLM := range llms {
+		ids = append(ids, uint(pbLLM.Id))
 		// Insert main LLM record
 		llm := &database.LLM{
 			Model: gorm.Model{
@@ -303,7 +390,7 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			llm.AuthMechanism = pbLLM.AuthMechanism
 		}
 
-		if err := tx.Create(llm).Error; err != nil {
+		if err := upsertByID(tx, llm, uint(pbLLM.Id), pbLLM.IsActive); err != nil {
 			return fmt.Errorf("failed to insert LLM %d: %w", pbLLM.Id, err)
 		}
 
@@ -328,12 +415,53 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			Msg("LLM synced to SQLite with filters")
 	}
 
+	if err := retireMissing(tx, &database.LLM{}, s.namespace, ids); err != nil {
+		return fmt.Errorf("failed to retire LLMs: %w", err)
+	}
 	return nil
 }
 
-// syncApps syncs App entities and recreates app_llms join table - THE CRITICAL PART
-func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
+// upsertByID inserts row, or overwrites every column of the row with its ID
+// (a retired one included, which it restores). GORM writes a column's
+// default in place of a zero value, so a row that must be inactive is set
+// so afterwards: is_active defaults to true.
+func upsertByID(tx *gorm.DB, row interface{}, id uint, isActive bool) error {
+	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, UpdateAll: true}).
+		Create(row).Error; err != nil {
+		return err
+	}
+	if isActive {
+		return nil
+	}
+	return tx.Model(row).Where("id = ?", id).Update("is_active", false).Error
+}
+
+// retireMissing soft-deletes the rows of model in this edge's namespaces
+// whose IDs are not in keep.
+func retireMissing(tx *gorm.DB, model interface{}, namespace string, keep []uint) error {
+	q := tx.Where(namespaceScope, namespace)
+	if len(keep) > 0 {
+		q = q.Where("id NOT IN ?", keep)
+	}
+	return q.Delete(model).Error
+}
+
+// budgetRaise is a stored period usage a sync raised, for the ledger.
+type budgetRaise struct {
+	appID uint
+	start time.Time
+	cost  float64
+}
+
+// syncApps syncs App entities and recreates app_llms join table - THE CRITICAL PART.
+// Apps are updated in place, so one the snapshot has is never missing; those
+// it no longer has are retired (soft-deleted), except kept: Apps the edge
+// stored after the snapshot was taken.
+func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig, kept []uint) ([]budgetRaise, error) {
 	log.Debug().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
+
+	var raised []budgetRaise
+	ids := append(make([]uint, 0, len(apps)+len(kept)), kept...)
 
 	// Collect join table records across all apps for batch insert
 	var allAppLLMs []database.AppLLM
@@ -343,6 +471,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	var allAppSemanticRouters []database.AppSemanticRouter
 
 	for _, pbApp := range apps {
+		ids = append(ids, uint(pbApp.Id))
 		// Insert main App record
 		app := &database.App{
 			Model: gorm.Model{
@@ -383,8 +512,8 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			}
 		}
 
-		if err := tx.Create(app).Error; err != nil {
-			return fmt.Errorf("failed to insert App %d: %w", pbApp.Id, err)
+		if err := upsertByID(tx, app, uint(pbApp.Id), pbApp.IsActive); err != nil {
+			return nil, fmt.Errorf("failed to insert App %d: %w", pbApp.Id, err)
 		}
 
 		// Collect join table records for batch insert
@@ -435,24 +564,17 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			// Convert from dollars (control server format) to dollars * 10000 (edge storage format)
 			storedCost := pbApp.CurrentPeriodUsage * 10000
 
-			budgetUsage := &database.BudgetUsage{
-				AppID:       uint(pbApp.Id),
-				PeriodStart: periodStart,
-				PeriodEnd:   periodEnd,
-				TotalCost:   storedCost,
-			}
-
-			// Use FirstOrCreate to avoid duplicates, and update TotalCost if record exists
-			result := tx.Where("app_id = ? AND period_start = ?", pbApp.Id, periodStart).
-				Assign(map[string]interface{}{"total_cost": storedCost}).
-				FirstOrCreate(budgetUsage)
-			if result.Error != nil {
-				log.Warn().Err(result.Error).
+			// Raise, never lower: the control plane's figure only has the
+			// edge spend its analytics pulse has delivered, so it can be
+			// behind the edge's own. Taking it reopened spent budgets.
+			if err := raiseStoredUsage(tx, uint(pbApp.Id), periodStart, periodEnd, storedCost); err != nil {
+				log.Warn().Err(err).
 					Uint32("app_id", pbApp.Id).
 					Float64("current_usage", pbApp.CurrentPeriodUsage).
 					Float64("stored_cost", storedCost).
 					Msg("Failed to initialize budget usage from control server")
 			} else {
+				raised = append(raised, budgetRaise{appID: uint(pbApp.Id), start: periodStart, cost: storedCost})
 				log.Debug().
 					Uint32("app_id", pbApp.Id).
 					Float64("current_usage_dollars", pbApp.CurrentPeriodUsage).
@@ -464,34 +586,169 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 		}
 	}
 
+	if err := retireMissing(tx, &database.App{}, s.namespace, ids); err != nil {
+		return nil, fmt.Errorf("failed to retire Apps: %w", err)
+	}
+
 	// Batch insert all join table records
 	if len(allAppLLMs) > 0 {
 		if err := tx.Create(&allAppLLMs).Error; err != nil {
-			return fmt.Errorf("failed to batch insert app_llms: %w", err)
+			return nil, fmt.Errorf("failed to batch insert app_llms: %w", err)
 		}
 	}
 	if len(allAppTools) > 0 {
 		if err := tx.Create(&allAppTools).Error; err != nil {
-			return fmt.Errorf("failed to batch insert app_tools: %w", err)
+			return nil, fmt.Errorf("failed to batch insert app_tools: %w", err)
 		}
 	}
 	if len(allAppDatasources) > 0 {
 		if err := tx.Create(&allAppDatasources).Error; err != nil {
-			return fmt.Errorf("failed to batch insert app_datasources: %w", err)
+			return nil, fmt.Errorf("failed to batch insert app_datasources: %w", err)
 		}
 	}
 	if len(allAppModelRouters) > 0 {
 		if err := tx.Create(&allAppModelRouters).Error; err != nil {
-			return fmt.Errorf("failed to batch insert app_model_routers: %w", err)
+			return nil, fmt.Errorf("failed to batch insert app_model_routers: %w", err)
 		}
 	}
 	if len(allAppSemanticRouters) > 0 {
 		if err := tx.Create(&allAppSemanticRouters).Error; err != nil {
-			return fmt.Errorf("failed to batch insert app_semantic_routers: %w", err)
+			return nil, fmt.Errorf("failed to batch insert app_semantic_routers: %w", err)
 		}
 	}
 
-	return nil
+	return raised, nil
+}
+
+// keptApps are Apps the edge stored after the snapshot was taken (pull-on-miss
+// token validation), so the snapshot cannot have them. They keep their rows;
+// their grants are read before the join tables are cleared and restored at
+// the end of the sync.
+type keptApps struct {
+	appIDs          []uint
+	llms            []database.AppLLM
+	tools           []database.AppTool
+	datasources     []database.AppDatasource
+	modelRouters    []database.AppModelRouter
+	semanticRouters []database.AppSemanticRouter
+}
+
+// appsNewerThan returns the Apps in this edge's namespaces that the snapshot
+// does not have and that were created at or after cutoff, with their grants.
+// A zero cutoff (the snapshot's time is unknown) keeps none.
+func (s *EdgeSyncService) appsNewerThan(tx *gorm.DB, snapshot []*pb.AppConfig, cutoff time.Time) (*keptApps, error) {
+	k := &keptApps{}
+	if cutoff.IsZero() {
+		return k, nil
+	}
+	inSnapshot := make(map[uint]bool, len(snapshot))
+	for _, a := range snapshot {
+		inSnapshot[uint(a.Id)] = true
+	}
+	var local []database.App
+	if err := tx.Select("id", "created_at").Where(namespaceScope, s.namespace).Find(&local).Error; err != nil {
+		return nil, err
+	}
+	for _, a := range local {
+		if !inSnapshot[a.ID] && !a.CreatedAt.Before(cutoff) {
+			k.appIDs = append(k.appIDs, a.ID)
+		}
+	}
+	if len(k.appIDs) == 0 {
+		return k, nil
+	}
+	log.Info().Interface("app_ids", k.appIDs).Time("snapshot_time", cutoff).
+		Msg("Keeping Apps created after the configuration snapshot was taken")
+	for _, dest := range []interface{}{&k.llms, &k.tools, &k.datasources, &k.modelRouters, &k.semanticRouters} {
+		if err := tx.Where("app_id IN ?", k.appIDs).Find(dest).Error; err != nil {
+			return nil, err
+		}
+	}
+	return k, nil
+}
+
+// restore re-inserts the kept Apps' grants whose targets still exist.
+func (k *keptApps) restore(tx *gorm.DB) error {
+	if len(k.appIDs) == 0 {
+		return nil
+	}
+	if err := restoreGrants(tx, k.llms, func(g database.AppLLM) uint { return g.LLMID }, &database.LLM{}); err != nil {
+		return err
+	}
+	if err := restoreGrants(tx, k.tools, func(g database.AppTool) uint { return g.ToolID }, &database.Tool{}); err != nil {
+		return err
+	}
+	if err := restoreGrants(tx, k.datasources, func(g database.AppDatasource) uint { return g.DatasourceID }, &database.Datasource{}); err != nil {
+		return err
+	}
+	if err := restoreGrants(tx, k.modelRouters, func(g database.AppModelRouter) uint { return g.ModelRouterID }, &database.ModelRouter{}); err != nil {
+		return err
+	}
+	return restoreGrants(tx, k.semanticRouters, func(g database.AppSemanticRouter) uint { return g.SemanticRouterID }, &database.SemanticRouter{})
+}
+
+// restoreGrants inserts the grants whose target (a row of model) exists.
+func restoreGrants[G any](tx *gorm.DB, grants []G, target func(G) uint, model interface{}) error {
+	if len(grants) == 0 {
+		return nil
+	}
+	ids := make([]uint, 0, len(grants))
+	for _, g := range grants {
+		ids = append(ids, target(g))
+	}
+	var have []uint
+	if err := tx.Model(model).Where("id IN ?", ids).Pluck("id", &have).Error; err != nil {
+		return err
+	}
+	found := make(map[uint]bool, len(have))
+	for _, id := range have {
+		found[id] = true
+	}
+	var rows []G
+	for _, g := range grants {
+		if found[target(g)] {
+			rows = append(rows, g)
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rows).Error
+}
+
+// raiseStoredUsage raises an App's stored usage for the period starting at
+// start to at least cost, creating the row if it is missing. The maximum is
+// taken by the database in one statement, so increments the analytics writer
+// makes meanwhile are not lost.
+func raiseStoredUsage(db *gorm.DB, appID uint, start, end time.Time, cost float64) error {
+	now := time.Now()
+	maxExpr := "MAX(total_cost, ?)"
+	if db.Dialector.Name() == "postgres" {
+		maxExpr = "GREATEST(total_cost, ?)"
+	}
+	raise := func() (int64, error) {
+		res := db.Model(&database.BudgetUsage{}).
+			Where("app_id = ? AND period_start = ?", appID, start).
+			Updates(map[string]interface{}{
+				"total_cost": gorm.Expr(maxExpr, cost),
+				"updated_at": now,
+			})
+		return res.RowsAffected, res.Error
+	}
+
+	n, err := raise()
+	if err != nil || n > 0 {
+		return err
+	}
+	// Create the row; if the writer created it meanwhile, raise that.
+	res := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&database.BudgetUsage{
+		AppID: appID, PeriodStart: start, PeriodEnd: end, TotalCost: cost, CreatedAt: now, UpdatedAt: now,
+	})
+	if res.Error == nil && res.RowsAffected == 0 {
+		_, err = raise()
+		return err
+	}
+	return res.Error
 }
 
 // syncFilters syncs Filter entities

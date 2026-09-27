@@ -1234,8 +1234,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// objects plus those filed under "default"), same checksum, same sync row.
 	namespace = models.CanonicalNamespace(namespace)
 
+	// Taken before any row is read: an edge keeps Apps created after it,
+	// which it learnt of from token validation (see EdgeSyncService).
+	takenAt := time.Now()
 	snapshot := &pb.ConfigurationSnapshot{
-		Version:      fmt.Sprintf("%d", time.Now().Unix()),
+		Version:      fmt.Sprintf("%d", takenAt.Unix()),
+		SnapshotTime: timestamppb.New(takenAt),
 		Llms:         []*pb.LLMConfig{},
 		Apps:         []*pb.AppConfig{},
 		ModelPrices:  []*pb.ModelPriceConfig{},

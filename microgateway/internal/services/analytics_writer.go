@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -177,9 +178,9 @@ func (w *AnalyticsWriter) run() {
 // flush writes the events and the ledger's pending usage in one transaction.
 // Busy errors are retried. Any other error is taken to be a bad row (a
 // foreign key to a configuration row deleted meanwhile, on databases that
-// enforce them): the usage and then each event are written on their own, so
-// only the bad rows are lost. Failed events are counted; failed usage stays
-// in the ledger for the next flush.
+// enforce them): each App's usage and then each event are written on their
+// own, so only the bad rows are lost. Failed events are counted; failed usage
+// stays in the ledger for the next flush (see BudgetLedger.finishEach).
 func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 	var usage *ledgerFlush
 	if w.ledger != nil {
@@ -197,9 +198,18 @@ func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 		return usage.write(tx)
 	})
 	written, failed := len(events), 0
-	if err != nil && !isBusyError(err) && len(events) > 0 {
+	var usageOK []bool // per ledger entry, when written one by one
+	if err != nil && !isBusyError(err) {
 		log.Warn().Err(err).Int("events", len(events)).Msg("Analytics writer: batch failed, writing its rows one by one")
-		err = w.withBusyRetry(usage.write)
+		err = nil
+		if !usage.empty() {
+			usageOK = usage.writeEach(w.db, w.withBusyRetry)
+			for _, ok := range usageOK {
+				if !ok {
+					err = errors.New("budget usage of some Apps was not written")
+				}
+			}
+		}
 		written = 0
 		for i, e := range events {
 			rowErr := w.withBusyRetry(func(tx *gorm.DB) error { return insertEvents(tx, []*database.AnalyticsEvent{e}) })
@@ -223,7 +233,11 @@ func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 	w.batches.Add(1)
 
 	if w.ledger != nil && usage != nil {
-		w.ledger.finish(usage, err == nil)
+		if usageOK != nil {
+			w.ledger.finishEach(usage, usageOK)
+		} else {
+			w.ledger.finish(usage, err == nil)
+		}
 	}
 	w.written.Add(uint64(written))
 	w.failed.Add(uint64(failed))
