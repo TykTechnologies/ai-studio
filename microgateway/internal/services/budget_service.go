@@ -172,7 +172,7 @@ func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estim
 		return 0, 0, fmt.Errorf("%w: reading app %d: %v", services.ErrBudgetCheckUnavailable, appID, err)
 	}
 	if !app.found || !app.isActive {
-		return 0, 0, fmt.Errorf("app not found or inactive: %w", gorm.ErrRecordNotFound)
+		return 0, 0, fmt.Errorf("app not found or inactive: %w: %w", services.ErrAppInactive, gorm.ErrRecordNotFound)
 	}
 
 	monthlyBudget := app.monthlyBudget

@@ -20,6 +20,15 @@ func TestBudgetDenial(t *testing.T) {
 	if status != http.StatusServiceUnavailable || msg == "Budget limit exceeded" {
 		t.Fatalf("a check that could not run must be a 503, not a spent budget: %d %q", status, msg)
 	}
+
+	// An App deactivated on the hub can outlive its cached token on an edge
+	// until the budget check finds it gone; the caller must hear that, not
+	// that a budget is spent.
+	inactive := fmt.Errorf("app not found or inactive: %w", services.ErrAppInactive)
+	status, msg = budgetDenial(inactive, "Budget limit exceeded")
+	if status != http.StatusForbidden || msg != services.AppInactiveMessage {
+		t.Fatalf("an inactive App must be a 403 %q: %d %q", services.AppInactiveMessage, status, msg)
+	}
 }
 
 // The default transport keeps 2 idle connections per host; with more requests
