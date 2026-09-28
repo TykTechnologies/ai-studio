@@ -38,6 +38,14 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 // ExchangeRecorder gets both in one call; any other handler gets
 // RecordProxyLog followed by RecordChatRecord, as before.
 func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
+	// The proxy paths build chat records without a latency; the gateway put
+	// the request's start on the context (WithRequestStart).
+	if rec != nil && rec.TotalTimeMS == 0 {
+		if ms, ok := RequestLatencyMS(ctx, rec.TimeStamp); ok {
+			rec.TotalTimeMS = ms
+		}
+	}
+
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 

@@ -110,9 +110,15 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	req.Header.Set(hdrInternalHop, internalHopToken)
 
 	resp, err := loopbackRoundTrip(t.underlying, req)
-	if err == nil && resp.StatusCode < http.StatusMultipleChoices {
-		if relay := loopbackRelayFrom(req.Context()); relay != nil {
+	if relay := loopbackRelayFrom(req.Context()); relay != nil {
+		switch {
+		case err != nil:
+			relay.clearFailure()
+		case resp.StatusCode < http.StatusMultipleChoices:
 			relay.capture(resp.Header)
+			relay.clearFailure()
+		case resp.StatusCode >= http.StatusBadRequest:
+			relay.captureFailure(resp)
 		}
 	}
 	return resp, err
@@ -125,7 +131,18 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 type loopbackRelay struct {
 	mu sync.Mutex
 	h  http.Header
+	// failStatus and failBody are the latest loopback response when it was a
+	// refusal. The drivers turn it into an error string that keeps little of
+	// it (Google's keeps no message at all), so the outer hop reads the
+	// reason from here instead (see attemptFailure.withLoopback).
+	failStatus int
+	failBody   []byte
 }
+
+// maxRelayedErrorBody caps how much of a refusal's body is kept. The inner
+// hop's own errors are a few hundred bytes; a vendor's may be longer, and
+// only needs its message.
+const maxRelayedErrorBody = 16 << 10
 
 type loopbackRelayKey struct{}
 
@@ -180,6 +197,46 @@ func (l *loopbackRelay) capture(h http.Header) {
 	l.mu.Lock()
 	l.h = kept
 	l.mu.Unlock()
+}
+
+// captureFailure keeps the status and the start of the body of a refused
+// loopback response. The body is put back together so the driver still reads
+// all of it.
+func (l *loopbackRelay) captureFailure(resp *http.Response) {
+	prefix, _ := io.ReadAll(io.LimitReader(resp.Body, maxRelayedErrorBody))
+	resp.Body = replayedBody{Reader: io.MultiReader(bytes.NewReader(prefix), resp.Body), Closer: resp.Body}
+	l.mu.Lock()
+	l.failStatus, l.failBody = resp.StatusCode, prefix
+	l.mu.Unlock()
+}
+
+// clearFailure forgets a refusal once a later loopback response (a driver's
+// retry) superseded it.
+func (l *loopbackRelay) clearFailure() {
+	l.mu.Lock()
+	l.failStatus, l.failBody = 0, nil
+	l.mu.Unlock()
+}
+
+// failure is the refusal the latest loopback response carried, when its body
+// reads as an error the client can be given.
+func (l *loopbackRelay) failure() (*APIError, int, bool) {
+	if l == nil {
+		return nil, 0, false
+	}
+	l.mu.Lock()
+	status, body := l.failStatus, l.failBody
+	l.mu.Unlock()
+	if status == 0 {
+		return nil, 0, false
+	}
+	apiErr, ok := parseLoopbackError(status, body)
+	return apiErr, status, ok
+}
+
+type replayedBody struct {
+	io.Reader
+	io.Closer
 }
 
 // applyTo replaces any relayed headers in dst with the captured ones. It must

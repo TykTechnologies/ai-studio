@@ -33,10 +33,11 @@ func TestUpstreamEnvelope_RelayedVerbatim(t *testing.T) {
 			require.NoError(t, json.Unmarshal(got, &out), "body: %s", got)
 			require.NotNil(t, out.Error)
 			assert.Equal(t, "prompt has 3 images, max is 2", out.Error.Message)
-			// The drivers keep only the envelope's message, so type and
-			// code are the ones the status implies.
-			assert.Equal(t, oaiErrorType(http.StatusBadRequest), out.Error.Type)
-			assert.Equal(t, oaiErrorCode(http.StatusBadRequest), out.Error.Code)
+			// The drivers keep only the envelope's message, but the outer
+			// hop reads the refusal from the loopback response itself
+			// (loopbackRelay), so the vendor's type and code survive too.
+			assert.Equal(t, "invalid_request_error", out.Error.Type)
+			assert.Equal(t, "too_many_images", out.Error.Code)
 			assert.Empty(t, h.fallbackVendor.calls(), "a 400 must not fail over")
 		})
 	}

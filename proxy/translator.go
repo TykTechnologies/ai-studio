@@ -336,7 +336,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 				served, relay = a, attemptRelay
 				break
 			}
-			last = classifyDriverError(err, actx) // before cancel: the deadline is what we ask about
+			last = classifyDriverError(err, actx).withLoopback(attemptRelay) // before cancel: the deadline is what we ask about
 			cancel()
 		}
 		if i == plan.last() || overall.Err() != nil {
@@ -352,7 +352,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		// Surface the vendor's own status. An unknown model is a 404 upstream;
 		// reporting it as our 500 tells the caller to retry a request that can
 		// never succeed, and hides a client error as a server one.
-		respondRelayingOAIError(w, last.status, "failed to generate content", last.err)
+		respondAttemptFailure(w, last, "failed to generate content")
 		return
 	}
 	setServedHeaders(w, served)
@@ -647,7 +647,7 @@ func (p *Proxy) handleChatCompletionStream(
 			served = a
 			break
 		}
-		last = classifyDriverError(err, actx) // before cancel: the deadline is what we ask about
+		last = classifyDriverError(err, actx).withLoopback(relay) // before cancel: the deadline is what we ask about
 		cancel()
 		if framesSent > 0 || i == plan.last() || overall.Err() != nil {
 			break
@@ -659,7 +659,7 @@ func (p *Proxy) handleChatCompletionStream(
 		p.noteFailover(r, a, plan.attempts[i+1], reason, last)
 	}
 	if resp == nil {
-		p.failStream(w, flusher, framesSent, last.status, "LLM call failed", last.err)
+		p.failStreamAttempt(w, flusher, framesSent, last, "LLM call failed")
 		return
 	}
 	conf = served.conf
@@ -766,6 +766,28 @@ func (p *Proxy) failStream(w http.ResponseWriter, flusher http.Flusher, framesSe
 		detail = fmt.Sprintf("%s: %s", message, err.Error())
 	}
 	p.sendStreamError(w, flusher, detail, errType)
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
+// failStreamAttempt is failStream for a failed attempt, giving the client the
+// loopback hop's refusal when the relay read one.
+func (p *Proxy) failStreamAttempt(w http.ResponseWriter, flusher http.Flusher, framesSent int, f attemptFailure, message string) {
+	if f.inner == nil {
+		p.failStream(w, flusher, framesSent, f.status, message, f.err)
+		return
+	}
+	if framesSent == 0 {
+		w.Header().Del("Content-Type")
+		clearServedHeaders(w) // nobody served this request after all
+		respondAttemptFailure(w, f, message)
+		return
+	}
+	errType := f.inner.Type
+	if errType == "" {
+		errType = oaiErrorType(f.status)
+	}
+	p.sendStreamError(w, flusher, f.inner.Message, errType)
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }

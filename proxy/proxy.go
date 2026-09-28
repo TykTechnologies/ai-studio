@@ -246,6 +246,28 @@ func upstreamTransportStatus(err error) int {
 	return http.StatusBadGateway
 }
 
+// loopbackAwareTransportStatus is upstreamTransportStatus for a request that
+// may be the /ai/ loopback hop. The outer hop runs its attempts on contexts
+// detached from its client, so the only thing that cancels a loopback request
+// is the outer attempt's deadline: the outer hop answers its client 504, and
+// the inner hop's row says the same instead of 502.
+func loopbackAwareTransportStatus(r *http.Request, err error) int {
+	if errors.Is(err, context.Canceled) && IsInternalHop(r) {
+		return http.StatusGatewayTimeout
+	}
+	return upstreamTransportStatus(err)
+}
+
+// upstreamFailureBody is the analytics body for a vendor call that failed
+// before any response arrived.
+func upstreamFailureBody(status int, err error) []byte {
+	body, _ := json.Marshal(map[string]interface{}{"error": map[string]interface{}{
+		"message": "failed to make upstream request: " + err.Error(),
+		"type":    oaiErrorType(status),
+	}})
+	return body
+}
+
 func (c *Config) serverReadTimeout() time.Duration {
 	if c != nil && c.ServerReadTimeout > 0 {
 		return c.ServerReadTimeout
@@ -528,7 +550,17 @@ func (p *Proxy) createHandler() http.Handler {
 	if p.config != nil && p.config.ServerTiming {
 		h = serverTimingMiddleware(h)
 	}
-	return h
+	return requestStartMiddleware(h)
+}
+
+// requestStartMiddleware notes when the request arrived, so the analytics
+// recorded for it carry its latency (total_time_ms). On the /ai/ loopback the
+// inner hop notes its own start: its row times the vendor call and the inner
+// hop's filters, which is what its row describes.
+func requestStartMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(analytics.WithRequestStart(r.Context(), time.Now())))
+	})
 }
 
 // Header names the MCP StreamableHTTP transport relies on. A browser client
@@ -585,6 +617,40 @@ func budgetDenial(err error, exceededMsg string) (int, string) {
 		return http.StatusForbidden, services.AppInactiveMessage
 	}
 	return http.StatusForbidden, exceededMsg
+}
+
+// budgetDenialError is the OpenAI error for a budget refusal: the reason
+// when a budget is spent, and only that the check could not run otherwise,
+// since the cause of that is a database error.
+func budgetDenialError(status int, msg string, err error) *APIError {
+	apiErr := &APIError{Message: msg, Type: oaiErrorType(status), Code: "budget_check_unavailable"}
+	if errors.Is(err, services.ErrAppInactive) {
+		apiErr.Code = "app_inactive"
+		apiErr.Message = services.AppInactiveMessage
+		return apiErr
+	}
+	if status == http.StatusForbidden {
+		apiErr.Code = "budget_exceeded"
+		if detail := strings.TrimPrefix(err.Error(), "budget exceeded: "); detail != "" {
+			apiErr.Message = msg + ": " + detail
+		}
+	}
+	return apiErr
+}
+
+// respondBudgetDenial answers a budget refusal. A direct caller of the
+// pass-through gets the usual error body. The /ai/ loopback hop gets an OpenAI
+// envelope stating the reason, so the outer hop can relay it (see
+// respondPolicyBlock).
+func respondBudgetDenial(w http.ResponseWriter, r *http.Request, status int, msg string, err error) {
+	if r.Header.Get(hdrInternalHop) == "" {
+		respondWithError(w, status, msg, err, false)
+		return
+	}
+	slog.Error("api client error", "message", msg, "status", status, "error", err)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(OAIErrorResponse{Error: budgetDenialError(status, msg, err)})
 }
 
 // upstreamGuardedTransport is the shared transport for all upstream LLM
@@ -859,7 +925,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			p.analyzeResponse(llm, app, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, r)
 		})
 		respStatus = status
-		respondWithError(w, status, msg, err, false)
+		respondBudgetDenial(w, r, status, msg, err)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
@@ -938,8 +1004,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// No response arrived. The default handler wrote a bare 502 even on a
 		// timeout and left respStatus at 200, so metrics and the span
 		// recorded a success.
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-			respStatus = upstreamTransportStatus(err)
+		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
+			respStatus = loopbackAwareTransportStatus(req, err)
 			respondWithError(w, respStatus, "failed to make upstream request", err, false)
 		},
 	}
@@ -1589,7 +1655,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		status, msg := budgetDenial(err, "Budget limit exceeded for streaming")
+		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
 			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
 		}
@@ -1597,7 +1663,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			p.analyzeStreamingResponse(llm, app, r, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, nil, time.Now(), "")
 		})
 		respStatus = status
-		respondWithError(w, status, msg, err, false)
+		respondBudgetDenial(w, r, status, msg, err)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
@@ -1679,7 +1745,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
-		respStatus = upstreamTransportStatus(err)
+		respStatus = loopbackAwareTransportStatus(r, err)
+		// No response arrived, but the request was made and failed: record it,
+		// as the REST path's ErrorHandler does, so a vendor outage shows in
+		// analytics. /ai/ and the unified /v1 route through here too.
+		status := respStatus
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, r, status, upstreamFailureBody(status, err), reqBody, nil, time.Now(), "")
+		})
 		respondWithError(w, respStatus, "failed to make upstream request for streaming", err, false)
 		return
 	}
