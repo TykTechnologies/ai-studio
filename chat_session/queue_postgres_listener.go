@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -58,12 +59,16 @@ var (
 )
 
 // postgresDSN returns the connection string db was opened with, falling back
-// to DATABASE_URL.
+// to the configured database URL (a host may open db from a *sql.DB, which
+// leaves no DSN on the dialector) and then to DATABASE_URL.
 func postgresDSN(db *gorm.DB) (string, error) {
 	if db != nil {
 		if d, ok := db.Dialector.(*postgres.Dialector); ok && d.Config != nil && d.Config.DSN != "" {
 			return d.Config.DSN, nil
 		}
+	}
+	if dsn := config.Get("").DatabaseURL; dsn != "" {
+		return dsn, nil
 	}
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		return dsn, nil

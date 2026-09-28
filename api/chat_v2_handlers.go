@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -87,16 +87,10 @@ type V2RunRequest struct {
 	ToolResults    []V2ToolResult `json:"tool_results"`
 }
 
-// chatUIV2Enabled reads CHAT_UI_V2_ENABLED; the new chat UI is on unless the
-// variable is explicitly false.
+// chatUIV2Enabled reports whether the new chat UI is on; it is unless
+// CHAT_UI_V2_ENABLED is explicitly false.
 func chatUIV2Enabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("CHAT_UI_V2_ENABLED")))
-	switch v {
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return true
-	}
+	return config.Get("").ChatUIV2Enabled
 }
 
 type V2ToolResult struct {

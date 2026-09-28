@@ -2,9 +2,10 @@ package api
 
 import (
 	"log/slog"
-	"os"
 	"sync"
 	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/config"
 )
 
 // HubSession is what the SessionHub manages: chat-room sessions and agent
@@ -216,14 +217,8 @@ func (h *SessionHub) StartReaper(interval time.Duration) {
 	})
 }
 
-// sessionIdleTTL reads CHAT_SESSION_IDLE_TTL (a Go duration, default 10m). It
+// sessionIdleTTL is CHAT_SESSION_IDLE_TTL (a Go duration, default 10m). It
 // is short on purpose: NATS and Postgres queues hold a connection per session.
 func sessionIdleTTL() time.Duration {
-	if v := os.Getenv("CHAT_SESSION_IDLE_TTL"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			return d
-		}
-		slog.Warn("invalid CHAT_SESSION_IDLE_TTL, using default", "value", v)
-	}
-	return 10 * time.Minute
+	return config.Get("").ChatSessionIdleTTL
 }

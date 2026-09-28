@@ -134,7 +134,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	// Add debug middleware only if DEBUG_HTTP=true
-	if os.Getenv("DEBUG_HTTP") == "true" {
+	if appconfig.Get("").DebugHTTP {
 		router.Use(func(c *gin.Context) {
 			// Log request details
 			fmt.Printf("\n[DEBUG] %v | %v | Headers: %v\n", c.Request.Method, c.Request.URL.Path, c.Request.Header)
@@ -264,12 +264,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			csrf.Secure(false),
 			csrf.Path("/"),
 		}
-		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {
+		if appConf := appconfig.Get(""); appConf.DevMode {
 			// The dev frontend proxies to the API from another origin (its own
 			// port, or a host-mapped port in Docker), so the browser's Origin never
 			// matches the request Host. Trust the SITE_URL host plus any extra
 			// CSRF_TRUSTED_ORIGINS (comma-separated host[:port] values).
-			trusted := devCSRFTrustedOrigins(os.Getenv("SITE_URL"), os.Getenv("CSRF_TRUSTED_ORIGINS"))
+			trusted := devCSRFTrustedOrigins(appConf.SiteURL, appConf.CSRFTrustedOrigins)
 			logger.Infof("DEVMODE: CSRF trusted origins: %s", strings.Join(trusted, ", "))
 			csrfOpts = append(csrfOpts, csrf.TrustedOrigins(trusted))
 		}
@@ -1332,7 +1332,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	scheme := "http"
 
 	host := c.Request.Host
-	siteURLVar := os.Getenv("SITE_URL")
+	siteURLVar := config.Get("").SiteURL
 	if siteURLVar != "" {
 		asURL, err := url.Parse(siteURLVar)
 		if err == nil {

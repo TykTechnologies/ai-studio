@@ -68,7 +68,8 @@ func setupTestServer(t *testing.T, config *Config) (*ControlServer, *gorm.DB) {
 		}
 	}
 
-	server := NewControlServer(config, db)
+	server, err := NewControlServer(config, db)
+	require.NoError(t, err)
 	return server, db
 }
 
@@ -158,8 +159,8 @@ func TestNewControlServer(t *testing.T) {
 		name        string
 		setupEnv    func()
 		config      *Config
-		expectPanic bool
-		panicMsg    string
+		expectErr   bool
+		errMsg      string
 	}{
 		{
 			name: "valid configuration",
@@ -172,7 +173,7 @@ func TestNewControlServer(t *testing.T) {
 				AuthToken:            testAuthToken,
 				MaxConcurrentStreams: 1000,
 			},
-			expectPanic: false,
+			expectErr:   false,
 		},
 		{
 			name: "missing encryption key",
@@ -182,8 +183,8 @@ func TestNewControlServer(t *testing.T) {
 			config: &Config{
 				AuthToken: testAuthToken,
 			},
-			expectPanic: true,
-			panicMsg:    "MICROGATEWAY_ENCRYPTION_KEY environment variable is required",
+			expectErr:   true,
+			errMsg:      "MICROGATEWAY_ENCRYPTION_KEY is required",
 		},
 		{
 			name: "invalid encryption key length",
@@ -193,8 +194,8 @@ func TestNewControlServer(t *testing.T) {
 			config: &Config{
 				AuthToken: testAuthToken,
 			},
-			expectPanic: true,
-			panicMsg:    "must be exactly 32 characters long",
+			expectErr:   true,
+			errMsg:      "must be exactly 32 characters long",
 		},
 		{
 			name: "default insecure key",
@@ -204,8 +205,8 @@ func TestNewControlServer(t *testing.T) {
 			config: &Config{
 				AuthToken: testAuthToken,
 			},
-			expectPanic: true,
-			panicMsg:    "cannot use the default insecure key",
+			expectErr:   true,
+			errMsg:      "cannot use the default insecure key",
 		},
 		{
 			name: "zero max concurrent streams - should use default",
@@ -216,7 +217,7 @@ func TestNewControlServer(t *testing.T) {
 				AuthToken:            testAuthToken,
 				MaxConcurrentStreams: 0,
 			},
-			expectPanic: false,
+			expectErr:   false,
 		},
 	}
 
@@ -230,12 +231,13 @@ func TestNewControlServer(t *testing.T) {
 
 			db := setupTestDB(t)
 
-			if tt.expectPanic {
-				// Note: We can't easily test log.Fatal() panics in unit tests
-				// since log.Fatal() calls os.Exit(1) which terminates the test process
-				t.Skip("Skipping panic test for log.Fatal() - would terminate test process")
+			server, err := NewControlServer(tt.config, db)
+			if tt.expectErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				assert.Nil(t, server)
 			} else {
-				server := NewControlServer(tt.config, db)
+				require.NoError(t, err)
 				assert.NotNil(t, server)
 				assert.Equal(t, tt.config, server.config)
 				assert.Equal(t, db, server.db)

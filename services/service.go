@@ -177,13 +177,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	groupAccessSvc := group_access.NewService(db)
 	modelRouterSvc := model_router.NewService(db)
 
-	// Initialize log export service with storage path from environment
-	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
-	if exportStoragePath == "" {
-		exportStoragePath = "./data/exports"
-	}
-	siteURL := os.Getenv("SITE_URL")
-	logExportSvc := log_export.NewService(db, notificationService, exportStoragePath, siteURL)
+	// Initialize log export service with storage path from configuration
+	appConf := config.Get("")
+	logExportSvc := log_export.NewService(db, notificationService, appConf.ExportStoragePath, appConf.SiteURL)
 
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)

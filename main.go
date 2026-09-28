@@ -72,6 +72,10 @@ func main() {
 	logger.Init(appConf.LogLevel)
 	logger.Infof("Log level set to: %s", appConf.LogLevel)
 
+	// Hand the process-wide keys and paths to the packages that use them.
+	secrets.SetEncryptionKey(appConf.SecretKey)
+	services.SetBrandingStoragePath(appConf.BrandingStoragePath)
+
 	// Warn loudly at startup if secrets encryption is not configured
 	secrets.WarnIfEncryptionUnconfigured()
 
@@ -324,15 +328,11 @@ func main() {
 
 	// Reinitialize LogExportService with the proper notification service (with SMTP configured)
 	// The service created in NewServiceWithOCI has a notification service without SMTP
-	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
-	if exportStoragePath == "" {
-		exportStoragePath = "./data/exports"
-	}
 	// Stop the old service's cleanup goroutine before replacing
 	if service.LogExportService != nil {
 		service.LogExportService.Stop()
 	}
-	service.LogExportService = log_export.NewService(db, notificationService, exportStoragePath, appConf.SiteURL)
+	service.LogExportService = log_export.NewService(db, notificationService, appConf.ExportStoragePath, appConf.SiteURL)
 
 	// Initialize and start telemetry
 	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, Version)
@@ -367,9 +367,13 @@ func main() {
 			TLSKeyPath:    appConf.GRPCTLSKeyPath,
 			AuthToken:     appConf.GRPCAuthToken,
 			NextAuthToken: appConf.GRPCNextAuthToken,
+			EncryptionKey: appConf.MicrogatewayEncryptionKey,
 		}
 
-		controlServer = grpc.NewControlServer(grpcConfig, db)
+		controlServer, err = grpc.NewControlServer(grpcConfig, db)
+		if err != nil {
+			logger.FatalErr("Failed to create gRPC control server", err)
+		}
 		controlServer.SetGovernedMetadataReader(service.GovernedMetadataService)
 		// Enterprise: edges learn which Apps to refuse (budget 0, team over
 		// a hard-blocking budget) and edge spend raises budget alerts.

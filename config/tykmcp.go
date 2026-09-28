@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"strconv"
 	"time"
 )
@@ -36,7 +35,7 @@ const (
 	tykMCPMinSyncInterval   = 10 * time.Second
 )
 
-func getTykMCPConfig() TykMCPConfig {
+func getTykMCPConfig(getenv func(string) string) TykMCPConfig {
 	cfg := TykMCPConfig{
 		Enabled:            true,
 		SyncMinInterval:    60 * time.Second,
@@ -44,32 +43,32 @@ func getTykMCPConfig() TykMCPConfig {
 		SyncRunRetention:   30 * 24 * time.Hour,
 		RateLimitPerSecond: 10,
 	}
-	if v := os.Getenv("TYK_MCP_ENABLED"); v != "" {
+	if v := getenv("TYK_MCP_ENABLED"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.Enabled = b
 		} else {
 			cfgLog.Warn().Msgf("Invalid TYK_MCP_ENABLED value: %s. Using default: %t", v, cfg.Enabled)
 		}
 	}
-	cfg.SyncMinInterval = parseDurationWithDefault("TYK_MCP_SYNC_MIN_INTERVAL", cfg.SyncMinInterval)
+	cfg.SyncMinInterval = parseDurationWithDefault(getenv, "TYK_MCP_SYNC_MIN_INTERVAL", cfg.SyncMinInterval)
 	if cfg.SyncMinInterval < tykMCPMinSyncInterval {
 		cfgLog.Warn().Msgf("TYK_MCP_SYNC_MIN_INTERVAL (%s) is below %s; using the minimum", cfg.SyncMinInterval, tykMCPMinSyncInterval)
 		cfg.SyncMinInterval = tykMCPMinSyncInterval
 	}
-	cfg.RequestTimeout = parseDurationWithDefault("TYK_MCP_REQUEST_TIMEOUT", cfg.RequestTimeout)
+	cfg.RequestTimeout = parseDurationWithDefault(getenv, "TYK_MCP_REQUEST_TIMEOUT", cfg.RequestTimeout)
 	if cfg.RequestTimeout <= 0 || cfg.RequestTimeout > tykMCPMaxRequestTimeout {
 		cfgLog.Warn().Msgf("TYK_MCP_REQUEST_TIMEOUT (%s) must be between 1s and %s; using 10s", cfg.RequestTimeout, tykMCPMaxRequestTimeout)
 		cfg.RequestTimeout = 10 * time.Second
 	}
-	cfg.AllowedHosts = splitCSVList(os.Getenv("TYK_MCP_ALLOWED_HOSTS"))
-	cfg.DeniedHosts = splitCSVList(os.Getenv("TYK_MCP_DENIED_HOSTS"))
-	if v := os.Getenv("TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR"); v != "" {
+	cfg.AllowedHosts = splitCSVList(getenv("TYK_MCP_ALLOWED_HOSTS"))
+	cfg.DeniedHosts = splitCSVList(getenv("TYK_MCP_DENIED_HOSTS"))
+	if v := getenv("TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.RequireDifferentActivator = b
 		}
 	}
-	cfg.SyncRunRetention = parseDurationWithDefault("TYK_MCP_SYNC_RUN_RETENTION", cfg.SyncRunRetention)
-	if v := os.Getenv("TYK_MCP_RATE_LIMIT_PER_SECOND"); v != "" {
+	cfg.SyncRunRetention = parseDurationWithDefault(getenv, "TYK_MCP_SYNC_RUN_RETENTION", cfg.SyncRunRetention)
+	if v := getenv("TYK_MCP_RATE_LIMIT_PER_SECOND"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 1000 {
 			cfg.RateLimitPerSecond = n
 		} else {

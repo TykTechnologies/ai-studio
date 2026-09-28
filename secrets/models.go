@@ -133,7 +133,7 @@ func (s *Secret) HasValue() bool {
 		}
 		return len(payload) > saltLength+gcmNonceSize+gcmTagSize
 	}
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	if key == "" {
 		return true
 	}
@@ -155,6 +155,25 @@ const (
 )
 
 var midsommarSecret = "TYK_AI_SECRET_KEY"
+
+// configuredKey holds a key installed with SetEncryptionKey.
+var configuredKey atomic.Pointer[string]
+
+// SetEncryptionKey sets the key that encrypts secrets at rest, taking the
+// place of the TYK_AI_SECRET_KEY environment variable. An embedding host calls
+// it before any secret is read or written.
+func SetEncryptionKey(key string) {
+	configuredKey.Store(&key)
+}
+
+// encryptionKey returns the key installed with SetEncryptionKey, or the value
+// of TYK_AI_SECRET_KEY when none was installed.
+func encryptionKey() string {
+	if key := configuredKey.Load(); key != nil {
+		return *key
+	}
+	return os.Getenv(midsommarSecret)
+}
 
 // encrypt encrypts a value with the current scheme: a 32-byte key derived
 // from the configured secret via scrypt with a random per-value salt, then
@@ -291,7 +310,7 @@ var reencryptBatchSize = 100
 // memory usage, with each batch's updates applied in a single transaction.
 // Returns the number of migrated rows.
 func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	if key == "" {
 		return 0, nil // nothing to do without a key
 	}
@@ -338,10 +357,10 @@ func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
 // once per process rather than on every call.
 var plaintextFallbackWarnOnce sync.Once
 
-// EncryptionKeyConfigured reports whether the secrets encryption key
-// environment variable is set.
+// EncryptionKeyConfigured reports whether a secrets encryption key is set,
+// through SetEncryptionKey or the environment.
 func EncryptionKeyConfigured() bool {
-	return os.Getenv(midsommarSecret) != ""
+	return encryptionKey() != ""
 }
 
 // WarnIfEncryptionUnconfigured emits a prominent startup warning when the
@@ -361,7 +380,7 @@ func EncryptValue(plaintext string) string {
 	if plaintext == "" || plaintext == "[redacted]" {
 		return plaintext
 	}
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	if key == "" {
 		// No encryption key configured: the value is stored as plaintext.
 		// Warn loudly once, and at debug level on subsequent calls.
@@ -385,7 +404,7 @@ func DecryptValue(value string) string {
 	if !strings.HasPrefix(value, "$ENC/") {
 		return value // Not encrypted
 	}
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	if key == "" {
 		return value // No key to decrypt with
 	}
@@ -411,7 +430,7 @@ func GetSecretByID(db *gorm.DB, id uint, preserveRef bool) (*Secret, error) {
 		return &settings, nil
 	}
 
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	decrypted, err := decrypt(key, settings.Value)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt secret %d: %w", settings.ID, err)
@@ -433,7 +452,7 @@ func GetSecretByVarName(db *gorm.DB, name string, preserveRef bool) (*Secret, er
 		return &settings, nil
 	}
 
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	decrypted, err := decrypt(key, settings.Value)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt secret %q: %w", settings.VarName, err)
@@ -449,7 +468,7 @@ func DeleteSecretByID(db *gorm.DB, id uint) error {
 
 // CreateSecret creates a new Secret record in the database.
 func CreateSecret(db *gorm.DB, settings *Secret) error {
-	key := os.Getenv(midsommarSecret)
+	key := encryptionKey()
 	log.Debugf("[DEBUG] CreateSecret: Got key from env, length: %d", len(key))
 
 	var err error
@@ -471,7 +490,7 @@ func CreateSecret(db *gorm.DB, settings *Secret) error {
 // Pass false when the Value already contains the stored (encrypted) value and should not be re-encrypted.
 func UpdateSecret(db *gorm.DB, settings *Secret, encryptValue bool) error {
 	if encryptValue {
-		key := os.Getenv(midsommarSecret)
+		key := encryptionKey()
 		var err error
 		settings.Value, err = encrypt(key, settings.Value)
 		if err != nil {
