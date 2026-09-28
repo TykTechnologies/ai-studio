@@ -24,6 +24,7 @@ import { useChatSSE } from './chat/hooks/useChatSSE';
 import MessageContent from './chat/MessageContent';
 import ChatInput from './chat/ChatInput';
 import ChatSidebar from './chat/ChatSidebar';
+import { stripBase, withBase } from '../../runtimeConfig';
 
 /**
  * Modified ChatView to use Server-Sent Events (SSE) instead of WebSocket.
@@ -667,7 +668,7 @@ const ChatView = () => {
     
     // Remove session ID from localStorage and URL
     localStorage.removeItem('chatSessionId');
-    const newUrl = `/chat/${chatId}`;
+    const newUrl = withBase(`/chat/${chatId}`);
     try {
       window.history.replaceState({}, "", newUrl);
     } catch (err) {
@@ -675,7 +676,7 @@ const ChatView = () => {
     }
     
     // Trigger reconnection by navigating away and back (similar to PortalDrawer approach)
-    const currentPath = window.location.pathname;
+    const currentPath = stripBase(window.location.pathname);
     navigate('/chat/dashboard');
     setTimeout(() => {
       navigate(currentPath);

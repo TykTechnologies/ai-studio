@@ -37,6 +37,7 @@ import ConfirmationDialog from '../common/ConfirmationDialog';
 import agentService from '../../services/agentService';
 import Can from '../rbac/Can';
 import { P } from '../../rbac/permissions';
+import { withBase } from '../../../runtimeConfig';
 
 const AgentDetail = () => {
   const navigate = useNavigate();
@@ -90,7 +91,7 @@ const AgentDetail = () => {
 
   const establishTestConnection = async () => {
     try {
-      const baseURL = '/api/v1';
+      const baseURL = withBase('/api/v1');
       
       // Create SSE connection to establish session
       // Admin uses cookie auth, no need for token in URL
@@ -227,7 +228,7 @@ const AgentDetail = () => {
     }]);
 
     try {
-      const baseURL = '/api/v1';
+      const baseURL = withBase('/api/v1');
 
       // Send message with session ID as query parameter
       // Admin uses cookie auth, no Authorization header needed

@@ -17,7 +17,7 @@ behaviour unchanged:
 | 2 | `pkg/studio` (`New`, `HTTPHandler`, `StartGRPC`, `StartProxy`, `Stop`); `ui` embed package; thin `main.go` | Done |
 | 3 | Configurable base path for the backend | Done |
 | 4 | Pluggable authentication and CSRF | Done |
-| 5 | UI served under a base path; host-authentication UI mode | Planned |
+| 5 | UI served under a base path; host-authentication UI mode | Done |
 | 6 | Shipping the built UI to importers | Planned |
 
 Decisions that shape the design:
@@ -140,17 +140,11 @@ when it does not end with the base path.
   happens at the host root (`/.well-known/oauth-authorization-server/<base>`);
   `studio.OAuthMetadataHandler()` serves it there. The gateway's protected
   resource metadata is unchanged: the gateway keeps its own port.
-- The SPA fallback injects `<base href="<base>/">` and
-  `window.__TYK_AI_BASE__` into `index.html`, and replaces the
-  `/__TYK_AI_BASE__` placeholder in `index.html` and `manifest.json`: the
-  contract Phase 5 builds the frontend against. With no base path a build
-  without the placeholder is served unchanged. `/auth/config` returns
-  `basePath`.
+- The SPA fallback injects a `<base>` element and the frontend bootstrap
+  into `index.html` (see Phase 5). `/auth/config` returns `basePath`.
 - The resend-verification email linked to `/verify-email`, which nothing
   serves; it now links to `/auth/verify-email` like the registration email.
 
-Until Phase 5 the frontend is still built for the root, so its assets and
-client-side routes do not yet work under a base path; the API does.
 
 ## Host authentication and CSRF (Phase 4)
 
@@ -202,4 +196,48 @@ it.
 
 `pkg/studio` tests run on Postgres, one schema per test, when
 `STUDIO_TEST_POSTGRES_DSN` is set.
+
+## Frontend under a base path, and host sign-in (Phase 5)
+
+One frontend build serves any base path:
+
+- It is built with a relative public path (`"homepage": "."`, and
+  `PUBLIC_URL="."` in the Dockerfile and the release, prod and benchmark
+  builds), so `index.html` loads `./static/...` and the CSS refers to
+  `../../static/media/...`.
+- The server injects `<base href="<base>/">` (`<base href="/">` at the
+  root) so those relative URLs resolve from any client-side route, and
+  `window.__TYK_AI_STUDIO__`: `basePath`, `authMode`, `loginURL`,
+  `logoutURL`, `csrfTokenHeader`, `csrfTokenURL` (`api.frontendBootstrap`,
+  the same values `/auth/config` reports). It is read synchronously, so it
+  applies before the first request.
+- `src/runtimeConfig.js` reads it. `withBase(path)` puts an absolute path
+  under the base; `stripBase(pathname)` turns a browser path into a route.
+  The router gets `basename`; `apiClient` (`/api/v1`) and `pubClient` (via
+  `getBaseUrl`) carry the base, so the hundreds of client calls and router
+  links need no change. Everything the browser loads directly goes through
+  `withBase`: logos, branding, `window.location`/`window.open`,
+  `fetch`/`EventSource`, the OAuth consent page, plugin iframes and remote
+  entries. Comparisons against `window.location.pathname` use `stripBase`.
+- `src/basePathGuard.test.js` fails on new root-absolute URLs in those
+  places.
+- CSRF tokens are fetched from `csrfTokenURL` and sent in `csrfTokenHeader`.
+- Host sign-in: with `authMode: "host"` a signed-out visitor goes to
+  `loginURL` (the login route shows a pointer to it), and logout goes to
+  `logoutURL` after Studio's own sign-out.
+- Fixed on the way: the admin plugin iframe loaded `/plugins/assets/...`,
+  which no route serves (now `/api/v1/plugins/assets/...`), and "mark plugin
+  UI loaded" posted to a doubled `/api/v1/api/v1/...`.
+- `config/docs_links.json` is embedded (an on-disk copy still overrides it),
+  so documentation links work from any working directory.
+
+`examples/embed-host` is a runnable host: its own login page and cookie, an
+`Authenticator` over that cookie, Studio at `/ai-studio`, and the OAuth
+discovery document at the host root.
+
+Verified by hand in a browser: the standalone binary with
+`BASE_PATH=/ai-studio` (registration, login, admin, portal and chat,
+deep-link reloads, logout; every request stayed under the prefix), the same
+build at the root, and `embed-host` (host login, provisioning as an
+administrator, logout through the host).
 

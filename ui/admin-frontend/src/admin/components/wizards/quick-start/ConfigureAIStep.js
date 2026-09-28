@@ -20,6 +20,7 @@ import Icon from '../../../../components/common/Icon';
 import RadioSelectionGroup from '../../common/RadioSelectionGroup';
 import { getVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
 import { PRIVACY_LEVEL_SCORES, PRIVACY_LEVEL_OPTIONS, PRIVACY_BADGE_CONFIGS, privacyLevelKeyForScore } from './utils';
+import { withBase } from "../../../../runtimeConfig";
 
 const ConfigureAIStep = () => {
   const {
@@ -263,7 +264,7 @@ const ConfigureAIStep = () => {
                             }}
                             onError={(e) => {
                               e.target.onerror = null;
-                              e.target.src = "/images/placeholder-logo.png";
+                              e.target.src = withBase("/images/placeholder-logo.png");
                             }}
                           />
                           {option.label}
@@ -317,7 +318,7 @@ const ConfigureAIStep = () => {
                       }}
                       onError={(e) => {
                         e.target.onerror = null;
-                        e.target.src = "/images/placeholder-logo.png";
+                        e.target.src = withBase("/images/placeholder-logo.png");
                       }}
                     />
                     {option.label}

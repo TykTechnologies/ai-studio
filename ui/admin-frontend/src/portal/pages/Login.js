@@ -3,6 +3,7 @@ import { Box, Alert, Typography, useTheme } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import pubClient from "../../admin/utils/pubClient";
 import AuthLayout from "./AuthLayout";
+import { hostLoginURL, isHostAuth, withBase } from "../../runtimeConfig";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 import {
   StyledTextField,
@@ -59,13 +60,13 @@ const Login = () => {
         // Determine which dashboard to show based on permissions. Anyone
         // holding an administrative role lands on the administration surface.
         if (is_admin) {
-          window.location.href = "/admin";
+          window.location.href = withBase("/admin");
         } else if (has_admin_access) {
-          window.location.href = "/admin";
+          window.location.href = withBase("/admin");
         } else if (ui_options?.show_portal) {
-          window.location.href = "/portal/dashboard";
+          window.location.href = withBase("/portal/dashboard");
         } else if (ui_options?.show_chat) {
-          window.location.href = "/chat/dashboard";
+          window.location.href = withBase("/chat/dashboard");
         } else {
           setError("Your account doesn't have access to any features.");
         }
@@ -198,4 +199,24 @@ const Login = () => {
   );
 };
 
-export default Login;
+// HostSignIn stands in for the login form when the application Studio is
+// embedded in signs users in: it sends the visitor to the host's sign-in.
+const HostSignIn = () => {
+  const loginURL = hostLoginURL();
+  useEffect(() => {
+    if (loginURL) {
+      window.location.assign(loginURL);
+    }
+  }, [loginURL]);
+  return (
+    <AuthLayout>
+      <Typography variant="bodyLargeDefault">
+        Sign in through the application AI Studio is part of.
+      </Typography>
+    </AuthLayout>
+  );
+};
+
+const LoginPage = () => (isHostAuth() ? <HostSignIn /> : <Login />);
+
+export default LoginPage;

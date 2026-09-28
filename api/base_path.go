@@ -44,28 +44,55 @@ func withBasePath(prefix string, h http.Handler) http.Handler {
 	})
 }
 
-// basePathPlaceholder is the PUBLIC_URL the admin frontend is built with, so
-// one build can be served under any base path.
-const basePathPlaceholder = "/__TYK_AI_BASE__"
+// frontendBootstrap is what the admin frontend reads before its first
+// request (ui/admin-frontend/src/runtimeConfig.js); the server injects it
+// into index.html as window.__TYK_AI_STUDIO__. /auth/config repeats it.
+type frontendBootstrap struct {
+	BasePath        string `json:"basePath"`
+	AuthMode        string `json:"authMode"`
+	LoginURL        string `json:"loginURL,omitempty"`
+	LogoutURL       string `json:"logoutURL,omitempty"`
+	CSRFTokenHeader string `json:"csrfTokenHeader"`
+	CSRFTokenURL    string `json:"csrfTokenURL"`
+}
 
-// injectBasePath prepares index.html for serving under basePath: it replaces
-// the build's base path placeholder and, when basePath is set, adds a <base>
-// element and window.__TYK_AI_BASE__ for the frontend. At the root a build
-// without the placeholder is served unchanged.
-func injectBasePath(index []byte, basePath string) []byte {
-	out := bytes.ReplaceAll(index, []byte(basePathPlaceholder), []byte(basePath))
-	if basePath == "" {
-		return out
+func (a *API) frontendBootstrap() frontendBootstrap {
+	b := frontendBootstrap{
+		BasePath:        a.basePath,
+		AuthMode:        "local",
+		CSRFTokenHeader: "X-CSRF-Token",
+		CSRFTokenURL:    a.publicPath("/csrf-token"),
 	}
-	// json.Marshal escapes <, > and &, so the value cannot close the script.
-	quoted, _ := json.Marshal(basePath)
-	head := `<base href="` + html.EscapeString(basePath+"/") + `">` +
-		`<script>window.__TYK_AI_BASE__=` + string(quoted) + `;</script>`
-	if i := bytes.Index(out, []byte("<head>")); i >= 0 {
+	if a.config == nil {
+		return b
+	}
+	if !a.config.LocalAccountsEnabled() {
+		b.AuthMode = "host"
+		b.LoginURL = a.config.HostLoginURL
+		b.LogoutURL = a.config.HostLogoutURL
+	}
+	if a.config.CSRFTokenHeader != "" {
+		b.CSRFTokenHeader = a.config.CSRFTokenHeader
+	}
+	if a.config.CSRFTokenURL != "" {
+		b.CSRFTokenURL = a.config.CSRFTokenURL
+	}
+	return b
+}
+
+// injectBootstrap prepares index.html: a <base> element at the base path,
+// which is what the frontend's relative asset URLs (it is built with
+// PUBLIC_URL ".") resolve against on any route, and the bootstrap settings.
+func injectBootstrap(index []byte, b frontendBootstrap) []byte {
+	// json.Marshal escapes <, > and &, so no value can close the script.
+	settings, _ := json.Marshal(b)
+	head := `<base href="` + html.EscapeString(b.BasePath+"/") + `">` +
+		`<script>window.__TYK_AI_STUDIO__=` + string(settings) + `;</script>`
+	if i := bytes.Index(index, []byte("<head>")); i >= 0 {
 		i += len("<head>")
-		return append(out[:i:i], append([]byte(head), out[i:]...)...)
+		return append(index[:i:i], append([]byte(head), index[i:]...)...)
 	}
-	return append([]byte(head), out...)
+	return append([]byte(head), index...)
 }
 
 // publicPath returns path (which starts with "/") as the browser sees it,

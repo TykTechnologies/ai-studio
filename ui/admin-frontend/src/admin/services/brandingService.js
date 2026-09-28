@@ -1,6 +1,7 @@
 import apiClient from '../utils/apiClient';
 import pubClient from '../utils/pubClient';
 import { handleApiError } from './utils/errorHandler';
+import { withBase } from '../../runtimeConfig';
 
 /**
  * Get current branding settings
@@ -89,12 +90,12 @@ export const resetBrandingToDefaults = async () => {
  * Get logo URL
  */
 export const getLogoUrl = () => {
-  return '/api/v1/branding/logo';
+  return withBase('/api/v1/branding/logo');
 };
 
 /**
  * Get favicon URL
  */
 export const getFaviconUrl = () => {
-  return '/api/v1/branding/favicon';
+  return withBase('/api/v1/branding/favicon');
 };

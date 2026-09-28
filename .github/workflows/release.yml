@@ -179,7 +179,7 @@ jobs:
           npm ci --ignore-scripts
           npm rebuild
           echo "Building UI..."
-          PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+          PUBLIC_URL="." REACT_APP_API_URL="" CI=false npm run build
           echo "Checking build output..."
           ls -la build
           echo "Checking static directory..."

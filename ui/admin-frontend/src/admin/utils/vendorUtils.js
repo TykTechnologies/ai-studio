@@ -1,10 +1,11 @@
 import apiClient from "./apiClient";
+import { withBase } from "../../runtimeConfig";
 
 let embedders = [
   {
     code: "openai",
     name: "OpenAI",
-    logo: "/logos/chatgpt-logo.png",
+    logo: withBase("/logos/chatgpt-logo.png"),
     helpText: "",
     defaultModel: "text-embedding-3-small",
     defaultUrl: "https://api.openai.com/v1",
@@ -12,20 +13,20 @@ let embedders = [
   {
     code: "ollama",
     name: "Ollama",
-    logo: "/logos/ollama.png",
+    logo: withBase("/logos/ollama.png"),
     helpText: "",
   },
   {
     code: "vertex",
     name: "Vertex AI",
-    logo: "/logos/vertex.png",
+    logo: withBase("/logos/vertex.png"),
     helpText:
       "The Vertex Embed client requires a project name and a region, add this as the Database Connection string as {project:location} (project ID followed by a colon, followed by the region)",
   },
   {
     code: "google_ai",
     name: "Google AI",
-    logo: "/logos/google-ai.png",
+    logo: withBase("/logos/google-ai.png"),
     helpText: "",
   },
   {
@@ -40,37 +41,37 @@ let vectorStores = [
   {
     code: "chroma",
     name: "Chroma",
-    logo: "/logos/chroma-logo.png",
+    logo: withBase("/logos/chroma-logo.png"),
     helpText: "",
   },
   {
     code: "pgvector",
     name: "pgvector",
-    logo: "/logos/pg-logo.png",
+    logo: withBase("/logos/pg-logo.png"),
     helpText: "",
   },
   {
     code: "pinecone",
     name: "Pinecone",
-    logo: "/logos/pinecone.png",
+    logo: withBase("/logos/pinecone.png"),
     helpText: "",
   },
   {
     code: "redis",
     name: "Redis",
-    logo: "/logos/redis.svg",
+    logo: withBase("/logos/redis.svg"),
     helpText: "",
   },
   {
     code: "qdrant",
     name: "Qdrant",
-    logo: "/logos/qdrant.svg",
+    logo: withBase("/logos/qdrant.svg"),
     helpText: "",
   },
   {
     code: "weaviate",
     name: "Weaviate",
-    logo: "/logos/weaviate.png",
+    logo: withBase("/logos/weaviate.png"),
     helpText: "",
   },
 ];

@@ -21,6 +21,7 @@ import {
   StyledTab,
   TabIndicatorProps,
 } from "./styles";
+import { withBase } from "../../runtimeConfig";
 
 const LicenseAlert = styled(Box)(({ theme }) => ({
   display: 'flex',
@@ -77,12 +78,12 @@ const TopNavigation = ({
         <NavigationContainer>
           <LogoContainer>
             <Logo
-              src="/api/v1/branding/logo"
+              src={withBase("/api/v1/branding/logo")}
               alt="Logo"
               title={version ? `Tyk AI Studio ${version}` : "Tyk AI Studio"}
               onError={(e) => {
                 // Fallback to default logo if custom logo fails to load
-                e.target.src = "/logos/tyk-portal-logo.png";
+                e.target.src = withBase("/logos/tyk-portal-logo.png");
               }}
             />
             <Chip
