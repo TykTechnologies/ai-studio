@@ -154,6 +154,14 @@ type AppConf struct {
 	// CSRFTrustedOrigins lists extra origins, comma-separated, the CSRF check
 	// accepts in DevMode (CSRF_TRUSTED_ORIGINS).
 	CSRFTrustedOrigins string
+	// CSRFKey is a secret the CSRF token key is derived from (CSRF_KEY).
+	// Set it so tokens survive restarts and are shared by replicas; empty
+	// uses a random key per process.
+	CSRFKey string
+	// CSRFCookieName names the CSRF cookie (CSRF_COOKIE_NAME, default
+	// _gorilla_csrf); change it when a host on the same domain uses the
+	// default name too.
+	CSRFCookieName string
 	// ExportStoragePath is where log exports are written (EXPORT_STORAGE_PATH,
 	// default ./data/exports).
 	ExportStoragePath string
@@ -698,6 +706,8 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	conf.SecretKey = getenv("TYK_AI_SECRET_KEY")
 	conf.MicrogatewayEncryptionKey = getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	conf.CSRFTrustedOrigins = getenv("CSRF_TRUSTED_ORIGINS")
+	conf.CSRFKey = getenv("CSRF_KEY")
+	conf.CSRFCookieName = getenv("CSRF_COOKIE_NAME")
 	conf.ExportStoragePath = getenv("EXPORT_STORAGE_PATH")
 	if conf.ExportStoragePath == "" {
 		conf.ExportStoragePath = "./data/exports"

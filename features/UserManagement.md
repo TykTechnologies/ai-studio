@@ -153,7 +153,7 @@ type User struct {
 12. **APIKey**: Unique key for API authentication (`Authorization: Bearer <key>` or `?token=`).
     - Issued automatically only on **self-registration** (`models.NewUser()`). Administrator-created and SSO-provisioned accounts have no key until one is explicitly issued with `POST /users/{id}/roll-api-key`.
     - Revoked with `DELETE /users/{id}/api-key`; the user then shows `has_api_key: false` and the console says "No API key issued" rather than a masked placeholder.
-    - Never issued to an SSO-provisioned user (`auth_source = sso`) unless `ALLOW_SSO_USER_API_KEYS=true`; the roll endpoint returns 403 and the console hides the button.
+    - Never issued to an externally managed user (`auth_source = sso`, or `host` when Studio is embedded and the host authenticates) unless `ALLOW_SSO_USER_API_KEYS=true`; the roll endpoint returns 403 and the console hides the button. An issued key keeps working only while the user keeps signing in through the identity provider or the host (`SSO_API_KEY_LIVENESS`).
     - An empty key never authenticates: `GetByAPIKey("")` returns not-found, so keyless accounts cannot be matched by a blank credential.
     - Used for programmatic access to the management API with the user's full permissions; see `APIKeyLastUsedAt` and the audit trail's `auth_method` for monitoring.
 
@@ -163,7 +163,7 @@ type User struct {
     - First user (admin) has this automatically set to `true`.
     - Disabled administrators are skipped.
 
-14. **AuthSource**: How the account came to exist: `local` (self-registration), `admin` (created through the console or API) or `sso` (provisioned on first identity-provider login). Set once at creation and never changed by later logins. Rows that predate the column are classified on startup by `models.BackfillAuthSource`: no password hash → `sso`, password but no key → `admin`, otherwise `local` (an admin-created user whose key was later rolled, or an SSO user who set a password through the reset flow, reads as `local`).
+14. **AuthSource**: How the account came to exist: `local` (self-registration), `admin` (created through the console or API), `sso` (provisioned on first identity-provider login) or `host` (provisioned on the first request from a host application Studio is embedded in; see `features/Embedding.md`). Host users also carry `external_subject`, the host's identifier for them. Set once at creation and never changed by later logins. Rows that predate the column are classified on startup by `models.BackfillAuthSource`: no password hash → `sso`, password but no key → `admin`, otherwise `local` (an admin-created user whose key was later rolled, or an SSO user who set a password through the reset flow, reads as `local`).
 
 15. **SSOProfileID**: The identity-provider profile that provisioned the user, or, for a non-SSO account, the first profile they signed in through. Set once.
 
@@ -314,7 +314,7 @@ func (ue *UserEntitlements) HasToolAccess(toolID uint) bool {
   - `/common/me` - Get current user with entitlements
 
 * **User Management:**
-  - `/users` - List/create users. List filters: `search`, `auth_source` (`local|admin|sso`), `has_api_key` (`true|false`), `disabled` (`true|false`), plus `sort`/pagination.
+  - `/users` - List/create users. List filters: `search`, `auth_source` (`local|admin|sso|host`), `has_api_key` (`true|false`), `disabled` (`true|false`), plus `sort`/pagination.
   - `/users/{id}` - Get/update/delete specific user
   - `/users/{id}/roll-api-key` - Issue or regenerate the API key (403 for SSO-provisioned users unless `ALLOW_SSO_USER_API_KEYS=true`)
   - `DELETE /users/{id}/api-key` - Revoke the API key

@@ -64,3 +64,18 @@ func TestInjectBasePath(t *testing.T) {
 	hostile := string(injectBasePath([]byte("<head></head>"), `/x</script><script>alert(1)`))
 	assert.False(t, strings.Contains(hostile, "</script><script>alert(1)"), "the base path cannot close the script element")
 }
+
+// A configured CSRF_KEY gives every replica and restart the same token key;
+// without one each process makes its own.
+func TestCSRFKey(t *testing.T) {
+	a, err := csrfKey("shared-secret")
+	assert.NoError(t, err)
+	b, _ := csrfKey("shared-secret")
+	assert.Equal(t, a, b)
+	assert.Len(t, a, 32)
+
+	r1, _ := csrfKey("")
+	r2, _ := csrfKey("")
+	assert.Len(t, r1, 32)
+	assert.NotEqual(t, r1, r2)
+}

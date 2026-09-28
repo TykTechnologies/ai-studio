@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 // withBasePath serves h under prefix (a normalised base path such as
@@ -92,4 +94,16 @@ func (a *API) OAuthMetadataHandler() http.Handler {
 		r2.URL.RawPath = ""
 		a.router.ServeHTTP(w, r2)
 	})
+}
+
+// localAccountsOnly answers 404 for Studio's own sign-in routes (password,
+// registration, SSO) when a host application authenticates users instead.
+func (a *API) localAccountsOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if a.config != nil && !a.config.LocalAccountsEnabled() {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.Next()
+	}
 }
