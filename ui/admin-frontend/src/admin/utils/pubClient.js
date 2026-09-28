@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getBaseUrl, fetchCSRFToken } from "./urlUtils";
-import { redirectToLogin } from "./authRedirect";
+import { redirectToLogin, redirectToLogout } from "./authRedirect";
+import { csrfTokenHeader } from "../../runtimeConfig";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -31,7 +32,7 @@ pubClient.interceptors.request.use(
     if (config.method !== "get") {
       const token = await fetchCSRFToken();
       if (token) {
-        config.headers["X-CSRF-Token"] = token;
+        config.headers[csrfTokenHeader()] = token;
       }
     }
     return config;
@@ -44,15 +45,11 @@ pubClient.interceptors.request.use(
 export const logout = async () => {
   try {
     await pubClient.post("/common/logout");
-    localStorage.clear();
-    window.location.href = "/login";
   } catch (error) {
     console.error("Logout failed:", error);
-    // Only redirect if we're not already on the login page
-    if (!window.location.pathname.includes("/login")) {
-      window.location.href = "/login";
-    }
   }
+  localStorage.clear();
+  redirectToLogout();
 };
 
 // Export a function to reinitialize the client with updated config

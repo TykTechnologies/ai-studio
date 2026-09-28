@@ -1,6 +1,7 @@
 {
   "name": "admin-frontend",
   "version": "0.1.0",
+  "homepage": ".",
   "private": true,
   "engines": {
     "node": ">=20.0.0"

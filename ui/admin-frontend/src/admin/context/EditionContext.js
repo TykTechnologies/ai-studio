@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { withBase } from '../../runtimeConfig';
 
 const EditionContext = createContext();
 
@@ -12,7 +13,7 @@ export const EditionProvider = ({ children }) => {
 	useEffect(() => {
 		const fetchEditionInfo = async () => {
 			try {
-				const response = await axios.get('/common/system');
+				const response = await axios.get(withBase('/common/system'));
 				const editionValue = response.data.edition || 'community';
 				const versionValue = response.data.version || '';
 

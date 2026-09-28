@@ -46,23 +46,18 @@ func TestWithBasePathAtRootPassesRequestsThrough(t *testing.T) {
 	assert.Equal(t, "/ai-studio/admin", got)
 }
 
-func TestInjectBasePath(t *testing.T) {
-	index := []byte(`<!doctype html><html><head><link href="/__TYK_AI_BASE__/static/main.css"></head></html>`)
+func TestInjectBootstrap(t *testing.T) {
+	index := []byte(`<!doctype html><html><head><link href="./static/css/main.css"></head></html>`)
 
-	out := string(injectBasePath(index, "/ai-studio"))
-	assert.Contains(t, out, `<head><base href="/ai-studio/"><script>window.__TYK_AI_BASE__="/ai-studio";</script>`)
-	assert.Contains(t, out, `href="/ai-studio/static/main.css"`)
-	assert.NotContains(t, out, "__TYK_AI_BASE__/")
+	out := string(injectBootstrap(index, frontendBootstrap{BasePath: "/ai-studio", AuthMode: "host", LoginURL: "/login", CSRFTokenHeader: "X-CSRF-Token", CSRFTokenURL: "/ai-studio/csrf-token"}))
+	assert.Contains(t, out, `<head><base href="/ai-studio/"><script>window.__TYK_AI_STUDIO__={"basePath":"/ai-studio","authMode":"host","loginURL":"/login","csrfTokenHeader":"X-CSRF-Token","csrfTokenURL":"/ai-studio/csrf-token"};</script>`)
+	assert.Contains(t, out, `href="./static/css/main.css"`, "relative asset URLs resolve against the <base> element")
 
-	root := string(injectBasePath(index, ""))
-	assert.Contains(t, root, `href="/static/main.css"`)
-	assert.NotContains(t, root, "<base")
+	root := string(injectBootstrap(index, frontendBootstrap{AuthMode: "local"}))
+	assert.Contains(t, root, `<base href="/">`, "at the root the base anchors relative assets on deep routes")
 
-	legacy := []byte(`<html><head><script src="/static/js/main.js"></script></head></html>`)
-	assert.Equal(t, string(legacy), string(injectBasePath(legacy, "")), "a root build without the placeholder is served unchanged")
-
-	hostile := string(injectBasePath([]byte("<head></head>"), `/x</script><script>alert(1)`))
-	assert.False(t, strings.Contains(hostile, "</script><script>alert(1)"), "the base path cannot close the script element")
+	hostile := string(injectBootstrap([]byte("<head></head>"), frontendBootstrap{BasePath: `/x</script><script>alert(1)`}))
+	assert.False(t, strings.Contains(hostile, "</script><script>alert(1)"), "a setting cannot close the script element")
 }
 
 // A configured CSRF_KEY gives every replica and restart the same token key;

@@ -464,7 +464,7 @@ func (a *API) setupRoutes() error {
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Files at the root of the build (manifest.json, robots.txt, ...)
-		if serveBuildRootFile(c, a.frontend, a.basePath) {
+		if serveBuildRootFile(c, a.frontend) {
 			return
 		}
 
@@ -489,7 +489,7 @@ func (a *API) setupRoutes() error {
 			c.String(http.StatusInternalServerError, "Could not read index.html")
 			return
 		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", injectBasePath(indexFile, a.basePath))
+		c.Data(http.StatusOK, "text/html; charset=utf-8", injectBootstrap(indexFile, a.frontendBootstrap()))
 	})
 
 	a.router.GET("/csrf-token", func(c *gin.Context) {
@@ -1396,24 +1396,16 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
 		AllowSSOUserAPIKeys:  config.Get("").AllowSSOUserAPIKeys,
-		BasePath:             a.basePath,
-		AuthMode:             "local",
-		CSRFTokenHeader:      "X-CSRF-Token",
-		CSRFTokenURL:         a.publicPath("/csrf-token"),
 	}
-	if a.config != nil {
-		if !a.config.LocalAccountsEnabled() {
-			cfg.AuthMode = "host"
-			cfg.TIBEnabled = false
-			cfg.LoginURL = a.config.HostLoginURL
-			cfg.LogoutURL = a.config.HostLogoutURL
-		}
-		if a.config.CSRFTokenHeader != "" {
-			cfg.CSRFTokenHeader = a.config.CSRFTokenHeader
-		}
-		if a.config.CSRFTokenURL != "" {
-			cfg.CSRFTokenURL = a.config.CSRFTokenURL
-		}
+	boot := a.frontendBootstrap()
+	cfg.BasePath = boot.BasePath
+	cfg.AuthMode = boot.AuthMode
+	cfg.LoginURL = boot.LoginURL
+	cfg.LogoutURL = boot.LogoutURL
+	cfg.CSRFTokenHeader = boot.CSRFTokenHeader
+	cfg.CSRFTokenURL = boot.CSRFTokenURL
+	if boot.AuthMode == "host" {
+		cfg.TIBEnabled = false
 	}
 
 	c.JSON(http.StatusOK, cfg)

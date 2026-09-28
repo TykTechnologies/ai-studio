@@ -29,6 +29,7 @@ import modelPresets from "../../utils/modelPresets";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 
 import { getVendorLogo } from "../../utils/vendorLogos";
+import { withBase } from "../../../runtimeConfig";
 
 const ChatRoomWizard = ({ open, onClose, fetchData }) => {
   const stepHelpText = {
@@ -365,7 +366,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                     color="primary"
                     onClick={() => {
                       window.open(
-                        `/portal/chat/${createdChatRoomId}`,
+                        withBase(`/portal/chat/${createdChatRoomId}`),
                         "_blank",
                       );
                       onClose();

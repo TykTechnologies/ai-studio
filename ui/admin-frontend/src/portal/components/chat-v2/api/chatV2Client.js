@@ -1,6 +1,8 @@
 import { UIMessageStreamDecoder, AssistantMessageAccumulator } from 'assistant-stream';
 import pubClient from '../../../../admin/utils/pubClient';
 import { fetchCSRFToken } from '../../../../admin/utils/urlUtils';
+import { redirectToLogin } from '../../../../admin/utils/authRedirect';
+import { csrfTokenHeader } from '../../../../runtimeConfig';
 
 /**
  * Thin client for the v2 chat API.
@@ -106,7 +108,7 @@ export const streamRun = async (endpoints, sessionId, body, { signal, onData } =
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
   };
-  if (csrf) headers['X-CSRF-Token'] = csrf;
+  if (csrf) headers[csrfTokenHeader()] = csrf;
 
   const res = await fetch(`${baseUrl()}${endpoints.runs(sessionId)}`, {
     method: 'POST',
@@ -118,9 +120,7 @@ export const streamRun = async (endpoints, sessionId, body, { signal, onData } =
 
   if (res.status === 401) {
     localStorage.clear();
-    if (!window.location.pathname.includes('/login')) {
-      window.location.href = '/login';
-    }
+    redirectToLogin();
     throw new Error('Authentication failed. Please sign in again.');
   }
   if (!res.ok || !res.body) {

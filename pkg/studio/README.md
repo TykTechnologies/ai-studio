@@ -46,8 +46,8 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   returns an error rather than exiting; nothing listens yet.
 - `HTTPHandler` is the admin API and UI, served under `Config.BasePath`; it
   strips the prefix itself. Session and CSRF cookies are scoped to the base
-  path, and logout leaves the host's cookies alone. The frontend is not yet
-  built for a base path (see `features/Embedding.md`, Phase 5).
+  path, and logout leaves the host's cookies alone. The console follows the
+  base path and, with `Auth`, sends signed-out users to `LoginURL`.
 - With `Auth`, every request is offered to the host first. The identity it
   returns (subject, email, name, admin, optional group names) becomes a
   Studio user on first sight and is kept in step after that; Studio's own
@@ -86,3 +86,9 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - **Enterprise edition.** Build with `-tags enterprise` and import
   `github.com/TykTechnologies/midsommar/v2/enterprise/all` for its side
   effects. `New` fails if an enterprise feature is missing.
+
+## Example
+
+`examples/embed-host` is a small runnable host: `go run ./examples/embed-host`
+(after building the frontend), then open http://localhost:8090/.
+

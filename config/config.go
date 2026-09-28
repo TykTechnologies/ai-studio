@@ -1,6 +1,7 @@
 package config
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -223,6 +224,12 @@ type PostgreSQLQueueConfig struct {
 }
 
 type DocsLinks map[string]string
+
+// defaultDocsLinks is config/docs_links.json, embedded so the console's
+// documentation links work wherever the process runs.
+//
+//go:embed docs_links.json
+var defaultDocsLinks []byte
 
 func (d DocsLinks) ReadFromFile(fileName string) {
 	data, err := os.ReadFile(fileName)
@@ -478,8 +485,15 @@ func LoadFrom(getenv func(string) string) *AppConf {
 		conf.DocsDisabled = true
 	}
 
+	// Embedded defaults, overridden by config/docs_links.json in the working
+	// directory when a deployment provides one.
 	conf.DocsLinks = make(DocsLinks)
-	conf.DocsLinks.ReadFromFile("config/docs_links.json")
+	if err := json.Unmarshal(defaultDocsLinks, &conf.DocsLinks); err != nil {
+		cfgLog.Warn().Err(err).Msg("Could not read the embedded docs_links.json")
+	}
+	if _, err := os.Stat("config/docs_links.json"); err == nil {
+		conf.DocsLinks.ReadFromFile("config/docs_links.json")
+	}
 
 	conf.ProxyURL = getenv("PROXY_URL")
 	if conf.ProxyURL == "" {

@@ -63,3 +63,12 @@ func TestNormalizeBasePath(t *testing.T) {
 		t.Errorf("BasePath %q, PublicPath %q", conf.BasePath, conf.PublicPath("/admin"))
 	}
 }
+
+// A process started outside the repository still has the documentation links.
+func TestDocsLinksAreEmbedded(t *testing.T) {
+	t.Chdir(t.TempDir())
+	conf := LoadFrom(func(string) string { return "" })
+	if len(conf.DocsLinks) == 0 {
+		t.Fatal("no documentation links without config/docs_links.json on disk")
+	}
+}

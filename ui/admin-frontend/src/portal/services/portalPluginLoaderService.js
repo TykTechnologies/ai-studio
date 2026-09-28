@@ -1,5 +1,6 @@
 import pubClient from '../../admin/utils/pubClient';
 import { getIdentity, hasPermissionNow } from '../../admin/utils/identityStore';
+import { withBase } from '../../runtimeConfig';
 
 /**
  * Portal Plugin Loader Service - Handles dynamic loading of plugin UI components for the AI Portal.
@@ -212,7 +213,7 @@ class PortalPluginLoaderService {
         const iframe = iframeRef.current;
         if (!iframe) return;
 
-        const assetUrl = `/common/plugins/assets/${plugin_id}${app}`;
+        const assetUrl = withBase(`/common/plugins/assets/${plugin_id}${app}`);
         iframe.src = assetUrl;
 
         if (ref) {

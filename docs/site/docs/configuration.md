@@ -76,6 +76,10 @@ Cookie-authenticated writes (anything the admin UI or portal does while signed i
 
 CSRF tokens are signed with a key generated when Studio starts, so a restart invalidates tokens held by open browser tabs, and replicas behind a load balancer do not accept each other's tokens. Set `CSRF_KEY` to a long random secret, the same on every replica, to keep tokens valid across restarts and replicas. `CSRF_COOKIE_NAME` renames the CSRF cookie (default `_gorilla_csrf`) if another application on the same domain uses that name.
 
+### Serving under a path prefix
+
+To serve AI Studio under a path such as `https://example.com/ai-studio` instead of at the root of its own host name, set `BASE_PATH=/ai-studio` and include the prefix in `SITE_URL` (`SITE_URL=https://example.com/ai-studio`). The admin interface, portal, chat and API are then served under the prefix, and session and CSRF cookies are scoped to it. A reverse proxy in front of Studio may forward requests with or without the prefix; both work. OAuth clients that discover the authorization server from its issuer URL look for the metadata at `/.well-known/oauth-authorization-server/ai-studio` on the host root, so route that path to Studio's `/ai-studio/.well-known/oauth-authorization-server`.
+
 ### Unified Endpoint (Main Ingress)
 The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) sits at `/v1` by default. Move it when embedding the gateway in a host that already owns `/v1`, or remove it entirely; the per-LLM endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected either way.
 

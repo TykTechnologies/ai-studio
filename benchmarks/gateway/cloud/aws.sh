@@ -475,7 +475,7 @@ cmd_build_studio() {
   git -C "$REPO_ROOT/enterprise" archive "$ent_sha" | tar -x -C "$src/enterprise" \
     || die "cannot read enterprise@$ent_sha (git -C enterprise fetch?)"
   (cd "$src/ui/admin-frontend" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null &&
-    PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build >/dev/null) || die "frontend build failed"
+    PUBLIC_URL="." REACT_APP_API_URL="" CI=false npm run build >/dev/null) || die "frontend build failed"
   (cd "$src/docs/site" && npm ci --ignore-scripts --no-audit --no-fund >/dev/null && npm run docs:build >/dev/null) \
     || die "docs build failed"
   docker run --rm --platform linux/amd64 -v "$src:/src" -v gwbench-gomod-amd64:/go/pkg/mod \

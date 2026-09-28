@@ -34,6 +34,7 @@ import {
   getMetadataObjectTypes,
 } from "../services/governedMetadataService";
 import { STATUSES, statusMeta } from "../components/metadata/metadataStatus";
+import { stripBase } from "../../runtimeConfig";
 
 export const objectEditPath = (objectType, objectId) => {
   switch (objectType) {
@@ -80,7 +81,7 @@ export const openDetailPath = (path, navigate) => {
     return;
   }
   const [beforeHash] = path.split("#");
-  const current = `${window.location.pathname}${window.location.search}`;
+  const current = `${stripBase(window.location.pathname)}${window.location.search}`;
   navigate(path);
   if (beforeHash === current) {
     window.dispatchEvent(new PopStateEvent("popstate"));
