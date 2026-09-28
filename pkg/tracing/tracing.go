@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -116,8 +117,33 @@ func parseEndpoint(raw string) (endpoint string, insecure bool, err error) {
 	return u.Host, u.Scheme != "https", nil
 }
 
+// injected holds the provider and propagator installed with Use.
+var injected atomic.Pointer[injectedTracing]
+
+type injectedTracing struct {
+	provider   trace.TracerProvider
+	propagator propagation.TextMapPropagator
+}
+
+// Use makes Studio create spans from provider and carry trace context with
+// propagator instead of the OpenTelemetry globals, which belong to an
+// embedding host. A nil argument keeps the corresponding global.
+func Use(provider trace.TracerProvider, propagator propagation.TextMapPropagator) {
+	injected.Store(&injectedTracing{provider: provider, propagator: propagator})
+}
+
+func propagator() propagation.TextMapPropagator {
+	if in := injected.Load(); in != nil && in.propagator != nil {
+		return in.propagator
+	}
+	return otel.GetTextMapPropagator()
+}
+
 // Tracer returns the tracer every proxy span is created from.
 func Tracer() trace.Tracer {
+	if in := injected.Load(); in != nil && in.provider != nil {
+		return in.provider.Tracer(TracerName)
+	}
 	return otel.Tracer(TracerName)
 }
 
@@ -125,11 +151,11 @@ func Tracer() trace.Tracer {
 // request headers, so gateway spans become children of the caller's trace
 // rather than starting a disconnected one.
 func ExtractIncoming(ctx context.Context, header map[string][]string) context.Context {
-	return otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(header))
+	return propagator().Extract(ctx, propagation.HeaderCarrier(header))
 }
 
 // InjectOutgoing writes the current trace context into the upstream request
 // headers so the provider (or an in-cluster model server) can continue the trace.
 func InjectOutgoing(ctx context.Context, header map[string][]string) {
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(header))
+	propagator().Inject(ctx, propagation.HeaderCarrier(header))
 }

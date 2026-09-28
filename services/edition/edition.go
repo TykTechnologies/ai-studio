@@ -72,7 +72,7 @@ func checkFeatures(features []feature) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("enterprise build is missing features %s: blank-import their enterprise/features packages",
+		return fmt.Errorf("enterprise build is missing features %s: import github.com/TykTechnologies/midsommar/v2/enterprise/all",
 			strings.Join(missing, ", "))
 	}
 	return nil

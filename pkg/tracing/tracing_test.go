@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 func TestParseEndpoint(t *testing.T) {
@@ -171,4 +174,20 @@ func TestShutdownIsIdempotent(t *testing.T) {
 	defer cancel()
 	_ = shutdown(ctx)
 	_ = shutdown(ctx)
+}
+
+// An embedding host supplies its own provider; Studio's spans must go there
+// rather than to the OpenTelemetry global.
+func TestUseRoutesSpansToTheInjectedProvider(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	Use(provider, nil)
+	t.Cleanup(func() { injected.Store(nil) })
+
+	_, span := Tracer().Start(context.Background(), "embedded-span")
+	span.End()
+
+	if spans := recorder.Ended(); len(spans) != 1 || spans[0].Name() != "embedded-span" {
+		t.Fatalf("expected the span on the injected provider, got %d spans", len(spans))
+	}
 }

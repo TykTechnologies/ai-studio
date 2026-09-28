@@ -16,10 +16,10 @@ import (
 func TestServeBuildRootFile(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	build := fstest.MapFS{
-		"ui/admin-frontend/build/index.html":    {Data: []byte("<html></html>")},
-		"ui/admin-frontend/build/manifest.json": {Data: []byte(`{"short_name":"Studio"}`)},
-		"ui/admin-frontend/build/robots.txt":    {Data: []byte("User-agent: *")},
-		"ui/admin-frontend/build/logo192.png":   {Data: []byte("png")},
+		"index.html":    {Data: []byte("<html></html>")},
+		"manifest.json": {Data: []byte(`{"short_name":"Studio"}`)},
+		"robots.txt":    {Data: []byte("User-agent: *")},
+		"logo192.png":   {Data: []byte("png")},
 	}
 
 	serve := func(path string) (*httptest.ResponseRecorder, bool) {

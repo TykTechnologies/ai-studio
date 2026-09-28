@@ -49,6 +49,13 @@ func Init(level string) {
 	SetLevel(level)
 }
 
+// Use makes l the logger Studio's own logging goes through, without touching
+// zerolog's global logger or level, which belong to an embedding host.
+func Use(l zerolog.Logger) {
+	Log = l
+	currentLevel = l.GetLevel()
+}
+
 // SetLevel sets the global log level
 func SetLevel(level string) {
 	parsedLevel := parseLogLevel(level)

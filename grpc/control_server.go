@@ -87,7 +87,8 @@ type ControlServer struct {
 	// Edge management service (CE: forces "default", ENT: multi-tenant)
 	edgeManagementService edge_management.Service
 
-	// gRPC server
+	// gRPC server, set by Serve and read by Stop
+	serverMu   sync.Mutex
 	grpcServer *grpc.Server
 
 	// Cleanup ticker for stale connections
@@ -196,15 +197,20 @@ func (s *ControlServer) SetEdgeBudgetSource(src EdgeBudgetSource) {
 	}
 }
 
-// Start starts the gRPC control server
+// Start listens on the configured host and port and serves the gRPC control
+// server until Stop is called.
 func (s *ControlServer) Start() error {
-	// Create listener
 	addr := fmt.Sprintf("%s:%d", s.config.GRPCHost, s.config.GRPCPort)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
+	return s.Serve(listener)
+}
 
+// Serve serves the gRPC control server on listener until Stop is called. An
+// embedding host uses it to supply its own listener.
+func (s *ControlServer) Serve(listener net.Listener) error {
 	// Setup gRPC server options
 	var opts []grpc.ServerOption
 
@@ -215,6 +221,7 @@ func (s *ControlServer) Start() error {
 			s.config.TLSKeyPath,
 		)
 		if err != nil {
+			listener.Close()
 			return fmt.Errorf("failed to load TLS credentials: %w", err)
 		}
 		opts = append(opts, grpc.Creds(creds))
@@ -225,13 +232,16 @@ func (s *ControlServer) Start() error {
 	opts = append(opts, grpc.StreamInterceptor(s.streamAuthInterceptor))
 
 	// Create gRPC server
-	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterConfigurationSyncServiceServer(s.grpcServer, s)
+	server := grpc.NewServer(opts...)
+	pb.RegisterConfigurationSyncServiceServer(server, s)
+	s.serverMu.Lock()
+	s.grpcServer = server
+	s.serverMu.Unlock()
 
-	log.Info().Str("address", addr).Msg("Starting AI Studio gRPC control server")
+	log.Info().Str("address", listener.Addr().String()).Msg("Starting AI Studio gRPC control server")
 
 	// Start serving
-	if err := s.grpcServer.Serve(listener); err != nil {
+	if err := server.Serve(listener); err != nil {
 		return fmt.Errorf("gRPC server failed: %w", err)
 	}
 
@@ -252,8 +262,11 @@ func (s *ControlServer) Stop() {
 		s.cleanupTicker.Stop()
 	}
 
-	if s.grpcServer != nil {
-		s.grpcServer.GracefulStop()
+	s.serverMu.Lock()
+	server := s.grpcServer
+	s.serverMu.Unlock()
+	if server != nil {
+		server.GracefulStop()
 	}
 
 	// Close all edge connections

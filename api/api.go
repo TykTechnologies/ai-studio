@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -73,12 +72,14 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 type API struct {
 	service                       *services.Service
 	router                        *gin.Engine
+	serverMu                      sync.Mutex
 	server                        *http.Server
 	config                        *auth.Config
 	disableCORS                   bool
 	auth                          *auth.AuthService
 	proxy                         *proxy.Proxy
-	staticFiles                   embed.FS
+	// frontend holds the built admin UI, rooted at its build directory.
+	frontend                      fs.FS
 	setupChatRoutesFunc           func(*gin.RouterGroup)
 	ssoService                    sso.Service
 	licensingService              licensing.Service
@@ -119,9 +120,9 @@ func (a *API) SetAuditService(s audit.Service) {
 
 // NewAPI builds the API like New but panics where New returns an error, which
 // suits tests.
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, frontend fs.FS, licensingService licensing.Service) *API {
 	gin.SetMode(gin.ReleaseMode)
-	api, err := New(service, disableCORS, authService, config, proxy, staticFiles, licensingService)
+	api, err := New(service, disableCORS, authService, config, proxy, frontend, licensingService)
 	if err != nil {
 		panic(err)
 	}
@@ -129,8 +130,9 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 }
 
 // New builds the admin API: the gin router with its middleware and routes.
-// It leaves gin's process-wide mode to the caller.
-func New(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) (*API, error) {
+// frontend is the built admin UI rooted at its build directory (ui.FS). New
+// leaves gin's process-wide mode to the caller.
+func New(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, frontend fs.FS, licensingService licensing.Service) (*API, error) {
 
 	// Use gin.New() instead of gin.Default() to have control over middleware
 	// gin.Default() adds Logger and Recovery middleware automatically
@@ -193,7 +195,7 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 		auth:             authService,
 		config:           config,
 		proxy:            proxy,
-		staticFiles:      staticFiles,
+		frontend:         frontend,
 		licensingService: licensingService,
 	}
 
@@ -313,25 +315,30 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 func (a *API) Run(addr string, certFile string, keyFile string) error {
 	// Create http.Server for graceful shutdown support
-	a.server = newHTTPServer(addr, a.router)
+	server := newHTTPServer(addr, a.router)
+	a.serverMu.Lock()
+	a.server = server
+	a.serverMu.Unlock()
 
 	if certFile != "" && keyFile != "" {
-		return a.server.ListenAndServeTLS(certFile, keyFile)
+		return server.ListenAndServeTLS(certFile, keyFile)
 	}
 
-	return a.server.ListenAndServe()
+	return server.ListenAndServe()
 }
 
-// Shutdown gracefully shuts down the API server
+// Shutdown gracefully shuts down the API server, if Run started one, and the
+// audit trail writer, which runs whether or not the router is served by Run.
 func (a *API) Shutdown(ctx context.Context) error {
-	if a.server == nil {
-		return nil
-	}
+	a.serverMu.Lock()
+	server := a.server
+	a.serverMu.Unlock()
 
-	logger.Info("Shutting down API server...")
-
-	if err := a.server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("API server shutdown failed: %w", err)
+	if server != nil {
+		logger.Info("Shutting down API server...")
+		if err := server.Shutdown(ctx); err != nil {
+			return fmt.Errorf("API server shutdown failed: %w", err)
+		}
 	}
 
 	if a.auditService != nil {
@@ -396,7 +403,7 @@ func (a *API) setupRoutes() error {
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
+		faviconFile, err := fs.ReadFile(a.frontend, "sun.ico")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -405,7 +412,7 @@ func (a *API) setupRoutes() error {
 	})
 
 	a.router.GET("/sun-logo.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
+		faviconFile, err := fs.ReadFile(a.frontend, "sun-logo.png")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -414,7 +421,7 @@ func (a *API) setupRoutes() error {
 	})
 
 	a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
+		faviconFile, err := fs.ReadFile(a.frontend, "generic-datasource-icon.png")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -423,7 +430,7 @@ func (a *API) setupRoutes() error {
 	})
 
 	a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
+		faviconFile, err := fs.ReadFile(a.frontend, "generic-llm-logo.png")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -432,14 +439,14 @@ func (a *API) setupRoutes() error {
 	})
 
 	// Serve static files from /build/static
-	staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
+	staticFS, err := fs.Sub(a.frontend, "static")
 	if err != nil {
 		return fmt.Errorf("frontend static files: %w", err)
 	}
 	a.router.StaticFS("/static", http.FS(staticFS))
 
 	// Serve logos from /build/logos
-	logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
+	logosFS, err := fs.Sub(a.frontend, "logos")
 	if err != nil {
 		return fmt.Errorf("frontend logos: %w", err)
 	}
@@ -473,7 +480,7 @@ func (a *API) setupRoutes() error {
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Files at the root of the build (manifest.json, robots.txt, ...)
-		if serveBuildRootFile(c, a.staticFiles) {
+		if serveBuildRootFile(c, a.frontend) {
 			return
 		}
 
@@ -493,7 +500,7 @@ func (a *API) setupRoutes() error {
 		}
 
 		// For all other routes, serve the frontend application
-		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
+		indexFile, err := fs.ReadFile(a.frontend, "index.html")
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Could not read index.html")
 			return
