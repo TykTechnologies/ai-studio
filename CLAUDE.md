@@ -144,6 +144,7 @@ For detailed architecture, see `docs/site/docs/edge-gateways.md`.
 - `microgateway/` - Microgateway (data plane) for edge deployments
 - `tests/` - Test utilities and data
 - `pkg/plugin_sdk/` - Unified Plugin SDK for building plugins
+- `pkg/studio/` - Embeddable AI Studio (`studio.New`); `main.go` is a thin wrapper over it (see `features/Embedding.md`)
 - `examples/plugins/` - Example plugins demonstrating SDK capabilities
 - `.claude/skills/` - Claude Code skills for dev environment management
 

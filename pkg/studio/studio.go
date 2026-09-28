@@ -123,10 +123,8 @@ type Studio struct {
 	tracingShutdown  tracing.Shutdown
 	cancelBackground context.CancelFunc
 
-	mu           sync.Mutex
-	proxyStarted bool
-	stopOnce     sync.Once
-	stopErr      error
+	stopOnce sync.Once
+	stopErr  error
 }
 
 // New builds a Studio: it migrates the database, seeds defaults, starts the
@@ -471,9 +469,6 @@ func (s *Studio) StartProxy() error {
 	if ent, ok := s.licensing.Entitlement(licensing.FeatureGateway); !ok || !ent.Bool() {
 		return ErrGatewayNotLicensed
 	}
-	s.mu.Lock()
-	s.proxyStarted = true
-	s.mu.Unlock()
 	return s.proxy.Start()
 }
 
@@ -510,10 +505,7 @@ func (s *Studio) stop(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
-	s.mu.Lock()
-	proxyStarted := s.proxyStarted
-	s.mu.Unlock()
-	if proxyStarted {
+	if s.proxy != nil {
 		if err := s.proxy.Stop(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("stop gateway: %w", err))
 		}

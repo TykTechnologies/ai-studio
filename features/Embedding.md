@@ -14,7 +14,7 @@ behaviour unchanged:
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 1 | Configuration from a struct; injectable keys and paths; errors instead of process exits | Done |
-| 2 | `pkg/studio` (`New`, `HTTPHandler`, `StartGRPC`, `StartProxy`, `Stop`); `ui` embed package; thin `main.go` | Planned |
+| 2 | `pkg/studio` (`New`, `HTTPHandler`, `StartGRPC`, `StartProxy`, `Stop`); `ui` embed package; thin `main.go` | Done |
 | 3 | Configurable base path for the backend | Planned |
 | 4 | Pluggable authentication and CSRF | Planned |
 | 5 | UI served under a base path; host-authentication UI mode | Planned |
@@ -82,3 +82,36 @@ shared with the microgateway (`ANALYTICS_BUFFER_SIZE`, `BUDGET_SYNC_INTERVAL`,
   in the working directory still takes precedence, so deployments can
   customise them, but a process started elsewhere renders the defaults
   instead of failing.
+
+## The studio package (Phase 2)
+
+`pkg/studio` holds the wiring that used to live in `main.go`; `main.go` is
+now a thin wrapper (flags, `config.Get`, logger, connectivity checks, opening
+the database, the docs server, signal handling). See `pkg/studio/README.md`
+for the host-facing API.
+
+- `studio.New(Options)` installs the configuration, checks the edition,
+  migrates and seeds the database, starts licensing, the service layer,
+  marketplace sync, scheduler, analytics, telemetry and plugins, and builds
+  the API, gateway and (in control mode) the gRPC control server. Every
+  failure is a returned error, and a failed `New` stops whatever it started.
+- `HTTPHandler`, `ListenAndServe`, `ProxyHandler`, `StartProxy` and
+  `StartGRPC(listener)` serve it. `Stop(ctx)` shuts down the API, gateway,
+  gRPC server, plugins and workers, analytics, tracing and licensing in that
+  order, and leaves the database open. Previously `Service.Cleanup` closed
+  the database before the deferred stops in `main` ran; `Service.Stop` now
+  does everything but close it, and `Cleanup` is `Stop` plus the close.
+- One Studio runs per process (`ErrAlreadyRunning`); after `Stop`, `New` may
+  build another.
+- Host-owned telemetry: `Options.Logger` (`logger.Use`),
+  `Options.TracerProvider`/`Propagator` (`tracing.Use`) and
+  `Options.MeterProvider` (`metrics.InitWithProvider`) keep Studio off
+  zerolog's and OpenTelemetry's globals.
+- Package `ui` embeds the built frontend (`ui.FS`, rooted at the build
+  directory); `api.New` takes it as an `fs.FS`, and `Options.UIAssets`
+  overrides it.
+- `enterprise/all` imports every enterprise feature; `main_enterprise.go` and
+  enterprise hosts import it.
+- `grpc.ControlServer.Serve(listener)` serves on a host-supplied listener;
+  `API.Shutdown` stops the audit writer even when the host served the router.
+
