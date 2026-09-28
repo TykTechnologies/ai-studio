@@ -104,6 +104,22 @@ type AnthropicUsage struct {
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
+// --- Model list (GET /v1/models) ---
+
+// AnthropicModelListResponse is the body of GET /anthropic/{routeId}/v1/models, the
+// list Claude Code reads for gateway model discovery. Data is never null.
+type AnthropicModelListResponse struct {
+	Data    []AnthropicModelListEntry `json:"data"`
+	HasMore bool                      `json:"has_more"`
+}
+
+// AnthropicModelListEntry is one model in the list.
+type AnthropicModelListEntry struct {
+	Type        string `json:"type"` // "model"
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+}
+
 // --- Helpers ---
 
 // parseAnthropicBlocks normalises a field that may be a JSON string or an array

@@ -100,4 +100,78 @@ func TestAnthropicBridgeAuth(t *testing.T) {
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
+
+	// GET /v1/models (Claude Code model discovery) sits behind the same credential
+	// middleware as POST /v1/messages. With no default_model configured, an authenticated
+	// request gets 200 with an empty list, so a 200 proves auth and the app grant passed.
+	otherApp := &models.App{Name: "OtherApp", UserID: user.ID}
+	require.NoError(t, db.Create(otherApp).Error)
+	otherCred := &models.Credential{KeyID: "other-key", Secret: "other-secret", Active: true}
+	require.NoError(t, db.Create(otherCred).Error)
+	otherApp.CredentialID = otherCred.ID
+	require.NoError(t, db.Save(otherApp).Error) // holds no LLM
+	require.NoError(t, p.loadResources())
+
+	modelsURL := func(routeSlug string) string {
+		return srv.URL + "/anthropic/" + routeSlug + "/v1/models?limit=1000"
+	}
+	getModels := func(t *testing.T, url string, setAuth func(*http.Request)) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest("GET", url, nil)
+		require.NoError(t, err)
+		setAuth(req)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		return resp
+	}
+	llmModels := modelsURL(slug.Make(llm.Name))
+
+	t.Run("models: valid x-api-key authenticates", func(t *testing.T) {
+		resp := getModels(t, llmModels, func(r *http.Request) { r.Header.Set("x-api-key", "valid-secret") })
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode, "should pass auth and return an (empty) list")
+		b, _ := io.ReadAll(resp.Body)
+		assert.Contains(t, string(b), `"data":[]`)
+	})
+
+	t.Run("models: valid Bearer token authenticates", func(t *testing.T) {
+		resp := getModels(t, llmModels, func(r *http.Request) { r.Header.Set("Authorization", "Bearer valid-secret") })
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	// Claude Code v2.1.248+ sends both headers when both resolve.
+	t.Run("models: x-api-key and Bearer together authenticate", func(t *testing.T) {
+		resp := getModels(t, llmModels, func(r *http.Request) {
+			r.Header.Set("x-api-key", "valid-secret")
+			r.Header.Set("Authorization", "Bearer valid-secret")
+		})
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	})
+
+	t.Run("models: invalid x-api-key is rejected", func(t *testing.T) {
+		resp := getModels(t, llmModels, func(r *http.Request) { r.Header.Set("x-api-key", "wrong-secret") })
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("models: missing credentials is rejected", func(t *testing.T) {
+		resp := getModels(t, llmModels, func(r *http.Request) {})
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("models: app not granted the LLM is forbidden", func(t *testing.T) {
+		resp := getModels(t, llmModels, func(r *http.Request) { r.Header.Set("x-api-key", "other-secret") })
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	// Unknown answers like ungranted (403, not 404), so slugs cannot be enumerated.
+	t.Run("models: unknown connection is forbidden, not 404", func(t *testing.T) {
+		resp := getModels(t, modelsURL("no-such-llm"), func(r *http.Request) { r.Header.Set("x-api-key", "valid-secret") })
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
 }
