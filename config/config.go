@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -140,6 +141,11 @@ type AppConf struct {
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 
+	// BasePath is the path prefix Studio's HTTP interface is served under,
+	// such as "/ai-studio" (BASE_PATH); empty serves it at the root. SiteURL
+	// should include it.
+	BasePath string
+
 	// SecretKey encrypts secrets at rest (TYK_AI_SECRET_KEY).
 	SecretKey string
 	// MicrogatewayEncryptionKey is the 32-character key edges decrypt the
@@ -253,6 +259,22 @@ func ExportEnvFile(envFile string) {
 	}
 }
 
+// NormalizeBasePath returns p as a path prefix with a leading slash and no
+// trailing one ("ai-studio/" becomes "/ai-studio"), or "" for the root.
+func NormalizeBasePath(p string) string {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	if p == "" {
+		return ""
+	}
+	return "/" + p
+}
+
+// PublicPath returns path (which starts with "/") as seen by a browser: under
+// BasePath.
+func (c *AppConf) PublicPath(path string) string {
+	return c.BasePath + path
+}
+
 // Set installs conf as the configuration Get returns.
 func Set(conf *AppConf) {
 	globalConfig.Store(conf)
@@ -338,6 +360,13 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	conf.SiteURL = getenv("SITE_URL")
 	if conf.SiteURL == "" {
 		cfgLog.Warn().Msg("Warning: SITE_URL environment variable is not set")
+	}
+
+	conf.BasePath = NormalizeBasePath(getenv("BASE_PATH"))
+	if conf.BasePath != "" && conf.SiteURL != "" {
+		if u, err := url.Parse(conf.SiteURL); err == nil && strings.TrimRight(u.Path, "/") != conf.BasePath {
+			cfgLog.Warn().Msgf("Warning: SITE_URL (%s) should end with BASE_PATH (%s); links in emails and OAuth metadata are built from SITE_URL", conf.SiteURL, conf.BasePath)
+		}
 	}
 
 	conf.ServerPort = getenv("SERVER_PORT")

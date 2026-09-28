@@ -49,3 +49,17 @@ func TestSetOverridesGet(t *testing.T) {
 		t.Fatalf("Get returned %p, want the configuration passed to Set (%p)", got, conf)
 	}
 }
+
+func TestNormalizeBasePath(t *testing.T) {
+	for in, want := range map[string]string{
+		"": "", "/": "", " / ": "", "ai-studio": "/ai-studio", "/ai-studio/": "/ai-studio", "/a/b/": "/a/b",
+	} {
+		if got := NormalizeBasePath(in); got != want {
+			t.Errorf("NormalizeBasePath(%q) = %q, want %q", in, got, want)
+		}
+	}
+	conf := LoadFrom(func(k string) string { return map[string]string{"BASE_PATH": "ai-studio/"}[k] })
+	if conf.BasePath != "/ai-studio" || conf.PublicPath("/admin") != "/ai-studio/admin" {
+		t.Errorf("BasePath %q, PublicPath %q", conf.BasePath, conf.PublicPath("/admin"))
+	}
+}

@@ -1261,6 +1261,9 @@ type FrontendConfig struct {
 	// hide key issuance for SSO-provisioned users instead of offering a
 	// button that returns 403.
 	AllowSSOUserAPIKeys bool `json:"allowSSOUserAPIKeys"`
+	// BasePath is the path prefix the console is served under ("" for the
+	// root), so it can build URLs and route under it.
+	BasePath string `json:"basePath"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

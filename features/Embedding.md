@@ -15,7 +15,7 @@ behaviour unchanged:
 |-------|-------|--------|
 | 1 | Configuration from a struct; injectable keys and paths; errors instead of process exits | Done |
 | 2 | `pkg/studio` (`New`, `HTTPHandler`, `StartGRPC`, `StartProxy`, `Stop`); `ui` embed package; thin `main.go` | Done |
-| 3 | Configurable base path for the backend | Planned |
+| 3 | Configurable base path for the backend | Done |
 | 4 | Pluggable authentication and CSRF | Planned |
 | 5 | UI served under a base path; host-authentication UI mode | Planned |
 | 6 | Shipping the built UI to importers | Planned |
@@ -114,4 +114,41 @@ for the host-facing API.
   enterprise hosts import it.
 - `grpc.ControlServer.Serve(listener)` serves on a host-supplied listener;
   `API.Shutdown` stops the audit writer even when the host served the router.
+
+## Base path (Phase 3)
+
+`BASE_PATH` (`AppConf.BasePath`, normalised to `/prefix` or `""`) serves the
+API and UI under a path prefix. `SITE_URL` (and `AUTH_SERVER_URL`, which
+defaults to it) should include the prefix: emails, the OAuth consent
+redirect and the OAuth metadata are built from it, and a warning is logged
+when it does not end with the base path.
+
+- Routes stay registered at the root. `API.Handler()` (what
+  `studio.HTTPHandler` and the standalone server serve) strips the prefix;
+  a request without it passes through unchanged, so a reverse proxy may
+  strip it first. The bare prefix redirects to `prefix/`.
+- The session cookie (`auth.Config.CookiePath`) and the CSRF cookie are
+  scoped to the base path.
+- Logout expires Studio's session cookie and the identity broker's
+  `_gothic_session`, and nothing else (it used to expire every cookie on the
+  request, which would sign a user out of the host too).
+- Post-SSO redirects and the email-verified page's redirect go to the base
+  path instead of `/`.
+- OAuth: the consent redirect and the authorization server metadata keep the
+  path of `SITE_URL`/`AUTH_SERVER_URL` (`url.JoinPath` instead of resolving
+  absolute paths, which dropped it). RFC 8414 discovery for a pathed issuer
+  happens at the host root (`/.well-known/oauth-authorization-server/<base>`);
+  `studio.OAuthMetadataHandler()` serves it there. The gateway's protected
+  resource metadata is unchanged: the gateway keeps its own port.
+- The SPA fallback injects `<base href="<base>/">` and
+  `window.__TYK_AI_BASE__` into `index.html`, and replaces the
+  `/__TYK_AI_BASE__` placeholder in `index.html` and `manifest.json`: the
+  contract Phase 5 builds the frontend against. With no base path a build
+  without the placeholder is served unchanged. `/auth/config` returns
+  `basePath`.
+- The resend-verification email linked to `/verify-email`, which nothing
+  serves; it now links to `/auth/verify-email` like the registration email.
+
+Until Phase 5 the frontend is still built for the root, so its assets and
+client-side routes do not yet work under a base path; the API does.
 

@@ -26,7 +26,7 @@ func TestServeBuildRootFile(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, path, nil)
-		ok := serveBuildRootFile(c, build)
+		ok := serveBuildRootFile(c, build, "")
 		return w, ok
 	}
 

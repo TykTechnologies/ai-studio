@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 // frontend build (manifest.json, robots.txt, logo192.png) with that file.
 // It reports false, having written nothing, for anything else, which the SPA
 // fallback then answers with index.html.
-func serveBuildRootFile(c *gin.Context, fsys fs.FS) bool {
+func serveBuildRootFile(c *gin.Context, fsys fs.FS, basePath string) bool {
 	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
 		return false
 	}
@@ -25,6 +26,9 @@ func serveBuildRootFile(c *gin.Context, fsys fs.FS) bool {
 	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return false
+	}
+	if name == "manifest.json" {
+		data = bytes.ReplaceAll(data, []byte(basePathPlaceholder), []byte(basePath))
 	}
 	contentType := mime.TypeByExtension(path.Ext(name))
 	if contentType == "" {

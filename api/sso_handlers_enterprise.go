@@ -27,7 +27,7 @@ import (
 func (a *API) handleTIBAuth(c *gin.Context) {
 	user := a.auth.GetAuthenticatedUser(c)
 	if user != nil {
-		c.Redirect(http.StatusFound, "/")
+		c.Redirect(http.StatusFound, a.publicPath("/"))
 		return
 	}
 
@@ -71,7 +71,7 @@ func (a *API) handleTIBAuth(c *gin.Context) {
 func (a *API) handleTIBAuthCallback(c *gin.Context) {
 	user := a.auth.GetAuthenticatedUser(c)
 	if user != nil {
-		c.Redirect(http.StatusFound, "/")
+		c.Redirect(http.StatusFound, a.publicPath("/"))
 		return
 	}
 
@@ -103,7 +103,7 @@ func (a *API) handleTIBAuthCallback(c *gin.Context) {
 func (a *API) handleSAMLMetadata(c *gin.Context) {
 	user := a.auth.GetAuthenticatedUser(c)
 	if user != nil {
-		c.Redirect(http.StatusFound, "/")
+		c.Redirect(http.StatusFound, a.publicPath("/"))
 		return
 	}
 
@@ -158,7 +158,7 @@ func (a *API) handleSSO(c *gin.Context) {
 		return
 	}
 
-	c.Redirect(http.StatusFound, "/")
+	c.Redirect(http.StatusFound, a.publicPath("/"))
 }
 
 func (a *API) SSOAuthMiddleware() gin.HandlerFunc {
