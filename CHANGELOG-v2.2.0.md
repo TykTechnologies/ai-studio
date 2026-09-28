@@ -1,8 +1,8 @@
 # Tyk AI Studio 2.2.0
 
-**Status:** Release candidate — `v2.2.0-rc10.4`
+**Status:** Released — `v2.2.0`
 **Release date:** 2026-09-29
-**Diff:** [`v2.1.0...v2.2.0-rc10.4`](https://github.com/TykTechnologies/ai-studio/compare/v2.1.0...v2.2.0-rc10.4)
+**Diff:** [`v2.1.0...v2.2.0`](https://github.com/TykTechnologies/ai-studio/compare/v2.1.0...v2.2.0)
 
 180 commits, 1,901 files, +451,819 / −40,164.
 
