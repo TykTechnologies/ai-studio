@@ -92,7 +92,34 @@ type Options struct {
 	// SkipLLMDefaults skips seeding the default LLM configurations and
 	// their secrets.
 	SkipLLMDefaults bool
+
+	// Auth, when set, authenticates every request on the host's behalf:
+	// Studio provisions a user for each identity it returns (see Identity)
+	// and switches off its own password login, registration and SSO. API
+	// keys still authenticate requests Auth has no identity for.
+	Auth Authenticator
+	// LoginURL and LogoutURL are where the console sends a user to sign in
+	// or out when Auth is set.
+	LoginURL, LogoutURL string
+
+	// CSRF, when set, replaces Studio's CSRF protection for
+	// cookie-authenticated requests with the host's. It must call the
+	// handler it wraps only for requests that pass. CSRFTokenHeader and
+	// CSRFTokenURL tell the console how to obtain and present the token.
+	CSRF            func(http.Handler) http.Handler
+	CSRFTokenHeader string
+	CSRFTokenURL    string
 }
+
+// Identity is a user as the host has authenticated them. Subject and Email
+// are required; Studio keeps the user's name, email, administrator status
+// and, when Groups is not nil, group memberships in step with it.
+type Identity = services.HostIdentity
+
+// Authenticator authenticates a request on the host's behalf. It returns
+// nil and no error when the request carries no host identity, and an error
+// to reject the request.
+type Authenticator = auth.Authenticator
 
 // ErrAlreadyRunning is returned by New while another Studio is running in
 // the process.
@@ -305,6 +332,13 @@ func New(opts Options) (_ *Studio, err error) {
 		OCIConfig:              conf.OCIPlugins.ToOCILibConfig(),
 		AllowSSOUserAPIKeys:    conf.AllowSSOUserAPIKeys,
 		SSOAPIKeyLiveness:      conf.SSOAPIKeyLiveness,
+		HostAuth:               opts.Auth,
+		ProvisionHostUser:      service.ProvisionHostUser,
+		HostLoginURL:           opts.LoginURL,
+		HostLogoutURL:          opts.LogoutURL,
+		CSRF:                   opts.CSRF,
+		CSRFTokenHeader:        opts.CSRFTokenHeader,
+		CSRFTokenURL:           opts.CSRFTokenURL,
 	}
 	authService := auth.NewAuthService(authConfig, mailService, service, notificationService)
 

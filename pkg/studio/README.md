@@ -21,6 +21,12 @@ s, err := studio.New(studio.Options{
 	TracerProvider: hostTracerProvider,
 	MeterProvider:  hostMeterProvider,
 	OnLicenceInvalid: func(err error) { /* alert, degrade, or stop Studio */ },
+
+	// The host signs users in; Studio provisions and authorises them.
+	Auth:      hostAuthenticator, // Authenticate(*http.Request) (*studio.Identity, error)
+	LoginURL:  "/login",
+	LogoutURL: "/logout",
+	CSRF:      hostCSRFMiddleware, // optional; Studio's own otherwise
 })
 if err != nil {
 	return err
@@ -42,6 +48,13 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   strips the prefix itself. Session and CSRF cookies are scoped to the base
   path, and logout leaves the host's cookies alone. The frontend is not yet
   built for a base path (see `features/Embedding.md`, Phase 5).
+- With `Auth`, every request is offered to the host first. The identity it
+  returns (subject, email, name, admin, optional group names) becomes a
+  Studio user on first sight and is kept in step after that; Studio's own
+  RBAC then decides what the user may do. Studio's password login,
+  registration and SSO are switched off; its API keys still work.
+- `CSRF` replaces Studio's CSRF check for cookie-authenticated writes with
+  the host's.
 - `OAuthMetadataHandler` serves the OAuth authorization server metadata for
   MCP clients; with a base path, mount it at
   `/.well-known/oauth-authorization-server<base path>` on the host root.

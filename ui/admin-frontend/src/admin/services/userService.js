@@ -115,6 +115,7 @@ export const AUTH_SOURCE_LABELS = {
   local: "Self-registered",
   admin: "Admin-created",
   sso: "SSO",
+  host: "Host application",
 };
 
 export const authSourceLabel = (source) => AUTH_SOURCE_LABELS[source] || "Unknown";
@@ -122,8 +123,10 @@ export const authSourceLabel = (source) => AUTH_SOURCE_LABELS[source] || "Unknow
 export const formatLastLogin = (attributes) => {
   if (!attributes?.last_login_at) return "Never";
   const when = new Date(attributes.last_login_at).toLocaleString();
-  const method = attributes.last_login_method === "sso"
-    ? "SSO"
-    : attributes.last_login_method === "password" ? "password" : "";
+  const method = {
+    sso: "SSO",
+    password: "password",
+    host: "host application",
+  }[attributes.last_login_method] || "";
   return method ? `${when} (${method})` : when;
 };

@@ -2,15 +2,18 @@ package studio
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -23,8 +26,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// newTestOptions builds Options for a Studio on a fresh SQLite database. The
-// database is a file, not :memory:, because background workers use their own
+// newTestOptions builds Options for a Studio on a fresh SQLite database, or,
+// when STUDIO_TEST_POSTGRES_DSN is set, on a fresh schema in that Postgres
+// database (the way a host gives Studio its own schema). The SQLite database
+// is a file, not :memory:, because background workers use their own
 // connections.
 func newTestOptions(t *testing.T) Options {
 	t.Helper()
@@ -44,7 +49,11 @@ func newTestOptions(t *testing.T) Options {
 	conf := config.LoadFrom(func(k string) string { return vals[k] })
 	t.Cleanup(config.ResetGlobalConfig)
 
-	db, err := gorm.Open(sqlite.Open(dbPath+"?_busy_timeout=5000"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	var dialector gorm.Dialector = sqlite.Open(dbPath + "?_busy_timeout=5000")
+	if dsn := os.Getenv("STUDIO_TEST_POSTGRES_DSN"); dsn != "" {
+		dialector = postgresSchema(t, dsn)
+	}
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		if sqlDB, err := db.DB(); err == nil {
@@ -73,3 +82,24 @@ func stopStudio(t *testing.T, s *Studio) {
 func listenLocal() (net.Listener, error) { return net.Listen("tcp", "127.0.0.1:0") }
 
 func dialLocal(addr string) (net.Conn, error) { return net.Dial("tcp", addr) }
+
+// postgresSchema creates a schema for one test in the database dsn names and
+// returns a dialector whose connections use it.
+func postgresSchema(t *testing.T, dsn string) gorm.Dialector {
+	t.Helper()
+	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	schema := fmt.Sprintf("studio_test_%d", time.Now().UnixNano())
+	require.NoError(t, admin.Exec("CREATE SCHEMA "+schema).Error)
+	t.Cleanup(func() {
+		admin.Exec("DROP SCHEMA " + schema + " CASCADE")
+		if sqlDB, err := admin.DB(); err == nil {
+			sqlDB.Close()
+		}
+	})
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return postgres.Open(dsn + sep + "search_path=" + schema)
+}

@@ -16,7 +16,7 @@ behaviour unchanged:
 | 1 | Configuration from a struct; injectable keys and paths; errors instead of process exits | Done |
 | 2 | `pkg/studio` (`New`, `HTTPHandler`, `StartGRPC`, `StartProxy`, `Stop`); `ui` embed package; thin `main.go` | Done |
 | 3 | Configurable base path for the backend | Done |
-| 4 | Pluggable authentication and CSRF | Planned |
+| 4 | Pluggable authentication and CSRF | Done |
 | 5 | UI served under a base path; host-authentication UI mode | Planned |
 | 6 | Shipping the built UI to importers | Planned |
 
@@ -151,4 +151,55 @@ when it does not end with the base path.
 
 Until Phase 5 the frontend is still built for the root, so its assets and
 client-side routes do not yet work under a base path; the API does.
+
+## Host authentication and CSRF (Phase 4)
+
+`studio.Options.Auth` (an `auth.Authenticator`) lets the host authenticate
+every request: `Authenticate(r)` returns the signed-in user as a
+`studio.Identity` (`services.HostIdentity`: subject, email, name, admin,
+groups), nil when the request has no host identity, or an error to reject
+it.
+
+- It runs first in `auth.GetAuthenticatedUser`, so `AuthMiddleware`, RBAC,
+  the audit trail (`auth_method = host`) and every handler reading `"user"`
+  work unchanged. With no host identity, Studio's API keys still
+  authenticate the request; a host error or an identity that cannot be
+  provisioned ends it as unauthenticated.
+- `Service.ProvisionHostUser` finds the user by `users.external_subject`
+  (unique among live users: a partial index that soft-deleted rows do not
+  hold). On first sight it links an existing account with the same email
+  and no subject, or creates one (`auth_source = host`, verified, portal and
+  chat on, a random unusable password). Name, email, administrator status
+  and, when `Groups` is not nil, group memberships (by name, always keeping
+  Default, unknown names skipped) follow the host through `UpdateUser`, so
+  plugin hooks, Enterprise role bindings (admin is an Administrator binding)
+  and group rules apply. Unchanged identities write nothing but a login
+  stamp at most every 15 minutes. Disabled users are refused, and an email
+  linked to another subject is a conflict.
+- Host users are externally managed like SSO users
+  (`User.IsExternallyManaged`): no API key unless
+  `ALLOW_SSO_USER_API_KEYS`, and an issued key lapses once the user stops
+  signing in through the host (`SSO_API_KEY_LIVENESS`).
+- With `Auth` set, Studio's own sign-in is off: password login,
+  registration, password reset, email verification and every SSO route
+  answer 404, and the identity broker (whose library keeps process-wide
+  state a host running its own broker would clash with) is not started.
+  `/auth/config` reports `authMode: "host"` with `loginURL`/`logoutURL`
+  from `Options.LoginURL`/`LogoutURL`.
+- `Options.CSRF` (`func(http.Handler) http.Handler`, calling the wrapped
+  handler only for requests that pass) replaces Studio's gorilla/csrf
+  protection; requests with an `Authorization` header and `/oauth/` stay
+  exempt as before. `/auth/config` reports `csrfTokenHeader` and
+  `csrfTokenURL` (defaults `X-CSRF-Token` and `<base>/csrf-token`, or
+  `Options.CSRFTokenHeader`/`CSRFTokenURL`).
+- Studio's own CSRF key can now be stable across restarts and replicas:
+  `CSRF_KEY` (the token key is derived from it). `CSRF_COOKIE_NAME`
+  renames the cookie when a host on the same domain also uses gorilla's
+  default.
+- The console labels host-provisioned users ("Host application") and can
+  filter by that origin. Using `authMode` (redirecting to the host's login,
+  hiding login and SSO pages) is Phase 5.
+
+`pkg/studio` tests run on Postgres, one schema per test, when
+`STUDIO_TEST_POSTGRES_DSN` is set.
 
