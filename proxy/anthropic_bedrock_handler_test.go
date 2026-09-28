@@ -115,3 +115,127 @@ func TestResolveAnthropicModelID(t *testing.T) {
 		assert.Equal(t, "anthropic.claude-3-haiku-20240307-v1:0", model)
 	})
 }
+
+// anthropicModelList decodes a GET /v1/models discovery response.
+func anthropicModelList(t *testing.T, body []byte) AnthropicModelListResponse {
+	t.Helper()
+	var parsed AnthropicModelListResponse
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed
+}
+
+// callListModels invokes the discovery handler with routeId wired into the mux vars.
+func callListModels(p *Proxy, routeID string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest("GET", "/anthropic/"+routeID+"/v1/models?limit=1000", nil)
+	r = mux.SetURLVars(r, map[string]string{"routeId": routeID})
+	w := httptest.NewRecorder()
+	p.handleAnthropicListModels(w, r)
+	return w
+}
+
+// TestHandleAnthropicListModels covers the model-discovery endpoint consumed by Claude Code's
+// /model picker: the listed entry, its display name, and the empty and error branches.
+func TestHandleAnthropicListModels(t *testing.T) {
+	t.Run("configured connection lists its model", func(t *testing.T) {
+		p := &Proxy{llms: map[string]*models.LLM{
+			"bedrock": {Name: "My Claude", Vendor: models.BEDROCK, DefaultModel: "anthropic.claude-3-haiku-20240307-v1:0"},
+		}}
+		w := callListModels(p, "bedrock")
+
+		assert.Equal(t, 200, w.Code)
+		assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+		resp := anthropicModelList(t, w.Body.Bytes())
+		assert.False(t, resp.HasMore)
+		require.Len(t, resp.Data, 1)
+		assert.Equal(t, "model", resp.Data[0].Type)
+		assert.Equal(t, "anthropic.claude-3-haiku-20240307-v1:0", resp.Data[0].ID)
+		assert.Equal(t, "My Claude — anthropic.claude-3-haiku-20240307-v1:0", resp.Data[0].DisplayName)
+	})
+
+	t.Run("region-prefixed model id is returned unchanged", func(t *testing.T) {
+		for _, id := range []string{
+			"eu.anthropic.claude-3-5-sonnet-20241022-v2:0",
+			"us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+			"global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+			"us-gov.anthropic.claude-3-haiku-20240307-v1:0",
+		} {
+			t.Run(id, func(t *testing.T) {
+				p := &Proxy{llms: map[string]*models.LLM{
+					"bedrock": {Name: "Regional Claude", Vendor: models.BEDROCK, DefaultModel: id},
+				}}
+				w := callListModels(p, "bedrock")
+
+				assert.Equal(t, 200, w.Code)
+				resp := anthropicModelList(t, w.Body.Bytes())
+				require.Len(t, resp.Data, 1)
+				assert.Equal(t, id, resp.Data[0].ID)
+				// Claude Code keeps an id containing "claude" or "anthropic".
+				assert.Contains(t, resp.Data[0].ID, "anthropic")
+				assert.Equal(t, "Regional Claude — "+id, resp.Data[0].DisplayName)
+			})
+		}
+	})
+
+	t.Run("empty name falls back to model id", func(t *testing.T) {
+		p := &Proxy{llms: map[string]*models.LLM{
+			"bedrock": {Vendor: models.BEDROCK, DefaultModel: "anthropic.claude-3-haiku-20240307-v1:0"},
+		}}
+		w := callListModels(p, "bedrock")
+
+		resp := anthropicModelList(t, w.Body.Bytes())
+		require.Len(t, resp.Data, 1)
+		assert.Equal(t, "anthropic.claude-3-haiku-20240307-v1:0", resp.Data[0].DisplayName)
+	})
+
+	t.Run("no default_model -> 200 empty list", func(t *testing.T) {
+		p := &Proxy{llms: map[string]*models.LLM{
+			"bedrock": {Name: "Bedrock", Vendor: models.BEDROCK},
+		}}
+		w := callListModels(p, "bedrock")
+
+		assert.Equal(t, 200, w.Code)
+		resp := anthropicModelList(t, w.Body.Bytes())
+		assert.False(t, resp.HasMore)
+		assert.Empty(t, resp.Data)
+		// Must serialize as [], never null.
+		assert.Contains(t, w.Body.String(), `"data":[]`)
+	})
+
+	t.Run("default_model refused by allowed_models -> 200 empty list, as /v1/messages refuses it", func(t *testing.T) {
+		conf := &models.LLM{
+			Name:          "Bedrock",
+			Vendor:        models.BEDROCK,
+			DefaultModel:  "anthropic.claude-3-haiku-20240307-v1:0",
+			AllowedModels: []string{`^anthropic\.claude-3-5-sonnet`},
+		}
+		p := &Proxy{llms: map[string]*models.LLM{"bedrock": conf}}
+		w := callListModels(p, "bedrock")
+
+		assert.Equal(t, 200, w.Code)
+		assert.Contains(t, w.Body.String(), `"data":[]`)
+		// The patterns are never listed as models.
+		assert.NotContains(t, w.Body.String(), "sonnet")
+
+		// The real endpoint refuses the same model, so the list and /v1/messages agree.
+		mw := httptest.NewRecorder()
+		_, ok := p.resolveAnthropicModelID(mw, conf)
+		assert.False(t, ok)
+		assert.Equal(t, 403, mw.Code)
+	})
+
+	t.Run("non-bedrock vendor -> 400", func(t *testing.T) {
+		p := &Proxy{llms: map[string]*models.LLM{"openai": {Name: "openai", Vendor: models.OPENAI}}}
+		w := callListModels(p, "openai")
+
+		assert.Equal(t, 400, w.Code)
+		assert.Equal(t, "invalid_request_error", anthropicErrorType(t, w.Body.Bytes()))
+	})
+
+	t.Run("route not found -> 404", func(t *testing.T) {
+		p := &Proxy{llms: map[string]*models.LLM{}}
+		w := callListModels(p, "missing")
+
+		assert.Equal(t, 404, w.Code)
+		assert.Equal(t, "not_found_error", anthropicErrorType(t, w.Body.Bytes()))
+	})
+}

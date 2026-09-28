@@ -512,6 +512,7 @@ func (p *Proxy) createHandler() http.Handler {
 	// to populate the app context.
 	anthropicRouter := mux.NewRouter()
 	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/messages", p.handleAnthropicMessagesEntry).Methods("POST")
+	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/models", p.handleAnthropicListModels).Methods("GET")
 	authenticatedAnthropicHandler := p.credValidator.Middleware(anthropicRouter)
 
 	// Unified router: OpenRouter-style ingress (default /v1/...) that rewrites a

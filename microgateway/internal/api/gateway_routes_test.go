@@ -40,22 +40,24 @@ func TestGatewayRoutes_ForwardAnthropicBridge(t *testing.T) {
 
 	cases := []struct {
 		name        string
+		method      string
 		path        string
 		wantStatus  int
 		wantForward bool
 	}{
-		{"anthropic bridge", "/anthropic/aws-bedrock/v1/messages", http.StatusOK, true},
-		{"openai-compatible", "/ai/aws-bedrock/v1/chat/completions", http.StatusOK, true},
-		{"llm passthrough", "/llm/call/aws-bedrock/v1/messages", http.StatusOK, true},
-		{"unified router chat", "/v1/chat/completions", http.StatusOK, true},
-		{"unified router completions", "/v1/completions", http.StatusOK, true},
-		{"unmounted path", "/nope/x", http.StatusNotFound, false},
+		{"anthropic bridge", http.MethodPost, "/anthropic/aws-bedrock/v1/messages", http.StatusOK, true},
+		{"anthropic model discovery", http.MethodGet, "/anthropic/aws-bedrock/v1/models", http.StatusOK, true},
+		{"openai-compatible", http.MethodPost, "/ai/aws-bedrock/v1/chat/completions", http.StatusOK, true},
+		{"llm passthrough", http.MethodPost, "/llm/call/aws-bedrock/v1/messages", http.StatusOK, true},
+		{"unified router chat", http.MethodPost, "/v1/chat/completions", http.StatusOK, true},
+		{"unified router completions", http.MethodPost, "/v1/completions", http.StatusOK, true},
+		{"unmounted path", http.MethodPost, "/nope/x", http.StatusNotFound, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			gotPath = ""
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, tc.path, nil))
+			router.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
 
 			if w.Code != tc.wantStatus {
 				t.Fatalf("status: got %d, want %d", w.Code, tc.wantStatus)
