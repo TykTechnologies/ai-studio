@@ -35,7 +35,7 @@ The Enterprise Edition licensing system provides JWT-based license validation, p
 - ✅ JWT-based license validation
 - ✅ License check at boot (exits if invalid)
 - ✅ Periodic re-validation every 24 hours (configurable)
-- ✅ Exits with fatal error if license invalid/expired
+- ✅ Exits with fatal error if license invalid/expired (the standalone binary; an embedding host handles it through `licensing.Config.OnInvalid`)
 - ✅ Usage telemetry collection and transmission
 - ✅ Feature entitlements (future use)
 
@@ -46,8 +46,8 @@ The Enterprise Edition licensing system provides JWT-based license validation, p
 The **Enterprise Edition Licensing System** provides a framework for validating licenses, controlling feature access, and collecting usage telemetry. Its core objectives are:
 
 - **License Validation:** Verify license authenticity using JWT-based signatures and enforce expiration dates
-- **Boot-Time Check:** Validate license at startup - process exits if invalid or expired
-- **Periodic Verification:** Re-validate every 24 hours - process exits if validation fails
+- **Boot-Time Check:** Validate license at startup - `Start` returns an error if invalid or expired, and the standalone binary exits
+- **Periodic Verification:** Re-validate every 24 hours - a failure calls `licensing.Config.OnInvalid`, or exits the process when none is set
 - **Usage Telemetry:** Collect anonymized usage statistics to understand platform utilization
 - **Security:** Protect sensitive license information with RSA signature verification
 - **Privacy:** License keys are hashed (SHA256) before transmission
@@ -194,7 +194,7 @@ The licensing system uses JWT (JSON Web Tokens) with RSA signatures for secure l
 
 3. **Periodic Validation:**
    - The license is re-validated periodically (default: every 10 minutes)
-   - If validation fails, the application will terminate with a fatal error
+   - If validation fails, `licensing.Config.OnInvalid` is called; with no callback set (the standalone binary) the application terminates with a fatal error
 
 4. **JWT Structure:**
    - Standard JWT claims (`exp`, `iat`, `nbf`) for time-based validation

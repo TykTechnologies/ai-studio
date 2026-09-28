@@ -120,6 +120,7 @@ func (a *API) SetAuditService(s audit.Service) {
 // NewAPI builds the API like New but panics where New returns an error, which
 // suits tests.
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
+	gin.SetMode(gin.ReleaseMode)
 	api, err := New(service, disableCORS, authService, config, proxy, staticFiles, licensingService)
 	if err != nil {
 		panic(err)
@@ -128,8 +129,8 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 }
 
 // New builds the admin API: the gin router with its middleware and routes.
+// It leaves gin's process-wide mode to the caller.
 func New(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) (*API, error) {
-	gin.SetMode(gin.ReleaseMode)
 
 	// Use gin.New() instead of gin.Default() to have control over middleware
 	// gin.Default() adds Logger and Recovery middleware automatically

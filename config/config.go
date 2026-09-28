@@ -241,14 +241,6 @@ func Load(envFile string) *AppConf {
 	})
 }
 
-// LoadFrom builds a configuration from lookup, which maps a variable name to
-// its value ("" when unset), applying the same defaults and validation as
-// Load. It lets a host build the configuration from its own settings rather
-// than from the process environment.
-func LoadFrom(lookup func(string) string) *AppConf {
-	return getConfig(lookup)
-}
-
 // ExportEnvFile copies the variables in envFile (".env" when empty) into the
 // process environment, leaving variables that are already set untouched. The
 // standalone binary calls it so packages that still read the environment
@@ -287,7 +279,11 @@ func readEnvFile(envFile string) map[string]string {
 	return nil
 }
 
-func getConfig(getenv func(string) string) *AppConf {
+// LoadFrom builds a configuration from getenv, which maps a variable name to
+// its value ("" when unset), applying the same defaults and validation as
+// Load. It lets a host build the configuration from its own settings rather
+// than from the process environment.
+func LoadFrom(getenv func(string) string) *AppConf {
 	conf := &AppConf{}
 
 	conf.SMTPServer = getenv("SMTP_SERVER")

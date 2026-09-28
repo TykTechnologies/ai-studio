@@ -40,6 +40,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
+	"github.com/gin-gonic/gin"
 	"github.com/go-mail/mail"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -483,6 +484,7 @@ func main() {
 	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
+		gin.SetMode(gin.ReleaseMode)
 		apiServer, err = api.New(service, appConf.DisableCors, authService, config, p, staticFiles, licensingService)
 		if err != nil {
 			logger.FatalErr("Failed to create API server", err)

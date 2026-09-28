@@ -115,6 +115,11 @@ func TestHandleGetConfig(t *testing.T) {
 			// Unset proxy URL for test
 			os.Unsetenv("PROXY_URL")
 
+			// The handler reads the configuration, so reload it from the
+			// environment just set.
+			config.ResetGlobalConfig()
+			t.Cleanup(config.ResetGlobalConfig)
+
 			// Create API instance with test config
 			authConfig := &auth.Config{
 				TIBEnabled: tc.tibEnabled,
