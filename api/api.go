@@ -1153,6 +1153,9 @@ func (a *API) setupRoutes() {
 	v1.PUT("/mcp-servers/:id/catalogues", authz.Write("mcp-servers"), a.setMCPServerCatalogues)
 	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
 	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
+	// Discovery calls the upstream MCP server from Studio, so it needs the
+	// same permission as registering the proxy.
+	v1.POST("/mcp-servers/discover-tools", authz.Execute("mcp-servers"), a.discoverMCPServerTools)
 	v1.POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.pushMCPServer)
 	v1.GET("/mcp-servers/:id/handoff", authz.Read("mcp-servers"), a.getMCPServerHandoff)
 	v1.POST("/mcp-servers/:id/link", authz.Execute("mcp-servers"), a.linkMCPServer)

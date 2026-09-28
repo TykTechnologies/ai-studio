@@ -88,6 +88,9 @@ func (s *communityService) PushServer(context.Context, Actor, uint, PushInput, b
 func (s *communityService) ListSourceAPIs(context.Context, uint, string) ([]SourceAPI, error) {
 	return nil, ErrEnterpriseFeature
 }
+func (s *communityService) DiscoverUpstreamTools(context.Context, DiscoverToolsInput) (*DiscoverToolsResult, error) {
+	return nil, ErrEnterpriseFeature
+}
 func (s *communityService) ListSourceOperations(context.Context, uint, string) ([]SourceOperation, error) {
 	return nil, ErrEnterpriseFeature
 }

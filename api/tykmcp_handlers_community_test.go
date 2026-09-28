@@ -56,6 +56,7 @@ func TestTykMCPCommunity_NotAvailable(t *testing.T) {
 		{"PUT", "/api/v1/mcp-servers/1/catalogues"},
 		{"PUT", "/api/v1/mcp-servers/1/bundle"},
 		{"POST", "/api/v1/mcp-servers/register"},
+		{"POST", "/api/v1/mcp-servers/discover-tools"},
 		{"POST", "/api/v1/mcp-servers/1/push"},
 		{"GET", "/api/v1/mcp-servers/1/handoff"},
 		{"POST", "/api/v1/mcp-servers/1/link"},

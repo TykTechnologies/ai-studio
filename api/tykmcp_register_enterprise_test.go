@@ -4,6 +4,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,8 +15,11 @@ import (
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -260,4 +264,48 @@ func TestTykMCPEnterprise_RegistrationFlow(t *testing.T) {
 	dash.mu.Unlock()
 	w = apitest.PerformAuthRequest(r, "GET", "/api/v1/mcp-servers/"+tykIDStr(srv.ID), nil, key)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestTykMCPEnterprise_DiscoverTools(t *testing.T) {
+	h := setupTykMCPEnterpriseAPI(t, func(c *config.TykMCPConfig) { c.AllowedHosts = []string{"127.0.0.1"} })
+	r := h.api.router
+	key := h.admin.APIKey
+
+	s := server.NewMCPServer("orders", "1.0.0", server.WithToolCapabilities(false))
+	s.AddTool(mcp.NewTool("get_order", mcp.WithDescription("Fetch one order")), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("ok"), nil
+	})
+	mcpHandler := server.NewStreamableHTTPServer(s)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/mcp" || r.Header.Get("Authorization") != "Bearer UPSTREAM-SECRET" {
+			http.Error(w, "unauthorised", http.StatusUnauthorized)
+			return
+		}
+		mcpHandler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(up.Close)
+
+	body := map[string]interface{}{"upstream_url": up.URL, "upstream_auth_header_name": "Authorization", "upstream_auth_token": "Bearer UPSTREAM-SECRET"}
+	w := apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/discover-tools", body, key)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "UPSTREAM-SECRET")
+	var res tykmcp.DiscoverToolsResult
+	decodeWebhookJSON(t, w, &res)
+	assert.Equal(t, up.URL+"/mcp", res.Endpoint)
+	require.Len(t, res.Tools, 1)
+	assert.Equal(t, "get_order", res.Tools[0].Name)
+	assert.Equal(t, "Fetch one order", res.Tools[0].Description)
+
+	// The upstream refusing the credential is a 502 with a hint.
+	body["upstream_auth_token"] = "Bearer wrong"
+	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/discover-tools", body, key)
+	assert.Equal(t, http.StatusBadGateway, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "check the upstream auth header")
+
+	// Hosts outside the allow list are refused before any call.
+	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/discover-tools", map[string]interface{}{"upstream_url": "http://10.1.2.3:9000"}, key)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+
+	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/discover-tools", map[string]interface{}{}, key)
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 }

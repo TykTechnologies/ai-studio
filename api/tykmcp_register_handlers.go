@@ -52,6 +52,36 @@ func (a *API) registerMCPServer(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"server": srv, "warnings": preview.Warnings, "endpoint_url": preview.EndpointURL})
 }
 
+// discoverMCPServerTools godoc
+// @Summary List the tools a remote MCP server offers
+// @Description Studio calls the upstream's tools/list (at the upstream base URL plus /mcp, as the Tyk Gateway will) so the registration wizard can offer the tools for the allow-list. The auth value is used for this call only and never stored. Subject to the Tyk MCP outbound URL policy.
+// @Tags TykMCP
+// @Accept json
+// @Produce json
+// @Param body body tykmcp.DiscoverToolsInput true "Upstream to introspect"
+// @Success 200 {object} tykmcp.DiscoverToolsResult
+// @Router /mcp-servers/discover-tools [post]
+func (a *API) discoverMCPServerTools(c *gin.Context) {
+	if _, ok := requireTykMCPActor(c, "mcp-servers"); !ok {
+		return
+	}
+	if !a.tykMCPService().Status().Available {
+		tykMCPErrorResponse(c, tykmcp.ErrEnterpriseFeature, "")
+		return
+	}
+	var in tykmcp.DiscoverToolsInput
+	if err := c.ShouldBindJSON(&in); err != nil || strings.TrimSpace(in.UpstreamURL) == "" {
+		webhookBadRequest(c, "upstream_url is required")
+		return
+	}
+	res, err := a.tykMCPService().DiscoverUpstreamTools(c.Request.Context(), in)
+	if err != nil {
+		tykMCPErrorResponse(c, err, "Failed to list the MCP server's tools")
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
 // pushMCPServer godoc
 // @Summary Replace a server's definition on the Tyk Dashboard
 // @Description Checks the live hash, restores masked secrets from the live document, then updates. ?dry_run=1 validates only.
