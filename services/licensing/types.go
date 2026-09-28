@@ -63,6 +63,11 @@ type Config struct {
 	TelemetryDisabled       bool
 	ValidityCheckPeriod     time.Duration
 	TelemetryConcurrency    int
+
+	// OnInvalid is called when a periodic re-check finds the licence no
+	// longer valid. Nil exits the process, which is what the standalone
+	// binaries rely on; an embedding host supplies its own handling.
+	OnInvalid func(error)
 }
 
 // TelemetryEvent represents a telemetry event to be sent

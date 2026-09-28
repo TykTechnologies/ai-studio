@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -396,7 +397,7 @@ func (a *AuthService) ResetPassword(email string) error {
 	resetLink := fmt.Sprintf("%s/reset-password?token=%s", a.Config.FrontendURL, resetToken)
 
 	emailBody := ""
-	tmpl, err := template.ParseFiles("./templates/reset.tmpl")
+	tmpl, err := parseTemplate("reset.tmpl")
 	if err != nil {
 		emailBody = fmt.Sprintf("Click the following link to reset your password: %s", resetLink)
 	} else {
@@ -669,4 +670,13 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 
 func (a *AuthService) SendEmail(to, subject, body string) error {
 	return a.MailService.SendEmail(to, subject, body)
+}
+
+// parseTemplate parses a named email template (see templates.Read).
+func parseTemplate(name string) (*template.Template, error) {
+	text, err := templates.Read(name)
+	if err != nil {
+		return nil, err
+	}
+	return template.New(name).Parse(string(text))
 }

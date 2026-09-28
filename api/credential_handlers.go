@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
 )
 
@@ -230,7 +231,11 @@ func (a *API) sendCredentialsApprovedEmail(app *models.App, creds *models.Creden
 	}
 
 	var body string
-	tmpl, err := template.ParseFiles("./templates/user-app-approved-notification.tmpl")
+	var tmpl *template.Template
+	text, err := templates.Read("user-app-approved-notification.tmpl")
+	if err == nil {
+		tmpl, err = template.New("user-app-approved-notification.tmpl").Parse(string(text))
+	}
 	if err != nil {
 		// If template is not found, use a simple string
 		body = fmt.Sprintf("Your app has been approved:\n\nName: %s\n\nView app details: %s\n",

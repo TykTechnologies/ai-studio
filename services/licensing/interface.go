@@ -10,7 +10,7 @@ import (
 // Enterprise Edition: JWT validation, periodic checks, telemetry
 type Service interface {
 	// Start initializes and starts the licensing service
-	// - Validates license at boot (ENT: exits if invalid)
+	// - Validates license at boot (ENT: returns an error if invalid)
 	// - Starts periodic validation checks (ENT: every 24h)
 	// - Starts telemetry collection (ENT: every 1h)
 	Start() error
