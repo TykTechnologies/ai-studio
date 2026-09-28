@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -118,7 +117,18 @@ func (a *API) SetAuditService(s audit.Service) {
 	}
 }
 
+// NewAPI builds the API like New but panics where New returns an error, which
+// suits tests.
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
+	api, err := New(service, disableCORS, authService, config, proxy, staticFiles, licensingService)
+	if err != nil {
+		panic(err)
+	}
+	return api
+}
+
+// New builds the admin API: the gin router with its middleware and routes.
+func New(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) (*API, error) {
 	gin.SetMode(gin.ReleaseMode)
 
 	// Use gin.New() instead of gin.Default() to have control over middleware
@@ -222,7 +232,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
 	if sso.IsEnterpriseAvailable() {
 		if err := api.ssoService.InitInternalTIB(); err != nil {
-			log.Fatalf("Failed to initialize SSO service: %v", err)
+			return nil, fmt.Errorf("initialize SSO service: %w", err)
 		}
 	}
 
@@ -249,9 +259,8 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 
 	// Generate a random 32-byte key for CSRF
 	csrfKey := make([]byte, 32)
-	_, err := rand.Read(csrfKey)
-	if err != nil {
-		log.Fatalf("Failed to generate CSRF key: %v", err)
+	if _, err := rand.Read(csrfKey); err != nil {
+		return nil, fmt.Errorf("generate CSRF key: %w", err)
 	}
 
 	// no CSRF for tests
@@ -281,8 +290,10 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		api.router.Use(csrfGuard(csrfMiddleware))
 	}
 
-	api.setupRoutes()
-	return api
+	if err := api.setupRoutes(); err != nil {
+		return nil, err
+	}
+	return api, nil
 }
 
 // newHTTPServer builds the API http.Server with hardening timeouts.
@@ -330,15 +341,6 @@ func (a *API) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// Helper function to create a sub-filesystem
-func sub(fsys embed.FS, dir string) http.FileSystem {
-	sub, err := fs.Sub(fsys, dir)
-	if err != nil {
-		panic(err)
-	}
-	return http.FS(sub)
-}
-
 // getPaginationParams extracts pagination parameters from the request
 // If no parameters are provided, it returns default values for "all" pagination
 func getPaginationParams(c *gin.Context) (int, int, bool) {
@@ -364,7 +366,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 	return pageSize, pageNumber, all
 }
 
-func (a *API) setupRoutes() {
+func (a *API) setupRoutes() error {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
 
@@ -431,14 +433,14 @@ func (a *API) setupRoutes() {
 	// Serve static files from /build/static
 	staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("frontend static files: %w", err)
 	}
 	a.router.StaticFS("/static", http.FS(staticFS))
 
 	// Serve logos from /build/logos
 	logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("frontend logos: %w", err)
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
@@ -1302,6 +1304,7 @@ func (a *API) setupRoutes() {
 	if a.setupChatRoutesFunc != nil {
 		a.setupChatRoutesFunc(authed)
 	}
+	return nil
 }
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {

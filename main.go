@@ -32,6 +32,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/edition"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
@@ -71,6 +72,10 @@ func main() {
 	// Initialize logger with configured level
 	logger.Init(appConf.LogLevel)
 	logger.Infof("Log level set to: %s", appConf.LogLevel)
+
+	if err := edition.CheckRegistered(); err != nil {
+		logger.FatalErr("Incomplete build", err)
+	}
 
 	// Hand the process-wide keys and paths to the packages that use them.
 	secrets.SetEncryptionKey(appConf.SecretKey)
@@ -478,7 +483,10 @@ func main() {
 	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
-		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, licensingService)
+		apiServer, err = api.New(service, appConf.DisableCors, authService, config, p, staticFiles, licensingService)
+		if err != nil {
+			logger.FatalErr("Failed to create API server", err)
+		}
 
 		// Start server in goroutine
 		serverErrors := make(chan error, 1)

@@ -4,8 +4,6 @@
 package sso
 
 import (
-	"log"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -16,6 +14,5 @@ func NewService(config *Config, router *gin.Engine, db *gorm.DB, notificationSvc
 	if enterpriseFactory != nil {
 		return enterpriseFactory(config, router, db, notificationSvc)
 	}
-	log.Fatal("Enterprise SSO factory not registered")
-	return nil
+	panic("Enterprise SSO factory not registered; see edition.CheckRegistered")
 }
