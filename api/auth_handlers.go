@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 	"net/url"
@@ -377,7 +378,7 @@ func (a *API) handleVerifyEmail(c *gin.Context) {
 		return
 	}
 
-	emailVerifiedHandler(c.Writer, c.Request)
+	emailVerifiedHandler(c.Writer, a.publicPath("/"))
 	return
 }
 
@@ -524,14 +525,14 @@ func mapToSlice[T any](m map[uint]T) []T {
 	return slice
 }
 
-func emailVerifiedHandler(w http.ResponseWriter, r *http.Request) {
-	// HTML content with auto-redirect
-	html := `
+func emailVerifiedHandler(w http.ResponseWriter, home string) {
+	// HTML content with auto-redirect to home
+	page := `
 <!DOCTYPE html>
 <html>
 <head>
     <title>Email Verification</title>
-    <meta http-equiv="refresh" content="3;url=/">
+    <meta http-equiv="refresh" content="3;url=` + html.EscapeString(home) + `">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -563,7 +564,7 @@ func emailVerifiedHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// Write the HTML content
-	fmt.Fprint(w, html)
+	fmt.Fprint(w, page)
 }
 
 // OAuth Client Registration
@@ -806,12 +807,10 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	consentPath, _ := url.Parse("/oauth/consent")
-	consentPageQuery := consentPath.Query()
-	consentPageQuery.Set("auth_req_id", pendingRequest.ID)
-	consentPath.RawQuery = consentPageQuery.Encode()
-
-	finalConsentURL := consentPageBaseURL.ResolveReference(consentPath)
+	// JoinPath keeps any path in SITE_URL, such as a base path Studio is
+	// served under.
+	finalConsentURL := consentPageBaseURL.JoinPath("oauth", "consent")
+	finalConsentURL.RawQuery = url.Values{"auth_req_id": {pendingRequest.ID}}.Encode()
 	c.Redirect(http.StatusFound, finalConsentURL.String())
 }
 
@@ -1355,9 +1354,10 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 		return
 	}
 
+	// JoinPath keeps any path in the issuer URL, such as a base path Studio
+	// is served under.
 	resolve := func(p string) string {
-		rel, _ := url.Parse(p)
-		return baseURL.ResolveReference(rel).String()
+		return baseURL.JoinPath(p).String()
 	}
 
 	metadata := OAuthServerMetadata{

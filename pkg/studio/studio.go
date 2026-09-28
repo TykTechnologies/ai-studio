@@ -293,6 +293,7 @@ func New(opts Options) (_ *Studio, err error) {
 		CookieHTTPOnly:         true,
 		CookieSameSite:         http.SameSiteLaxMode,
 		CookieDomain:           "",
+		CookiePath:             cookiePath(conf.BasePath),
 		ResetTokenExpiry:       time.Hour,
 		SessionDuration:        conf.SessionDuration,
 		FrontendURL:            conf.SiteURL,
@@ -441,10 +442,19 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 }
 
 // HTTPHandler returns the admin API and UI handler: the portal, chat,
-// management API and admin interface. Studio expects to be served at the
-// root of the host it is mounted on.
+// management API and admin interface. Mount it at Config.BasePath (or the
+// root when that is empty); it strips the base path itself, so the host
+// passes requests through unchanged.
 func (s *Studio) HTTPHandler() http.Handler {
-	return s.api.Router()
+	return s.api.Handler()
+}
+
+// OAuthMetadataHandler serves Studio's OAuth authorization server metadata
+// for MCP clients. With a base path, RFC 8414 discovery happens outside it,
+// at /.well-known/oauth-authorization-server followed by the base path, so
+// the host mounts this handler there.
+func (s *Studio) OAuthMetadataHandler() http.Handler {
+	return s.api.OAuthMetadataHandler()
 }
 
 // ListenAndServe serves HTTPHandler on addr, with TLS when certFile and
@@ -541,4 +551,12 @@ func (s *Studio) stop(ctx context.Context) error {
 		s.licensing.Stop()
 	}
 	return errors.Join(errs...)
+}
+
+// cookiePath scopes Studio's cookies to its base path.
+func cookiePath(basePath string) string {
+	if basePath = config.NormalizeBasePath(basePath); basePath != "" {
+		return basePath
+	}
+	return "/"
 }

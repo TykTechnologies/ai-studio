@@ -31,6 +31,9 @@ type Config struct {
 	CookieSecure bool
 
 	CookieDomain     string
+	// CookiePath scopes the session cookie; empty means "/". Set it to the
+	// base path when Studio is served under one.
+	CookiePath       string
 	ResetTokenExpiry time.Duration
 	SessionDuration  time.Duration
 	FrontendURL      string
@@ -114,7 +117,7 @@ func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
 		Secure:   a.Config.CookieSecure,
 		HttpOnly: a.Config.CookieHTTPOnly,
 		SameSite: a.Config.CookieSameSite,
-		Path:     "/",
+		Path:     a.cookiePath(),
 		Domain:   a.Config.CookieDomain,
 	})
 
@@ -353,20 +356,39 @@ func (a *AuthService) Logout(c *gin.Context) error {
 		return err
 	}
 
-	for _, cookie := range c.Request.Cookies() {
-		http.SetCookie(c.Writer, &http.Cookie{
-			Name:     cookie.Name,
-			Value:    "",
-			Expires:  time.Now().Add(-1 * time.Hour),
-			Path:     "/",
-			Domain:   a.Config.CookieDomain,
-			Secure:   a.Config.CookieSecure,
-			HttpOnly: a.Config.CookieHTTPOnly,
-			SameSite: a.Config.CookieSameSite,
-		})
+	// Expire Studio's own cookies only: the session, and the identity
+	// broker's SSO session when there is one. Other cookies on the request
+	// may belong to a host application Studio is embedded in.
+	a.expireCookie(c, a.Config.CookieName, a.cookiePath())
+	if _, err := c.Request.Cookie(ssoSessionCookie); err == nil {
+		a.expireCookie(c, ssoSessionCookie, "/")
 	}
 
 	return nil
+}
+
+// ssoSessionCookie is the identity broker's session cookie (tothic.SessionName).
+const ssoSessionCookie = "_gothic_session"
+
+func (a *AuthService) expireCookie(c *gin.Context, name, path string) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Expires:  time.Now().Add(-1 * time.Hour),
+		MaxAge:   -1,
+		Path:     path,
+		Domain:   a.Config.CookieDomain,
+		Secure:   a.Config.CookieSecure,
+		HttpOnly: a.Config.CookieHTTPOnly,
+		SameSite: a.Config.CookieSameSite,
+	})
+}
+
+func (a *AuthService) cookiePath() string {
+	if a.Config.CookiePath == "" {
+		return "/"
+	}
+	return a.Config.CookiePath
 }
 
 // ErrUserDisabled is returned by the password-reset flow for a disabled
@@ -586,7 +608,7 @@ func (a *AuthService) ResendVerificationEmail(email string) error {
 		return fmt.Errorf("failed to update user with new verification token: %w", err)
 	}
 
-	verificationLink := fmt.Sprintf("%s/verify-email?token=%s", a.Config.FrontendURL, verificationToken)
+	verificationLink := fmt.Sprintf("%s/auth/verify-email?token=%s", a.Config.FrontendURL, verificationToken)
 	emailBody := fmt.Sprintf("Click the following link to verify your email: %s", verificationLink)
 
 	if err := a.SendEmail(user.Email, "Email Verification", emailBody); err != nil {

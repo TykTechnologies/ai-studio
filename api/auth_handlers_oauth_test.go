@@ -282,6 +282,24 @@ func TestHandleOAuthMetadata(t *testing.T) {
 	require.Equal(t, "http://auth.example.com/oauth/authorize", metadata.AuthorizationEndpoint)
 }
 
+// Studio served under a base path has a pathed issuer; the endpoints must
+// keep that path rather than resolving to the host root.
+func TestHandleOAuthMetadata_PathedIssuer(t *testing.T) {
+	_, router, _, _, _, _, _ := setupTestAPIWithMocks(t)
+	originalAuthServerURL := config.Get("").AuthServerURL
+	config.Get("").AuthServerURL = "https://cp.example.com/ai-studio"
+	defer func() { config.Get("").AuthServerURL = originalAuthServerURL }()
+
+	w := performOAuthRequest(router, "GET", "/.well-known/oauth-authorization-server", nil, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	var metadata OAuthServerMetadata
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.Equal(t, "https://cp.example.com/ai-studio", metadata.Issuer)
+	require.Equal(t, "https://cp.example.com/ai-studio/oauth/authorize", metadata.AuthorizationEndpoint)
+	require.Equal(t, "https://cp.example.com/ai-studio/oauth/token", metadata.TokenEndpoint)
+	require.Equal(t, "https://cp.example.com/ai-studio/oauth/register_client", metadata.RegistrationEndpoint)
+}
+
 func TestHandleRegisterOAuthClient_Success(t *testing.T) {
 	_, router, _, _, _, _, mockAuthSvc := setupTestAPIWithMocks(t)
 
@@ -332,6 +350,30 @@ func TestHandleRegisterOAuthClient_AuthFailure(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &respBody)
 	require.NoError(t, err)
 	require.Contains(t, respBody["error_middleware"], "simulated auth failure")
+}
+
+// The consent page lives under the base path included in SITE_URL.
+func TestHandleOAuthAuthorize_ConsentRedirectKeepsSitePath(t *testing.T) {
+	apiInstance, router, _, _, _, _, mockAuthSvc := setupTestAPIWithMocks(t)
+	testDB := apiInstance.config.DB
+
+	currentUser := ensureUserInDB(t, testDB, testUserGlobal)
+	mockAuthSvc.SimulateAuthenticatedUser = currentUser
+	mockAuthSvc.SimulateAuthError = nil
+
+	clientSvc := services.NewOAuthClientService(testDB)
+	testClient, _, err := clientSvc.CreateClient("AuthzPathClient", []string{"http://client.example.com/callback"}, &currentUser.ID, "mcp")
+	require.NoError(t, err)
+
+	appConf := config.Get("")
+	originalSiteURL := appConf.SiteURL
+	appConf.SiteURL = "https://cp.example.com/ai-studio"
+	defer func() { appConf.SiteURL = originalSiteURL }()
+	authURL := "/oauth/authorize?response_type=code&client_id=" + testClient.ClientID + "&redirect_uri=" + url.QueryEscape("http://client.example.com/callback") + "&code_challenge=challenge&code_challenge_method=S256&scope=mcp&state=123"
+	w := performOAuthRequest(router, "GET", authURL, nil, nil)
+	require.Equal(t, http.StatusFound, w.Code, "Body: "+w.Body.String())
+	location := w.Header().Get("Location")
+	require.True(t, strings.HasPrefix(location, "https://cp.example.com/ai-studio/oauth/consent?auth_req_id="), "Unexpected redirect URL: "+location)
 }
 
 func TestHandleOAuthAuthorize_SuccessRedirectsToConsent(t *testing.T) {

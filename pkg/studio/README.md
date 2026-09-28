@@ -10,7 +10,8 @@ import (
 )
 
 conf := config.LoadFrom(func(key string) string { return hostSettings[key] })
-conf.SiteURL = "https://control.example.com"
+conf.BasePath = "/ai-studio"
+conf.SiteURL = "https://control.example.com/ai-studio" // includes the base path
 
 s, err := studio.New(studio.Options{
 	Config:  conf,
@@ -26,7 +27,8 @@ if err != nil {
 }
 defer s.Stop(ctx)
 
-mux.Handle("/", s.HTTPHandler())      // admin API, portal, chat and UI
+mux.Handle("/ai-studio/", s.HTTPHandler()) // with conf.BasePath = "/ai-studio"
+mux.Handle("/.well-known/oauth-authorization-server/ai-studio", s.OAuthMetadataHandler())
 go s.StartProxy()                      // AI gateway on Config.ProxyPort
 go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode is "control"
 ```
@@ -36,9 +38,13 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - `New` migrates the database, seeds defaults, starts background services
   and builds the API, gateway and (in control mode) gRPC control server. It
   returns an error rather than exiting; nothing listens yet.
-- `HTTPHandler` is the admin API and UI. It still expects to be served at the
-  root of its host; serving it under a path prefix is the next phase of the
-  embedding work (see `features/Embedding.md`).
+- `HTTPHandler` is the admin API and UI, served under `Config.BasePath`; it
+  strips the prefix itself. Session and CSRF cookies are scoped to the base
+  path, and logout leaves the host's cookies alone. The frontend is not yet
+  built for a base path (see `features/Embedding.md`, Phase 5).
+- `OAuthMetadataHandler` serves the OAuth authorization server metadata for
+  MCP clients; with a base path, mount it at
+  `/.well-known/oauth-authorization-server<base path>` on the host root.
 - `ListenAndServe`, `StartProxy` and `StartGRPC` block until `Stop` or a
   serving error. `StartProxy` returns `ErrGatewayNotLicensed` at once without
   the gateway entitlement; `StartGRPC` returns `ErrNotControlPlane` outside

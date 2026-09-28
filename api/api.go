@@ -80,6 +80,9 @@ type API struct {
 	proxy                         *proxy.Proxy
 	// frontend holds the built admin UI, rooted at its build directory.
 	frontend                      fs.FS
+	// basePath is the path prefix the API and UI are served under ("" for
+	// the root); see Handler.
+	basePath                      string
 	setupChatRoutesFunc           func(*gin.RouterGroup)
 	ssoService                    sso.Service
 	licensingService              licensing.Service
@@ -196,6 +199,7 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 		config:           config,
 		proxy:            proxy,
 		frontend:         frontend,
+		basePath:         appconfig.NormalizeBasePath(appconfig.Get("").BasePath),
 		licensingService: licensingService,
 	}
 
@@ -274,7 +278,7 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 			// setups through is csrfGuard marking plain-HTTP requests
 			// plaintext, so gorilla does not demand an Origin/Referer.
 			csrf.Secure(false),
-			csrf.Path("/"),
+			csrf.Path(api.cookiePath()),
 		}
 		if appConf := appconfig.Get(""); appConf.DevMode {
 			// The dev frontend proxies to the API from another origin (its own
@@ -315,7 +319,7 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 func (a *API) Run(addr string, certFile string, keyFile string) error {
 	// Create http.Server for graceful shutdown support
-	server := newHTTPServer(addr, a.router)
+	server := newHTTPServer(addr, a.Handler())
 	a.serverMu.Lock()
 	a.server = server
 	a.serverMu.Unlock()
@@ -480,7 +484,7 @@ func (a *API) setupRoutes() error {
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Files at the root of the build (manifest.json, robots.txt, ...)
-		if serveBuildRootFile(c, a.frontend) {
+		if serveBuildRootFile(c, a.frontend, a.basePath) {
 			return
 		}
 
@@ -505,7 +509,7 @@ func (a *API) setupRoutes() error {
 			c.String(http.StatusInternalServerError, "Could not read index.html")
 			return
 		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", injectBasePath(indexFile, a.basePath))
 	})
 
 	a.router.GET("/csrf-token", func(c *gin.Context) {
@@ -1409,6 +1413,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
 		AllowSSOUserAPIKeys:  config.Get("").AllowSSOUserAPIKeys,
+		BasePath:             a.basePath,
 	}
 
 	c.JSON(http.StatusOK, cfg)
