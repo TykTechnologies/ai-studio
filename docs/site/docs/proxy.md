@@ -150,6 +150,24 @@ A single OpenAI-compatible endpoint at the root of the gateway, fronting every L
     export ANTHROPIC_AUTH_TOKEN="YOUR_APP_API_KEY"
     ```
 
+*   **Model discovery (Claude Code `/model` picker):** every request on this endpoint goes to the LLM's configured default model, whatever model name the client sends. So that Claude Code's picker shows that model, not Anthropic's built-in list, the endpoint also answers `GET /anthropic/{llmSlug}/v1/models`. Developers turn discovery on in Claude Code:
+
+    ```bash
+    export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1
+    ```
+
+    The picker then shows one extra entry, marked "From gateway", labelled `<LLM name> — <model id>`, for example `Bedrock Claude — eu.anthropic.claude-3-5-sonnet-20241022-v2:0`. The id is the configured Bedrock model id, unchanged.
+
+    ```json
+    {"data":[{"type":"model","id":"eu.anthropic.claude-3-5-sonnet-20241022-v2:0","display_name":"Bedrock Claude — eu.anthropic.claude-3-5-sonnet-20241022-v2:0"}],"has_more":false}
+    ```
+
+    *   It uses the same authentication and App access check as `/v1/messages`. It calls no model, so it spends no budget, runs no filters and records no usage.
+    *   The list is empty (`"data":[]`) when the LLM has no default model or its allowed models refuse the default model. Claude Code then falls back to its built-in list.
+    *   **Use Claude Code v2.1.223 or later.** Claude Code keeps an id only if it contains "claude" or "anthropic". Versions from v2.1.129 (when discovery arrived) up to v2.1.222 needed the id to *start* with one of those words, so they hide region-prefixed ids such as `us.anthropic...` or `eu.anthropic...`.
+    *   **Application inference profiles are not shown.** If the default model is an application inference profile ARN (`arn:aws:bedrock:...:application-inference-profile/...`), the id contains neither word and Claude Code drops it. Requests still work; only the picker entry is missing. System inference profile ARNs contain "anthropic" and are shown.
+    *   **Don't redirect this path.** Claude Code treats any redirect as a failed discovery, including an ingress redirect from `http://` to `https://`. Point `ANTHROPIC_BASE_URL` at the final URL.
+
 ### 5. Legacy Endpoints (`/llm/rest/...`, `/llm/stream/...`)
 
 *   `/llm/rest/{llmSlug}/...` handles non-streaming (synchronous) requests only; `/llm/stream/{llmSlug}/...` handles Server-Sent Events streaming only.
