@@ -238,8 +238,9 @@ MCP server** walks through:
    the operations of a Tyk OAS API into MCP tools),
 2. the proxy: name, listen path, the upstream server's base URL (the
    gateway strips the listen path and appends `/mcp` itself, so a pasted
-   `/mcp` suffix is removed) and an optional static upstream header, or the source API and the operations to expose as tools
-   with their names and descriptions,
+   `/mcp` suffix is removed), an optional static upstream header and which
+   of the server's tools the gateway lets through, or the source API and
+   the operations to expose as tools with their names and descriptions,
 3. consumer authentication (API key, OAuth 2.1 with its authorization
    servers, or keyless after an explicit confirmation), the deployment
    target, and the portal presentation, privacy score and whether to
@@ -249,6 +250,25 @@ MCP server** walks through:
    before creating it. The Dashboard validates it on create (Dashboard 5.14
    persists `dryRun` requests instead of validating them, so AI Studio never
    sends any).
+
+### Choosing the tools of a remote server
+
+A remote proxy either allows every tool the upstream offers (including tools
+it adds later) or only an allow-list; the gateway blocks every other tool.
+**Discover tools** (also run when you choose the allow-list) makes AI Studio
+call the upstream's `tools/list` at the same `/mcp` path the gateway will
+use, with the upstream header you entered, and lists the tools with their
+descriptions to tick. Names you typed before discovering stay selected, and
+any the server does not offer are flagged so a typo is caught before the
+proxy exists. Changing the URL or the credential drops the list.
+
+This is the only call AI Studio makes to an upstream MCP server. It runs
+only from the administrator's wizard (it needs `mcp-servers` execute), goes
+through the integration's URL policy with no internal-host exemption, caps
+the response at 8 MB and the list at 1,000 tools, and never stores the
+credential. When AI Studio cannot reach the upstream (an internal host, a
+network only the gateway can reach), the wizard says why and you type the
+tool names instead. Community submissions never trigger it.
 
 The upstream header value travels to the Dashboard in the create request
 and is stored nowhere in AI Studio. The definition AI Studio keeps masks it,
@@ -308,7 +328,7 @@ App.
 | Resource | Group | Actions | Notes |
 |---|---|---|---|
 | `tyk-connections` | Settings | read, write, delete, execute | execute: activate, disable, probe, sync now. Sensitive and privileged. |
-| `mcp-servers` | Context management | read, write, delete, execute, publish | write: presentation, catalogs, bundle; publish: portal visibility; execute: register, push, link, create policies, download a handoff with the credential. |
+| `mcp-servers` | Context management | read, write, delete, execute, publish | write: presentation, catalogs, bundle; publish: portal visibility; execute: register, discover an upstream's tools, push, link, create policies, download a handoff with the credential. |
 | `mcp-credentials` | AI Portal | read, write, delete, execute | execute: mint, rotate, suspend, resume, revoke, apply a widening change. Sensitive and privileged. |
 
 Portal actions (binding servers, minting a key for one's own App) are
@@ -322,7 +342,7 @@ checked by ownership and team visibility, not by roles.
 | `TYK_MCP_SYNC_MIN_INTERVAL` | `60s` | Floor for every connection's sync interval. |
 | `TYK_MCP_REQUEST_TIMEOUT` | `10s` | Dashboard reads; writes get three times this. |
 | `TYK_MCP_RATE_LIMIT_PER_SECOND` | `10` | Outbound requests per connection. |
-| `TYK_MCP_ALLOWED_HOSTS` | empty | Dashboard and MDCB hosts allowed (exact or `.suffix`); empty means any public host. |
+| `TYK_MCP_ALLOWED_HOSTS` | empty | Dashboard, MDCB and upstream MCP hosts (for tool discovery) allowed (exact or `.suffix`); empty means any public host. A host named exactly may be internal. |
 | `TYK_MCP_DENIED_HOSTS` | empty | Hosts always refused. |
 | `TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR` | `false` | Four-eyes on connection activation. |
 | `TYK_MCP_SYNC_RUN_RETENTION` | `720h` | How long sync run records are kept. |
@@ -336,6 +356,10 @@ Dashboard and MDCB URLs go through the same URL policy as webhook targets:
 `localhost`/`.local`/`.internal` refused unless the connection's
 **allow internal host** flag is set (an `execute` action, shown as a
 warning), re-checked against the resolved address on every connection.
+Tool discovery uses the same policy without that flag: an upstream on an
+internal address must be named exactly in `TYK_MCP_ALLOWED_HOSTS`, and once
+that variable is set, upstream hosts need to be listed alongside the
+Dashboards.
 
 ## Local development
 

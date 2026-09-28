@@ -10,6 +10,8 @@ import {
   FormControlLabel,
   Grid,
   MenuItem,
+  Radio,
+  RadioGroup,
   Step,
   StepLabel,
   Stepper,
@@ -46,6 +48,10 @@ const parseList = (s) =>
     .map((v) => v.trim())
     .filter(Boolean);
 
+// selectedTools is the allow-list the wizard sends: ticked discovered tools
+// plus any names typed by hand, de-duplicated. Empty means every tool.
+export const selectedTools = (f) => (f.tool_access === "selected" ? [...new Set([...(f.allowed_tools || []), ...parseList(f.manual_tools)])] : []);
+
 /**
  * buildPayload turns the wizard state into the register request. It is
  * exported so the test can assert the exact body without driving every field.
@@ -72,7 +78,7 @@ export const buildPayload = (f) => {
       body.upstream_auth_header_name = f.upstream_auth_header_name || "Authorization";
       body.upstream_auth_token = f.upstream_auth_token;
     }
-    body.allowed_tools = parseList(f.allowed_tools);
+    body.allowed_tools = selectedTools(f);
   } else {
     body.source_api_id = f.source_api_id;
     body.primitives = f.primitives
@@ -95,7 +101,9 @@ const initialForm = {
   upstream_url: "",
   upstream_auth_header_name: "Authorization",
   upstream_auth_token: "",
-  allowed_tools: "",
+  tool_access: "all",
+  allowed_tools: [],
+  manual_tools: "",
   source_api_id: "",
   primitives: [],
   consumer_auth: "auth_token",
@@ -112,6 +120,121 @@ const initialForm = {
   tool_catalogues: [],
 };
 
+/**
+ * ToolAccess lets the administrator allow every upstream tool or pick an
+ * allow-list, from the server's own tools/list when discovery works and by
+ * typing names when it does not.
+ */
+const ToolAccess = ({ form, discovery, onDiscover, onAccessChange, onToggle, onManualChange }) => {
+  const discovered = discovery.status === "done";
+  const selecting = form.tool_access === "selected";
+  const offered = new Set((discovery.tools || []).map((t) => t.name));
+  const unknown = discovered ? form.allowed_tools.filter((t) => !offered.has(t)) : [];
+  const allTicked = discovered && discovery.tools.length > 0 && discovery.tools.every((t) => form.allowed_tools.includes(t.name));
+
+  return (
+    <Box data-testid="tool-access">
+      <Typography variant="subtitle2">Tools</Typography>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, my: 1, flexWrap: "wrap" }}>
+        <SecondaryOutlineButton onClick={onDiscover} disabled={!form.upstream_url.trim() || discovery.status === "loading"} data-testid="discover-tools">
+          {discovered ? "Refresh tools" : "Discover tools"}
+        </SecondaryOutlineButton>
+        {discovery.status === "loading" && <CircularProgress size={20} />}
+        {discovered && (
+          <Typography variant="body2" color="text.secondary" data-testid="discovery-summary">
+            {discovery.tools.length} tool{discovery.tools.length === 1 ? "" : "s"} offered by {discovery.serverName || discovery.endpoint}
+            {discovery.truncated ? " (list truncated)" : ""}
+          </Typography>
+        )}
+        {discovery.status === "idle" && (
+          <Typography variant="body2" color="text.secondary">
+            AI Studio asks the upstream for its tool list, using the auth header above.
+          </Typography>
+        )}
+      </Box>
+      {discovery.status === "error" && (
+        <Alert severity="warning" sx={{ mb: 1 }} data-testid="discovery-error">
+          {discovery.error} You can still type the tool names.
+        </Alert>
+      )}
+      <RadioGroup row value={form.tool_access} onChange={onAccessChange}>
+        <FormControlLabel value="all" control={<Radio inputProps={{ "data-testid": "tools-all" }} />} label="Allow every tool the server offers" />
+        <FormControlLabel value="selected" control={<Radio inputProps={{ "data-testid": "tools-selected" }} />} label="Only the tools I select" />
+      </RadioGroup>
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+        {selecting ? "The gateway blocks every other tool, including tools the server adds later." : "Tools the server adds later are allowed too."}
+      </Typography>
+      {discovered && (discovery.tools.length > 0 || (selecting && unknown.length > 0)) && (
+        <Table size="small" data-testid="discovered-tools">
+          <TableHead>
+            <TableRow>
+              {selecting && (
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={allTicked}
+                    indeterminate={!allTicked && form.allowed_tools.some((t) => offered.has(t))}
+                    onChange={(e) => discovery.tools.forEach((t) => onToggle(t.name, e.target.checked))}
+                    inputProps={{ "aria-label": "Select all tools", "data-testid": "tool-all" }}
+                  />
+                </TableCell>
+              )}
+              <TableCell>Tool</TableCell>
+              <TableCell>Description</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {discovery.tools.map((t) => (
+              <TableRow key={t.name}>
+                {selecting && (
+                  <TableCell padding="checkbox">
+                    <Checkbox checked={form.allowed_tools.includes(t.name)} onChange={(e) => onToggle(t.name, e.target.checked)} inputProps={{ "aria-label": `Allow ${t.name}`, "data-testid": `tool-${t.name}` }} />
+                  </TableCell>
+                )}
+                <TableCell>
+                  <code>{t.name}</code>
+                  {t.title && (
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      {t.title}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">{t.description}</Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+            {selecting &&
+              unknown.map((name) => (
+                <TableRow key={`unknown-${name}`} data-testid={`unknown-tool-${name}`}>
+                  <TableCell padding="checkbox">
+                    <Checkbox checked onChange={() => onToggle(name, false)} inputProps={{ "aria-label": `Allow ${name}` }} />
+                  </TableCell>
+                  <TableCell>
+                    <code>{name}</code>
+                  </TableCell>
+                  <TableCell>
+                    <Chip size="small" color="warning" label="Not offered by this server; check the spelling" />
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      )}
+      {discovered && discovery.tools.length === 0 && <Typography variant="body2">The server reported no tools.</Typography>}
+      {selecting && !discovered && (
+        <TextField
+          fullWidth
+          label="Allowed tools (comma separated)"
+          value={form.manual_tools}
+          onChange={onManualChange}
+          inputProps={{ "data-testid": "allowed-tools" }}
+          helperText="Discover the server's tools to pick from its list instead of typing names."
+        />
+      )}
+    </Box>
+  );
+};
+
 const MCPServerRegister = () => {
   const navigate = useNavigate();
   const [status, setStatus] = useState(null);
@@ -126,6 +249,9 @@ const MCPServerRegister = () => {
   const [opsLoading, setOpsLoading] = useState(false);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+  // Tool discovery for remote servers: Studio asks the upstream for its
+  // tools/list. It goes stale when the URL or credential changes.
+  const [discovery, setDiscovery] = useState({ status: "idle" });
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target?.type === "checkbox" ? e.target.checked : e.target.value }));
 
@@ -214,6 +340,45 @@ const MCPServerRegister = () => {
     [form.connection_id]
   );
 
+  // Editing what discovery was based on drops the discovered list; ticked
+  // names move to the typed list so nothing is lost.
+  const setUpstream = (k) => (e) => {
+    const value = e.target.value;
+    setForm((f) => ({
+      ...f,
+      [k]: value,
+      allowed_tools: [],
+      manual_tools: discovery.status === "done" ? [...parseList(f.manual_tools), ...f.allowed_tools].join(", ") : f.manual_tools,
+    }));
+    if (discovery.status !== "idle") setDiscovery({ status: "idle" });
+  };
+
+  const discoverTools = async () => {
+    setDiscovery({ status: "loading" });
+    try {
+      const res = await apiClient.post("/mcp-servers/discover-tools", {
+        upstream_url: form.upstream_url,
+        upstream_auth_header_name: form.upstream_auth_header_name,
+        upstream_auth_token: form.upstream_auth_token,
+      });
+      const tools = res.data?.tools || [];
+      setDiscovery({ status: "done", tools, serverName: res.data?.server_name, endpoint: res.data?.endpoint, truncated: res.data?.truncated });
+      // Typed names join the selection; those the server does not offer are flagged.
+      setForm((f) => ({ ...f, allowed_tools: [...new Set([...f.allowed_tools, ...parseList(f.manual_tools)])], manual_tools: "" }));
+    } catch (err) {
+      setDiscovery({ status: "error", error: apiErrorDetail(err, "Could not list the server's tools") });
+    }
+  };
+
+  const setToolAccess = (e) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, tool_access: value }));
+    if (value === "selected" && discovery.status === "idle" && form.upstream_url.trim()) discoverTools();
+  };
+
+  const toggleTool = (name, on) =>
+    setForm((f) => ({ ...f, allowed_tools: on ? [...new Set([...f.allowed_tools, name])] : f.allowed_tools.filter((t) => t !== name) }));
+
   const validateStep = () => {
     switch (step) {
       case 0:
@@ -222,6 +387,7 @@ const MCPServerRegister = () => {
       case 1:
         if (!form.name.trim()) return "A name is required.";
         if (form.kind === "remote" && !form.upstream_url.trim()) return "The upstream MCP URL is required.";
+        if (form.kind === "remote" && form.tool_access === "selected" && selectedTools(form).length === 0) return "Select at least one tool, or allow every tool the server offers.";
         if (form.kind === "rest_to_mcp" && !form.source_api_id) return "Choose the source API.";
         if (form.kind === "rest_to_mcp" && !form.primitives.some((p) => p.selected)) return "Select at least one operation to expose.";
         return null;
@@ -353,16 +519,23 @@ const MCPServerRegister = () => {
               {form.kind === "remote" ? (
                 <>
                   <Grid item xs={12}>
-                    <TextField fullWidth label="Upstream MCP URL" value={form.upstream_url} onChange={set("upstream_url")} inputProps={{ "data-testid": "upstream-url" }} helperText="The remote MCP server's base URL; the gateway appends /mcp itself (a pasted /mcp suffix is removed). AI Studio never calls it; the Tyk Gateway does." required />
+                    <TextField fullWidth label="Upstream MCP URL" value={form.upstream_url} onChange={setUpstream("upstream_url")} inputProps={{ "data-testid": "upstream-url" }} helperText="The remote MCP server's base URL; the gateway appends /mcp itself (a pasted /mcp suffix is removed). The Tyk Gateway calls it; AI Studio calls it only when you discover its tools." required />
                   </Grid>
                   <Grid item xs={12} md={4}>
-                    <TextField fullWidth label="Upstream auth header" value={form.upstream_auth_header_name} onChange={set("upstream_auth_header_name")} inputProps={{ "data-testid": "upstream-header" }} />
+                    <TextField fullWidth label="Upstream auth header" value={form.upstream_auth_header_name} onChange={setUpstream("upstream_auth_header_name")} inputProps={{ "data-testid": "upstream-header" }} />
                   </Grid>
                   <Grid item xs={12} md={8}>
-                    <TextField fullWidth type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={set("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText="Sent to the Dashboard once and never stored in AI Studio." autoComplete="new-password" />
+                    <TextField fullWidth type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={setUpstream("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText="Used to discover tools and sent to the Dashboard; never stored in AI Studio." autoComplete="new-password" />
                   </Grid>
                   <Grid item xs={12}>
-                    <TextField fullWidth label="Allowed tools (optional, comma separated)" value={form.allowed_tools} onChange={set("allowed_tools")} inputProps={{ "data-testid": "allowed-tools" }} helperText="When set, every other tool the upstream server offers is blocked by the gateway." />
+                    <ToolAccess
+                      form={form}
+                      discovery={discovery}
+                      onDiscover={discoverTools}
+                      onAccessChange={setToolAccess}
+                      onToggle={toggleTool}
+                      onManualChange={set("manual_tools")}
+                    />
                   </Grid>
                 </>
               ) : (

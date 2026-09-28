@@ -61,14 +61,18 @@ type tykMCPEntHarness struct {
 	admin *models.User
 }
 
-func setupTykMCPEnterpriseAPI(t *testing.T) *tykMCPEntHarness {
+func setupTykMCPEnterpriseAPI(t *testing.T, tweaks ...func(*config.TykMCPConfig)) *tykMCPEntHarness {
 	t.Helper()
 	t.Setenv("AUDIT_ENABLED", "true")
 	t.Setenv("TYK_AI_SECRET_KEY", "test-encryption-key")
 	db := sharedMemoryDB(t)
 	service := apitest.SetupTestService(db)
 	service.SetEventBus(eventbridge.NewBus())
-	service.InitTykMCP(config.TykMCPConfig{Enabled: true, SyncMinInterval: 10 * time.Second, RequestTimeout: 2 * time.Second, RateLimitPerSecond: 100}, "test")
+	cfg := config.TykMCPConfig{Enabled: true, SyncMinInterval: 10 * time.Second, RequestTimeout: 2 * time.Second, RateLimitPerSecond: 100}
+	for _, tweak := range tweaks {
+		tweak(&cfg)
+	}
+	service.InitTykMCP(cfg, "test")
 	t.Cleanup(service.TykMCP.Stop)
 
 	authCfg := apitest.SetupTestAuthConfig(db, service)

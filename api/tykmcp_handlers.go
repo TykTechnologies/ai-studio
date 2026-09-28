@@ -70,6 +70,8 @@ func tykMCPErrorResponse(c *gin.Context, err error, fallback string) {
 		webhookError(c, http.StatusBadRequest, "Bad Request", err.Error())
 	case errors.Is(err, tykmcp.ErrDashboard):
 		webhookError(c, http.StatusBadGateway, "Tyk Dashboard Error", err.Error())
+	case errors.Is(err, tykmcp.ErrUpstreamDiscovery):
+		webhookError(c, http.StatusBadGateway, "MCP Server Error", err.Error())
 	default:
 		webhookError(c, http.StatusInternalServerError, "Internal Server Error", fallback)
 	}

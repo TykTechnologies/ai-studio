@@ -136,16 +136,100 @@ describe("MCPServerRegister", () => {
     expect(screen.queryByTestId("preview")).not.toBeInTheDocument();
   });
 
+  describe("tool discovery", () => {
+    const toProxyDetails = async () => {
+      renderPage();
+      await screen.findByTestId("connection");
+      await selectOption("connection", "Prod");
+      fireEvent.click(screen.getByTestId("next"));
+      fireEvent.change(await screen.findByTestId("name"), { target: { value: "Orders MCP" } });
+      fireEvent.change(screen.getByTestId("upstream-url"), { target: { value: "https://orders.example.com" } });
+      fireEvent.change(screen.getByTestId("upstream-token"), { target: { value: "Bearer k1" } });
+    };
+    const dryRunBody = async () => {
+      fireEvent.click(screen.getByTestId("next"));
+      await screen.findByTestId("gateway-tags");
+      fireEvent.click(screen.getByTestId("confirm-no-tags"));
+      fireEvent.click(screen.getByTestId("next"));
+      await screen.findByTestId("preview");
+      return apiClient.post.mock.calls.find((c) => c[0] === "/mcp-servers/register?dry_run=1")[1];
+    };
+
+    it("offers the upstream's tools as a checklist", async () => {
+      apiClient.post.mockImplementation((path) => {
+        if (path === "/mcp-servers/discover-tools") {
+          return Promise.resolve({ data: { endpoint: "https://orders.example.com/mcp", server_name: "orders", tools: [{ name: "get_order", description: "Fetch one order" }, { name: "list_orders", description: "List orders" }] } });
+        }
+        return Promise.resolve({ data: { definition: {}, warnings: [], endpoint_url: "" } });
+      });
+      await toProxyDetails();
+
+      // Choosing an allow-list discovers the tools with the typed credential.
+      fireEvent.click(screen.getByTestId("tools-selected"));
+      await screen.findByTestId("discovered-tools");
+      expect(apiClient.post).toHaveBeenCalledWith("/mcp-servers/discover-tools", { upstream_url: "https://orders.example.com", upstream_auth_header_name: "Authorization", upstream_auth_token: "Bearer k1" });
+      expect(screen.getByTestId("discovery-summary")).toHaveTextContent("2 tools offered by orders");
+      expect(screen.getByText("Fetch one order")).toBeInTheDocument();
+
+      // Nothing ticked yet: the step refuses to continue.
+      fireEvent.click(screen.getByTestId("next"));
+      expect(await screen.findByTestId("page-error")).toHaveTextContent("Select at least one tool");
+      fireEvent.click(screen.getByTestId("tool-get_order"));
+
+      const body = await dryRunBody();
+      expect(body.allowed_tools).toEqual(["get_order"]);
+    });
+
+    it("keeps typed names across discovery and flags the ones the server lacks", async () => {
+      apiClient.post.mockResolvedValue({ data: { endpoint: "https://orders.example.com/mcp", tools: [{ name: "get_order" }] } });
+      await toProxyDetails();
+      // Choose the allow-list before a URL exists so discovery is not automatic.
+      fireEvent.change(screen.getByTestId("upstream-url"), { target: { value: "" } });
+      fireEvent.click(screen.getByTestId("tools-selected"));
+      fireEvent.change(screen.getByTestId("upstream-url"), { target: { value: "https://orders.example.com" } });
+      fireEvent.change(screen.getByTestId("allowed-tools"), { target: { value: "get_order, get_ordr" } });
+      fireEvent.click(screen.getByTestId("discover-tools"));
+
+      expect(await screen.findByTestId("unknown-tool-get_ordr")).toHaveTextContent("Not offered by this server");
+      expect(screen.getByTestId("tool-get_order")).toBeChecked();
+      fireEvent.click(within(screen.getByTestId("unknown-tool-get_ordr")).getByRole("checkbox"));
+      expect(screen.queryByTestId("unknown-tool-get_ordr")).not.toBeInTheDocument();
+
+      // Changing the URL drops the stale list; ticked names become typed ones.
+      fireEvent.change(screen.getByTestId("upstream-url"), { target: { value: "https://orders2.example.com" } });
+      expect(screen.queryByTestId("discovered-tools")).not.toBeInTheDocument();
+      expect(screen.getByTestId("allowed-tools")).toHaveValue("get_order");
+    });
+
+    it("falls back to typed names when the server cannot be reached", async () => {
+      apiClient.post.mockImplementation((path) => {
+        if (path === "/mcp-servers/discover-tools") {
+          return Promise.reject({ response: { data: { errors: [{ detail: "url is not allowed by the Tyk Dashboard URL policy: AI Studio does not call internal MCP hosts" }] } } });
+        }
+        return Promise.resolve({ data: { definition: {}, warnings: [], endpoint_url: "" } });
+      });
+      await toProxyDetails();
+      fireEvent.click(screen.getByTestId("discover-tools"));
+      expect(await screen.findByTestId("discovery-error")).toHaveTextContent("does not call internal MCP hosts");
+
+      fireEvent.click(screen.getByTestId("tools-selected"));
+      fireEvent.change(screen.getByTestId("allowed-tools"), { target: { value: "get_order, list_orders" } });
+      const body = await dryRunBody();
+      expect(body.allowed_tools).toEqual(["get_order", "list_orders"]);
+    });
+  });
+
   it("buildPayload omits upstream auth when no token is given and parses lists", () => {
     const body = buildPayload({
       connection_id: "1", kind: "remote", name: "A", listen_path: "", consumer_auth: "auth_token", gateway_tags: ["edge-eu"], confirm_no_gateway_tags: false,
-      description: "", long_description: "", tags: "a, b", privacy_score: "", publish: false, upstream_url: "https://u", upstream_auth_header_name: "X", upstream_auth_token: "", allowed_tools: "t1,t2", primitives: [],
+      description: "", long_description: "", tags: "a, b", privacy_score: "", publish: false, upstream_url: "https://u", upstream_auth_header_name: "X", upstream_auth_token: "", tool_access: "selected", allowed_tools: ["t1"], manual_tools: "t2, t1", primitives: [],
       tool_catalogues: [{ id: "4", name: "Ops tools" }, { id: 5, name: "Research" }],
     });
     expect(body.tool_catalogue_ids).toEqual([4, 5]);
     expect(body.upstream_auth_token).toBeUndefined();
     expect(body.upstream_auth_header_name).toBeUndefined();
     expect(body.allowed_tools).toEqual(["t1", "t2"]);
+    expect(buildPayload({ kind: "remote", tool_access: "all", allowed_tools: ["t1"], manual_tools: "t2", primitives: [], gateway_tags: [] }).allowed_tools).toEqual([]);
     expect(body.tags).toEqual(["a", "b"]);
     expect(body.privacy_score).toBeUndefined();
     expect(body.gateway_tags).toEqual(["edge-eu"]);

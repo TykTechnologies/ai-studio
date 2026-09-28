@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/mcpintrospect"
 )
 
 // ErrEnterpriseFeature is returned by Community Edition for every operation.
@@ -40,6 +41,7 @@ var (
 	ErrNotBrokerable         = errors.New("no access key can be minted for this MCP server")
 	ErrNotVisible            = errors.New("MCP server is not available to you")
 	ErrInUse                 = errors.New("the connection still has live credentials")
+	ErrUpstreamDiscovery     = errors.New("could not list the MCP server's tools")
 )
 
 // Actor is the administrator or portal user performing an operation.
@@ -345,6 +347,22 @@ type RegisterInput struct {
 	ToolCatalogueIDs []uint   `json:"tool_catalogue_ids"`
 }
 
+// DiscoverToolsInput names a remote MCP server whose tools the registration
+// wizard lists. UpstreamAuthToken is used for this one call and never stored.
+type DiscoverToolsInput struct {
+	UpstreamURL            string `json:"upstream_url"`
+	UpstreamAuthHeaderName string `json:"upstream_auth_header_name"`
+	UpstreamAuthToken      string `json:"upstream_auth_token"`
+}
+
+// DiscoverToolsResult is what the upstream server reported in tools/list.
+type DiscoverToolsResult struct {
+	// Endpoint is the URL Studio called: the upstream base plus /mcp, the
+	// same path the Tyk Gateway will call.
+	Endpoint string `json:"endpoint"`
+	mcpintrospect.Result
+}
+
 // RegisterPreview is a dry-run result: the definition Studio would send
 // (secrets masked), the Dashboard's expanded rendering when it returned one,
 // and warnings the administrator should read before confirming.
@@ -447,6 +465,10 @@ type Service interface {
 	// PushServer replaces a server's definition on the Dashboard after
 	// checking the live hash and restoring masked secrets.
 	PushServer(ctx context.Context, actor Actor, id uint, in PushInput, dryRun bool) (*RegisterPreview, *models.MCPServerResponse, error)
+	// DiscoverUpstreamTools calls a remote MCP server's tools/list so the
+	// wizard can offer its tools for the allow-list. Studio makes the call,
+	// under the Tyk MCP outbound URL policy.
+	DiscoverUpstreamTools(ctx context.Context, in DiscoverToolsInput) (*DiscoverToolsResult, error)
 	ListSourceAPIs(ctx context.Context, connectionID uint, search string) ([]SourceAPI, error)
 	ListSourceOperations(ctx context.Context, connectionID uint, apiID string) ([]SourceOperation, error)
 	// GetSourceAPIDocument fetches one Tyk OAS API for the Tools import,
