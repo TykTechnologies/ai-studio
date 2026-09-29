@@ -18,7 +18,7 @@ behaviour unchanged:
 | 3 | Configurable base path for the backend | Done |
 | 4 | Pluggable authentication and CSRF | Done |
 | 5 | UI served under a base path; host-authentication UI mode | Done |
-| 6 | Shipping the built UI to importers | Planned |
+| 6 | Shipping the built UI to importers | Done |
 
 Decisions that shape the design:
 
@@ -240,4 +240,31 @@ Verified by hand in a browser: the standalone binary with
 deep-link reloads, logout; every request stayed under the prefix), the same
 build at the root, and `embed-host` (host login, provisioning as an
 administrator, logout through the host).
+
+## UI assets for importers (Phase 6)
+
+`go:embed` needs the built frontend at compile time, and
+`ui/admin-frontend/build` is not committed, so a host that imports Studio
+as a module cannot compile the default `ui` package.
+
+- `ui` embeds `admin-frontend/build` by default (`ui/embed.go`). With the
+  `studio_noui` build tag (`ui/noui.go`) it embeds only `ui/noui/index.html`,
+  a tracked placeholder page, and `ui.Embedded` is false. `pkg/studio` then
+  expects `Options.UIAssets` and logs a warning without it. `pkg/studio`
+  imports nothing else that embeds uncommitted files (the docs site server
+  is only in `main`).
+- The `ui-assets` job in `release.yml` builds the frontend once per tag,
+  packs it as `tyk-ai-studio-ui-<tag>.tar.gz` with a `.sha256`, and uploads
+  both to the tag's GitHub release, creating a draft release when there is
+  none. It is the only job with `contents: write`.
+- A host builds with `-tags studio_noui`, unpacks the tarball for the Studio
+  version it imports, and passes `os.DirFS(dir)` (or its own embed of the
+  directory) as `Options.UIAssets`. `examples/embed-host -ui <dir>` does
+  this.
+
+Verified: with `ui/admin-frontend/build` moved away, the default build of
+`pkg/studio` fails on the embed pattern and the `studio_noui` build of
+`pkg/studio` and `examples/embed-host` succeeds; that `studio_noui` host,
+given a tarball made as the release job makes it, serves the full console
+under `/ai-studio`.
 

@@ -295,3 +295,52 @@ jobs:
             dist/*.rpm
             !dist/*PAYG*.rpm
             !dist/*fips*.rpm
+
+  # The built admin frontend, for hosts that embed Studio through pkg/studio.
+  # They compile with -tags studio_noui (the ui package then embeds nothing)
+  # and serve these files with studio.Options.UIAssets; see
+  # pkg/studio/README.md. Attached to the tag's GitHub release, which is
+  # created as a draft when it does not exist yet.
+  ui-assets:
+    name: "ui-assets"
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write # upload the release asset
+    steps:
+      -
+        name: Checkout of midsommar
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 1
+          path: midsommar
+      -
+        name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+      -
+        name: Build UI
+        run: |
+          cd ui/admin-frontend
+          npm ci --ignore-scripts
+          npm rebuild
+          PUBLIC_URL="." REACT_APP_API_URL="" CI=false npm run build
+          test -f build/index.html
+      -
+        name: Attach UI assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          asset="tyk-ai-studio-ui-${TAG}.tar.gz"
+          tar -czf "$asset" -C ui/admin-frontend/build .
+          sha256sum "$asset" > "$asset.sha256"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" \
+              --notes "AI Studio $TAG. Assets are attached by the release workflow."
+          fi
+          gh release upload "$TAG" "$asset" "$asset.sha256" --clobber

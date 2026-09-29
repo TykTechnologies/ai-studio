@@ -73,8 +73,13 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   the secrets key are process-wide; `New` returns `ErrAlreadyRunning` until
   the running Studio is stopped.
 - **Frontend assets.** Package `ui` embeds `ui/admin-frontend/build`, which
-  is not committed; build it (`npm run build`) before compiling, or pass
-  `Options.UIAssets`.
+  is not committed, so a module download of Studio has no frontend to embed.
+  Build with `-tags studio_noui` (package `ui` then embeds only a placeholder
+  page) and pass the release's assets: every release tag carries
+  `tyk-ai-studio-ui-<tag>.tar.gz` (and a `.sha256`) on its GitHub release.
+  Unpack it and set `Options.UIAssets` to `os.DirFS(dir)`, or embed the
+  directory in the host's own binary. In this repository, `npm run build` in
+  `ui/admin-frontend` and the default build tags embed it as before.
 - **Telemetry globals.** Pass `TracerProvider` and `MeterProvider` to keep
   Studio off the OpenTelemetry globals. Without them Studio configures
   tracing and metrics from `Config` the way the standalone binary does,

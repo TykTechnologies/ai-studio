@@ -322,6 +322,7 @@ See `docs/site/docs/plugins-edge-to-control.md` for details.
 - **For local builds**: Frontend must be built before Go binary (the app embeds frontend assets)
 - Running `go build` without building frontend first will fail with empty directory errors
 - Use `make build-local` for local builds (includes frontend build)
+- Hosts importing `pkg/studio` as a module build with `-tags studio_noui` and pass the release UI tarball as `studio.Options.UIAssets` (see `pkg/studio/README.md`)
 
 ### Queue System Architecture
 The chat session system uses an interface-driven message queue:

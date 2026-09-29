@@ -85,8 +85,10 @@ type Options struct {
 	// periodic re-check. Nil exits the process.
 	OnLicenceInvalid func(error)
 
-	// UIAssets is the built admin frontend, rooted at its build directory.
-	// Nil uses the frontend embedded in package ui.
+	// UIAssets is the built admin frontend, rooted at its build directory
+	// (for example os.DirFS over the unpacked tyk-ai-studio-ui release
+	// tarball). Nil uses the frontend embedded in package ui, which a build
+	// with the studio_noui tag leaves out.
 	UIAssets fs.FS
 
 	// SkipLLMDefaults skips seeding the default LLM configurations and
@@ -408,6 +410,9 @@ func New(opts Options) (_ *Studio, err error) {
 
 	frontend := opts.UIAssets
 	if frontend == nil {
+		if !ui.Embedded {
+			logger.Warn("Built with studio_noui and no Options.UIAssets: the web interface is a placeholder page")
+		}
 		frontend = ui.FS
 	}
 	s.api, err = api.New(service, conf.DisableCors, authService, authConfig, s.proxy, frontend, s.licensing)

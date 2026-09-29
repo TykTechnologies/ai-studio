@@ -1,19 +1,22 @@
-// Package ui holds the built admin frontend. The build directory is produced
-// by `npm run build` in admin-frontend and is not committed, so it must exist
-// before this package compiles.
+// Package ui holds the built admin frontend.
+//
+// By default it embeds admin-frontend/build, which `npm run build` in
+// admin-frontend produces and which is not committed, so it must exist before
+// this package compiles. A host embedding Studio through pkg/studio from a
+// module download has no build directory: it compiles with the studio_noui
+// build tag, which embeds only a placeholder page, and serves the release's
+// UI assets through studio.Options.UIAssets.
 package ui
 
-import (
-	"embed"
-	"io/fs"
-)
-
-//go:embed admin-frontend/build
-var build embed.FS
+import "io/fs"
 
 // FS is the built admin frontend rooted at its build directory: index.html,
 // static/, logos/ and the root-level assets.
-var FS fs.FS = mustSub(build, "admin-frontend/build")
+var FS fs.FS = mustSub(files, root)
+
+// Embedded reports whether FS holds the real frontend rather than the
+// studio_noui placeholder.
+const Embedded = embedded
 
 func mustSub(fsys fs.FS, dir string) fs.FS {
 	sub, err := fs.Sub(fsys, dir)

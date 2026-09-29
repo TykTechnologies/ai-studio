@@ -9,7 +9,9 @@
 // Then open http://localhost:8090/, sign in as "admin" (a Studio
 // administrator) or any other name (a regular user), and follow the link
 // into Studio. The frontend must be built first (npm run build in
-// ui/admin-frontend), as for the standalone binary.
+// ui/admin-frontend), as for the standalone binary; or build with
+// -tags studio_noui and pass -ui with the unpacked tyk-ai-studio-ui release
+// tarball, as a host importing Studio as a module does.
 package main
 
 import (
@@ -63,6 +65,7 @@ func (cookieAuth) Authenticate(r *http.Request) (*studio.Identity, error) {
 func main() {
 	addr := flag.String("addr", ":8090", "listen address")
 	dbPath := flag.String("db", "embed-host.db", "SQLite database for Studio")
+	uiDir := flag.String("ui", "", "directory holding the unpacked UI release assets (required with -tags studio_noui)")
 	flag.Parse()
 
 	// Studio's configuration comes from the host, not the environment.
@@ -85,14 +88,18 @@ func main() {
 		log.Fatalf("open database: %v", err)
 	}
 
-	s, err := studio.New(studio.Options{
+	opts := studio.Options{
 		Config:    conf,
 		DB:        db,
 		Version:   "embed-host",
 		Auth:      cookieAuth{},
 		LoginURL:  "/login",
 		LogoutURL: "/logout",
-	})
+	}
+	if *uiDir != "" {
+		opts.UIAssets = os.DirFS(*uiDir)
+	}
+	s, err := studio.New(opts)
 	if err != nil {
 		log.Fatalf("start AI Studio: %v", err)
 	}
