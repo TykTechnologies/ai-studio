@@ -4,12 +4,7 @@ go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => ../../../..
 
-replace github.com/TykTechnologies/midsommar/microgateway => ../../../../microgateway
-
-require (
-	github.com/TykTechnologies/midsommar/microgateway v0.0.0
-	github.com/TykTechnologies/midsommar/v2 v2.0.0
-)
+require github.com/TykTechnologies/midsommar/v2 v2.0.0
 
 require (
 	github.com/fatih/color v1.17.0 // indirect

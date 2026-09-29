@@ -272,6 +272,18 @@ given a tarball made as the release job makes it, serves the full console
 under `/ai-studio`.
 
 
+## Module layout
+
+A host imports the root module only. The root module does not require the
+microgateway module: the gateway plugin interfaces and SDK that `pkg/plugin_sdk`
+uses live in `pkg/gatewayplugin/{interfaces,sdk}`, and the gateway management
+gRPC API is generated from `proto/microgateway_management.proto` into
+`proto/microgateway_management`. The old paths under `microgateway/plugins/`
+and `microgateway/proto/microgateway_management` are deprecated forwarding
+packages (type aliases and wrappers, generated when the code moved) so that
+existing plugins keep compiling. The proto package name is unchanged, so the
+wire format and gRPC method names are the same.
+
 ## gorm isolation
 
 The Tyk Dashboard `replace`s `gorm.io/gorm` with a fork, and a `replace`

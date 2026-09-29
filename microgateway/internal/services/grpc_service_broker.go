@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	pb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

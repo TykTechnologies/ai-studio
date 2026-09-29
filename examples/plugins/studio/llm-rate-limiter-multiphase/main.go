@@ -14,7 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	studiomgmt "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
-	gwmgmt "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	gwmgmt "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 )
 
 // Embed UI assets and manifest into the binary

@@ -5,7 +5,6 @@ go 1.26.6
 require (
 	dario.cat/mergo v1.0.2
 	github.com/Masterminds/semver/v3 v3.2.1
-	github.com/TykTechnologies/midsommar/microgateway v0.0.0
 	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0
 	github.com/TykTechnologies/tyk-identity-broker v1.7.0
 	github.com/amikos-tech/chroma-go v0.2.5
@@ -317,7 +316,5 @@ require (
 )
 
 replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260927043826-21bacb978dfe
-
-replace github.com/TykTechnologies/midsommar/microgateway => ./microgateway
 
 replace github.com/TykTechnologies/midsommar/v2/enterprise => ./enterprise

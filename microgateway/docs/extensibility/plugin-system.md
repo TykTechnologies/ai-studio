@@ -173,7 +173,7 @@ package main
 
 import (
     "context"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type MyPlugin struct {
@@ -346,7 +346,7 @@ The plugin SDK provides:
 ### SDK Installation
 ```bash
 # Import SDK in plugin code
-import "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+import "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 
 # SDK provides all necessary interfaces and utilities
 ```

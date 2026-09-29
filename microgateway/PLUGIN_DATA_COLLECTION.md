@@ -87,7 +87,7 @@ package main
 
 import (
     "context"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type MyDataCollector struct {

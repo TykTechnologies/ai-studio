@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/rpc"
 
-	mgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"github.com/hashicorp/go-plugin"

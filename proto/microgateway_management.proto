@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package microgateway_management;
 
-option go_package = "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management";
+option go_package = "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management";
 
 import "google/protobuf/timestamp.proto";
 

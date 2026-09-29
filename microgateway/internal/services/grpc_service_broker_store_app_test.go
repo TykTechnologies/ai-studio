@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	pb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"

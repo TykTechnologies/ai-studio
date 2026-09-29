@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
-	mgwsdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	mgwsdk "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/google/uuid"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"

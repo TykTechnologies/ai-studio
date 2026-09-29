@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 // ElasticsearchCollector implements DataCollectionPlugin to send data to Elasticsearch

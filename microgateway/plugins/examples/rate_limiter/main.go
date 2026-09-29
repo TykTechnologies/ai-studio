@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 // RateLimiterPlugin implements a simple rate limiter for pre-authentication

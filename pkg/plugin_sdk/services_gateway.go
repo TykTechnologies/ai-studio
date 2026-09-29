@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	mgwsdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
-	mgwpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	mgwsdk "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
+	mgwpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )

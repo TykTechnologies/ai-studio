@@ -305,8 +305,6 @@ go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
 
-replace github.com/TykTechnologies/midsommar/microgateway => {{.RelativeReplace}}/microgateway
-
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 `
 
@@ -523,8 +521,6 @@ const gatewayGoModTemplate = `module github.com/TykTechnologies/midsommar/exampl
 go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
-
-replace github.com/TykTechnologies/midsommar/microgateway => {{.RelativeReplace}}/microgateway
 
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 `
@@ -788,8 +784,6 @@ go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
 
-replace github.com/TykTechnologies/midsommar/microgateway => {{.RelativeReplace}}/microgateway
-
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 `
 
@@ -1005,8 +999,6 @@ const dataCollectorGoModTemplate = `module github.com/TykTechnologies/midsommar/
 go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
-
-replace github.com/TykTechnologies/midsommar/microgateway => {{.RelativeReplace}}/microgateway
 
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 `
