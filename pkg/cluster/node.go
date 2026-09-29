@@ -1,0 +1,171 @@
+// Package cluster lets several Studio replicas share one database: it
+// registers each replica (Node) so others can tell live replicas from dead
+// ones, and carries events every replica must see (Log). See
+// features/ClusterControlPlane.md.
+//
+// On Postgres it is always on, whether one replica runs or ten: a deployment
+// that forgot to switch it on would fail silently. On SQLite, which only one
+// process can serve, the node registry still runs (one row) and the event
+// log is inert.
+package cluster
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
+)
+
+// Defaults for the node registry. A node counts as live while its row was
+// refreshed within LivenessWindow; that is four refreshes, so one slow
+// database round trip never makes a live node look dead.
+var (
+	HeartbeatInterval = 5 * time.Second
+	LivenessWindow    = 20 * time.Second
+)
+
+// NewNodeID returns an ID for this process: hostname, pid and a random
+// suffix. The suffix matters in containers, where every process may be pid
+// 1 and a restarted replica must not inherit its predecessor's claims.
+func NewNodeID() string {
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		host = "studio"
+	}
+	b := make([]byte, 3)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%s-%d-%s", host, os.Getpid(), hex.EncodeToString(b))
+}
+
+// Node is this replica's entry in the registry.
+type Node struct {
+	db       *gorm.DB
+	id       string
+	hostname string
+	version  string
+	started  time.Time
+	interval time.Duration
+
+	stopOnce sync.Once
+	stop     chan struct{}
+	done     chan struct{}
+}
+
+// StartNode registers the replica and keeps its row fresh until Stop. The
+// first write happens before it returns, so a failure to reach the database
+// is reported rather than discovered later.
+func StartNode(db *gorm.DB, id, version string) (*Node, error) {
+	host, _ := os.Hostname()
+	n := &Node{
+		db:       db,
+		id:       id,
+		hostname: host,
+		version:  version,
+		started:  time.Now().UTC(),
+		interval: HeartbeatInterval,
+		stop:     make(chan struct{}),
+		done:     make(chan struct{}),
+	}
+	if err := n.beat(); err != nil {
+		return nil, fmt.Errorf("cluster: register node %s: %w", id, err)
+	}
+	go n.loop()
+	logger.Infof("Cluster node %s registered", id)
+	return n, nil
+}
+
+// ID is the node's ID.
+func (n *Node) ID() string { return n.id }
+
+func (n *Node) loop() {
+	defer close(n.done)
+	t := time.NewTicker(n.interval)
+	defer t.Stop()
+	failing := false
+	for {
+		select {
+		case <-n.stop:
+			return
+		case <-t.C:
+			if err := n.beat(); err != nil {
+				if !failing {
+					logger.Warnf("Cluster node %s could not refresh its registration (other replicas will consider it dead after %s): %v", n.id, LivenessWindow, err)
+				}
+				failing = true
+				continue
+			}
+			if failing {
+				logger.Infof("Cluster node %s refreshes its registration again", n.id)
+				failing = false
+			}
+		}
+	}
+}
+
+func (n *Node) beat() error {
+	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "node_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{"last_seen": nowExpr(n.db), "hostname": n.hostname, "version": n.version}),
+	}).Create(map[string]interface{}{
+		"node_id":    n.id,
+		"hostname":   n.hostname,
+		"version":    n.version,
+		"started_at": n.started,
+		"last_seen":  nowExpr(n.db),
+	}).Error
+}
+
+// Stop ends the refreshes and removes the node's row, so other replicas
+// know at once that it is gone rather than after the liveness window.
+func (n *Node) Stop(ctx context.Context) {
+	n.stopOnce.Do(func() {
+		close(n.stop)
+		<-n.done
+		if err := n.db.WithContext(ctx).Where("node_id = ?", n.id).Delete(&models.ClusterNode{}).Error; err != nil {
+			logger.Warnf("Cluster node %s could not remove its registration; others will see it expire: %v", n.id, err)
+		}
+	})
+}
+
+// LiveNodes returns the nodes whose registration is fresh, by the database's
+// clock (never the caller's, so clock skew between replicas cannot make a
+// live node look dead).
+func LiveNodes(db *gorm.DB) ([]models.ClusterNode, error) {
+	var nodes []models.ClusterNode
+	err := db.Model(&models.ClusterNode{}).Where("last_seen > ?", sinceExpr(db, LivenessWindow)).Order("node_id").Find(&nodes).Error
+	return nodes, err
+}
+
+// IsLive reports whether nodeID has a fresh registration.
+func IsLive(db *gorm.DB, nodeID string) (bool, error) {
+	if nodeID == "" {
+		return false, nil
+	}
+	var count int64
+	err := db.Model(&models.ClusterNode{}).Where("node_id = ? AND last_seen > ?", nodeID, sinceExpr(db, LivenessWindow)).Count(&count).Error
+	return count > 0, err
+}
+
+// nowExpr is the database's current time.
+func nowExpr(db *gorm.DB) clause.Expr {
+	if db.Dialector.Name() == "postgres" {
+		return gorm.Expr("now()")
+	}
+	return gorm.Expr("CURRENT_TIMESTAMP")
+}
+
+// sinceExpr is the database's current time minus d.
+func sinceExpr(db *gorm.DB, d time.Duration) clause.Expr {
+	if db.Dialector.Name() == "postgres" {
+		return gorm.Expr("now() - make_interval(secs => ?)", d.Seconds())
+	}
+	return gorm.Expr("datetime('now', ?)", fmt.Sprintf("-%d seconds", int(d.Seconds())))
+}

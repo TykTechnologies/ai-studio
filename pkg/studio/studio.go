@@ -35,6 +35,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
+	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
@@ -91,6 +92,13 @@ type Options struct {
 	// with the studio_noui tag leaves out.
 	UIAssets fs.FS
 
+	// NodeID identifies this replica among the Studio replicas sharing the
+	// database (pkg/cluster): it is recorded as the owner of the edge streams
+	// this replica holds and of the work it claims. Empty means a fresh ID
+	// (hostname, pid and a random suffix) per process, which is what a
+	// replica restart needs: it must not inherit its predecessor's claims.
+	NodeID string
+
 	// SkipLLMDefaults skips seeding the default LLM configurations and
 	// their secrets.
 	SkipLLMDefaults bool
@@ -146,6 +154,11 @@ type Studio struct {
 	api       *api.API
 	proxy     *proxy.Proxy
 	control   *grpc.ControlServer
+
+	// clusterNode registers this replica; clusterLog carries events between
+	// replicas (pkg/cluster).
+	clusterNode *cluster.Node
+	clusterLog  *cluster.Log
 
 	scheduler        *scheduler.SchedulerService
 	telemetry        *services.TelemetryManager
@@ -267,6 +280,20 @@ func New(opts Options) (_ *Studio, err error) {
 	}
 	releaseMigrationLock()
 	releaseMigrationLock = nil
+
+	// Join the cluster: register this replica and start reading the event
+	// log. With one replica (or SQLite) this is one row and an idle reader.
+	nodeID := opts.NodeID
+	if nodeID == "" {
+		nodeID = cluster.NewNodeID()
+	}
+	if s.clusterNode, err = cluster.StartNode(s.db, nodeID, opts.Version); err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
+	}
+	s.clusterLog = cluster.NewLog(s.db, nodeID, cluster.LogOptions{})
+	if err := s.clusterLog.Start(backgroundCtx); err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
+	}
 
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.
@@ -457,6 +484,7 @@ func (s *Studio) wireControlPlane(version string) error {
 		AuthToken:     conf.GRPCAuthToken,
 		NextAuthToken: conf.GRPCNextAuthToken,
 		EncryptionKey: conf.MicrogatewayEncryptionKey,
+		NodeID:        s.clusterNode.ID(),
 	}, s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)
@@ -582,6 +610,14 @@ func (s *Studio) stop(ctx context.Context) error {
 	}
 	if s.control != nil {
 		s.control.Stop()
+	}
+	if s.clusterLog != nil {
+		s.clusterLog.Stop()
+	}
+	if s.clusterNode != nil {
+		// Last among the cluster pieces: removing the row tells the other
+		// replicas at once that this one is gone.
+		s.clusterNode.Stop(ctx)
 	}
 	if s.service != nil {
 		if err := s.service.Stop(); err != nil {

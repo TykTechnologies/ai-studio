@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -108,6 +109,10 @@ type ControlServer struct {
 
 	// encryptionKey is the validated key credentials are encrypted with for edges.
 	encryptionKey string
+
+	// nodeID is this replica's cluster node ID, recorded as the owner of the
+	// edge streams it holds.
+	nodeID string
 }
 
 // Config holds the control server configuration
@@ -123,6 +128,10 @@ type Config struct {
 	// EncryptionKey is the 32-character key edges use to decrypt the
 	// credentials sent to them. Empty means MICROGATEWAY_ENCRYPTION_KEY.
 	EncryptionKey string
+	// NodeID identifies this Studio replica (pkg/cluster). It is recorded as
+	// the owner of every edge stream this server holds. Empty means
+	// "control", for a single replica.
+	NodeID string
 }
 
 // validateEncryptionKey checks the key edges use to decrypt the credentials
@@ -166,6 +175,10 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		edgeManagementService: edge_management.NewService(db),
 		eventBus:              eventbridge.NewBus(),
 		encryptionKey:         encryptionKey,
+		nodeID:                cfg.NodeID,
+	}
+	if server.nodeID == "" {
+		server.nodeID = "control"
 	}
 
 	// Initialize AI Studio's analytics system for processing edge pulse data
@@ -351,7 +364,9 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 			edgeInstance.Metadata = metadata
 		}
 
-		if err := edgeInstance.Update(s.db); err != nil {
+		// Omit the stream ownership columns: a stream on another replica may
+		// have claimed the edge since the row was read.
+		if err := s.db.Omit("OwnerNodeID", "StreamSessionID").Save(&edgeInstance).Error; err != nil {
 			return nil, status.Error(codes.Internal, "failed to update edge instance")
 		}
 	}
@@ -375,7 +390,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		edgeInstance.LoadedChecksum = initialConfig.Checksum
 		edgeInstance.LoadedVersion = initialConfig.Version
 		edgeInstance.LastSyncAck = &now
-		if err := edgeInstance.Update(s.db); err != nil {
+		if err := edgeInstance.UpdateSyncStatus(s.db, initialConfig.Checksum, initialConfig.Version, models.EdgeSyncStatusInSync); err != nil {
 			log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to update edge sync status on registration")
 		} else {
 			log.Debug().
@@ -537,12 +552,17 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					}, s.eventBus, streamAdapter)
 					bridge.Start(bridgeCtx)
 
+					// Every stream gets a session of its own: writes that end
+					// it are conditional on it (see models.ReleaseEdgeStream).
+					streamSession := uuid.New().String()
+
 					s.edgeMutex.Lock()
 					edgeConnection = &EdgeInstanceConnection{
 						EdgeID:        m.Registration.EdgeId,
 						Namespace:     normalizedNamespace, // Use normalized namespace for in-memory connection
 						Status:        "connected",
 						Version:       m.Registration.Version,
+						SessionID:     streamSession,
 						Stream:        stream,
 						LastHeartbeat: time.Now(),
 						streamAdapter: streamAdapter,
@@ -553,7 +573,13 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					s.edgeConnections[edgeID] = edgeConnection
 					s.edgeMutex.Unlock()
 
-					log.Debug().Str("edge_id", edgeID).Msg("Event bridge started for edge connection")
+					if found, err := models.ClaimEdgeStream(s.db, edgeID, s.nodeID, streamSession); err != nil {
+						log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to record this replica as the edge's stream owner; pushes to it may not be routed here until its next heartbeat")
+					} else if !found {
+						log.Warn().Str("edge_id", edgeID).Msg("Edge opened a stream without being registered; it cannot receive pushes until it registers")
+					}
+
+					log.Debug().Str("edge_id", edgeID).Str("stream_session", streamSession).Msg("Event bridge started for edge connection")
 
 					// Send registration response
 					response := &pb.ControlMessage{
@@ -586,7 +612,11 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					var requestFullSync bool
 
 					if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
-						edgeInstance.UpdateHeartbeat(s.db)
+						if reclaimed, err := models.TouchEdgeStream(s.db, edgeID, s.nodeID, edgeConnection.SessionID); err != nil {
+							log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record edge heartbeat")
+						} else if reclaimed {
+							log.Info().Str("edge_id", edgeID).Msg("Edge stream ownership restored from its heartbeat")
+						}
 
 						// Check sync status against namespace expected checksum
 						// The checksum is updated via config change events, so we use the cached value
@@ -717,10 +747,12 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 		}
 		s.edgeMutex.Unlock()
 
-		// Update database
-		var edgeInstance models.EdgeInstance
-		if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
-			edgeInstance.UpdateStatus(s.db, models.EdgeStatusDisconnected)
+		// Mark the edge disconnected only if this is still its current
+		// stream: it may already have reconnected, here or to another replica.
+		if changed, err := models.ReleaseEdgeStream(s.db, edgeID, edgeConnection.SessionID); err != nil {
+			log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of the edge's stream")
+		} else if !changed {
+			log.Debug().Str("edge_id", edgeID).Msg("Edge already on a newer stream; its state is left as is")
 		}
 
 		log.Debug().Str("edge_id", edgeID).Msg("Event bridge stopped for edge connection")
@@ -2555,10 +2587,9 @@ func (s *ControlServer) cleanupStaleConnections() {
 				Time("last_heartbeat", lastHeartbeat).
 				Msg("Removing stale edge connection")
 
-			// Update database status
-			var edgeInstance models.EdgeInstance
-			if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
-				edgeInstance.UpdateStatus(s.db, models.EdgeStatusDisconnected)
+			// Only if this stream is still the edge's current one.
+			if _, err := models.ReleaseEdgeStream(s.db, edgeID, edge.SessionID); err != nil {
+				log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of a stale edge stream")
 			}
 
 			toRemove = append(toRemove, edgeID)
@@ -2655,12 +2686,10 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 		Str("event_id", event.ID).
 		Msg("Configuration changed, recomputing namespace checksums")
 
-	// Get all namespaces that have connected edges
-	namespaces := s.getActiveNamespaces()
-	if len(namespaces) == 0 {
-		// No connected edges, just update default namespace
-		namespaces = []string{"default"}
-	}
+	// Every namespace the database knows about, not just those with edges on
+	// this replica: other replicas hold streams too, and an edge that is
+	// offline now must see the drift when it comes back.
+	namespaces := s.namespacesToRecompute()
 
 	for _, namespace := range namespaces {
 		// Recompute the snapshot and checksum for this namespace. This updates
@@ -2682,22 +2711,26 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 	}
 }
 
-// getActiveNamespaces returns a list of unique namespaces that have connected edges.
-func (s *ControlServer) getActiveNamespaces() []string {
-	s.edgeMutex.RLock()
-	defer s.edgeMutex.RUnlock()
-
-	namespaceSet := make(map[string]bool)
-	for _, conn := range s.edgeConnections {
-		if conn.Namespace != "" {
-			namespaceSet[conn.Namespace] = true
-		}
+// namespacesToRecompute returns every namespace an edge is registered in
+// or a sync status is kept for, in canonical spelling, plus "default". It
+// reads the database, so the answer is the same on every replica.
+func (s *ControlServer) namespacesToRecompute() []string {
+	set := map[string]bool{models.CanonicalNamespace("default"): true}
+	var fromEdges, fromStatus []string
+	if err := s.db.Model(&models.EdgeInstance{}).Distinct("namespace").Pluck("namespace", &fromEdges).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to list edge namespaces for checksum recompute")
 	}
-
-	namespaces := make([]string, 0, len(namespaceSet))
-	for ns := range namespaceSet {
+	if err := s.db.Model(&models.NamespaceSyncStatus{}).Distinct("namespace").Pluck("namespace", &fromStatus).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to list namespace sync statuses for checksum recompute")
+	}
+	for _, ns := range append(fromEdges, fromStatus...) {
+		set[models.CanonicalNamespace(ns)] = true
+	}
+	namespaces := make([]string, 0, len(set))
+	for ns := range set {
 		namespaces = append(namespaces, ns)
 	}
+	sort.Strings(namespaces)
 	return namespaces
 }
 

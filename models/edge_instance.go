@@ -18,6 +18,12 @@ type EdgeInstance struct {
 	LastHeartbeat  *time.Time             `json:"last_heartbeat" gorm:"index:idx_edge_instances_heartbeat"`
 	Status         string                 `json:"status" gorm:"default:'registered';index:idx_edge_instances_status"`
 	SessionID      string                 `json:"session_id"`
+	// OwnerNodeID is the Studio replica holding the edge's configuration
+	// stream, and StreamSessionID identifies that stream. Writes that end a
+	// stream are conditional on StreamSessionID, so a replica the edge has
+	// left cannot overwrite the state its new replica recorded.
+	OwnerNodeID     string `json:"owner_node_id" gorm:"size:128;index:idx_edge_instances_owner"`
+	StreamSessionID string `json:"stream_session_id" gorm:"size:64"`
 	// Sync tracking fields
 	LoadedChecksum string     `json:"loaded_checksum" gorm:"size:64"`
 	LoadedVersion  string     `json:"loaded_version" gorm:"size:64"`
@@ -229,4 +235,59 @@ func (e *EdgeInstance) CountEdgesBySyncStatus(db *gorm.DB, namespace string) (ma
 func (edges *EdgeInstances) ListEdgesBySyncStatus(db *gorm.DB, syncStatus string) error {
 	return db.Where("sync_status = ? AND status IN ?", syncStatus, []string{EdgeStatusConnected, EdgeStatusRegistered}).
 		Order("created_at DESC").Find(edges).Error
+}
+// ClaimEdgeStream records that nodeID now holds the edge's configuration
+// stream, identified by session. The newest stream always wins: an edge has
+// one live stream at a time, so a new one means the old one is gone.
+// It reports whether the edge exists.
+func ClaimEdgeStream(db *gorm.DB, edgeID, nodeID, session string) (bool, error) {
+	now := time.Now()
+	res := db.Model(&EdgeInstance{}).Where("edge_id = ?", edgeID).Updates(map[string]interface{}{
+		"owner_node_id":     nodeID,
+		"stream_session_id": session,
+		"status":            EdgeStatusConnected,
+		"last_heartbeat":    now,
+	})
+	return res.RowsAffected > 0, res.Error
+}
+
+// ReleaseEdgeStream records that the stream identified by session has
+// ended, but only if it is still the edge's current stream: when the edge
+// has already reconnected (to this replica or another), the newer stream's
+// state is left alone. It reports whether it changed anything.
+func ReleaseEdgeStream(db *gorm.DB, edgeID, session string) (bool, error) {
+	if session == "" {
+		return false, nil
+	}
+	res := db.Model(&EdgeInstance{}).Where("edge_id = ? AND stream_session_id = ?", edgeID, session).Updates(map[string]interface{}{
+		"owner_node_id":     "",
+		"stream_session_id": "",
+		"status":            EdgeStatusDisconnected,
+	})
+	return res.RowsAffected > 0, res.Error
+}
+
+// TouchEdgeStream records a heartbeat received on the stream identified by
+// session. If the row has lost its owner (a stale sweep cleared it, or the
+// row was written by something else), the heartbeat proves this stream is
+// the edge's live one, so it re-claims it. It never takes over from a
+// different session. It reports whether it re-claimed.
+func TouchEdgeStream(db *gorm.DB, edgeID, nodeID, session string) (reclaimed bool, err error) {
+	now := time.Now()
+	if err := db.Model(&EdgeInstance{}).Where("edge_id = ?", edgeID).Update("last_heartbeat", now).Error; err != nil {
+		return false, err
+	}
+	if session == "" {
+		return false, nil
+	}
+	res := db.Model(&EdgeInstance{}).
+		Where("edge_id = ?", edgeID).
+		Where("(stream_session_id = '' OR stream_session_id IS NULL OR stream_session_id = ?)", session).
+		Where("(owner_node_id <> ? OR owner_node_id IS NULL OR stream_session_id <> ? OR stream_session_id IS NULL OR status <> ?)", nodeID, session, EdgeStatusConnected).
+		Updates(map[string]interface{}{
+			"owner_node_id":     nodeID,
+			"stream_session_id": session,
+			"status":            EdgeStatusConnected,
+		})
+	return res.RowsAffected > 0, res.Error
 }
