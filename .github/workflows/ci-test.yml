@@ -160,6 +160,13 @@ jobs:
           # Use dev environment template for tests
           cp dev/.env.dev .env
 
+      # A host embedding pkg/studio may build without cgo (the Dashboard's dev
+      # builds do), so pkg/studio must compile with CGO_ENABLED=0.
+      - name: Build pkg/studio without cgo
+        run: |
+          CGO_ENABLED=0 go build -o /dev/null \
+            -tags "studio_noui ${{ matrix.edition == 'ent' && 'enterprise' || '' }}" ./pkg/studio/...
+
       - name: Run AI Studio Unit Tests
         run: |
           go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \

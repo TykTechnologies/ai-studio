@@ -1,6 +1,8 @@
 package services
 
 import (
+	"slices"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 )
@@ -140,6 +142,13 @@ func (s *Service) GetAvailableVectorStores() ([]VendorDriverInfo, error) {
 			Description: "Scalable vector database for AI applications",
 			SupportedFeatures: []string{"vector-search", "scalability", "cloud-native", "multi-tenancy"},
 		},
+	}
+
+	if !chromaSupported {
+		// A CGO_ENABLED=0 build has no Chroma client (see data_session/chroma.go).
+		vectorStores = slices.DeleteFunc(vectorStores, func(v VendorDriverInfo) bool {
+			return v.Vendor == "chroma"
+		})
 	}
 
 	return vectorStores, nil

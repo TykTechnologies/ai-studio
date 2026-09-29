@@ -93,6 +93,11 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - **Replace directives.** Go ignores `replace` directives in dependencies,
   so an importing module must copy the ones in this repository's `go.mod`
   (the langchaingo fork, `./microgateway` and `./enterprise`).
+- **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
+  so it is in `pkg/studio/sqlitedb`: import that package for its side effect
+  to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but
+  Chroma datasources are then unavailable. See "Building without cgo" in
+  `features/Embedding.md`.
 - **Enterprise edition.** Build with `-tags enterprise` and import
   `github.com/TykTechnologies/midsommar/v2/enterprise/all` for its side
   effects. `New` fails if an enterprise feature is missing.

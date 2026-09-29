@@ -18,6 +18,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
+	// SQLite for DATABASE_TYPE=sqlite; it needs cgo, so pkg/studio leaves it out.
+	_ "github.com/TykTechnologies/midsommar/v2/pkg/studio/sqlitedb"
 	"github.com/TykTechnologies/midsommar/v2/startup"
 )
 
