@@ -19,8 +19,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 	modzip "golang.org/x/mod/zip"
 )
@@ -30,12 +32,21 @@ func main() {
 	maxMB := flag.Int64("max-mb", 150, "fail when the zip is larger than this many MiB (the proxy's own limit is 500)")
 	flag.Parse()
 
-	files, err := archiveFiles(*rev)
+	root, err := repoRoot()
+	if err != nil {
+		fail("%v", err)
+	}
+	modPath, err := modulePath(root)
+	if err != nil {
+		fail("%v", err)
+	}
+	files, err := archiveFiles(root, *rev)
 	if err != nil {
 		fail("%v", err)
 	}
 
-	m := module.Version{Path: "github.com/TykTechnologies/midsommar/v2", Version: "v2.999.999"}
+	// The version only has to be valid for the module path's major version.
+	m := module.Version{Path: modPath, Version: pseudoVersion(modPath)}
 	var w countingWriter
 	if err := modzip.Create(&w, m, files); err != nil {
 		fail("the module proxy would refuse %s:\n%v", *rev, err)
@@ -45,21 +56,24 @@ func main() {
 	if w.n > *maxMB<<20 {
 		fail("module zip is %.1f MiB, over the %d MiB budget: a committed binary or data file is likely", mb, *maxMB)
 	}
-	fmt.Printf("module zip OK: %.1f MiB, %d files at %s\n", mb, len(files), *rev)
+	fmt.Printf("module zip OK: %s, %.1f MiB, %d files at %s\n", modPath, mb, len(files), *rev)
 }
 
 // archiveFiles lists what the proxy sees at rev: the go command builds module
 // zips from `git archive`, which leaves out untracked and ignored files and
 // the contents of submodules. modzip.CreateFromVCS does the same but refuses
 // git worktrees, hence this copy of it.
-func archiveFiles(rev string) ([]modzip.File, error) {
-	top, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+func archiveFiles(root, rev string) ([]modzip.File, error) {
+	// Resolve rev to a tree hash first, so that -rev can only name a
+	// revision: --end-of-options stops a value such as "--output=..." being
+	// read as an option, and git archive then only ever sees a hash.
+	tree, err := exec.Command("git", "-C", root, "rev-parse", "--verify", "--end-of-options", rev+"^{tree}").Output()
 	if err != nil {
-		return nil, fmt.Errorf("not in a git repository: %w", err)
+		return nil, fmt.Errorf("%q is not a git revision: %w", rev, err)
 	}
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("git", "-c", "core.autocrlf=input", "-c", "core.eol=lf", "archive", "--format=zip", rev)
-	cmd.Dir = strings.TrimSpace(string(top))
+	cmd := exec.Command("git", "-c", "core.autocrlf=input", "-c", "core.eol=lf", "archive", "--format=zip", strings.TrimSpace(string(tree)))
+	cmd.Dir = root
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("git archive %s: %w: %s", rev, err, stderr.String())
@@ -75,6 +89,35 @@ func archiveFiles(rev string) ([]modzip.File, error) {
 		}
 	}
 	return files, nil
+}
+
+func repoRoot() (string, error) {
+	top, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", fmt.Errorf("not in a git repository: %w", err)
+	}
+	return strings.TrimSpace(string(top)), nil
+}
+
+// modulePath reads the root module's path from its go.mod.
+func modulePath(root string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return "", err
+	}
+	if p := modfile.ModulePath(data); p != "" {
+		return p, nil
+	}
+	return "", fmt.Errorf("no module line in %s/go.mod", root)
+}
+
+// pseudoVersion returns a version that is valid for the module path's major
+// version (v2.999.999 for a /v2 path), which is all modzip.Create checks.
+func pseudoVersion(modPath string) string {
+	if _, major, ok := module.SplitPathVersion(modPath); ok && major != "" {
+		return strings.TrimPrefix(major, "/") + ".999.999"
+	}
+	return "v0.999.999"
 }
 
 type archiveFile struct{ f *zip.File }
