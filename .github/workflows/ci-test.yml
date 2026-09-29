@@ -310,6 +310,27 @@ jobs:
         run: make gorm-verify
 
   # ==========================================================================
+  # Module zip check: the committed tree must make a module zip the Go proxy
+  # accepts, or nobody can `go get` Studio (see tools/modcheck)
+  # ==========================================================================
+  module-check:
+    needs: [dep-guard]
+    name: Module Zip Check
+    runs-on: warp-ubuntu-latest-arm64-2x
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: tools/modcheck/go.mod
+          cache-dependency-path: tools/modcheck/go.sum
+
+      - name: Check the module zip
+        run: make module-check
+
+  # ==========================================================================
   # Documentation Build
   # ==========================================================================
   docs-build:
@@ -349,7 +370,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: warp-ubuntu-latest-arm64-2x
-    needs: [frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, docs-build]
+    needs: [frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, docs-build]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -370,6 +391,7 @@ jobs:
           echo "| Go Unit Tests (ENT) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| gorm Copy Verification | ${{ needs.gorm-verify.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Module Zip Check | ${{ needs.module-check.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Coverage files:" >> $GITHUB_STEP_SUMMARY
