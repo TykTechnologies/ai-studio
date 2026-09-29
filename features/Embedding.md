@@ -300,6 +300,26 @@ packages (type aliases and wrappers, generated when the code moved) so that
 existing plugins keep compiling. The proto package name is unchanged, so the
 wire format and gRPC method names are the same.
 
+## Releases a host can import
+
+Every `v*` tag is a version of `github.com/TykTechnologies/midsommar/v2` a
+host can `go get` (the module proxy builds its zip from the tagged tree;
+`make module-check` keeps that tree valid). `release.yml` then:
+
+- builds the enterprise edition from the commit the `enterprise` submodule
+  pins, not from the enterprise repository's current main;
+- tags `github.com/TykTechnologies/ai-studio-enterprise` with the same
+  version on that commit (`scripts/release/tag-enterprise.sh`), refusing a
+  pin that is not on enterprise main, so an enterprise host requires both
+  modules at one version;
+- runs `scripts/release/consume-module.sh` for both editions: a throwaway
+  host with a clean module cache imports the tag through the proxy, runs
+  `go mod tidy` and builds with `CGO_ENABLED=0`. The Community Edition run
+  has no credentials at all.
+
+The same script checks any commit by hand, e.g.
+`scripts/release/consume-module.sh ce <commit>`.
+
 ## langchaingo in tree
 
 Studio's langchaingo fork (Anthropic temperature, OpenAI reasoning_effort and
