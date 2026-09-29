@@ -467,6 +467,7 @@ TABLE edge_push_commands
   index CREATE INDEX idx_edge_push_commands_edge_id ON edge_push_commands USING btree (edge_id)
   index CREATE UNIQUE INDEX idx_edge_push_commands_op_edge ON edge_push_commands USING btree (operation_id, edge_id)
   index CREATE INDEX idx_edge_push_commands_status_claim ON edge_push_commands USING btree (status, claim_expires_at)
+  index CREATE INDEX idx_edge_push_commands_status_created ON edge_push_commands USING btree (status, created_at)
   index CREATE INDEX idx_edge_push_commands_status_deadline ON edge_push_commands USING btree (status, deadline_at)
   index CREATE INDEX idx_edge_push_commands_status_edge ON edge_push_commands USING btree (status, edge_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('edge_push_commands_id_seq'::regclass)

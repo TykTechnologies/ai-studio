@@ -18,12 +18,98 @@ import (
 const signalTopic = "replica.signal"
 
 // replicaBackend connects pkg/replicas to this Studio's cluster membership.
-type replicaBackend struct{ s *Studio }
+type replicaBackend struct {
+	s       *Studio
+	signals *signalSender
+}
 
 func (b replicaBackend) IsLeader() bool { return b.s.leadership.IsLeader() }
 
-func (b replicaBackend) Signal(ctx context.Context, name string) error {
-	return b.s.clusterLog.Publish(ctx, signalTopic, []byte(name))
+// Signal queues the signal; it never waits for the database (it is called
+// from API requests).
+func (b replicaBackend) Signal(_ context.Context, name string) error {
+	b.signals.send(name)
+	return nil
+}
+
+// signalSender writes replica signals to the cluster log in the background.
+// Signals of the same name waiting to be written are sent once: a signal
+// means "re-read your state", so one is as good as several.
+type signalSender struct {
+	log     publisher
+	mu      sync.Mutex
+	pending map[string]bool
+	wake    chan struct{}
+	stop    chan struct{}
+	done    chan struct{}
+	once    sync.Once
+}
+
+// publisher is the part of the cluster log the sender uses.
+type publisher interface {
+	Publish(ctx context.Context, topic string, payload []byte) error
+}
+
+func newSignalSender(log publisher) *signalSender {
+	ss := &signalSender{log: log, pending: map[string]bool{}, wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
+	go ss.run()
+	return ss
+}
+
+func (ss *signalSender) send(name string) {
+	ss.mu.Lock()
+	ss.pending[name] = true
+	ss.mu.Unlock()
+	select {
+	case ss.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (ss *signalSender) run() {
+	defer close(ss.done)
+	for {
+		select {
+		case <-ss.wake:
+			ss.flush()
+		case <-ss.stop:
+			ss.flush()
+			return
+		}
+	}
+}
+
+func (ss *signalSender) flush() {
+	ss.mu.Lock()
+	names := make([]string, 0, len(ss.pending))
+	for n := range ss.pending {
+		names = append(names, n)
+	}
+	ss.pending = map[string]bool{}
+	ss.mu.Unlock()
+	for _, name := range names {
+		var err error
+		for attempt, backoff := 1, 100*time.Millisecond; attempt <= 5; attempt, backoff = attempt+1, backoff*2 {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			err = ss.log.Publish(ctx, signalTopic, []byte(name))
+			cancel()
+			if err == nil {
+				break
+			}
+			time.Sleep(backoff)
+		}
+		if err != nil {
+			logger.Errorf("Could not tell the other replicas that %q changed; they may serve stale data until their next refresh: %v", name, err)
+		}
+	}
+}
+
+// close writes what is pending and stops.
+func (ss *signalSender) close() {
+	ss.once.Do(func() {
+		close(ss.stop)
+		<-ss.done
+	})
 }
 
 // connectReplicas makes pkg/replicas answer for this Studio: leadership
@@ -32,7 +118,8 @@ func (s *Studio) connectReplicas() {
 	s.unsubscribeSignals = s.clusterLog.Subscribe(signalTopic, func(ev cluster.Event) {
 		replicas.Deliver(string(ev.Payload))
 	})
-	replicas.SetBackend(replicaBackend{s})
+	s.signals = newSignalSender(s.clusterLog)
+	replicas.SetBackend(replicaBackend{s: s, signals: s.signals})
 }
 
 // coalescer runs fn in the background after a trigger, once for any number

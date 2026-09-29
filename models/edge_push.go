@@ -70,7 +70,7 @@ type EdgePushCommand struct {
 	Namespace   string `json:"namespace" gorm:"size:255"`
 	// The janitor's and dispatcher's queries lead with status; the
 	// composite indexes serve them (see Coordinator.janitor, dispatch).
-	Status string `json:"status" gorm:"size:32;not null;index:idx_edge_push_commands_status_deadline,priority:1;index:idx_edge_push_commands_status_claim,priority:1;index:idx_edge_push_commands_status_edge,priority:1"`
+	Status string `json:"status" gorm:"size:32;not null;index:idx_edge_push_commands_status_deadline,priority:1;index:idx_edge_push_commands_status_claim,priority:1;index:idx_edge_push_commands_status_edge,priority:1;index:idx_edge_push_commands_status_created,priority:1"`
 
 	Attempts    int `json:"attempts"`
 	MaxAttempts int `json:"max_attempts"`
@@ -103,7 +103,7 @@ type EdgePushCommand struct {
 	Version int64 `json:"-" gorm:"not null;default:0"`
 
 	DeadlineAt  time.Time  `json:"deadline_at" gorm:"index:idx_edge_push_commands_status_deadline,priority:2"`
-	CreatedAt   time.Time  `json:"created_at"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"index:idx_edge_push_commands_status_created,priority:2"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	CompletedAt *time.Time `json:"completed_at"`
 }

@@ -171,6 +171,8 @@ type Studio struct {
 	relayed *relayedChanges
 	// unsubscribeSignals stops delivering other replicas' signals.
 	unsubscribeSignals func()
+	// signals writes this replica's replica signals in the background.
+	signals *signalSender
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (control mode only).
 	pushes *pushes.Coordinator
@@ -659,6 +661,9 @@ func (s *Studio) stop(ctx context.Context) error {
 		s.clusterLog.Stop()
 	}
 	replicas.SetBackend(nil)
+	if s.signals != nil {
+		s.signals.close()
+	}
 	if s.unsubscribeSignals != nil {
 		s.unsubscribeSignals()
 	}

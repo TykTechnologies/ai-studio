@@ -453,6 +453,7 @@ TABLE edge_push_commands
   column `completed_at` datetime
   index CREATE INDEX `idx_edge_push_commands_edge_id` ON `edge_push_commands`(`edge_id`)
   index CREATE INDEX `idx_edge_push_commands_status_claim` ON `edge_push_commands`(`status`,`claim_expires_at`)
+  index CREATE INDEX `idx_edge_push_commands_status_created` ON `edge_push_commands`(`status`,`created_at`)
   index CREATE INDEX `idx_edge_push_commands_status_deadline` ON `edge_push_commands`(`status`,`deadline_at`)
   index CREATE INDEX `idx_edge_push_commands_status_edge` ON `edge_push_commands`(`status`,`edge_id`)
   index CREATE UNIQUE INDEX `idx_edge_push_commands_op_edge` ON `edge_push_commands`(`operation_id`,`edge_id`)
