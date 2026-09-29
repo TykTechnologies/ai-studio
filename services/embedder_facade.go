@@ -7,7 +7,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/switches"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // EmbedderInput is how a datasource write names its embedder. EmbedderID,

@@ -8,9 +8,9 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {

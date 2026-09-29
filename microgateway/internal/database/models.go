@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // APIToken represents an API token for gateway access

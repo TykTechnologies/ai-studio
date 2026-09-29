@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // tokenTotalsSettleAfter is how long rows must have been visible before they

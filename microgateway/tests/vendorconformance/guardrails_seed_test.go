@@ -11,7 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	vc "github.com/TykTechnologies/midsommar/v2/pkg/testinfra/vendorconformance"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Seeding of the guardrailed route lives outside the enterprise-tagged test

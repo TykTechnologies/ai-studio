@@ -8,13 +8,13 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 func newGovernedMetadataTestServer(t *testing.T) (*GovernedMetadataServer, *services.Service) {

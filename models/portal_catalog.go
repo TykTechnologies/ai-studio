@@ -1,6 +1,6 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 // Catalog membership for the portal's unified catalog: which of the caller's
 // accessible catalogs each visible object belongs to. One query per object

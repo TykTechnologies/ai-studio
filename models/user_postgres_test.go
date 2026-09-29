@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // setupPostgreSQLTestDB sets up a PostgreSQL test database

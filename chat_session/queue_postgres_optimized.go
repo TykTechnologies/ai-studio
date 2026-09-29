@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // OptimizedPostgreSQLQueue implements MessageQueue using PostgreSQL LISTEN/NOTIFY

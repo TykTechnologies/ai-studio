@@ -7,8 +7,8 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 func setupFilterTestDB(t *testing.T) (*gorm.DB, *database.Repository) {

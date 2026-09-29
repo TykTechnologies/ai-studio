@@ -8,8 +8,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
 // AppBudgetData contains budget usage and period info for a single app

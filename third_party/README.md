@@ -80,7 +80,8 @@ No automation changes the copy. An upgrade is a deliberate PR:
    rewrite.
 4. CI runs `gorm-verify`, the schema snapshots and the full suites. If a new
    gorm changes a column, an index or a constraint, the snapshot fails and
-   shows the change.
+   shows the change. Accept it only on purpose, with `make schema-golden`,
+   and say why in the PR.
 
 To see what changed upstream:
 `https://github.com/go-gorm/gorm/compare/<old>...<new>` (and the same for

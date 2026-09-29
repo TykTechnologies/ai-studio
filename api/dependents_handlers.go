@@ -8,8 +8,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // DependentsResponse is the JSON:API-style envelope for a dependents lookup.

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gosimple/slug"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 type Tool struct {

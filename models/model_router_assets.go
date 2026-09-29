@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Model Routers as portal assets: how private a router is, and which model

@@ -6,7 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // teamStampTTL bounds how long a record keeps being attributed to an App's

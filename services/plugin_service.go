@@ -11,7 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PluginService implements plugin management for AI Studio

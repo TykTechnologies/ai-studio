@@ -10,11 +10,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 func setupAnalyticsTestDB(t *testing.T) *gorm.DB {

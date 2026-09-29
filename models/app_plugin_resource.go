@@ -1,7 +1,7 @@
 package models
 
 import (
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // AppPluginResource is the join table that associates Apps with plugin resource instances.

@@ -3,7 +3,7 @@ package models
 import (
 	"strings"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // SecretRefPrefix marks a credential field that reads a stored secret by

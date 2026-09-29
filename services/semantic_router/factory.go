@@ -1,6 +1,6 @@
 package semantic_router
 
-import "gorm.io/gorm"
+import "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 // FactoryFunc creates the service. The Enterprise module registers one from
 // its init().

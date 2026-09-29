@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // DefaultNamespace is the canonical key of the global/default namespace in

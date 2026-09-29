@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gosimple/slug"
-	"gorm.io/gorm"
 )
 
 // Route slugs.

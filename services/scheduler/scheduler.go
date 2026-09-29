@@ -11,7 +11,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PluginClient interface for executing scheduled tasks via gRPC

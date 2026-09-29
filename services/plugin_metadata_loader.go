@@ -8,7 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PluginMetadata represents combined plugin metadata from a single load operation

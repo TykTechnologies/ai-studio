@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
-	"gorm.io/gorm/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/schema"
 )
 
 // JSON is a JSON column: JSONB on Postgres, JSON on SQLite. It is the JSON

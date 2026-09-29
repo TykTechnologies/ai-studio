@@ -3,7 +3,7 @@ package models
 import (
 	"fmt"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 type ModelPrice struct {

@@ -13,10 +13,10 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func createTestProfile(t *testing.T, db *gorm.DB) *models.Profile {

@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/html"
-	"gorm.io/gorm"
 )
 
 // Search, filtering, sorting and paging for GET /common/catalog.

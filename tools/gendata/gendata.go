@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 const (

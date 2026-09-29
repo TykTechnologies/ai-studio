@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Team budget enforcement modes. A team in alert-only mode is notified when

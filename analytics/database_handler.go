@@ -12,7 +12,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // DatabaseHandler implements AnalyticsHandler using the existing database/channel system

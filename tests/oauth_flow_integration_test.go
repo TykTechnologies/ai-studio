@@ -20,9 +20,9 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 var testDB *gorm.DB

@@ -19,12 +19,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/go-mail/mail"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/api"

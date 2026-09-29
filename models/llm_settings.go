@@ -3,8 +3,8 @@ package models
 import (
 	"context"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/tmc/langchaingo/llms"
-	"gorm.io/gorm"
 )
 
 type LLMSettings struct {

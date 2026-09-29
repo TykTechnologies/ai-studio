@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 )
 
 // DatabaseConfig holds database configuration

@@ -3,7 +3,7 @@ package database
 import (
 	"sync/atomic"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Config generation.

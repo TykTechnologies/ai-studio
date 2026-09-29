@@ -12,9 +12,9 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
 )
 
 var emptyFile embed.FS

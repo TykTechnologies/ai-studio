@@ -1,6 +1,6 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 const (
 	DefaultGroupID   uint   = 1 // Deprecated: Use name-based lookup instead

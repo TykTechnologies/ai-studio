@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Plugin represents a plugin configuration in the hub-and-spoke system

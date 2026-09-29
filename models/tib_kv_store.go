@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/tyk-identity-broker/tap"
-	"gorm.io/gorm"
 )
 
 // GormKVStore implements AuthRegisterBackend using GORM

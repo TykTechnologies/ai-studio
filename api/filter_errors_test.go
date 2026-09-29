@@ -8,8 +8,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
-	"gorm.io/gorm"
 )
 
 // The status a filter error maps to comes from the sentinel it wraps, never

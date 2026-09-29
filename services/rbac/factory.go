@@ -1,6 +1,6 @@
 package rbac
 
-import "gorm.io/gorm"
+import "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 // FactoryFunc builds an RBAC service. The enterprise submodule registers one
 // from its init() when built with -tags enterprise.

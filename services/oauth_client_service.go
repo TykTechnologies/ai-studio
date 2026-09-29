@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"errors"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )

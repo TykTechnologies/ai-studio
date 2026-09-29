@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // UpdateEnv set to 1 rewrites the golden files instead of comparing with them.
