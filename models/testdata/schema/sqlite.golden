@@ -307,6 +307,14 @@ TABLE cluster_events
   column `payload` blob
   column `created_at` datetime NOT NULL
   index CREATE INDEX `idx_cluster_events_created_at` ON `cluster_events`(`created_at`)
+TABLE cluster_leases
+  column `name` text
+  column `holder` text NOT NULL
+  column `acquired_at` datetime
+  column `renewed_at` datetime
+  column `expires_at` datetime NOT NULL
+  constraint PRIMARY KEY (`name`)
+  autoindex origin=pk unique=1 (name)
 TABLE cluster_nodes
   column `node_id` text
   column `hostname` text

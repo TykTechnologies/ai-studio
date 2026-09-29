@@ -36,6 +36,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
@@ -160,6 +161,16 @@ type Studio struct {
 	// replicas (pkg/cluster).
 	clusterNode *cluster.Node
 	clusterLog  *cluster.Log
+	// relay carries edge-bound and object-change bus events to the other
+	// replicas through clusterLog.
+	relay *cluster.Relay
+	// leadership is this replica's claim on the leader lease, which
+	// singleton background work runs under.
+	leadership *cluster.Leadership
+	// relayed applies other replicas' changes to this replica's caches.
+	relayed *relayedChanges
+	// unsubscribeSignals stops delivering other replicas' signals.
+	unsubscribeSignals func()
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (control mode only).
 	pushes *pushes.Coordinator
@@ -298,6 +309,11 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := s.clusterLog.Start(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: %w", err)
 	}
+	// Singleton jobs (aggregations, alerts, syncs, cleanups) run only on
+	// the replica holding the leader lease.
+	s.leadership = cluster.NewLeadership(s.db, cluster.LeaderLease, nodeID, cluster.LeadershipOptions{})
+	s.leadership.Start()
+	s.connectReplicas()
 
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.
@@ -471,6 +487,9 @@ func New(opts Options) (_ *Studio, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("studio: build API: %w", err)
 	}
+	s.api.SetClusterStatus(func(ctx context.Context) (interface{}, error) {
+		return cluster.Snapshot(ctx, s.db, nodeID, s.clusterLog, s.relay)
+	})
 
 	return s, nil
 }
@@ -536,6 +555,12 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 		}
 	}
 	service.SetEventBus(bus)
+
+	// Other replicas' edges and caches must hear about this replica's
+	// events, and this replica about theirs.
+	s.watchRelayedChanges(bus)
+	s.relay = cluster.NewRelay(s.clusterLog, bus, cluster.RelayOptions{})
+	s.relay.Start()
 }
 
 // HTTPHandler returns the admin API and UI handler: the portal, chat,
@@ -625,8 +650,21 @@ func (s *Studio) stop(ctx context.Context) error {
 	if s.pushes != nil {
 		s.pushes.Stop()
 	}
+	s.relayed.stop()
+	if s.relay != nil {
+		// Before the log: events still queued are written on the way out.
+		s.relay.Stop()
+	}
 	if s.clusterLog != nil {
 		s.clusterLog.Stop()
+	}
+	replicas.SetBackend(nil)
+	if s.unsubscribeSignals != nil {
+		s.unsubscribeSignals()
+	}
+	if s.leadership != nil {
+		// Hand the leader lease over now rather than after its TTL.
+		s.leadership.Stop()
 	}
 	if s.clusterNode != nil {
 		// Last among the cluster pieces: removing the row tells the other

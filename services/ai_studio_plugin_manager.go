@@ -1777,46 +1777,12 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 	skippedCount := 0
 
 	for _, plugin := range plugins {
-		// Check if plugin supports studio_ui, agent, or object_hooks
-		supportsUI := plugin.SupportsHookType(models.HookTypeStudioUI)
-		supportsAgent := plugin.SupportsHookType(models.HookTypeAgent)
-		supportsObjectHooks := plugin.SupportsHookType(models.HookTypeObjectHooks)
-
-		// Skip if we know it's a gateway-only plugin
-		hasGatewayOnly := false
-		allHooks := plugin.GetAllHookTypes()
-		if len(allHooks) > 0 {
-			gatewayCount := 0
-			for _, hook := range allHooks {
-				if hook == models.HookTypePreAuth || hook == models.HookTypeAuth ||
-					hook == models.HookTypePostAuth || hook == models.HookTypeOnResponse ||
-					hook == models.HookTypeDataCollection {
-					gatewayCount++
-				}
-			}
-			hasGatewayOnly = gatewayCount == len(allHooks) && gatewayCount > 0
-		}
-
-		if hasGatewayOnly {
+		if !loadsAtStart(&plugin) {
 			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
-				Strs("hooks", allHooks).
-				Msg("Gateway-only plugin, skipping AI Studio loading")
-			skippedCount++
-			continue
-		}
-
-		// If hook_types is empty or contains AI Studio hooks, try loading
-		// This handles marketplace plugins that may not have hook_types populated yet
-		shouldLoad := supportsUI || supportsAgent || supportsObjectHooks || len(plugin.HookTypes) == 0
-
-		if !shouldLoad {
-			log.Debug().
-				Uint("plugin_id", plugin.ID).
-				Str("plugin_name", plugin.Name).
-				Strs("hooks", allHooks).
-				Msg("Plugin does not support UI, Agent, or Object Hooks, skipping")
+				Strs("hooks", plugin.GetAllHookTypes()).
+				Msg("Plugin does not run in AI Studio (gateway-only, or no UI, agent or object hooks), skipping")
 			skippedCount++
 			continue
 		}
@@ -1851,6 +1817,30 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 	}
 
 	return nil
+}
+
+// loadsAtStart reports whether Studio starts plugin when it starts (and
+// when another replica creates or changes it): plugins with a UI, agent or
+// object hooks, and ones whose hook types are not known yet (marketplace
+// plugins before their manifest is read). Gateway-only plugins run on the
+// gateways, and others are started when first used.
+func loadsAtStart(plugin *models.Plugin) bool {
+	allHooks := plugin.GetAllHookTypes()
+	if len(allHooks) > 0 {
+		gatewayCount := 0
+		for _, hook := range allHooks {
+			if hook == models.HookTypePreAuth || hook == models.HookTypeAuth ||
+				hook == models.HookTypePostAuth || hook == models.HookTypeOnResponse ||
+				hook == models.HookTypeDataCollection {
+				gatewayCount++
+			}
+		}
+		if gatewayCount == len(allHooks) {
+			return false
+		}
+	}
+	return plugin.SupportsHookType(models.HookTypeStudioUI) || plugin.SupportsHookType(models.HookTypeAgent) ||
+		plugin.SupportsHookType(models.HookTypeObjectHooks) || len(plugin.HookTypes) == 0
 }
 
 // Shutdown gracefully shuts down all loaded plugins
@@ -2080,6 +2070,14 @@ type AssetInfo struct {
 
 // ExecuteScheduledTask executes a scheduled task on a plugin via gRPC
 func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, pluginID uint, contextProto *pb.PluginContext, scheduleProto *pb.ScheduleDefinition) (*pb.ExecuteScheduledTaskResponse, error) {
+	// Schedules run on the replica holding the scheduler lease, which need
+	// not be the one that loaded the plugin: start it here if needed.
+	if !m.IsPluginLoaded(pluginID) {
+		if _, err := m.LoadPlugin(pluginID); err != nil {
+			return nil, fmt.Errorf("plugin %d is not loaded and could not be started: %w", pluginID, err)
+		}
+	}
+
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

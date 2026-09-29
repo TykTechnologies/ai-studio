@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/marketplace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -61,9 +62,13 @@ func (s *MarketplaceService) Start(ctx context.Context) {
 		Dur("sync_interval", s.syncInterval).
 		Msg("Starting marketplace service")
 
-	// Initial sync
-	if err := s.SyncAll(ctx, false); err != nil {
-		log.Error().Err(err).Msg("Initial marketplace sync failed")
+	// Initial sync. With several replicas the background sync runs on the
+	// leader only (it fetches the indexes and writes the shared tables);
+	// a refresh asked for through the API runs wherever it is asked.
+	if replicas.IsLeader() {
+		if err := s.SyncAll(ctx, false); err != nil {
+			log.Error().Err(err).Msg("Initial marketplace sync failed")
+		}
 	}
 
 	// Background sync loop
@@ -73,6 +78,9 @@ func (s *MarketplaceService) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
+			if !replicas.IsLeader() {
+				continue
+			}
 			if err := s.SyncAll(ctx, false); err != nil {
 				log.Error().Err(err).Msg("Marketplace sync failed")
 			}

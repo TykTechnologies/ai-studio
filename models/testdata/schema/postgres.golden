@@ -333,6 +333,14 @@ TABLE cluster_events
   column origin character varying(varchar) nullable=NO len=128
   column payload bytea(bytea) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=NO
+TABLE cluster_leases
+  constraint cluster_leases_pkey PRIMARY KEY (name)
+  index CREATE UNIQUE INDEX cluster_leases_pkey ON cluster_leases USING btree (name)
+  column name character varying(varchar) nullable=NO len=64
+  column holder character varying(varchar) nullable=NO len=128
+  column acquired_at timestamp with time zone(timestamptz) nullable=YES
+  column renewed_at timestamp with time zone(timestamptz) nullable=YES
+  column expires_at timestamp with time zone(timestamptz) nullable=NO
 TABLE cluster_nodes
   constraint cluster_nodes_pkey PRIMARY KEY (node_id)
   index CREATE UNIQUE INDEX cluster_nodes_pkey ON cluster_nodes USING btree (node_id)

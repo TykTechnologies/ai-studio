@@ -2709,6 +2709,11 @@ func (s *ControlServer) subscribeToConfigChanges() {
 	for _, topic := range configTopics {
 		topic := topic // Capture for closure
 		s.eventBus.Subscribe(topic, func(event eventbridge.Event) {
+			// The replica that made the change recomputes every namespace
+			// from the database; relayed copies of its event need not.
+			if event.RelayedFrom != "" {
+				return
+			}
 			s.onConfigurationChanged(topic, event)
 		})
 	}

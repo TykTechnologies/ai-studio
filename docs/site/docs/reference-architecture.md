@@ -149,6 +149,29 @@ Set up the pair like this:
 - **Cold standby** (VMs, or a second cluster or region). The same version and configuration as the hot instance: the same `DATABASE_URL`, `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY`, `GRPC_AUTH_TOKEN`, TLS certificates and license, and access to the same `data/` contents (a shared or replicated volume, or restored from backup). Keep it stopped, and upgrade it whenever the hot instance is upgraded.
 - **Failover.** Confirm the hot instance is stopped (fence it, or stop its host) before starting the standby. Then point the UI/API endpoint and the edges' gRPC endpoint (`CONTROL_ENDPOINT`) at the standby, for example with a DNS record or a load balancer target that you switch, so edges reconnect without being reconfigured. Fail back the same way: stop one instance before starting the other.
 
+### Several replicas (from 2.3)
+
+> This section describes 2.3. In 2.2, run the hot / cold singleton above.
+
+From 2.3, several AI Studio replicas can serve one PostgreSQL database behind a load balancer. The replicas coordinate through the database; there is nothing to configure beyond running them against the same database:
+
+- **Edges** connect to any replica. A configuration push is delivered by whichever replica holds each edge's connection, and its outcome can be read from any replica. An edge that reconnects to another replica during a push still gets it.
+- **Changes** made on one replica reach the others within about a second: their embedded gateways reload changed LLMs, datasources and filters, budget caches are cleared, and Studio plugins that were changed, deactivated or deleted are restarted or stopped. Events for edges (budget sync, plugin events) reach the edges of every replica.
+- **Work that must happen once** runs on one replica, the leader: budget aggregation and alerts, the budget sync to edges, marketplace sync and usage reports. If the leader stops, another replica takes over within about 30 seconds (at once on a clean shutdown). Scheduled plugin tasks have their own lease and move the same way.
+- **Upgrades** can roll one replica at a time: database migrations run under a lock, and a replica that stops hands its edges and pushes over to the others.
+
+`GET /api/v1/cluster/status` (administrators) lists the live replicas, the edges each holds and which one is the leader, and warns about anything that needs attention.
+
+What the deployment must provide:
+
+- **PostgreSQL.** Several replicas need PostgreSQL; SQLite is single-process.
+- **Session affinity for the UI.** Chat and agent conversations, and MCP connections over SSE, are held by the replica that started them. Route each browser session to one replica (sticky sessions on the load balancer).
+- **A shared `data/` volume**, if you use branding uploads or log exports: they are files on the replica that received them.
+- **Plugins from the marketplace or an OCI registry.** A plugin installed from a local file (`file://`) must exist at the same path on every replica.
+- **The same configuration and secrets** on every replica (the table below).
+
+Two settings change on their own schedule rather than at once: team budget settings and webhook targets are re-read every 30 seconds.
+
 ### Database
 
 - **PostgreSQL in production**, 14 or later (`DATABASE_TYPE=postgres`, `DATABASE_URL`). Use a managed service or a replicated cluster with automatic failover and point-in-time recovery. SQLite is for development.
