@@ -31,6 +31,9 @@ type Config struct {
 	CookieSecure bool
 
 	CookieDomain     string
+	// CookiePath scopes the session cookie; empty means "/". Set it to the
+	// base path when Studio is served under one.
+	CookiePath       string
 	ResetTokenExpiry time.Duration
 	SessionDuration  time.Duration
 	FrontendURL      string
@@ -55,6 +58,42 @@ type Config struct {
 	// request goroutine, which is what tests on a shared SQLite DB need.
 	APIKeyTouchInterval time.Duration
 	SyncAPIKeyTouch     bool
+
+	// HostAuth authenticates requests for a host application Studio is
+	// embedded in. When set it is asked first on every request, and the
+	// identity it returns is turned into a Studio user by
+	// ProvisionHostUser. Studio's own password login, registration and SSO
+	// are then switched off (see LocalAccountsEnabled).
+	HostAuth          Authenticator
+	ProvisionHostUser func(services.HostIdentity) (*models.User, error)
+	// HostLoginURL and HostLogoutURL are where the console sends a user to
+	// sign in or out when the host authenticates.
+	HostLoginURL  string
+	HostLogoutURL string
+
+	// CSRF, when set, replaces Studio's own CSRF protection for
+	// cookie-authenticated requests: a host application can apply its own.
+	// It must call the handler it wraps only for requests that pass.
+	// CSRFTokenHeader and CSRFTokenURL tell the console which header carries
+	// the token and where to fetch it (defaults: X-CSRF-Token and Studio's
+	// /csrf-token).
+	CSRF            func(http.Handler) http.Handler
+	CSRFTokenHeader string
+	CSRFTokenURL    string
+}
+
+// Authenticator authenticates a request on behalf of a host application.
+// It returns the user the host has signed in, or nil (and no error) when the
+// request carries no host identity, in which case Studio's own API keys may
+// still authenticate it. An error rejects the request.
+type Authenticator interface {
+	Authenticate(r *http.Request) (*services.HostIdentity, error)
+}
+
+// LocalAccountsEnabled reports whether Studio manages sign-in itself
+// (passwords, registration, SSO), which it does unless a host authenticates.
+func (c *Config) LocalAccountsEnabled() bool {
+	return c.HostAuth == nil
 }
 
 // defaultAPIKeyTouchInterval keeps the last-used stamp to one write per
@@ -69,6 +108,7 @@ const (
 	AuthMethodKey     = models.AuthMethodContextKey
 	AuthMethodSession = models.AuthMethodSession
 	AuthMethodAPIKey  = models.AuthMethodAPIKey
+	AuthMethodHost    = models.AuthMethodHost
 )
 
 // Ensure AuthService implements models.EmailSender
@@ -114,7 +154,7 @@ func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
 		Secure:   a.Config.CookieSecure,
 		HttpOnly: a.Config.CookieHTTPOnly,
 		SameSite: a.Config.CookieSameSite,
-		Path:     "/",
+		Path:     a.cookiePath(),
 		Domain:   a.Config.CookieDomain,
 	})
 
@@ -147,6 +187,13 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 }
 
 func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
+	// A host application Studio is embedded in has the first say.
+	if a.Config.HostAuth != nil {
+		if user, decided := a.hostUser(c); decided {
+			return user
+		}
+	}
+
 	// Try to get auth from cookie first
 	cookie, err := c.Cookie(a.Config.CookieName)
 	if err == nil && cookie != "" {
@@ -181,6 +228,32 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	return nil
 }
 
+// hostUser asks the host authenticator about the request. decided is false
+// when the host has no identity for it, leaving Studio's own credentials to
+// decide; otherwise user is the provisioned user, or nil when the host
+// rejected the request or the identity could not be provisioned.
+func (a *AuthService) hostUser(c *gin.Context) (user *models.User, decided bool) {
+	identity, err := a.Config.HostAuth.Authenticate(c.Request)
+	if err != nil {
+		slog.Info("Host authentication rejected the request", "error", err)
+		return nil, true
+	}
+	if identity == nil {
+		return nil, false
+	}
+	if a.Config.ProvisionHostUser == nil {
+		slog.Error("Host authentication is configured without ProvisionHostUser")
+		return nil, true
+	}
+	user, err = a.Config.ProvisionHostUser(*identity)
+	if err != nil {
+		slog.Warn("Host identity could not be provisioned", "error", err)
+		return nil, true
+	}
+	c.Set(AuthMethodKey, AuthMethodHost)
+	return user, true
+}
+
 // userForAPIKey resolves an API key to a usable account: the key must
 // exist, the address must be verified, the account must not be disabled
 // and, for SSO-provisioned users, the key is only honoured while the user
@@ -203,15 +276,16 @@ func (a *AuthService) userForAPIKey(apiKey string) *models.User {
 	return user
 }
 
-// ssoKeyAlive applies the liveness window to SSO-origin users. A user who
-// has never completed an SSO login, or whose last interactive login was by
-// password, has no proof of standing with the IdP and is rejected.
+// ssoKeyAlive applies the liveness window to externally managed users (SSO
+// or host provisioned). A user who has never signed in through the external
+// system, or whose last interactive login was by password, has no proof of
+// standing with it and is rejected.
 func (a *AuthService) ssoKeyAlive(user *models.User) bool {
 	window := a.Config.SSOAPIKeyLiveness
-	if window <= 0 || !user.IsSSOOrigin() {
+	if window <= 0 || !user.IsExternallyManaged() {
 		return true
 	}
-	if user.LastLoginAt == nil || user.LastLoginMethod != models.LoginMethodSSO {
+	if user.LastLoginAt == nil || user.LastLoginMethod != user.ExternalLoginMethod() {
 		return false
 	}
 	return time.Since(*user.LastLoginAt) <= window
@@ -353,20 +427,39 @@ func (a *AuthService) Logout(c *gin.Context) error {
 		return err
 	}
 
-	for _, cookie := range c.Request.Cookies() {
-		http.SetCookie(c.Writer, &http.Cookie{
-			Name:     cookie.Name,
-			Value:    "",
-			Expires:  time.Now().Add(-1 * time.Hour),
-			Path:     "/",
-			Domain:   a.Config.CookieDomain,
-			Secure:   a.Config.CookieSecure,
-			HttpOnly: a.Config.CookieHTTPOnly,
-			SameSite: a.Config.CookieSameSite,
-		})
+	// Expire Studio's own cookies only: the session, and the identity
+	// broker's SSO session when there is one. Other cookies on the request
+	// may belong to a host application Studio is embedded in.
+	a.expireCookie(c, a.Config.CookieName, a.cookiePath())
+	if _, err := c.Request.Cookie(ssoSessionCookie); err == nil {
+		a.expireCookie(c, ssoSessionCookie, "/")
 	}
 
 	return nil
+}
+
+// ssoSessionCookie is the identity broker's session cookie (tothic.SessionName).
+const ssoSessionCookie = "_gothic_session"
+
+func (a *AuthService) expireCookie(c *gin.Context, name, path string) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     name,
+		Value:    "",
+		Expires:  time.Now().Add(-1 * time.Hour),
+		MaxAge:   -1,
+		Path:     path,
+		Domain:   a.Config.CookieDomain,
+		Secure:   a.Config.CookieSecure,
+		HttpOnly: a.Config.CookieHTTPOnly,
+		SameSite: a.Config.CookieSameSite,
+	})
+}
+
+func (a *AuthService) cookiePath() string {
+	if a.Config.CookiePath == "" {
+		return "/"
+	}
+	return a.Config.CookiePath
 }
 
 // ErrUserDisabled is returned by the password-reset flow for a disabled
@@ -586,7 +679,7 @@ func (a *AuthService) ResendVerificationEmail(email string) error {
 		return fmt.Errorf("failed to update user with new verification token: %w", err)
 	}
 
-	verificationLink := fmt.Sprintf("%s/verify-email?token=%s", a.Config.FrontendURL, verificationToken)
+	verificationLink := fmt.Sprintf("%s/auth/verify-email?token=%s", a.Config.FrontendURL, verificationToken)
 	emailBody := fmt.Sprintf("Click the following link to verify your email: %s", verificationLink)
 
 	if err := a.SendEmail(user.Email, "Email Verification", emailBody); err != nil {

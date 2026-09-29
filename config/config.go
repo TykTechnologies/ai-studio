@@ -1,8 +1,10 @@
 package config
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -140,6 +142,11 @@ type AppConf struct {
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 
+	// BasePath is the path prefix Studio's HTTP interface is served under,
+	// such as "/ai-studio" (BASE_PATH); empty serves it at the root. SiteURL
+	// should include it.
+	BasePath string
+
 	// SecretKey encrypts secrets at rest (TYK_AI_SECRET_KEY).
 	SecretKey string
 	// MicrogatewayEncryptionKey is the 32-character key edges decrypt the
@@ -148,6 +155,14 @@ type AppConf struct {
 	// CSRFTrustedOrigins lists extra origins, comma-separated, the CSRF check
 	// accepts in DevMode (CSRF_TRUSTED_ORIGINS).
 	CSRFTrustedOrigins string
+	// CSRFKey is a secret the CSRF token key is derived from (CSRF_KEY).
+	// Set it so tokens survive restarts and are shared by replicas; empty
+	// uses a random key per process.
+	CSRFKey string
+	// CSRFCookieName names the CSRF cookie (CSRF_COOKIE_NAME, default
+	// _gorilla_csrf); change it when a host on the same domain uses the
+	// default name too.
+	CSRFCookieName string
 	// ExportStoragePath is where log exports are written (EXPORT_STORAGE_PATH,
 	// default ./data/exports).
 	ExportStoragePath string
@@ -210,6 +225,12 @@ type PostgreSQLQueueConfig struct {
 
 type DocsLinks map[string]string
 
+// defaultDocsLinks is config/docs_links.json, embedded so the console's
+// documentation links work wherever the process runs.
+//
+//go:embed docs_links.json
+var defaultDocsLinks []byte
+
 func (d DocsLinks) ReadFromFile(fileName string) {
 	data, err := os.ReadFile(fileName)
 	if err != nil {
@@ -251,6 +272,22 @@ func ExportEnvFile(envFile string) {
 			os.Setenv(key, value)
 		}
 	}
+}
+
+// NormalizeBasePath returns p as a path prefix with a leading slash and no
+// trailing one ("ai-studio/" becomes "/ai-studio"), or "" for the root.
+func NormalizeBasePath(p string) string {
+	p = strings.Trim(strings.TrimSpace(p), "/")
+	if p == "" {
+		return ""
+	}
+	return "/" + p
+}
+
+// PublicPath returns path (which starts with "/") as seen by a browser: under
+// BasePath.
+func (c *AppConf) PublicPath(path string) string {
+	return c.BasePath + path
 }
 
 // Set installs conf as the configuration Get returns.
@@ -338,6 +375,13 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	conf.SiteURL = getenv("SITE_URL")
 	if conf.SiteURL == "" {
 		cfgLog.Warn().Msg("Warning: SITE_URL environment variable is not set")
+	}
+
+	conf.BasePath = NormalizeBasePath(getenv("BASE_PATH"))
+	if conf.BasePath != "" && conf.SiteURL != "" {
+		if u, err := url.Parse(conf.SiteURL); err == nil && strings.TrimRight(u.Path, "/") != conf.BasePath {
+			cfgLog.Warn().Msgf("Warning: SITE_URL (%s) should end with BASE_PATH (%s); links in emails and OAuth metadata are built from SITE_URL", conf.SiteURL, conf.BasePath)
+		}
 	}
 
 	conf.ServerPort = getenv("SERVER_PORT")
@@ -441,8 +485,15 @@ func LoadFrom(getenv func(string) string) *AppConf {
 		conf.DocsDisabled = true
 	}
 
+	// Embedded defaults, overridden by config/docs_links.json in the working
+	// directory when a deployment provides one.
 	conf.DocsLinks = make(DocsLinks)
-	conf.DocsLinks.ReadFromFile("config/docs_links.json")
+	if err := json.Unmarshal(defaultDocsLinks, &conf.DocsLinks); err != nil {
+		cfgLog.Warn().Err(err).Msg("Could not read the embedded docs_links.json")
+	}
+	if _, err := os.Stat("config/docs_links.json"); err == nil {
+		conf.DocsLinks.ReadFromFile("config/docs_links.json")
+	}
 
 	conf.ProxyURL = getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
@@ -669,6 +720,8 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	conf.SecretKey = getenv("TYK_AI_SECRET_KEY")
 	conf.MicrogatewayEncryptionKey = getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	conf.CSRFTrustedOrigins = getenv("CSRF_TRUSTED_ORIGINS")
+	conf.CSRFKey = getenv("CSRF_KEY")
+	conf.CSRFCookieName = getenv("CSRF_COOKIE_NAME")
 	conf.ExportStoragePath = getenv("EXPORT_STORAGE_PATH")
 	if conf.ExportStoragePath == "" {
 		conf.ExportStoragePath = "./data/exports"

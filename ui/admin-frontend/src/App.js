@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
+import { basePath, hostLoginURL, isHostAuth, stripBase, withBase } from "./runtimeConfig";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import SuccessBanner from "./admin/components/common/SuccessBanner";
@@ -46,6 +47,16 @@ const ForgotPassword = React.lazy(() => import("./portal/pages/ForgotPassword"))
 const ResetPassword = React.lazy(() => import("./portal/pages/ResetPassword"));
 const NotificationsPage = React.lazy(() => import("./pages/NotificationsPage"));
 const ToolDocumentationPage = React.lazy(() => import("./portal/pages/ToolDocumentationPage"));
+
+// Sends a signed-out visitor to sign in: to the host application's sign-in
+// page when it authenticates users, else to Studio's login route.
+const SignInRedirect = () => {
+  if (isHostAuth() && hostLoginURL()) {
+    window.location.assign(hostLoginURL());
+    return <CircularProgress />;
+  }
+  return <Navigate to="/login" replace />;
+};
 
 // Component to redirect OAuth requests to backend
 const BackendRedirect = () => {
@@ -116,7 +127,7 @@ function App() {
           if (config.branding.has_custom_favicon) {
             const faviconLink = document.querySelector("link[rel='icon']") || document.createElement('link');
             faviconLink.rel = 'icon';
-            faviconLink.href = '/api/v1/branding/favicon';
+            faviconLink.href = withBase('/api/v1/branding/favicon');
             if (!document.querySelector("link[rel='icon']")) {
               document.head.appendChild(faviconLink);
             }
@@ -126,7 +137,7 @@ function App() {
         setConfigLoaded(true);
 
         // Skip auth check for password reset and forgot password routes
-        const currentPath = window.location.pathname;
+        const currentPath = stripBase(window.location.pathname);
         if (currentPath === '/register' ||
           currentPath === '/reset-password' ||
           currentPath === '/auth/reset-password' ||
@@ -203,7 +214,7 @@ function App() {
   }
 
   return (
-    <Router>
+    <Router basename={basePath() || undefined}>
       <EditionProvider>
         <PermissionsProvider identity={me}>
         <SyncStatusProvider>
@@ -295,7 +306,7 @@ function App() {
                 isAuthenticated ? (
                   <MainLayout />
                 ) : (
-                  <Navigate to="/login" replace />
+                  <SignInRedirect />
                 )
               }
             >
@@ -364,7 +375,7 @@ function App() {
                       </Box>
                     )
                   ) : (
-                    <Navigate to="/login" replace />
+                    <SignInRedirect />
                   )
                 }
               />

@@ -127,20 +127,25 @@ func (suite *AuthServiceTestSuite) TestLogout() {
 		c.Request.AddCookie(&http.Cookie{Name: "test_cookie1", Value: "value1"})
 		c.Request.AddCookie(&http.Cookie{Name: "test_cookie2", Value: "value2"})
 		c.Request.AddCookie(&http.Cookie{Name: suite.authService.Config.CookieName, Value: "session_value"})
+		c.Request.AddCookie(&http.Cookie{Name: "_gothic_session", Value: "sso"})
 
 		err = suite.authService.Logout(c)
 
 		assert.NoError(suite.T(), err)
 
-		// Check that all cookies are cleared
+		// Only Studio's own cookies are expired: the others may belong to a
+		// host application Studio is embedded in.
 		cookies := w.Result().Cookies()
-		assert.GreaterOrEqual(suite.T(), len(cookies), 3) // At least the 3 cookies we added
-
-		// Verify all cookies are expired
+		expired := map[string]*http.Cookie{}
 		for _, cookie := range cookies {
 			assert.Equal(suite.T(), "", cookie.Value, "Cookie value should be empty")
 			assert.True(suite.T(), cookie.Expires.Before(time.Now()), "Cookie should be expired")
+			expired[cookie.Name] = cookie
 		}
+		assert.Contains(suite.T(), expired, suite.authService.Config.CookieName)
+		assert.Contains(suite.T(), expired, "_gothic_session")
+		assert.NotContains(suite.T(), expired, "test_cookie1")
+		assert.NotContains(suite.T(), expired, "test_cookie2")
 	})
 
 	suite.Run("Logout failure - user not in context", func() {

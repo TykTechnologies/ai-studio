@@ -42,6 +42,7 @@ import { listAll } from "../utils/listAll";
 const ORIGIN_OPTIONS = [
   { value: "", label: "Any origin" },
   { value: "sso", label: "SSO" },
+  { value: "host", label: "Host application" },
   { value: "local", label: "Self-registered" },
   { value: "admin", label: "Admin-created" },
 ];

@@ -88,7 +88,7 @@ type UserAttributes struct {
 	Groups               []GroupResponse    `json:"groups,omitempty"`
 	Roles                []rbac.RoleSummary `json:"roles,omitempty"`
 
-	// Provenance and activity. auth_source is local | admin | sso;
+	// Provenance and activity. auth_source is local | admin | sso | host;
 	// sso_profile_id names the identity provider profile that provisioned
 	// (or last signed in) the user.
 	AuthSource       string     `json:"auth_source"`
@@ -1261,6 +1261,19 @@ type FrontendConfig struct {
 	// hide key issuance for SSO-provisioned users instead of offering a
 	// button that returns 403.
 	AllowSSOUserAPIKeys bool `json:"allowSSOUserAPIKeys"`
+	// BasePath is the path prefix the console is served under ("" for the
+	// root), so it can build URLs and route under it.
+	BasePath string `json:"basePath"`
+	// AuthMode is "local" when Studio signs users in itself and "host" when
+	// the application it is embedded in does; then LoginURL and LogoutURL
+	// say where to send the user.
+	AuthMode  string `json:"authMode"`
+	LoginURL  string `json:"loginURL,omitempty"`
+	LogoutURL string `json:"logoutURL,omitempty"`
+	// CSRFTokenHeader and CSRFTokenURL say how the console obtains and
+	// presents a CSRF token for cookie-authenticated writes.
+	CSRFTokenHeader string `json:"csrfTokenHeader"`
+	CSRFTokenURL    string `json:"csrfTokenURL"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

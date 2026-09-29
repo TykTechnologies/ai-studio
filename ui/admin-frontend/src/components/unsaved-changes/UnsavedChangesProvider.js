@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import UnsavedChangesDialog from "./UnsavedChangesDialog";
+import { stripBase } from "../../runtimeConfig";
 
 /**
  * Central registry of dirty forms plus the navigation guard that consults it.
@@ -167,7 +168,8 @@ export const UnsavedChangesProvider = ({ children }) => {
       event.preventDefault();
       event.stopPropagation();
       const url = new URL(anchor.href, window.location.href);
-      const to = `${url.pathname}${url.search}${url.hash}`;
+      // The router adds the base path itself.
+      const to = `${stripBase(url.pathname)}${url.search}${url.hash}`;
       setPending({ next: () => navigate(to) });
     };
     document.addEventListener("click", onClick, true);

@@ -433,11 +433,12 @@ func optionalBoolQuery(c *gin.Context, name string) *bool {
 }
 
 // userMayHoldAPIKey applies the ALLOW_SSO_USER_API_KEYS policy: an
-// identity-provider account holds no credential the provider cannot revoke,
-// unless the operator has opted in. Shared by the admin route and the
+// externally managed account (identity provider or embedding host) holds no
+// credential the external system cannot revoke, unless the operator has
+// opted in. Shared by the admin route and the
 // self-service route so both refuse the same users.
 func (a *API) userMayHoldAPIKey(user *models.User) bool {
-	return !user.IsSSOOrigin() || a.auth.Config.AllowSSOUserAPIKeys
+	return !user.IsExternallyManaged() || a.auth.Config.AllowSSOUserAPIKeys
 }
 
 // errSSOUserAPIKeysForbidden is the 403 both roll routes return.

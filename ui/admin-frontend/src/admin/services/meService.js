@@ -20,6 +20,7 @@ const AUTH_SOURCE_LABELS = {
   local: "Self-registered",
   admin: "Admin-created",
   sso: "SSO",
+  host: "Host application",
 };
 
 const titleCase = (value) =>

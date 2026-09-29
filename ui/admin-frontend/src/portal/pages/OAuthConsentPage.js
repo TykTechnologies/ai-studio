@@ -6,6 +6,7 @@ import { fetchCSRFToken } from '../../admin/utils/urlUtils';
 import AuthLayout from './AuthLayout';
 import { PrimaryButton, DangerOutlineButton } from '../../admin/styles/sharedStyles';
 import { FormLabel, FormText, StyledTextField } from '../styles/authStyles';
+import { withBase } from '../../runtimeConfig';
 
 function OAuthConsentPage() {
   const theme = useTheme();
@@ -31,7 +32,7 @@ function OAuthConsentPage() {
     }
     setAuthRequestID(reqId);
 
-    axios.get(`/oauth/consent_details?auth_req_id=${reqId}`, {
+    axios.get(withBase(`/oauth/consent_details?auth_req_id=${reqId}`), {
         withCredentials: true
       })
       .then(response => {
@@ -68,7 +69,7 @@ function OAuthConsentPage() {
     // This allows the browser to naturally follow the 302 redirect
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = '/oauth/submit_consent';
+    form.action = withBase('/oauth/submit_consent');
     
     // Add auth_req_id field
     const authReqField = document.createElement('input');

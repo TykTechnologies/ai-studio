@@ -20,6 +20,7 @@ import apiClient from "../../utils/apiClient";
 import { getVendorCodes, getVendorName } from "../../utils/vendorLogos";
 import modelPresets from "../../utils/modelPresets";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
+import { withBase } from "../../../runtimeConfig";
 
 const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
   const [activeStep, setActiveStep] = useState(0);
@@ -282,7 +283,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
               variant="contained"
               color="primary"
               onClick={() => {
-                window.open(`/catalogues/${createdCatalogueId}`, "_blank");
+                window.open(withBase(`/catalogues/${createdCatalogueId}`), "_blank");
                 onClose();
               }}
             >

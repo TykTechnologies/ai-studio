@@ -19,6 +19,7 @@ import {
 	isExternalLink,
 	relativeTime,
 } from './notificationPresentation';
+import { stripBase } from '../../../runtimeConfig';
 
 /** How many notifications the bell panel shows before "View all". */
 export const PANEL_SIZE = 8;
@@ -37,7 +38,7 @@ export const openNotificationLink = (link, navigate) => {
 		return;
 	}
 	const [beforeHash] = link.split('#');
-	const current = `${window.location.pathname}${window.location.search}`;
+	const current = `${stripBase(window.location.pathname)}${window.location.search}`;
 	navigate(link);
 	if (beforeHash === current) {
 		window.dispatchEvent(new PopStateEvent('popstate'));

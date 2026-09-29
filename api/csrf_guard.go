@@ -1,12 +1,18 @@
 package api
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
+
+	appconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 )
 
 // devCSRFTrustedOrigins builds the DEVMODE-only CSRF trusted-origin list.
@@ -112,4 +118,48 @@ func csrfGuard(csrfMiddleware func(http.Handler) http.Handler) gin.HandlerFunc {
 func forwardedHTTPS(r *http.Request) bool {
 	proto, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
 	return strings.EqualFold(strings.TrimSpace(proto), "https")
+}
+
+// studioCSRF builds Studio's own CSRF protection: gorilla/csrf double-submit
+// tokens, with the cookie scoped to the base path.
+func (a *API) studioCSRF() (func(http.Handler) http.Handler, error) {
+	appConf := appconfig.Get("")
+	key, err := csrfKey(appConf.CSRFKey)
+	if err != nil {
+		return nil, err
+	}
+	opts := []csrf.Option{
+		// Only unsets the cookie's Secure flag. What lets HTTP dev/test
+		// setups through is csrfGuard marking plain-HTTP requests
+		// plaintext, so gorilla does not demand an Origin/Referer.
+		csrf.Secure(false),
+		csrf.Path(a.cookiePath()),
+	}
+	if appConf.CSRFCookieName != "" {
+		opts = append(opts, csrf.CookieName(appConf.CSRFCookieName))
+	}
+	if appConf.DevMode {
+		// The dev frontend proxies to the API from another origin (its own
+		// port, or a host-mapped port in Docker), so the browser's Origin never
+		// matches the request Host. Trust the SITE_URL host plus any extra
+		// CSRF_TRUSTED_ORIGINS (comma-separated host[:port] values).
+		trusted := devCSRFTrustedOrigins(appConf.SiteURL, appConf.CSRFTrustedOrigins)
+		logger.Infof("DEVMODE: CSRF trusted origins: %s", strings.Join(trusted, ", "))
+		opts = append(opts, csrf.TrustedOrigins(trusted))
+	}
+	return csrf.Protect(key, opts...), nil
+}
+
+// csrfKey derives the 32-byte token key from secret, or makes a random one
+// when secret is empty (tokens then last only as long as the process).
+func csrfKey(secret string) ([]byte, error) {
+	if secret != "" {
+		sum := sha256.Sum256([]byte("tyk-ai-studio-csrf:" + secret))
+		return sum[:], nil
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("generate CSRF key: %w", err)
+	}
+	return key, nil
 }

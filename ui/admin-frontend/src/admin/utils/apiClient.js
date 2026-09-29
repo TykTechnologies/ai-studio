@@ -5,12 +5,13 @@ import { classifyAuthError } from './apiErrors';
 import { emitPermissionDenied } from './permissionDeniedBus';
 import { canAccessAdminNow } from './identityStore';
 import { redirectToLogin } from './authRedirect';
+import { csrfTokenHeader, withBase } from '../../runtimeConfig';
 
 let apiClientInstance = null;
 
 const createApiClient = () => {
   const instance = axios.create({
-    baseURL: '/api/v1',
+    baseURL: withBase('/api/v1'),
     withCredentials: true,
   });
 
@@ -19,7 +20,7 @@ const createApiClient = () => {
       if (config.method !== 'get') {
         const token = await fetchCSRFToken();
         if (token) {
-          config.headers["X-CSRF-Token"] = token;
+          config.headers[csrfTokenHeader()] = token;
         }
       }
       return config;

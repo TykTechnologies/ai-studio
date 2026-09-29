@@ -1,39 +1,41 @@
+import { withBase } from "../../runtimeConfig";
+
 const vendorData = {
   openai: {
     name: "OpenAI",
-    logo: "/logos/chatgpt-logo.png",
+    logo: withBase("/logos/chatgpt-logo.png"),
     requiresAccessDetails: true,
     defaultEndpoint: "https://api.openai.com/v1",
   },
   google_ai: {
     name: "Google AI",
-    logo: "/logos/google-ai.png",
+    logo: withBase("/logos/google-ai.png"),
     requiresAccessDetails: true,
   },
   anthropic: {
     name: "Anthropic",
-    logo: "/logos/anthropic.svg",
+    logo: withBase("/logos/anthropic.svg"),
     requiresAccessDetails: true,
     defaultEndpoint: "https://api.anthropic.com/v1/",
   },
   vertex: {
     name: "Vertex AI",
-    logo: "/logos/vertex.png",
+    logo: withBase("/logos/vertex.png"),
     requiresAccessDetails: true,
   },
   huggingface: {
     name: "HuggingFace",
-    logo: "/logos/hf-logo.svg",
+    logo: withBase("/logos/hf-logo.svg"),
     requiresAccessDetails: true,
   },
   ollama: {
     name: "Ollama",
-    logo: "/logos/ollama.png",
+    logo: withBase("/logos/ollama.png"),
     requiresAccessDetails: false,
   },
   bedrock: {
     name: "AWS Bedrock",
-    logo: "/logos/aws-bedrock.svg",
+    logo: withBase("/logos/aws-bedrock.svg"),
     requiresAccessDetails: true,
     defaultEndpoint: "https://bedrock-runtime.us-east-1.amazonaws.com",
   },

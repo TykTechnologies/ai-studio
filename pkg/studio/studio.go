@@ -85,14 +85,43 @@ type Options struct {
 	// periodic re-check. Nil exits the process.
 	OnLicenceInvalid func(error)
 
-	// UIAssets is the built admin frontend, rooted at its build directory.
-	// Nil uses the frontend embedded in package ui.
+	// UIAssets is the built admin frontend, rooted at its build directory
+	// (for example os.DirFS over the unpacked tyk-ai-studio-ui release
+	// tarball). Nil uses the frontend embedded in package ui, which a build
+	// with the studio_noui tag leaves out.
 	UIAssets fs.FS
 
 	// SkipLLMDefaults skips seeding the default LLM configurations and
 	// their secrets.
 	SkipLLMDefaults bool
+
+	// Auth, when set, authenticates every request on the host's behalf:
+	// Studio provisions a user for each identity it returns (see Identity)
+	// and switches off its own password login, registration and SSO. API
+	// keys still authenticate requests Auth has no identity for.
+	Auth Authenticator
+	// LoginURL and LogoutURL are where the console sends a user to sign in
+	// or out when Auth is set.
+	LoginURL, LogoutURL string
+
+	// CSRF, when set, replaces Studio's CSRF protection for
+	// cookie-authenticated requests with the host's. It must call the
+	// handler it wraps only for requests that pass. CSRFTokenHeader and
+	// CSRFTokenURL tell the console how to obtain and present the token.
+	CSRF            func(http.Handler) http.Handler
+	CSRFTokenHeader string
+	CSRFTokenURL    string
 }
+
+// Identity is a user as the host has authenticated them. Subject and Email
+// are required; Studio keeps the user's name, email, administrator status
+// and, when Groups is not nil, group memberships in step with it.
+type Identity = services.HostIdentity
+
+// Authenticator authenticates a request on the host's behalf. It returns
+// nil and no error when the request carries no host identity, and an error
+// to reject the request.
+type Authenticator = auth.Authenticator
 
 // ErrAlreadyRunning is returned by New while another Studio is running in
 // the process.
@@ -293,6 +322,7 @@ func New(opts Options) (_ *Studio, err error) {
 		CookieHTTPOnly:         true,
 		CookieSameSite:         http.SameSiteLaxMode,
 		CookieDomain:           "",
+		CookiePath:             cookiePath(conf.BasePath),
 		ResetTokenExpiry:       time.Hour,
 		SessionDuration:        conf.SessionDuration,
 		FrontendURL:            conf.SiteURL,
@@ -304,6 +334,13 @@ func New(opts Options) (_ *Studio, err error) {
 		OCIConfig:              conf.OCIPlugins.ToOCILibConfig(),
 		AllowSSOUserAPIKeys:    conf.AllowSSOUserAPIKeys,
 		SSOAPIKeyLiveness:      conf.SSOAPIKeyLiveness,
+		HostAuth:               opts.Auth,
+		ProvisionHostUser:      service.ProvisionHostUser,
+		HostLoginURL:           opts.LoginURL,
+		HostLogoutURL:          opts.LogoutURL,
+		CSRF:                   opts.CSRF,
+		CSRFTokenHeader:        opts.CSRFTokenHeader,
+		CSRFTokenURL:           opts.CSRFTokenURL,
 	}
 	authService := auth.NewAuthService(authConfig, mailService, service, notificationService)
 
@@ -373,6 +410,9 @@ func New(opts Options) (_ *Studio, err error) {
 
 	frontend := opts.UIAssets
 	if frontend == nil {
+		if !ui.Embedded {
+			logger.Warn("Built with studio_noui and no Options.UIAssets: the web interface is a placeholder page")
+		}
 		frontend = ui.FS
 	}
 	s.api, err = api.New(service, conf.DisableCors, authService, authConfig, s.proxy, frontend, s.licensing)
@@ -441,10 +481,19 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 }
 
 // HTTPHandler returns the admin API and UI handler: the portal, chat,
-// management API and admin interface. Studio expects to be served at the
-// root of the host it is mounted on.
+// management API and admin interface. Mount it at Config.BasePath (or the
+// root when that is empty); it strips the base path itself, so the host
+// passes requests through unchanged.
 func (s *Studio) HTTPHandler() http.Handler {
-	return s.api.Router()
+	return s.api.Handler()
+}
+
+// OAuthMetadataHandler serves Studio's OAuth authorization server metadata
+// for MCP clients. With a base path, RFC 8414 discovery happens outside it,
+// at /.well-known/oauth-authorization-server followed by the base path, so
+// the host mounts this handler there.
+func (s *Studio) OAuthMetadataHandler() http.Handler {
+	return s.api.OAuthMetadataHandler()
 }
 
 // ListenAndServe serves HTTPHandler on addr, with TLS when certFile and
@@ -541,4 +590,12 @@ func (s *Studio) stop(ctx context.Context) error {
 		s.licensing.Stop()
 	}
 	return errors.Join(errs...)
+}
+
+// cookiePath scopes Studio's cookies to its base path.
+func cookiePath(basePath string) string {
+	if basePath = config.NormalizeBasePath(basePath); basePath != "" {
+		return basePath
+	}
+	return "/"
 }

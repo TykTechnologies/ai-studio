@@ -1,6 +1,7 @@
 import apiClient from '../utils/apiClient';
 import { getIdentity, hasPermissionNow } from '../utils/identityStore';
 import { P, isPluginPermission } from '../rbac/permissions';
+import { withBase } from '../../runtimeConfig';
 
 /**
  * Plugin Loader Service - Handles dynamic loading of plugin UI components
@@ -243,7 +244,7 @@ class PluginLoaderService {
       const script = document.createElement('script');
       script.type = 'text/javascript';
       script.async = true;
-      script.src = remoteUrl;
+      script.src = withBase(remoteUrl);
 
       script.onload = async () => {
         try {
@@ -295,8 +296,9 @@ class PluginLoaderService {
         const iframe = iframeRef.current;
         if (!iframe) return;
 
-        // Set up iframe source
-        const assetUrl = `/plugins/assets/${plugin_id}${app}`;
+        // Set up iframe source. Plugin assets are served under the admin
+        // API (an iframe cannot go through apiClient, so the path is full).
+        const assetUrl = withBase(`/api/v1/plugins/assets/${plugin_id}${app}`);
         iframe.src = assetUrl;
 
         // Set up message handling for postMessage communication
@@ -466,7 +468,7 @@ class PluginLoaderService {
    */
   async markPluginLoaded(pluginId) {
     try {
-      await apiClient.post(`/api/v1/plugins/${pluginId}/ui/load`);
+      await apiClient.post(`/plugins/${pluginId}/ui/load`);
     } catch (error) {
       console.warn(`Failed to mark plugin ${pluginId} as loaded:`, error);
     }

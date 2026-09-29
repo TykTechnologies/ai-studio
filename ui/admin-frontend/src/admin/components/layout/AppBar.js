@@ -10,6 +10,7 @@ import { styled } from "@mui/material/styles";
 import { StyledIconButton } from "../../styles/sharedStyles";
 import pubClient, { logout } from "../../utils/pubClient";
 import { useEdition } from "../../context/EditionContext";
+import { withBase } from "../../../runtimeConfig";
 
 const StyledLink = styled("a")(({ theme }) => ({
   color: "white",
@@ -49,7 +50,7 @@ const MyAppBar = () => {
       <Toolbar>
         <Box sx={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
           <img
-            src="/logos/tyk-portal-logo.png"
+            src={withBase("/logos/tyk-portal-logo.png")}
             alt="Midsommar Logo"
             title={version ? `Tyk AI Studio ${version}` : "Tyk AI Studio"}
             style={{
@@ -79,7 +80,7 @@ const MyAppBar = () => {
         )}
 
         <StyledLink
-          href="/portal/dashboard"
+          href={withBase("/portal/dashboard")}
           target="_blank"
           rel="noopener noreferrer"
         >

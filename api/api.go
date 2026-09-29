@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -80,6 +79,9 @@ type API struct {
 	proxy                         *proxy.Proxy
 	// frontend holds the built admin UI, rooted at its build directory.
 	frontend                      fs.FS
+	// basePath is the path prefix the API and UI are served under ("" for
+	// the root); see Handler.
+	basePath                      string
 	setupChatRoutesFunc           func(*gin.RouterGroup)
 	ssoService                    sso.Service
 	licensingService              licensing.Service
@@ -196,6 +198,7 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 		config:           config,
 		proxy:            proxy,
 		frontend:         frontend,
+		basePath:         appconfig.NormalizeBasePath(appconfig.Get("").BasePath),
 		licensingService: licensingService,
 	}
 
@@ -233,7 +236,9 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 		LogLevel:  logLevel,
 	}
 	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
-	if sso.IsEnterpriseAvailable() {
+	// The identity broker keeps process-wide state; skip it when a host
+	// authenticates, since the host may run its own.
+	if sso.IsEnterpriseAvailable() && config.LocalAccountsEnabled() {
 		if err := api.ssoService.InitInternalTIB(); err != nil {
 			return nil, fmt.Errorf("initialize SSO service: %w", err)
 		}
@@ -260,36 +265,15 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
 
-	// Generate a random 32-byte key for CSRF
-	csrfKey := make([]byte, 32)
-	if _, err := rand.Read(csrfKey); err != nil {
-		return nil, fmt.Errorf("generate CSRF key: %w", err)
-	}
-
 	// no CSRF for tests
 	if !config.TestMode {
-		// Add CSRF middleware
-		csrfOpts := []csrf.Option{
-			// Only unsets the cookie's Secure flag. What lets HTTP dev/test
-			// setups through is csrfGuard marking plain-HTTP requests
-			// plaintext, so gorilla does not demand an Origin/Referer.
-			csrf.Secure(false),
-			csrf.Path("/"),
+		csrfMiddleware := config.CSRF
+		if csrfMiddleware == nil {
+			var err error
+			if csrfMiddleware, err = api.studioCSRF(); err != nil {
+				return nil, err
+			}
 		}
-		if appConf := appconfig.Get(""); appConf.DevMode {
-			// The dev frontend proxies to the API from another origin (its own
-			// port, or a host-mapped port in Docker), so the browser's Origin never
-			// matches the request Host. Trust the SITE_URL host plus any extra
-			// CSRF_TRUSTED_ORIGINS (comma-separated host[:port] values).
-			trusted := devCSRFTrustedOrigins(appConf.SiteURL, appConf.CSRFTrustedOrigins)
-			logger.Infof("DEVMODE: CSRF trusted origins: %s", strings.Join(trusted, ", "))
-			csrfOpts = append(csrfOpts, csrf.TrustedOrigins(trusted))
-		}
-		csrfMiddleware := csrf.Protect(
-			csrfKey,
-			csrfOpts...,
-		)
-
 		api.router.Use(csrfGuard(csrfMiddleware))
 	}
 
@@ -315,7 +299,7 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 func (a *API) Run(addr string, certFile string, keyFile string) error {
 	// Create http.Server for graceful shutdown support
-	server := newHTTPServer(addr, a.router)
+	server := newHTTPServer(addr, a.Handler())
 	a.serverMu.Lock()
 	a.server = server
 	a.serverMu.Unlock()
@@ -505,7 +489,7 @@ func (a *API) setupRoutes() error {
 			c.String(http.StatusInternalServerError, "Could not read index.html")
 			return
 		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", indexFile)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", injectBootstrap(indexFile, a.frontendBootstrap()))
 	})
 
 	a.router.GET("/csrf-token", func(c *gin.Context) {
@@ -519,14 +503,16 @@ func (a *API) setupRoutes() error {
 	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
 	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
 
-	// Public routes
-	public.POST("/auth/login", a.handleLogin)
-	public.POST("/auth/register", a.handleRegister)
-	public.POST("/auth/forgot-password", a.handleForgotPassword)
-	public.POST("/auth/reset-password", a.handleResetPassword)
-	public.GET("/auth/validate-reset-token", a.handleValidateResetToken)
-	public.GET("/auth/verify-email", a.handleVerifyEmail)
-	public.POST("/auth/resend-verification", a.handleResendVerification)
+	// Public routes. Studio's own accounts (passwords, registration, email
+	// verification) are off when a host application authenticates.
+	local := a.localAccountsOnly()
+	public.POST("/auth/login", local, a.handleLogin)
+	public.POST("/auth/register", local, a.handleRegister)
+	public.POST("/auth/forgot-password", local, a.handleForgotPassword)
+	public.POST("/auth/reset-password", local, a.handleResetPassword)
+	public.GET("/auth/validate-reset-token", local, a.handleValidateResetToken)
+	public.GET("/auth/verify-email", local, a.handleVerifyEmail)
+	public.POST("/auth/resend-verification", local, a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)
 	public.GET("/auth/features", a.handleFeatureSet)
 
@@ -1285,22 +1271,23 @@ func (a *API) setupRoutes() error {
 	v1.GET("/sync/status/:namespace", authz.Read("edges"), syncStatusHandlers.GetNamespaceSyncStatus)
 	v1.GET("/sync/audit", authz.Read("edges"), syncStatusHandlers.GetSyncAuditLog)
 
-	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required)
-	public.GET("/auth/:id/:provider", a.handleTIBAuth)
-	public.POST("/auth/:id/:provider", a.handleTIBAuth)
-	public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-	public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-	public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
-	public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
-	public.GET("/sso", a.handleSSO)
-	public.GET("/login-sso-profile", a.getLoginPageProfile)
+	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required).
+	// Off, like the other local account routes, when a host authenticates.
+	public.GET("/auth/:id/:provider", local, a.handleTIBAuth)
+	public.POST("/auth/:id/:provider", local, a.handleTIBAuth)
+	public.GET("/auth/:id/:provider/callback", local, a.handleTIBAuthCallback)
+	public.POST("/auth/:id/:provider/callback", local, a.handleTIBAuthCallback)
+	public.GET("/auth/:id/saml/metadata", local, a.handleSAMLMetadata)
+	public.POST("/auth/:id/saml/metadata", local, a.handleSAMLMetadata)
+	public.GET("/sso", local, a.handleSSO)
+	public.GET("/login-sso-profile", local, a.getLoginPageProfile)
 
 	apiGroup := public.Group("/api")
-	apiGroup.Use(a.SSOAuthMiddleware())
+	apiGroup.Use(local, a.SSOAuthMiddleware())
 	apiGroup.POST("/sso", a.handleNonceRequest)
 
 	profiles := v1.Group("/sso-profiles")
-	profiles.Raw().Use(a.ssoConfigGuard())
+	profiles.Raw().Use(local, a.ssoConfigGuard())
 	profiles.POST("", authz.Write("sso-profiles"), a.createProfile)
 	profiles.GET("", authz.Read("sso-profiles"), a.listProfiles)
 	profiles.GET("/:profile_id", authz.Read("sso-profiles"), a.getProfile)
@@ -1409,6 +1396,16 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
 		AllowSSOUserAPIKeys:  config.Get("").AllowSSOUserAPIKeys,
+	}
+	boot := a.frontendBootstrap()
+	cfg.BasePath = boot.BasePath
+	cfg.AuthMode = boot.AuthMode
+	cfg.LoginURL = boot.LoginURL
+	cfg.LogoutURL = boot.LogoutURL
+	cfg.CSRFTokenHeader = boot.CSRFTokenHeader
+	cfg.CSRFTokenURL = boot.CSRFTokenURL
+	if boot.AuthMode == "host" {
+		cfg.TIBEnabled = false
 	}
 
 	c.JSON(http.StatusOK, cfg)

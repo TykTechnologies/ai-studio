@@ -26,12 +26,14 @@ const (
 	AuthSourceLocal = "local" // self-registration
 	AuthSourceAdmin = "admin" // created by an administrator through the console or API
 	AuthSourceSSO   = "sso"   // provisioned on first login through an identity provider
+	AuthSourceHost  = "host"  // provisioned on first request from a host application Studio is embedded in
 )
 
 // LoginMethod values recorded in LastLoginMethod.
 const (
 	LoginMethodPassword = "password"
 	LoginMethodSSO      = "sso"
+	LoginMethodHost     = "host"
 )
 
 // AuthMethodContextKey is the gin context key under which the auth
@@ -41,6 +43,7 @@ const (
 	AuthMethodContextKey = "auth_method"
 	AuthMethodSession    = "session" // browser session cookie
 	AuthMethodAPIKey     = "api_key" // user API key (header or ?token=)
+	AuthMethodHost       = "host"    // identity supplied by the host application
 )
 
 type User struct {
@@ -80,6 +83,10 @@ type User struct {
 	// every equality filter.
 	AuthSource       string     `json:"auth_source" gorm:"size:16;not null;default:'';index"`
 	SSOProfileID     string     `json:"sso_profile_id" gorm:"size:64"`
+	// ExternalSubject is the host application's identifier for a user
+	// provisioned through host authentication (AuthSourceHost). It is
+	// unique among live users; soft-deleted rows do not hold it.
+	ExternalSubject string `json:"external_subject" gorm:"size:255;not null;default:'';uniqueIndex:idx_users_external_subject,where:external_subject <> '' AND deleted_at IS NULL"`
 	LastLoginAt      *time.Time `json:"last_login_at"`
 	LastLoginMethod  string     `json:"last_login_method" gorm:"size:16"`
 	APIKeyLastUsedAt *time.Time `json:"api_key_last_used_at"`
@@ -121,6 +128,23 @@ func (u *User) StampLogin(method string) {
 // provider.
 func (u *User) IsSSOOrigin() bool {
 	return u.AuthSource == AuthSourceSSO
+}
+
+// IsExternallyManaged reports whether something other than Studio vouches
+// for the account: an identity provider (SSO) or the host application
+// Studio is embedded in. Such accounts should hold no credential that
+// outlives the external system's say-so.
+func (u *User) IsExternallyManaged() bool {
+	return u.AuthSource == AuthSourceSSO || u.AuthSource == AuthSourceHost
+}
+
+// ExternalLoginMethod is the LastLoginMethod that proves an externally
+// managed account still has the external system's backing.
+func (u *User) ExternalLoginMethod() string {
+	if u.AuthSource == AuthSourceHost {
+		return LoginMethodHost
+	}
+	return LoginMethodSSO
 }
 
 // TouchAPIKeyUse records that the user's API key authenticated a request.
