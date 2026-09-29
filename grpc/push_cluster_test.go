@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -398,6 +399,16 @@ func TestPushCluster_FlappingEdgeExhaustsAttempts(t *testing.T) {
 		cmd := st.Commands[0]
 		assert.Equal(t, 3, cmd.Attempts)
 		assert.Contains(t, cmd.Message, "gave up after 3 attempts")
-		assert.Len(t, cmd.History, 6, "three sends, three closes: %+v", cmd.History)
+		// Each attempt ended with its stream closing. (A "sent" entry is
+		// missing when the stream closed before the send was recorded; the
+		// close is recorded either way, see TestStreamClosingWhileTheSendIsRecorded.)
+		closed := map[int]bool{}
+		for _, h := range cmd.History {
+			require.LessOrEqual(t, h.Attempt, 3, "no fourth attempt: %+v", cmd.History)
+			if strings.Contains(h.Outcome, "closed before it answered") {
+				closed[h.Attempt] = true
+			}
+		}
+		assert.Equal(t, map[int]bool{1: true, 2: true, 3: true}, closed, "%+v", cmd.History)
 	})
 }
