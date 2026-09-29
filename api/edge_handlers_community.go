@@ -166,37 +166,12 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 		return
 	}
 
-	// Get current user for audit trail
-	user, exists := c.Get("user")
-	initiatedBy := "unknown"
-	if exists {
-		if u, ok := user.(*models.User); ok {
-			initiatedBy = u.Email
-		}
-	}
-
-	// Trigger reload via namespace service
-	operation, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy)
+	res, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c))
 	if err != nil {
-		if err.Error() == "edge not found: failed to get edge: record not found" {
-			helpers.SendErrorResponse(c, helpers.NewNotFoundError("Edge instance not found"))
-			return
-		}
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		sendPushError(c, err)
 		return
 	}
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"data": gin.H{
-			"type": "reload-operations",
-			"id":   operation.OperationID,
-			"attributes": gin.H{
-				"operation_id": operation.OperationID,
-				"status":       operation.Status,
-				"message":      operation.Message,
-			},
-		},
-	})
+	pushAccepted(c, res)
 }
 
 // @Summary Delete edge instance
@@ -244,47 +219,7 @@ func (a *API) deleteEdge(c *gin.Context) {
 // @Router /api/v1/edges/reload-operations [get]
 // @Security BearerAuth
 func (a *API) listReloadOperations(c *gin.Context) {
-	// Get reload coordinator from namespace service
-	if a.service.NamespaceService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Namespace service not available",
-		})
-		return
-	}
-
-	reloadCoordinator := a.service.NamespaceService.GetReloadCoordinator()
-	if reloadCoordinator == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"data":    []interface{}{},
-			"message": "Reload coordinator not available (standalone mode)",
-		})
-		return
-	}
-
-	// Get active operations from reload coordinator
-	operations := reloadCoordinator.ListActiveOperations()
-
-	// Convert to API response format
-	data := make([]gin.H, len(operations))
-	for i, op := range operations {
-		data[i] = gin.H{
-			"type": "reload-operations",
-			"id":   op.OperationID,
-			"attributes": gin.H{
-				"operation_id": op.OperationID,
-				"target_edges": op.TargetEdges,
-				"initiated_by": op.InitiatedBy,
-				"initiated_at": op.InitiatedAt,
-				"status":       op.Status,
-				"progress":     op.Progress,
-				"message":      op.Message,
-			},
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": data,
-	})
+	a.listPushes(c)
 }
 
 // @Summary Reload all edge gateways
@@ -297,35 +232,13 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth
 func (a *API) reloadAllEdges(c *gin.Context) {
-	// CE: Reload all edges in "default" namespace (all edges are in default anyway)
-
-	// Get current user for audit trail
-	user, exists := c.Get("user")
-	initiatedBy := "unknown"
-	if exists {
-		if u, ok := user.(*models.User); ok {
-			initiatedBy = u.Email
-		}
-	}
-
-	// Trigger namespace reload for "default" (in CE, all edges are in default)
-	operation, err := a.service.NamespaceService.TriggerNamespaceReload("default", initiatedBy)
+	// CE: every edge is in the "default" namespace.
+	res, err := a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c))
 	if err != nil {
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to trigger global reload: "+err.Error()))
+		sendPushError(c, err)
 		return
 	}
-
-	c.JSON(http.StatusAccepted, gin.H{
-		"data": gin.H{
-			"type": "reload-operations",
-			"id":   operation.OperationID,
-			"attributes": gin.H{
-				"operation_id": operation.OperationID,
-				"status":       operation.Status,
-				"message":      "Global reload triggered for all edge gateways",
-			},
-		},
-	})
+	pushAccepted(c, res)
 }
 
 // Helper functions

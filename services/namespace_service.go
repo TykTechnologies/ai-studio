@@ -1,18 +1,21 @@
 package services
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // NamespaceService handles namespace operations for hub-and-spoke architecture
 type NamespaceService struct {
-	db                *gorm.DB
-	edgeService       *EdgeService
-	reloadCoordinator *ReloadCoordinator
+	db          *gorm.DB
+	edgeService *EdgeService
+	pushes      *pushes.Coordinator
 }
 
 // NewNamespaceService creates a new NamespaceService
@@ -20,18 +23,23 @@ func NewNamespaceService(db *gorm.DB, edgeService *EdgeService) *NamespaceServic
 	return &NamespaceService{
 		db:          db,
 		edgeService: edgeService,
-		// reloadCoordinator will be set later via SetReloadCoordinator
+		// pushes is set later via SetPushes
 	}
 }
 
-// SetReloadCoordinator sets the reload coordinator for distributed reload operations
-func (s *NamespaceService) SetReloadCoordinator(coordinator *ReloadCoordinator) {
-	s.reloadCoordinator = coordinator
+// ErrPushesUnavailable: this Studio has no control server, so nothing can
+// deliver a push.
+var ErrPushesUnavailable = errors.New("configuration pushes are not available: the edge control server is not running")
+
+// SetPushes sets the coordinator that records and delivers configuration
+// pushes (see features/ClusterControlPlane.md).
+func (s *NamespaceService) SetPushes(c *pushes.Coordinator) {
+	s.pushes = c
 }
 
-// GetReloadCoordinator returns the reload coordinator if available
-func (s *NamespaceService) GetReloadCoordinator() *ReloadCoordinator {
-	return s.reloadCoordinator
+// Pushes returns the push coordinator, or nil when there is none.
+func (s *NamespaceService) Pushes() *pushes.Coordinator {
+	return s.pushes
 }
 
 // NamespaceInfo contains information about a namespace
@@ -44,18 +52,6 @@ type NamespaceInfo struct {
 	TokenCount   int64  `json:"token_count"`
 	FilterCount  int64  `json:"filter_count"`
 	PluginCount  int64  `json:"plugin_count"`
-}
-
-// ReloadOperation represents a configuration reload operation
-type ReloadOperation struct {
-	OperationID     string    `json:"operation_id"`
-	TargetNamespace string    `json:"target_namespace"`
-	TargetEdges     []string  `json:"target_edges,omitempty"`
-	InitiatedBy     string    `json:"initiated_by"`
-	InitiatedAt     time.Time `json:"initiated_at"`
-	Status          string    `json:"status"`
-	Progress        int       `json:"progress"`
-	Message         string    `json:"message"`
 }
 
 // ListNamespaces returns all available namespaces with statistics
@@ -170,90 +166,43 @@ func (s *NamespaceService) GetEdgesInNamespace(namespace string) ([]EdgeInstance
 	return s.edgeService.GetEdgesInNamespace(dbNamespace)
 }
 
-// TriggerNamespaceReload initiates a configuration reload for all edges in a namespace
-func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy string) (*ReloadOperation, error) {
-	// Convert "global" to empty string for database queries
-	dbNamespace := namespace
-	if namespace == "global" {
-		dbNamespace = ""
-	}
-
-	// Check if namespace has any active edges. Edges register under the
-	// normalised spelling ("default" for a global/unset namespace), so match
-	// every spelling of the requested namespace.
-	var edgeCount int64
-	if err := s.db.Model(&models.EdgeInstance{}).
-		Where("namespace IN ? AND status IN ?", models.NamespaceAliases(namespace), []string{models.EdgeStatusConnected, models.EdgeStatusRegistered}).
-		Count(&edgeCount).Error; err != nil {
-		return nil, fmt.Errorf("failed to check namespace edges: %w", err)
-	}
-
-	if edgeCount == 0 {
-		return nil, fmt.Errorf("no active edges found in namespace '%s'", namespace)
-	}
-
-	// A push is being issued: the pending-changes preview measures from here
-	s.markNamespacePushed(dbNamespace)
-
-	// Create reload operation
-	operationID := fmt.Sprintf("ns-reload-%s-%d", namespace, time.Now().Unix())
-	
-	// Use reload coordinator if available, otherwise fall back to mock implementation
-	if s.reloadCoordinator != nil {
-		// Use the distributed reload coordinator for actual gRPC coordination
-		return s.reloadCoordinator.InitiateNamespaceReload(namespace, initiatedBy, 300) // 5 minute timeout
-	}
-
-	// Fallback for when no reload coordinator is set (standalone mode)
-	operation := &ReloadOperation{
-		OperationID:     operationID,
-		TargetNamespace: namespace,
-		InitiatedBy:     initiatedBy,
-		InitiatedAt:     time.Now(),
-		Status:          "initiated",
-		Progress:        0,
-		Message:         fmt.Sprintf("Reload operation initiated for namespace '%s'", namespace),
-	}
-
-	return operation, nil
+// TriggerNamespaceReload pushes the current configuration to every edge in
+// the namespace. It returns once the push is recorded; delivery and the
+// edges' answers are tracked on the returned operation.
+func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy string) (*pushes.Result, error) {
+	return s.push(pushes.Request{Scope: pushes.ScopeNamespace, Namespace: namespace, InitiatedBy: initiatedBy})
 }
 
-// TriggerEdgeReload initiates a configuration reload for a specific edge
-func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) (*ReloadOperation, error) {
-	// Check if edge exists and is active
-	edge, err := s.edgeService.GetEdgeByEdgeID(edgeID)
+// TriggerEdgeReload pushes the current configuration to one edge. An edge
+// that is not connected is waited for until the push's deadline.
+func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) (*pushes.Result, error) {
+	return s.push(pushes.Request{Scope: pushes.ScopeEdge, EdgeIDs: []string{edgeID}, InitiatedBy: initiatedBy})
+}
+
+// TriggerAllReload pushes the current configuration to every edge in every
+// namespace, as one operation.
+func (s *NamespaceService) TriggerAllReload(initiatedBy string) (*pushes.Result, error) {
+	return s.push(pushes.Request{Scope: pushes.ScopeAll, InitiatedBy: initiatedBy})
+}
+
+func (s *NamespaceService) push(req pushes.Request) (*pushes.Result, error) {
+	if s.pushes == nil {
+		return nil, ErrPushesUnavailable
+	}
+	res, err := s.pushes.Push(context.Background(), req)
 	if err != nil {
-		return nil, fmt.Errorf("edge not found: %w", err)
+		return nil, err
 	}
-
-	if edge.Status != models.EdgeStatusConnected && edge.Status != models.EdgeStatusRegistered {
-		return nil, fmt.Errorf("edge '%s' is not in a reloadable state (status: %s)", edgeID, edge.Status)
+	// The pending-changes preview measures from the push. Each namespace
+	// pushed to is stamped under the spelling its edges are stored with.
+	stamped := map[string]bool{}
+	for _, t := range res.Targets {
+		if !stamped[t.Namespace] {
+			stamped[t.Namespace] = true
+			s.markNamespacePushed(t.Namespace)
+		}
 	}
-
-	// A single-edge push still ships the namespace's current configuration
-	s.markNamespacePushed(edge.Namespace)
-
-	// Use reload coordinator if available, otherwise fall back to mock implementation
-	if s.reloadCoordinator != nil {
-		// Use the distributed reload coordinator for actual gRPC coordination
-		return s.reloadCoordinator.InitiateEdgeReload([]string{edgeID}, initiatedBy, 300) // 5 minute timeout
-	}
-
-	// Fallback for when no reload coordinator is set (standalone mode)
-	operationID := fmt.Sprintf("edge-reload-%s-%d", edgeID, time.Now().Unix())
-	
-	operation := &ReloadOperation{
-		OperationID:     operationID,
-		TargetNamespace: edge.Namespace,
-		TargetEdges:     []string{edgeID},
-		InitiatedBy:     initiatedBy,
-		InitiatedAt:     time.Now(),
-		Status:          "initiated",
-		Progress:        0,
-		Message:         fmt.Sprintf("Reload operation initiated for edge '%s'", edgeID),
-	}
-
-	return operation, nil
+	return res, nil
 }
 
 // markNamespacePushed stamps NamespaceSyncStatus.LastPushAt for the

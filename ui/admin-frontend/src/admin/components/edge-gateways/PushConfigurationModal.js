@@ -25,8 +25,9 @@ import useSystemFeatures from '../../hooks/useSystemFeatures';
 import { useSyncStatus } from '../../context/SyncStatusContext';
 import usePendingChanges from './usePendingChanges';
 import PendingChangesPreview from './PendingChangesPreview';
+import PushProgress from './PushProgress';
 
-const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
+const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) => {
   const { getAvailableNamespaces } = useNamespaces();
   const { features } = useSystemFeatures();
   const { refreshSyncStatus, notifyConfigPushed, syncStatus } = useSyncStatus();
@@ -40,7 +41,9 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+  // The push once it is recorded; PushProgress follows it from there.
+  const [operation, setOperation] = useState(null);
+  const success = operation !== null;
 
   const availableNamespaces = getAvailableNamespaces();
 
@@ -64,7 +67,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
       setTargetType('all');
       setSelectedNamespace('');
       setError(null);
-      setSuccess(null);
+      setOperation(null);
       onClose();
     }
   };
@@ -72,20 +75,14 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const handleSubmit = async () => {
     setLoading(true);
     setError(null);
-    setSuccess(null);
+    setOperation(null);
 
     try {
       let result;
 
       if (targetType === 'all') {
-        // CE/ENT: Use global reload-all endpoint
+        // CE/ENT: every edge gateway, as one push
         result = await edgeGatewayService.reloadAllEdges();
-
-        const message = features.hub_spoke_multi_tenant
-          ? `Configuration successfully pushed to all namespaces. Operation ID: ${result.operationId}`
-          : `Configuration successfully pushed to all edge gateways. Operation ID: ${result.operationId}`;
-
-        setSuccess(message);
       } else {
         // ENT only: Push to specific namespace
         if (!selectedNamespace) {
@@ -97,15 +94,18 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
           selectedNamespace === 'global' ? 'global' : selectedNamespace,
           'namespace'
         );
-
-        setSuccess(`Configuration push initiated for ${selectedNamespace} namespace. Operation ID: ${result.operationId}`);
       }
+      if (!result) {
+        throw new Error('The server did not return the push it started');
+      }
+      // Recorded, not yet delivered: PushProgress reports what the edges do.
+      setOperation(result);
 
       if (onSuccess) {
         onSuccess();
       }
 
-      // Refresh sync status after a successful push. The edges acknowledge
+      // Refresh sync status after the push starts. The edges acknowledge
       // over their next heartbeat, so the provider keeps polling for a short
       // while until nothing is pending any more (or gives up after 30 s).
       if (notifyConfigPushed) {
@@ -216,10 +216,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
           </Alert>
         )}
 
-        {success && (
-          <Alert severity="success" sx={{ mb: 2 }}>
-            {success}
-          </Alert>
+        {operation && (
+          <PushProgress
+            operation={operation}
+            pollIntervalMs={pollIntervalMs}
+            onFinished={() => refreshSyncStatus && refreshSyncStatus()}
+          />
         )}
 
         {loading && (

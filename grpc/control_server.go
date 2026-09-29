@@ -23,6 +23,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -36,6 +37,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -95,8 +97,15 @@ type ControlServer struct {
 	// Cleanup ticker for stale connections
 	cleanupTicker *time.Ticker
 
-	// Reload coordination (set after creation to avoid import cycle)
-	reloadCoordinator interface{} // Will be *services.ReloadCoordinator
+	// stopping is closed by Stop: every edge stream handler returns, so
+	// the edges reconnect (to another replica) and pushes in flight on
+	// them are requeued at once.
+	stopping     chan struct{}
+	stoppingOnce sync.Once
+
+	// pushes delivers configuration pushes to the edges whose streams this
+	// replica holds (services/pushes; set after creation).
+	pushes PushDelivery
 
 	// Plugin manager for routing edge payloads to plugins
 	pluginManager EdgePayloadRouter
@@ -171,6 +180,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		config:                cfg,
 		db:                    db,
 		edgeConnections:       make(map[string]*EdgeInstanceConnection),
+		stopping:              make(chan struct{}),
 		maxConcurrentStreams:  maxStreams,
 		edgeManagementService: edge_management.NewService(db),
 		eventBus:              eventbridge.NewBus(),
@@ -275,31 +285,34 @@ func (s *ControlServer) Stop() {
 		s.cleanupTicker.Stop()
 	}
 
+	// End the edge streams first: GracefulStop waits for every stream to
+	// end, and an edge's stream only ends when this side or the edge ends
+	// it. The edges reconnect with backoff, to another replica if there is
+	// one. (No ShutdownRequested notice: the edge client stops for good on
+	// it, which is wrong when only this replica is going away.)
+	s.stoppingOnce.Do(func() { close(s.stopping) })
+
 	s.serverMu.Lock()
 	server := s.grpcServer
 	s.serverMu.Unlock()
 	if server != nil {
-		server.GracefulStop()
-	}
-
-	// Close all edge connections
-	s.edgeMutex.Lock()
-	for _, edge := range s.edgeConnections {
-		if edge.Stream != nil {
-			// Send shutdown message
-			edge.Stream.Send(&pb.ControlMessage{
-				Message: &pb.ControlMessage_HeartbeatResponse{
-					HeartbeatResponse: &pb.HeartbeatResponse{
-						Acknowledged:      true,
-						Message:           "Control server shutting down",
-						ShutdownRequested: true,
-					},
-				},
-			})
+		done := make(chan struct{})
+		go func() {
+			server.GracefulStop()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(stopGracePeriod):
+			log.Warn().Dur("grace", stopGracePeriod).Msg("gRPC control server did not stop gracefully in time; closing remaining connections")
+			server.Stop()
+			<-done
 		}
 	}
-	s.edgeMutex.Unlock()
 }
+
+// stopGracePeriod bounds how long Stop waits for in-flight unary calls.
+var stopGracePeriod = 10 * time.Second
 
 // RegisterEdge handles edge instance registration
 func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrationRequest) (*pb.EdgeRegistrationResponse, error) {
@@ -484,6 +497,10 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 		return status.Error(codes.ResourceExhausted, "maximum concurrent streams exceeded")
 	}
 
+	// Heartbeat responses, events, config snapshots and pushes are sent on
+	// this stream from different goroutines; gRPC allows one Send at a time.
+	stream = &serialSendStream{ConfigurationSyncService_SubscribeToChangesServer: stream}
+
 	var edgeID string
 	var edgeConnection *EdgeInstanceConnection
 
@@ -580,6 +597,11 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					}
 
 					log.Debug().Str("edge_id", edgeID).Str("stream_session", streamSession).Msg("Event bridge started for edge connection")
+
+					// Deliver any push waiting for this edge.
+					if p := s.pushDelivery(); p != nil {
+						p.StreamOpened(edgeID)
+					}
 
 					// Send registration response
 					response := &pb.ControlMessage{
@@ -692,18 +714,18 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 				if m.ReloadResponse != nil {
 					log.Info().
 						Str("operation_id", m.ReloadResponse.OperationId).
-						Str("edge_id", m.ReloadResponse.EdgeId).
+						Str("edge_id", edgeID).
 						Str("phase", m.ReloadResponse.Phase.String()).
 						Bool("success", m.ReloadResponse.Success).
 						Msg("Received reload status from edge")
 
-					// Forward to reload coordinator if available
-					if s.reloadCoordinator != nil {
-						if coordinator, ok := s.reloadCoordinator.(interface {
-							ProcessReloadResponse(*pb.ConfigurationReloadResponse)
-						}); ok {
-							coordinator.ProcessReloadResponse(m.ReloadResponse)
-						}
+					if edgeConnection == nil {
+						log.Warn().Str("operation_id", m.ReloadResponse.OperationId).Msg("Reload status on a stream that has not registered; ignored")
+					} else if p := s.pushDelivery(); p != nil {
+						// The stream says which edge this is, not the message.
+						resp := proto.Clone(m.ReloadResponse).(*pb.ConfigurationReloadResponse)
+						resp.EdgeId = edgeID
+						p.HandleReloadResponse(resp)
 					}
 				}
 
@@ -725,7 +747,11 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	}()
 
 	// Keep connection alive and handle outgoing messages
-	<-stream.Context().Done()
+	select {
+	case <-stream.Context().Done():
+	case <-s.stopping:
+		log.Debug().Str("edge_id", edgeID).Msg("Control server stopping; ending edge stream")
+	}
 
 	// Cleanup when stream closes
 	if edgeConnection != nil {
@@ -753,6 +779,12 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 			log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of the edge's stream")
 		} else if !changed {
 			log.Debug().Str("edge_id", edgeID).Msg("Edge already on a newer stream; its state is left as is")
+		}
+
+		// Pushes sent on this stream and not yet answered are retried on
+		// the edge's next stream, on whichever replica it reaches.
+		if p := s.pushDelivery(); p != nil {
+			p.StreamClosed(edgeID, edgeConnection.SessionID)
 		}
 
 		log.Debug().Str("edge_id", edgeID).Msg("Event bridge stopped for edge connection")
@@ -2448,86 +2480,81 @@ func deriveSnapshotNonce(encryptionKey, plaintext string, size int) []byte {
 	return mac.Sum(nil)[:size]
 }
 
-// SetReloadCoordinator sets the reload coordinator reference (avoids import cycle)
-func (s *ControlServer) SetReloadCoordinator(coordinator interface{}) {
-	s.reloadCoordinator = coordinator
-	log.Debug().Msg("Reload coordinator set for control server")
+// PushDelivery is the durable push coordinator (services/pushes.Coordinator),
+// told about this replica's edge streams and the edges' reload reports.
+type PushDelivery interface {
+	StreamOpened(edgeID string)
+	StreamClosed(edgeID, session string)
+	HandleReloadResponse(*pb.ConfigurationReloadResponse)
 }
 
-// SendReloadRequest sends a reload request to a specific edge instance
-func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.ConfigurationReloadRequest) error {
+// SetPushDelivery connects the push coordinator. The coordinator in turn
+// uses the server's LocalStreams and SendReload.
+func (s *ControlServer) SetPushDelivery(p PushDelivery) {
+	s.edgeMutex.Lock()
+	s.pushes = p
+	s.edgeMutex.Unlock()
+}
+
+func (s *ControlServer) pushDelivery() PushDelivery {
 	s.edgeMutex.RLock()
-	edge, exists := s.edgeConnections[edgeID]
+	defer s.edgeMutex.RUnlock()
+	return s.pushes
+}
+
+// LocalStreams lists the edges with a live stream on this replica, with the
+// stream's session.
+func (s *ControlServer) LocalStreams() map[string]string {
+	s.edgeMutex.RLock()
+	defer s.edgeMutex.RUnlock()
+	out := make(map[string]string, len(s.edgeConnections))
+	for edgeID, edge := range s.edgeConnections {
+		if edge.Stream != nil && edge.Stream.Context().Err() == nil {
+			out[edgeID] = edge.SessionID
+		}
+	}
+	return out
+}
+
+// SendReload sends a push on the edge's stream, provided it is still the
+// stream with the given session: a push must go out on the stream it was
+// claimed for, or not at all.
+func (s *ControlServer) SendReload(edgeID, session string, req *pb.ConfigurationReloadRequest) error {
+	s.edgeMutex.RLock()
+	edge, ok := s.edgeConnections[edgeID]
+	var stream pb.ConfigurationSyncService_SubscribeToChangesServer
+	var current string
+	if ok {
+		stream, current = edge.Stream, edge.SessionID
+	}
 	s.edgeMutex.RUnlock()
 
-	if !exists {
-		return fmt.Errorf("edge instance not found: %s", edgeID)
+	switch {
+	case !ok || stream == nil:
+		return fmt.Errorf("%w: edge %s has no stream here", pushes.ErrNoStream, edgeID)
+	case current != session:
+		return fmt.Errorf("%w: edge %s reconnected (stream %s replaced %s)", pushes.ErrNoStream, edgeID, current, session)
+	case stream.Context().Err() != nil:
+		return fmt.Errorf("%w: edge %s stream is closed (%v)", pushes.ErrNoStream, edgeID, stream.Context().Err())
 	}
-
-	if edge.Stream == nil || (edge.Status != "connected" && edge.Status != "registered") {
-		return fmt.Errorf("edge instance not available for reload: %s (status: %s, has_stream: %v)", edgeID, edge.Status, edge.Stream != nil)
+	if err := stream.Send(&pb.ControlMessage{Message: &pb.ControlMessage_ReloadRequest{ReloadRequest: req}}); err != nil {
+		return fmt.Errorf("send on edge %s stream: %w", edgeID, err)
 	}
-
-	// Test stream connectivity before sending
-	if !s.isEdgeStreamActive(edge) {
-		log.Warn().Str("edge_id", edgeID).Msg("Edge stream is not active, marking as disconnected")
-		edge.Status = "disconnected"
-		edge.Stream = nil
-		return fmt.Errorf("edge instance stream is not active: %s", edgeID)
-	}
-
-	// Send reload request via gRPC stream
-	message := &pb.ControlMessage{
-		Message: &pb.ControlMessage_ReloadRequest{
-			ReloadRequest: reloadReq,
-		},
-	}
-
-	if err := edge.Stream.Send(message); err != nil {
-		log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to send reload request to edge")
-		edge.Status = "disconnected"
-		edge.Stream = nil
-		return fmt.Errorf("failed to send reload request: %w", err)
-	}
-
-	log.Info().
-		Str("edge_id", edgeID).
-		Str("operation_id", reloadReq.OperationId).
-		Msg("Reload request sent to edge via stream")
-
+	log.Info().Str("edge_id", edgeID).Str("operation_id", req.OperationId).Str("stream_session", session).Msg("Configuration push sent to edge")
 	return nil
 }
 
-// GetConnectedEdges returns all connected edge instances as interface{} map
-func (s *ControlServer) GetConnectedEdges() map[string]interface{} {
-	s.edgeMutex.RLock()
-	defer s.edgeMutex.RUnlock()
+// serialSendStream lets one goroutine at a time Send on an edge stream,
+// which gRPC requires. A torn message could lose a push or its answer.
+type serialSendStream struct {
+	pb.ConfigurationSyncService_SubscribeToChangesServer
+	mu sync.Mutex
+}
 
-	result := make(map[string]interface{})
-	for edgeID, edge := range s.edgeConnections {
-		// Only include edges that are truly connected (have active stream)
-		if s.isEdgeStreamActive(edge) {
-			edge.mu.RLock()
-			lastHeartbeat := edge.LastHeartbeat
-			edge.mu.RUnlock()
-
-			// Convert edge connection to interface{} map format expected by reload coordinator
-			result[edgeID] = map[string]interface{}{
-				"edge_id":        edge.EdgeID,
-				"namespace":      edge.Namespace,
-				"status":         edge.Status,
-				"version":        edge.Version,
-				"session_id":     edge.SessionID,
-				"last_heartbeat": lastHeartbeat,
-			}
-		}
-	}
-
-	log.Debug().
-		Int("connected_edges", len(result)).
-		Msg("Retrieved connected edges for reload coordinator")
-
-	return result
+func (s *serialSendStream) Send(msg *pb.ControlMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ConfigurationSyncService_SubscribeToChangesServer.Send(msg)
 }
 
 // isEdgeStreamActive checks if an edge's stream is still active
@@ -2571,6 +2598,16 @@ func (s *ControlServer) startCleanupRoutine() {
 
 // cleanupStaleConnections removes disconnected and stale edge connections
 func (s *ControlServer) cleanupStaleConnections() {
+	type closed struct{ edgeID, session string }
+	var ended []closed
+	defer func() {
+		if p := s.pushDelivery(); p != nil {
+			for _, e := range ended {
+				p.StreamClosed(e.edgeID, e.session)
+			}
+		}
+	}()
+
 	s.edgeMutex.Lock()
 	defer s.edgeMutex.Unlock()
 
@@ -2593,6 +2630,7 @@ func (s *ControlServer) cleanupStaleConnections() {
 			}
 
 			toRemove = append(toRemove, edgeID)
+			ended = append(ended, closed{edgeID, edge.SessionID})
 		}
 	}
 

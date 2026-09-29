@@ -6,7 +6,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/gin-gonic/gin"
 )
 
@@ -104,63 +104,16 @@ func (a *API) triggerNamespaceReload(c *gin.Context) {
 
 	// Security: Validate namespace parameter
 	if err := validateNamespace(namespace); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
 
-	// Get current user for audit trail
-	user, exists := c.Get("user")
-	initiatedBy := "unknown"
-	if exists {
-		if u, ok := user.(*models.User); ok {
-			initiatedBy = u.Email
-		}
-	}
-	
-	// Use namespace service to trigger reload
-	operation, err := a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy)
+	res, err := a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy(c))
 	if err != nil {
-		if err.Error() == "no active edges found in namespace '"+namespace+"'" {
-			c.JSON(http.StatusNotFound, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Not Found", Detail: err.Error()}},
-			})
-			return
-		}
-		
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		sendPushError(c, err)
 		return
 	}
-
-	response := ReloadResponse{
-		Type: "reload-operations",
-		ID:   operation.OperationID,
-		Attributes: struct {
-			OperationID     string `json:"operation_id"`
-			TargetNamespace string `json:"target_namespace"`
-			Status          string `json:"status"`
-			Message         string `json:"message"`
-		}{
-			OperationID:     operation.OperationID,
-			TargetNamespace: operation.TargetNamespace,
-			Status:          operation.Status,
-			Message:         operation.Message,
-		},
-	}
-
-	c.JSON(http.StatusAccepted, gin.H{"data": response})
+	pushAccepted(c, res)
 }
 
 // @Summary Get edges in namespace
@@ -233,68 +186,5 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 // @Router /api/v1/reload-operations/{operation_id}/status [get]
 // @Security BearerAuth
 func (a *API) getReloadOperationStatus(c *gin.Context) {
-	operationID := c.Param("operation_id")
-
-	// Security: Validate operation_id parameter
-	if err := validateOperationID(operationID); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
-		return
-	}
-
-	// Get reload coordinator from namespace service
-	if a.service.NamespaceService == nil {
-		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Service Unavailable", Detail: "Namespace service not available"}},
-		})
-		return
-	}
-	
-	reloadCoordinator := a.service.NamespaceService.GetReloadCoordinator()
-	if reloadCoordinator == nil {
-		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Service Unavailable", Detail: "Reload coordinator not available (standalone mode)"}},
-		})
-		return
-	}
-	
-	// Get operation status
-	operation, err := reloadCoordinator.GetOperationStatus(operationID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Not Found", Detail: err.Error()}},
-		})
-		return
-	}
-
-	response := ReloadResponse{
-		Type: "reload-operations",
-		ID:   operation.OperationID,
-		Attributes: struct {
-			OperationID     string `json:"operation_id"`
-			TargetNamespace string `json:"target_namespace"`
-			Status          string `json:"status"`
-			Message         string `json:"message"`
-		}{
-			OperationID:     operation.OperationID,
-			TargetNamespace: operation.TargetNamespace,
-			Status:          operation.Status,
-			Message:         operation.Message,
-		},
-	}
-
-	c.JSON(http.StatusOK, gin.H{"data": response})
+	a.pushStatus(c)
 }

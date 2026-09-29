@@ -130,11 +130,16 @@ The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM**
 
 When you push configuration:
 
-1. The control plane generates a new configuration snapshot for the target namespace(s)
-2. Edge gateways receive a reload signal via gRPC
-3. Each edge fetches the new configuration and applies it
-4. Edges report the new checksum in their next heartbeat
-5. The sync status updates to reflect the new state
+1. AI Studio records the push: one entry per target edge gateway, with a deadline (5 minutes). The modal shows which edges are connected now and warns about the ones that are not.
+2. The control-plane replica that holds each edge's connection sends it a reload request. With several AI Studio replicas behind a load balancer, it does not matter which replica you pushed from.
+3. Each edge pulls the current configuration, applies it and answers **ready** (or **failed**, with the reason).
+4. The modal follows the push until every edge has answered and shows each edge's outcome:
+   - **Updated**: the edge loaded the configuration.
+   - **Updated, with a warning**: the edge loaded a configuration that has since changed again; push once more.
+   - **Failed**: the edge could not apply it (its error is shown), or three delivery attempts in a row were cut short.
+   - **Timed out**: the edge did not connect, or did not finish, before the deadline.
+
+You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline. If an edge's connection drops while it is reloading, or the replica it was connected to stops, the push is sent again when the edge reconnects (to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes and lists them. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
 
 How an edge applies a snapshot:
 
@@ -241,20 +246,22 @@ Returns what has changed in a namespace since its last push, as shown in the pus
 
 A reload makes each edge pull the snapshot through `GetFullConfiguration`, which marks that edge in sync immediately rather than waiting for its next heartbeat; the other edges in the namespace stay pending until they pull.
 
-### Trigger Configuration Reload
+### Push Configuration
 
 ```
-POST /api/v1/edges/reload
+POST /api/v1/edges/{edge_id}/reload          # one edge
+POST /api/v1/namespaces/{namespace}/reload   # one namespace (Enterprise)
+POST /api/v1/edges/reload-all                # every edge gateway
 ```
 
-Triggers a configuration reload for all edges or a specific namespace:
+Each answers `202 Accepted` with the push operation: `operation_id`, `target_edges`, `targets` (each with `reachable` and, if not, the reason), `skipped` (edges left out because they have been offline for more than 5 minutes), `warnings` and `deadline_at`. It answers `404` for an unknown edge, `409` when there is nothing to push to, and `503` when this AI Studio runs no control server.
 
-```json
-{
-  "namespace": "production",
-  "scope": "namespace"
-}
 ```
+GET /api/v1/reload-operations/{operation_id}/status   # Enterprise
+GET /api/v1/edges/reload-operations                  # the last day's pushes
+```
+
+The status reports the operation's `status` (`in_progress`, `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`, `expired`), `progress`, `counts` per outcome, and `edges`: for each edge its `status`, the phase it last reported, `message`, `warning`, `attempts` and the history of every delivery attempt. Any AI Studio replica answers it. The listing gives each push's status, counts and message.
 
 ## Troubleshooting
 

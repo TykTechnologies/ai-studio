@@ -42,7 +42,9 @@ type SimpleEdgeClient struct {
 	// connection and setConnection.
 	connMu sync.RWMutex
 
-	// Config checksum tracking for sync status
+	// Config checksum tracking for sync status; guarded by configMu with
+	// configCache (see setLoadedConfig).
+	configMu       sync.RWMutex
 	loadedChecksum string
 	loadedVersion  string
 
@@ -51,7 +53,11 @@ type SimpleEdgeClient struct {
 	buildHash string
 	buildTime string
 
-	// Bidirectional streaming
+	// Bidirectional streaming. stream is read and replaced through
+	// currentStream and setStream (a reconnect replaces it while heartbeats,
+	// events and reload statuses are being sent), and it is always a
+	// serialSendStream: gRPC allows one Send at a time per stream.
+	streamMu     sync.RWMutex
 	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
 	streamCtx    context.Context
 	streamCancel context.CancelFunc
@@ -103,6 +109,11 @@ func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime strin
 		reconnectInterval: 5 * time.Second, // 5 second retry interval
 		eventBus:          eventbridge.NewBus(),
 		stopCh:            make(chan struct{}),
+	}
+
+	// EDGE_RECONNECT_INTERVAL is the base of the reconnect backoff.
+	if cfg != nil && cfg.HubSpoke.ReconnectInterval > 0 {
+		client.reconnectInterval = cfg.HubSpoke.ReconnectInterval
 	}
 
 	log.Debug().Msg("Event bridge bus initialized for edge client")
@@ -190,11 +201,7 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 			Int32("app_count", int32(len(resp.InitialConfig.Apps))).
 			Msg("Received initial configuration from control")
 
-		c.configCache = resp.InitialConfig
-
-		// Store checksum and version for sync tracking
-		c.loadedChecksum = resp.InitialConfig.Checksum
-		c.loadedVersion = resp.InitialConfig.Version
+		c.setLoadedConfig(resp.InitialConfig)
 
 		// Notify provider if callback is set
 		if c.onConfigChange != nil {
@@ -222,7 +229,27 @@ func (c *SimpleEdgeClient) IsConnected() bool {
 
 // GetCurrentConfiguration returns the cached configuration
 func (c *SimpleEdgeClient) GetCurrentConfiguration() *pb.ConfigurationSnapshot {
+	c.configMu.RLock()
+	defer c.configMu.RUnlock()
 	return c.configCache
+}
+
+// setLoadedConfig records the snapshot this edge now runs. Pushes, stream
+// updates and the initial registration write it while heartbeats report
+// it, so it is only read and written under configMu.
+func (c *SimpleEdgeClient) setLoadedConfig(snap *pb.ConfigurationSnapshot) {
+	c.configMu.Lock()
+	defer c.configMu.Unlock()
+	c.configCache = snap
+	c.loadedChecksum = snap.Checksum
+	c.loadedVersion = snap.Version
+}
+
+// loadedConfig returns the checksum and version of the loaded snapshot.
+func (c *SimpleEdgeClient) loadedConfig() (checksum, version string) {
+	c.configMu.RLock()
+	defer c.configMu.RUnlock()
+	return c.loadedChecksum, c.loadedVersion
 }
 
 // GetEventBus returns the edge client's event bus for subscribing to events.
@@ -369,11 +396,7 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 	}
 
 	// Update local cache and trigger callback
-	c.configCache = resp
-
-	// Store checksum and version for sync tracking
-	c.loadedChecksum = resp.Checksum
-	c.loadedVersion = resp.Version
+	c.setLoadedConfig(resp)
 
 	if c.onConfigChange != nil {
 		c.onConfigChange(resp)
@@ -410,7 +433,7 @@ func (c *SimpleEdgeClient) establishStream() error {
 		return fmt.Errorf("failed to start streaming: %w", err)
 	}
 
-	c.stream = stream
+	c.setStream(stream)
 
 	// Setup event bridge for this connection
 	c.setupEventBridge()
@@ -436,7 +459,7 @@ func (c *SimpleEdgeClient) establishStream() error {
 		},
 	}
 
-	if err := c.stream.Send(regMsg); err != nil {
+	if err := c.send(regMsg); err != nil {
 		cancel()
 		return fmt.Errorf("failed to send stream registration: %w", err)
 	}
@@ -460,7 +483,7 @@ func (c *SimpleEdgeClient) setupEventBridge() {
 
 	// Create stream adapter that sends events to control
 	c.streamAdapter = eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
-		return c.stream.Send(&pb.EdgeMessage{
+		return c.send(&pb.EdgeMessage{
 			Message: &pb.EdgeMessage_Event{
 				Event: &pb.EventFrame{
 					Id:      frame.ID,
@@ -499,6 +522,7 @@ func (c *SimpleEdgeClient) stopEventBridge() {
 
 // handleIncomingMessages processes messages from control server with comprehensive error recovery
 func (c *SimpleEdgeClient) handleIncomingMessages() {
+	stream := c.currentStream()
 	defer func() {
 		// Handle panic recovery
 		if r := recover(); r != nil {
@@ -521,7 +545,7 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 	}()
 
 	for {
-		msg, err := c.stream.Recv()
+		msg, err := stream.Recv()
 		if err != nil {
 			// Categorize the error and handle accordingly
 			errorCategory := c.categorizeStreamError(err)
@@ -665,11 +689,7 @@ func (c *SimpleEdgeClient) handleConfigurationUpdate(config *pb.ConfigurationSna
 		Int("app_count", len(config.Apps)).
 		Msg("Received configuration update via stream")
 
-	c.configCache = config
-
-	// Store checksum and version for sync tracking
-	c.loadedChecksum = config.Checksum
-	c.loadedVersion = config.Version
+	c.setLoadedConfig(config)
 
 	log.Info().
 		Str("checksum", config.Checksum).
@@ -710,8 +730,9 @@ func (c *SimpleEdgeClient) handleHeartbeatResponse(resp *pb.HeartbeatResponse) e
 
 	// Log sync status warning if out of sync
 	if resp.ExpectedChecksum != "" && !resp.IsInSync {
+		loaded, _ := c.loadedConfig()
 		log.Warn().
-			Str("loaded_checksum", c.loadedChecksum).
+			Str("loaded_checksum", loaded).
 			Str("expected_checksum", resp.ExpectedChecksum).
 			Msg("Edge is out of sync with control - configuration update pending")
 	}
@@ -762,7 +783,7 @@ func (c *SimpleEdgeClient) handleReloadRequest(req *pb.ConfigurationReloadReques
 
 // SendReloadStatus sends a reload status update to control server via stream
 func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResponse) error {
-	if c.stream == nil {
+	if c.currentStream() == nil {
 		return fmt.Errorf("no stream available for sending reload status")
 	}
 
@@ -778,7 +799,7 @@ func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResp
 		},
 	}
 
-	if err := c.stream.Send(msg); err != nil {
+	if err := c.send(msg); err != nil {
 		log.Error().Err(err).Msg("Failed to send reload status via stream")
 		return fmt.Errorf("failed to send reload status: %w", err)
 	}
@@ -841,12 +862,12 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 	for {
 		select {
 		case <-ticker.C:
-			if c.connected && c.stream != nil {
+			if c.connected && c.currentStream() != nil {
 				c.sendHeartbeat()
 			} else {
 				log.Debug().
 					Bool("connected", c.connected).
-					Bool("stream_not_nil", c.stream != nil).
+					Bool("stream_not_nil", c.currentStream() != nil).
 					Msg("Skipping heartbeat - not connected or stream is nil")
 			}
 		case <-c.streamCtx.Done():
@@ -858,6 +879,7 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 
 // sendHeartbeat sends a heartbeat message to the control instance
 func (c *SimpleEdgeClient) sendHeartbeat() {
+	loadedChecksum, loadedVersion := c.loadedConfig()
 	heartbeat := &pb.EdgeMessage{
 		Message: &pb.EdgeMessage_Heartbeat{
 			Heartbeat: &pb.HeartbeatRequest{
@@ -870,18 +892,18 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 				},
 				Metrics:              c.collectBasicMetrics(),
 				Timestamp:            timestamppb.Now(),
-				LoadedConfigChecksum: c.loadedChecksum,
-				LoadedConfigVersion:  c.loadedVersion,
+				LoadedConfigChecksum: loadedChecksum,
+				LoadedConfigVersion:  loadedVersion,
 			},
 		},
 	}
 
-	if err := c.stream.Send(heartbeat); err != nil {
+	if err := c.send(heartbeat); err != nil {
 		log.Error().Err(err).Msg("Failed to send heartbeat")
 	} else {
 		log.Debug().
 			Str("edge_id", c.config.HubSpoke.EdgeID).
-			Str("checksum", c.loadedChecksum).
+			Str("checksum", loadedChecksum).
 			Msg("Heartbeat sent with config checksum")
 	}
 
@@ -1180,4 +1202,44 @@ func (c *SimpleEdgeClient) authStreamInterceptor() grpc.StreamClientInterceptor 
 		// Create the stream with authenticated context
 		return streamer(authCtx, desc, cc, method, opts...)
 	}
+}
+// serialSendStream lets one goroutine at a time Send on a stream: gRPC
+// streams do not allow concurrent Send calls, and heartbeats, events and
+// reload statuses are sent from different goroutines. A torn or dropped
+// reload status would leave control waiting for an answer that never comes.
+type serialSendStream struct {
+	pb.ConfigurationSyncService_SubscribeToChangesClient
+	mu sync.Mutex
+}
+
+func (s *serialSendStream) Send(msg *pb.EdgeMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ConfigurationSyncService_SubscribeToChangesClient.Send(msg)
+}
+
+func (c *SimpleEdgeClient) setStream(stream pb.ConfigurationSyncService_SubscribeToChangesClient) {
+	if stream != nil {
+		if _, ok := stream.(*serialSendStream); !ok {
+			stream = &serialSendStream{ConfigurationSyncService_SubscribeToChangesClient: stream}
+		}
+	}
+	c.streamMu.Lock()
+	c.stream = stream
+	c.streamMu.Unlock()
+}
+
+func (c *SimpleEdgeClient) currentStream() pb.ConfigurationSyncService_SubscribeToChangesClient {
+	c.streamMu.RLock()
+	defer c.streamMu.RUnlock()
+	return c.stream
+}
+
+// send writes msg on the current stream.
+func (c *SimpleEdgeClient) send(msg *pb.EdgeMessage) error {
+	stream := c.currentStream()
+	if stream == nil {
+		return fmt.Errorf("no stream to control")
+	}
+	return stream.Send(msg)
 }

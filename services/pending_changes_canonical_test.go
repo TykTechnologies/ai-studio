@@ -7,6 +7,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,6 +50,7 @@ func TestPendingChanges_EdgeReloadStampsThePreview(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	edgeService := services.NewEdgeService(db)
 	nsService := services.NewNamespaceService(db, edgeService)
+	nsService.SetPushes(pushes.New(db, "test-node", nil, pushes.Options{}))
 	svc := services.NewSyncStatusService(db)
 
 	require.NoError(t, db.Create(&models.EdgeInstance{EdgeID: "edge-legacy", Namespace: "", Status: models.EdgeStatusConnected}).Error)
