@@ -127,7 +127,9 @@ type MCPServerCache struct {
 type Proxy struct {
 	gatewayService          services.ServiceInterface
 	budgetService           services.BudgetServiceInterface
-	server                  *http.Server
+	serverMu                sync.Mutex
+	server                  *http.Server // set by Start, read by Stop under serverMu
+	stopped                 bool         // Stop was called; a later Start does not listen
 	llms                    map[string]*models.LLM
 	llmsByID       map[uint]*models.LLM // same entries as llms, keyed by id for failover rungs
 	datasources             map[string]*models.Datasource
@@ -385,15 +387,22 @@ func (p *Proxy) Start() error {
 		})
 	}
 
-	p.server = &http.Server{
+	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", p.config.Port),
 		Handler:      handler,
 		ReadTimeout:  p.config.serverReadTimeout(),
 		WriteTimeout: p.config.serverWriteTimeout(),
 		IdleTimeout:  p.config.serverIdleTimeout(),
 	}
+	p.serverMu.Lock()
+	if p.stopped {
+		p.serverMu.Unlock()
+		return http.ErrServerClosed
+	}
+	p.server = server
+	p.serverMu.Unlock()
 	logger.Infof("Starting proxy server on port %d", p.config.Port)
-	return p.server.ListenAndServe()
+	return server.ListenAndServe()
 }
 
 type loggingResponseWriter struct { // Kept for debug middleware, if used.
@@ -406,7 +415,18 @@ func (w *loggingResponseWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-func (p *Proxy) Stop(ctx context.Context) error { return p.server.Shutdown(ctx) }
+// Stop shuts down the server Start is running. Called before Start has begun
+// listening, it makes Start return http.ErrServerClosed instead.
+func (p *Proxy) Stop(ctx context.Context) error {
+	p.serverMu.Lock()
+	p.stopped = true
+	server := p.server
+	p.serverMu.Unlock()
+	if server == nil {
+		return nil
+	}
+	return server.Shutdown(ctx)
+}
 
 func (p *Proxy) Reload() error {
 	logger.Debug("proxy reloading resources")
