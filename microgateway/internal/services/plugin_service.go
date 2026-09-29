@@ -14,7 +14,6 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/rs/zerolog/log"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -60,7 +59,7 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 	}
 
 	// Convert config to JSON
-	var configJSON datatypes.JSON
+	var configJSON database.JSON
 	if req.Config != nil {
 		configBytes, err := json.Marshal(req.Config)
 		if err != nil {
@@ -265,7 +264,7 @@ func (s *PluginService) loadPluginsForLLM(llmID uint) ([]database.Plugin, error)
 		}
 
 		// Update plugin with merged config
-		plugin.Config = datatypes.JSON(mergedConfigJSON)
+		plugin.Config = database.JSON(mergedConfigJSON)
 
 		log.Debug().
 			Uint("plugin_id", plugin.ID).

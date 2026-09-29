@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -36,7 +35,7 @@ func setupStoreAppTestDB(t *testing.T) (*gorm.DB, *MicrogatewayManagementServer)
 		Command:       "/bin/test-plugin",
 		HookType:      "auth",
 		IsActive:      true,
-		ServiceScopes: datatypes.JSON(`["apps.write","apps.read","kv.readwrite"]`),
+		ServiceScopes: database.JSON(`["apps.write","apps.read","kv.readwrite"]`),
 	}
 	require.NoError(t, db.Create(plugin).Error)
 

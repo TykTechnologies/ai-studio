@@ -22,8 +22,11 @@ behaviour unchanged:
 
 Decisions that shape the design:
 
-- **Own database.** Studio keeps its own database or schema; the host passes a
-  `*gorm.DB` for it. Studio's table names are not prefixed.
+- **Own database.** Studio keeps its own database or schema; the host opens it
+  with `studio.OpenDatabase(conf)` and passes the result as `Options.DB`, so
+  the host never names Studio's gorm (Studio is moving to its own copy of
+  gorm, which a host's `replace gorm.io/gorm` cannot reach). Studio's table
+  names are not prefixed.
 - **Host-authoritative identity.** The host authenticates the user and Studio
   provisions a matching user on first sight, keeping its own RBAC and groups.
 - **One instance per process.** Package-level state that clashes with a host
@@ -87,7 +90,7 @@ shared with the microgateway (`ANALYTICS_BUFFER_SIZE`, `BUDGET_SYNC_INTERVAL`,
 
 `pkg/studio` holds the wiring that used to live in `main.go`; `main.go` is
 now a thin wrapper (flags, `config.Get`, logger, connectivity checks, opening
-the database, the docs server, signal handling). See `pkg/studio/README.md`
+the database with `studio.OpenDatabase`, the docs server, signal handling). See `pkg/studio/README.md`
 for the host-facing API.
 
 - `studio.New(Options)` installs the configuration, checks the edition,

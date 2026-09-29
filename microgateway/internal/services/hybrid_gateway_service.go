@@ -13,7 +13,6 @@ import (
 	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -516,7 +515,7 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 
 		// Handle metadata JSON
 		if pbApp.Metadata != "" {
-			app.Metadata = datatypes.JSON(pbApp.Metadata)
+			app.Metadata = database.JSON(pbApp.Metadata)
 		}
 
 		// Upsert: Create if not exists, Update if exists

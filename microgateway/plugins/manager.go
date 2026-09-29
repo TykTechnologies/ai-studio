@@ -45,7 +45,7 @@ type PluginData struct {
 	HookType  string
 	HookTypes []string // All hook types this plugin supports
 	Command   string
-	Config    []byte // JSON-encoded config (matches datatypes.JSON from database)
+	Config    []byte // JSON-encoded config (matches database.JSON from database)
 	Checksum  string
 	IsActive  bool
 }
@@ -335,7 +335,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Parse plugin config
 	var config map[string]interface{}
 	if pluginData.Config != nil {
-		// Convert datatypes.JSON to map[string]interface{}
+		// Convert database.JSON to map[string]interface{}
 		if err := json.Unmarshal(pluginData.Config, &config); err != nil {
 			client.Kill()
 			return nil, fmt.Errorf("failed to parse plugin config: %w", err)

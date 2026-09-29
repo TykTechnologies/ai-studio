@@ -3,8 +3,6 @@ package database
 import (
 	"encoding/json"
 	"fmt"
-
-	"gorm.io/datatypes"
 )
 
 // GovernedMetadataContextKey is the plugin-context metadata key carrying the
@@ -16,11 +14,11 @@ const GovernedMetadataContextKey = "governed_metadata"
 
 // GovernedMetadataJSON converts the snapshot's JSON string into a column value,
 // keeping the column NULL when the control plane sent nothing.
-func GovernedMetadataJSON(raw string) datatypes.JSON {
+func GovernedMetadataJSON(raw string) JSON {
 	if raw == "" {
 		return nil
 	}
-	return datatypes.JSON(raw)
+	return JSON(raw)
 }
 
 // AddGovernedMetadataToContext copies the LLM's governed metadata into a plugin

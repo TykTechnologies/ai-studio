@@ -28,9 +28,6 @@ import (
 	"syscall"
 	"time"
 
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
 )
@@ -83,7 +80,7 @@ func main() {
 	}
 	conf := config.LoadFrom(func(key string) string { return settings[key] })
 
-	db, err := gorm.Open(sqlite.Open(*dbPath), &gorm.Config{})
+	db, err := studio.OpenDatabase(conf)
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}

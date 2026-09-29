@@ -3,7 +3,7 @@ package database
 import "reflect"
 
 // DeepCopy returns a copy of v that shares no mutable memory with it:
-// pointers, slices (including datatypes.JSON byte slices) and maps are
+// pointers, slices (including JSON byte slices) and maps are
 // duplicated recursively. Unexported struct fields are copied by value.
 //
 // Caches of configuration objects hand out DeepCopy results, so a caller that

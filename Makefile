@@ -495,6 +495,13 @@ plugin-help: bin/plugin-scaffold
 	@./bin/plugin-scaffold -help
 
 # ============================================================================
+# Schema snapshots
+# ============================================================================
+.PHONY: schema-golden
+schema-golden: ## Regenerate the schema snapshot goldens (SQLite + postgres:16 in Docker) after a model change
+	@scripts/schema-golden.sh
+
+# ============================================================================
 # Plugin Release (build -> sign -> push -> marketplace index entry)
 # ============================================================================
 # One command takes a plugin from source to a signed, indexed marketplace
