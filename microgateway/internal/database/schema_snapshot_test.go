@@ -14,7 +14,7 @@ import (
 // The schema the gateway's migrations produce is pinned by golden files, so
 // a change underneath them (a gorm upgrade, a custom column type such as JSON
 // that stops implementing GormDBDataType) cannot alter it unnoticed. A
-// deliberate model change updates the goldens with UPDATE_SCHEMA_GOLDEN=1.
+// deliberate model change updates the goldens with make schema-golden.
 func TestGatewaySchemaSnapshotSQLite(t *testing.T) {
 	db := openTestDB(t)
 	schemasnapshot.AssertGolden(t, db, filepath.Join("testdata", "schema", "sqlite.golden"))

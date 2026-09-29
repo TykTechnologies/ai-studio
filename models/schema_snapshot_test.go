@@ -28,7 +28,7 @@ func migrateStudioSchema(t *testing.T, db *gorm.DB) {
 // The schema Studio's migrations produce is pinned by golden files, so a
 // change underneath them (a gorm upgrade, a custom column type that stops
 // implementing GormDBDataType) cannot alter it unnoticed. A deliberate model
-// change updates the goldens with UPDATE_SCHEMA_GOLDEN=1.
+// change updates the goldens with make schema-golden.
 func TestStudioSchemaSnapshot_SQLite(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "schema.db")),
 		&gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})

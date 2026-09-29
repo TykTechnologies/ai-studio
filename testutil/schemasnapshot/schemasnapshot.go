@@ -36,11 +36,11 @@ func AssertGolden(t *testing.T, db *gorm.DB, path string) {
 	}
 	want, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read golden %s (run with %s=1 to create it): %v", path, UpdateEnv, err)
+		t.Fatalf("read golden %s (make schema-golden creates it): %v", path, err)
 	}
 	if got != string(want) {
-		t.Fatalf("schema differs from %s (run with %s=1 to accept a deliberate change):\n%s",
-			path, UpdateEnv, lineDiff(string(want), got))
+		t.Fatalf("schema differs from %s; if the change is deliberate, make schema-golden updates the goldens:\n%s",
+			path, lineDiff(string(want), got))
 	}
 }
 
