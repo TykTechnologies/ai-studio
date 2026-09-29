@@ -453,6 +453,36 @@ TABLE edge_instances
   column loaded_version character varying(varchar) nullable=YES len=64
   column sync_status character varying(varchar) nullable=YES len=20 default='unknown'::character varying
   column last_sync_ack timestamp with time zone(timestamptz) nullable=YES
+TABLE edge_push_commands
+  constraint edge_push_commands_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX edge_push_commands_pkey ON edge_push_commands USING btree (id)
+  index CREATE INDEX idx_edge_push_commands_deadline_at ON edge_push_commands USING btree (deadline_at)
+  index CREATE INDEX idx_edge_push_commands_edge_id ON edge_push_commands USING btree (edge_id)
+  index CREATE UNIQUE INDEX idx_edge_push_commands_op_edge ON edge_push_commands USING btree (operation_id, edge_id)
+  index CREATE INDEX idx_edge_push_commands_status ON edge_push_commands USING btree (status)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('edge_push_commands_id_seq'::regclass)
+  column operation_id character varying(varchar) nullable=NO len=64
+  column edge_id character varying(varchar) nullable=NO len=255
+  column namespace character varying(varchar) nullable=YES len=255
+  column status character varying(varchar) nullable=NO len=32
+  column attempts bigint(int8) nullable=YES precision=64 scale=0
+  column max_attempts bigint(int8) nullable=YES precision=64 scale=0
+  column claimed_by character varying(varchar) nullable=YES len=128
+  column claim_expires_at timestamp with time zone(timestamptz) nullable=YES
+  column stream_session_id character varying(varchar) nullable=YES len=64
+  column sent_at timestamp with time zone(timestamptz) nullable=YES
+  column phase character varying(varchar) nullable=YES len=32
+  column phase_at timestamp with time zone(timestamptz) nullable=YES
+  column message text(text) nullable=YES
+  column warning text(text) nullable=YES
+  column expected_checksum character varying(varchar) nullable=YES len=64
+  column loaded_checksum character varying(varchar) nullable=YES len=64
+  column history text(text) nullable=YES
+  column version bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column deadline_at timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column completed_at timestamp with time zone(timestamptz) nullable=YES
 TABLE embedders
   constraint embedders_pkey PRIMARY KEY (id)
   constraint fk_embedders_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
@@ -1329,6 +1359,20 @@ TABLE proxy_log_exports
   column expires_at timestamp with time zone(timestamptz) nullable=NO
   column requested_by bigint(int8) nullable=NO precision=64 scale=0
   column error_message text(text) nullable=YES
+TABLE push_operations
+  constraint push_operations_pkey PRIMARY KEY (operation_id)
+  index CREATE INDEX idx_push_operations_created_at ON push_operations USING btree (created_at)
+  index CREATE INDEX idx_push_operations_status ON push_operations USING btree (status)
+  index CREATE UNIQUE INDEX push_operations_pkey ON push_operations USING btree (operation_id)
+  column operation_id character varying(varchar) nullable=NO len=64
+  column scope character varying(varchar) nullable=NO len=16
+  column namespace character varying(varchar) nullable=YES len=255
+  column initiated_by character varying(varchar) nullable=YES len=255
+  column status character varying(varchar) nullable=NO len=32
+  column total bigint(int8) nullable=YES precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column deadline_at timestamp with time zone(timestamptz) nullable=YES
+  column completed_at timestamp with time zone(timestamptz) nullable=YES
 TABLE registered_plugins
   constraint fk_registered_plugins_plugin FOREIGN KEY (plugin_id) REFERENCES plugins(id)
   constraint registered_plugins_pkey PRIMARY KEY (id)

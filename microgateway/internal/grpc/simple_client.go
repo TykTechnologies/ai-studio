@@ -51,7 +51,11 @@ type SimpleEdgeClient struct {
 	buildHash string
 	buildTime string
 
-	// Bidirectional streaming
+	// Bidirectional streaming. stream is read and replaced through
+	// currentStream and setStream (a reconnect replaces it while heartbeats,
+	// events and reload statuses are being sent), and it is always a
+	// serialSendStream: gRPC allows one Send at a time per stream.
+	streamMu     sync.RWMutex
 	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
 	streamCtx    context.Context
 	streamCancel context.CancelFunc
@@ -410,7 +414,7 @@ func (c *SimpleEdgeClient) establishStream() error {
 		return fmt.Errorf("failed to start streaming: %w", err)
 	}
 
-	c.stream = stream
+	c.setStream(stream)
 
 	// Setup event bridge for this connection
 	c.setupEventBridge()
@@ -436,7 +440,7 @@ func (c *SimpleEdgeClient) establishStream() error {
 		},
 	}
 
-	if err := c.stream.Send(regMsg); err != nil {
+	if err := c.send(regMsg); err != nil {
 		cancel()
 		return fmt.Errorf("failed to send stream registration: %w", err)
 	}
@@ -460,7 +464,7 @@ func (c *SimpleEdgeClient) setupEventBridge() {
 
 	// Create stream adapter that sends events to control
 	c.streamAdapter = eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
-		return c.stream.Send(&pb.EdgeMessage{
+		return c.send(&pb.EdgeMessage{
 			Message: &pb.EdgeMessage_Event{
 				Event: &pb.EventFrame{
 					Id:      frame.ID,
@@ -499,6 +503,7 @@ func (c *SimpleEdgeClient) stopEventBridge() {
 
 // handleIncomingMessages processes messages from control server with comprehensive error recovery
 func (c *SimpleEdgeClient) handleIncomingMessages() {
+	stream := c.currentStream()
 	defer func() {
 		// Handle panic recovery
 		if r := recover(); r != nil {
@@ -521,7 +526,7 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 	}()
 
 	for {
-		msg, err := c.stream.Recv()
+		msg, err := stream.Recv()
 		if err != nil {
 			// Categorize the error and handle accordingly
 			errorCategory := c.categorizeStreamError(err)
@@ -762,7 +767,7 @@ func (c *SimpleEdgeClient) handleReloadRequest(req *pb.ConfigurationReloadReques
 
 // SendReloadStatus sends a reload status update to control server via stream
 func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResponse) error {
-	if c.stream == nil {
+	if c.currentStream() == nil {
 		return fmt.Errorf("no stream available for sending reload status")
 	}
 
@@ -778,7 +783,7 @@ func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResp
 		},
 	}
 
-	if err := c.stream.Send(msg); err != nil {
+	if err := c.send(msg); err != nil {
 		log.Error().Err(err).Msg("Failed to send reload status via stream")
 		return fmt.Errorf("failed to send reload status: %w", err)
 	}
@@ -841,12 +846,12 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 	for {
 		select {
 		case <-ticker.C:
-			if c.connected && c.stream != nil {
+			if c.connected && c.currentStream() != nil {
 				c.sendHeartbeat()
 			} else {
 				log.Debug().
 					Bool("connected", c.connected).
-					Bool("stream_not_nil", c.stream != nil).
+					Bool("stream_not_nil", c.currentStream() != nil).
 					Msg("Skipping heartbeat - not connected or stream is nil")
 			}
 		case <-c.streamCtx.Done():
@@ -876,7 +881,7 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 		},
 	}
 
-	if err := c.stream.Send(heartbeat); err != nil {
+	if err := c.send(heartbeat); err != nil {
 		log.Error().Err(err).Msg("Failed to send heartbeat")
 	} else {
 		log.Debug().
@@ -1180,4 +1185,44 @@ func (c *SimpleEdgeClient) authStreamInterceptor() grpc.StreamClientInterceptor 
 		// Create the stream with authenticated context
 		return streamer(authCtx, desc, cc, method, opts...)
 	}
+}
+// serialSendStream lets one goroutine at a time Send on a stream: gRPC
+// streams do not allow concurrent Send calls, and heartbeats, events and
+// reload statuses are sent from different goroutines. A torn or dropped
+// reload status would leave control waiting for an answer that never comes.
+type serialSendStream struct {
+	pb.ConfigurationSyncService_SubscribeToChangesClient
+	mu sync.Mutex
+}
+
+func (s *serialSendStream) Send(msg *pb.EdgeMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ConfigurationSyncService_SubscribeToChangesClient.Send(msg)
+}
+
+func (c *SimpleEdgeClient) setStream(stream pb.ConfigurationSyncService_SubscribeToChangesClient) {
+	if stream != nil {
+		if _, ok := stream.(*serialSendStream); !ok {
+			stream = &serialSendStream{ConfigurationSyncService_SubscribeToChangesClient: stream}
+		}
+	}
+	c.streamMu.Lock()
+	c.stream = stream
+	c.streamMu.Unlock()
+}
+
+func (c *SimpleEdgeClient) currentStream() pb.ConfigurationSyncService_SubscribeToChangesClient {
+	c.streamMu.RLock()
+	defer c.streamMu.RUnlock()
+	return c.stream
+}
+
+// send writes msg on the current stream.
+func (c *SimpleEdgeClient) send(msg *pb.EdgeMessage) error {
+	stream := c.currentStream()
+	if stream == nil {
+		return fmt.Errorf("no stream to control")
+	}
+	return stream.Send(msg)
 }

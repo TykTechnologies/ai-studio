@@ -4,6 +4,8 @@ go 1.26.6
 
 require github.com/stretchr/testify v1.12.1
 
+require github.com/lib/pq v1.10.9 // indirect
+
 require (
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.32 // indirect
 	github.com/lib/pq v1.10.9 // indirect

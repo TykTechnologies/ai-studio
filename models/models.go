@@ -66,6 +66,8 @@ func InitModels(db *gorm.DB) error {
 		&EdgeInstance{},       // Edge instance tracking
 		&ClusterNode{},        // Running Studio replicas (pkg/cluster)
 		&ClusterEvent{},       // Cluster event log (pkg/cluster)
+		&PushOperation{},      // Configuration pushes (services/pushes)
+		&EdgePushCommand{},    // One per push and target edge
 		&Plugin{},             // Plugin configurations
 		&LLMPlugin{},          // LLM-Plugin associations
 		&PluginConfigSchema{}, // Plugin config schema cache

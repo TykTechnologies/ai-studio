@@ -419,6 +419,34 @@ TABLE edge_instances
   index CREATE INDEX `idx_edge_instances_status` ON `edge_instances`(`status`)
   index CREATE INDEX `idx_edge_instances_sync_status` ON `edge_instances`(`sync_status`)
   index CREATE UNIQUE INDEX `idx_edge_instances_edge_id` ON `edge_instances`(`edge_id`)
+TABLE edge_push_commands
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `operation_id` text NOT NULL
+  column `edge_id` text NOT NULL
+  column `namespace` text
+  column `status` text NOT NULL
+  column `attempts` integer
+  column `max_attempts` integer
+  column `claimed_by` text
+  column `claim_expires_at` datetime
+  column `stream_session_id` text
+  column `sent_at` datetime
+  column `phase` text
+  column `phase_at` datetime
+  column `message` text
+  column `warning` text
+  column `expected_checksum` text
+  column `loaded_checksum` text
+  column `history` text
+  column `version` integer NOT NULL DEFAULT 0
+  column `deadline_at` datetime
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `completed_at` datetime
+  index CREATE INDEX `idx_edge_push_commands_deadline_at` ON `edge_push_commands`(`deadline_at`)
+  index CREATE INDEX `idx_edge_push_commands_edge_id` ON `edge_push_commands`(`edge_id`)
+  index CREATE INDEX `idx_edge_push_commands_status` ON `edge_push_commands`(`status`)
+  index CREATE UNIQUE INDEX `idx_edge_push_commands_op_edge` ON `edge_push_commands`(`operation_id`,`edge_id`)
 TABLE embedders
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1219,6 +1247,20 @@ TABLE proxy_log_exports
   index CREATE INDEX `idx_proxy_log_exports_deleted_at` ON `proxy_log_exports`(`deleted_at`)
   index CREATE INDEX `idx_proxy_log_exports_expires_at` ON `proxy_log_exports`(`expires_at`)
   index CREATE UNIQUE INDEX `idx_proxy_log_exports_export_id` ON `proxy_log_exports`(`export_id`)
+TABLE push_operations
+  column `operation_id` text
+  column `scope` text NOT NULL
+  column `namespace` text
+  column `initiated_by` text
+  column `status` text NOT NULL
+  column `total` integer
+  column `created_at` datetime
+  column `deadline_at` datetime
+  column `completed_at` datetime
+  constraint PRIMARY KEY (`operation_id`)
+  autoindex origin=pk unique=1 (operation_id)
+  index CREATE INDEX `idx_push_operations_created_at` ON `push_operations`(`created_at`)
+  index CREATE INDEX `idx_push_operations_status` ON `push_operations`(`status`)
 TABLE registered_plugins
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

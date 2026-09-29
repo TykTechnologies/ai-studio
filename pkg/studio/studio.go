@@ -46,6 +46,7 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Registers the AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	"github.com/TykTechnologies/midsommar/v2/ui"
 )
@@ -159,6 +160,9 @@ type Studio struct {
 	// replicas (pkg/cluster).
 	clusterNode *cluster.Node
 	clusterLog  *cluster.Log
+	// pushes delivers configuration pushes to the edges whose streams this
+	// replica holds (control mode only).
+	pushes *pushes.Coordinator
 
 	scheduler        *scheduler.SchedulerService
 	telemetry        *services.TelemetryManager
@@ -471,7 +475,7 @@ func New(opts Options) (_ *Studio, err error) {
 	return s, nil
 }
 
-// wireControlPlane builds the gRPC control server and connects the reload
+// wireControlPlane builds the gRPC control server and connects the push
 // coordinator, plugin manager and event bus to it.
 func (s *Studio) wireControlPlane(version string) error {
 	conf, service := s.conf, s.service
@@ -498,9 +502,14 @@ func (s *Studio) wireControlPlane(version string) error {
 		control.SetEdgeBudgetSource(src)
 	}
 
-	reloadCoordinator := services.NewReloadCoordinator(control)
-	control.SetReloadCoordinator(reloadCoordinator)
-	service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
+	// Pushes are recorded in the database; this replica delivers those for
+	// edges whose streams it holds and reports on any of them.
+	s.pushes = pushes.New(s.db, s.clusterNode.ID(), control, pushes.Options{})
+	control.SetPushDelivery(s.pushes)
+	service.NamespaceService.SetPushes(s.pushes)
+	if err := s.pushes.Start(context.Background()); err != nil {
+		return fmt.Errorf("studio: start edge push delivery: %w", err)
+	}
 
 	if service.AIStudioPluginManager != nil {
 		// Route edge-to-control payloads to plugins.
@@ -509,7 +518,7 @@ func (s *Studio) wireControlPlane(version string) error {
 	s.wireEventBus(control.GetEventBus())
 	service.InitWebhooks(conf.Webhooks, version)
 	service.InitTykMCP(conf.TykMCP, version)
-	logger.Info("Reload coordinator created and connected to control server and namespace service")
+	logger.Info("Edge push delivery started on this replica")
 	return nil
 }
 
@@ -609,7 +618,12 @@ func (s *Studio) stop(ctx context.Context) error {
 		}
 	}
 	if s.control != nil {
+		// Streams close here; pushes sent on them and not yet answered go
+		// back to pending for the replica each edge reconnects to.
 		s.control.Stop()
+	}
+	if s.pushes != nil {
+		s.pushes.Stop()
 	}
 	if s.clusterLog != nil {
 		s.clusterLog.Stop()

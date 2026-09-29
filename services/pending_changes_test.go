@@ -7,6 +7,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -216,6 +217,7 @@ func TestReload_StampsLastPush(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	edgeService := services.NewEdgeService(db)
 	nsService := services.NewNamespaceService(db, edgeService)
+	nsService.SetPushes(pushes.New(db, "test-node", nil, pushes.Options{}))
 
 	edge := &models.EdgeInstance{EdgeID: "edge-a", Namespace: "default", Status: models.EdgeStatusConnected}
 	require.NoError(t, db.Create(edge).Error)

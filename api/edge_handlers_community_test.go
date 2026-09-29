@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestListEdges_CommunityEdition(t *testing.T) {
@@ -165,22 +168,62 @@ func TestTriggerEdgeReload_CommunityEdition(t *testing.T) {
 	t.Run("Trigger reload for existing edge", func(t *testing.T) {
 		path := fmt.Sprintf("/api/v1/edges/%s/reload", edge.EdgeID)
 		w := apitest.PerformRequest(r, "POST", path, nil)
+		require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
 
-		// In test environment, reload operations may fail if coordinator not fully initialized
-		// Accept either 202 (success) or 500 (coordinator not available)
-		if w.Code == http.StatusAccepted {
-			var response struct {
-				Data map[string]interface{} `json:"data"`
-			}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			assert.NoError(t, err)
-
-			assert.Equal(t, "reload-operations", response.Data["type"])
-			assert.NotEmpty(t, response.Data["id"], "Should have operation ID")
-		} else {
-			// Coordinator may not be available in test - that's okay
-			assert.Contains(t, []int{http.StatusInternalServerError, http.StatusAccepted}, w.Code)
+		var response struct {
+			Data struct {
+				Type       string `json:"type"`
+				ID         string `json:"id"`
+				Attributes struct {
+					OperationID string   `json:"operation_id"`
+					Scope       string   `json:"scope"`
+					Status      string   `json:"status"`
+					TargetEdges []string `json:"target_edges"`
+					Targets     []struct {
+						EdgeID    string `json:"edge_id"`
+						Reachable bool   `json:"reachable"`
+						Reason    string `json:"reason"`
+					} `json:"targets"`
+					Warnings   []string  `json:"warnings"`
+					DeadlineAt time.Time `json:"deadline_at"`
+				} `json:"attributes"`
+			} `json:"data"`
 		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		attrs := response.Data.Attributes
+		assert.Equal(t, "reload-operations", response.Data.Type)
+		assert.Equal(t, response.Data.ID, attrs.OperationID)
+		assert.Equal(t, "edge", attrs.Scope)
+		assert.Equal(t, "in_progress", attrs.Status)
+		assert.Equal(t, []string{edge.EdgeID}, attrs.TargetEdges)
+		// The test edge has no stream: the push waits for it, and says so.
+		require.Len(t, attrs.Targets, 1)
+		assert.False(t, attrs.Targets[0].Reachable)
+		assert.NotEmpty(t, attrs.Targets[0].Reason)
+		require.Len(t, attrs.Warnings, 1)
+		assert.Contains(t, attrs.Warnings[0], "not connected")
+		assert.True(t, attrs.DeadlineAt.After(time.Now()))
+
+		// The listing (CE) reports it with its outcome counts.
+		w = apitest.PerformRequest(r, "GET", "/api/v1/edges/reload-operations", nil)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var list struct {
+			Data []struct {
+				ID         string `json:"id"`
+				Attributes struct {
+					Status   string         `json:"status"`
+					Progress int            `json:"progress"`
+					Message  string         `json:"message"`
+					Counts   map[string]int `json:"counts"`
+				} `json:"attributes"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+		require.Len(t, list.Data, 1)
+		assert.Equal(t, attrs.OperationID, list.Data[0].ID)
+		assert.Equal(t, map[string]int{"pending": 1}, list.Data[0].Attributes.Counts)
+		assert.Equal(t, 0, list.Data[0].Attributes.Progress)
+		assert.Contains(t, list.Data[0].Attributes.Message, "1 waiting for connection")
 	})
 
 	t.Run("Trigger reload for non-existent edge returns 404", func(t *testing.T) {
@@ -279,29 +322,35 @@ func TestReloadAllEdges_CommunityEdition(t *testing.T) {
 	})
 	api.setupEdgeRoutes(r.Group("/api/v1"))
 
-	t.Run("Reload all edges", func(t *testing.T) {
+	t.Run("No edges: nothing to push to", func(t *testing.T) {
 		w := apitest.PerformRequest(r, "POST", "/api/v1/edges/reload-all", nil)
+		assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "no edges")
+	})
 
-		// In test environment, reload operations may fail if coordinator not fully initialized
-		// Accept either 202 (success) or 500 (coordinator not available)
-		if w.Code == http.StatusAccepted {
-			var response struct {
-				Data map[string]interface{} `json:"data"`
-			}
-			err := json.Unmarshal(w.Body.Bytes(), &response)
-			assert.NoError(t, err)
-
-			assert.Equal(t, "reload-operations", response.Data["type"])
-			assert.NotEmpty(t, response.Data["id"], "Should have operation ID")
-
-			// Check attributes
-			if attrs, ok := response.Data["attributes"].(map[string]interface{}); ok {
-				assert.Contains(t, attrs["message"], "Global reload")
-			}
-		} else {
-			// Coordinator may not be available in test - that's okay
-			assert.Contains(t, []int{http.StatusInternalServerError, http.StatusAccepted}, w.Code)
+	t.Run("Reload all edges", func(t *testing.T) {
+		for _, e := range []*models.EdgeInstance{
+			{EdgeID: "reload-all-1", Namespace: "", Status: models.EdgeStatusRegistered},
+			{EdgeID: "reload-all-2", Namespace: "default", Status: models.EdgeStatusConnected},
+		} {
+			require.NoError(t, service.DB.Create(e).Error)
 		}
+		w := apitest.PerformRequest(r, "POST", "/api/v1/edges/reload-all", nil)
+		require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+
+		var response struct {
+			Data struct {
+				Type       string `json:"type"`
+				ID         string `json:"id"`
+				Attributes struct {
+					TargetEdges []string `json:"target_edges"`
+				} `json:"attributes"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		assert.Equal(t, "reload-operations", response.Data.Type)
+		assert.NotEmpty(t, response.Data.ID)
+		assert.ElementsMatch(t, []string{"reload-all-1", "reload-all-2"}, response.Data.Attributes.TargetEdges, "one operation for every edge")
 	})
 }
 
@@ -332,4 +381,18 @@ func (a *API) setupEdgeRoutes(r *gin.RouterGroup) {
 	r.DELETE("/edges/:edge_id", a.deleteEdge)
 	r.GET("/edges/reload-operations", a.listReloadOperations)
 	r.POST("/edges/reload-all", a.reloadAllEdges)
+}
+
+// Community Edition: the per-edge status of a push is an Enterprise
+// endpoint; the listing (above) carries each push's outcome counts, which
+// is what the UI falls back to.
+func TestReloadOperationStatus_CommunityEditionIsGated(t *testing.T) {
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	api := NewAPI(service, true, apitest.SetupTestAuthService(db, service), apitest.SetupTestAuthConfig(db, service), nil, emptyFile, nil)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/api/v1/reload-operations/:operation_id/status", api.getReloadOperationStatus)
+	w := apitest.PerformRequest(r, "GET", "/api/v1/reload-operations/push-1/status", nil)
+	assert.Equal(t, http.StatusPaymentRequired, w.Code)
 }

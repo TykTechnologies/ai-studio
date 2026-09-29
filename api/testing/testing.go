@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/stretchr/testify/assert"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -39,6 +40,9 @@ func SetupTestService(db *gorm.DB) *services.Service {
 	// Initialize hub-and-spoke services
 	edgeService := services.NewEdgeService(db)
 	namespaceService := services.NewNamespaceService(db, edgeService)
+	// Pushes are recorded and reported; with no control server nothing
+	// delivers them (tests that need delivery run grpc's push tests).
+	namespaceService.SetPushes(pushes.New(db, "test-node", nil, pushes.Options{}))
 	pluginService := services.NewPluginService(db)
 	
 	svc := &services.Service{
