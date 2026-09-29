@@ -13,7 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 var (

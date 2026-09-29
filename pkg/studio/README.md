@@ -92,9 +92,10 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   which installs a global tracer provider and propagator.
 - **Replace directives.** Go ignores `replace` directives in dependencies,
   so an importing module must copy the ones in this repository's `go.mod`
-  (the langchaingo fork and `./enterprise`).
-  Studio no longer needs the microgateway module: the gateway plugin SDK it
-  uses lives in `pkg/gatewayplugin` and `proto/microgateway_management`.
+  (`./enterprise`). langchaingo is not one of them: Studio's fork is in
+  tree, under `third_party/langchaingo`. Nor is the microgateway module:
+  the gateway plugin SDK Studio uses lives in `pkg/gatewayplugin` and
+  `proto/microgateway_management`.
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but

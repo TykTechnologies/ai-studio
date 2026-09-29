@@ -1,6 +1,6 @@
 package responses
 
-import "github.com/tmc/langchaingo/llms"
+import "github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 
 type OpenAIRequest struct {
 	Model    string `json:"model"`

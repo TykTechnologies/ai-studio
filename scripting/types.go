@@ -3,7 +3,7 @@ package scripting
 import (
 	"context"
 
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // ScriptInput provides rich context to scripts including messages, metadata, and vendor info

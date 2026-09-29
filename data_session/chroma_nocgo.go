@@ -9,9 +9,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/tmc/langchaingo/embeddings"
-	"github.com/tmc/langchaingo/schema"
-	"github.com/tmc/langchaingo/vectorstores"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )

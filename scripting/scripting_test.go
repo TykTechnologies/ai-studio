@@ -5,7 +5,7 @@ package scripting
 import (
 	"testing"
 
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // Type alias for convenience in tests

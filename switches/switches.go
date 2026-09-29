@@ -13,6 +13,13 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/anthropic"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/ollama"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/openai"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	anthropicVendor "github.com/TykTechnologies/midsommar/v2/vendors/anthropic"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	googleaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/googleai"
@@ -21,13 +28,6 @@ import (
 	ollamaVendor "github.com/TykTechnologies/midsommar/v2/vendors/ollama"
 	openaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/openai"
 	vertexVendor "github.com/TykTechnologies/midsommar/v2/vendors/vertex"
-	"github.com/tmc/langchaingo/embeddings"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/anthropic"
-	"github.com/tmc/langchaingo/llms/googleai"
-	"github.com/tmc/langchaingo/llms/ollama"
-	"github.com/tmc/langchaingo/llms/openai"
-	"github.com/tmc/langchaingo/schema"
 	"google.golang.org/api/option"
 )
 

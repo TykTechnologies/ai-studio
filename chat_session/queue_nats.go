@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // convertToNATSSafeResponse converts llms.ContentResponse to ContentResponseForNATS

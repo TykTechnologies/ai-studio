@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // tyk.detect and tyk.redact expose the built-in pattern library to scripts.

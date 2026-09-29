@@ -16,9 +16,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
-	"github.com/tmc/langchaingo/llms"
 )
 
 // LLM failover.

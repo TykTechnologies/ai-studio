@@ -17,7 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // FilterRunner executes one filter, whatever its kind, against the same

@@ -11,11 +11,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/responses"
-	"github.com/tmc/langchaingo/embeddings"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/googleai"
-	"github.com/tmc/langchaingo/llms/googleai/vertex"
-	"github.com/tmc/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai/vertex"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 )
 
 type Vertex struct{}

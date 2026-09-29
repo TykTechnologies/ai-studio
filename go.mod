@@ -22,6 +22,7 @@ require (
 	github.com/go-mail/mail v2.3.1+incompatible
 	github.com/go-openapi/strfmt v0.27.0
 	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/csrf v1.7.3
 	github.com/gorilla/mux v1.8.1
@@ -50,7 +51,6 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggo/swag v1.16.3
 	github.com/testcontainers/testcontainers-go v0.41.0
-	github.com/tmc/langchaingo v0.1.13
 	github.com/weaviate/weaviate v1.38.12
 	github.com/weaviate/weaviate-go-client/v5 v5.6.0
 	go.opentelemetry.io/otel v1.46.0
@@ -73,14 +73,13 @@ require (
 require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/ai v0.8.0 // indirect
-	cloud.google.com/go/aiplatform v1.114.0 // indirect
+	cloud.google.com/go/aiplatform v1.114.0
 	cloud.google.com/go/auth v0.18.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/longrunning v0.8.0 // indirect
-	cloud.google.com/go/vertexai v0.12.0 // indirect
-	filippo.io/edwards25519 v1.1.1 // indirect
+	cloud.google.com/go/vertexai v0.12.0
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20200615164410-66371956d46c // indirect
 	github.com/EndFirstCorp/peekingReader v0.0.0-20171012052444-257fb6f1a1a6 // indirect
@@ -89,7 +88,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
-	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/Masterminds/sprig/v3 v3.2.3
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/TykTechnologies/gojsonschema v0.0.0-20170222154038-dcb3e4bb7990 // indirect
 	github.com/TykTechnologies/graphql-go-tools v1.6.2-0.20240705065952-ae6008677a48 // indirect
@@ -180,7 +179,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/generative-ai-go v0.19.0 // indirect
+	github.com/google/generative-ai-go v0.19.0
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
@@ -235,7 +234,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nkeys v0.4.11 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
-	github.com/nikolalohinski/gonja v1.5.3 // indirect
+	github.com/nikolalohinski/gonja v1.5.3
 	github.com/oapi-codegen/runtime v1.6.0 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
@@ -250,7 +249,7 @@ require (
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
-	github.com/redis/rueidis v1.0.34 // indirect
+	github.com/redis/rueidis v1.0.34
 	github.com/russellhaering/goxmldsig v1.6.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
@@ -282,7 +281,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	gitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181 // indirect
 	gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82 // indirect
-	gitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a // indirect
+	gitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a
 	gitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84 // indirect
 	gitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f // indirect
 	go.mongodb.org/mongo-driver v1.17.6 // indirect
@@ -293,7 +292,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
-	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254 // indirect
+	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
@@ -312,9 +311,7 @@ require (
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/mail.v2 v2.3.1 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
+	sigs.k8s.io/yaml v1.4.0
 )
-
-replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260927043826-21bacb978dfe
 
 replace github.com/TykTechnologies/midsommar/v2/enterprise => ./enterprise

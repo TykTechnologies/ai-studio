@@ -284,6 +284,15 @@ packages (type aliases and wrappers, generated when the code moved) so that
 existing plugins keep compiling. The proto package name is unchanged, so the
 wire format and gRPC method names are the same.
 
+## langchaingo in tree
+
+Studio's langchaingo fork (Anthropic temperature, OpenAI reasoning_effort and
+other fixes) lives in `third_party/langchaingo` and is imported by its
+in-tree path. It used to be a `replace` in `go.mod`, which Go ignores in a
+module that imports Studio, so a host would have built with upstream
+langchaingo instead. `make langchaingo-verify` keeps upstream imports out.
+See `third_party/README.md`.
+
 ## gorm isolation
 
 The Tyk Dashboard `replace`s `gorm.io/gorm` with a fork, and a `replace`

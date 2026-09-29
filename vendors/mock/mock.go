@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/tmc/langchaingo/embeddings"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 )
 
 type MockResponse struct {

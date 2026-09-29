@@ -1,7 +1,7 @@
 package scripting
 
 import (
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // GetLastUserMessage extracts the content of the last user message

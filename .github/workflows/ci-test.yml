@@ -316,6 +316,9 @@ jobs:
       - name: Verify the gorm copy
         run: make gorm-verify
 
+      - name: Verify nothing uses upstream langchaingo
+        run: make langchaingo-verify
+
   # ==========================================================================
   # Module zip check: the committed tree must make a module zip the Go proxy
   # accepts, or nobody can `go get` Studio (see tools/modcheck)

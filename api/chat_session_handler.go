@@ -19,8 +19,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/filereader"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/gin-gonic/gin"
-	"github.com/tmc/langchaingo/llms"
 )
 
 const (

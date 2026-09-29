@@ -1,0 +1,7 @@
+Imported from github.com/lonelycode/langchaingo v0.0.0-20260927043826-21bacb978dfe
+(the fork previously pinned by `replace github.com/tmc/langchaingo => ...`),
+on 2026-09-29, with scripts/langchaingo-import.sh. The fork is upstream
+tmc/langchaingo plus Tyk fixes (lonelycode/langchaingo #1-#3): multi-tool
+streaming, omitted default temperature for Anthropic, OpenAI
+reasoning_effort, and empty Anthropic content as a stop rather than an error.
+Changes since the import are in this repository's git history.

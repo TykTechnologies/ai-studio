@@ -13,7 +13,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
-	"github.com/tmc/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

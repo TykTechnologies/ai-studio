@@ -515,6 +515,10 @@ gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports g
 module-check: ## Check the Go proxy would accept HEAD as a module zip (commit first)
 	@cd tools/modcheck && go run . -rev HEAD
 
+.PHONY: langchaingo-verify
+langchaingo-verify: ## Check nothing builds with upstream github.com/tmc/langchaingo (use third_party/langchaingo)
+	@scripts/langchaingo-verify.sh
+
 # ============================================================================
 # Plugin Release (build -> sign -> push -> marketplace index entry)
 # ============================================================================

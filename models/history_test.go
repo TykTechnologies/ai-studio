@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/stretchr/testify/assert"
-	"github.com/tmc/langchaingo/llms"
 )
 
 func TestChatHistoryRecordCRUD(t *testing.T) {
