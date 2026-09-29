@@ -51,7 +51,9 @@ func setupControlServer(t *testing.T, db *gorm.DB) *ControlServer {
 		AuthToken:   "test-token",
 	}
 
-	return NewControlServer(config, db)
+	server, err := NewControlServer(config, db)
+	require.NoError(t, err)
+	return server
 }
 
 func TestSendAnalyticsPulse_BatchProcessing(t *testing.T) {
@@ -506,7 +508,8 @@ func BenchmarkSendAnalyticsPulse_BatchProcessing(b *testing.B) {
 		AuthToken:   "test-token",
 	}
 
-	server := NewControlServer(config, db)
+	server, err := NewControlServer(config, db)
+	require.NoError(b, err)
 
 	// Create a pulse with many analytics events
 	createPulse := func(eventCount int) *pb.AnalyticsPulse {

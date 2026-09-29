@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,7 @@ func clearAuditEnv(t *testing.T) {
 
 func TestGetAuditConfig_Defaults(t *testing.T) {
 	clearAuditEnv(t)
-	cfg := getAuditConfig()
+	cfg := getAuditConfig(os.Getenv)
 
 	assert.True(t, cfg.Enabled)
 	assert.Equal(t, AuditStoreDB, cfg.StoreType)
@@ -50,7 +51,7 @@ func TestGetAuditConfig_Overrides(t *testing.T) {
 	t.Setenv("AUDIT_REDACT_KEYS", " SSN, customer_ref ,,")
 	t.Setenv("AUDIT_REDACT_HEADERS", "X-Tenant-Key")
 
-	cfg := getAuditConfig()
+	cfg := getAuditConfig(os.Getenv)
 	assert.False(t, cfg.Enabled)
 	assert.Equal(t, AuditStoreBoth, cfg.StoreType)
 	assert.True(t, cfg.StoresToDB())
@@ -75,7 +76,7 @@ func TestGetAuditConfig_InvalidValuesFallBack(t *testing.T) {
 	t.Setenv("AUDIT_MAX_BODY_BYTES", "0")
 	t.Setenv("AUDIT_QUEUE_SIZE", "lots")
 
-	cfg := getAuditConfig()
+	cfg := getAuditConfig(os.Getenv)
 	assert.True(t, cfg.Enabled)
 	assert.Equal(t, AuditStoreDB, cfg.StoreType)
 	assert.Equal(t, "json", cfg.FileFormat)

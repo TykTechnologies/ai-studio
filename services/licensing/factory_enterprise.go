@@ -4,8 +4,6 @@
 package licensing
 
 import (
-	"log"
-
 	"gorm.io/gorm"
 )
 
@@ -15,7 +13,6 @@ func NewService(config Config, db *gorm.DB) Service {
 	if enterpriseFactory != nil {
 		return enterpriseFactory(config, db)
 	}
-	// This should never happen in ENT builds if init() was called
-	log.Fatal("Enterprise licensing factory not registered")
-	return nil
+	// Unreachable once edition.CheckRegistered has passed at startup.
+	panic("Enterprise licensing factory not registered; see edition.CheckRegistered")
 }

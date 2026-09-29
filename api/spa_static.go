@@ -22,7 +22,7 @@ func serveBuildRootFile(c *gin.Context, fsys fs.FS) bool {
 	if name == "" || name == "index.html" || strings.Contains(name, "/") || !fs.ValidPath(name) {
 		return false
 	}
-	data, err := fs.ReadFile(fsys, "ui/admin-frontend/build/"+name)
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return false
 	}

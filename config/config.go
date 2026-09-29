@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -138,6 +139,29 @@ type AppConf struct {
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
+
+	// SecretKey encrypts secrets at rest (TYK_AI_SECRET_KEY).
+	SecretKey string
+	// MicrogatewayEncryptionKey is the 32-character key edges decrypt the
+	// credentials in their configuration with (MICROGATEWAY_ENCRYPTION_KEY).
+	MicrogatewayEncryptionKey string
+	// CSRFTrustedOrigins lists extra origins, comma-separated, the CSRF check
+	// accepts in DevMode (CSRF_TRUSTED_ORIGINS).
+	CSRFTrustedOrigins string
+	// ExportStoragePath is where log exports are written (EXPORT_STORAGE_PATH,
+	// default ./data/exports).
+	ExportStoragePath string
+	// BrandingStoragePath is where uploaded logos and favicons are kept
+	// (BRANDING_STORAGE_PATH, default ./data/branding).
+	BrandingStoragePath string
+	// DebugHTTP logs admin API request and response bodies (DEBUG_HTTP).
+	DebugHTTP bool
+	// ChatUIV2Enabled turns on the v2 chat UI; it is on unless
+	// CHAT_UI_V2_ENABLED is explicitly false.
+	ChatUIV2Enabled bool
+	// ChatSessionIdleTTL is how long an idle chat session keeps its queue
+	// (CHAT_SESSION_IDLE_TTL, default 10m).
+	ChatSessionIdleTTL time.Duration
 }
 
 // QueueConfig holds configuration for message queues
@@ -199,42 +223,75 @@ func (d DocsLinks) ReadFromFile(fileName string) {
 	}
 }
 
-var globalConfig *AppConf
+// globalConfig holds the configuration Get returns. It is set either lazily
+// by Get or explicitly by Set, which is how an embedding host supplies its own.
+var globalConfig atomic.Pointer[AppConf]
 
-func getConfigFromEnv(envFile string) *AppConf {
-	conf := &AppConf{}
+// Load reads the configuration from the process environment. Variables the
+// environment leaves unset are taken from envFile (".env" when empty) if it
+// exists. Unlike Get, Load neither caches the result nor writes to the
+// process environment.
+func Load(envFile string) *AppConf {
+	fileVals := readEnvFile(envFile)
+	return LoadFrom(func(key string) string {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		return fileVals[key]
+	})
+}
 
-	// Determine which env file to load
+// ExportEnvFile copies the variables in envFile (".env" when empty) into the
+// process environment, leaving variables that are already set untouched. The
+// standalone binary calls it so packages that still read the environment
+// directly see values from the file.
+func ExportEnvFile(envFile string) {
+	for key, value := range readEnvFile(envFile) {
+		if os.Getenv(key) == "" {
+			os.Setenv(key, value)
+		}
+	}
+}
+
+// Set installs conf as the configuration Get returns.
+func Set(conf *AppConf) {
+	globalConfig.Store(conf)
+}
+
+func readEnvFile(envFile string) map[string]string {
 	envFilePath := ".env" // Default
 	if envFile != "" {
 		envFilePath = envFile
 	}
 
-	// Try to load env file first
-	if envMap, err := godotenv.Read(envFilePath); err == nil {
+	envMap, err := godotenv.Read(envFilePath)
+	if err == nil {
 		cfgLog.Info().Msgf("Successfully loaded %s (environment variables will take precedence if set)", envFilePath)
-		// Set environment variables from env file if they're not already set
-		for key, value := range envMap {
-			if os.Getenv(key) == "" {
-				os.Setenv(key, value)
-			}
-		}
-	} else {
-		if envFile != "" {
-			// User explicitly specified a file that doesn't exist - this is an error
-			cfgLog.Warn().Msgf("Warning: Could not load specified environment file %s: %v", envFilePath, err)
-		} else {
-			// Default .env doesn't exist - this is expected in containers
-			cfgLog.Info().Msg("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
-		}
+		return envMap
 	}
+	if envFile != "" {
+		// User explicitly specified a file that doesn't exist - this is an error
+		cfgLog.Warn().Msgf("Warning: Could not load specified environment file %s: %v", envFilePath, err)
+	} else {
+		// Default .env doesn't exist - this is expected in containers
+		cfgLog.Info().Msg("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
+	}
+	return nil
+}
 
-	conf.SMTPServer = os.Getenv("SMTP_SERVER")
+// LoadFrom builds a configuration from getenv, which maps a variable name to
+// its value ("" when unset), applying the same defaults and validation as
+// Load. It lets a host build the configuration from its own settings rather
+// than from the process environment.
+func LoadFrom(getenv func(string) string) *AppConf {
+	conf := &AppConf{}
+
+	conf.SMTPServer = getenv("SMTP_SERVER")
 	if conf.SMTPServer == "" {
 		cfgLog.Warn().Msg("Warning: SMTP_SERVER environment variable is not set")
 	}
 
-	smtpPortStr := os.Getenv("SMTP_PORT")
+	smtpPortStr := getenv("SMTP_PORT")
 	if smtpPortStr == "" {
 		cfgLog.Warn().Msg("Warning: SMTP_PORT environment variable is not set")
 	} else {
@@ -246,17 +303,17 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
-	conf.SMTPUser = os.Getenv("SMTP_USER")
+	conf.SMTPUser = getenv("SMTP_USER")
 	if conf.SMTPUser == "" {
 		cfgLog.Warn().Msg("Warning: SMTP_USER environment variable is not set")
 	}
 
-	conf.SMTPPass = os.Getenv("SMTP_PASS")
+	conf.SMTPPass = getenv("SMTP_PASS")
 	if conf.SMTPPass == "" {
 		cfgLog.Warn().Msg("Warning: SMTP_PASS environment variable is not set")
 	}
 
-	allowRegStr := os.Getenv("ALLOW_REGISTRATIONS")
+	allowRegStr := getenv("ALLOW_REGISTRATIONS")
 	if allowRegStr == "" {
 		cfgLog.Warn().Msg("Warning: ALLOW_REGISTRATIONS environment variable is not set")
 	} else {
@@ -268,28 +325,28 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
-	conf.AdminEmail = os.Getenv("ADMIN_EMAIL")
+	conf.AdminEmail = getenv("ADMIN_EMAIL")
 	if conf.AdminEmail != "" {
 		cfgLog.Warn().Msg("Warning: ADMIN_EMAIL is deprecated")
 	}
 
-	conf.FromEmail = os.Getenv("FROM_EMAIL")
+	conf.FromEmail = getenv("FROM_EMAIL")
 	if conf.FromEmail == "" {
 		cfgLog.Warn().Msg("Warning: FROM_EMAIL environment variable is not set")
 	}
 
-	conf.SiteURL = os.Getenv("SITE_URL")
+	conf.SiteURL = getenv("SITE_URL")
 	if conf.SiteURL == "" {
 		cfgLog.Warn().Msg("Warning: SITE_URL environment variable is not set")
 	}
 
-	conf.ServerPort = os.Getenv("SERVER_PORT")
+	conf.ServerPort = getenv("SERVER_PORT")
 	if conf.ServerPort == "" {
 		cfgLog.Warn().Msg("Warning: SERVER_PORT environment variable is not set, defaulting to 8080")
 		conf.ServerPort = "8080"
 	}
 
-	proxyPortStr := os.Getenv("PROXY_PORT")
+	proxyPortStr := getenv("PROXY_PORT")
 	if proxyPortStr != "" {
 		if port, err := strconv.Atoi(proxyPortStr); err == nil {
 			conf.ProxyPort = port
@@ -301,25 +358,25 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.ProxyPort = 9090 // Default embedded gateway port
 	}
 
-	conf.CertFile = os.Getenv("CERT_FILE")
-	conf.KeyFile = os.Getenv("KEY_FILE")
+	conf.CertFile = getenv("CERT_FILE")
+	conf.KeyFile = getenv("KEY_FILE")
 	if conf.KeyFile == "" || conf.CertFile == "" {
 		cfgLog.Warn().Msg("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
-	devMode := os.Getenv("DEVMODE")
+	devMode := getenv("DEVMODE")
 	if devMode == "true" || devMode == "1" {
 		conf.DevMode = true
 		conf.DisableCors = true
 	}
 
-	conf.DatabaseURL = os.Getenv("DATABASE_URL")
+	conf.DatabaseURL = getenv("DATABASE_URL")
 	if conf.DatabaseURL == "" {
 		cfgLog.Info().Msg("Warning: DATABASE_URL environment variable is not set, defaulting to SQLite")
 		conf.DatabaseURL = "midsommar.db"
 	}
 
-	conf.DatabaseType = os.Getenv("DATABASE_TYPE")
+	conf.DatabaseType = getenv("DATABASE_TYPE")
 	if conf.DatabaseType == "" {
 		cfgLog.Info().Msg("Warning: DATABASE_TYPE environment variable is not set, defaulting to sqlite")
 		conf.DatabaseType = "sqlite"
@@ -330,24 +387,24 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.DatabaseType = "sqlite"
 	}
 
-	filterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")
+	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
 		conf.FilterSignupDomains = strings.Split(filterDomains, ",")
 		cfgLog.Info().Msgf("Filtering signup domains to: %v", conf.FilterSignupDomains)
 	}
 
-	echoConvStr := os.Getenv("ECHO_CONVERSATION")
+	echoConvStr := getenv("ECHO_CONVERSATION")
 	if echoConvStr != "" {
 		conf.EchoConversation = true
 	}
 
-	proxyOnlyStr := os.Getenv("PROXY_ONLY")
+	proxyOnlyStr := getenv("PROXY_ONLY")
 	if proxyOnlyStr == "true" || proxyOnlyStr == "1" {
 		conf.ProxyOnly = true
 	}
 
-	conf.UnifiedRouterPath = strings.TrimSpace(os.Getenv("UNIFIED_ROUTER_PATH"))
-	unifiedDisabledStr := os.Getenv("UNIFIED_ROUTER_DISABLED")
+	conf.UnifiedRouterPath = strings.TrimSpace(getenv("UNIFIED_ROUTER_PATH"))
+	unifiedDisabledStr := getenv("UNIFIED_ROUTER_DISABLED")
 	if unifiedDisabledStr == "true" || unifiedDisabledStr == "1" {
 		conf.UnifiedRouterDisabled = true
 		cfgLog.Info().Msg("Unified router endpoint disabled; only per-route LLM endpoints are served")
@@ -355,13 +412,13 @@ func getConfigFromEnv(envFile string) *AppConf {
 		cfgLog.Info().Msgf("Unified router endpoint mounted at %s", conf.UnifiedRouterPath)
 	}
 
-	if v := os.Getenv("GATEWAY_SERVER_TIMING"); v == "true" || v == "1" {
+	if v := getenv("GATEWAY_SERVER_TIMING"); v == "true" || v == "1" {
 		conf.GatewayServerTiming = true
 		cfgLog.Info().Msg("Gateway Server-Timing headers enabled")
 	}
 
 	// Docs server configuration - read port first so we can use it in default URL
-	docsPortStr := os.Getenv("DOCS_PORT")
+	docsPortStr := getenv("DOCS_PORT")
 	if docsPortStr != "" {
 		if port, err := strconv.Atoi(docsPortStr); err == nil {
 			conf.DocsPort = port
@@ -375,11 +432,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 
 	// Default DocsURL constructed from port, can be overridden for production/proxy setups
 	conf.DocsURL = fmt.Sprintf("http://localhost:%d", conf.DocsPort)
-	if override := os.Getenv("DOCS_URL_OVERRIDE"); override != "" {
+	if override := getenv("DOCS_URL_OVERRIDE"); override != "" {
 		conf.DocsURL = override
 	}
 
-	docsDisabledStr := os.Getenv("DOCS_DISABLED")
+	docsDisabledStr := getenv("DOCS_DISABLED")
 	if docsDisabledStr == "true" || docsDisabledStr == "1" {
 		conf.DocsDisabled = true
 	}
@@ -387,45 +444,45 @@ func getConfigFromEnv(envFile string) *AppConf {
 	conf.DocsLinks = make(DocsLinks)
 	conf.DocsLinks.ReadFromFile("config/docs_links.json")
 
-	conf.ProxyURL = os.Getenv("PROXY_URL")
+	conf.ProxyURL = getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
 		cfgLog.Info().Msg("Warning: PROXY_URL environment variable is not set")
 	}
 
 	// Display URLs for Tools and Datasources (optional, fallback to ProxyURL in API handler)
-	conf.ToolDisplayURL = os.Getenv("TOOL_DISPLAY_URL")
-	conf.DataSourceDisplayURL = os.Getenv("DATASOURCE_DISPLAY_URL")
+	conf.ToolDisplayURL = getenv("TOOL_DISPLAY_URL")
+	conf.DataSourceDisplayURL = getenv("DATASOURCE_DISPLAY_URL")
 
-	conf.DefaultSignupMode = os.Getenv("DEFAULT_SIGNUP_MODE")
+	conf.DefaultSignupMode = getenv("DEFAULT_SIGNUP_MODE")
 	if conf.DefaultSignupMode == "" {
 		conf.DefaultSignupMode = "both"
 	}
 
-	tibEnabledStr := os.Getenv("TIB_ENABLED")
+	tibEnabledStr := getenv("TIB_ENABLED")
 	if tibEnabledStr == "true" || tibEnabledStr == "1" {
 		conf.TIBEnabled = true
 	}
 
-	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
+	conf.TIBAPISecret = getenv("TYK_AI_SECRET_KEY")
 	if conf.TIBAPISecret == "" && conf.TIBEnabled {
 		cfgLog.Info().Msg("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
 	}
 
 	// Licensing configuration (Enterprise Edition)
-	conf.LicenseKey = os.Getenv("TYK_AI_LICENSE")
+	conf.LicenseKey = getenv("TYK_AI_LICENSE")
 
 	// License telemetry configuration
-	conf.LicenseTelemetryURL = os.Getenv("LICENSE_TELEMETRY_URL")
+	conf.LicenseTelemetryURL = getenv("LICENSE_TELEMETRY_URL")
 	if conf.LicenseTelemetryURL == "" {
 		conf.LicenseTelemetryURL = "https://telemetry.tyk.technology/api/track"
 	}
 
-	conf.LicenseTelemetryPeriod = parseDurationWithDefault("LICENSE_TELEMETRY_PERIOD", 1*time.Hour)
-	conf.LicenseValidityPeriod = parseDurationWithDefault("LICENSE_VALIDITY_CHECK_PERIOD", 24*time.Hour)
+	conf.LicenseTelemetryPeriod = parseDurationWithDefault(getenv, "LICENSE_TELEMETRY_PERIOD", 1*time.Hour)
+	conf.LicenseValidityPeriod = parseDurationWithDefault(getenv, "LICENSE_VALIDITY_CHECK_PERIOD", 24*time.Hour)
 
-	conf.LicenseDisableTelemetry = os.Getenv("LICENSE_DISABLE_TELEMETRY") == "true"
+	conf.LicenseDisableTelemetry = getenv("LICENSE_DISABLE_TELEMETRY") == "true"
 
-	telemetryConcurrency := os.Getenv("LICENSE_TELEMETRY_CONCURRENCY")
+	telemetryConcurrency := getenv("LICENSE_TELEMETRY_CONCURRENCY")
 	if telemetryConcurrency != "" {
 		if concurrency, err := strconv.Atoi(telemetryConcurrency); err == nil {
 			conf.LicenseTelemetryConcurrency = concurrency
@@ -436,7 +493,7 @@ func getConfigFromEnv(envFile string) *AppConf {
 	}
 
 	// Telemetry configuration - enabled by default, can be disabled by setting TELEMETRY_ENABLED=false
-	telemetryEnabledStr := os.Getenv("TELEMETRY_ENABLED")
+	telemetryEnabledStr := getenv("TELEMETRY_ENABLED")
 	if telemetryEnabledStr == "false" || telemetryEnabledStr == "0" {
 		conf.TelemetryEnabled = false
 	} else {
@@ -444,26 +501,26 @@ func getConfigFromEnv(envFile string) *AppConf {
 	}
 
 	// Metrics configuration - enabled by default
-	metricsEnabledStr := os.Getenv("METRICS_ENABLED")
+	metricsEnabledStr := getenv("METRICS_ENABLED")
 	if metricsEnabledStr == "false" || metricsEnabledStr == "0" {
 		conf.MetricsEnabled = false
 	} else {
 		conf.MetricsEnabled = true
 	}
-	conf.MetricsPath = os.Getenv("METRICS_PATH")
+	conf.MetricsPath = getenv("METRICS_PATH")
 	if conf.MetricsPath == "" {
 		conf.MetricsPath = "/metrics"
 	}
-	conf.MetricsAuthToken = os.Getenv("METRICS_AUTH_TOKEN")
-	metricsAllowUnauthStr := os.Getenv("METRICS_ALLOW_UNAUTHENTICATED")
+	conf.MetricsAuthToken = getenv("METRICS_AUTH_TOKEN")
+	metricsAllowUnauthStr := getenv("METRICS_ALLOW_UNAUTHENTICATED")
 	conf.MetricsAllowUnauthenticated = metricsAllowUnauthStr == "true" || metricsAllowUnauthStr == "1"
 
 	// Tracing configuration - disabled by default
-	tracingEnabledStr := os.Getenv("ENABLE_TRACING")
+	tracingEnabledStr := getenv("ENABLE_TRACING")
 	conf.TracingEnabled = tracingEnabledStr == "true" || tracingEnabledStr == "1"
-	conf.TracingEndpoint = os.Getenv("TRACING_ENDPOINT")
+	conf.TracingEndpoint = getenv("TRACING_ENDPOINT")
 
-	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
+	conf.AuthServerURL = getenv("AUTH_SERVER_URL")
 	if conf.AuthServerURL == "" {
 		if conf.SiteURL != "" {
 			conf.AuthServerURL = conf.SiteURL
@@ -474,7 +531,7 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
-	conf.ProxyOAuthMetadataURL = os.Getenv("PROXY_OAUTH_METADATA_URL")
+	conf.ProxyOAuthMetadataURL = getenv("PROXY_OAUTH_METADATA_URL")
 	if conf.ProxyOAuthMetadataURL == "" {
 		var baseURL string
 		if conf.ProxyURL != "" {
@@ -488,15 +545,15 @@ func getConfigFromEnv(envFile string) *AppConf {
 	}
 
 	// Queue configuration
-	conf.QueueConfig = getQueueConfig()
+	conf.QueueConfig = getQueueConfig(getenv)
 
 	// Hub-and-Spoke configuration
-	conf.GatewayMode = os.Getenv("GATEWAY_MODE")
+	conf.GatewayMode = getenv("GATEWAY_MODE")
 	if conf.GatewayMode == "" {
 		conf.GatewayMode = "standalone" // Default to standalone mode
 	}
 
-	grpcPortStr := os.Getenv("GRPC_PORT")
+	grpcPortStr := getenv("GRPC_PORT")
 	if grpcPortStr != "" {
 		if port, err := strconv.Atoi(grpcPortStr); err == nil {
 			conf.GRPCPort = port
@@ -508,13 +565,13 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.GRPCPort = 50051 // Default gRPC port
 	}
 
-	conf.GRPCHost = os.Getenv("GRPC_HOST")
+	conf.GRPCHost = getenv("GRPC_HOST")
 	if conf.GRPCHost == "" {
 		conf.GRPCHost = "0.0.0.0" // Default to listen on all interfaces
 	}
 
 	// gRPC TLS is enabled by default (secure by default)
-	grpcTLSInsecureStr := os.Getenv("GRPC_TLS_INSECURE")
+	grpcTLSInsecureStr := getenv("GRPC_TLS_INSECURE")
 	if grpcTLSInsecureStr == "true" || grpcTLSInsecureStr == "1" {
 		conf.GRPCTLSEnabled = false
 		cfgLog.Info().Msg("⚠️  SECURITY WARNING: gRPC TLS is DISABLED. This should only be used for development!")
@@ -524,36 +581,36 @@ func getConfigFromEnv(envFile string) *AppConf {
 		cfgLog.Info().Msg("✅ gRPC TLS enabled (secure by default)")
 	}
 
-	conf.GRPCTLSCertPath = os.Getenv("GRPC_TLS_CERT_PATH")
-	conf.GRPCTLSKeyPath = os.Getenv("GRPC_TLS_KEY_PATH")
-	conf.GRPCAuthToken = os.Getenv("GRPC_AUTH_TOKEN")
-	conf.GRPCNextAuthToken = os.Getenv("GRPC_AUTH_TOKEN_NEXT")
+	conf.GRPCTLSCertPath = getenv("GRPC_TLS_CERT_PATH")
+	conf.GRPCTLSKeyPath = getenv("GRPC_TLS_KEY_PATH")
+	conf.GRPCAuthToken = getenv("GRPC_AUTH_TOKEN")
+	conf.GRPCNextAuthToken = getenv("GRPC_AUTH_TOKEN_NEXT")
 
 	// OCI Plugin configuration
-	conf.OCIPlugins = getOCIConfig()
+	conf.OCIPlugins = getOCIConfig(getenv)
 
 	// Audit trail configuration
-	conf.Audit = getAuditConfig()
+	conf.Audit = getAuditConfig(getenv)
 
 	// Webhooks configuration
-	conf.Webhooks = getWebhooksConfig()
-	conf.TykMCP = getTykMCPConfig()
+	conf.Webhooks = getWebhooksConfig(getenv)
+	conf.TykMCP = getTykMCPConfig(getenv)
 
 	// Marketplace configuration
 	conf.MarketplaceEnabled = true // Enabled by default
-	if enabledStr := os.Getenv("MARKETPLACE_ENABLED"); enabledStr != "" {
+	if enabledStr := getenv("MARKETPLACE_ENABLED"); enabledStr != "" {
 		if enabled, err := strconv.ParseBool(enabledStr); err == nil {
 			conf.MarketplaceEnabled = enabled
 		}
 	}
 
-	conf.MarketplaceIndexURL = os.Getenv("MARKETPLACE_INDEX_URL")
+	conf.MarketplaceIndexURL = getenv("MARKETPLACE_INDEX_URL")
 	if conf.MarketplaceIndexURL == "" {
 		conf.MarketplaceIndexURL = "https://raw.githubusercontent.com/TykTechnologies/tyk-ai-studio-plugins-ce/main/index.yaml"
 	}
 
 	conf.MarketplaceSyncInterval = 1 * time.Hour // Default: sync every hour
-	if intervalStr := os.Getenv("MARKETPLACE_SYNC_INTERVAL"); intervalStr != "" {
+	if intervalStr := getenv("MARKETPLACE_SYNC_INTERVAL"); intervalStr != "" {
 		if interval, err := time.ParseDuration(intervalStr); err == nil {
 			conf.MarketplaceSyncInterval = interval
 		} else {
@@ -561,24 +618,24 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
-	conf.MarketplaceCacheDir = os.Getenv("MARKETPLACE_CACHE_DIR")
+	conf.MarketplaceCacheDir = getenv("MARKETPLACE_CACHE_DIR")
 	if conf.MarketplaceCacheDir == "" {
 		conf.MarketplaceCacheDir = "./.marketplace-cache"
 	}
 
 	// Log level configuration
-	conf.LogLevel = os.Getenv("LOG_LEVEL")
+	conf.LogLevel = getenv("LOG_LEVEL")
 	if conf.LogLevel == "" {
 		conf.LogLevel = "info" // Default to info level
 	}
 
 	// Session duration configuration
-	conf.SessionDuration = parseDurationWithDefault("SESSION_DURATION", 6*time.Hour)
+	conf.SessionDuration = parseDurationWithDefault(getenv, "SESSION_DURATION", 6*time.Hour)
 
 	// User API keys for SSO-provisioned accounts: issuance is opt-in, and
 	// an issued key only works while the user keeps signing in through the
 	// identity provider (Go durations, so 30 days is "720h").
-	if v := os.Getenv("ALLOW_SSO_USER_API_KEYS"); v != "" {
+	if v := getenv("ALLOW_SSO_USER_API_KEYS"); v != "" {
 		allow, err := strconv.ParseBool(v)
 		if err != nil {
 			cfgLog.Warn().Msgf("Warning: Invalid ALLOW_SSO_USER_API_KEYS value: %s", v)
@@ -586,11 +643,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 			conf.AllowSSOUserAPIKeys = allow
 		}
 	}
-	conf.SSOAPIKeyLiveness = parseDurationWithDefault("SSO_API_KEY_LIVENESS", 30*24*time.Hour)
+	conf.SSOAPIKeyLiveness = parseDurationWithDefault(getenv, "SSO_API_KEY_LIVENESS", 30*24*time.Hour)
 
 	// Max resource payload size for submissions (default: 5MB)
 	conf.MaxResourcePayloadSize = 5 * 1024 * 1024
-	if maxPayloadStr := os.Getenv("MAX_RESOURCE_PAYLOAD_SIZE"); maxPayloadStr != "" {
+	if maxPayloadStr := getenv("MAX_RESOURCE_PAYLOAD_SIZE"); maxPayloadStr != "" {
 		if maxPayload, err := strconv.Atoi(maxPayloadStr); err == nil && maxPayload > 0 {
 			conf.MaxResourcePayloadSize = maxPayload
 			cfgLog.Info().Msgf("Max resource payload size set to: %d bytes", maxPayload)
@@ -600,7 +657,7 @@ func getConfigFromEnv(envFile string) *AppConf {
 	}
 
 	// Default app budget configuration
-	if defaultBudgetStr := os.Getenv("DEFAULT_APP_BUDGET"); defaultBudgetStr != "" {
+	if defaultBudgetStr := getenv("DEFAULT_APP_BUDGET"); defaultBudgetStr != "" {
 		if defaultBudget, err := strconv.ParseFloat(defaultBudgetStr, 64); err == nil && defaultBudget > 0 {
 			conf.DefaultAppBudget = &defaultBudget
 			cfgLog.Info().Msgf("Default app budget set to: %.2f", defaultBudget)
@@ -609,18 +666,44 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
+	conf.SecretKey = getenv("TYK_AI_SECRET_KEY")
+	conf.MicrogatewayEncryptionKey = getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	conf.CSRFTrustedOrigins = getenv("CSRF_TRUSTED_ORIGINS")
+	conf.ExportStoragePath = getenv("EXPORT_STORAGE_PATH")
+	if conf.ExportStoragePath == "" {
+		conf.ExportStoragePath = "./data/exports"
+	}
+	conf.BrandingStoragePath = getenv("BRANDING_STORAGE_PATH")
+	if conf.BrandingStoragePath == "" {
+		conf.BrandingStoragePath = "./data/branding"
+	}
+	conf.DebugHTTP = getenv("DEBUG_HTTP") == "true"
+	switch strings.ToLower(strings.TrimSpace(getenv("CHAT_UI_V2_ENABLED"))) {
+	case "0", "false", "no", "off":
+		conf.ChatUIV2Enabled = false
+	default:
+		conf.ChatUIV2Enabled = true
+	}
+	conf.ChatSessionIdleTTL = 10 * time.Minute
+	if v := getenv("CHAT_SESSION_IDLE_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			conf.ChatSessionIdleTTL = d
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid CHAT_SESSION_IDLE_TTL value: %s, using default 10m", v)
+		}
+	}
 	return conf
 }
 
 // getQueueConfig parses queue-related environment variables
-func getQueueConfig() QueueConfig {
+func getQueueConfig(getenv func(string) string) QueueConfig {
 	config := QueueConfig{
 		Type:       "inmemory", // Default to in-memory queue
 		BufferSize: 100,        // Default buffer size
 	}
 
 	// Parse queue type
-	queueType := os.Getenv("QUEUE_TYPE")
+	queueType := getenv("QUEUE_TYPE")
 	if queueType == "nats" || queueType == "inmemory" || queueType == "postgres" {
 		config.Type = queueType
 	} else if queueType != "" {
@@ -628,7 +711,7 @@ func getQueueConfig() QueueConfig {
 	}
 
 	// Parse buffer size
-	if bufferSizeStr := os.Getenv("QUEUE_BUFFER_SIZE"); bufferSizeStr != "" {
+	if bufferSizeStr := getenv("QUEUE_BUFFER_SIZE"); bufferSizeStr != "" {
 		if bufferSize, err := strconv.Atoi(bufferSizeStr); err == nil && bufferSize > 0 {
 			config.BufferSize = bufferSize
 		} else {
@@ -637,16 +720,16 @@ func getQueueConfig() QueueConfig {
 	}
 
 	// Parse NATS configuration
-	config.NATS = getNATSConfig()
+	config.NATS = getNATSConfig(getenv)
 
 	// Parse PostgreSQL configuration
-	config.PostgreSQL = getPostgreSQLQueueConfig()
+	config.PostgreSQL = getPostgreSQLQueueConfig(getenv)
 
 	return config
 }
 
 // getNATSConfig parses NATS-specific environment variables
-func getNATSConfig() NATSConfig {
+func getNATSConfig(getenv func(string) string) NATSConfig {
 	config := NATSConfig{
 		URL:             "nats://localhost:4222", // Default NATS URL
 		StorageType:     "file",                  // Default to persistent storage
@@ -663,19 +746,19 @@ func getNATSConfig() NATSConfig {
 	}
 
 	// NATS server URL
-	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+	if natsURL := getenv("NATS_URL"); natsURL != "" {
 		config.URL = natsURL
 	}
 
 	// Storage type
-	if storageType := os.Getenv("NATS_STORAGE_TYPE"); storageType == "memory" || storageType == "file" {
+	if storageType := getenv("NATS_STORAGE_TYPE"); storageType == "memory" || storageType == "file" {
 		config.StorageType = storageType
 	} else if storageType != "" {
 		cfgLog.Info().Msgf("Warning: Invalid NATS_STORAGE_TYPE value: %s. Using default: %s", storageType, config.StorageType)
 	}
 
 	// Retention policy
-	retentionPolicy := os.Getenv("NATS_RETENTION_POLICY")
+	retentionPolicy := getenv("NATS_RETENTION_POLICY")
 	if retentionPolicy == "limits" || retentionPolicy == "interest" || retentionPolicy == "workqueue" {
 		config.RetentionPolicy = retentionPolicy
 	} else if retentionPolicy != "" {
@@ -683,12 +766,12 @@ func getNATSConfig() NATSConfig {
 	}
 
 	// Max age
-	if maxAge := os.Getenv("NATS_MAX_AGE"); maxAge != "" {
+	if maxAge := getenv("NATS_MAX_AGE"); maxAge != "" {
 		config.MaxAge = maxAge
 	}
 
 	// Max bytes
-	if maxBytesStr := os.Getenv("NATS_MAX_BYTES"); maxBytesStr != "" {
+	if maxBytesStr := getenv("NATS_MAX_BYTES"); maxBytesStr != "" {
 		if maxBytes, err := strconv.ParseInt(maxBytesStr, 10, 64); err == nil && maxBytes > 0 {
 			config.MaxBytes = maxBytes
 		} else {
@@ -697,7 +780,7 @@ func getNATSConfig() NATSConfig {
 	}
 
 	// Durable consumer
-	if durableStr := os.Getenv("NATS_DURABLE_CONSUMER"); durableStr != "" {
+	if durableStr := getenv("NATS_DURABLE_CONSUMER"); durableStr != "" {
 		if durable, err := strconv.ParseBool(durableStr); err == nil {
 			config.DurableConsumer = durable
 		} else {
@@ -706,12 +789,12 @@ func getNATSConfig() NATSConfig {
 	}
 
 	// Ack wait
-	if ackWait := os.Getenv("NATS_ACK_WAIT"); ackWait != "" {
+	if ackWait := getenv("NATS_ACK_WAIT"); ackWait != "" {
 		config.AckWait = ackWait
 	}
 
 	// Max deliver
-	if maxDeliverStr := os.Getenv("NATS_MAX_DELIVER"); maxDeliverStr != "" {
+	if maxDeliverStr := getenv("NATS_MAX_DELIVER"); maxDeliverStr != "" {
 		if maxDeliver, err := strconv.Atoi(maxDeliverStr); err == nil && maxDeliver > 0 {
 			config.MaxDeliver = maxDeliver
 		} else {
@@ -720,17 +803,17 @@ func getNATSConfig() NATSConfig {
 	}
 
 	// Fetch timeout
-	if fetchTimeout := os.Getenv("NATS_FETCH_TIMEOUT"); fetchTimeout != "" {
+	if fetchTimeout := getenv("NATS_FETCH_TIMEOUT"); fetchTimeout != "" {
 		config.FetchTimeout = fetchTimeout
 	}
 
 	// Retry interval
-	if retryInterval := os.Getenv("NATS_RETRY_INTERVAL"); retryInterval != "" {
+	if retryInterval := getenv("NATS_RETRY_INTERVAL"); retryInterval != "" {
 		config.RetryInterval = retryInterval
 	}
 
 	// Max retries
-	if maxRetriesStr := os.Getenv("NATS_MAX_RETRIES"); maxRetriesStr != "" {
+	if maxRetriesStr := getenv("NATS_MAX_RETRIES"); maxRetriesStr != "" {
 		if maxRetries, err := strconv.Atoi(maxRetriesStr); err == nil && maxRetries >= 0 {
 			config.MaxRetries = maxRetries
 		} else {
@@ -739,29 +822,29 @@ func getNATSConfig() NATSConfig {
 	}
 
 	// Credentials file
-	if credFile := os.Getenv("NATS_CREDENTIALS_FILE"); credFile != "" {
+	if credFile := getenv("NATS_CREDENTIALS_FILE"); credFile != "" {
 		config.CredentialsFile = credFile
 	}
 
 	// Authentication credentials
-	if username := os.Getenv("NATS_USERNAME"); username != "" {
+	if username := getenv("NATS_USERNAME"); username != "" {
 		config.Username = username
 	}
 
-	if password := os.Getenv("NATS_PASSWORD"); password != "" {
+	if password := getenv("NATS_PASSWORD"); password != "" {
 		config.Password = password
 	}
 
-	if token := os.Getenv("NATS_TOKEN"); token != "" {
+	if token := getenv("NATS_TOKEN"); token != "" {
 		config.Token = token
 	}
 
-	if nkeyFile := os.Getenv("NATS_NKEY_FILE"); nkeyFile != "" {
+	if nkeyFile := getenv("NATS_NKEY_FILE"); nkeyFile != "" {
 		config.NKeyFile = nkeyFile
 	}
 
 	// TLS configuration
-	if tlsStr := os.Getenv("NATS_TLS_ENABLED"); tlsStr != "" {
+	if tlsStr := getenv("NATS_TLS_ENABLED"); tlsStr != "" {
 		if tls, err := strconv.ParseBool(tlsStr); err == nil {
 			config.TLSEnabled = tls
 		} else {
@@ -769,19 +852,19 @@ func getNATSConfig() NATSConfig {
 		}
 	}
 
-	if certFile := os.Getenv("NATS_TLS_CERT_FILE"); certFile != "" {
+	if certFile := getenv("NATS_TLS_CERT_FILE"); certFile != "" {
 		config.TLSCertFile = certFile
 	}
 
-	if keyFile := os.Getenv("NATS_TLS_KEY_FILE"); keyFile != "" {
+	if keyFile := getenv("NATS_TLS_KEY_FILE"); keyFile != "" {
 		config.TLSKeyFile = keyFile
 	}
 
-	if caFile := os.Getenv("NATS_TLS_CA_FILE"); caFile != "" {
+	if caFile := getenv("NATS_TLS_CA_FILE"); caFile != "" {
 		config.TLSCAFile = caFile
 	}
 
-	if skipVerifyStr := os.Getenv("NATS_TLS_SKIP_VERIFY"); skipVerifyStr != "" {
+	if skipVerifyStr := getenv("NATS_TLS_SKIP_VERIFY"); skipVerifyStr != "" {
 		if skipVerify, err := strconv.ParseBool(skipVerifyStr); err == nil {
 			config.TLSSkipVerify = skipVerify
 		} else {
@@ -793,7 +876,7 @@ func getNATSConfig() NATSConfig {
 }
 
 // getPostgreSQLQueueConfig parses PostgreSQL-specific queue environment variables
-func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
+func getPostgreSQLQueueConfig(getenv func(string) string) PostgreSQLQueueConfig {
 	config := PostgreSQLQueueConfig{
 		ReconnectInterval:   "2s", // Default 2 second reconnection interval
 		MaxReconnectRetries: 10,   // Default max 10 reconnection attempts
@@ -801,12 +884,12 @@ func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
 	}
 
 	// Reconnect interval
-	if reconnectInterval := os.Getenv("POSTGRES_QUEUE_RECONNECT_INTERVAL"); reconnectInterval != "" {
+	if reconnectInterval := getenv("POSTGRES_QUEUE_RECONNECT_INTERVAL"); reconnectInterval != "" {
 		config.ReconnectInterval = reconnectInterval
 	}
 
 	// Max reconnect retries
-	if maxRetriesStr := os.Getenv("POSTGRES_QUEUE_MAX_RECONNECT_RETRIES"); maxRetriesStr != "" {
+	if maxRetriesStr := getenv("POSTGRES_QUEUE_MAX_RECONNECT_RETRIES"); maxRetriesStr != "" {
 		if maxRetries, err := strconv.Atoi(maxRetriesStr); err == nil && maxRetries >= 0 {
 			config.MaxReconnectRetries = maxRetries
 		} else {
@@ -815,7 +898,7 @@ func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
 	}
 
 	// Notify timeout
-	if notifyTimeout := os.Getenv("POSTGRES_QUEUE_NOTIFY_TIMEOUT"); notifyTimeout != "" {
+	if notifyTimeout := getenv("POSTGRES_QUEUE_NOTIFY_TIMEOUT"); notifyTimeout != "" {
 		config.NotifyTimeout = notifyTimeout
 	}
 
@@ -874,7 +957,7 @@ func (c AuditConfig) StoresToFile() bool {
 	return c.StoreType == AuditStoreFile || c.StoreType == AuditStoreBoth
 }
 
-func getAuditConfig() AuditConfig {
+func getAuditConfig(getenv func(string) string) AuditConfig {
 	cfg := AuditConfig{
 		Enabled:           true,
 		StoreType:         AuditStoreDB,
@@ -887,7 +970,7 @@ func getAuditConfig() AuditConfig {
 		QueueSize:         4096,
 	}
 
-	if v := os.Getenv("AUDIT_ENABLED"); v != "" {
+	if v := getenv("AUDIT_ENABLED"); v != "" {
 		if enabled, err := strconv.ParseBool(v); err == nil {
 			cfg.Enabled = enabled
 		} else {
@@ -895,7 +978,7 @@ func getAuditConfig() AuditConfig {
 		}
 	}
 
-	switch v := strings.ToLower(os.Getenv("AUDIT_STORE_TYPE")); v {
+	switch v := strings.ToLower(getenv("AUDIT_STORE_TYPE")); v {
 	case "":
 	case AuditStoreDB, AuditStoreFile, AuditStoreBoth:
 		cfg.StoreType = v
@@ -903,11 +986,11 @@ func getAuditConfig() AuditConfig {
 		cfgLog.Warn().Msgf("Invalid AUDIT_STORE_TYPE value: %s. Using default: %s", v, cfg.StoreType)
 	}
 
-	if v := os.Getenv("AUDIT_FILE_PATH"); v != "" {
+	if v := getenv("AUDIT_FILE_PATH"); v != "" {
 		cfg.FilePath = v
 	}
 
-	switch v := strings.ToLower(os.Getenv("AUDIT_FILE_FORMAT")); v {
+	switch v := strings.ToLower(getenv("AUDIT_FILE_FORMAT")); v {
 	case "":
 	case "json", "text":
 		cfg.FileFormat = v
@@ -915,19 +998,19 @@ func getAuditConfig() AuditConfig {
 		cfgLog.Warn().Msgf("Invalid AUDIT_FILE_FORMAT value: %s. Using default: %s", v, cfg.FileFormat)
 	}
 
-	if v := os.Getenv("AUDIT_DETAILED_RECORDING"); v != "" {
+	if v := getenv("AUDIT_DETAILED_RECORDING"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.DetailedRecording = b
 		}
 	}
 
-	if v := os.Getenv("AUDIT_RECORD_READS"); v != "" {
+	if v := getenv("AUDIT_RECORD_READS"); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			cfg.RecordReads = b
 		}
 	}
 
-	if v := os.Getenv("AUDIT_RETENTION_DAYS"); v != "" {
+	if v := getenv("AUDIT_RETENTION_DAYS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 			cfg.RetentionDays = n
 		} else {
@@ -935,20 +1018,20 @@ func getAuditConfig() AuditConfig {
 		}
 	}
 
-	if v := os.Getenv("AUDIT_MAX_BODY_BYTES"); v != "" {
+	if v := getenv("AUDIT_MAX_BODY_BYTES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.MaxBodyBytes = n
 		}
 	}
 
-	if v := os.Getenv("AUDIT_QUEUE_SIZE"); v != "" {
+	if v := getenv("AUDIT_QUEUE_SIZE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.QueueSize = n
 		}
 	}
 
-	cfg.RedactKeys = splitCSVList(os.Getenv("AUDIT_REDACT_KEYS"))
-	cfg.RedactHeaders = splitCSVList(os.Getenv("AUDIT_REDACT_HEADERS"))
+	cfg.RedactKeys = splitCSVList(getenv("AUDIT_REDACT_KEYS"))
+	cfg.RedactHeaders = splitCSVList(getenv("AUDIT_REDACT_HEADERS"))
 
 	return cfg
 }
@@ -1006,7 +1089,7 @@ const (
 	webhooksMaxAttempts       = 50
 )
 
-func getWebhooksConfig() WebhooksConfig {
+func getWebhooksConfig(getenv func(string) string) WebhooksConfig {
 	cfg := WebhooksConfig{
 		Enabled:                 true,
 		WorkerEnabled:           true,
@@ -1024,7 +1107,7 @@ func getWebhooksConfig() WebhooksConfig {
 	}
 
 	boolEnv := func(key string, dst *bool) {
-		if v := os.Getenv(key); v != "" {
+		if v := getenv(key); v != "" {
 			if b, err := strconv.ParseBool(v); err == nil {
 				*dst = b
 			} else {
@@ -1033,7 +1116,7 @@ func getWebhooksConfig() WebhooksConfig {
 		}
 	}
 	intEnv := func(key string, dst *int, min, max int) {
-		if v := os.Getenv(key); v != "" {
+		if v := getenv(key); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n >= min && (max <= 0 || n <= max) {
 				*dst = n
 			} else {
@@ -1046,28 +1129,28 @@ func getWebhooksConfig() WebhooksConfig {
 	boolEnv("WEBHOOKS_WORKER_ENABLED", &cfg.WorkerEnabled)
 	intEnv("WEBHOOKS_WORKER_COUNT", &cfg.WorkerCount, 1, webhooksMaxWorkerCount)
 	intEnv("WEBHOOKS_MAX_ATTEMPTS", &cfg.MaxAttempts, 1, webhooksMaxAttempts)
-	cfg.BaseBackoff = parseDurationWithDefault("WEBHOOKS_BASE_BACKOFF", cfg.BaseBackoff)
-	cfg.MaxBackoff = parseDurationWithDefault("WEBHOOKS_MAX_BACKOFF", cfg.MaxBackoff)
+	cfg.BaseBackoff = parseDurationWithDefault(getenv, "WEBHOOKS_BASE_BACKOFF", cfg.BaseBackoff)
+	cfg.MaxBackoff = parseDurationWithDefault(getenv, "WEBHOOKS_MAX_BACKOFF", cfg.MaxBackoff)
 	if cfg.MaxBackoff < cfg.BaseBackoff {
 		cfgLog.Warn().Msgf("WEBHOOKS_MAX_BACKOFF (%s) is below WEBHOOKS_BASE_BACKOFF (%s); using the base value", cfg.MaxBackoff, cfg.BaseBackoff)
 		cfg.MaxBackoff = cfg.BaseBackoff
 	}
-	cfg.RequestTimeout = parseDurationWithDefault("WEBHOOKS_REQUEST_TIMEOUT", cfg.RequestTimeout)
+	cfg.RequestTimeout = parseDurationWithDefault(getenv, "WEBHOOKS_REQUEST_TIMEOUT", cfg.RequestTimeout)
 	if cfg.RequestTimeout <= 0 || cfg.RequestTimeout > webhooksMaxRequestTimeout {
 		cfgLog.Warn().Msgf("WEBHOOKS_REQUEST_TIMEOUT (%s) must be between 1s and %s; using 10s", cfg.RequestTimeout, webhooksMaxRequestTimeout)
 		cfg.RequestTimeout = 10 * time.Second
 	}
 	boolEnv("WEBHOOKS_ALLOW_INTERNAL_TARGETS", &cfg.AllowInternalTargets)
-	cfg.AllowedHosts = splitCSVList(os.Getenv("WEBHOOKS_ALLOWED_HOSTS"))
-	cfg.DeniedHosts = splitCSVList(os.Getenv("WEBHOOKS_DENIED_HOSTS"))
+	cfg.AllowedHosts = splitCSVList(getenv("WEBHOOKS_ALLOWED_HOSTS"))
+	cfg.DeniedHosts = splitCSVList(getenv("WEBHOOKS_DENIED_HOSTS"))
 	intEnv("WEBHOOKS_RETENTION_DAYS", &cfg.RetentionDays, 0, 0)
 	intEnv("WEBHOOKS_DEAD_LETTER_RETENTION_DAYS", &cfg.DeadLetterRetentionDays, 0, 0)
 	intEnv("WEBHOOKS_MAX_RESPONSE_SNIPPET_BYTES", &cfg.MaxResponseSnippetBytes, 0, 64*1024)
 	boolEnv("WEBHOOKS_REQUIRE_DIFFERENT_APPROVER", &cfg.RequireDifferentApprover)
-	cfg.SecretRotationGrace = parseDurationWithDefault("WEBHOOKS_SECRET_ROTATION_GRACE", cfg.SecretRotationGrace)
-	cfg.RedactKeys = splitCSVList(os.Getenv("WEBHOOKS_REDACT_KEYS"))
+	cfg.SecretRotationGrace = parseDurationWithDefault(getenv, "WEBHOOKS_SECRET_ROTATION_GRACE", cfg.SecretRotationGrace)
+	cfg.RedactKeys = splitCSVList(getenv("WEBHOOKS_REDACT_KEYS"))
 	boolEnv("WEBHOOKS_AUDIT_DELIVERIES", &cfg.AuditDeliveries)
-	cfg.ShutdownDrainTimeout = parseDurationWithDefault("WEBHOOKS_SHUTDOWN_DRAIN_TIMEOUT", cfg.ShutdownDrainTimeout)
+	cfg.ShutdownDrainTimeout = parseDurationWithDefault(getenv, "WEBHOOKS_SHUTDOWN_DRAIN_TIMEOUT", cfg.ShutdownDrainTimeout)
 
 	return cfg
 }
@@ -1085,11 +1168,11 @@ func splitCSVList(v string) []string {
 	return out
 }
 
-func getOCIConfig() OCIConfig {
+func getOCIConfig(getenv func(string) string) OCIConfig {
 	config := OCIConfig{}
 
 	// Cache directory - if not set, OCI support is disabled
-	config.CacheDir = os.Getenv("AI_STUDIO_OCI_CACHE_DIR")
+	config.CacheDir = getenv("AI_STUDIO_OCI_CACHE_DIR")
 
 	// Only parse other settings if OCI is enabled
 	if config.CacheDir == "" {
@@ -1097,7 +1180,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Max cache size
-	if cacheSizeStr := os.Getenv("AI_STUDIO_OCI_MAX_CACHE_SIZE"); cacheSizeStr != "" {
+	if cacheSizeStr := getenv("AI_STUDIO_OCI_MAX_CACHE_SIZE"); cacheSizeStr != "" {
 		if cacheSize, err := strconv.ParseInt(cacheSizeStr, 10, 64); err == nil && cacheSize > 0 {
 			config.MaxCacheSize = cacheSize
 		} else {
@@ -1106,7 +1189,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Allowed registries
-	if allowedRegistries := os.Getenv("AI_STUDIO_OCI_ALLOWED_REGISTRIES"); allowedRegistries != "" {
+	if allowedRegistries := getenv("AI_STUDIO_OCI_ALLOWED_REGISTRIES"); allowedRegistries != "" {
 		config.AllowedRegistries = strings.Split(allowedRegistries, ",")
 		for i, registry := range config.AllowedRegistries {
 			config.AllowedRegistries[i] = strings.TrimSpace(registry)
@@ -1114,7 +1197,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Require signature verification
-	if requireSigStr := os.Getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
+	if requireSigStr := getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
 		if requireSig, err := strconv.ParseBool(requireSigStr); err == nil {
 			config.RequireSignature = requireSig
 		} else {
@@ -1123,7 +1206,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Network timeout
-	if timeoutStr := os.Getenv("AI_STUDIO_OCI_TIMEOUT"); timeoutStr != "" {
+	if timeoutStr := getenv("AI_STUDIO_OCI_TIMEOUT"); timeoutStr != "" {
 		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
 			config.Timeout = timeout
 		} else {
@@ -1132,7 +1215,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Retry attempts
-	if retriesStr := os.Getenv("AI_STUDIO_OCI_RETRY_ATTEMPTS"); retriesStr != "" {
+	if retriesStr := getenv("AI_STUDIO_OCI_RETRY_ATTEMPTS"); retriesStr != "" {
 		if retries, err := strconv.Atoi(retriesStr); err == nil && retries >= 0 {
 			config.RetryAttempts = retries
 		} else {
@@ -1141,7 +1224,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Garbage collection interval
-	if gcIntervalStr := os.Getenv("AI_STUDIO_OCI_GC_INTERVAL"); gcIntervalStr != "" {
+	if gcIntervalStr := getenv("AI_STUDIO_OCI_GC_INTERVAL"); gcIntervalStr != "" {
 		if gcInterval, err := time.ParseDuration(gcIntervalStr); err == nil {
 			config.GCInterval = gcInterval
 		} else {
@@ -1150,7 +1233,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Keep versions
-	if keepVersionsStr := os.Getenv("AI_STUDIO_OCI_KEEP_VERSIONS"); keepVersionsStr != "" {
+	if keepVersionsStr := getenv("AI_STUDIO_OCI_KEEP_VERSIONS"); keepVersionsStr != "" {
 		if keepVersions, err := strconv.Atoi(keepVersionsStr); err == nil && keepVersions > 0 {
 			config.KeepVersions = keepVersions
 		} else {
@@ -1159,7 +1242,7 @@ func getOCIConfig() OCIConfig {
 	}
 
 	// Insecure registries
-	if insecureRegistries := os.Getenv("AI_STUDIO_OCI_INSECURE_REGISTRIES"); insecureRegistries != "" {
+	if insecureRegistries := getenv("AI_STUDIO_OCI_INSECURE_REGISTRIES"); insecureRegistries != "" {
 		config.InsecureRegistries = strings.Split(insecureRegistries, ",")
 		for i, registry := range config.InsecureRegistries {
 			config.InsecureRegistries[i] = strings.TrimSpace(registry)
@@ -1178,21 +1261,23 @@ func getOCIConfig() OCIConfig {
 }
 
 func Get(envFile string) *AppConf {
-	if globalConfig == nil {
-		globalConfig = getConfigFromEnv(envFile)
+	if conf := globalConfig.Load(); conf != nil {
+		return conf
 	}
-	return globalConfig
+	ExportEnvFile(envFile)
+	globalConfig.CompareAndSwap(nil, LoadFrom(os.Getenv))
+	return globalConfig.Load()
 }
 
 // ResetGlobalConfig resets the global configuration cache, forcing a reload on next Get() call
 // This is primarily for testing purposes to ensure test isolation
 func ResetGlobalConfig() {
-	globalConfig = nil
+	globalConfig.Store(nil)
 }
 
 // parseDurationWithDefault parses a duration from an environment variable with a default fallback
-func parseDurationWithDefault(envVar string, defaultDuration time.Duration) time.Duration {
-	value := os.Getenv(envVar)
+func parseDurationWithDefault(getenv func(string) string, envVar string, defaultDuration time.Duration) time.Duration {
+	value := getenv(envVar)
 	if value == "" {
 		return defaultDuration
 	}

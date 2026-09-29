@@ -14,6 +14,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
+	"github.com/TykTechnologies/midsommar/v2/templates"
 	"gorm.io/gorm"
 )
 
@@ -554,8 +555,12 @@ func (s *NotificationService) renderTemplate(templateName string, data interface
 			}
 			parent := filepath.Dir(currentDir)
 			if parent == currentDir {
-				// We've reached the root directory
-				return "", fmt.Errorf("could not find template %s in templates directory", templateName)
+				// No templates directory on disk; use the embedded default.
+				tmpl, err = template.New(baseName).Funcs(funcMap).ParseFS(templates.FS, baseName)
+				if err != nil {
+					return "", fmt.Errorf("could not find template %s: %v", templateName, err)
+				}
+				break
 			}
 			currentDir = parent
 		}

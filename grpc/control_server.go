@@ -87,7 +87,8 @@ type ControlServer struct {
 	// Edge management service (CE: forces "default", ENT: multi-tenant)
 	edgeManagementService edge_management.Service
 
-	// gRPC server
+	// gRPC server, set by Serve and read by Stop
+	serverMu   sync.Mutex
 	grpcServer *grpc.Server
 
 	// Cleanup ticker for stale connections
@@ -104,6 +105,9 @@ type ControlServer struct {
 
 	// Budget sync service for multi-edge budget synchronization
 	budgetSyncService *BudgetSyncService
+
+	// encryptionKey is the validated key credentials are encrypted with for edges.
+	encryptionKey string
 }
 
 // Config holds the control server configuration
@@ -116,31 +120,40 @@ type Config struct {
 	AuthToken            string
 	NextAuthToken        string
 	MaxConcurrentStreams int // Maximum number of concurrent gRPC streams (default 1000)
+	// EncryptionKey is the 32-character key edges use to decrypt the
+	// credentials sent to them. Empty means MICROGATEWAY_ENCRYPTION_KEY.
+	EncryptionKey string
 }
 
-// NewControlServer creates a new control server for AI Studio
-func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
+// validateEncryptionKey checks the key edges use to decrypt the credentials
+// the control server sends them.
+func validateEncryptionKey(key string) error {
+	switch {
+	case key == "":
+		return errors.New("MICROGATEWAY_ENCRYPTION_KEY is required but not set; set a secure 32-character random key")
+	case len(key) != 32:
+		return fmt.Errorf("MICROGATEWAY_ENCRYPTION_KEY must be exactly 32 characters long, got %d", len(key))
+	case key == DEFAULT_ENCRYPTION_KEY:
+		return errors.New("MICROGATEWAY_ENCRYPTION_KEY cannot use the default insecure key; generate a secure 32-character random key")
+	}
+	return nil
+}
+
+// NewControlServer creates a new control server for AI Studio. It fails when
+// the microgateway encryption key is missing or insecure.
+func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 	// Set default connection limit if not specified
 	maxStreams := cfg.MaxConcurrentStreams
 	if maxStreams <= 0 {
 		maxStreams = 1000 // Sensible default
 	}
 
-	// Security check: REQUIRE MICROGATEWAY_ENCRYPTION_KEY to be configured
-	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	encryptionKey := cfg.EncryptionKey
 	if encryptionKey == "" {
-		log.Fatal().
-			Msg("🚨 CRITICAL SECURITY ERROR: MICROGATEWAY_ENCRYPTION_KEY environment variable is required but not set! Please set a secure 32-character random key.")
+		encryptionKey = os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	}
-	if len(encryptionKey) != 32 {
-		log.Fatal().
-			Int("current_length", len(encryptionKey)).
-			Int("required_length", 32).
-			Msg("🚨 CRITICAL SECURITY ERROR: MICROGATEWAY_ENCRYPTION_KEY must be exactly 32 characters long!")
-	}
-	if encryptionKey == DEFAULT_ENCRYPTION_KEY {
-		log.Fatal().
-			Msg("🚨 CRITICAL SECURITY ERROR: MICROGATEWAY_ENCRYPTION_KEY cannot use the default insecure key! Please generate a secure 32-character random key.")
+	if err := validateEncryptionKey(encryptionKey); err != nil {
+		return nil, err
 	}
 
 	log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
@@ -152,6 +165,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 		maxConcurrentStreams:  maxStreams,
 		edgeManagementService: edge_management.NewService(db),
 		eventBus:              eventbridge.NewBus(),
+		encryptionKey:         encryptionKey,
 	}
 
 	// Initialize AI Studio's analytics system for processing edge pulse data
@@ -172,7 +186,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	// Start cleanup routine
 	server.startCleanupRoutine()
 
-	return server
+	return server, nil
 }
 
 // SetEdgeBudgetSource has the budget sync push budget blocks to edges and
@@ -183,15 +197,20 @@ func (s *ControlServer) SetEdgeBudgetSource(src EdgeBudgetSource) {
 	}
 }
 
-// Start starts the gRPC control server
+// Start listens on the configured host and port and serves the gRPC control
+// server until Stop is called.
 func (s *ControlServer) Start() error {
-	// Create listener
 	addr := fmt.Sprintf("%s:%d", s.config.GRPCHost, s.config.GRPCPort)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
+	return s.Serve(listener)
+}
 
+// Serve serves the gRPC control server on listener until Stop is called. An
+// embedding host uses it to supply its own listener.
+func (s *ControlServer) Serve(listener net.Listener) error {
 	// Setup gRPC server options
 	var opts []grpc.ServerOption
 
@@ -202,6 +221,7 @@ func (s *ControlServer) Start() error {
 			s.config.TLSKeyPath,
 		)
 		if err != nil {
+			listener.Close()
 			return fmt.Errorf("failed to load TLS credentials: %w", err)
 		}
 		opts = append(opts, grpc.Creds(creds))
@@ -212,13 +232,16 @@ func (s *ControlServer) Start() error {
 	opts = append(opts, grpc.StreamInterceptor(s.streamAuthInterceptor))
 
 	// Create gRPC server
-	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterConfigurationSyncServiceServer(s.grpcServer, s)
+	server := grpc.NewServer(opts...)
+	pb.RegisterConfigurationSyncServiceServer(server, s)
+	s.serverMu.Lock()
+	s.grpcServer = server
+	s.serverMu.Unlock()
 
-	log.Info().Str("address", addr).Msg("Starting AI Studio gRPC control server")
+	log.Info().Str("address", listener.Addr().String()).Msg("Starting AI Studio gRPC control server")
 
 	// Start serving
-	if err := s.grpcServer.Serve(listener); err != nil {
+	if err := server.Serve(listener); err != nil {
 		return fmt.Errorf("gRPC server failed: %w", err)
 	}
 
@@ -239,8 +262,11 @@ func (s *ControlServer) Stop() {
 		s.cleanupTicker.Stop()
 	}
 
-	if s.grpcServer != nil {
-		s.grpcServer.GracefulStop()
+	s.serverMu.Lock()
+	server := s.grpcServer
+	s.serverMu.Unlock()
+	if server != nil {
+		server.GracefulStop()
 	}
 
 	// Close all edge connections
@@ -2330,8 +2356,12 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 		return "", nil
 	}
 
-	// Get microgateway encryption key from environment - this MUST be set at startup
-	encryptionKey := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	// The key is validated in NewControlServer; a server built without it
+	// falls back to the environment.
+	encryptionKey := s.encryptionKey
+	if encryptionKey == "" {
+		encryptionKey = os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	}
 	if encryptionKey == "" {
 		return "", fmt.Errorf("MICROGATEWAY_ENCRYPTION_KEY environment variable is required but not set")
 	}

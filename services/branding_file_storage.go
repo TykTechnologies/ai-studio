@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 const (
@@ -64,8 +65,21 @@ func NewBrandingFileStorage(basePath string) (*BrandingFileStorage, error) {
 	}, nil
 }
 
-// GetBrandingStoragePath returns the configured branding storage path from environment or default
+// brandingStoragePath holds a path installed with SetBrandingStoragePath.
+var brandingStoragePath atomic.Pointer[string]
+
+// SetBrandingStoragePath sets where branding assets are stored, taking the
+// place of the BRANDING_STORAGE_PATH environment variable.
+func SetBrandingStoragePath(path string) {
+	brandingStoragePath.Store(&path)
+}
+
+// GetBrandingStoragePath returns the path installed with
+// SetBrandingStoragePath, else BRANDING_STORAGE_PATH, else the default.
 func GetBrandingStoragePath() string {
+	if path := brandingStoragePath.Load(); path != nil && *path != "" {
+		return *path
+	}
 	path := os.Getenv("BRANDING_STORAGE_PATH")
 	if path == "" {
 		return DefaultBrandingStoragePath

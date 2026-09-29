@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -74,12 +72,14 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 type API struct {
 	service                       *services.Service
 	router                        *gin.Engine
+	serverMu                      sync.Mutex
 	server                        *http.Server
 	config                        *auth.Config
 	disableCORS                   bool
 	auth                          *auth.AuthService
 	proxy                         *proxy.Proxy
-	staticFiles                   embed.FS
+	// frontend holds the built admin UI, rooted at its build directory.
+	frontend                      fs.FS
 	setupChatRoutesFunc           func(*gin.RouterGroup)
 	ssoService                    sso.Service
 	licensingService              licensing.Service
@@ -118,8 +118,21 @@ func (a *API) SetAuditService(s audit.Service) {
 	}
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
+// NewAPI builds the API like New but panics where New returns an error, which
+// suits tests.
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, frontend fs.FS, licensingService licensing.Service) *API {
 	gin.SetMode(gin.ReleaseMode)
+	api, err := New(service, disableCORS, authService, config, proxy, frontend, licensingService)
+	if err != nil {
+		panic(err)
+	}
+	return api
+}
+
+// New builds the admin API: the gin router with its middleware and routes.
+// frontend is the built admin UI rooted at its build directory (ui.FS). New
+// leaves gin's process-wide mode to the caller.
+func New(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, frontend fs.FS, licensingService licensing.Service) (*API, error) {
 
 	// Use gin.New() instead of gin.Default() to have control over middleware
 	// gin.Default() adds Logger and Recovery middleware automatically
@@ -134,7 +147,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	// Add debug middleware only if DEBUG_HTTP=true
-	if os.Getenv("DEBUG_HTTP") == "true" {
+	if appconfig.Get("").DebugHTTP {
 		router.Use(func(c *gin.Context) {
 			// Log request details
 			fmt.Printf("\n[DEBUG] %v | %v | Headers: %v\n", c.Request.Method, c.Request.URL.Path, c.Request.Header)
@@ -182,7 +195,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		auth:             authService,
 		config:           config,
 		proxy:            proxy,
-		staticFiles:      staticFiles,
+		frontend:         frontend,
 		licensingService: licensingService,
 	}
 
@@ -222,7 +235,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
 	if sso.IsEnterpriseAvailable() {
 		if err := api.ssoService.InitInternalTIB(); err != nil {
-			log.Fatalf("Failed to initialize SSO service: %v", err)
+			return nil, fmt.Errorf("initialize SSO service: %w", err)
 		}
 	}
 
@@ -249,9 +262,8 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 
 	// Generate a random 32-byte key for CSRF
 	csrfKey := make([]byte, 32)
-	_, err := rand.Read(csrfKey)
-	if err != nil {
-		log.Fatalf("Failed to generate CSRF key: %v", err)
+	if _, err := rand.Read(csrfKey); err != nil {
+		return nil, fmt.Errorf("generate CSRF key: %w", err)
 	}
 
 	// no CSRF for tests
@@ -264,12 +276,12 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			csrf.Secure(false),
 			csrf.Path("/"),
 		}
-		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {
+		if appConf := appconfig.Get(""); appConf.DevMode {
 			// The dev frontend proxies to the API from another origin (its own
 			// port, or a host-mapped port in Docker), so the browser's Origin never
 			// matches the request Host. Trust the SITE_URL host plus any extra
 			// CSRF_TRUSTED_ORIGINS (comma-separated host[:port] values).
-			trusted := devCSRFTrustedOrigins(os.Getenv("SITE_URL"), os.Getenv("CSRF_TRUSTED_ORIGINS"))
+			trusted := devCSRFTrustedOrigins(appConf.SiteURL, appConf.CSRFTrustedOrigins)
 			logger.Infof("DEVMODE: CSRF trusted origins: %s", strings.Join(trusted, ", "))
 			csrfOpts = append(csrfOpts, csrf.TrustedOrigins(trusted))
 		}
@@ -281,8 +293,10 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		api.router.Use(csrfGuard(csrfMiddleware))
 	}
 
-	api.setupRoutes()
-	return api
+	if err := api.setupRoutes(); err != nil {
+		return nil, err
+	}
+	return api, nil
 }
 
 // newHTTPServer builds the API http.Server with hardening timeouts.
@@ -301,25 +315,30 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 func (a *API) Run(addr string, certFile string, keyFile string) error {
 	// Create http.Server for graceful shutdown support
-	a.server = newHTTPServer(addr, a.router)
+	server := newHTTPServer(addr, a.router)
+	a.serverMu.Lock()
+	a.server = server
+	a.serverMu.Unlock()
 
 	if certFile != "" && keyFile != "" {
-		return a.server.ListenAndServeTLS(certFile, keyFile)
+		return server.ListenAndServeTLS(certFile, keyFile)
 	}
 
-	return a.server.ListenAndServe()
+	return server.ListenAndServe()
 }
 
-// Shutdown gracefully shuts down the API server
+// Shutdown gracefully shuts down the API server, if Run started one, and the
+// audit trail writer, which runs whether or not the router is served by Run.
 func (a *API) Shutdown(ctx context.Context) error {
-	if a.server == nil {
-		return nil
-	}
+	a.serverMu.Lock()
+	server := a.server
+	a.serverMu.Unlock()
 
-	logger.Info("Shutting down API server...")
-
-	if err := a.server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("API server shutdown failed: %w", err)
+	if server != nil {
+		logger.Info("Shutting down API server...")
+		if err := server.Shutdown(ctx); err != nil {
+			return fmt.Errorf("API server shutdown failed: %w", err)
+		}
 	}
 
 	if a.auditService != nil {
@@ -328,15 +347,6 @@ func (a *API) Shutdown(ctx context.Context) error {
 
 	logger.Info("API server stopped successfully")
 	return nil
-}
-
-// Helper function to create a sub-filesystem
-func sub(fsys embed.FS, dir string) http.FileSystem {
-	sub, err := fs.Sub(fsys, dir)
-	if err != nil {
-		panic(err)
-	}
-	return http.FS(sub)
 }
 
 // getPaginationParams extracts pagination parameters from the request
@@ -364,7 +374,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 	return pageSize, pageNumber, all
 }
 
-func (a *API) setupRoutes() {
+func (a *API) setupRoutes() error {
 	// Add global panic recovery middleware
 	a.router.Use(gin.Recovery())
 
@@ -393,7 +403,7 @@ func (a *API) setupRoutes() {
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
+		faviconFile, err := fs.ReadFile(a.frontend, "sun.ico")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -402,7 +412,7 @@ func (a *API) setupRoutes() {
 	})
 
 	a.router.GET("/sun-logo.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun-logo.png")
+		faviconFile, err := fs.ReadFile(a.frontend, "sun-logo.png")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -411,7 +421,7 @@ func (a *API) setupRoutes() {
 	})
 
 	a.router.GET("/generic-datasource-icon.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-datasource-icon.png")
+		faviconFile, err := fs.ReadFile(a.frontend, "generic-datasource-icon.png")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -420,7 +430,7 @@ func (a *API) setupRoutes() {
 	})
 
 	a.router.GET("/generic-llm-logo.png", func(c *gin.Context) {
-		faviconFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/generic-llm-logo.png")
+		faviconFile, err := fs.ReadFile(a.frontend, "generic-llm-logo.png")
 		if err != nil {
 			c.Status(http.StatusNotFound)
 			return
@@ -429,16 +439,16 @@ func (a *API) setupRoutes() {
 	})
 
 	// Serve static files from /build/static
-	staticFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/static")
+	staticFS, err := fs.Sub(a.frontend, "static")
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("frontend static files: %w", err)
 	}
 	a.router.StaticFS("/static", http.FS(staticFS))
 
 	// Serve logos from /build/logos
-	logosFS, err := fs.Sub(a.staticFiles, "ui/admin-frontend/build/logos")
+	logosFS, err := fs.Sub(a.frontend, "logos")
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("frontend logos: %w", err)
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
@@ -470,7 +480,7 @@ func (a *API) setupRoutes() {
 	// Serve index.html for all other routes, including /reset-password
 	a.router.NoRoute(func(c *gin.Context) {
 		// Files at the root of the build (manifest.json, robots.txt, ...)
-		if serveBuildRootFile(c, a.staticFiles) {
+		if serveBuildRootFile(c, a.frontend) {
 			return
 		}
 
@@ -490,7 +500,7 @@ func (a *API) setupRoutes() {
 		}
 
 		// For all other routes, serve the frontend application
-		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
+		indexFile, err := fs.ReadFile(a.frontend, "index.html")
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Could not read index.html")
 			return
@@ -1302,6 +1312,7 @@ func (a *API) setupRoutes() {
 	if a.setupChatRoutesFunc != nil {
 		a.setupChatRoutesFunc(authed)
 	}
+	return nil
 }
 
 func (a *API) devCorsMiddleware() gin.HandlerFunc {
@@ -1332,7 +1343,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	scheme := "http"
 
 	host := c.Request.Host
-	siteURLVar := os.Getenv("SITE_URL")
+	siteURLVar := config.Get("").SiteURL
 	if siteURLVar != "" {
 		asURL, err := url.Parse(siteURLVar)
 		if err == nil {

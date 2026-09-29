@@ -169,7 +169,10 @@ func TestAnalyticsPulseBatchProcessing_Performance(t *testing.T) {
 		AuthToken:  "test-token",
 	}
 
-	server := grpc.NewControlServer(config, db)
+	server, err := grpc.NewControlServer(config, db)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Create a large analytics pulse to test batch performance
 	eventCount := 500

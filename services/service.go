@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -177,13 +178,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	groupAccessSvc := group_access.NewService(db)
 	modelRouterSvc := model_router.NewService(db)
 
-	// Initialize log export service with storage path from environment
-	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
-	if exportStoragePath == "" {
-		exportStoragePath = "./data/exports"
-	}
-	siteURL := os.Getenv("SITE_URL")
-	logExportSvc := log_export.NewService(db, notificationService, exportStoragePath, siteURL)
+	// Initialize log export service with storage path from configuration
+	appConf := config.Get("")
+	logExportSvc := log_export.NewService(db, notificationService, appConf.ExportStoragePath, appConf.SiteURL)
 
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
@@ -387,14 +384,35 @@ func (s *Service) GetPluginClient(pluginID uint) (pb.PluginServiceClient, error)
 	return loadedPlugin.GRPCClient, nil
 }
 
-// Cleanup performs graceful cleanup of all services
+// Cleanup stops the service (see Stop) and closes its database.
 func (s *Service) Cleanup() error {
+	err := s.Stop()
+
+	// Close database connections
+	if s.DB != nil {
+		logger.Info("Closing database connections...")
+		sqlDB, dbErr := s.DB.DB()
+		if dbErr == nil {
+			if dbErr := sqlDB.Close(); dbErr != nil {
+				logger.Errorf("Failed to close database: %v", dbErr)
+				err = errors.Join(err, fmt.Errorf("database close: %w", dbErr))
+			} else {
+				logger.Info("Database connections closed")
+			}
+		}
+	}
+	return err
+}
+
+// Stop stops the service's background workers and plugins, leaving the
+// database open for whoever owns it.
+func (s *Service) Stop() error {
 	logger.Info("Starting service cleanup...")
 
 	var errors []error
 
-	// Stop background workers that write to the database first: it is
-	// closed at the end of this function.
+	// Stop background workers that write to the database first: Cleanup
+	// closes it once Stop returns.
 	if s.TykMCP != nil {
 		logger.Info("Stopping Tyk MCP integration service...")
 		s.TykMCP.Stop()
@@ -435,20 +453,6 @@ func (s *Service) Cleanup() error {
 		logger.Info("Cleaning up hook registry...")
 		// Hook registry cleanup if needed
 		// Currently no explicit cleanup required
-	}
-
-	// Close database connections
-	if s.DB != nil {
-		logger.Info("Closing database connections...")
-		sqlDB, err := s.DB.DB()
-		if err == nil {
-			if err := sqlDB.Close(); err != nil {
-				logger.Errorf("Failed to close database: %v", err)
-				errors = append(errors, fmt.Errorf("database close: %w", err))
-			} else {
-				logger.Info("Database connections closed")
-			}
-		}
 	}
 
 	logger.Info("Service cleanup completed")

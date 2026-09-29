@@ -66,7 +66,7 @@ func (suite *AuthHandlersTestSuite) SetupTest() {
 		auth:    suite.authService,
 		router:  gin.Default(),
 	}
-	suite.api.setupRoutes()
+	suite.Require().NoError(suite.api.setupRoutes())
 }
 
 func (suite *AuthHandlersTestSuite) TearDownTest() {

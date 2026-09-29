@@ -62,7 +62,27 @@ func Init() http.Handler {
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(exporter))
 	otel.SetMeterProvider(provider)
 
-	meter := provider.Meter("aistudio")
+	registerInstruments(provider.Meter("aistudio"))
+
+	handler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+	initialized.Store(true)
+
+	return handler
+}
+
+// InitWithProvider registers Studio's instruments on provider, which an
+// embedding host exports however it likes. Unlike Init it neither creates a
+// Prometheus registry nor sets the global MeterProvider: Handler stays nil and
+// Register returns an error.
+func InitWithProvider(provider otelmetric.MeterProvider) {
+	registry, handler = nil, nil
+	registerInstruments(provider.Meter("aistudio"))
+	initialized.Store(true)
+}
+
+// registerInstruments creates every instrument on meter.
+func registerInstruments(meter otelmetric.Meter) {
+	var err error
 
 	// Register the OpenTelemetry GenAI semantic convention instruments (genai.go)
 	// before the aistudio_* ones, so legacyNames is set for every recorder below.
@@ -157,19 +177,14 @@ func Init() http.Handler {
 	if err != nil {
 		panic("failed to create inflightRequests gauge: " + err.Error())
 	}
-
-	handler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
-	initialized.Store(true)
-
-	return handler
 }
 
 // Register adds collectors to the registry Init created, for metrics that
 // come from outside this package (connection pools, file sizes). It returns
 // an error when Init has not been called.
 func Register(cs ...prometheus.Collector) error {
-	if !initialized.Load() {
-		return errors.New("metrics not initialized")
+	if !initialized.Load() || registry == nil {
+		return errors.New("metrics not initialized with a Prometheus registry")
 	}
 	for _, c := range cs {
 		if err := registry.Register(c); err != nil {

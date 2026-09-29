@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"os"
 	"strconv"
 
 	log "github.com/sirupsen/logrus"
@@ -13,7 +12,7 @@ import (
 )
 
 func checkSecretKey(c *gin.Context) bool {
-	if os.Getenv("TYK_AI_SECRET_KEY") == "" {
+	if !secrets.EncryptionKeyConfigured() {
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

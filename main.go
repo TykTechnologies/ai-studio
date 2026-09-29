@@ -1,51 +1,28 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
+	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
-
-	"gorm.io/driver/postgres"
-
-	"context"
-	"embed"
-	"fmt"
-	"io/fs"
-	"net/http"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
-	"github.com/TykTechnologies/midsommar/v2/api"
-	"github.com/TykTechnologies/midsommar/v2/auth"
-	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/docs"
-	"github.com/TykTechnologies/midsommar/v2/grpc"
-	"github.com/TykTechnologies/midsommar/v2/logger"
-	"github.com/TykTechnologies/midsommar/v2/metrics"
-	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
-	"github.com/TykTechnologies/midsommar/v2/notifications"
-	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
-	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
-	"github.com/TykTechnologies/midsommar/v2/proxy"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
-	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
-	"github.com/TykTechnologies/midsommar/v2/services/licensing"
-	"github.com/TykTechnologies/midsommar/v2/services/log_export"
-	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
-	"github.com/TykTechnologies/midsommar/v2/startup"
-
-	"github.com/go-mail/mail"
+	"github.com/gin-gonic/gin"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-)
 
-//go:embed ui/admin-frontend/build templates docs/site/public
-var staticFiles embed.FS
+	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/docs"
+	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
+	"github.com/TykTechnologies/midsommar/v2/startup"
+)
 
 func printWelcome() {
 	fmt.Printf("Starting Tyk AI Studio %v\n", Version)
@@ -54,11 +31,6 @@ func printWelcome() {
 
 func main() {
 	printWelcome()
-
-	// version.go is package main, so the api package cannot import it. Hand the
-	// build-time values over explicitly rather than letting /common/system
-	// report a hardcoded v1.0 forever.
-	api.SetBuildInfo(Version, BuildHash, BuildTime)
 
 	// Parse command-line flags
 	envFile := flag.String("env", "", "Path to environment file (default: .env in current directory)")
@@ -72,9 +44,6 @@ func main() {
 	logger.Init(appConf.LogLevel)
 	logger.Infof("Log level set to: %s", appConf.LogLevel)
 
-	// Warn loudly at startup if secrets encryption is not configured
-	secrets.WarnIfEncryptionUnconfigured()
-
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	startup.ReportPaths(appConf, *envFile)
 
@@ -83,6 +52,86 @@ func main() {
 		logger.FatalErr("Connectivity tests failed", err)
 	}
 
+	db, err := openDatabase(appConf)
+	if err != nil {
+		logger.FatalErr("Failed to connect to the database", err)
+	}
+	logger.Info("Successfully connected to the database")
+
+	gin.SetMode(gin.ReleaseMode)
+	s, err := studio.New(studio.Options{
+		Config:          appConf,
+		DB:              db,
+		Version:         Version,
+		BuildHash:       BuildHash,
+		BuildTime:       BuildTime,
+		SkipLLMDefaults: *noLLMDefaults,
+	})
+	if err != nil {
+		logger.FatalErr("Failed to start AI Studio", err)
+	}
+
+	// Setup signal handling for graceful shutdown
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Any server failing stops the process, as a signal would.
+	serve := func(name string, run func() error) {
+		go func() {
+			if err := run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Errorf("%s error: %v", name, err)
+				stop()
+			}
+		}()
+	}
+
+	// Start gateway if licensed (CE: always enabled, ENT: requires feature_gateway entitlement)
+	go func() {
+		err := s.StartProxy()
+		switch {
+		case errors.Is(err, studio.ErrGatewayNotLicensed):
+			logger.Info("Gateway not started - feature_gateway not in license entitlements")
+		case err != nil && !errors.Is(err, http.ErrServerClosed):
+			logger.Errorf("Gateway error: %v", err)
+		}
+	}()
+
+	if appConf.GatewayMode == "control" {
+		logger.Infof("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
+		serve("gRPC control server", func() error { return s.StartGRPC(nil) })
+	}
+
+	if !docsDisabled(appConf) {
+		go docs.NewServer(docsPort(appConf)).Start()
+	}
+
+	if !appConf.ProxyOnly {
+		listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
+		logger.Infof("Server listening on %s", listenOn)
+		serve("Server", func() error { return s.ListenAndServe(listenOn, appConf.CertFile, appConf.KeyFile) })
+	} else {
+		logger.Info("Running in proxy-only mode, waiting for shutdown signal...")
+	}
+
+	<-shutdownCtx.Done()
+	logger.Info("Starting graceful shutdown...")
+
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := s.Stop(cleanupCtx); err != nil {
+		logger.Errorf("Error during shutdown: %v", err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		if err := sqlDB.Close(); err != nil {
+			logger.Errorf("Failed to close database: %v", err)
+		}
+	}
+
+	logger.Info("Application stopped gracefully")
+}
+
+// openDatabase connects to the configured database and checks it responds.
+func openDatabase(appConf *config.AppConf) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 	switch appConf.DatabaseType {
 	case "sqlite":
@@ -90,581 +139,41 @@ func main() {
 	case "postgres":
 		dialector = postgres.Open(appConf.DatabaseURL)
 	default:
-		logger.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
+		return nil, fmt.Errorf("unsupported database type: %s", appConf.DatabaseType)
 	}
 
 	db, err := gorm.Open(dialector, logger.GetGormConfig())
 	if err != nil {
-		logger.FatalErr("Failed to connect to database", err)
+		return nil, err
 	}
-
-	// Test the database connection
 	sqlDB, err := db.DB()
 	if err != nil {
-		logger.FatalErr("Failed to get database instance", err)
+		return nil, err
 	}
-	err = sqlDB.Ping()
-	if err != nil {
-		logger.FatalErr("Failed to ping database", err)
+	if err := sqlDB.Ping(); err != nil {
+		return nil, err
 	}
-	logger.Info("Successfully connected to the database")
+	return db, nil
+}
 
-	// Auto Migrate the schemas
-	err = models.InitModels(db)
-	if err != nil {
-		logger.FatalErr("Failed to initialize models", err)
-	}
-
-	// Ensure default group and catalogues exist and are linked
-	if err := ensureDefaults(db, *noLLMDefaults); err != nil {
-		logger.FatalErr("Failed to ensure default group and catalogues", err)
-	}
-
-	// Initialize and start licensing service (ENT: validates license, starts periodic checks)
-	licensingConfig := licensing.Config{
-		LicenseKey:           appConf.LicenseKey,
-		TelemetryURL:         appConf.LicenseTelemetryURL,
-		TelemetryPeriod:      appConf.LicenseTelemetryPeriod,
-		TelemetryDisabled:    appConf.LicenseDisableTelemetry,
-		ValidityCheckPeriod:  appConf.LicenseValidityPeriod,
-		TelemetryConcurrency: appConf.LicenseTelemetryConcurrency,
-	}
-	licensingService := licensing.NewService(licensingConfig, db)
-	if err := licensingService.Start(); err != nil {
-		logger.FatalErr("Failed to start licensing service", err)
-	}
-	defer licensingService.Stop()
-	logger.Info("Licensing service initialized")
-
-	// Initialize branding storage directory
-	brandingStoragePath := services.GetBrandingStoragePath()
-	_, err = services.NewBrandingFileStorage(brandingStoragePath)
-	if err != nil {
-		logger.Warnf("Failed to initialize branding storage: %v", err)
-	} else {
-		logger.Infof("Branding storage initialized at: %s", brandingStoragePath)
-	}
-
-	// Create a new service instance with OCI support if configured
-	var ociConfig *ociplugins.OCIConfig
-	if appConf.OCIPlugins.IsEnabled() {
-		ociConfig = appConf.OCIPlugins.ToOCILibConfig()
-		logger.Debugf("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
-	} else {
-		logger.Debug("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
-	}
-
-	service := services.NewServiceWithOCI(db, ociConfig)
-
-	// Wire licensing service to main service for plugin license checks
-	service.SetLicensingService(licensingService)
-
-	// Register the per-plugin permission resources of every installed plugin
-	// before the system roles are seeded, so Viewer/Editor/Auditor are
-	// computed against the full catalogue.
-	if err := service.RebuildPermissionCatalogue(); err != nil {
-		logger.Warn(fmt.Sprintf("Failed to register plugin permission resources: %v", err))
-	}
-
-	// Seed RBAC system roles and migrate legacy admin flags into bindings
-	// (Enterprise; no-op in Community Edition). Idempotent on every boot.
-	if err := service.Authz().Seed(context.Background()); err != nil {
-		logger.FatalErr("Failed to seed RBAC roles", err)
-	}
-
-	// NOTE: Plugin loading is deferred until after the event bus is wired (see below)
-	// This ensures plugins can subscribe to events during initialization
-
-	// Initialize and start marketplace service if enabled
-	if appConf.MarketplaceEnabled && ociConfig != nil {
-		logger.Debug("Initializing marketplace service...")
-
-		// Get OCI client from plugin service
-		var ociClient *ociplugins.OCIPluginClient
-		if service.PluginService != nil {
-			ociClient, _ = ociplugins.NewOCIPluginClient(ociConfig)
-		}
-
-		// Create marketplace service
-		service.MarketplaceService = services.NewMarketplaceService(
-			db,
-			ociClient,
-			service.PluginService,
-			service.AIStudioPluginManager,
-			appConf.MarketplaceCacheDir,
-			appConf.MarketplaceIndexURL,
-			appConf.MarketplaceSyncInterval,
-		)
-
-		// Start background sync in a goroutine
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		go service.MarketplaceService.Start(ctx)
-
-		logger.Debugf("Marketplace service started - index URL: %s, sync interval: %v",
-			appConf.MarketplaceIndexURL, appConf.MarketplaceSyncInterval)
-	} else {
-		if !appConf.MarketplaceEnabled {
-			logger.Info("Marketplace is disabled via MARKETPLACE_ENABLED=false")
-		} else if ociConfig == nil {
-			logger.Warn("Marketplace requires OCI support - set AI_STUDIO_OCI_CACHE_DIR to enable")
-		}
-	}
-
-	// Initialize and start scheduler service
-	if service.AIStudioPluginManager != nil {
-		logger.Info("Initializing scheduler service...")
-		schedulerService := scheduler.NewSchedulerService(db, service.AIStudioPluginManager)
-		if err := schedulerService.Start(); err != nil {
-			logger.Errorf("Failed to start scheduler service: %v", err)
-		} else {
-			logger.Info("Scheduler service started successfully")
-		}
-
-		// Ensure scheduler stops on shutdown
-		defer func() {
-			if err := schedulerService.Stop(); err != nil {
-				logger.Errorf("Error stopping scheduler service: %v", err)
-			}
-		}()
-	}
-
-	// Initialize mail service and notification service
-	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
-	mailService := notifications.NewMailService(
-		appConf.FromEmail,
-		appConf.SMTPServer,
-		appConf.SMTPPort,
-		appConf.SMTPUser,
-		appConf.SMTPPass,
-		mailer,
-		appConf.DevMode,
-	)
-
-	// Create notification service that will handle all notifications
-	notificationService := services.NewNotificationService(
-		db,
-		appConf.FromEmail,
-		appConf.SMTPServer,
-		appConf.SMTPPort,
-		appConf.SMTPUser,
-		appConf.SMTPPass,
-		mailer,
-	)
-	// Rows recorded before email framing was stripped at write time still
-	// read "Subject: ... Dear Administrator ..." in the bell. Rewrite them
-	// once, off the startup path; a second run finds nothing to change.
-	go func() {
-		changed, err := notificationService.BackfillLegacyBodies()
-		if err != nil {
-			logger.Warnf("Notification body backfill stopped after %d rows: %v", changed, err)
-		} else if changed > 0 {
-			logger.Infof("Rewrote %d legacy notification bodies", changed)
-		}
-	}()
-
-	// Initialize auth config and service
-	config := &auth.Config{
-		DB:                     db,
-		Service:                service,
-		CookieName:             "session",
-		CookieSecure:           !appConf.DevMode,
-		CookieHTTPOnly:         true,
-		CookieSameSite:         http.SameSiteLaxMode, // less restrictive
-		CookieDomain:           "",                   // empty for development to work with localhost
-		ResetTokenExpiry:       time.Hour,
-		SessionDuration:        appConf.SessionDuration,
-		FrontendURL:            appConf.SiteURL,
-		RegistrationAllowed:    appConf.AllowRegistrations,
-		AdminEmail:             appConf.AdminEmail,
-		TestMode:               false, // Always false in production - tests set this directly
-		AllowedRegisterDomains: appConf.FilterSignupDomains,
-		TIBEnabled:             appConf.TIBEnabled,
-		TIBAPISecret:           appConf.TIBAPISecret,
-		OCIConfig:              appConf.OCIPlugins.ToOCILibConfig(), // OCI config for plugin security
-		AllowSSOUserAPIKeys:    appConf.AllowSSOUserAPIKeys,
-		SSOAPIKeyLiveness:      appConf.SSOAPIKeyLiveness,
-	}
-
-	authService := auth.NewAuthService(config, mailService, service, notificationService)
-
-	// metrics
-	if appConf.MetricsEnabled {
-		metrics.Init()
-		logger.Infof("Prometheus metrics enabled at %s", appConf.MetricsPath)
-	}
-
-	// tracing. Init is called unconditionally so the W3C propagator is installed
-	// even when export is off, which keeps an inbound traceparent flowing through
-	// to the upstream provider.
-	tracingShutdown, err := tracing.Init(context.Background(), tracing.Config{
-		Enabled:        appConf.TracingEnabled,
-		Endpoint:       appConf.TracingEndpoint,
-		ServiceName:    "tyk-ai-studio",
-		ServiceVersion: Version,
-	})
-	if err != nil {
-		logger.Errorf("Tracing disabled: %v", err)
-	} else if appConf.TracingEnabled {
-		logger.Infof("OpenTelemetry tracing enabled, exporting to %s", appConf.TracingEndpoint)
-	}
-	defer func() {
-		if err := tracingShutdown(context.Background()); err != nil {
-			logger.Errorf("Failed to flush traces on shutdown: %v", err)
-		}
-	}()
-
-	// analytics
-	ctx, stopRec := context.WithCancel(context.Background())
-	defer stopRec()
-	analytics.StartRecording(ctx, db)
-	// One budget service (and team budget service) for the API and the
-	// proxy, so resets and allocation changes clear the cache the proxy reads.
-	service.InitBudgets(notificationService)
-
-	// Reinitialize LogExportService with the proper notification service (with SMTP configured)
-	// The service created in NewServiceWithOCI has a notification service without SMTP
-	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
-	if exportStoragePath == "" {
-		exportStoragePath = "./data/exports"
-	}
-	// Stop the old service's cleanup goroutine before replacing
-	if service.LogExportService != nil {
-		service.LogExportService.Stop()
-	}
-	service.LogExportService = log_export.NewService(db, notificationService, exportStoragePath, appConf.SiteURL)
-
-	// Initialize and start telemetry
-	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, Version)
-	telemetryManager.Start()
-	defer telemetryManager.Stop()
-
-	// start the Proxy
-	pConfig := &proxy.Config{
-		Port:                  appConf.ProxyPort,
-		UnifiedRouterBasePath: appConf.UnifiedRouterPath,
-		DisableUnifiedRouter:  appConf.UnifiedRouterDisabled,
-		ServerTiming:          appConf.GatewayServerTiming,
-	}
-	p := proxy.NewProxy(service, pConfig, service.Budget)
-
-	// Start gateway if licensed (CE: always enabled, ENT: requires feature_gateway entitlement)
-	if ent, ok := licensingService.Entitlement(licensing.FeatureGateway); ok && ent.Bool() {
-		go p.Start()
-	} else {
-		logger.Info("Gateway not started - feature_gateway not in license entitlements")
-	}
-
-	// Initialize gRPC control server and reload coordinator if in control mode
-	var controlServer *grpc.ControlServer
-	var reloadCoordinator *services.ReloadCoordinator
-	if appConf.GatewayMode == "control" {
-		grpcConfig := &grpc.Config{
-			GRPCPort:      appConf.GRPCPort,
-			GRPCHost:      appConf.GRPCHost,
-			TLSEnabled:    appConf.GRPCTLSEnabled,
-			TLSCertPath:   appConf.GRPCTLSCertPath,
-			TLSKeyPath:    appConf.GRPCTLSKeyPath,
-			AuthToken:     appConf.GRPCAuthToken,
-			NextAuthToken: appConf.GRPCNextAuthToken,
-		}
-
-		controlServer = grpc.NewControlServer(grpcConfig, db)
-		controlServer.SetGovernedMetadataReader(service.GovernedMetadataService)
-		// Enterprise: edges learn which Apps to refuse (budget 0, team over
-		// a hard-blocking budget) and edge spend raises budget alerts.
-		if src, ok := service.Budget.(grpc.EdgeBudgetSource); ok {
-			controlServer.SetEdgeBudgetSource(src)
-		}
-
-		// Create reload coordinator and connect it to control server
-		reloadCoordinator = services.NewReloadCoordinator(controlServer)
-		controlServer.SetReloadCoordinator(reloadCoordinator)
-
-		// Connect reload coordinator to namespace service
-		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
-
-		// Wire plugin manager for edge-to-control payload routing
-		if service.AIStudioPluginManager != nil {
-			controlServer.SetPluginManager(service.AIStudioPluginManager)
-			logger.Info("AI Studio plugin manager connected to control server for edge payload routing")
-
-			// Wire event bus from control server to plugin manager for plugin pub/sub support
-			// This allows AI Studio plugins to subscribe/publish events that flow to/from edge instances
-			// IMPORTANT: This MUST happen BEFORE loading plugins so they can subscribe to events
-			service.AIStudioPluginManager.SetEventBus(controlServer.GetEventBus(), "control")
-			logger.Info("Event bus wired to AI Studio plugin manager for plugin event support")
-
-			// NOW load plugins - after event bus is wired so plugins can subscribe during init
-			logger.Debug("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
-			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
-				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
-			} else {
-				logger.Debug("AI Studio plugins loaded successfully")
-			}
-		}
-
-		// Wire event bus to service for system CRUD events
-		service.SetEventBus(controlServer.GetEventBus())
-		logger.Info("Event bus wired to service for system CRUD events")
-		service.InitWebhooks(appConf.Webhooks, Version)
-		service.InitTykMCP(appConf.TykMCP, Version)
-
-		logger.Info("Reload coordinator created and connected to control server and namespace service")
-
-		go func() {
-			logger.Infof("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
-			if err := controlServer.Start(); err != nil {
-				logger.FatalErr("Failed to start gRPC control server", err)
-			}
-		}()
-
-		// Graceful shutdown of gRPC server
-		defer func() {
-			if controlServer != nil {
-				logger.Info("Shutting down gRPC control server...")
-				controlServer.Stop()
-			}
-		}()
-	} else {
-		// Non-control mode (standalone): there is no gRPC control server, so
-		// create a node-local event bus. System CRUD events, plugin pub/sub and
-		// webhooks all work the same as in control mode; nothing is forwarded
-		// to edges because there are none.
-		localBus := eventbridge.NewBus()
-		if service.AIStudioPluginManager != nil {
-			service.AIStudioPluginManager.SetEventBus(localBus, "control")
-			logger.Debug("Loading AI Studio plugins (standalone mode - local event bus)...")
-			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
-				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
-			} else {
-				logger.Debug("AI Studio plugins loaded successfully (standalone mode)")
-			}
-		}
-		service.SetEventBus(localBus)
-		service.InitWebhooks(appConf.Webhooks, Version)
-		service.InitTykMCP(appConf.TykMCP, Version)
-	}
-
-	noDocsArg := appConf.DocsDisabled
-	docsPortArg := appConf.DocsPort
-	for i, arg := range os.Args {
+// docsDisabled and docsPort apply the --no-docs and --docs-port arguments
+// over the configuration.
+func docsDisabled(appConf *config.AppConf) bool {
+	for _, arg := range os.Args {
 		if arg == "--no-docs" {
-			noDocsArg = true
+			return true
 		}
+	}
+	return appConf.DocsDisabled
+}
+
+func docsPort(appConf *config.AppConf) int {
+	for i, arg := range os.Args {
 		if arg == "--docs-port" && i+1 < len(os.Args) {
 			if port, err := strconv.Atoi(os.Args[i+1]); err == nil {
-				docsPortArg = port
+				return port
 			}
 		}
 	}
-
-	if !noDocsArg {
-		docsServer := docs.NewServer(docsPortArg)
-		go docsServer.Start()
-	}
-
-	// Setup signal handling for graceful shutdown
-	shutdownCtx, stop := signal.NotifyContext(context.Background(),
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-	defer stop()
-
-	var apiServer *api.API
-	if !appConf.ProxyOnly {
-		// Create a new API instance
-		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, licensingService)
-
-		// Start server in goroutine
-		serverErrors := make(chan error, 1)
-		go func() {
-			listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
-			logger.Infof("Server listening on %s", listenOn)
-			if err := apiServer.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
-				serverErrors <- fmt.Errorf("server error: %w", err)
-			}
-		}()
-
-		// Wait for shutdown signal or server error
-		select {
-		case err := <-serverErrors:
-			logger.Errorf("Server error occurred: %v", err)
-			stop()
-		case <-shutdownCtx.Done():
-			logger.Info("Shutdown signal received")
-		}
-	} else {
-		// Proxy-only mode: wait for shutdown signal
-		logger.Info("Running in proxy-only mode, waiting for shutdown signal...")
-		<-shutdownCtx.Done()
-		logger.Info("Shutdown signal received")
-	}
-
-	// Graceful shutdown sequence
-	logger.Info("Starting graceful shutdown...")
-
-	shutdownTimeout := 30 * time.Second
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-
-	// Shutdown API server if running
-	if apiServer != nil {
-		if err := apiServer.Shutdown(cleanupCtx); err != nil {
-			logger.Errorf("Error during API shutdown: %v", err)
-		}
-	}
-
-	// Cleanup services
-	if err := service.Cleanup(); err != nil {
-		logger.Errorf("Error during service cleanup: %v", err)
-	}
-
-	logger.Info("Application stopped gracefully")
-}
-
-// ensureDefaults ensures default group and catalogues exist and are linked
-func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
-	logger.Info("Ensuring default group and catalogues exist...")
-
-	// Get or create Default group
-	defaultGroup, err := models.GetOrCreateDefaultGroup(db)
-	if err != nil {
-		return fmt.Errorf("failed to ensure default group: %w", err)
-	}
-	logger.Infof("Default group ensured (ID: %d, Name: %s)", defaultGroup.ID, defaultGroup.Name)
-
-	// Get or create Default LLM catalogue
-	defaultCatalogue, err := models.GetOrCreateDefaultCatalogue(db)
-	if err != nil {
-		return fmt.Errorf("failed to ensure default catalogue: %w", err)
-	}
-	logger.Infof("Default LLM catalogue ensured (ID: %d, Name: %s)", defaultCatalogue.ID, defaultCatalogue.Name)
-
-	// Get or create Default data catalogue
-	defaultDataCatalogue, err := models.GetOrCreateDefaultDataCatalogue(db)
-	if err != nil {
-		return fmt.Errorf("failed to ensure default data catalogue: %w", err)
-	}
-	logger.Infof("Default data catalogue ensured (ID: %d, Name: %s)", defaultDataCatalogue.ID, defaultDataCatalogue.Name)
-
-	// Get or create Default tool catalogue
-	defaultToolCatalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
-	if err != nil {
-		return fmt.Errorf("failed to ensure default tool catalogue: %w", err)
-	}
-	logger.Infof("Default tool catalogue ensured (ID: %d, Name: %s)", defaultToolCatalogue.ID, defaultToolCatalogue.Name)
-
-	// Link catalogues to default group if not already linked
-	if err := linkCatalogueToGroup(db, defaultGroup, defaultCatalogue); err != nil {
-		return fmt.Errorf("failed to link LLM catalogue to default group: %w", err)
-	}
-
-	if err := linkDataCatalogueToGroup(db, defaultGroup, defaultDataCatalogue); err != nil {
-		return fmt.Errorf("failed to link data catalogue to default group: %w", err)
-	}
-
-	if err := linkToolCatalogueToGroup(db, defaultGroup, defaultToolCatalogue); err != nil {
-		return fmt.Errorf("failed to link tool catalogue to default group: %w", err)
-	}
-
-	// Seed default LLM settings if table is empty (for quick start UX)
-	if err := models.GetOrCreateDefaultLLMSettings(db); err != nil {
-		return fmt.Errorf("failed to create default LLM settings: %w", err)
-	}
-	logger.Info("Default LLM settings checked/initialized")
-
-	// Seed the built-in client tools (generative UI "present") so chat rooms
-	// can pick them as defaults without an administrator authoring them.
-	if err := models.GetOrCreateDefaultClientTools(db); err != nil {
-		return fmt.Errorf("failed to create default client tools: %w", err)
-	}
-	logger.Info("Default client tools checked/initialized")
-
-	// Seed the default governed metadata vocabularies and "Governance Core" schema
-	// (Enterprise only; advisory mode so existing objects are never blocked).
-	if governed_metadata.IsEnterpriseAvailable() {
-		if err := governed_metadata.NewService(db, governed_metadata.Deps{}).EnsureDefaults(); err != nil {
-			logger.Warnf("Failed to seed default governed metadata schema: %v", err)
-		} else {
-			logger.Info("Governed metadata defaults checked/initialized")
-		}
-	}
-
-	// Upgrade any legacy-format encrypted secrets to authenticated encryption.
-	// Runs in the background so scrypt's deliberate cost never delays startup;
-	// decrypt handles both formats, so reads are correct while it runs.
-	go func() {
-		logger.Info("Starting background re-encryption of legacy secrets (if any)")
-		if migrated, err := secrets.ReencryptLegacySecrets(db); err != nil {
-			logger.Errorf("Failed to re-encrypt legacy secrets: %v", err)
-		} else if migrated > 0 {
-			logger.Infof("Background migration complete: re-encrypted %d legacy secret(s) to AES-GCM format", migrated)
-		} else {
-			logger.Info("No legacy-format secrets to re-encrypt")
-		}
-	}()
-
-	// Seed default secrets and LLM configurations if not disabled
-	if !skipLLMDefaults {
-		if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
-			return fmt.Errorf("failed to create default secrets: %w", err)
-		}
-		logger.Info("Default secrets checked/initialized")
-
-		if err := models.GetOrCreateDefaultLLMs(db); err != nil {
-			return fmt.Errorf("failed to create default LLM configurations: %w", err)
-		}
-		logger.Info("Default LLM configurations checked/initialized")
-	}
-
-	// Seed the default guardrail filters (Enterprise, where filters execute).
-	// They are created unattached, so nothing is enforced until an
-	// administrator attaches one. SKIP_FILTER_DEFAULTS=true skips this.
-	if config.IsEnterprise() && os.Getenv("SKIP_FILTER_DEFAULTS") != "true" {
-		if err := models.GetOrCreateDefaultFilters(db); err != nil {
-			return fmt.Errorf("failed to create default guardrail filters: %w", err)
-		}
-		logger.Info("Default guardrail filters checked/initialized")
-	}
-
-	logger.Info("Default group and catalogues successfully initialized and linked")
-	return nil
-}
-
-// linkCatalogueToGroup links an LLM catalogue to a group if not already linked
-func linkCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.Catalogue) error {
-	count := db.Model(group).Where("catalogue_id = ?", catalogue.ID).Association("Catalogues").Count()
-	if count == 0 {
-		return db.Model(group).Association("Catalogues").Append(catalogue)
-	}
-	return nil
-}
-
-// linkDataCatalogueToGroup links a data catalogue to a group if not already linked
-func linkDataCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.DataCatalogue) error {
-	count := db.Model(group).Where("data_catalogue_id = ?", catalogue.ID).Association("DataCatalogues").Count()
-	if count == 0 {
-		return db.Model(group).Association("DataCatalogues").Append(catalogue)
-	}
-	return nil
-}
-
-// linkToolCatalogueToGroup links a tool catalogue to a group if not already linked
-func linkToolCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.ToolCatalogue) error {
-	count := db.Model(group).Where("tool_catalogue_id = ?", catalogue.ID).Association("ToolCatalogues").Count()
-	if count == 0 {
-		return db.Model(group).Association("ToolCatalogues").Append(catalogue)
-	}
-	return nil
-}
-
-func listEmbeddedFiles(fsys embed.FS) error {
-	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Path: %s, IsDir: %t\n", path, d.IsDir())
-		return nil
-	})
+	return appConf.DocsPort
 }

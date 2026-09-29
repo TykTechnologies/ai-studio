@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -423,7 +424,7 @@ func (a *API) serveLogo(c *gin.Context) {
 	// If no custom logo, serve embedded default
 	if logoPath == "" {
 		// Serve embedded logo from static files
-		data, err := a.staticFiles.ReadFile("ui/admin-frontend/build/logos/tyk-portal-logo.png")
+		data, err := fs.ReadFile(a.frontend, "logos/tyk-portal-logo.png")
 		if err != nil {
 			c.JSON(http.StatusNotFound, ErrorResponse{
 				Errors: []struct {
@@ -487,7 +488,7 @@ func (a *API) serveFavicon(c *gin.Context) {
 	// If no custom favicon, serve embedded default
 	if faviconPath == "" {
 		// Serve embedded favicon from static files
-		data, err := a.staticFiles.ReadFile("ui/admin-frontend/build/sun.ico")
+		data, err := fs.ReadFile(a.frontend, "sun.ico")
 		if err != nil {
 			c.JSON(http.StatusNotFound, ErrorResponse{
 				Errors: []struct {

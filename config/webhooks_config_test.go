@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func clearWebhooksEnv(t *testing.T) {
 
 func TestGetWebhooksConfig_Defaults(t *testing.T) {
 	clearWebhooksEnv(t)
-	cfg := getWebhooksConfig()
+	cfg := getWebhooksConfig(os.Getenv)
 
 	assert.True(t, cfg.Enabled)
 	assert.True(t, cfg.WorkerEnabled)
@@ -67,7 +68,7 @@ func TestGetWebhooksConfig_Overrides(t *testing.T) {
 	t.Setenv("WEBHOOKS_AUDIT_DELIVERIES", "true")
 	t.Setenv("WEBHOOKS_SHUTDOWN_DRAIN_TIMEOUT", "3s")
 
-	cfg := getWebhooksConfig()
+	cfg := getWebhooksConfig(os.Getenv)
 
 	assert.False(t, cfg.Enabled)
 	assert.False(t, cfg.WorkerEnabled)
@@ -99,7 +100,7 @@ func TestGetWebhooksConfig_InvalidValuesFallBack(t *testing.T) {
 	t.Setenv("WEBHOOKS_MAX_RESPONSE_SNIPPET_BYTES", "-1")
 	t.Setenv("WEBHOOKS_ENABLED", "maybe")
 
-	cfg := getWebhooksConfig()
+	cfg := getWebhooksConfig(os.Getenv)
 
 	assert.Equal(t, 4, cfg.WorkerCount)
 	assert.Equal(t, 10, cfg.MaxAttempts)
