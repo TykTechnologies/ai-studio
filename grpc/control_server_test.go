@@ -1192,6 +1192,12 @@ func TestControlServer_getConfigurationSnapshot_BudgetUsage(t *testing.T) {
 	}
 	db.Create(&oldRecord)
 
+	// The snapshot prefers the budget sync's latest figure, and the sync
+	// setupTestServer started runs its first cycle in the background: if that
+	// cycle landed between the inserts above, it holds a partial sum. Run a
+	// cycle now so the figure covers every record whichever path is taken.
+	server.budgetSyncService.aggregateAndPublish()
+
 	// Get configuration snapshot
 	snapshot, err := server.getConfigurationSnapshot(namespace)
 	require.NoError(t, err)
