@@ -2,7 +2,6 @@ package studio
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
@@ -14,7 +13,7 @@ import (
 )
 
 // ensureDefaults ensures default group and catalogues exist and are linked
-func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
+func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error {
 	logger.Info("Ensuring default group and catalogues exist...")
 
 	// Get or create Default group
@@ -110,8 +109,9 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 
 	// Seed the default guardrail filters (Enterprise, where filters execute).
 	// They are created unattached, so nothing is enforced until an
-	// administrator attaches one. SKIP_FILTER_DEFAULTS=true skips this.
-	if config.IsEnterprise() && os.Getenv("SKIP_FILTER_DEFAULTS") != "true" {
+	// administrator attaches one. AppConf.SkipFilterDefaults
+	// (SKIP_FILTER_DEFAULTS=true) skips this.
+	if config.IsEnterprise() && !skipFilterDefaults {
 		if err := models.GetOrCreateDefaultFilters(db); err != nil {
 			return fmt.Errorf("failed to create default guardrail filters: %w", err)
 		}

@@ -184,6 +184,54 @@ type AppConf struct {
 	// ChatSessionIdleTTL is how long an idle chat session keeps its queue
 	// (CHAT_SESSION_IDLE_TTL, default 10m).
 	ChatSessionIdleTTL time.Duration
+
+	// Tuning and debug settings (also read by the microgateway under the
+	// same environment variable names).
+
+	// AnalyticsBufferSize is how many analytics records wait in memory to
+	// be written (ANALYTICS_BUFFER_SIZE, default 1000).
+	AnalyticsBufferSize int
+	// BudgetSyncInterval is how often budget usage is synced to edges
+	// (BUDGET_SYNC_INTERVAL, default 30s).
+	BudgetSyncInterval time.Duration
+	// DebugHTTPProxy logs the embedded gateway's requests
+	// (DEBUG_HTTP_PROXY).
+	DebugHTTPProxy bool
+	// MetricsNoLegacyNames stops emitting the pre-conventions aistudio_*
+	// metrics next to the gen_ai.* ones (METRICS_LEGACY_NAMES=false). The
+	// zero value keeps them, so dashboards built on them keep working.
+	MetricsNoLegacyNames bool
+	// CORSAllowedOrigins is the comma-separated origin list for the
+	// endpoints that allow cross-origin calls (CORS_ALLOWED_ORIGINS; empty
+	// allows any origin).
+	CORSAllowedOrigins string
+	// SkipFilterDefaults skips creating the example filters in an
+	// Enterprise database (SKIP_FILTER_DEFAULTS).
+	SkipFilterDefaults bool
+	// FilterLimits are the Enterprise filter-script limits, by their
+	// environment variable names (see FilterLimitNames). A name missing
+	// here falls back to the environment. The switch that lets scripts use
+	// the operating system (FILTER_SCRIPT_ALLOW_OS) is a security setting
+	// and is read from the environment only.
+	FilterLimits map[string]string
+}
+
+// FilterLimitNames are the tuning limits of Enterprise filter scripts and
+// the helpers they call, which AppConf.FilterLimits may set.
+var FilterLimitNames = []string{
+	"FILTER_SCRIPT_TIMEOUT",
+	"FILTER_SCRIPT_MAX_ALLOCS",
+	"FILTER_HTTP_TIMEOUT",
+	"FILTER_HTTP_MAX_RESPONSE_BYTES",
+	"FILTER_LLM_TIMEOUT",
+}
+
+// Installed returns the configuration installed with Set (or loaded by
+// Get), or nil. Unlike Get it never loads one: code shared with the
+// microgateway, which has no AppConf, uses it to prefer Studio's settings
+// when there are any.
+func Installed() *AppConf {
+	return globalConfig.Load()
 }
 
 // QueueConfig holds configuration for message queues
@@ -752,6 +800,33 @@ func LoadFrom(getenv func(string) string) *AppConf {
 			conf.ChatSessionIdleTTL = d
 		} else {
 			cfgLog.Warn().Msgf("Warning: Invalid CHAT_SESSION_IDLE_TTL value: %s, using default 10m", v)
+		}
+	}
+
+	conf.AnalyticsBufferSize = 1000
+	if v := getenv("ANALYTICS_BUFFER_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.AnalyticsBufferSize = n
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid ANALYTICS_BUFFER_SIZE value: %s, using default 1000", v)
+		}
+	}
+	conf.BudgetSyncInterval = 30 * time.Second
+	if v := getenv("BUDGET_SYNC_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			conf.BudgetSyncInterval = d
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid BUDGET_SYNC_INTERVAL value: %s, using default 30s", v)
+		}
+	}
+	conf.DebugHTTPProxy = getenv("DEBUG_HTTP_PROXY") == "true"
+	conf.MetricsNoLegacyNames = getenv("METRICS_LEGACY_NAMES") == "false"
+	conf.CORSAllowedOrigins = getenv("CORS_ALLOWED_ORIGINS")
+	conf.SkipFilterDefaults = getenv("SKIP_FILTER_DEFAULTS") == "true"
+	conf.FilterLimits = map[string]string{}
+	for _, name := range FilterLimitNames {
+		if v := strings.TrimSpace(getenv(name)); v != "" {
+			conf.FilterLimits[name] = v
 		}
 	}
 	return conf

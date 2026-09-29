@@ -141,6 +141,9 @@ type Config struct {
 	// the owner of every edge stream this server holds. Empty means
 	// "control", for a single replica.
 	NodeID string
+	// BudgetSyncInterval is how often budget usage is synced to edges.
+	// Zero means BUDGET_SYNC_INTERVAL, or 30s.
+	BudgetSyncInterval time.Duration
 }
 
 // validateEncryptionKey checks the key edges use to decrypt the credentials
@@ -203,6 +206,9 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 
 	// Initialize budget sync service for multi-edge budget synchronization
 	server.budgetSyncService = NewBudgetSyncService(db, server.eventBus)
+	if cfg.BudgetSyncInterval > 0 {
+		server.budgetSyncService.syncInterval = cfg.BudgetSyncInterval
+	}
 	server.budgetSyncService.Start()
 	log.Debug().Msg("Budget sync service initialized for control server")
 
