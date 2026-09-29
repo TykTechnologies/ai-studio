@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// JSON keeps the behaviour of gorm.io/datatypes.JSON, which it replaced: an
-// empty value is stored as NULL and reads back empty, and it marshals as JSON
-// rather than base64.
+// JSON keeps the behaviour of gorm.io/datatypes.JSON v1.2.6, which it
+// replaced (checked side by side before the swap): an empty value is stored
+// as NULL; a model loaded by gorm reads that NULL back empty (gorm does not
+// call Scan for NULL), while a direct Scan of NULL gives the JSON value null;
+// and it marshals as JSON rather than base64.
 func TestJSONColumnBehaviour(t *testing.T) {
 	db := openTestDB(t)
 
@@ -29,7 +31,11 @@ func TestJSONColumnBehaviour(t *testing.T) {
 
 	var gotEmpty App
 	require.NoError(t, db.First(&gotEmpty, empty.ID).Error)
-	assert.Empty(t, gotEmpty.Metadata, "NULL reads back empty")
+	assert.Empty(t, gotEmpty.Metadata, "gorm leaves a NULL column's field empty")
+
+	var scanned JSON
+	require.NoError(t, db.Raw("SELECT metadata FROM apps WHERE id = ?", empty.ID).Row().Scan(&scanned))
+	assert.Equal(t, JSON("null"), scanned, "a direct Scan of NULL gives the JSON value null")
 
 	out, err := json.Marshal(struct{ M JSON }{JSON(`{"k":1}`)})
 	require.NoError(t, err)

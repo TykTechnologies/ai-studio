@@ -28,7 +28,9 @@ func (j JSON) Value() (driver.Value, error) {
 	return string(j), nil
 }
 
-// Scan reads a JSON column. NULL reads as the JSON value null.
+// Scan reads a JSON column. Scanning NULL directly (database/sql Rows.Scan)
+// gives the JSON value null, as datatypes.JSON v1.2.6 does. gorm does not call
+// Scan for a NULL column when it loads a model: it leaves the field empty.
 func (j *JSON) Scan(value interface{}) error {
 	if value == nil {
 		*j = JSON("null")
