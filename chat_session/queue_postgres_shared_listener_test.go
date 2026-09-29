@@ -3,6 +3,7 @@ package chat_session
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -14,10 +15,28 @@ import (
 
 // openPostgresForQueueTest opens its own pool against DATABASE_URL, or skips.
 func openPostgresForQueueTest(t *testing.T, maxOpen int) *gorm.DB {
+	db, _ := openPostgresForQueueTestNamed(t, maxOpen)
+	return db
+}
+
+// openPostgresForQueueTestNamed also returns the application_name its
+// connections (and so the shared listener's) carry, so a test can act on
+// its own backends only: other packages' tests may be listening on the same
+// database at the same time.
+func openPostgresForQueueTestNamed(t *testing.T, maxOpen int) (*gorm.DB, string) {
 	t.Helper()
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		t.Skip("DATABASE_URL not set - skipping PostgreSQL queue test")
+	}
+	appName := fmt.Sprintf("chatq-test-%d", time.Now().UnixNano())
+	if u, err := url.Parse(dbURL); err == nil && u.Scheme != "" {
+		q := u.Query()
+		q.Set("application_name", appName)
+		u.RawQuery = q.Encode()
+		dbURL = u.String()
+	} else {
+		dbURL += " application_name=" + appName
 	}
 	db, err := gorm.Open(postgres.Open(dbURL), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -30,7 +49,7 @@ func openPostgresForQueueTest(t *testing.T, maxOpen int) *gorm.DB {
 	sqlDB.SetMaxOpenConns(maxOpen)
 	sqlDB.SetMaxIdleConns(1)
 	t.Cleanup(func() { sqlDB.Close() })
-	return db
+	return db, appName
 }
 
 // createQueueWithin fails the test instead of hanging when queue creation
@@ -229,7 +248,7 @@ func TestSharedPostgreSQLQueue_SameSessionTwice(t *testing.T) {
 // The shared listener reconnects after its backend is killed, re-issues
 // LISTEN, and sessions receive again.
 func TestSharedPostgreSQLQueue_ListenerReconnects(t *testing.T) {
-	db := openPostgresForQueueTest(t, 4)
+	db, appName := openPostgresForQueueTestNamed(t, 4)
 	factory := NewSharedPostgreSQLQueueFactory(db, testQueueConfig(50, 2*time.Second))
 	q, err := createQueueWithin(t, factory, fmt.Sprintf("reconnect-%d", time.Now().UnixNano()), 15*time.Second)
 	if err != nil {
@@ -239,7 +258,7 @@ func TestSharedPostgreSQLQueue_ListenerReconnects(t *testing.T) {
 
 	var killed int
 	if err := db.Raw(`SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity
-		WHERE datname = current_database() AND pid <> pg_backend_pid() AND query ILIKE 'LISTEN %'`).Scan(&killed).Error; err != nil {
+		WHERE datname = current_database() AND pid <> pg_backend_pid() AND application_name = ? AND query ILIKE 'LISTEN %'`, appName).Scan(&killed).Error; err != nil {
 		t.Fatal(err)
 	}
 	if killed != 1 {
