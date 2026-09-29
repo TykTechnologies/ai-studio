@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// Register the enterprise implementations under test.
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/audit"
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/tykmcp"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/audit"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/tykmcp"
 )
 
 // fakeTykDashboard answers the probe endpoints of a capable Dashboard.

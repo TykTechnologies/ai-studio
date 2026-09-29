@@ -27,8 +27,8 @@ import (
 	"time"
 
 	// Registers the enterprise provider implementations (builtin and remote).
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/guardrails/builtin"
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/guardrails/providers"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/guardrails/builtin"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/guardrails/providers"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	vc "github.com/TykTechnologies/midsommar/v2/pkg/testinfra/vendorconformance"

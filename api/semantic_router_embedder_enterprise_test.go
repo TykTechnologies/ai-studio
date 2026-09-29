@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
-	entsr "github.com/TykTechnologies/midsommar/v2/enterprise/features/semantic_router"
+	entsr "github.com/TykTechnologies/ai-studio-enterprise/v2/features/semantic_router"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
 	"github.com/stretchr/testify/assert"

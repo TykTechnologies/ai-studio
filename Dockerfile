@@ -34,8 +34,8 @@ ARG EDITION=ce
 
 # Remove enterprise module references for CE builds
 RUN if [ "$EDITION" = "ce" ]; then \
-        sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' go.mod; \
-        sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' microgateway/go.mod; \
+        sed -i '/github.com\/TykTechnologies\/ai-studio-enterprise/d' go.mod; \
+        sed -i '/github.com\/TykTechnologies\/ai-studio-enterprise/d' microgateway/go.mod; \
     fi
 
 # Download dependencies

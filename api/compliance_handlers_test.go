@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	// Import enterprise compliance to trigger init() registration
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/compliance"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/compliance"
 )
 
 func setupComplianceTestAPI(t *testing.T) (*API, *gin.Engine) {

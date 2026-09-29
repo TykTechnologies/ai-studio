@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/all"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/all"
 )
 
 // An Enterprise Studio whose licence fails validation is an error for the

@@ -113,7 +113,7 @@ jobs:
         run: |
           mkdir -p enterprise
           cat > enterprise/go.mod << 'EOF'
-          module github.com/TykTechnologies/midsommar/v2/enterprise
+          module github.com/TykTechnologies/ai-studio-enterprise/v2
 
           go 1.26.6
           EOF
@@ -318,6 +318,9 @@ jobs:
 
       - name: Verify nothing uses upstream langchaingo
         run: make langchaingo-verify
+
+      - name: Check no public package imports the enterprise module
+        run: make enterprise-import-guard
 
   # ==========================================================================
   # Module zip check: the committed tree must make a module zip the Go proxy

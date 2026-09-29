@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// Register the enterprise implementations under test.
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/audit"
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/webhooks"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/audit"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/webhooks"
 )
 
 type webhookEntHarness struct {

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/enterprise/scriptExtensions/httpcaller"
-	ent_scripting "github.com/TykTechnologies/midsommar/v2/enterprise/scripting"
+	"github.com/TykTechnologies/ai-studio-enterprise/v2/scriptExtensions/httpcaller"
+	ent_scripting "github.com/TykTechnologies/ai-studio-enterprise/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )

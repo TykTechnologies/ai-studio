@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/budget"
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/team_budget"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/budget"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/team_budget"
 )
 
 func TestTeamBudgetsEnterprise_API(t *testing.T) {

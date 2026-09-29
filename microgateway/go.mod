@@ -242,8 +242,8 @@ require (
 )
 
 require (
+	github.com/TykTechnologies/ai-studio-enterprise/v2 v2.0.0-00010101000000-000000000000
 	github.com/TykTechnologies/midsommar/v2 v2.0.0
-	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/d5/tengo/v2 v2.17.0 // indirect
 	github.com/gin-gonic/gin v1.10.1
@@ -266,4 +266,4 @@ require (
 
 replace github.com/TykTechnologies/midsommar/v2 => ../
 
-replace github.com/TykTechnologies/midsommar/v2/enterprise => ../enterprise
+replace github.com/TykTechnologies/ai-studio-enterprise/v2 => ../enterprise

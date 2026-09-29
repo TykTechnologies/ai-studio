@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// Import enterprise audit to trigger init() registration
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/audit"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/audit"
 )
 
 // setupAuditTestAPI builds the real API (so the middleware is registered in

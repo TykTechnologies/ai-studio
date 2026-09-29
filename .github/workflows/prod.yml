@@ -80,7 +80,7 @@ jobs:
 
       - name: Remove enterprise module references for CE
         run: |
-          sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' go.mod
+          sed -i '/github.com\/TykTechnologies\/ai-studio-enterprise/d' go.mod
 
       - name: Build CE Binaries
         run: |

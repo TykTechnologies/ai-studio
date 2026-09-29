@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	// Import enterprise features to register factories before tests run
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/filters"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/plugin_security"
 )
 
 func TestMain(m *testing.M) {

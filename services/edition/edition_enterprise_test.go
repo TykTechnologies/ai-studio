@@ -5,7 +5,7 @@ package edition_test
 import (
 	"testing"
 
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/all"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/all"
 
 	"github.com/TykTechnologies/midsommar/v2/services/edition"
 )

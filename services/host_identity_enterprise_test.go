@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/rbac"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/rbac"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
