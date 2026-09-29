@@ -64,6 +64,8 @@ func InitModels(db *gorm.DB) error {
 		&PendingOAuthRequest{},
 		// Hub-and-Spoke Models
 		&EdgeInstance{},       // Edge instance tracking
+		&ClusterNode{},        // Running Studio replicas (pkg/cluster)
+		&ClusterEvent{},       // Cluster event log (pkg/cluster)
 		&Plugin{},             // Plugin configurations
 		&LLMPlugin{},          // LLM-Plugin associations
 		&PluginConfigSchema{}, // Plugin config schema cache

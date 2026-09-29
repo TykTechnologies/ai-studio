@@ -3,290 +3,58 @@ package chat_session
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/lib/pq"
 )
 
 // Every PostgreSQL queue in the process receives its notifications through one
-// shared LISTEN connection per database, opened with pq.Listener outside the
+// shared LISTEN connection per database (package pglisten), opened outside the
 // application's pool. A session only registers its channels on it, so the
 // number of sessions no longer decides how many connections are held, and a
 // session never waits on the pool to start listening.
 
-// listenerPingInterval is how often the shared listener checks its connection;
-// pq.Listener only notices a dead connection when it next uses it.
-const listenerPingInterval = 90 * time.Second
+// sharedListener is the process-wide listener for one database.
+type sharedListener = pglisten.Listener
 
 // notificationHandler receives the payload of a notification on one channel.
 // It is called from the dispatch goroutine and must not block.
-type notificationHandler func(payload string)
-
-type listenerSubscription struct {
-	handler notificationHandler
-}
-
-// sharedListener fans notifications from one pq.Listener out to subscribers.
-type sharedListener struct {
-	dsn      string
-	listener *pq.Listener
-	refs     int
-
-	// mu guards subs. dispatch holds the read lock while it calls handlers,
-	// so an unsubscribe returns only once no handler of it is running.
-	mu   sync.RWMutex
-	subs map[string][]*listenerSubscription
-
-	// ctlMu orders LISTEN and UNLISTEN, so a channel's last subscriber
-	// leaving cannot UNLISTEN after a new first subscriber's LISTEN.
-	ctlMu sync.Mutex
-
-	stop chan struct{}
-	done chan struct{}
-}
-
-var (
-	sharedListenersMu sync.Mutex
-	sharedListeners   = map[string]*sharedListener{}
-)
+type notificationHandler = pglisten.Handler
 
 // postgresDSN returns the connection string db was opened with, falling back
 // to the configured database URL (a host may open db from a *sql.DB, which
 // leaves no DSN on the dialector) and then to DATABASE_URL.
 func postgresDSN(db *gorm.DB) (string, error) {
-	if db != nil {
-		if d, ok := db.Dialector.(*postgres.Dialector); ok && d.Config != nil && d.Config.DSN != "" {
-			return d.Config.DSN, nil
-		}
-	}
-	if dsn := config.Get("").DatabaseURL; dsn != "" {
-		return dsn, nil
-	}
-	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
-		return dsn, nil
-	}
-	return "", errors.New("cannot determine the PostgreSQL connection string for the queue listener: set DATABASE_URL")
+	return pglisten.DSN(db, config.Get("").DatabaseURL, os.Getenv("DATABASE_URL"))
 }
 
 // acquireSharedListener returns the listener for dsn, connecting it if this is
 // its first user. It waits at most the queue timeout for the connection.
 func acquireSharedListener(dsn string, config PostgreSQLConfig) (*sharedListener, error) {
-	sharedListenersMu.Lock()
-	defer sharedListenersMu.Unlock()
-
-	if sl, ok := sharedListeners[dsn]; ok {
-		sl.refs++
-		return sl, nil
-	}
-
 	if config.ReconnectInterval <= 0 {
 		config.ReconnectInterval = DefaultPostgreSQLConfig().ReconnectInterval
 	}
-
-	firstEvent := make(chan error, 1)
-	var once sync.Once
-	listener := pq.NewListener(dsn, config.ReconnectInterval, reconnectCeiling(config), func(ev pq.ListenerEventType, err error) {
-		switch ev {
-		case pq.ListenerEventConnected:
-			slog.Info("PostgreSQL queue listener connected")
-			once.Do(func() { firstEvent <- nil })
-		case pq.ListenerEventDisconnected:
-			slog.Warn("PostgreSQL queue listener disconnected; notifications sent until it reconnects are lost", "error", err)
-		case pq.ListenerEventReconnected:
-			slog.Info("PostgreSQL queue listener reconnected")
-		case pq.ListenerEventConnectionAttemptFailed:
-			slog.Error("PostgreSQL queue listener connection failed", "error", err)
-			once.Do(func() { firstEvent <- err })
-		}
+	l, err := pglisten.Acquire(dsn, pglisten.Options{
+		ReconnectInterval: config.ReconnectInterval,
+		ReconnectCeiling:  reconnectCeiling(config),
+		ConnectTimeout:    queueTimeout(config),
+		Name:              "PostgreSQL queue listener",
 	})
-
-	timeout := queueTimeout(config)
-	select {
-	case err := <-firstEvent:
-		if err != nil {
-			listener.Close()
-			return nil, fmt.Errorf("queue listener could not connect to PostgreSQL: %w", err)
-		}
-	case <-time.After(timeout):
-		listener.Close()
-		return nil, fmt.Errorf("queue listener could not connect to PostgreSQL within %s", timeout)
+	if err != nil {
+		return nil, fmt.Errorf("queue listener: %w", err)
 	}
-
-	sl := &sharedListener{
-		dsn:      dsn,
-		listener: listener,
-		refs:     1,
-		subs:     map[string][]*listenerSubscription{},
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
-	}
-	go sl.dispatch()
-	sharedListeners[dsn] = sl
-	return sl, nil
-}
-
-// release drops one reference; the last one closes the listener.
-func (sl *sharedListener) release() {
-	sharedListenersMu.Lock()
-	defer sharedListenersMu.Unlock()
-
-	sl.refs--
-	if sl.refs > 0 {
-		return
-	}
-	delete(sharedListeners, sl.dsn)
-	close(sl.stop)
-	<-sl.done
-	if err := sl.listener.Close(); err != nil {
-		slog.Warn("error closing PostgreSQL queue listener", "error", err)
-	}
-}
-
-// subscribe registers handler for channel, issuing LISTEN when it is the
-// channel's first subscriber. It gives up after timeout.
-func (sl *sharedListener) subscribe(channel string, handler notificationHandler, timeout time.Duration) (*listenerSubscription, error) {
-	sub := &listenerSubscription{handler: handler}
-
-	sl.ctlMu.Lock()
-	defer sl.ctlMu.Unlock()
-
-	sl.mu.Lock()
-	first := len(sl.subs[channel]) == 0
-	sl.subs[channel] = append(sl.subs[channel], sub)
-	sl.mu.Unlock()
-
-	if !first {
-		return sub, nil
-	}
-	if err := sl.withTimeout(timeout, func() error { return sl.listener.Listen(channel) }, func() {
-		// LISTEN completed after we gave up: undo it unless someone else
-		// has subscribed to the channel since.
-		sl.mu.RLock()
-		inUse := len(sl.subs[channel]) > 0
-		sl.mu.RUnlock()
-		if !inUse {
-			_ = sl.listener.Unlisten(channel)
-		}
-	}); err != nil && !errors.Is(err, pq.ErrChannelAlreadyOpen) {
-		sl.mu.Lock()
-		sl.removeLocked(channel, sub)
-		sl.mu.Unlock()
-		return nil, fmt.Errorf("failed to listen to channel %s: %w", channel, err)
-	}
-	return sub, nil
-}
-
-// removeLocked drops sub from channel and reports whether none are left.
-// The caller holds mu.
-func (sl *sharedListener) removeLocked(channel string, sub *listenerSubscription) bool {
-	subs := sl.subs[channel]
-	for i, s := range subs {
-		if s == sub {
-			subs = append(subs[:i:i], subs[i+1:]...)
-			break
-		}
-	}
-	if len(subs) == 0 {
-		delete(sl.subs, channel)
-		return true
-	}
-	sl.subs[channel] = subs
-	return false
-}
-
-// unsubscribe removes sub and issues UNLISTEN when it was the channel's last
-// subscriber. Once it returns, sub's handler is not running and will not run.
-func (sl *sharedListener) unsubscribe(channel string, sub *listenerSubscription, timeout time.Duration) {
-	sl.ctlMu.Lock()
-	defer sl.ctlMu.Unlock()
-
-	sl.mu.Lock()
-	last := sl.removeLocked(channel, sub)
-	sl.mu.Unlock()
-
-	if !last {
-		return
-	}
-	if err := sl.withTimeout(timeout, func() error { return sl.listener.Unlisten(channel) }, nil); err != nil && !errors.Is(err, pq.ErrChannelNotOpen) {
-		slog.Warn("error unlistening from PostgreSQL channel", "channel", channel, "error", err)
-	}
-}
-
-// withTimeout runs op, which may block while the listener reconnects, for at
-// most timeout. late runs if op finishes successfully after the timeout.
-func (sl *sharedListener) withTimeout(timeout time.Duration, op func() error, late func()) error {
-	result := make(chan error, 1)
-	var mu sync.Mutex
-	gaveUp := false
-	go func() {
-		err := op()
-		mu.Lock()
-		defer mu.Unlock()
-		if gaveUp {
-			if err == nil && late != nil {
-				late()
-			}
-			return
-		}
-		result <- err
-	}()
-	select {
-	case err := <-result:
-		return err
-	case <-time.After(timeout):
-		mu.Lock()
-		defer mu.Unlock()
-		select {
-		case err := <-result:
-			return err
-		default:
-		}
-		gaveUp = true
-		return fmt.Errorf("PostgreSQL listener did not answer within %s", timeout)
-	}
-}
-
-func (sl *sharedListener) dispatch() {
-	defer close(sl.done)
-	ping := time.NewTicker(listenerPingInterval)
-	defer ping.Stop()
-	for {
-		select {
-		case <-sl.stop:
-			return
-		case <-ping.C:
-			go func() {
-				if err := sl.listener.Ping(); err != nil {
-					slog.Warn("PostgreSQL queue listener ping failed", "error", err)
-				}
-			}()
-		case n := <-sl.listener.Notify:
-			// nil means the connection was re-established; anything sent
-			// while it was down is gone.
-			if n == nil {
-				continue
-			}
-			sl.mu.RLock()
-			for _, sub := range sl.subs[n.Channel] {
-				sub.handler(n.Extra)
-			}
-			sl.mu.RUnlock()
-		}
-	}
+	return l, nil
 }
 
 // channelSubscription is one session channel registered on a shared listener.
 type channelSubscription struct {
 	channel string
-	sub     *listenerSubscription
+	sub     *pglisten.Subscription
 }
 
 // subscribeSessionChannels registers handler for every channel. On error the
@@ -294,7 +62,7 @@ type channelSubscription struct {
 func subscribeSessionChannels(sl *sharedListener, channels []string, handler notificationHandler, timeout time.Duration) ([]channelSubscription, error) {
 	subs := make([]channelSubscription, 0, len(channels))
 	for _, channel := range channels {
-		sub, err := sl.subscribe(channel, handler, timeout)
+		sub, err := sl.Subscribe(channel, handler, timeout)
 		if err != nil {
 			return subs, err
 		}
@@ -309,7 +77,7 @@ func unsubscribeSessionChannels(sl *sharedListener, subs []channelSubscription, 
 		return
 	}
 	for _, s := range subs {
-		sl.unsubscribe(s.channel, s.sub, timeout)
+		sl.Unsubscribe(s.channel, s.sub, timeout)
 	}
 }
 

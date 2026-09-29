@@ -324,6 +324,24 @@ TABLE chats
   column system_prompt text(text) nullable=YES
   column default_data_source_id bigint(int8) nullable=YES precision=64 scale=0
   column prompt_templates_json text(text) nullable=YES
+TABLE cluster_events
+  constraint cluster_events_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX cluster_events_pkey ON cluster_events USING btree (id)
+  index CREATE INDEX idx_cluster_events_created_at ON cluster_events USING btree (created_at)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('cluster_events_id_seq'::regclass)
+  column topic character varying(varchar) nullable=NO len=255
+  column origin character varying(varchar) nullable=NO len=128
+  column payload bytea(bytea) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=NO
+TABLE cluster_nodes
+  constraint cluster_nodes_pkey PRIMARY KEY (node_id)
+  index CREATE UNIQUE INDEX cluster_nodes_pkey ON cluster_nodes USING btree (node_id)
+  index CREATE INDEX idx_cluster_nodes_last_seen ON cluster_nodes USING btree (last_seen)
+  column node_id character varying(varchar) nullable=NO len=128
+  column hostname character varying(varchar) nullable=YES len=255
+  column version character varying(varchar) nullable=YES len=64
+  column started_at timestamp with time zone(timestamptz) nullable=YES
+  column last_seen timestamp with time zone(timestamptz) nullable=YES
 TABLE credentials
   constraint credentials_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX credentials_pkey ON credentials USING btree (id)
@@ -414,6 +432,7 @@ TABLE edge_instances
   index CREATE UNIQUE INDEX idx_edge_instances_edge_id ON edge_instances USING btree (edge_id)
   index CREATE INDEX idx_edge_instances_heartbeat ON edge_instances USING btree (last_heartbeat)
   index CREATE INDEX idx_edge_instances_namespace ON edge_instances USING btree (namespace)
+  index CREATE INDEX idx_edge_instances_owner ON edge_instances USING btree (owner_node_id)
   index CREATE INDEX idx_edge_instances_status ON edge_instances USING btree (status)
   index CREATE INDEX idx_edge_instances_sync_status ON edge_instances USING btree (sync_status)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('edge_instances_id_seq'::regclass)
@@ -428,6 +447,8 @@ TABLE edge_instances
   column last_heartbeat timestamp with time zone(timestamptz) nullable=YES
   column status text(text) nullable=YES default='registered'::text
   column session_id text(text) nullable=YES
+  column owner_node_id character varying(varchar) nullable=YES len=128
+  column stream_session_id character varying(varchar) nullable=YES len=64
   column loaded_checksum character varying(varchar) nullable=YES len=64
   column loaded_version character varying(varchar) nullable=YES len=64
   column sync_status character varying(varchar) nullable=YES len=20 default='unknown'::character varying

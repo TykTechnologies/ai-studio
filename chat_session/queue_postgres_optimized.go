@@ -269,7 +269,7 @@ func (psq *OptimizedPostgreSQLQueue) Close() error {
 	unsubscribeSessionChannels(psq.listener, psq.subscriptions, queueTimeout(psq.config))
 	psq.subscriptions = nil
 	if psq.listener != nil {
-		psq.listener.release()
+		psq.listener.Release()
 		psq.listener = nil
 	}
 

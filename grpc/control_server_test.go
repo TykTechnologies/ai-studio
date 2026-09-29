@@ -1392,11 +1392,16 @@ func TestControlServer_isEdgeStreamActive(t *testing.T) {
 func TestControlServer_cleanupStaleConnections(t *testing.T) {
 	server, db := setupTestServer(t, nil)
 
-	// Create edge in database
+	// Create edge in database, owned by this server's stream session (as a
+	// stream registration records it; see models.ClaimEdgeStream). The sweep
+	// only marks an edge disconnected when the stale stream is still its
+	// current one.
 	edge := models.EdgeInstance{
-		EdgeID:    "stale-edge",
-		Namespace: "test",
-		Status:    models.EdgeStatusConnected,
+		EdgeID:          "stale-edge",
+		Namespace:       "test",
+		Status:          models.EdgeStatusConnected,
+		OwnerNodeID:     "control",
+		StreamSessionID: "session-1",
 	}
 	db.Create(&edge)
 
@@ -1406,6 +1411,7 @@ func TestControlServer_cleanupStaleConnections(t *testing.T) {
 		EdgeID:    "stale-edge",
 		Namespace: "test",
 		Status:    "connected",
+		SessionID: "session-1",
 		Stream:    nil, // No active stream
 	}
 	server.edgeMutex.Unlock()

@@ -388,6 +388,15 @@ unique constraints), so the lock is a guard for upgrades, where replicas
 starting together would run the same ALTERs and backfills, rather than for
 an observed race.
 
+## Several replicas
+
+A host may run several Studio replicas against one database. Each joins
+the cluster in `studio.New` (`Options.NodeID`, default a fresh per-process
+ID): a registry row other replicas use to tell live replicas from dead ones,
+and an event log for what every replica must hear. Edge streams record their
+owning replica. See `features/ClusterControlPlane.md` for the guarantees
+and what is still being built.
+
 ## langchaingo in tree
 
 Studio's langchaingo fork (Anthropic temperature, OpenAI reasoning_effort and
