@@ -128,10 +128,12 @@ The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM**
 
 ### Push Process
 
+> **AI Studio 2.2 runs as a single instance.** Replicated AI Studio instances are not supported in 2.2: run one hot instance with an optional cold standby (see [Reference Architecture](./reference-architecture.md#run-studio-as-a-hot-cold-singleton)). Support for several active replicas is planned for 2.3; the notes on replicas below apply from then.
+
 When you push configuration:
 
 1. AI Studio records the push: one entry per target edge gateway, with a deadline (5 minutes). The modal shows which edges are connected now and warns about the ones that are not.
-2. The control-plane replica that holds each edge's connection sends it a reload request. With several AI Studio replicas behind a load balancer, it does not matter which replica you pushed from.
+2. The AI Studio instance that holds each edge's connection sends it a reload request. From 2.3, with several AI Studio replicas behind a load balancer, it does not matter which replica you pushed from.
 3. Each edge pulls the current configuration, applies it and answers **ready** (or **failed**, with the reason).
 4. The modal follows the push until every edge has answered and shows each edge's outcome:
    - **Updated**: the edge loaded the configuration.
@@ -139,7 +141,7 @@ When you push configuration:
    - **Failed**: the edge could not apply it (its error is shown), or three delivery attempts in a row were cut short.
    - **Timed out**: the edge did not connect, or did not finish, before the deadline.
 
-You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline. If an edge's connection drops while it is reloading, or the replica it was connected to stops, the push is sent again when the edge reconnects (to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes and lists them. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
+You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline. If an edge's connection drops while it is reloading, or the AI Studio instance it was connected to stops, the push is sent again when the edge reconnects (from 2.3, to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes and lists them. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
 
 How an edge applies a snapshot:
 
@@ -261,7 +263,7 @@ GET /api/v1/reload-operations/{operation_id}/status   # Enterprise
 GET /api/v1/edges/reload-operations                  # the last day's pushes
 ```
 
-The status reports the operation's `status` (`in_progress`, `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`, `expired`), `progress`, `counts` per outcome, and `edges`: for each edge its `status`, the phase it last reported, `message`, `warning`, `attempts` and the history of every delivery attempt. Any AI Studio replica answers it. The listing gives each push's status, counts and message.
+The status reports the operation's `status` (`in_progress`, `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`, `expired`), `progress`, `counts` per outcome, and `edges`: for each edge its `status`, the phase it last reported, `message`, `warning`, `attempts` and the history of every delivery attempt. From 2.3, any AI Studio replica answers it. The listing gives each push's status, counts and message.
 
 ## Troubleshooting
 
