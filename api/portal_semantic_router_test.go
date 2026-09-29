@@ -9,10 +9,10 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 // A Semantic Router is a portal asset like a Model Router: published in LLM

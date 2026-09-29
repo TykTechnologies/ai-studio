@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // SemanticRouter is a router that picks one of its named routes from what the

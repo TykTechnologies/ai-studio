@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // CreateQueueFactory creates appropriate queue factory based on configuration

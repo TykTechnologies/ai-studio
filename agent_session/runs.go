@@ -10,8 +10,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gofrs/uuid"
-	"gorm.io/gorm"
 )
 
 // Chunk types as the plugin proto names them (AgentMessageChunk_ChunkType.String()).

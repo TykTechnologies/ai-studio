@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // AccessTokenService handles business logic for access tokens.

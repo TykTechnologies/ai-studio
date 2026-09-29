@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // LLMPlugin represents the many-to-many relationship between LLMs and plugins

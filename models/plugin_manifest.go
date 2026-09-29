@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PluginManifest represents the manifest structure defined in Hot-load-ui-plugins-plan.md

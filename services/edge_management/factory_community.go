@@ -3,7 +3,7 @@
 
 package edge_management
 
-import "gorm.io/gorm"
+import "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 // FactoryFunc is the function signature for creating edge management services
 type FactoryFunc func(db *gorm.DB) Service

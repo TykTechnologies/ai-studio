@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/tmc/langchaingo/llms"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // CMessage is the GORM model for chat messages

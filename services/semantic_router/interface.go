@@ -10,7 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 var (

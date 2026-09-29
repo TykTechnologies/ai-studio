@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PresentToolOperation is the function name the model calls for generative

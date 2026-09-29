@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 func newCachedTool(id uint, updatedAt time.Time, spec, operations string) *models.Tool {

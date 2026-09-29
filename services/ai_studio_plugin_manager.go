@@ -22,10 +22,10 @@ import (
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
-	"gorm.io/gorm"
 )
 
 // Global service reference for GRPCServer access

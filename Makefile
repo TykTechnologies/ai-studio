@@ -502,6 +502,16 @@ schema-golden: ## Regenerate the schema snapshot goldens (SQLite + postgres:16 i
 	@scripts/schema-golden.sh
 
 # ============================================================================
+# gorm: AI Studio's own copy (see third_party/README.md)
+# ============================================================================
+.PHONY: gorm-vendor gorm-verify
+gorm-vendor: ## Rebuild third_party/gorm.io from the pins in third_party/gorm-pin/go.mod
+	@scripts/gorm-vendor.sh
+
+gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports gorm.io
+	@scripts/gorm-verify.sh
+
+# ============================================================================
 # Plugin Release (build -> sign -> push -> marketplace index entry)
 # ============================================================================
 # One command takes a plugin from source to a signed, indexed marketplace

@@ -3,9 +3,9 @@ package studio
 import (
 	"fmt"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -14,8 +14,9 @@ import (
 // OpenDatabase connects to the database conf names (DatabaseType "sqlite" or
 // "postgres", at DatabaseURL) and checks it responds. The result is what
 // Options.DB takes. A host opens Studio's database with it rather than with
-// gorm itself, so the host does not depend on which gorm Studio builds with.
-// The caller closes it after Stop, through DB().
+// gorm itself: Studio builds with its own copy of gorm (third_party/gorm.io),
+// which the host's gorm cannot stand in for. The caller closes it after
+// Stop, through DB().
 func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 	switch conf.DatabaseType {

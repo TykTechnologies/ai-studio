@@ -3,7 +3,7 @@ package models
 import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/gosimple/slug"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 func InitModels(db *gorm.DB) error {

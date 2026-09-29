@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	gormlogger "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 )
 
 // GormLogger implements gorm's logger.Interface using zerolog

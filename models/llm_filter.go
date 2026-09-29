@@ -3,7 +3,7 @@ package models
 import (
 	"sort"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // LLMFilter is the llm_filters join row. OrderIndex is the filter's position

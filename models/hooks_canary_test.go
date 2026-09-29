@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/callbacks"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/callbacks"
-	"gorm.io/gorm/logger"
 )
 
 // gorm finds model hooks by type assertion at runtime, so a hook whose

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // PendingAuthRequestService handles business logic for pending OAuth authorization requests.

@@ -13,7 +13,7 @@ import (
 	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/sync/singleflight"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // TokenCacheEntry represents a cached token validation result

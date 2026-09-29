@@ -8,7 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // --- Plugin resource creation (for ApproveSubmission) ---

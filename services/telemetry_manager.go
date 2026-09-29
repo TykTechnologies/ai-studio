@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 const (

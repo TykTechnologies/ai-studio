@@ -9,8 +9,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // asHelperError unwraps a service error that already carries its HTTP status.

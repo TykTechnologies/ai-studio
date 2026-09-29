@@ -2,7 +2,7 @@ package models
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Filter kinds. A script filter runs a Tengo script; a guardrail filter runs

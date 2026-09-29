@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type Credential struct {

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // EdgeService handles edge instance management for hub-and-spoke architecture

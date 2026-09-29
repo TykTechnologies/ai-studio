@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
 	pgvectorDriver "github.com/pgvector/pgvector-go"
@@ -20,13 +21,13 @@ import (
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	weaviateModels "github.com/weaviate/weaviate/entities/models"
 	"google.golang.org/protobuf/types/known/structpb"
-	"gorm.io/driver/postgres"
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	chromaEmbeddings "github.com/amikos-tech/chroma-go/pkg/embeddings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/switches"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/tmc/langchaingo/embeddings"
 	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/textsplitter"
@@ -37,7 +38,6 @@ import (
 	"github.com/tmc/langchaingo/vectorstores/qdrant"
 	"github.com/tmc/langchaingo/vectorstores/redisvector"
 	"github.com/tmc/langchaingo/vectorstores/weaviate"
-	"gorm.io/gorm"
 )
 
 type VectorStoreVendor string

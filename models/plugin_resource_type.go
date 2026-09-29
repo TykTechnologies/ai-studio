@@ -1,7 +1,7 @@
 package models
 
 import (
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PluginResourceType represents a resource type registered by a plugin.

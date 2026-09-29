@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Webhook target lifecycle. A target is created pending and never receives a

@@ -24,9 +24,9 @@ Decisions that shape the design:
 
 - **Own database.** Studio keeps its own database or schema; the host opens it
   with `studio.OpenDatabase(conf)` and passes the result as `Options.DB`, so
-  the host never names Studio's gorm (Studio is moving to its own copy of
-  gorm, which a host's `replace gorm.io/gorm` cannot reach). Studio's table
-  names are not prefixed.
+  the host never names Studio's gorm. Studio builds with its own copy of
+  gorm (`third_party/gorm.io`), which a host's `replace gorm.io/gorm` cannot
+  reach; see "gorm isolation" below. Studio's table names are not prefixed.
 - **Host-authoritative identity.** The host authenticates the user and Studio
   provisions a matching user on first sight, keeping its own RBAC and groups.
 - **One instance per process.** Package-level state that clashes with a host
@@ -271,3 +271,34 @@ Verified: with `ui/admin-frontend/build` moved away, the default build of
 given a tarball made as the release job makes it, serves the full console
 under `/ai-studio`.
 
+
+## gorm isolation
+
+The Tyk Dashboard `replace`s `gorm.io/gorm` with a fork, and a `replace`
+applies to the whole build. So Studio imports gorm and its postgres and
+sqlite drivers from its own copy,
+`github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/...`, and the
+Dashboard's replace cannot reach it. `third_party/README.md` has the details.
+
+- The copy is the published modules at the versions pinned in
+  `third_party/gorm-pin/go.mod`, with their `gorm.io/...` imports rewritten.
+  `scripts/gorm-vendor.sh` (`make gorm-vendor`) is the only thing that
+  writes it. No automation changes the pins, so an upgrade is always a
+  deliberate PR whose diff is the upstream change.
+- `make gorm-verify`, a CI job, checks two things. The tree must be exactly
+  what the pins produce. And no package of the root, microgateway or
+  enterprise module may import `gorm.io/...`. gorm finds model hooks, column
+  types and sentinel errors by type assertion at runtime, so a stray import
+  of another gorm compiles and then fails silently. Also, `go mod tidy`
+  would resolve `gorm.io/gorm` to v1.21.16, the version the Tyk gateway
+  module requires.
+- The schema snapshot tests (`models/`, `microgateway/internal/database/`)
+  pin what the migrations produce on SQLite and Postgres. The hook canary
+  (`models/hooks_canary_test.go`) ties every model hook to the copy's
+  callback interfaces.
+- The drivers underneath (pgx, go-sqlite3) are not copied. They stay
+  ordinary requirements, because a second copy would register the same
+  `database/sql` driver name again and panic. In a host's build they may
+  move up to the host's versions.
+- A host uses `studio.OpenDatabase` for `Options.DB` and never imports
+  gorm. Its binary carries both gorms, about 2–3 MB.
