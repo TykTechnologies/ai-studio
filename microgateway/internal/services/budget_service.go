@@ -15,7 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // DatabaseBudgetService implements BudgetServiceInterface using database storage

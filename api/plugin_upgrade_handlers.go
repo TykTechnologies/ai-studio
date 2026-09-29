@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
 // PluginUpgradePreviewRequest selects the version to preview.

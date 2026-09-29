@@ -13,10 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/scrypt"
 	"golang.org/x/sync/singleflight"
-	"gorm.io/gorm"
 )
 
 const (

@@ -17,10 +17,10 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/semantic_router/engine"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 // embeddingStub answers /v1/embeddings like OpenAI: texts about maths point

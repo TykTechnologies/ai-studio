@@ -1,8 +1,8 @@
 package licensing
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // Service defines the licensing service interface

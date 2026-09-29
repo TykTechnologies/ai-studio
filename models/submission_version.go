@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // SubmissionVersion stores a snapshot of a resource's state before an update is applied.

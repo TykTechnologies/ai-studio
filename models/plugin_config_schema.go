@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
 )
 
 // PluginConfigSchema represents cached configuration schemas for plugins

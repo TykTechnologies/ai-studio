@@ -21,8 +21,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/tmc/langchaingo/schema"
 	"google.golang.org/protobuf/types/known/structpb"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // This file contains vendor-specific implementations for metadata operations

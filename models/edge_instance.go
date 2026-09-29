@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // EdgeInstance represents a registered edge instance in hub-and-spoke mode

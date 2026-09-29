@@ -5,8 +5,8 @@ import (
 	// "time" // Removed as it's not directly used in this file's tests. app.go uses it.
 
 	"github.com/stretchr/testify/assert"
-	// "gorm.io/driver/sqlite" // Removed: setupTestDB from user_test.go handles this
-	// "gorm.io/gorm" // Removed as it seems unused directly in this file
+	// "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite" // Removed: setupTestDB from user_test.go handles this
+	// "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm" // Removed as it seems unused directly in this file
 )
 
 func TestApp_NewApp(t *testing.T) {

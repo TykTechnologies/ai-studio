@@ -6,7 +6,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // ListOptions carries the optional search and sort of a plain list endpoint

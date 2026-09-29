@@ -1,4 +1,9 @@
 issues:
+  # third_party/gorm.io is upstream gorm, rebuilt by scripts/gorm-vendor.sh and
+  # never edited by hand (see third_party/README.md).
+  exclude-dirs:
+    - third_party
+
   exclude:
     - "^exported: exported var Err[A-Za-z0-9]+ should have comment or be unexported$"
     - "shadow: declaration of .err. shadows declaration"

@@ -1,6 +1,6 @@
 package models
 
-import "gorm.io/gorm"
+import "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 // OAuthClient represents an OAuth 2.0 client application.
 type OAuthClient struct {

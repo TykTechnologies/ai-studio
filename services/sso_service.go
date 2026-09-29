@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	tykerrors "github.com/TykTechnologies/tyk-identity-broker/error"
 	"github.com/TykTechnologies/tyk-identity-broker/initializer"
 	"github.com/TykTechnologies/tyk-identity-broker/providers"
@@ -21,7 +22,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 const (

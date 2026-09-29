@@ -27,7 +27,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // appVersion is injected from package main at startup via SetBuildInfo.
@@ -1374,6 +1374,6 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 	c.JSON(http.StatusOK, metadata)
 }
 
-// Need to import "errors", "log", "net/url", "time", "gorm.io/gorm"
+// Need to import "errors", "log", "net/url", "time", "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 // and "strings"
 // and "github.com/TykTechnologies/midsommar/v2/services"

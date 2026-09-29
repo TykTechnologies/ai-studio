@@ -3,7 +3,7 @@ package database
 import (
 	"sort"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // OrderLLMFilters sorts each LLM's Filters by llm_filters.order_index in one

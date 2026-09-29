@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
 // BudgetBlocks holds the Apps the control plane says this gateway must

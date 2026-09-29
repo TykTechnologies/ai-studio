@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm/logger"
 )
 
 // TestAnalyticsWriterPostgres runs the writer, the ledger and the budget sync

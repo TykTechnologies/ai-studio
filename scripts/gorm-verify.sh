@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Checks that AI Studio builds only with its own copy of gorm:
+#   1. third_party/gorm.io is exactly what third_party/gorm-pin produces;
+#   2. no package of the root, microgateway or enterprise module, in either
+#      edition, imports gorm.io/... . gorm finds model hooks, column types
+#      (GormDBDataType) and sentinel errors by type assertion at runtime,
+#      so a stray import of the other gorm compiles and silently misbehaves;
+#   3. the copy's own tests pass.
+# See third_party/README.md.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
+
+"$ROOT/scripts/gorm-vendor.sh" --verify
+
+status=0
+if matches=$(git grep -n --recurse-submodules '"gorm\.io/' -- '*.go' ':!third_party/'); then
+  echo "Import gorm from github.com/TykTechnologies/midsommar/v2/third_party/gorm.io, not gorm.io:" >&2
+  echo "$matches" >&2
+  status=1
+fi
+
+for mod in . microgateway enterprise; do
+  if [ ! -f "$mod/go.mod" ]; then
+    echo "gorm-verify: $mod/go.mod missing (is the enterprise submodule checked out?)" >&2
+    exit 1
+  fi
+  for tags in "" enterprise; do
+    # go list runs on its own so that a failure stops the check rather
+    # than reading as "no gorm.io packages".
+    deps=$(cd "$mod" && go list -deps -test ${tags:+-tags "$tags"} ./...)
+    if found=$(grep '^gorm\.io/' <<< "$deps"); then
+      echo "gorm-verify: module $mod${tags:+ (-tags $tags)} builds with upstream gorm packages:" >&2
+      echo "$found" >&2
+      status=1
+    fi
+  done
+done
+[ "$status" -eq 0 ] || exit "$status"
+echo "No gorm.io packages in the root, microgateway or enterprise build graphs."
+
+go test -count=1 ./third_party/...

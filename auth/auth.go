@@ -21,7 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 type Config struct {

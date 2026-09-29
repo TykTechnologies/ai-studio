@@ -3,8 +3,8 @@ package models
 import (
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/tyk-identity-broker/tap"
-	"gorm.io/gorm"
 )
 
 // GormAuthRegisterBackend implements AuthRegisterBackend using GORM

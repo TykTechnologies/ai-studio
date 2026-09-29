@@ -20,8 +20,8 @@ import (
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	// Using orderedmap indirectly through the pb33f API
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"gorm.io/gorm"
 )
 
 // ParameterDetail stores information about a single API operation parameter.

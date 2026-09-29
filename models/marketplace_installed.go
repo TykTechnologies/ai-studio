@@ -2,7 +2,7 @@ package models
 
 import (
 	"github.com/Masterminds/semver/v3"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Install sources recorded on InstalledPluginVersion.

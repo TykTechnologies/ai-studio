@@ -3,9 +3,9 @@ package models
 import (
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestUser_GetByAPIKey_EmptyNeverMatches(t *testing.T) {

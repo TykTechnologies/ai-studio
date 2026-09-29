@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Embedder is a reusable embedding configuration: the client (API

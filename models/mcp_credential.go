@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Credential status. minting/active/suspended/rotating_out are "live"

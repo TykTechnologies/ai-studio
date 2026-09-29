@@ -11,8 +11,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	"github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting/llmclient"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
-	"gorm.io/gorm"
 )
 
 // SemanticRouterService compiles the Semantic Routers synced from the hub

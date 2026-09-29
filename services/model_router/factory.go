@@ -1,7 +1,7 @@
 package model_router
 
 import (
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // FactoryFunc is a function type that creates a model router service instance.

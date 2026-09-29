@@ -323,6 +323,8 @@ See `docs/site/docs/plugins-edge-to-control.md` for details.
 - Running `go build` without building frontend first will fail with empty directory errors
 - Use `make build-local` for local builds (includes frontend build)
 - Hosts importing `pkg/studio` as a module build with `-tags studio_noui` and pass the release UI tarball as `studio.Options.UIAssets` (see `pkg/studio/README.md`)
+- **gorm is a vendored copy**: import `github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm` (and `.../gorm.io/driver/postgres`, `.../driver/sqlite`), never `gorm.io/...`. Never edit `third_party/gorm.io` by hand; upgrades change `third_party/gorm-pin/go.mod` and run `make gorm-vendor`. `make gorm-verify` (CI) catches stray `gorm.io` imports, which compile but silently break hooks. See `third_party/README.md`
+- Model changes that alter the schema need `make schema-golden` (regenerates the schema snapshot goldens in `models/` and `microgateway/internal/database/` on SQLite and a Docker postgres:16); review the golden diff
 
 ### Queue System Architecture
 The chat session system uses an interface-driven message queue:

@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // updateChatPromptTemplates updates the prompt templates for a chat

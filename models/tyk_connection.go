@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Tyk connection trust modes. Studio runs at the lower of the declared mode

@@ -5,7 +5,7 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // Embedders are found or created on demand (a datasource written with the

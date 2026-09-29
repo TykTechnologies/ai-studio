@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func routerWithExamples(slug string, llmID uint) *SemanticRouter {

@@ -2,7 +2,7 @@ package audit
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // FactoryFunc builds an audit service. The enterprise submodule registers one

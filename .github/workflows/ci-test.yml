@@ -279,6 +279,37 @@ jobs:
           go test -tags enterprise -v -race -count=1 ./features/audit/...
 
   # ==========================================================================
+  # gorm copy: third_party/gorm.io is exactly what third_party/gorm-pin
+  # produces, and no module imports gorm.io (see third_party/README.md)
+  # ==========================================================================
+  gorm-verify:
+    needs: [dep-guard]
+    name: gorm Copy Verification
+    runs-on: warp-ubuntu-latest-arm64-2x
+    steps:
+      # The enterprise module is part of the import check.
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Create placeholders for embeds
+        run: |
+          mkdir -p docs/site/dist ui/admin-frontend/build
+          echo "placeholder" > docs/site/dist/index.html
+          echo "placeholder" > ui/admin-frontend/build/index.html
+
+      - name: Verify the gorm copy
+        run: make gorm-verify
+
+  # ==========================================================================
   # Documentation Build
   # ==========================================================================
   docs-build:
@@ -318,7 +349,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: warp-ubuntu-latest-arm64-2x
-    needs: [frontend-tests, go-unit-tests, go-postgres-tests, docs-build]
+    needs: [frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, docs-build]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -338,6 +369,7 @@ jobs:
           echo "| Go Unit Tests (CE) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Unit Tests (ENT) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| gorm Copy Verification | ${{ needs.gorm-verify.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Coverage files:" >> $GITHUB_STEP_SUMMARY
@@ -352,7 +384,7 @@ jobs:
         continue-on-error: true
 
       - name: Check Results
-        if: needs.frontend-tests.result != 'success' || needs.go-unit-tests.result != 'success' || needs.go-postgres-tests.result != 'success'
+        if: needs.frontend-tests.result != 'success' || needs.go-unit-tests.result != 'success' || needs.go-postgres-tests.result != 'success' || needs.gorm-verify.result != 'success'
         run: |
           echo "Some tests failed!"
           exit 1

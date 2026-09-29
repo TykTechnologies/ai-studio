@@ -10,9 +10,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gofrs/uuid"
 	"github.com/gosimple/slug"
-	"gorm.io/gorm"
 )
 
 // MessageQueue is a minimal interface for publishing agent responses
