@@ -4,6 +4,28 @@
 
 This document describes the testing strategy for handling Community Edition (CE) and Enterprise Edition (ENT) test suites.
 
+## Where enterprise tests of core packages live (read this first)
+
+A test in this repository must never import the enterprise module
+(`github.com/TykTechnologies/ai-studio-enterprise/v2`), not even behind
+`//go:build enterprise`. `go mod tidy` in a program that embeds Studio reads
+the tests of every package it imports, under every build tag, so such a test
+makes every Community Edition consumer try to fetch the private repository.
+`make enterprise-import-guard` (CI) enforces this.
+
+Enterprise tests of core packages, including the `TestMain` files below,
+therefore live in the enterprise repository under
+`enterprise/_coretests/<core package dir>/<name>_entlink_test.go`, with the
+package clause of the core package they test. `make ent-link`
+(`scripts/enterprise-link-tests.sh`) symlinks them into their core package
+directories, where `*_entlink_test.go` is gitignored; `make init-enterprise`,
+`make test`, `make test-studio-*` and the enterprise CI job run it. After
+that, `go test -tags enterprise ./api/...` works as before. Edit them in
+place: the links point into the enterprise submodule, so commit them there.
+
+The microgateway module and the `tests/` tree are not imported by anything
+that embeds Studio, so their enterprise tests stay where they are.
+
 ## Problem
 
 The codebase uses a factory pattern with `init()` functions to register enterprise implementations. This creates import cycle issues when tests try to import enterprise packages to trigger factory registration.
@@ -14,7 +36,7 @@ The preferred approach is to use a `TestMain` function in an enterprise-tagged f
 
 ### Pattern
 
-**Enterprise TestMain File** (`testmain_enterprise_test.go`):
+**Enterprise TestMain File** (`enterprise/_coretests/<pkg>/testmain_enterprise_entlink_test.go`, linked in as `<pkg>/testmain_enterprise_entlink_test.go`):
 ```go
 //go:build enterprise
 // +build enterprise
@@ -61,10 +83,10 @@ Use this approach when:
 ### Examples of TestMain Pattern
 
 See these files for working examples:
-- [`auth/testmain_enterprise_test.go`](auth/testmain_enterprise_test.go) - Auth package
-- [`services/testmain_enterprise_test.go`](services/testmain_enterprise_test.go) - Services package (excludes budget)
-- [`api/testmain_enterprise_test.go`](api/testmain_enterprise_test.go) - API package
-- [`proxy/testmain_enterprise_test.go`](proxy/testmain_enterprise_test.go) - Proxy package
+- [`auth` TestMain](enterprise/_coretests/auth/testmain_enterprise_entlink_test.go) - Auth package
+- [`services` TestMain](enterprise/_coretests/services/testmain_enterprise_entlink_test.go) - Services package (excludes budget)
+- [`api` TestMain](enterprise/_coretests/api/testmain_enterprise_entlink_test.go) - API package
+- [`proxy` TestMain](enterprise/_coretests/proxy/testmain_enterprise_entlink_test.go) - Proxy package
 
 ## Solution 2: Build-Tagged Test Files (Alternative)
 
@@ -146,6 +168,7 @@ go test ./api/...                # Runs CE API tests
 
 ### Enterprise Edition
 ```bash
+make ent-link                    # Link enterprise tests of core packages first
 go test -tags enterprise ./...   # Runs all ENT tests
 go test -tags enterprise ./api/... # Runs ENT API tests
 ```

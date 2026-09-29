@@ -125,7 +125,11 @@ for the host-facing API.
   public package imports the enterprise module, not even behind the
   `enterprise` build tag, because `go mod tidy` in a host considers every tag
   and would try to fetch the private module; `make enterprise-import-guard`
-  (CI) enforces it. Only tests and the `main_enterprise.go` files may import
+  (CI) enforces it. Tests may not import it either, because tidy also reads
+  the tests of every package it imports: enterprise tests of core packages
+  live in the enterprise repository (`enterprise/_coretests`) and
+  `make ent-link` links them in. Only the `main_enterprise.go` files, the
+  microgateway module and `tests/`, none of which a host imports, may import
   it.
 - `grpc.ControlServer.Serve(listener)` serves on a host-supplied listener;
   `API.Shutdown` stops the audit writer even when the host served the router.

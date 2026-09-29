@@ -160,6 +160,12 @@ jobs:
           # Use dev environment template for tests
           cp dev/.env.dev .env
 
+      # Enterprise tests of core packages live in the enterprise repository
+      # (enterprise/_coretests) and are linked into their packages here.
+      - name: Link enterprise tests of core packages
+        if: matrix.edition == 'ent'
+        run: make ent-link
+
       # A host embedding pkg/studio may build without cgo (the Dashboard's dev
       # builds do), so pkg/studio must compile with CGO_ENABLED=0.
       - name: Build pkg/studio without cgo

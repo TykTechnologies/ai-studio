@@ -157,3 +157,7 @@ utils/proxy-tests/ollama/ollama
 examples/plugins/studio/custom-auth-ui/server/custom-auth-ui-plugin
 examples/plugins/studio/scheduler-demo/server/scheduler-demo
 examples/plugins/studio/portal-feedback/portal-feedback
+
+# Enterprise tests of core packages, linked in from enterprise/_coretests by
+# scripts/enterprise-link-tests.sh (make ent-link). Never commit them here.
+*_entlink_test.go

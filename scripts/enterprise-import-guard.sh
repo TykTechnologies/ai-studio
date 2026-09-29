@@ -8,16 +8,21 @@
 # and fail, to fetch the private repository. Enterprise features register
 # themselves with core through hooks instead (see enterprise/all).
 #
-# Allowed: tests, and the enterprise binaries' own main packages, which no
-# other module imports.
+# That includes tests: tidy reads the tests of every package it imports too.
+# Enterprise tests of core packages live in enterprise/_coretests and are
+# linked in, gitignored, by scripts/enterprise-link-tests.sh.
+#
+# Allowed: the enterprise binaries' main packages, and the microgateway
+# module and tests/ tree, which no program embedding Studio imports.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 if matches=$(git grep -n '"github\.com/TykTechnologies/ai-studio-enterprise' -- '*.go' \
-  ':!*_test.go' ':!main_enterprise.go' ':!microgateway/cmd/microgateway/main_enterprise.go' ':!third_party/'); then
-  echo "These public files import the private enterprise module; register the feature through a core hook instead:" >&2
+  ':!main_enterprise.go' ':!microgateway/' ':!tests/' ':!third_party/'); then
+  echo "These files import the private enterprise module; register the feature through a core hook," >&2
+  echo "and put enterprise tests of core packages in enterprise/_coretests:" >&2
   echo "$matches" >&2
   exit 1
 fi
