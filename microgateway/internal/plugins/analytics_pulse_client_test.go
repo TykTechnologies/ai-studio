@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 // ResponseModifierPlugin modifies LLM responses

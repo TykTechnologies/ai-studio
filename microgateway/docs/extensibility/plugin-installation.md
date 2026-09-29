@@ -182,7 +182,7 @@ cd dev-plugins/my-plugin
 
 # Create plugin
 go mod init my-plugin
-go get github.com/TykTechnologies/midsommar/microgateway/plugins/sdk
+go get github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk
 
 # Write plugin code
 cat > main.go << 'EOF'
@@ -190,7 +190,7 @@ package main
 
 import (
     "context"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type DevPlugin struct{}

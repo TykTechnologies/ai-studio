@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	pb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"

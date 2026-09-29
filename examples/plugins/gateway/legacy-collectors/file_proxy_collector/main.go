@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 // FileProxyCollector implements DataCollectionPlugin to append proxy logs to text files

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 )
 
 // GatewayServiceInterface defines the interface for gateway operations

@@ -62,7 +62,7 @@ The Microgateway SDK provides two functions for sending data to the control plan
 Send raw byte payloads:
 
 ```go
-import "github.com/TykTechnologies/midsommar/v2/microgateway/plugins/sdk"
+import "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 
 func (p *MyPlugin) HandlePostAuth(ctx context.Context, req *sdk.EnrichedRequest) (*sdk.PluginResponse, error) {
     // Send raw bytes to control plane
@@ -89,7 +89,7 @@ func (p *MyPlugin) HandlePostAuth(ctx context.Context, req *sdk.EnrichedRequest)
 Convenience function for JSON payloads:
 
 ```go
-import "github.com/TykTechnologies/midsommar/v2/microgateway/plugins/sdk"
+import "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 
 type CacheStats struct {
     Hits   int64   `json:"hits"`
@@ -169,7 +169,7 @@ import (
     "sync/atomic"
     "time"
 
-    "github.com/TykTechnologies/midsommar/v2/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
     pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 

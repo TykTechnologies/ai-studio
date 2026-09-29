@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.9
 // 	protoc        v4.25.3
-// source: microgateway/proto/microgateway_management/service.proto
+// source: proto/microgateway_management.proto
 
 package microgateway_management
 
@@ -33,7 +33,7 @@ type PluginContext struct {
 
 func (x *PluginContext) Reset() {
 	*x = PluginContext{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[0]
+	mi := &file_proto_microgateway_management_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +45,7 @@ func (x *PluginContext) String() string {
 func (*PluginContext) ProtoMessage() {}
 
 func (x *PluginContext) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[0]
+	mi := &file_proto_microgateway_management_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +58,7 @@ func (x *PluginContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginContext.ProtoReflect.Descriptor instead.
 func (*PluginContext) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{0}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *PluginContext) GetPluginId() uint32 {
@@ -90,7 +90,7 @@ type ListLLMsRequest struct {
 
 func (x *ListLLMsRequest) Reset() {
 	*x = ListLLMsRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[1]
+	mi := &file_proto_microgateway_management_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -102,7 +102,7 @@ func (x *ListLLMsRequest) String() string {
 func (*ListLLMsRequest) ProtoMessage() {}
 
 func (x *ListLLMsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[1]
+	mi := &file_proto_microgateway_management_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -115,7 +115,7 @@ func (x *ListLLMsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLLMsRequest.ProtoReflect.Descriptor instead.
 func (*ListLLMsRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{1}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ListLLMsRequest) GetContext() *PluginContext {
@@ -163,7 +163,7 @@ type ListLLMsResponse struct {
 
 func (x *ListLLMsResponse) Reset() {
 	*x = ListLLMsResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[2]
+	mi := &file_proto_microgateway_management_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -175,7 +175,7 @@ func (x *ListLLMsResponse) String() string {
 func (*ListLLMsResponse) ProtoMessage() {}
 
 func (x *ListLLMsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[2]
+	mi := &file_proto_microgateway_management_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -188,7 +188,7 @@ func (x *ListLLMsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLLMsResponse.ProtoReflect.Descriptor instead.
 func (*ListLLMsResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{2}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListLLMsResponse) GetLlms() []*LLMInfo {
@@ -215,7 +215,7 @@ type GetLLMRequest struct {
 
 func (x *GetLLMRequest) Reset() {
 	*x = GetLLMRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[3]
+	mi := &file_proto_microgateway_management_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -227,7 +227,7 @@ func (x *GetLLMRequest) String() string {
 func (*GetLLMRequest) ProtoMessage() {}
 
 func (x *GetLLMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[3]
+	mi := &file_proto_microgateway_management_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -240,7 +240,7 @@ func (x *GetLLMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLLMRequest.ProtoReflect.Descriptor instead.
 func (*GetLLMRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{3}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetLLMRequest) GetContext() *PluginContext {
@@ -266,7 +266,7 @@ type GetLLMResponse struct {
 
 func (x *GetLLMResponse) Reset() {
 	*x = GetLLMResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[4]
+	mi := &file_proto_microgateway_management_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -278,7 +278,7 @@ func (x *GetLLMResponse) String() string {
 func (*GetLLMResponse) ProtoMessage() {}
 
 func (x *GetLLMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[4]
+	mi := &file_proto_microgateway_management_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -291,7 +291,7 @@ func (x *GetLLMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLLMResponse.ProtoReflect.Descriptor instead.
 func (*GetLLMResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{4}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetLLMResponse) GetLlm() *LLMInfo {
@@ -326,7 +326,7 @@ type LLMInfo struct {
 
 func (x *LLMInfo) Reset() {
 	*x = LLMInfo{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[5]
+	mi := &file_proto_microgateway_management_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +338,7 @@ func (x *LLMInfo) String() string {
 func (*LLMInfo) ProtoMessage() {}
 
 func (x *LLMInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[5]
+	mi := &file_proto_microgateway_management_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +351,7 @@ func (x *LLMInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMInfo.ProtoReflect.Descriptor instead.
 func (*LLMInfo) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{5}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *LLMInfo) GetId() uint32 {
@@ -487,7 +487,7 @@ type ListAppsRequest struct {
 
 func (x *ListAppsRequest) Reset() {
 	*x = ListAppsRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[6]
+	mi := &file_proto_microgateway_management_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -499,7 +499,7 @@ func (x *ListAppsRequest) String() string {
 func (*ListAppsRequest) ProtoMessage() {}
 
 func (x *ListAppsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[6]
+	mi := &file_proto_microgateway_management_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -512,7 +512,7 @@ func (x *ListAppsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAppsRequest.ProtoReflect.Descriptor instead.
 func (*ListAppsRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{6}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListAppsRequest) GetContext() *PluginContext {
@@ -553,7 +553,7 @@ type ListAppsResponse struct {
 
 func (x *ListAppsResponse) Reset() {
 	*x = ListAppsResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[7]
+	mi := &file_proto_microgateway_management_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -565,7 +565,7 @@ func (x *ListAppsResponse) String() string {
 func (*ListAppsResponse) ProtoMessage() {}
 
 func (x *ListAppsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[7]
+	mi := &file_proto_microgateway_management_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -578,7 +578,7 @@ func (x *ListAppsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAppsResponse.ProtoReflect.Descriptor instead.
 func (*ListAppsResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{7}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListAppsResponse) GetApps() []*AppInfo {
@@ -605,7 +605,7 @@ type GetAppRequest struct {
 
 func (x *GetAppRequest) Reset() {
 	*x = GetAppRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[8]
+	mi := &file_proto_microgateway_management_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +617,7 @@ func (x *GetAppRequest) String() string {
 func (*GetAppRequest) ProtoMessage() {}
 
 func (x *GetAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[8]
+	mi := &file_proto_microgateway_management_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +630,7 @@ func (x *GetAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAppRequest.ProtoReflect.Descriptor instead.
 func (*GetAppRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{8}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetAppRequest) GetContext() *PluginContext {
@@ -656,7 +656,7 @@ type GetAppResponse struct {
 
 func (x *GetAppResponse) Reset() {
 	*x = GetAppResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[9]
+	mi := &file_proto_microgateway_management_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -668,7 +668,7 @@ func (x *GetAppResponse) String() string {
 func (*GetAppResponse) ProtoMessage() {}
 
 func (x *GetAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[9]
+	mi := &file_proto_microgateway_management_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -681,7 +681,7 @@ func (x *GetAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAppResponse.ProtoReflect.Descriptor instead.
 func (*GetAppResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{9}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetAppResponse) GetApp() *AppInfo {
@@ -711,7 +711,7 @@ type AppInfo struct {
 
 func (x *AppInfo) Reset() {
 	*x = AppInfo{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[10]
+	mi := &file_proto_microgateway_management_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -723,7 +723,7 @@ func (x *AppInfo) String() string {
 func (*AppInfo) ProtoMessage() {}
 
 func (x *AppInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[10]
+	mi := &file_proto_microgateway_management_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -736,7 +736,7 @@ func (x *AppInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppInfo.ProtoReflect.Descriptor instead.
 func (*AppInfo) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{10}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AppInfo) GetId() uint32 {
@@ -850,7 +850,7 @@ type StoreAppRequest struct {
 
 func (x *StoreAppRequest) Reset() {
 	*x = StoreAppRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[11]
+	mi := &file_proto_microgateway_management_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -862,7 +862,7 @@ func (x *StoreAppRequest) String() string {
 func (*StoreAppRequest) ProtoMessage() {}
 
 func (x *StoreAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[11]
+	mi := &file_proto_microgateway_management_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -875,7 +875,7 @@ func (x *StoreAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreAppRequest.ProtoReflect.Descriptor instead.
 func (*StoreAppRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{11}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StoreAppRequest) GetContext() *PluginContext {
@@ -1007,7 +1007,7 @@ type StoreAppResponse struct {
 
 func (x *StoreAppResponse) Reset() {
 	*x = StoreAppResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[12]
+	mi := &file_proto_microgateway_management_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1019,7 +1019,7 @@ func (x *StoreAppResponse) String() string {
 func (*StoreAppResponse) ProtoMessage() {}
 
 func (x *StoreAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[12]
+	mi := &file_proto_microgateway_management_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1032,7 +1032,7 @@ func (x *StoreAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreAppResponse.ProtoReflect.Descriptor instead.
 func (*StoreAppResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{12}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StoreAppResponse) GetSuccess() bool {
@@ -1060,7 +1060,7 @@ type GetBudgetStatusRequest struct {
 
 func (x *GetBudgetStatusRequest) Reset() {
 	*x = GetBudgetStatusRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[13]
+	mi := &file_proto_microgateway_management_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1072,7 +1072,7 @@ func (x *GetBudgetStatusRequest) String() string {
 func (*GetBudgetStatusRequest) ProtoMessage() {}
 
 func (x *GetBudgetStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[13]
+	mi := &file_proto_microgateway_management_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1085,7 +1085,7 @@ func (x *GetBudgetStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBudgetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetBudgetStatusRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{13}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetBudgetStatusRequest) GetContext() *PluginContext {
@@ -1128,7 +1128,7 @@ type GetBudgetStatusResponse struct {
 
 func (x *GetBudgetStatusResponse) Reset() {
 	*x = GetBudgetStatusResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[14]
+	mi := &file_proto_microgateway_management_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +1140,7 @@ func (x *GetBudgetStatusResponse) String() string {
 func (*GetBudgetStatusResponse) ProtoMessage() {}
 
 func (x *GetBudgetStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[14]
+	mi := &file_proto_microgateway_management_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,7 +1153,7 @@ func (x *GetBudgetStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBudgetStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetBudgetStatusResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{14}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetBudgetStatusResponse) GetAppId() uint32 {
@@ -1243,7 +1243,7 @@ type ListModelPricesRequest struct {
 
 func (x *ListModelPricesRequest) Reset() {
 	*x = ListModelPricesRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[15]
+	mi := &file_proto_microgateway_management_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1255,7 +1255,7 @@ func (x *ListModelPricesRequest) String() string {
 func (*ListModelPricesRequest) ProtoMessage() {}
 
 func (x *ListModelPricesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[15]
+	mi := &file_proto_microgateway_management_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1268,7 +1268,7 @@ func (x *ListModelPricesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelPricesRequest.ProtoReflect.Descriptor instead.
 func (*ListModelPricesRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{15}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListModelPricesRequest) GetContext() *PluginContext {
@@ -1294,7 +1294,7 @@ type ListModelPricesResponse struct {
 
 func (x *ListModelPricesResponse) Reset() {
 	*x = ListModelPricesResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[16]
+	mi := &file_proto_microgateway_management_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1306,7 +1306,7 @@ func (x *ListModelPricesResponse) String() string {
 func (*ListModelPricesResponse) ProtoMessage() {}
 
 func (x *ListModelPricesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[16]
+	mi := &file_proto_microgateway_management_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1319,7 +1319,7 @@ func (x *ListModelPricesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelPricesResponse.ProtoReflect.Descriptor instead.
 func (*ListModelPricesResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{16}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListModelPricesResponse) GetModelPrices() []*ModelPriceInfo {
@@ -1340,7 +1340,7 @@ type GetModelPriceRequest struct {
 
 func (x *GetModelPriceRequest) Reset() {
 	*x = GetModelPriceRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[17]
+	mi := &file_proto_microgateway_management_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1352,7 +1352,7 @@ func (x *GetModelPriceRequest) String() string {
 func (*GetModelPriceRequest) ProtoMessage() {}
 
 func (x *GetModelPriceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[17]
+	mi := &file_proto_microgateway_management_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1365,7 +1365,7 @@ func (x *GetModelPriceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelPriceRequest.ProtoReflect.Descriptor instead.
 func (*GetModelPriceRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{17}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetModelPriceRequest) GetContext() *PluginContext {
@@ -1398,7 +1398,7 @@ type GetModelPriceResponse struct {
 
 func (x *GetModelPriceResponse) Reset() {
 	*x = GetModelPriceResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[18]
+	mi := &file_proto_microgateway_management_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1410,7 +1410,7 @@ func (x *GetModelPriceResponse) String() string {
 func (*GetModelPriceResponse) ProtoMessage() {}
 
 func (x *GetModelPriceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[18]
+	mi := &file_proto_microgateway_management_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1423,7 +1423,7 @@ func (x *GetModelPriceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelPriceResponse.ProtoReflect.Descriptor instead.
 func (*GetModelPriceResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{18}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetModelPriceResponse) GetModelPrice() *ModelPriceInfo {
@@ -1451,7 +1451,7 @@ type ModelPriceInfo struct {
 
 func (x *ModelPriceInfo) Reset() {
 	*x = ModelPriceInfo{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[19]
+	mi := &file_proto_microgateway_management_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1463,7 +1463,7 @@ func (x *ModelPriceInfo) String() string {
 func (*ModelPriceInfo) ProtoMessage() {}
 
 func (x *ModelPriceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[19]
+	mi := &file_proto_microgateway_management_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1476,7 +1476,7 @@ func (x *ModelPriceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelPriceInfo.ProtoReflect.Descriptor instead.
 func (*ModelPriceInfo) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{19}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ModelPriceInfo) GetId() uint32 {
@@ -1559,7 +1559,7 @@ type ValidateCredentialRequest struct {
 
 func (x *ValidateCredentialRequest) Reset() {
 	*x = ValidateCredentialRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[20]
+	mi := &file_proto_microgateway_management_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1571,7 +1571,7 @@ func (x *ValidateCredentialRequest) String() string {
 func (*ValidateCredentialRequest) ProtoMessage() {}
 
 func (x *ValidateCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[20]
+	mi := &file_proto_microgateway_management_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1584,7 +1584,7 @@ func (x *ValidateCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateCredentialRequest.ProtoReflect.Descriptor instead.
 func (*ValidateCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{20}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ValidateCredentialRequest) GetContext() *PluginContext {
@@ -1613,7 +1613,7 @@ type ValidateCredentialResponse struct {
 
 func (x *ValidateCredentialResponse) Reset() {
 	*x = ValidateCredentialResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[21]
+	mi := &file_proto_microgateway_management_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1625,7 +1625,7 @@ func (x *ValidateCredentialResponse) String() string {
 func (*ValidateCredentialResponse) ProtoMessage() {}
 
 func (x *ValidateCredentialResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[21]
+	mi := &file_proto_microgateway_management_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1638,7 +1638,7 @@ func (x *ValidateCredentialResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateCredentialResponse.ProtoReflect.Descriptor instead.
 func (*ValidateCredentialResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{21}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ValidateCredentialResponse) GetValid() bool {
@@ -1681,7 +1681,7 @@ type WritePluginKVRequest struct {
 
 func (x *WritePluginKVRequest) Reset() {
 	*x = WritePluginKVRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[22]
+	mi := &file_proto_microgateway_management_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1693,7 +1693,7 @@ func (x *WritePluginKVRequest) String() string {
 func (*WritePluginKVRequest) ProtoMessage() {}
 
 func (x *WritePluginKVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[22]
+	mi := &file_proto_microgateway_management_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1706,7 +1706,7 @@ func (x *WritePluginKVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WritePluginKVRequest.ProtoReflect.Descriptor instead.
 func (*WritePluginKVRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{22}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *WritePluginKVRequest) GetContext() *PluginContext {
@@ -1746,7 +1746,7 @@ type WritePluginKVResponse struct {
 
 func (x *WritePluginKVResponse) Reset() {
 	*x = WritePluginKVResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[23]
+	mi := &file_proto_microgateway_management_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1758,7 +1758,7 @@ func (x *WritePluginKVResponse) String() string {
 func (*WritePluginKVResponse) ProtoMessage() {}
 
 func (x *WritePluginKVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[23]
+	mi := &file_proto_microgateway_management_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1771,7 +1771,7 @@ func (x *WritePluginKVResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WritePluginKVResponse.ProtoReflect.Descriptor instead.
 func (*WritePluginKVResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{23}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *WritePluginKVResponse) GetCreated() bool {
@@ -1791,7 +1791,7 @@ type ReadPluginKVRequest struct {
 
 func (x *ReadPluginKVRequest) Reset() {
 	*x = ReadPluginKVRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[24]
+	mi := &file_proto_microgateway_management_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1803,7 +1803,7 @@ func (x *ReadPluginKVRequest) String() string {
 func (*ReadPluginKVRequest) ProtoMessage() {}
 
 func (x *ReadPluginKVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[24]
+	mi := &file_proto_microgateway_management_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1816,7 +1816,7 @@ func (x *ReadPluginKVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadPluginKVRequest.ProtoReflect.Descriptor instead.
 func (*ReadPluginKVRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{24}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ReadPluginKVRequest) GetContext() *PluginContext {
@@ -1842,7 +1842,7 @@ type ReadPluginKVResponse struct {
 
 func (x *ReadPluginKVResponse) Reset() {
 	*x = ReadPluginKVResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[25]
+	mi := &file_proto_microgateway_management_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1854,7 +1854,7 @@ func (x *ReadPluginKVResponse) String() string {
 func (*ReadPluginKVResponse) ProtoMessage() {}
 
 func (x *ReadPluginKVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[25]
+	mi := &file_proto_microgateway_management_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1867,7 +1867,7 @@ func (x *ReadPluginKVResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadPluginKVResponse.ProtoReflect.Descriptor instead.
 func (*ReadPluginKVResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{25}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ReadPluginKVResponse) GetValue() []byte {
@@ -1887,7 +1887,7 @@ type DeletePluginKVRequest struct {
 
 func (x *DeletePluginKVRequest) Reset() {
 	*x = DeletePluginKVRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[26]
+	mi := &file_proto_microgateway_management_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1899,7 +1899,7 @@ func (x *DeletePluginKVRequest) String() string {
 func (*DeletePluginKVRequest) ProtoMessage() {}
 
 func (x *DeletePluginKVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[26]
+	mi := &file_proto_microgateway_management_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1912,7 +1912,7 @@ func (x *DeletePluginKVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePluginKVRequest.ProtoReflect.Descriptor instead.
 func (*DeletePluginKVRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{26}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeletePluginKVRequest) GetContext() *PluginContext {
@@ -1938,7 +1938,7 @@ type DeletePluginKVResponse struct {
 
 func (x *DeletePluginKVResponse) Reset() {
 	*x = DeletePluginKVResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[27]
+	mi := &file_proto_microgateway_management_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1950,7 +1950,7 @@ func (x *DeletePluginKVResponse) String() string {
 func (*DeletePluginKVResponse) ProtoMessage() {}
 
 func (x *DeletePluginKVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[27]
+	mi := &file_proto_microgateway_management_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1963,7 +1963,7 @@ func (x *DeletePluginKVResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePluginKVResponse.ProtoReflect.Descriptor instead.
 func (*DeletePluginKVResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{27}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DeletePluginKVResponse) GetDeleted() bool {
@@ -1985,7 +1985,7 @@ type QueueControlPayloadRequest struct {
 
 func (x *QueueControlPayloadRequest) Reset() {
 	*x = QueueControlPayloadRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[28]
+	mi := &file_proto_microgateway_management_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1997,7 +1997,7 @@ func (x *QueueControlPayloadRequest) String() string {
 func (*QueueControlPayloadRequest) ProtoMessage() {}
 
 func (x *QueueControlPayloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[28]
+	mi := &file_proto_microgateway_management_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2010,7 +2010,7 @@ func (x *QueueControlPayloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueControlPayloadRequest.ProtoReflect.Descriptor instead.
 func (*QueueControlPayloadRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{28}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *QueueControlPayloadRequest) GetContext() *PluginContext {
@@ -2052,7 +2052,7 @@ type QueueControlPayloadResponse struct {
 
 func (x *QueueControlPayloadResponse) Reset() {
 	*x = QueueControlPayloadResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[29]
+	mi := &file_proto_microgateway_management_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2064,7 @@ func (x *QueueControlPayloadResponse) String() string {
 func (*QueueControlPayloadResponse) ProtoMessage() {}
 
 func (x *QueueControlPayloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[29]
+	mi := &file_proto_microgateway_management_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2077,7 @@ func (x *QueueControlPayloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueueControlPayloadResponse.ProtoReflect.Descriptor instead.
 func (*QueueControlPayloadResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{29}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *QueueControlPayloadResponse) GetSuccess() bool {
@@ -2110,7 +2110,7 @@ type GetLicenseInfoRequest struct {
 
 func (x *GetLicenseInfoRequest) Reset() {
 	*x = GetLicenseInfoRequest{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[30]
+	mi := &file_proto_microgateway_management_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2122,7 @@ func (x *GetLicenseInfoRequest) String() string {
 func (*GetLicenseInfoRequest) ProtoMessage() {}
 
 func (x *GetLicenseInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[30]
+	mi := &file_proto_microgateway_management_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2135,7 +2135,7 @@ func (x *GetLicenseInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLicenseInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetLicenseInfoRequest) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{30}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetLicenseInfoRequest) GetContext() *PluginContext {
@@ -2159,7 +2159,7 @@ type GetLicenseInfoResponse struct {
 
 func (x *GetLicenseInfoResponse) Reset() {
 	*x = GetLicenseInfoResponse{}
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[31]
+	mi := &file_proto_microgateway_management_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2171,7 +2171,7 @@ func (x *GetLicenseInfoResponse) String() string {
 func (*GetLicenseInfoResponse) ProtoMessage() {}
 
 func (x *GetLicenseInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_microgateway_proto_microgateway_management_service_proto_msgTypes[31]
+	mi := &file_proto_microgateway_management_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2184,7 +2184,7 @@ func (x *GetLicenseInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLicenseInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetLicenseInfoResponse) Descriptor() ([]byte, []int) {
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP(), []int{31}
+	return file_proto_microgateway_management_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetLicenseInfoResponse) GetLicenseValid() bool {
@@ -2229,11 +2229,11 @@ func (x *GetLicenseInfoResponse) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-var File_microgateway_proto_microgateway_management_service_proto protoreflect.FileDescriptor
+var File_proto_microgateway_management_proto protoreflect.FileDescriptor
 
-const file_microgateway_proto_microgateway_management_service_proto_rawDesc = "" +
+const file_proto_microgateway_management_proto_rawDesc = "" +
 	"\n" +
-	"8microgateway/proto/microgateway_management/service.proto\x12\x17microgateway_management\x1a\x1fgoogle/protobuf/timestamp.proto\"O\n" +
+	"#proto/microgateway_management.proto\x12\x17microgateway_management\x1a\x1fgoogle/protobuf/timestamp.proto\"O\n" +
 	"\rPluginContext\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\rR\bpluginId\x12!\n" +
 	"\fmethod_scope\x18\x02 \x01(\tR\vmethodScope\"\xc5\x01\n" +
@@ -2452,22 +2452,22 @@ const file_microgateway_proto_microgateway_management_service_proto_rawDesc = ""
 	"\fReadPluginKV\x12,.microgateway_management.ReadPluginKVRequest\x1a-.microgateway_management.ReadPluginKVResponse\x12q\n" +
 	"\x0eDeletePluginKV\x12..microgateway_management.DeletePluginKVRequest\x1a/.microgateway_management.DeletePluginKVResponse\x12\x80\x01\n" +
 	"\x13QueueControlPayload\x123.microgateway_management.QueueControlPayloadRequest\x1a4.microgateway_management.QueueControlPayloadResponse\x12q\n" +
-	"\x0eGetLicenseInfo\x12..microgateway_management.GetLicenseInfoRequest\x1a/.microgateway_management.GetLicenseInfoResponseBQZOgithub.com/TykTechnologies/midsommar/microgateway/proto/microgateway_managementb\x06proto3"
+	"\x0eGetLicenseInfo\x12..microgateway_management.GetLicenseInfoRequest\x1a/.microgateway_management.GetLicenseInfoResponseBGZEgithub.com/TykTechnologies/midsommar/v2/proto/microgateway_managementb\x06proto3"
 
 var (
-	file_microgateway_proto_microgateway_management_service_proto_rawDescOnce sync.Once
-	file_microgateway_proto_microgateway_management_service_proto_rawDescData []byte
+	file_proto_microgateway_management_proto_rawDescOnce sync.Once
+	file_proto_microgateway_management_proto_rawDescData []byte
 )
 
-func file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP() []byte {
-	file_microgateway_proto_microgateway_management_service_proto_rawDescOnce.Do(func() {
-		file_microgateway_proto_microgateway_management_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_microgateway_proto_microgateway_management_service_proto_rawDesc), len(file_microgateway_proto_microgateway_management_service_proto_rawDesc)))
+func file_proto_microgateway_management_proto_rawDescGZIP() []byte {
+	file_proto_microgateway_management_proto_rawDescOnce.Do(func() {
+		file_proto_microgateway_management_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_microgateway_management_proto_rawDesc), len(file_proto_microgateway_management_proto_rawDesc)))
 	})
-	return file_microgateway_proto_microgateway_management_service_proto_rawDescData
+	return file_proto_microgateway_management_proto_rawDescData
 }
 
-var file_microgateway_proto_microgateway_management_service_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
-var file_microgateway_proto_microgateway_management_service_proto_goTypes = []any{
+var file_proto_microgateway_management_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_proto_microgateway_management_proto_goTypes = []any{
 	(*PluginContext)(nil),               // 0: microgateway_management.PluginContext
 	(*ListLLMsRequest)(nil),             // 1: microgateway_management.ListLLMsRequest
 	(*ListLLMsResponse)(nil),            // 2: microgateway_management.ListLLMsResponse
@@ -2504,7 +2504,7 @@ var file_microgateway_proto_microgateway_management_service_proto_goTypes = []an
 	nil,                                 // 33: microgateway_management.QueueControlPayloadRequest.MetadataEntry
 	(*timestamppb.Timestamp)(nil),       // 34: google.protobuf.Timestamp
 }
-var file_microgateway_proto_microgateway_management_service_proto_depIdxs = []int32{
+var file_proto_microgateway_management_proto_depIdxs = []int32{
 	0,  // 0: microgateway_management.ListLLMsRequest.context:type_name -> microgateway_management.PluginContext
 	5,  // 1: microgateway_management.ListLLMsResponse.llms:type_name -> microgateway_management.LLMInfo
 	0,  // 2: microgateway_management.GetLLMRequest.context:type_name -> microgateway_management.PluginContext
@@ -2572,32 +2572,32 @@ var file_microgateway_proto_microgateway_management_service_proto_depIdxs = []in
 	0,  // [0:32] is the sub-list for field type_name
 }
 
-func init() { file_microgateway_proto_microgateway_management_service_proto_init() }
-func file_microgateway_proto_microgateway_management_service_proto_init() {
-	if File_microgateway_proto_microgateway_management_service_proto != nil {
+func init() { file_proto_microgateway_management_proto_init() }
+func file_proto_microgateway_management_proto_init() {
+	if File_proto_microgateway_management_proto != nil {
 		return
 	}
-	file_microgateway_proto_microgateway_management_service_proto_msgTypes[1].OneofWrappers = []any{}
-	file_microgateway_proto_microgateway_management_service_proto_msgTypes[5].OneofWrappers = []any{}
-	file_microgateway_proto_microgateway_management_service_proto_msgTypes[6].OneofWrappers = []any{}
-	file_microgateway_proto_microgateway_management_service_proto_msgTypes[13].OneofWrappers = []any{}
-	file_microgateway_proto_microgateway_management_service_proto_msgTypes[14].OneofWrappers = []any{}
-	file_microgateway_proto_microgateway_management_service_proto_msgTypes[21].OneofWrappers = []any{}
+	file_proto_microgateway_management_proto_msgTypes[1].OneofWrappers = []any{}
+	file_proto_microgateway_management_proto_msgTypes[5].OneofWrappers = []any{}
+	file_proto_microgateway_management_proto_msgTypes[6].OneofWrappers = []any{}
+	file_proto_microgateway_management_proto_msgTypes[13].OneofWrappers = []any{}
+	file_proto_microgateway_management_proto_msgTypes[14].OneofWrappers = []any{}
+	file_proto_microgateway_management_proto_msgTypes[21].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_microgateway_proto_microgateway_management_service_proto_rawDesc), len(file_microgateway_proto_microgateway_management_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_microgateway_management_proto_rawDesc), len(file_proto_microgateway_management_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_microgateway_proto_microgateway_management_service_proto_goTypes,
-		DependencyIndexes: file_microgateway_proto_microgateway_management_service_proto_depIdxs,
-		MessageInfos:      file_microgateway_proto_microgateway_management_service_proto_msgTypes,
+		GoTypes:           file_proto_microgateway_management_proto_goTypes,
+		DependencyIndexes: file_proto_microgateway_management_proto_depIdxs,
+		MessageInfos:      file_proto_microgateway_management_proto_msgTypes,
 	}.Build()
-	File_microgateway_proto_microgateway_management_service_proto = out.File
-	file_microgateway_proto_microgateway_management_service_proto_goTypes = nil
-	file_microgateway_proto_microgateway_management_service_proto_depIdxs = nil
+	File_proto_microgateway_management_proto = out.File
+	file_proto_microgateway_management_proto_goTypes = nil
+	file_proto_microgateway_management_proto_depIdxs = nil
 }

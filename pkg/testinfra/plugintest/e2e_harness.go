@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	gwmgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	gwmgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"

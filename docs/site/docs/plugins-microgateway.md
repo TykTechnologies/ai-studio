@@ -495,7 +495,7 @@ import (
     "net/http"
     "time"
 
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type ElasticsearchCollector struct {
@@ -822,7 +822,7 @@ Gateway plugins can send data back to AI Studio (the control plane) using the `S
 - Sending alerts or notifications to central plugins
 
 ```go
-import "github.com/TykTechnologies/midsommar/v2/microgateway/plugins/sdk"
+import "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 
 func (p *MyPlugin) HandlePostAuth(ctx sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
     // Send JSON data to control plane

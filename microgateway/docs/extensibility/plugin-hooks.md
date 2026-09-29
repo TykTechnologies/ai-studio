@@ -232,7 +232,7 @@ package main
 import (
     "context"
     "fmt"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type RateLimiterPlugin struct {
@@ -269,7 +269,7 @@ import (
     "context"
     "encoding/json"
     "net/http"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type SSOAuthPlugin struct {
@@ -317,7 +317,7 @@ package main
 import (
     "context"
     "encoding/json"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type ResponseFilterPlugin struct {
@@ -345,7 +345,7 @@ package main
 
 import (
     "context"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type ElasticsearchCollector struct {

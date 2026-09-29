@@ -257,7 +257,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/rodaine/table v1.3.0
 	github.com/rs/zerolog v1.34.0
-	github.com/simonfxr/pubsub v0.0.5
+	github.com/simonfxr/pubsub v0.0.5 // indirect
 	github.com/spf13/cobra v1.10.1
 	golang.org/x/crypto v0.55.0
 	google.golang.org/grpc v1.83.2

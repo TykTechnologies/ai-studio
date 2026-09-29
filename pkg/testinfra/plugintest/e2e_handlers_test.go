@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	gwmgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	gwmgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/containers"
 	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/plugintest"

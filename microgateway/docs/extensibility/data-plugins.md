@@ -218,7 +218,7 @@ import (
     "context"
     "encoding/json"
     "github.com/elastic/go-elasticsearch/v8"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type ElasticsearchPlugin struct {
@@ -274,7 +274,7 @@ import (
     "context"
     "database/sql"
     _ "github.com/ClickHouse/clickhouse-go/v2"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type ClickHousePlugin struct {
@@ -309,7 +309,7 @@ import (
     "context"
     "encoding/json"
     "github.com/aws/aws-sdk-go/service/s3"
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 type S3DataLakePlugin struct {

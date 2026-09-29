@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	gwmgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	gwmgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"google.golang.org/grpc/codes"

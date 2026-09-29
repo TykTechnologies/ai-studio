@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 )

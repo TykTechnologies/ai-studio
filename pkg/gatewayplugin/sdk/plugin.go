@@ -2,7 +2,7 @@
 package sdk
 
 import (
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/hashicorp/go-plugin"
 )
 

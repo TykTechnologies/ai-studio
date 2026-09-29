@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 // CustomAuthPlugin replaces default token authentication with custom logic

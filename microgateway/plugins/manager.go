@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"

@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 )
 
 // MessageModifierPlugin modifies outbound LLM requests to add instructions

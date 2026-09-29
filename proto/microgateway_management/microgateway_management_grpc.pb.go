@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: microgateway/proto/microgateway_management/service.proto
+// source: proto/microgateway_management.proto
 
 package microgateway_management
 
@@ -640,5 +640,5 @@ var MicrogatewayManagementService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "microgateway/proto/microgateway_management/service.proto",
+	Metadata: "proto/microgateway_management.proto",
 }

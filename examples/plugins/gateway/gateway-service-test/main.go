@@ -8,7 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	mgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 )
 
 //go:embed manifest.json
