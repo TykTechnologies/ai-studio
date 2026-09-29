@@ -38,7 +38,10 @@ permissions:
   contents: read
 
 env:
-  GOPRIVATE: github.com/TykTechnologies
+  # Only the enterprise module is private; every other TykTechnologies module
+  # (tyk-identity-broker, storage, ...) is public and comes through the proxy.
+  # (Fetching those with git broke CI when a cached clone missed a new tag.)
+  GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
 
 jobs:
   # ==========================================================================
