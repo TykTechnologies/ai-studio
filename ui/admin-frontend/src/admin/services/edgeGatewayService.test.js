@@ -260,11 +260,25 @@ describe('EdgeGatewayService', () => {
     const mockReloadResponse = {
       data: {
         data: {
+          type: 'reload-operations',
+          id: 'push-001',
           attributes: {
-            operation_id: 'op-001',
+            operation_id: 'push-001',
+            scope: 'namespace',
             target_namespace: 'production',
-            status: 'pending',
-            message: 'Reload triggered',
+            target_edges: ['edge-001', 'edge-002'],
+            initiated_by: 'admin@example.com',
+            initiated_at: '2026-09-30T01:00:00Z',
+            deadline_at: '2026-09-30T01:05:00Z',
+            status: 'in_progress',
+            progress: 0,
+            message: 'Push recorded for 2 edge(s); 1 connected now.',
+            targets: [
+              { edge_id: 'edge-001', namespace: 'production', reachable: true },
+              { edge_id: 'edge-002', namespace: 'production', reachable: false, reason: 'no recent heartbeat' },
+            ],
+            skipped: [],
+            warnings: ['1 of 2 edge(s) are not connected to the control plane; the push waits up to 5m0s for them to reconnect.'],
           },
         },
       },
@@ -276,12 +290,20 @@ describe('EdgeGatewayService', () => {
       const result = await edgeGatewayService.triggerConfigurationReload('production', 'namespace');
 
       expect(apiClient.post).toHaveBeenCalledWith('/namespaces/production/reload');
-      expect(result).toEqual({
-        operationId: 'op-001',
+      expect(result).toMatchObject({
+        operationId: 'push-001',
+        scope: 'namespace',
         targetNamespace: 'production',
-        status: 'pending',
-        message: 'Reload triggered',
+        targetEdges: ['edge-001', 'edge-002'],
+        status: 'in_progress',
+        deadlineAt: '2026-09-30T01:05:00Z',
+        edges: null,
       });
+      expect(result.targets).toEqual([
+        { edgeId: 'edge-001', namespace: 'production', reachable: true, reason: '' },
+        { edgeId: 'edge-002', namespace: 'production', reachable: false, reason: 'no recent heartbeat' },
+      ]);
+      expect(result.warnings).toHaveLength(1);
     });
 
     test('should trigger reload for a specific edge', async () => {
@@ -308,6 +330,16 @@ describe('EdgeGatewayService', () => {
       expect(result).toBeNull();
     });
 
+    test('reports the API error detail (JSON:API errors)', async () => {
+      apiClient.post.mockRejectedValueOnce({
+        response: { status: 409, data: { errors: [{ title: 'Conflict', detail: 'no edges to push to: no edges are registered in namespace "production"' }] } },
+      });
+
+      await expect(edgeGatewayService.triggerConfigurationReload('production')).rejects.toThrow(
+        'no edges to push to: no edges are registered in namespace "production"'
+      );
+    });
+
     test('should throw error on API failure', async () => {
       apiClient.post.mockRejectedValueOnce({
         response: { data: { message: 'Reload failed' } },
@@ -321,32 +353,29 @@ describe('EdgeGatewayService', () => {
     const mockReloadResponse = {
       data: {
         data: {
-          message: 'Global reload triggered',
-          operations_count: 2,
-          operations: [
-            { operation_id: 'op-global-001', status: 'initiated' },
-            { operation_id: 'op-global-002', status: 'initiated' },
-          ],
+          type: 'reload-operations',
+          id: 'push-all',
+          attributes: {
+            operation_id: 'push-all',
+            scope: 'all',
+            target_edges: ['edge-001'],
+            status: 'in_progress',
+            message: 'Push recorded for 1 edge(s).',
+            skipped: [{ edge_id: 'edge-old', namespace: 'ns3', reason: 'offline since 2026-09-28T00:00:00Z' }],
+            warnings: [],
+          },
         },
       },
     };
 
-    test('should trigger global reload', async () => {
+    test('should trigger global reload as one operation', async () => {
       apiClient.post.mockResolvedValueOnce(mockReloadResponse);
 
       const result = await edgeGatewayService.reloadAllEdges();
 
       expect(apiClient.post).toHaveBeenCalledWith('/edges/reload-all');
-      expect(result).toEqual({
-        operationId: 'op-global-001',
-        status: 'initiated',
-        message: 'Global reload triggered',
-        operationsCount: 2,
-        operations: [
-          { operation_id: 'op-global-001', status: 'initiated' },
-          { operation_id: 'op-global-002', status: 'initiated' },
-        ],
-      });
+      expect(result).toMatchObject({ operationId: 'push-all', scope: 'all', targetEdges: ['edge-001'], status: 'in_progress' });
+      expect(result.skipped).toEqual([{ edgeId: 'edge-old', namespace: 'ns3', reason: 'offline since 2026-09-28T00:00:00Z' }]);
     });
 
     test('should return null when response has no data', async () => {
@@ -377,58 +406,31 @@ describe('EdgeGatewayService', () => {
       data: {
         data: {
           attributes: {
-            operation_id: 'op-001',
-            status: 'in_progress',
-            progress: 50,
-            message: 'Reloading edges...',
+            operation_id: 'push-001',
+            status: 'partially_failed',
+            progress: 100,
+            message: 'Push finished: 1 updated, 1 failed',
             target_namespace: 'production',
             target_edges: ['edge-001', 'edge-002'],
-            initiated_by: 'admin',
-            initiated_at: '2024-01-01T12:00:00Z',
+            counts: { succeeded: 1, failed: 1 },
+            edges: [
+              { edge_id: 'edge-001', status: 'succeeded', phase: 'READY', attempts: 1, max_attempts: 3 },
+              { edge_id: 'edge-002', status: 'failed', phase: 'FAILED', message: 'Failed to update SQLite: disk full', attempts: 1, max_attempts: 3 },
+            ],
+            warnings: [],
           },
         },
       },
     };
 
-    test('should fetch reload operation status', async () => {
+    test('should fetch the per-edge report', async () => {
       apiClient.get.mockResolvedValueOnce(mockStatusResponse);
 
-      const result = await edgeGatewayService.getReloadStatus('op-001');
+      const result = await edgeGatewayService.getReloadStatus('push-001');
 
-      expect(apiClient.get).toHaveBeenCalledWith('/reload-operations/op-001/status');
-      expect(result).toEqual({
-        operationId: 'op-001',
-        status: 'in_progress',
-        progress: 50,
-        message: 'Reloading edges...',
-        targetNamespace: 'production',
-        targetEdges: ['edge-001', 'edge-002'],
-        initiatedBy: 'admin',
-        initiatedAt: '2024-01-01T12:00:00Z',
-      });
-    });
-
-    test('should handle missing target_edges attribute', async () => {
-      const responseWithoutEdges = {
-        data: {
-          data: {
-            attributes: {
-              operation_id: 'op-001',
-              status: 'completed',
-              progress: 100,
-              message: 'Done',
-              target_namespace: 'production',
-              initiated_by: 'admin',
-              initiated_at: '2024-01-01T12:00:00Z',
-            },
-          },
-        },
-      };
-      apiClient.get.mockResolvedValueOnce(responseWithoutEdges);
-
-      const result = await edgeGatewayService.getReloadStatus('op-001');
-
-      expect(result.targetEdges).toEqual([]);
+      expect(apiClient.get).toHaveBeenCalledWith('/reload-operations/push-001/status');
+      expect(result).toMatchObject({ operationId: 'push-001', status: 'partially_failed', progress: 100, counts: { succeeded: 1, failed: 1 } });
+      expect(result.edges[1]).toMatchObject({ edgeId: 'edge-002', status: 'failed', message: 'Failed to update SQLite: disk full', attempts: 1, maxAttempts: 3, reachable: null });
     });
 
     test('should return null when response has no data', async () => {
@@ -441,10 +443,47 @@ describe('EdgeGatewayService', () => {
 
     test('should throw error on API failure', async () => {
       apiClient.get.mockRejectedValueOnce({
-        response: { data: { message: 'Operation not found' } },
+        response: { status: 404, data: { errors: [{ detail: 'push operation not found: op-001' }] } },
       });
 
-      await expect(edgeGatewayService.getReloadStatus('op-001')).rejects.toThrow('Operation not found');
+      await expect(edgeGatewayService.getReloadStatus('op-001')).rejects.toThrow('push operation not found: op-001');
+    });
+  });
+
+  describe('getPushProgress', () => {
+    test('uses the per-edge report when available', async () => {
+      apiClient.get.mockResolvedValueOnce({ data: { data: { attributes: { operation_id: 'push-1', status: 'succeeded', edges: [] } } } });
+
+      const result = await edgeGatewayService.getPushProgress('push-1');
+
+      expect(result.status).toBe('succeeded');
+      expect(result.edges).toEqual([]);
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+    });
+
+    test('falls back to the listing in Community Edition (402)', async () => {
+      apiClient.get
+        .mockRejectedValueOnce({ response: { status: 402, data: { errors: [{ detail: 'Enterprise Edition' }] } } })
+        .mockResolvedValueOnce({
+          data: {
+            data: [
+              { attributes: { operation_id: 'push-0', status: 'succeeded' } },
+              { attributes: { operation_id: 'push-1', status: 'in_progress', progress: 50, message: 'Pushing to 2 edge(s): 1 updated, 1 reloading', counts: { succeeded: 1, sent: 1 } } },
+            ],
+          },
+        });
+
+      const result = await edgeGatewayService.getPushProgress('push-1');
+
+      expect(apiClient.get).toHaveBeenLastCalledWith('/edges/reload-operations');
+      expect(result).toMatchObject({ operationId: 'push-1', status: 'in_progress', progress: 50, edges: null });
+    });
+
+    test('other errors are not hidden by the fallback', async () => {
+      apiClient.get.mockRejectedValueOnce({ response: { status: 500, data: { errors: [{ detail: 'database is down' }] } } });
+
+      await expect(edgeGatewayService.getPushProgress('push-1')).rejects.toThrow('database is down');
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
     });
   });
 

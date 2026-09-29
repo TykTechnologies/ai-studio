@@ -43,7 +43,9 @@ jest.mock("../../services/edgeGatewayService", () => ({
     getPendingChanges: jest.fn(),
     reloadAllEdges: jest.fn(),
     triggerConfigurationReload: jest.fn(),
+    getPushProgress: jest.fn(),
   },
+  PUSH_FINAL_STATUSES: ["succeeded", "succeeded_with_warnings", "partially_failed", "failed", "expired"],
 }));
 const edgeGatewayService = require("../../services/edgeGatewayService").default;
 
@@ -67,7 +69,7 @@ const renderModal = (props = {}) =>
   render(
     <MemoryRouter>
       <ThemeProvider theme={testTheme}>
-        <PushConfigurationModal open onClose={() => {}} {...props} />
+        <PushConfigurationModal open onClose={() => {}} pollIntervalMs={5} {...props} />
       </ThemeProvider>
     </MemoryRouter>
   );
@@ -140,13 +142,143 @@ describe("PushConfigurationModal", () => {
     expect(screen.getByRole("button", { name: /push configuration/i })).not.toBeDisabled();
   });
 
-  it("starts the post-push polling after a successful push", async () => {
-    edgeGatewayService.reloadAllEdges.mockResolvedValue({ operationId: "op-1" });
-    renderModal();
+  const started = (overrides = {}) => ({
+    operationId: "push-1",
+    scope: "all",
+    targetEdges: ["edge-a", "edge-b"],
+    status: "in_progress",
+    progress: 0,
+    message: "Push recorded for 2 edge(s).",
+    counts: {},
+    warnings: [],
+    skipped: [],
+    targets: [],
+    edges: null,
+    deadlineAt: new Date(Date.now() + 300000).toISOString(),
+    ...overrides,
+  });
+
+  const clickPush = async () => {
     await screen.findByTestId("pending-changes-default");
     fireEvent.click(screen.getByRole("button", { name: /push configuration/i }));
+  };
+
+  // Starting a push is not delivering it: the dialog follows the push until
+  // every edge has answered, and only then says it worked.
+  it("follows the push until the edges have loaded it", async () => {
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started());
+    edgeGatewayService.getPushProgress
+      .mockResolvedValueOnce(started({
+        progress: 50,
+        message: "Pushing to 2 edge(s): 1 updated, 1 reloading",
+        edges: [
+          { edgeId: "edge-a", status: "succeeded", message: "", warning: "", attempts: 1, maxAttempts: 3 },
+          { edgeId: "edge-b", status: "sent", phase: "PULL_STARTED", message: "", warning: "", attempts: 1, maxAttempts: 3 },
+        ],
+      }))
+      .mockResolvedValue(started({
+        status: "succeeded",
+        progress: 100,
+        message: "All 2 edge(s) loaded the configuration.",
+        edges: [
+          { edgeId: "edge-a", status: "succeeded", message: "", warning: "", attempts: 1, maxAttempts: 3 },
+          { edgeId: "edge-b", status: "succeeded", message: "", warning: "", attempts: 2, maxAttempts: 3 },
+        ],
+      }));
+    renderModal();
+    await clickPush();
+
+    // Recorded, not yet a success.
+    expect(await screen.findByText("Pushing configuration")).toBeInTheDocument();
+    expect(screen.queryByText(/successfully pushed/i)).not.toBeInTheDocument();
     await waitFor(() => expect(mockSyncContext.notifyConfigPushed).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/successfully pushed/)).toBeInTheDocument();
+
+    expect(await screen.findByText("Configuration pushed")).toBeInTheDocument();
+    expect(screen.getByText("All 2 edge(s) loaded the configuration.")).toBeInTheDocument();
+    expect(screen.getByTestId("push-edge-edge-b")).toHaveTextContent("Updated");
+    expect(screen.getByTestId("push-edge-edge-b")).toHaveTextContent("attempt 2 of 3");
+    expect(mockSyncContext.refreshSyncStatus).toHaveBeenCalled();
     expect(screen.queryByTestId("pending-changes-preview")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+
+    // It stops polling once the push is settled.
+    const calls = edgeGatewayService.getPushProgress.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(edgeGatewayService.getPushProgress.mock.calls.length).toBe(calls);
+  });
+
+  it("says which edges failed and why", async () => {
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started());
+    edgeGatewayService.getPushProgress.mockResolvedValue(started({
+      status: "partially_failed",
+      progress: 100,
+      message: "Push finished: 1 updated, 1 failed",
+      edges: [
+        { edgeId: "edge-a", status: "succeeded", message: "", warning: "", attempts: 1, maxAttempts: 3 },
+        { edgeId: "edge-b", status: "failed", message: "Failed to update SQLite: disk full", warning: "", attempts: 1, maxAttempts: 3 },
+      ],
+    }));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByText("Some edge gateways did not update")).toBeInTheDocument();
+    const failed = screen.getByTestId("push-edge-edge-b");
+    expect(failed).toHaveTextContent("Failed");
+    expect(failed).toHaveTextContent("Failed to update SQLite: disk full");
+  });
+
+  it("warns about edges that are not connected, and ones left out", async () => {
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started({
+      warnings: ["1 of 2 edge(s) are not connected to the control plane; the push waits up to 5m0s for them to reconnect."],
+      skipped: [{ edgeId: "edge-old", namespace: "default", reason: "offline since 2026-09-28T00:00:00Z" }],
+    }));
+    edgeGatewayService.getPushProgress.mockResolvedValue(started({
+      edges: [
+        { edgeId: "edge-a", status: "pending", message: "", warning: "", waitingReason: "no recent heartbeat", attempts: 0, maxAttempts: 3 },
+      ],
+    }));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByTestId("push-warnings")).toHaveTextContent("not connected to the control plane");
+    expect(screen.getByTestId("push-skipped")).toHaveTextContent("edge-old: offline since");
+    expect(await screen.findByTestId("push-edge-edge-a")).toHaveTextContent("Waiting: no recent heartbeat");
+  });
+
+  it("reports the outcome from the summary when per-edge results are unavailable (Community Edition)", async () => {
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started());
+    edgeGatewayService.getPushProgress.mockResolvedValue(started({
+      status: "expired",
+      progress: 100,
+      message: "Push finished: 1 updated, 1 timed out",
+      edges: null,
+    }));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByText("The push timed out")).toBeInTheDocument();
+    expect(screen.getByText("Push finished: 1 updated, 1 timed out")).toBeInTheDocument();
+    expect(screen.getByText(/Per-edge results are available in Enterprise Edition/)).toBeInTheDocument();
+  });
+
+  it("keeps polling through a failed progress check", async () => {
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started());
+    edgeGatewayService.getPushProgress
+      .mockRejectedValueOnce(new Error("Network Error"))
+      .mockResolvedValue(started({ status: "succeeded", progress: 100, message: "All 2 edge(s) loaded the configuration.", edges: [] }));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByText("Configuration pushed")).toBeInTheDocument();
+  });
+
+  it("shows why a push could not start", async () => {
+    edgeGatewayService.reloadAllEdges.mockRejectedValue(new Error('no edges to push to: no edges are registered in namespace "default"'));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByText(/no edges are registered in namespace "default"/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /push configuration/i })).toBeInTheDocument();
+    expect(edgeGatewayService.getPushProgress).not.toHaveBeenCalled();
   });
 });

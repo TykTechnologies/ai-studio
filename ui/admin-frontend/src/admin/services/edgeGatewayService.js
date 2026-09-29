@@ -1,5 +1,48 @@
 import apiClient from '../utils/apiClient';
 
+// Push operation statuses that are final.
+export const PUSH_FINAL_STATUSES = ['succeeded', 'succeeded_with_warnings', 'partially_failed', 'failed', 'expired'];
+
+/** The API's error text: JSON:API `errors[].detail`, or `message`/`error`. */
+export const apiErrorMessage = (error, fallback) =>
+  error?.response?.data?.errors?.[0]?.detail ||
+  error?.response?.data?.message ||
+  error?.response?.data?.error ||
+  fallback;
+
+/** A push operation ("reload") as the API reports it, in camelCase. */
+export const normalisePushOperation = (a) => ({
+  operationId: a.operation_id,
+  scope: a.scope,
+  targetNamespace: a.target_namespace,
+  targetEdges: a.target_edges || [],
+  initiatedBy: a.initiated_by,
+  initiatedAt: a.initiated_at,
+  deadlineAt: a.deadline_at || null,
+  completedAt: a.completed_at || null,
+  status: a.status,
+  progress: typeof a.progress === 'number' ? a.progress : 0,
+  message: a.message || '',
+  counts: a.counts || {},
+  warnings: a.warnings || [],
+  skipped: (a.skipped || []).map((t) => ({ edgeId: t.edge_id, namespace: t.namespace, reason: t.reason })),
+  targets: (a.targets || []).map((t) => ({ edgeId: t.edge_id, namespace: t.namespace, reachable: !!t.reachable, reason: t.reason || '' })),
+  edges: a.edges
+    ? a.edges.map((e) => ({
+        edgeId: e.edge_id,
+        namespace: e.namespace,
+        status: e.status,
+        phase: e.phase || '',
+        message: e.message || '',
+        warning: e.warning || '',
+        attempts: e.attempts || 0,
+        maxAttempts: e.max_attempts || 0,
+        reachable: typeof e.reachable === 'boolean' ? e.reachable : null,
+        waitingReason: e.waiting_reason || '',
+      }))
+    : null,
+});
+
 class EdgeGatewayService {
   async listEdgeGateways(namespace = null) {
     try {
@@ -105,6 +148,11 @@ class EdgeGatewayService {
     }
   }
 
+  /**
+   * Starts a configuration push to one namespace (targetType 'namespace') or
+   * one edge ('edge'). The push is only recorded here; follow it with
+   * getPushProgress until it is no longer in progress.
+   */
   async triggerConfigurationReload(namespace, targetType = 'namespace') {
     try {
       const endpoint = targetType === 'namespace'
@@ -112,45 +160,23 @@ class EdgeGatewayService {
         : `/edges/${namespace}/reload`; // namespace is actually edge ID in this case
 
       const response = await apiClient.post(endpoint);
-
-      if (response.data?.data) {
-        const operation = response.data.data;
-        return {
-          operationId: operation.attributes.operation_id,
-          targetNamespace: operation.attributes.target_namespace,
-          status: operation.attributes.status,
-          message: operation.attributes.message,
-        };
-      }
-
-      return null;
+      const attributes = response.data?.data?.attributes;
+      return attributes ? normalisePushOperation(attributes) : null;
     } catch (error) {
       console.error('Error triggering configuration reload:', error);
-      throw new Error(error.response?.data?.message || 'Failed to trigger configuration reload');
+      throw new Error(apiErrorMessage(error, 'Failed to trigger configuration reload'));
     }
   }
 
+  /** Starts a push to every edge gateway, as one operation. */
   async reloadAllEdges() {
     try {
       const response = await apiClient.post('/edges/reload-all');
-
-      if (response.data?.data) {
-        const data = response.data.data;
-        // Handle the reload-all response format which contains operations array
-        const firstOperation = data.operations?.[0];
-        return {
-          operationId: firstOperation?.operation_id || data.operation_id || 'reload-all',
-          status: firstOperation?.status || 'initiated',
-          message: data.message,
-          operationsCount: data.operations_count,
-          operations: data.operations,
-        };
-      }
-
-      return null;
+      const attributes = response.data?.data?.attributes;
+      return attributes ? normalisePushOperation(attributes) : null;
     } catch (error) {
       console.error('Error triggering global reload:', error);
-      throw new Error(error.response?.data?.message || 'Failed to trigger global reload');
+      throw new Error(apiErrorMessage(error, 'Failed to trigger global reload'));
     }
   }
 
@@ -187,29 +213,50 @@ class EdgeGatewayService {
     }
   }
 
+  /** The full report of a push, per edge (Enterprise Edition). */
   async getReloadStatus(operationId) {
     try {
       const response = await apiClient.get(`/reload-operations/${operationId}/status`);
-
-      if (response.data?.data) {
-        const operation = response.data.data;
-        return {
-          operationId: operation.attributes.operation_id,
-          status: operation.attributes.status,
-          progress: operation.attributes.progress,
-          message: operation.attributes.message,
-          targetNamespace: operation.attributes.target_namespace,
-          targetEdges: operation.attributes.target_edges || [],
-          initiatedBy: operation.attributes.initiated_by,
-          initiatedAt: operation.attributes.initiated_at,
-        };
-      }
-
-      return null;
+      const attributes = response.data?.data?.attributes;
+      return attributes ? normalisePushOperation(attributes) : null;
     } catch (error) {
       console.error('Error fetching reload status:', error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch reload status');
+      const err = new Error(apiErrorMessage(error, 'Failed to fetch reload status'));
+      err.status = error.response?.status;
+      throw err;
     }
+  }
+
+  /** Recent pushes (the last day), newest first, with their outcome counts. */
+  async listReloadOperations() {
+    try {
+      const response = await apiClient.get('/edges/reload-operations');
+      return (response.data?.data || []).map((op) => normalisePushOperation(op.attributes || {}));
+    } catch (error) {
+      console.error('Error listing reload operations:', error);
+      throw new Error(apiErrorMessage(error, 'Failed to list reload operations'));
+    }
+  }
+
+  /**
+   * How a push is going. Enterprise Edition reports each edge; Community
+   * Edition (where the per-edge report is not available) falls back to the
+   * push's outcome counts from the listing, with `edges` null.
+   */
+  async getPushProgress(operationId) {
+    try {
+      return await this.getReloadStatus(operationId);
+    } catch (error) {
+      if (error.status !== 402) {
+        throw error;
+      }
+    }
+    const operations = await this.listReloadOperations();
+    const found = operations.find((op) => op.operationId === operationId);
+    if (!found) {
+      throw new Error('The push is no longer listed');
+    }
+    return { ...found, edges: null };
   }
 
   async deleteEdgeGateway(edgeId) {
