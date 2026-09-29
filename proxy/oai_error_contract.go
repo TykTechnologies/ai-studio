@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // oaiErrorType maps an HTTP status to the error.type string OpenAI's contract

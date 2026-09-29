@@ -8,8 +8,8 @@ import (
 
 	"math/rand"
 
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 )
 
 type DummyDriver struct {

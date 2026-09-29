@@ -9,7 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // Client (human-in-the-loop) tools.

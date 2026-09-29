@@ -181,7 +181,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.0.4 // indirect
-	github.com/tmc/langchaingo v0.1.13 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/uber/jaeger-client-go v2.30.1-0.20220110192849-8d8e8fcfd04d+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.2-0.20210604143007-135cf5605a6d+incompatible // indirect
@@ -266,7 +265,5 @@ require (
 )
 
 replace github.com/TykTechnologies/midsommar/v2 => ../
-
-replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260927043826-21bacb978dfe
 
 replace github.com/TykTechnologies/midsommar/v2/enterprise => ../enterprise

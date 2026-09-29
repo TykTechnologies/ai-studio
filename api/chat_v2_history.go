@@ -8,7 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // V2Message is one thread message as the v2 chat API exposes it: the shape

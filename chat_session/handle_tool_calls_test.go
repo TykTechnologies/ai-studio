@@ -12,10 +12,10 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/tmc/langchaingo/llms"
 )
 
 // MockUniversalClient is a mock for the universalclient.Client

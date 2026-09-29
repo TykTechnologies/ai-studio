@@ -91,3 +91,78 @@ To see what changed upstream:
 
 gorm and its drivers are MIT licensed (Copyright (c) 2013-present Jinzhu).
 Each module's licence file is kept in its directory.
+
+## langchaingo: AI Studio's fork of langchaingo, in tree
+
+`third_party/langchaingo` holds the langchaingo packages AI Studio uses
+(listed in `langchaingo/PACKAGES`). AI Studio imports them as
+`github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/...` and
+never as `github.com/tmc/langchaingo/...`.
+
+### Why
+
+AI Studio runs a fork of langchaingo with fixes it depends on: multi-tool
+streaming, no default `temperature: 0` for Anthropic (newer Claude models
+reject it), OpenAI `reasoning_effort`, and an empty Anthropic `content` read
+as a stop rather than an error. The fork used to be selected with
+`replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo`,
+but Go ignores a `replace` in a dependency. A program that imports
+`pkg/studio`, such as the Tyk Dashboard, would have built with upstream
+langchaingo v0.1.13: without the fixes, and without compiling at all,
+because upstream's Chroma store needs a chroma-go API that no longer exists.
+Under an in-tree path the fork is simply part of this module.
+
+### Unlike gorm, this copy is edited in place
+
+gorm is upstream, byte for byte. This is a fork: fix it here, in the same PR
+as the code that needs the fix, and add a test next to it. Mark a change to
+upstream behaviour with a `Tyk:` comment. `langchaingo/VERSION` records where
+the copy came from; everything since is in this repository's history.
+
+`scripts/langchaingo-import.sh` made the copy:
+
+1. It downloads the module (checked against the Go checksum database).
+2. It copies the non-test files of each package in `PACKAGES`, the files
+   they `//go:embed`, and the `LICENSE`. For the packages in `TESTED` (the
+   LLM clients Tyk patches, plus `llms`) it also copies the tests and their
+   `testdata`. Other langchaingo tests are left out, because they need
+   testcontainers and other modules that would land in every host's module
+   graph.
+3. It rewrites `"github.com/tmc/langchaingo/` to the in-tree path and runs
+   gofmt.
+
+Changes made after the import:
+
+- `vectorstores/chroma` is `//go:build cgo`, like `data_session/chroma.go`:
+  chroma-go's client loads a tokenizer and the ONNX runtime through cgo, and
+  a host may build with `CGO_ENABLED=0`.
+- `llms/anthropic/anthropicllm_test.go` uses `t.Setenv`: upstream's
+  `os.Setenv` leaked a fake API key into `TestLLM`, which then called the
+  live Anthropic API with it.
+
+### Using another langchaingo package
+
+Add it to `PACKAGES` and copy it the same way: import into a scratch
+directory with the script, then copy that package across. The script fails
+if the copy imports a langchaingo package that is not in `PACKAGES`.
+
+### Taking upstream changes
+
+Import the new upstream (or fork) version into a scratch directory and merge
+the diff by hand, keeping the Tyk changes:
+
+```
+scripts/langchaingo-import.sh github.com/tmc/langchaingo@<version> /tmp/lcg
+diff -ru /tmp/lcg third_party/langchaingo
+```
+
+### Checks (`make langchaingo-verify`, run in CI on every PR)
+
+No package of the root, microgateway or enterprise module, in either
+edition, may import `github.com/tmc/langchaingo`, and no `go.mod` may name
+it. The copy's tests run with the rest of the root module.
+
+### Licence
+
+langchaingo is MIT licensed (Copyright (c) Travis Cline). The licence
+file is kept in `langchaingo/LICENSE`.

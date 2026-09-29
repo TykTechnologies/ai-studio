@@ -8,7 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // fakeProvider flags every segment containing "SECRET" and, when asked,

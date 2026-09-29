@@ -17,7 +17,7 @@ import (
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	weaviateModels "github.com/weaviate/weaviate/entities/models"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/tmc/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	"google.golang.org/protobuf/types/known/structpb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"

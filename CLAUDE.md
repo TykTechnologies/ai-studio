@@ -325,6 +325,7 @@ See `docs/site/docs/plugins-edge-to-control.md` for details.
 - Use `make build-local` for local builds (includes frontend build)
 - Hosts importing `pkg/studio` as a module build with `-tags studio_noui` and pass the release UI tarball as `studio.Options.UIAssets` (see `pkg/studio/README.md`)
 - **gorm is a vendored copy**: import `github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm` (and `.../gorm.io/driver/postgres`, `.../driver/sqlite`), never `gorm.io/...`. Never edit `third_party/gorm.io` by hand; upgrades change `third_party/gorm-pin/go.mod` and run `make gorm-vendor`. `make gorm-verify` (CI) catches stray `gorm.io` imports, which compile but silently break hooks. See `third_party/README.md`
+- **langchaingo is an in-tree fork**: import `github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/...`, never `github.com/tmc/langchaingo`. Unlike gorm it is edited in place (mark changes with a `Tyk:` comment); new packages go in `third_party/langchaingo/PACKAGES`. `make langchaingo-verify` (CI) catches upstream imports. See `third_party/README.md`
 - Model changes that alter the schema need `make schema-golden` (regenerates the schema snapshot goldens in `models/` and `microgateway/internal/database/` on SQLite and a Docker postgres:16); review the golden diff
 
 ### Queue System Architecture

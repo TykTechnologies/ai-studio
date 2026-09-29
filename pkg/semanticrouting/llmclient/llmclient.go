@@ -20,8 +20,8 @@ import (
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/switches"
-	"github.com/tmc/langchaingo/embeddings"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // LLMLookup returns the LLM with the given id. On the hub it reads the store,

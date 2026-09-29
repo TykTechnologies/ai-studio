@@ -1,6 +1,7 @@
 issues:
   # third_party/gorm.io is upstream gorm, rebuilt by scripts/gorm-vendor.sh and
-  # never edited by hand (see third_party/README.md).
+  # never edited by hand; third_party/langchaingo is Tyk's langchaingo fork,
+  # kept in upstream style (see third_party/README.md).
   exclude-dirs:
     - third_party
 

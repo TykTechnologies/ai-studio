@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
-	"github.com/tmc/langchaingo/llms"
 	"gopkg.in/yaml.v3"
 )
 

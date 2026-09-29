@@ -13,13 +13,13 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores/chroma"
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
 	chromaEmbeddings "github.com/amikos-tech/chroma-go/pkg/embeddings"
 	"github.com/google/uuid"
-	"github.com/tmc/langchaingo/embeddings"
-	"github.com/tmc/langchaingo/schema"
-	"github.com/tmc/langchaingo/vectorstores"
-	"github.com/tmc/langchaingo/vectorstores/chroma"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )

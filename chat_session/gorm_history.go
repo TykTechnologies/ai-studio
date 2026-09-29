@@ -11,7 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // GormChatMessageHistory is a struct that stores chat messages using GORM

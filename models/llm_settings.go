@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/tmc/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 type LLMSettings struct {
