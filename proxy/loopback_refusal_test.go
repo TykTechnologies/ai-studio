@@ -212,6 +212,9 @@ func TestChatRecord_CarriesLatency(t *testing.T) {
 			require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", got)
 			waitForProxyLog(t, h.db, h.app.ID, http.StatusOK)
 			h.proxy.waitForAnalyzers()
+			// The analytics worker writes the chat record and the proxy log
+			// from separate channels in no fixed order: wait for the record.
+			waitForAnalytics(t, h.db, 1)
 
 			var recs []models.LLMChatRecord
 			require.NoError(t, h.db.Where("app_id = ?", h.app.ID).Find(&recs).Error)
