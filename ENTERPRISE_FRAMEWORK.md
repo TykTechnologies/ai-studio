@@ -43,7 +43,7 @@ midsommar/                              # Public repository
 ```
 Main Module (github.com/TykTechnologies/midsommar/v2)
   ↓ (optional, via replace)
-Enterprise Module (github.com/TykTechnologies/midsommar/v2/enterprise)
+Enterprise Module (github.com/TykTechnologies/ai-studio-enterprise/v2)
   ↓ (imports)
 Main Module (no cycle!)
 
@@ -241,7 +241,7 @@ func init() {
 package main
 
 import (
-    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/myfeature"
+    _ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/myfeature"
 )
 ```
 

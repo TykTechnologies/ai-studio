@@ -113,8 +113,24 @@ for the host-facing API.
 - Package `ui` embeds the built frontend (`ui.FS`, rooted at the build
   directory); `api.New` takes it as an `fs.FS`, and `Options.UIAssets`
   overrides it.
-- `enterprise/all` imports every enterprise feature; `main_enterprise.go` and
-  enterprise hosts import it.
+- `enterprise/all` (`github.com/TykTechnologies/ai-studio-enterprise/v2/all`)
+  imports every enterprise feature; `main_enterprise.go` and enterprise hosts
+  import it. The enterprise module is named after its own private repository,
+  so a host with read access fetches it like any module; under the old path
+  (`midsommar/v2/enterprise`, a directory of this repository that is really a
+  submodule) Go could never resolve it.
+- Enterprise features register themselves with core through hooks (feature
+  factories, `scripting/engine.Register`, the guardrails registry), and
+  `services/edition.CheckRegistered` fails `New` when one is missing. No
+  public package imports the enterprise module, not even behind the
+  `enterprise` build tag, because `go mod tidy` in a host considers every tag
+  and would try to fetch the private module; `make enterprise-import-guard`
+  (CI) enforces it. Tests may not import it either, because tidy also reads
+  the tests of every package it imports: enterprise tests of core packages
+  live in the enterprise repository (`enterprise/_coretests`) and
+  `make ent-link` links them in. Only the `main_enterprise.go` files, the
+  microgateway module and `tests/`, none of which a host imports, may import
+  it.
 - `grpc.ControlServer.Serve(listener)` serves on a host-supplied listener;
   `API.Shutdown` stops the audit writer even when the host served the router.
 

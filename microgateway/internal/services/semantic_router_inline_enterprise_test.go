@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/semantic_router/engine"
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/semantic_router/engine"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"

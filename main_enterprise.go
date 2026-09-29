@@ -4,5 +4,5 @@
 package main
 
 import (
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/all" // Register every enterprise feature
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/all" // Register every enterprise feature
 )

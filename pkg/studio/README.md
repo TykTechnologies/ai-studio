@@ -91,19 +91,28 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   tracing and metrics from `Config` the way the standalone binary does,
   which installs a global tracer provider and propagator.
 - **Replace directives.** Go ignores `replace` directives in dependencies,
-  so an importing module must copy the ones in this repository's `go.mod`
-  (`./enterprise`). langchaingo is not one of them: Studio's fork is in
-  tree, under `third_party/langchaingo`. Nor is the microgateway module:
-  the gateway plugin SDK Studio uses lives in `pkg/gatewayplugin` and
-  `proto/microgateway_management`.
+  and a host needs to copy none of this repository's. The only one left, `./enterprise`, points
+  this repository's own builds at the submodule; an enterprise host requires
+  the enterprise module itself (below). langchaingo is in tree, under
+  `third_party/langchaingo`, and the gateway plugin SDK Studio uses lives in
+  `pkg/gatewayplugin` and `proto/microgateway_management`, so the
+  microgateway module is not needed.
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but
   Chroma datasources are then unavailable. See "Building without cgo" in
   `features/Embedding.md`.
-- **Enterprise edition.** Build with `-tags enterprise` and import
-  `github.com/TykTechnologies/midsommar/v2/enterprise/all` for its side
-  effects. `New` fails if an enterprise feature is missing.
+- **Enterprise edition.** The enterprise module is the private repository
+  `github.com/TykTechnologies/ai-studio-enterprise` (module path
+  `github.com/TykTechnologies/ai-studio-enterprise/v2`, tagged with the same
+  versions as Studio). Set
+  `GOPRIVATE=github.com/TykTechnologies/ai-studio-enterprise` with read access
+  to it, require both modules at the same version, build with
+  `-tags enterprise`, and import
+  `github.com/TykTechnologies/ai-studio-enterprise/v2/all` for its side
+  effects. `New` fails if an enterprise feature is missing. A Community
+  Edition host needs none of this: no public package imports the enterprise
+  module (`make enterprise-import-guard` checks it), so it is never fetched.
 
 ## Example
 

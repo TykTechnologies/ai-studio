@@ -515,6 +515,14 @@ gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports g
 module-check: ## Check the Go proxy would accept HEAD as a module zip (commit first)
 	@cd tools/modcheck && go run . -rev HEAD
 
+.PHONY: ent-link
+ent-link: ## Link enterprise tests of core packages in from enterprise/_coretests (no-op without the submodule)
+	@scripts/enterprise-link-tests.sh
+
+.PHONY: enterprise-import-guard
+enterprise-import-guard: ## Check no public package imports the private enterprise module
+	@scripts/enterprise-import-guard.sh
+
 .PHONY: langchaingo-verify
 langchaingo-verify: ## Check nothing builds with upstream github.com/tmc/langchaingo (use third_party/langchaingo)
 	@scripts/langchaingo-verify.sh
@@ -577,7 +585,7 @@ plugin-verify:
 	@env VERSION= ./tools/publish-plugin.sh verify "$(NAME)" $(PLUGIN_VERSION_FLAG)
 
 # Test target (legacy - use test-all for more control)
-test:
+test: ent-link
 	go test $(BUILD_TAGS) ./...
 	cd microgateway && go test $(BUILD_TAGS) ./...
 
@@ -675,13 +683,13 @@ test-ci: ## Run CI-appropriate tests (unit + integration, with coverage)
 # ============================================================================
 
 .PHONY: test-studio-unit
-test-studio-unit: ## Run AI Studio unit tests
+test-studio-unit: ent-link ## Run AI Studio unit tests
 	@echo "Running AI Studio unit tests ($(TEST_EDITION))..."
 	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) $(TEST_COVERAGE_FLAG) \
 		-timeout $(TEST_TIMEOUT) -race -short ./...
 
 .PHONY: test-studio-integration
-test-studio-integration: ## Run AI Studio integration tests
+test-studio-integration: ent-link ## Run AI Studio integration tests
 	@echo "Running AI Studio integration tests ($(TEST_EDITION))..."
 	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
 		-timeout $(TEST_TIMEOUT) -count=1 ./tests/...
@@ -1501,6 +1509,7 @@ init-enterprise:
 	@git submodule update --remote
 	@if [ -f enterprise/.git ]; then \
 		echo "✅ Enterprise edition initialized successfully"; \
+		scripts/enterprise-link-tests.sh; \
 		echo "Run 'make build' to build enterprise edition"; \
 	else \
 		echo "❌ Failed to initialize enterprise submodule"; \

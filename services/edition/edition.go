@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
+	"github.com/TykTechnologies/midsommar/v2/scripting/engine"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/compliance"
@@ -41,12 +43,14 @@ var enterpriseFeatures = []feature{
 	{"edge_management", edge_management.FactoryRegistered},
 	{"governed_metadata", governed_metadata.IsEnterpriseAvailable},
 	{"group_access", group_access.FactoryRegistered},
+	{"guardrails", guardrails.Available},
 	{"licensing", licensing.IsEnterpriseAvailable},
 	{"log_export", log_export.IsEnterpriseAvailable},
 	{"marketplace_management", marketplace_management.IsEnterpriseAvailable},
 	{"model_router", model_router.IsEnterpriseAvailable},
 	{"plugin_security", plugin_security.IsEnterpriseAvailable},
 	{"rbac", rbac.IsEnterpriseAvailable},
+	{"scripting", engine.Available},
 	{"semantic_router", semantic_router.IsEnterpriseAvailable},
 	{"sso", sso.IsEnterpriseAvailable},
 	{"team_budget", team_budget.IsEnterpriseAvailable},
@@ -72,7 +76,7 @@ func checkFeatures(features []feature) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("enterprise build is missing features %s: import github.com/TykTechnologies/midsommar/v2/enterprise/all",
+		return fmt.Errorf("enterprise build is missing features %s: import github.com/TykTechnologies/ai-studio-enterprise/v2/all",
 			strings.Join(missing, ", "))
 	}
 	return nil
