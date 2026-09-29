@@ -17,7 +17,10 @@ defaults:
     working-directory: midsommar
 
 env:
-  GOPRIVATE: github.com/TykTechnologies
+  # Only the enterprise module is private; every other TykTechnologies module
+  # (tyk-identity-broker, storage, ...) is public and comes through the proxy.
+  # (Fetching those with git broke CI when a cached clone missed a new tag.)
+  GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
   VARIATION: inverted
   DOCKER_BUILD_SUMMARY: false
   DOCKER_BUILD_RECORD_UPLOAD: false
@@ -229,7 +232,7 @@ jobs:
           -e EDITION='${{ matrix.edition }}'                                     \
           -e IS_TAG="${{ startsWith(github.ref, 'refs/tags/') }}"                \
           -e GORELEASER_CONFIG='${{ matrix.goreleaser }}'                         \
-          -e GOPRIVATE=github.com/TykTechnologies                                \
+          -e GOPRIVATE=github.com/TykTechnologies/ai-studio-enterprise           \
           -e GOFLAGS='${{ matrix.goflags }}'                              \
           -e DEBVERS='${{ matrix.debvers }}'                               \
           -e RPMVERS='${{ matrix.rpmvers }}'                               \
