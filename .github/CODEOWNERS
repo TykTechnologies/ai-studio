@@ -1,0 +1,5 @@
+# AI Studio's own copy of gorm changes only through a pin bump and
+# scripts/gorm-vendor.sh (see third_party/README.md).
+/third_party/            @lonelycode
+/scripts/gorm-vendor.sh  @lonelycode
+/scripts/gorm-verify.sh  @lonelycode
