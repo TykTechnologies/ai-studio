@@ -42,7 +42,9 @@ type SimpleEdgeClient struct {
 	// connection and setConnection.
 	connMu sync.RWMutex
 
-	// Config checksum tracking for sync status
+	// Config checksum tracking for sync status; guarded by configMu with
+	// configCache (see setLoadedConfig).
+	configMu       sync.RWMutex
 	loadedChecksum string
 	loadedVersion  string
 
@@ -107,6 +109,11 @@ func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime strin
 		reconnectInterval: 5 * time.Second, // 5 second retry interval
 		eventBus:          eventbridge.NewBus(),
 		stopCh:            make(chan struct{}),
+	}
+
+	// EDGE_RECONNECT_INTERVAL is the base of the reconnect backoff.
+	if cfg != nil && cfg.HubSpoke.ReconnectInterval > 0 {
+		client.reconnectInterval = cfg.HubSpoke.ReconnectInterval
 	}
 
 	log.Debug().Msg("Event bridge bus initialized for edge client")
@@ -194,11 +201,7 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 			Int32("app_count", int32(len(resp.InitialConfig.Apps))).
 			Msg("Received initial configuration from control")
 
-		c.configCache = resp.InitialConfig
-
-		// Store checksum and version for sync tracking
-		c.loadedChecksum = resp.InitialConfig.Checksum
-		c.loadedVersion = resp.InitialConfig.Version
+		c.setLoadedConfig(resp.InitialConfig)
 
 		// Notify provider if callback is set
 		if c.onConfigChange != nil {
@@ -226,7 +229,27 @@ func (c *SimpleEdgeClient) IsConnected() bool {
 
 // GetCurrentConfiguration returns the cached configuration
 func (c *SimpleEdgeClient) GetCurrentConfiguration() *pb.ConfigurationSnapshot {
+	c.configMu.RLock()
+	defer c.configMu.RUnlock()
 	return c.configCache
+}
+
+// setLoadedConfig records the snapshot this edge now runs. Pushes, stream
+// updates and the initial registration write it while heartbeats report
+// it, so it is only read and written under configMu.
+func (c *SimpleEdgeClient) setLoadedConfig(snap *pb.ConfigurationSnapshot) {
+	c.configMu.Lock()
+	defer c.configMu.Unlock()
+	c.configCache = snap
+	c.loadedChecksum = snap.Checksum
+	c.loadedVersion = snap.Version
+}
+
+// loadedConfig returns the checksum and version of the loaded snapshot.
+func (c *SimpleEdgeClient) loadedConfig() (checksum, version string) {
+	c.configMu.RLock()
+	defer c.configMu.RUnlock()
+	return c.loadedChecksum, c.loadedVersion
 }
 
 // GetEventBus returns the edge client's event bus for subscribing to events.
@@ -373,11 +396,7 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 	}
 
 	// Update local cache and trigger callback
-	c.configCache = resp
-
-	// Store checksum and version for sync tracking
-	c.loadedChecksum = resp.Checksum
-	c.loadedVersion = resp.Version
+	c.setLoadedConfig(resp)
 
 	if c.onConfigChange != nil {
 		c.onConfigChange(resp)
@@ -670,11 +689,7 @@ func (c *SimpleEdgeClient) handleConfigurationUpdate(config *pb.ConfigurationSna
 		Int("app_count", len(config.Apps)).
 		Msg("Received configuration update via stream")
 
-	c.configCache = config
-
-	// Store checksum and version for sync tracking
-	c.loadedChecksum = config.Checksum
-	c.loadedVersion = config.Version
+	c.setLoadedConfig(config)
 
 	log.Info().
 		Str("checksum", config.Checksum).
@@ -715,8 +730,9 @@ func (c *SimpleEdgeClient) handleHeartbeatResponse(resp *pb.HeartbeatResponse) e
 
 	// Log sync status warning if out of sync
 	if resp.ExpectedChecksum != "" && !resp.IsInSync {
+		loaded, _ := c.loadedConfig()
 		log.Warn().
-			Str("loaded_checksum", c.loadedChecksum).
+			Str("loaded_checksum", loaded).
 			Str("expected_checksum", resp.ExpectedChecksum).
 			Msg("Edge is out of sync with control - configuration update pending")
 	}
@@ -863,6 +879,7 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 
 // sendHeartbeat sends a heartbeat message to the control instance
 func (c *SimpleEdgeClient) sendHeartbeat() {
+	loadedChecksum, loadedVersion := c.loadedConfig()
 	heartbeat := &pb.EdgeMessage{
 		Message: &pb.EdgeMessage_Heartbeat{
 			Heartbeat: &pb.HeartbeatRequest{
@@ -875,8 +892,8 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 				},
 				Metrics:              c.collectBasicMetrics(),
 				Timestamp:            timestamppb.Now(),
-				LoadedConfigChecksum: c.loadedChecksum,
-				LoadedConfigVersion:  c.loadedVersion,
+				LoadedConfigChecksum: loadedChecksum,
+				LoadedConfigVersion:  loadedVersion,
 			},
 		},
 	}
@@ -886,7 +903,7 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 	} else {
 		log.Debug().
 			Str("edge_id", c.config.HubSpoke.EdgeID).
-			Str("checksum", c.loadedChecksum).
+			Str("checksum", loadedChecksum).
 			Msg("Heartbeat sent with config checksum")
 	}
 

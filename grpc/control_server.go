@@ -97,6 +97,12 @@ type ControlServer struct {
 	// Cleanup ticker for stale connections
 	cleanupTicker *time.Ticker
 
+	// stopping is closed by Stop: every edge stream handler returns, so
+	// the edges reconnect (to another replica) and pushes in flight on
+	// them are requeued at once.
+	stopping     chan struct{}
+	stoppingOnce sync.Once
+
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (services/pushes; set after creation).
 	pushes PushDelivery
@@ -174,6 +180,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		config:                cfg,
 		db:                    db,
 		edgeConnections:       make(map[string]*EdgeInstanceConnection),
+		stopping:              make(chan struct{}),
 		maxConcurrentStreams:  maxStreams,
 		edgeManagementService: edge_management.NewService(db),
 		eventBus:              eventbridge.NewBus(),
@@ -278,31 +285,34 @@ func (s *ControlServer) Stop() {
 		s.cleanupTicker.Stop()
 	}
 
+	// End the edge streams first: GracefulStop waits for every stream to
+	// end, and an edge's stream only ends when this side or the edge ends
+	// it. The edges reconnect with backoff, to another replica if there is
+	// one. (No ShutdownRequested notice: the edge client stops for good on
+	// it, which is wrong when only this replica is going away.)
+	s.stoppingOnce.Do(func() { close(s.stopping) })
+
 	s.serverMu.Lock()
 	server := s.grpcServer
 	s.serverMu.Unlock()
 	if server != nil {
-		server.GracefulStop()
-	}
-
-	// Close all edge connections
-	s.edgeMutex.Lock()
-	for _, edge := range s.edgeConnections {
-		if edge.Stream != nil {
-			// Send shutdown message
-			edge.Stream.Send(&pb.ControlMessage{
-				Message: &pb.ControlMessage_HeartbeatResponse{
-					HeartbeatResponse: &pb.HeartbeatResponse{
-						Acknowledged:      true,
-						Message:           "Control server shutting down",
-						ShutdownRequested: true,
-					},
-				},
-			})
+		done := make(chan struct{})
+		go func() {
+			server.GracefulStop()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(stopGracePeriod):
+			log.Warn().Dur("grace", stopGracePeriod).Msg("gRPC control server did not stop gracefully in time; closing remaining connections")
+			server.Stop()
+			<-done
 		}
 	}
-	s.edgeMutex.Unlock()
 }
+
+// stopGracePeriod bounds how long Stop waits for in-flight unary calls.
+var stopGracePeriod = 10 * time.Second
 
 // RegisterEdge handles edge instance registration
 func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrationRequest) (*pb.EdgeRegistrationResponse, error) {
@@ -737,7 +747,11 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	}()
 
 	// Keep connection alive and handle outgoing messages
-	<-stream.Context().Done()
+	select {
+	case <-stream.Context().Done():
+	case <-s.stopping:
+		log.Debug().Str("edge_id", edgeID).Msg("Control server stopping; ending edge stream")
+	}
 
 	// Cleanup when stream closes
 	if edgeConnection != nil {

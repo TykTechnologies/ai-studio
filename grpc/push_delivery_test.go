@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 )
@@ -219,4 +220,40 @@ func TestControlServer_StreamSendsAreSerialised(t *testing.T) {
 	<-done
 	assert.False(t, stream.overlap.Load(), "two Sends overlapped on one stream")
 	assert.Len(t, reloadRequests(stream.fakeEdgeStream), 120)
+}
+
+// Stopping a replica ends its edge streams itself: waiting for the edges
+// to leave would hang the shutdown, and pushes in flight on them must be
+// requeued for the replica each edge reconnects to.
+func TestControlServer_StopEndsEdgeStreams(t *testing.T) {
+	db := setupTestDB(t)
+	server := replicaServer(t, db, "node-a")
+	rec := &recordingPushes{}
+	server.SetPushDelivery(rec)
+	registerEdge(t, server, "edge-1", "default")
+
+	stream := newFakeEdgeStream()
+	done := make(chan struct{})
+	go func() { defer close(done); _ = server.SubscribeToChanges(stream) }()
+	stream.in <- &pb.EdgeMessage{Message: &pb.EdgeMessage_Registration{Registration: &pb.EdgeRegistrationRequest{EdgeId: "edge-1", EdgeNamespace: "default"}}}
+	require.Eventually(t, func() bool { return server.LocalStreams()["edge-1"] != "" }, 5*time.Second, 10*time.Millisecond)
+	session := server.LocalStreams()["edge-1"]
+
+	stopped := make(chan struct{})
+	go func() { server.Stop(); close(stopped) }()
+	for _, ch := range []chan struct{}{done, stopped} {
+		select {
+		case <-ch:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Stop waited for the edge to disconnect")
+		}
+	}
+	_, closed, _ := rec.snapshot()
+	assert.Equal(t, [][2]string{{"edge-1", session}}, closed)
+	assert.Equal(t, models.EdgeStatusDisconnected, streamEdgeRow(t, db, "edge-1").Status)
+	for _, m := range stream.sent() {
+		if hb := m.GetHeartbeatResponse(); hb != nil {
+			assert.False(t, hb.ShutdownRequested, "the edge client stops for good on ShutdownRequested")
+		}
+	}
 }

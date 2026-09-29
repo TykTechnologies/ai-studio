@@ -526,3 +526,10 @@ func (m *mockReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 		m.handleFunc(req)
 	}
 }
+// EDGE_RECONNECT_INTERVAL sets the backoff base; unset keeps 5 s.
+func TestSimpleEdgeClient_ReconnectIntervalFromConfig(t *testing.T) {
+	c := NewSimpleEdgeClient(&config.Config{HubSpoke: config.HubSpokeConfig{ReconnectInterval: 250 * time.Millisecond}}, "test", "h", "t")
+	assert.Equal(t, 250*time.Millisecond, c.reconnectInterval)
+	c = NewSimpleEdgeClient(&config.Config{}, "test", "h", "t")
+	assert.Equal(t, 5*time.Second, c.reconnectInterval)
+}
