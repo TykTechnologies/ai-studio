@@ -2,6 +2,7 @@ package studio
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,4 +31,19 @@ func TestOpenDatabase(t *testing.T) {
 		_, err := OpenDatabase(&config.AppConf{DatabaseType: "sqlite", DatabaseURL: filepath.Join(t.TempDir(), "missing", "studio.db")})
 		assert.Error(t, err)
 	})
+}
+
+// Without pkg/studio/sqlitedb registered, asking for SQLite names the package
+// to import instead of failing as an unknown type.
+func TestOpenDatabaseSQLiteNotRegistered(t *testing.T) {
+	databaseDriversMu.Lock()
+	open := databaseDrivers["sqlite"]
+	delete(databaseDrivers, "sqlite")
+	databaseDriversMu.Unlock()
+	t.Cleanup(func() { RegisterDatabaseDriver("sqlite", open) })
+
+	_, err := OpenDatabase(&config.AppConf{DatabaseType: "sqlite", DatabaseURL: filepath.Join(t.TempDir(), "studio.db")})
+	if err == nil || !strings.Contains(err.Error(), "pkg/studio/sqlitedb") {
+		t.Fatalf("err = %v, want one naming pkg/studio/sqlitedb", err)
+	}
 }

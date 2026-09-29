@@ -302,3 +302,23 @@ Dashboard's replace cannot reach it. `third_party/README.md` has the details.
   move up to the host's versions.
 - A host uses `studio.OpenDatabase` for `Options.DB` and never imports
   gorm. Its binary carries both gorms, about 2–3 MB.
+
+## Building without cgo
+
+A host may build with `CGO_ENABLED=0` (the Tyk Dashboard's dev builds do), so
+`pkg/studio` links nothing that needs cgo. `TestHostBuildHasNoCgoOnlyDependencies`
+(`pkg/studio/deps_test.go`) and a CI build step keep it that way.
+
+- **SQLite** (go-sqlite3 needs cgo) lives in `pkg/studio/sqlitedb`, which
+  registers itself with `studio.RegisterDatabaseDriver`. The standalone
+  binary and `examples/embed-host` import it, so standalone Studio still
+  runs on SQLite. A host that does not import it opens Postgres only, and
+  asking for `sqlite` gives an error naming the package.
+- **Chroma**: chroma-go's v2 client loads a tokenizer and the ONNX runtime
+  through cgo. `data_session/chroma.go` is `//go:build cgo`, and
+  `chroma_nocgo.go` stands in for it: Chroma datasources return
+  `ErrChromaUnavailable`, and Chroma is left out of the vector store lists.
+  chroma-go v0.4 was not an option: it adds an embedded runtime, and
+  `chroma-go-local@v0.3.4`, which it requires, failed checksum-database
+  verification (2026-09-29).
+- The microgateway is not embedded and keeps its cgo build and local SQLite.

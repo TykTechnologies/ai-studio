@@ -22,9 +22,6 @@ import (
 	weaviateModels "github.com/weaviate/weaviate/entities/models"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
-	chromaEmbeddings "github.com/amikos-tech/chroma-go/pkg/embeddings"
-
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -32,7 +29,6 @@ import (
 	"github.com/tmc/langchaingo/schema"
 	"github.com/tmc/langchaingo/textsplitter"
 	"github.com/tmc/langchaingo/vectorstores"
-	"github.com/tmc/langchaingo/vectorstores/chroma"
 	"github.com/tmc/langchaingo/vectorstores/pgvector"
 	"github.com/tmc/langchaingo/vectorstores/pinecone"
 	"github.com/tmc/langchaingo/vectorstores/qdrant"
@@ -51,13 +47,22 @@ const (
 	VECTOR_WEAVIATE = "weaviate"
 )
 
-var AVAILABLE_VECTOR_STORES = []VectorStoreVendor{
-	VECTOR_CHROMA,
-	VECTOR_PGVECTOR,
-	VECTOR_PINECONE,
-	VECTOR_REDIS,
-	VECTOR_QDRANT,
-	VECTOR_WEAVIATE,
+// AVAILABLE_VECTOR_STORES lists the vector stores this build can use. Chroma
+// needs cgo (see chroma.go), so a CGO_ENABLED=0 build leaves it out.
+var AVAILABLE_VECTOR_STORES = availableVectorStores()
+
+func availableVectorStores() []VectorStoreVendor {
+	var stores []VectorStoreVendor
+	if ChromaSupported {
+		stores = append(stores, VECTOR_CHROMA)
+	}
+	return append(stores,
+		VECTOR_PGVECTOR,
+		VECTOR_PINECONE,
+		VECTOR_REDIS,
+		VECTOR_QDRANT,
+		VECTOR_WEAVIATE,
+	)
 }
 
 type DataSession struct {
@@ -102,19 +107,8 @@ func (ds *DataSession) Search(query string, n int) ([]schema.Document, error) {
 			convertedMetadata := make(map[string]any)
 			for k, v := range docs[i].Metadata {
 				// Check if value is a ChromaDB v2.MetadataValue and extract the actual value
-				if chromaVal, ok := v.(chromago.MetadataValue); ok {
-					if rawVal, ok := chromaVal.GetRaw(); ok {
-						convertedMetadata[k] = rawVal
-					} else {
-						convertedMetadata[k] = chromaVal.String()
-					}
-				} else if chromaVal, ok := v.(*chromago.MetadataValue); ok {
-					// Handle pointer case
-					if rawVal, ok := chromaVal.GetRaw(); ok {
-						convertedMetadata[k] = rawVal
-					} else {
-						convertedMetadata[k] = chromaVal.String()
-					}
+				if chromaVal, ok := chromaMetadataValue(v); ok {
+					convertedMetadata[k] = chromaVal
 				} else if pbVal, ok := v.(*structpb.Value); ok {
 					// Handle protobuf Value (for Pinecone compatibility)
 					convertedMetadata[k] = pbVal.AsInterface()
@@ -341,11 +335,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 		)
 
 	case VECTOR_CHROMA:
-		store, err = chroma.New(
-			chroma.WithChromaURL(d.DBConnString),
-			chroma.WithEmbedder(embedder),
-			chroma.WithNameSpace(d.DBName),
-		)
+		store, err = newChromaStore(d, embedder)
 
 	case VECTOR_REDIS:
 		store, err = redisvector.New(context.Background(),
@@ -575,66 +565,6 @@ func (ds *DataSession) storeToPGVector(ctx context.Context, store vectorstores.V
 	}
 
 	slog.Info("Successfully stored vectors in PGVector", "count", len(vectors), "table", tableName)
-	return nil
-}
-
-func (ds *DataSession) storeToChroma(ctx context.Context, store vectorstores.VectorStore, d *models.Datasource, contents []string, vectors [][]float32, metadatas []map[string]any) error {
-	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
-	if err != nil {
-		return fmt.Errorf("failed to create chroma client: %w", err)
-	}
-
-	// Get or create collection
-	collection, err := client.GetCollection(ctx, d.DBName)
-	if err != nil {
-		// Try to create if doesn't exist
-		slog.Info("Chroma collection not found, creating new one", "collection", d.DBName, "error", err.Error())
-
-		// Create with no-op embedding function (we're providing pre-computed embeddings)
-		// Use default embedding function which won't be called since we provide embeddings
-		collection, err = client.CreateCollection(ctx, d.DBName,
-			chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
-			chromago.WithIfNotExistsCreate(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to get/create chroma collection '%s' at %s: %w", d.DBName, d.DBConnString, err)
-		}
-		slog.Info("Created new Chroma collection", "collection", d.DBName)
-	}
-
-	// Add documents with embeddings using v2 API
-	// The v2 API uses functional options and adds documents one at a time or in batch
-	for i := range contents {
-		docID := chromago.DocumentID(uuid.New().String())
-
-		// Convert float32 to Embedding
-		emb := chromaEmbeddings.NewEmbeddingFromFloat32(vectors[i])
-
-		// Prepare metadata
-		var chromaMetadata chromago.DocumentMetadata
-		if len(metadatas) > i {
-			chromaMetadata, err = chromago.NewDocumentMetadataFromMap(metadatas[i])
-			if err != nil {
-				return fmt.Errorf("failed to create metadata for document %d: %w", i, err)
-			}
-		} else {
-			chromaMetadata = chromago.NewDocumentMetadata()
-		}
-
-		// Add document with pre-computed embedding
-		err = collection.Add(ctx,
-			chromago.WithIDs(docID),
-			chromago.WithTexts(contents[i]),
-			chromago.WithEmbeddings(emb),
-			chromago.WithMetadatas(chromaMetadata),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to add document %d to chroma: %w", i, err)
-		}
-	}
-
-	slog.Info("Successfully stored vectors in Chroma", "count", len(vectors), "collection", d.DBName)
 	return nil
 }
 
@@ -872,177 +802,6 @@ func (ds *DataSession) searchPGVectorByVector(ctx context.Context, d *models.Dat
 			Metadata:    metadata,
 			Score:       r.Distance,
 		})
-	}
-
-	return docs, nil
-}
-
-func (ds *DataSession) searchChromaByVector(ctx context.Context, store vectorstores.VectorStore, d *models.Datasource, vector []float32, topK int) ([]schema.Document, error) {
-	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create chroma client: %w", err)
-	}
-
-	// Get collection - if it doesn't exist or has validation issues, try to create it
-	collection, err := client.GetCollection(ctx, d.DBName)
-	if err != nil {
-		slog.Info("Chroma collection not found for query, creating new one", "collection", d.DBName, "error", err.Error())
-
-		// Create collection with L2 distance metric
-		collection, err = client.CreateCollection(ctx, d.DBName,
-			chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
-			chromago.WithIfNotExistsCreate(),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get/create chroma collection '%s' for query: %w", d.DBName, err)
-		}
-		slog.Info("Created new Chroma collection for query", "collection", d.DBName)
-	}
-
-	// Convert to Chroma embedding
-	emb := chromaEmbeddings.NewEmbeddingFromFloat32(vector)
-
-	// Query with embedding using v2 API
-	// Make sure to include documents in the results
-	queryResult, err := collection.Query(ctx,
-		chromago.WithQueryEmbeddings(emb),
-		chromago.WithNResults(topK),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query chroma: %w", err)
-	}
-
-	// Convert v2 API results
-	docs := make([]schema.Document, 0)
-
-	documentsGroups := queryResult.GetDocumentsGroups()
-	metadatasGroups := queryResult.GetMetadatasGroups()
-	distancesGroups := queryResult.GetDistancesGroups()
-
-	slog.Info("Chroma query results",
-		"num_groups", len(documentsGroups),
-		"total_results", queryResult.CountGroups())
-
-	// Iterate through result groups
-	for groupIdx := range documentsGroups {
-		documents := documentsGroups[groupIdx]
-		slog.Info("Processing result group", "group_idx", groupIdx, "num_docs", len(documents))
-
-		for docIdx, doc := range documents {
-			metadata := make(map[string]any)
-
-			// Extract metadata if available
-			if len(metadatasGroups) > groupIdx && len(metadatasGroups[groupIdx]) > docIdx {
-				chromaMeta := metadatasGroups[groupIdx][docIdx]
-
-				slog.Info("ChromaDB metadata extraction",
-					"groupIdx", groupIdx,
-					"docIdx", docIdx,
-					"metadata_available", chromaMeta != nil)
-
-				// Extract all standard and custom metadata fields
-				// AI Studio standard fields
-				if val, ok := chromaMeta.GetString("filename"); ok {
-					metadata["filename"] = val
-					slog.Info("Extracted field", "key", "filename", "value", val)
-				}
-				if val, ok := chromaMeta.GetString("file_name"); ok {
-					metadata["file_name"] = val
-					slog.Info("Extracted field", "key", "file_name", "value", val)
-				}
-				if val, ok := chromaMeta.GetString("title"); ok {
-					metadata["title"] = val
-				}
-				if val, ok := chromaMeta.GetString("text"); ok {
-					metadata["text"] = val
-				}
-				if val, ok := chromaMeta.GetString("start"); ok {
-					metadata["start"] = val
-				}
-				if val, ok := chromaMeta.GetString("end"); ok {
-					metadata["end"] = val
-				}
-
-				// GitHub RAG plugin fields
-				if val, ok := chromaMeta.GetString("source"); ok {
-					metadata["source"] = val
-				}
-				if val, ok := chromaMeta.GetString("repo_id"); ok {
-					metadata["repo_id"] = val
-				}
-				if val, ok := chromaMeta.GetString("repo_name"); ok {
-					metadata["repo_name"] = val
-				}
-				if val, ok := chromaMeta.GetString("repo_owner"); ok {
-					metadata["repo_owner"] = val
-				}
-				if val, ok := chromaMeta.GetString("repo_host"); ok {
-					metadata["repo_host"] = val
-				}
-				if val, ok := chromaMeta.GetString("branch"); ok {
-					metadata["branch"] = val
-				}
-				if val, ok := chromaMeta.GetString("commit_sha"); ok {
-					metadata["commit_sha"] = val
-				}
-				if val, ok := chromaMeta.GetString("file_path"); ok {
-					metadata["file_path"] = val
-				}
-				if val, ok := chromaMeta.GetString("file_type"); ok {
-					metadata["file_type"] = val
-				}
-				if val, ok := chromaMeta.GetString("chunk_index"); ok {
-					metadata["chunk_index"] = val
-				}
-				if val, ok := chromaMeta.GetString("total_chunks"); ok {
-					metadata["total_chunks"] = val
-				}
-				if val, ok := chromaMeta.GetString("line_start"); ok {
-					metadata["line_start"] = val
-				}
-				if val, ok := chromaMeta.GetString("line_end"); ok {
-					metadata["line_end"] = val
-				}
-				if val, ok := chromaMeta.GetString("github_url"); ok {
-					metadata["github_url"] = val
-				}
-				if val, ok := chromaMeta.GetString("ingestion_timestamp"); ok {
-					metadata["ingestion_timestamp"] = val
-				}
-				if val, ok := chromaMeta.GetString("namespace"); ok {
-					metadata["namespace"] = val
-				}
-
-				// Other common fields
-				if val, ok := chromaMeta.GetString("encoding"); ok {
-					metadata["encoding"] = val
-				}
-				if val, ok := chromaMeta.GetString("test_type"); ok {
-					metadata["test_type"] = val
-				}
-			}
-
-			score := float32(0)
-			if len(distancesGroups) > groupIdx && len(distancesGroups[groupIdx]) > docIdx {
-				score = float32(distancesGroups[groupIdx][docIdx])
-			}
-
-			// v2 Document interface has ContentString() method
-			content := doc.ContentString()
-
-			// Log final metadata before creating document
-			slog.Info("Final metadata for document",
-				"docIdx", docIdx,
-				"metadata_keys", len(metadata),
-				"metadata", metadata)
-
-			docs = append(docs, schema.Document{
-				PageContent: content,
-				Metadata:    metadata,
-				Score:       score,
-			})
-		}
 	}
 
 	return docs, nil

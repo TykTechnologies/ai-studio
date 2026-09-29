@@ -30,6 +30,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
+	// This demo keeps Studio in a SQLite file; a Postgres-only host skips it.
+	_ "github.com/TykTechnologies/midsommar/v2/pkg/studio/sqlitedb"
 )
 
 const (
