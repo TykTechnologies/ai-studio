@@ -318,8 +318,6 @@ require (
 
 replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20260927043826-21bacb978dfe
 
-replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.44.0
-
 replace github.com/TykTechnologies/midsommar/microgateway => ./microgateway
 
 replace github.com/TykTechnologies/midsommar/v2/enterprise => ./enterprise

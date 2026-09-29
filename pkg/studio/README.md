@@ -92,8 +92,7 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   which installs a global tracer provider and propagator.
 - **Replace directives.** Go ignores `replace` directives in dependencies,
   so an importing module must copy the ones in this repository's `go.mod`
-  (the langchaingo fork, the OpenTelemetry SDK pin, `./microgateway` and
-  `./enterprise`).
+  (the langchaingo fork, `./microgateway` and `./enterprise`).
 - **Enterprise edition.** Build with `-tags enterprise` and import
   `github.com/TykTechnologies/midsommar/v2/enterprise/all` for its side
   effects. `New` fails if an enterprise feature is missing.
