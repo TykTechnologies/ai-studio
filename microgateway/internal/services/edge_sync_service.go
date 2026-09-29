@@ -13,7 +13,6 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -372,19 +371,19 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 
 		// Handle JSON fields with proper conversion
 		if pbLLM.GovernedMetadata != "" {
-			llm.GovernedMetadata = datatypes.JSON(pbLLM.GovernedMetadata)
+			llm.GovernedMetadata = database.JSON(pbLLM.GovernedMetadata)
 		}
 		if pbLLM.Metadata != "" {
-			llm.Metadata = datatypes.JSON(pbLLM.Metadata)
+			llm.Metadata = database.JSON(pbLLM.Metadata)
 		}
 		if pbLLM.AllowedModels != "" {
-			llm.AllowedModels = datatypes.JSON(pbLLM.AllowedModels)
+			llm.AllowedModels = database.JSON(pbLLM.AllowedModels)
 		}
 		if pbLLM.Failover != "" {
-			llm.Failover = datatypes.JSON(pbLLM.Failover)
+			llm.Failover = database.JSON(pbLLM.Failover)
 		}
 		if pbLLM.AuthConfig != "" {
-			llm.AuthConfig = datatypes.JSON(pbLLM.AuthConfig)
+			llm.AuthConfig = database.JSON(pbLLM.AuthConfig)
 		}
 		if pbLLM.AuthMechanism != "" {
 			llm.AuthMechanism = pbLLM.AuthMechanism
@@ -492,16 +491,16 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig, kept []uin
 
 		// Handle JSON fields with proper conversion
 		if pbApp.AllowedIps != "" {
-			app.AllowedIPs = datatypes.JSON(pbApp.AllowedIps)
+			app.AllowedIPs = database.JSON(pbApp.AllowedIps)
 		}
 		if pbApp.Metadata != "" {
-			app.Metadata = datatypes.JSON(pbApp.Metadata)
+			app.Metadata = database.JSON(pbApp.Metadata)
 		}
 
 		// Serialize plugin resource associations for gateway access
 		if len(pbApp.PluginResources) > 0 {
 			if prJSON, err := json.Marshal(pbApp.PluginResources); err == nil {
-				app.PluginResourcesJSON = datatypes.JSON(prJSON)
+				app.PluginResourcesJSON = database.JSON(prJSON)
 			}
 		}
 
@@ -816,14 +815,14 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 
 		// Handle Config JSON field with proper conversion
 		if pbPlugin.Config != "" {
-			plugin.Config = datatypes.JSON(pbPlugin.Config)
+			plugin.Config = database.JSON(pbPlugin.Config)
 		}
 
 		// Handle HookTypes JSON field with proper conversion
 		if len(pbPlugin.HookTypes) > 0 {
 			hookTypesJSON, err := json.Marshal(pbPlugin.HookTypes)
 			if err == nil {
-				plugin.HookTypes = datatypes.JSON(hookTypesJSON)
+				plugin.HookTypes = database.JSON(hookTypesJSON)
 			}
 		}
 
@@ -831,7 +830,7 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 		if len(pbPlugin.ServiceScopes) > 0 {
 			scopesJSON, err := json.Marshal(pbPlugin.ServiceScopes)
 			if err == nil {
-				plugin.ServiceScopes = datatypes.JSON(scopesJSON)
+				plugin.ServiceScopes = database.JSON(scopesJSON)
 			}
 		}
 

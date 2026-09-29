@@ -15,7 +15,6 @@ require (
 	cloud.google.com/go/longrunning v0.8.0 // indirect
 	cloud.google.com/go/vertexai v0.12.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
-	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20200615164410-66371956d46c // indirect
 	github.com/Jeffail/gabs v1.4.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
@@ -102,7 +101,6 @@ require (
 	github.com/go-playground/validator/v10 v10.26.0 // indirect
 	github.com/go-redis/redismock/v9 v9.2.0 // indirect
 	github.com/go-redsync/redsync/v4 v4.11.0 // indirect
-	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
@@ -240,7 +238,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
-	gorm.io/driver/mysql v1.5.7 // indirect
 	oras.land/oras-go/v2 v2.6.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
@@ -249,7 +246,7 @@ require (
 	github.com/TykTechnologies/midsommar/v2 v2.0.0
 	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0
 	github.com/caarlos0/env/v9 v9.0.0
-	github.com/d5/tengo/v2 v2.17.0
+	github.com/d5/tengo/v2 v2.17.0 // indirect
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
@@ -266,7 +263,6 @@ require (
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
-	gorm.io/datatypes v1.2.6
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.30.3

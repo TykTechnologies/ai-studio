@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -34,7 +33,7 @@ var vendorCurrencies = map[string][]string{
 
 func main() {
 	dbConnStr := flag.String("db", "", "Database connection string")
-	dbType := flag.String("type", "mysql", "Database type (mysql, postgres, sqlite)")
+	dbType := flag.String("type", "postgres", "Database type (postgres, sqlite)")
 	flag.Parse()
 
 	if *dbConnStr == "" {
@@ -65,8 +64,6 @@ func connectToDatabase(dbType, connStr string) (*gorm.DB, error) {
 	var dialector gorm.Dialector
 
 	switch dbType {
-	case "mysql":
-		dialector = mysql.Open(connStr)
 	case "postgres":
 		dialector = postgres.Open(connStr)
 	case "sqlite":

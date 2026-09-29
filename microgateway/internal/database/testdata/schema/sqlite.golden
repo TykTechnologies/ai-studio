@@ -1,0 +1,452 @@
+TABLE access_tokens
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `token_hash` varchar(64) NOT NULL
+  column `token_encrypted` varchar(255) NOT NULL
+  column `client_id` varchar(255) NOT NULL
+  column `user_id` integer NOT NULL
+  column `app_id` integer
+  column `scope` varchar(255)
+  column `expires_at` datetime NOT NULL
+  index CREATE INDEX `idx_access_tokens_app_id` ON `access_tokens`(`app_id`)
+  index CREATE INDEX `idx_access_tokens_deleted_at` ON `access_tokens`(`deleted_at`)
+  index CREATE UNIQUE INDEX `idx_access_tokens_token_hash` ON `access_tokens`(`token_hash`)
+TABLE analytics_events
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `request_id` text NOT NULL
+  column `app_id` integer NOT NULL
+  column `llm_id` integer
+  column `credential_id` integer
+  column `user_id` integer
+  column `name` text
+  column `vendor` text
+  column `interaction_type` text DEFAULT "proxy"
+  column `choices` integer
+  column `tool_calls` integer
+  column `chat_id` text
+  column `currency` text DEFAULT "USD"
+  column `endpoint` text
+  column `method` text
+  column `status_code` integer
+  column `prompt_tokens` integer
+  column `response_tokens` integer
+  column `total_tokens` integer
+  column `cache_write_prompt_tokens` integer
+  column `cache_read_prompt_tokens` integer
+  column `cost` real
+  column `total_time_ms` integer
+  column `error_message` text
+  column `metadata` JSON
+  column `request_body` text
+  column `response_body` text
+  column `router_kind` text
+  column `router_slug` text
+  column `router_pool_name` text
+  column `route` text
+  column `route_reason` text
+  column `router_source_model` text
+  column `router_target_model` text
+  column `router_selection_algo` text
+  column `route_score` real
+  column `shadow_route` text
+  column `failover_from_llm_id` integer
+  column `failover_attempt` integer DEFAULT 0
+  column `time_stamp` datetime
+  column `created_at` datetime
+  constraint CONSTRAINT `fk_analytics_events_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
+  constraint CONSTRAINT `fk_apps_events` FOREIGN KEY (`app_id`) REFERENCES `apps`(`id`)
+  constraint CONSTRAINT `fk_llms_events` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
+  index CREATE INDEX `idx_analytics_app` ON `analytics_events`(`app_id`,`created_at`)
+  index CREATE INDEX `idx_analytics_failover_from` ON `analytics_events`(`failover_from_llm_id`)
+  index CREATE INDEX `idx_analytics_timestamp` ON `analytics_events`(`time_stamp`)
+  index CREATE INDEX `idx_analytics_user` ON `analytics_events`(`user_id`)
+  index CREATE UNIQUE INDEX `idx_analytics_events_request_id` ON `analytics_events`(`request_id`)
+TABLE api_tokens
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `token` text NOT NULL
+  column `name` text NOT NULL
+  column `app_id` integer NOT NULL
+  column `scopes` JSON
+  column `is_active` numeric DEFAULT true
+  column `expires_at` datetime
+  column `last_used_at` datetime
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `namespace` text DEFAULT ""
+  constraint CONSTRAINT `fk_apps_tokens` FOREIGN KEY (`app_id`) REFERENCES `apps`(`id`)
+  index CREATE INDEX `idx_api_tokens_deleted_at` ON `api_tokens`(`deleted_at`)
+  index CREATE INDEX `idx_token_active` ON `api_tokens`(`is_active`)
+  index CREATE INDEX `idx_token_namespace` ON `api_tokens`(`namespace`)
+  index CREATE UNIQUE INDEX `idx_api_tokens_token` ON `api_tokens`(`token`)
+TABLE app_datasources
+  column `app_id` integer
+  column `datasource_id` integer
+  column `created_at` datetime
+  constraint PRIMARY KEY (`app_id`,`datasource_id`)
+  autoindex origin=pk unique=1 (app_id, datasource_id)
+TABLE app_llms
+  column `app_id` integer
+  column `llm_id` integer
+  column `is_active` numeric DEFAULT true
+  column `custom_budget` real
+  column `created_at` datetime
+  constraint PRIMARY KEY (`app_id`,`llm_id`)
+  autoindex origin=pk unique=1 (app_id, llm_id)
+TABLE app_model_routers
+  column `app_id` integer
+  column `model_router_id` integer
+  column `created_at` datetime
+  constraint PRIMARY KEY (`app_id`,`model_router_id`)
+  autoindex origin=pk unique=1 (app_id, model_router_id)
+TABLE app_semantic_routers
+  column `app_id` integer
+  column `semantic_router_id` integer
+  column `created_at` datetime
+  constraint PRIMARY KEY (`app_id`,`semantic_router_id`)
+  autoindex origin=pk unique=1 (app_id, semantic_router_id)
+TABLE app_tools
+  column `app_id` integer
+  column `tool_id` integer
+  column `created_at` datetime
+  constraint PRIMARY KEY (`app_id`,`tool_id`)
+  autoindex origin=pk unique=1 (app_id, tool_id)
+TABLE apps
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `name` text NOT NULL
+  column `description` text
+  column `owner_email` text
+  column `user_id` integer
+  column `is_active` numeric DEFAULT true
+  column `monthly_budget` real
+  column `budget_start_date` datetime
+  column `budget_reset_day` integer DEFAULT 1
+  column `rate_limit_rpm` integer
+  column `allowed_ips` JSON
+  column `metadata` JSON
+  column `plugin_resources_json` JSON
+  column `namespace` text DEFAULT ""
+  index CREATE INDEX `idx_app_namespace` ON `apps`(`namespace`)
+  index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)
+  index CREATE INDEX `idx_apps_is_active` ON `apps`(`is_active`)
+  index CREATE INDEX `idx_apps_owner_email` ON `apps`(`owner_email`)
+TABLE budget_blocks
+  column `app_id` integer
+  column `reason` text
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`app_id`)
+TABLE budget_usage
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `app_id` integer NOT NULL
+  column `llm_id` integer
+  column `period_start` datetime NOT NULL
+  column `period_end` datetime NOT NULL
+  column `tokens_used` integer DEFAULT 0
+  column `requests_count` integer DEFAULT 0
+  column `total_cost` real DEFAULT 0
+  column `prompt_tokens` integer DEFAULT 0
+  column `completion_tokens` integer DEFAULT 0
+  column `created_at` datetime
+  column `updated_at` datetime
+  constraint CONSTRAINT `fk_apps_budget_usage` FOREIGN KEY (`app_id`) REFERENCES `apps`(`id`)
+  constraint CONSTRAINT `fk_llms_usage` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
+  index CREATE INDEX `idx_budget_usage_llm_id` ON `budget_usage`(`llm_id`)
+  index CREATE UNIQUE INDEX `idx_budget_app_period` ON `budget_usage`(`app_id`,`period_start`,`period_end`)
+TABLE control_payloads
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `plugin_id` integer NOT NULL
+  column `payload` blob NOT NULL
+  column `correlation_id` text
+  column `metadata` JSON
+  column `sent` numeric DEFAULT false
+  column `sent_at` datetime
+  column `created_at` datetime
+  index CREATE INDEX `idx_control_payload_correlation` ON `control_payloads`(`correlation_id`)
+  index CREATE INDEX `idx_control_payload_created` ON `control_payloads`(`created_at`)
+  index CREATE INDEX `idx_control_payload_plugin` ON `control_payloads`(`plugin_id`)
+  index CREATE INDEX `idx_control_payload_sent` ON `control_payloads`(`sent`)
+TABLE credentials
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `app_id` integer NOT NULL
+  column `key_id` text NOT NULL
+  column `secret_hash` text NOT NULL
+  column `name` text
+  column `is_active` numeric DEFAULT true
+  column `expires_at` datetime
+  column `last_used_at` datetime
+  constraint CONSTRAINT `fk_apps_credentials` FOREIGN KEY (`app_id`) REFERENCES `apps`(`id`)
+  index CREATE INDEX `idx_credentials_deleted_at` ON `credentials`(`deleted_at`)
+  index CREATE UNIQUE INDEX `idx_credentials_key_id` ON `credentials`(`key_id`)
+TABLE datasources
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `name` text NOT NULL
+  column `short_description` text
+  column `long_description` text
+  column `icon` text
+  column `url` text
+  column `privacy_score` integer
+  column `db_source_type` text
+  column `db_conn_string_encrypted` text
+  column `db_conn_api_key_encrypted` text
+  column `db_name` text
+  column `embed_vendor` text
+  column `embed_url` text
+  column `embed_api_key_encrypted` text
+  column `embed_model` text
+  column `active` numeric DEFAULT true
+  column `namespace` text DEFAULT ""
+  column `governed_metadata` JSON
+  index CREATE INDEX `idx_datasources_deleted_at` ON `datasources`(`deleted_at`)
+  index CREATE INDEX `idx_ds_namespace` ON `datasources`(`namespace`)
+TABLE edge_instances
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `edge_id` text NOT NULL
+  column `namespace` text NOT NULL DEFAULT ""
+  column `version` text
+  column `build_hash` text
+  column `metadata` JSON
+  column `last_heartbeat` datetime
+  column `status` text DEFAULT "registered"
+  column `session_id` text
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE INDEX `idx_edge_heartbeat` ON `edge_instances`(`last_heartbeat`)
+  index CREATE INDEX `idx_edge_namespace` ON `edge_instances`(`namespace`,`status`)
+  index CREATE UNIQUE INDEX `idx_edge_instances_edge_id` ON `edge_instances`(`edge_id`)
+TABLE filters
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `name` text NOT NULL
+  column `description` text
+  column `script` text NOT NULL
+  column `response_filter` numeric DEFAULT false
+  column `is_active` numeric DEFAULT true
+  column `order_index` integer DEFAULT 0
+  column `kind` text DEFAULT "script"
+  column `config` text
+  column `namespace` text DEFAULT ""
+  index CREATE INDEX `idx_filter_namespace` ON `filters`(`namespace`)
+  index CREATE INDEX `idx_filters_deleted_at` ON `filters`(`deleted_at`)
+TABLE llm_filters
+  column `llm_id` integer
+  column `filter_id` integer
+  column `is_active` numeric DEFAULT true
+  column `order_index` integer DEFAULT 0
+  column `created_at` datetime
+  constraint PRIMARY KEY (`llm_id`,`filter_id`)
+  autoindex origin=pk unique=1 (llm_id, filter_id)
+TABLE llm_plugins
+  column `llm_id` integer
+  column `plugin_id` integer
+  column `order_index` integer DEFAULT 0
+  column `is_active` numeric DEFAULT true
+  column `config_override` JSON
+  column `created_at` datetime
+  constraint PRIMARY KEY (`llm_id`,`plugin_id`)
+  autoindex origin=pk unique=1 (llm_id, plugin_id)
+  index CREATE INDEX `idx_llm_plugins_llm_id` ON `llm_plugins`(`llm_id`)
+  index CREATE INDEX `idx_llm_plugins_order` ON `llm_plugins`(`order_index`)
+TABLE llms
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `name` text NOT NULL
+  column `slug` text NOT NULL
+  column `vendor` text NOT NULL
+  column `endpoint` text
+  column `api_key_encrypted` text
+  column `default_model` text
+  column `max_tokens` integer DEFAULT 4096
+  column `timeout_seconds` integer DEFAULT 30
+  column `retry_count` integer DEFAULT 3
+  column `is_active` numeric DEFAULT true
+  column `monthly_budget` real
+  column `rate_limit_rpm` integer
+  column `metadata` JSON
+  column `governed_metadata` JSON
+  column `allowed_models` JSON
+  column `failover` JSON
+  column `auth_mechanism` text DEFAULT "token"
+  column `auth_config` JSON
+  column `namespace` text DEFAULT ""
+  column `dont_log_bodies` numeric DEFAULT false
+  index CREATE INDEX `idx_llm_active` ON `llms`(`is_active`)
+  index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
+  index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)
+  index CREATE UNIQUE INDEX `idx_llms_slug` ON `llms`(`slug`)
+TABLE model_mappings
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `vendor_id` integer NOT NULL
+  column `source_model` text NOT NULL
+  column `target_model` text NOT NULL
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  constraint CONSTRAINT `fk_pool_vendors_mappings` FOREIGN KEY (`vendor_id`) REFERENCES `pool_vendors`(`id`) ON DELETE CASCADE
+  index CREATE INDEX `idx_mapping_vendor` ON `model_mappings`(`vendor_id`)
+  index CREATE INDEX `idx_model_mappings_deleted_at` ON `model_mappings`(`deleted_at`)
+TABLE model_pools
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `router_id` integer NOT NULL
+  column `name` text NOT NULL
+  column `model_pattern` text NOT NULL
+  column `selection_algorithm` text DEFAULT "round_robin"
+  column `priority` integer DEFAULT 0
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  constraint CONSTRAINT `fk_model_routers_pools` FOREIGN KEY (`router_id`) REFERENCES `model_routers`(`id`) ON DELETE CASCADE
+  index CREATE INDEX `idx_model_pools_deleted_at` ON `model_pools`(`deleted_at`)
+  index CREATE INDEX `idx_pool_router` ON `model_pools`(`router_id`)
+TABLE model_prices
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `model_name` text NOT NULL
+  column `vendor` text NOT NULL
+  column `cpt` real NOT NULL
+  column `cpit` real NOT NULL
+  column `cache_write_pt` real DEFAULT 0
+  column `cache_read_pt` real DEFAULT 0
+  column `currency` text DEFAULT "USD"
+  column `namespace` text DEFAULT ""
+  index CREATE INDEX `idx_model_price_namespace` ON `model_prices`(`namespace`)
+  index CREATE INDEX `idx_model_prices_deleted_at` ON `model_prices`(`deleted_at`)
+  index CREATE UNIQUE INDEX `idx_model_vendor` ON `model_prices`(`model_name`,`vendor`)
+TABLE model_routers
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `name` text NOT NULL
+  column `slug` text NOT NULL
+  column `description` text
+  column `api_compat` text DEFAULT "openai"
+  column `is_active` numeric DEFAULT false
+  column `namespace` text DEFAULT ""
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  index CREATE INDEX `idx_model_routers_deleted_at` ON `model_routers`(`deleted_at`)
+  index CREATE INDEX `idx_router_active` ON `model_routers`(`is_active`)
+  index CREATE INDEX `idx_router_namespace` ON `model_routers`(`namespace`)
+  index CREATE UNIQUE INDEX `idx_router_slug_namespace` ON `model_routers`(`slug`,`namespace`)
+TABLE oauth_clients
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `client_id` varchar(255) NOT NULL
+  column `client_secret` varchar(255) NOT NULL
+  column `client_name` varchar(255) NOT NULL
+  column `redirect_uris` text
+  column `user_id` integer
+  column `scope` varchar(255)
+  index CREATE INDEX `idx_oauth_clients_deleted_at` ON `oauth_clients`(`deleted_at`)
+  index CREATE INDEX `idx_oauth_clients_user_id` ON `oauth_clients`(`user_id`)
+  index CREATE UNIQUE INDEX `idx_oauth_clients_client_id` ON `oauth_clients`(`client_id`)
+TABLE plugin_kv
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `key` text NOT NULL
+  column `value` bytea NOT NULL
+  column `plugin_id` integer NOT NULL
+  column `expire_at` datetime
+  column `created_at` datetime
+  column `updated_at` datetime
+  constraint CONSTRAINT `fk_plugin_kv_plugin` FOREIGN KEY (`plugin_id`) REFERENCES `plugins`(`id`)
+  index CREATE INDEX `idx_plugin_kv_expire_at` ON `plugin_kv`(`expire_at`)
+  index CREATE INDEX `idx_plugin_kv_plugin_id` ON `plugin_kv`(`plugin_id`)
+  index CREATE UNIQUE INDEX `idx_plugin_kv_key` ON `plugin_kv`(`key`)
+TABLE plugins
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `name` text NOT NULL
+  column `description` text
+  column `command` text NOT NULL
+  column `checksum` text
+  column `config` JSON
+  column `hook_type` text NOT NULL
+  column `hook_types` JSON
+  column `hook_types_customized` numeric DEFAULT false
+  column `is_active` numeric
+  column `service_scopes` JSON
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `namespace` text DEFAULT ""
+  index CREATE INDEX `idx_plugin_namespace` ON `plugins`(`namespace`)
+  index CREATE INDEX `idx_plugins_deleted_at` ON `plugins`(`deleted_at`)
+  index CREATE INDEX `idx_plugins_hook_type` ON `plugins`(`hook_type`)
+  index CREATE INDEX `idx_plugins_is_active` ON `plugins`(`is_active`)
+TABLE pool_vendors
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `pool_id` integer NOT NULL
+  column `llm_id` integer NOT NULL
+  column `llm_slug` text NOT NULL
+  column `weight` integer DEFAULT 1
+  column `is_active` numeric DEFAULT true
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  constraint CONSTRAINT `fk_model_pools_vendors` FOREIGN KEY (`pool_id`) REFERENCES `model_pools`(`id`) ON DELETE CASCADE
+  constraint CONSTRAINT `fk_pool_vendors_llm` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
+  index CREATE INDEX `idx_pool_vendors_deleted_at` ON `pool_vendors`(`deleted_at`)
+  index CREATE INDEX `idx_vendor_llm` ON `pool_vendors`(`llm_id`)
+  index CREATE INDEX `idx_vendor_pool` ON `pool_vendors`(`pool_id`)
+TABLE semantic_routers
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `name` text NOT NULL
+  column `slug` text NOT NULL
+  column `namespace` text DEFAULT ""
+  column `is_active` numeric DEFAULT false
+  column `config_json` text
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE UNIQUE INDEX `idx_semantic_router_slug_namespace` ON `semantic_routers`(`slug`,`namespace`)
+TABLE sync_states
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `topic` text NOT NULL
+  column `sequence_number` integer DEFAULT 0
+  column `last_sync_at` datetime
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE UNIQUE INDEX `idx_sync_states_topic` ON `sync_states`(`topic`)
+TABLE tool_filters
+  column `tool_id` integer
+  column `filter_id` integer
+  column `created_at` datetime
+  constraint PRIMARY KEY (`tool_id`,`filter_id`)
+  autoindex origin=pk unique=1 (tool_id, filter_id)
+TABLE tools
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `name` text NOT NULL
+  column `slug` text NOT NULL
+  column `description` text
+  column `tool_type` text
+  column `oas_spec` text
+  column `available_operations` text
+  column `privacy_score` integer
+  column `auth_key_encrypted` text
+  column `auth_schema_name` text
+  column `active` numeric DEFAULT true
+  column `namespace` text DEFAULT ""
+  column `rest_access_disabled` numeric NOT NULL DEFAULT false
+  column `mcp_access_disabled` numeric NOT NULL DEFAULT false
+  column `governed_metadata` JSON
+  index CREATE INDEX `idx_tool_namespace` ON `tools`(`namespace`)
+  index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)
+  index CREATE UNIQUE INDEX `idx_tools_slug` ON `tools`(`slug`)

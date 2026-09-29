@@ -9,7 +9,6 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/rs/zerolog/log"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -394,7 +393,7 @@ func (p *DatabaseProvider) GetPluginsForLLM(llmID uint) ([]database.Plugin, erro
 		}
 
 		// Update plugin with merged config
-		plugin.Config = datatypes.JSON(mergedConfigJSON)
+		plugin.Config = database.JSON(mergedConfigJSON)
 
 		log.Debug().
 			Uint("plugin_id", plugin.ID).

@@ -262,13 +262,14 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE audit_test'
 
       # Analytics writer, budget ledger and budget sync against Postgres
-      # (ON CONFLICT, GREATEST, enforced foreign keys).
+      # (ON CONFLICT, GREATEST, enforced foreign keys), and the edge schema
+      # snapshot.
       - name: Run microgateway Postgres tests
         working-directory: microgateway
         env:
           MGW_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/mgw_test?sslmode=disable
         run: |
-          go test -v -race -count=1 -run 'Postgres' ./internal/services/
+          go test -v -race -count=1 -run 'Postgres' ./internal/services/ ./internal/database/
 
       - name: Run enterprise audit Postgres tests
         working-directory: enterprise

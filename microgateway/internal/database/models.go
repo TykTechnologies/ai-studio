@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -16,7 +15,7 @@ type APIToken struct {
 	Name       string         `gorm:"not null"`
 	AppID      uint           `gorm:"not null"`
 	App        *App           `gorm:"foreignKey:AppID"`
-	Scopes     datatypes.JSON `gorm:"type:json"`
+	Scopes     JSON `gorm:"type:json"`
 	IsActive   bool           `gorm:"default:true;index:idx_token_active"`
 	ExpiresAt  *time.Time
 	LastUsedAt *time.Time
@@ -31,7 +30,7 @@ type APIToken struct {
 // TokenCache for persistent cache backing
 type TokenCache struct {
 	Token     string         `gorm:"primaryKey"`
-	CacheData datatypes.JSON `gorm:"not null;type:json"`
+	CacheData JSON `gorm:"not null;type:json"`
 	ExpiresAt time.Time      `gorm:"not null;index"`
 	CreatedAt time.Time
 }
@@ -51,17 +50,17 @@ type LLM struct {
 	IsActive        bool           `gorm:"default:true;index:idx_llm_active" json:"is_active"`
 	MonthlyBudget   float64        `json:"monthly_budget"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
-	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
+	Metadata        JSON `gorm:"type:json" json:"metadata"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
-	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
-	AllowedModels   datatypes.JSON `gorm:"type:json" json:"allowed_models"` // JSON array of regex patterns for allowed models
+	GovernedMetadata JSON `gorm:"type:json" json:"governed_metadata"`
+	AllowedModels   JSON `gorm:"type:json" json:"allowed_models"` // JSON array of regex patterns for allowed models
 	// Failover is the LLM's failover waterfall as synced from the hub
 	// (models.LLMFailover JSON); NULL when the LLM has none.
-	Failover        datatypes.JSON `gorm:"type:json" json:"failover"`
+	Failover        JSON `gorm:"type:json" json:"failover"`
 	
 	// Authentication configuration for pluggable auth mechanisms
 	AuthMechanism   string         `gorm:"default:'token'" json:"auth_mechanism"` // "token", "oauth", "api-key", "custom"
-	AuthConfig      datatypes.JSON `gorm:"type:json" json:"auth_config"`          // Provider-specific configuration
+	AuthConfig      JSON `gorm:"type:json" json:"auth_config"`          // Provider-specific configuration
 	
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_llm_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
@@ -88,9 +87,9 @@ type App struct {
 	BudgetStartDate *time.Time     `json:"budget_start_date"`
 	BudgetResetDay  int            `gorm:"default:1" json:"budget_reset_day"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
-	AllowedIPs           datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
-	Metadata             datatypes.JSON `gorm:"type:json" json:"metadata"`
-	PluginResourcesJSON  datatypes.JSON `gorm:"type:json" json:"plugin_resources_json"` // Synced from config snapshot PluginResources
+	AllowedIPs           JSON `gorm:"type:json" json:"allowed_ips"`
+	Metadata             JSON `gorm:"type:json" json:"metadata"`
+	PluginResourcesJSON  JSON `gorm:"type:json" json:"plugin_resources_json"` // Synced from config snapshot PluginResources
 
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_app_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
@@ -208,7 +207,7 @@ type AnalyticsEvent struct {
 
 	// Error tracking
 	ErrorMessage           string
-	Metadata               datatypes.JSON `gorm:"type:json"`
+	Metadata               JSON `gorm:"type:json"`
 
 	// Detailed payload storage (configurable)
 	RequestBody    string         `gorm:"type:text"` // Store request payload
@@ -278,12 +277,12 @@ type Plugin struct {
 	Description         string         `json:"description"`
 	Command             string         `gorm:"not null;size:500" json:"command"`
 	Checksum            string         `gorm:"size:255" json:"checksum"`
-	Config              datatypes.JSON `gorm:"type:json" json:"config"`
+	Config              JSON `gorm:"type:json" json:"config"`
 	HookType            string         `gorm:"not null;size:50;index:idx_plugins_hook_type" json:"hook_type"`
-	HookTypes           datatypes.JSON `gorm:"type:json" json:"hook_types"`                         // All hook types this plugin supports
+	HookTypes           JSON `gorm:"type:json" json:"hook_types"`                         // All hook types this plugin supports
 	HookTypesCustomized bool           `gorm:"default:false" json:"hook_types_customized"`          // True if user overrode manifest hooks
 	IsActive            bool           `gorm:"index:idx_plugins_is_active" json:"is_active"`
-	ServiceScopes       datatypes.JSON `gorm:"type:json" json:"service_scopes"`                     // Service API scopes (e.g., ["llms.read", "apps.read"])
+	ServiceScopes       JSON `gorm:"type:json" json:"service_scopes"`                     // Service API scopes (e.g., ["llms.read", "apps.read"])
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
 	DeletedAt           gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
@@ -350,7 +349,7 @@ type LLMPlugin struct {
 	PluginID       uint           `gorm:"primaryKey" json:"plugin_id"`
 	OrderIndex     int            `gorm:"default:0;index:idx_llm_plugins_order" json:"order_index"`
 	IsActive       bool           `gorm:"default:true" json:"is_active"`
-	ConfigOverride datatypes.JSON `gorm:"type:json" json:"config_override"`
+	ConfigOverride JSON `gorm:"type:json" json:"config_override"`
 	CreatedAt      time.Time      `json:"created_at"`
 }
 
@@ -376,7 +375,7 @@ type EdgeInstance struct {
 	Namespace     string         `gorm:"index:idx_edge_namespace;not null;default:''"`
 	Version       string         `gorm:"size:100"`
 	BuildHash     string         `gorm:"size:64"`
-	Metadata      datatypes.JSON `gorm:"type:json"`
+	Metadata      JSON `gorm:"type:json"`
 	LastHeartbeat *time.Time     `gorm:"index:idx_edge_heartbeat"`
 	Status        string         `gorm:"size:50;default:'registered';index:idx_edge_namespace"`
 	SessionID     string         `gorm:"size:255"`
@@ -411,7 +410,7 @@ type ControlPayload struct {
 	PluginID      uint           `gorm:"not null;index:idx_control_payload_plugin"`
 	Payload       []byte         `gorm:"not null"`
 	CorrelationID string         `gorm:"size:255;index:idx_control_payload_correlation"`
-	Metadata      datatypes.JSON `gorm:"type:json"`
+	Metadata      JSON `gorm:"type:json"`
 	Sent          bool           `gorm:"default:false;index:idx_control_payload_sent"`
 	SentAt        *time.Time
 	CreatedAt     time.Time      `gorm:"index:idx_control_payload_created"`
@@ -515,7 +514,7 @@ type Tool struct {
 	RESTAccessDisabled bool `gorm:"not null;default:false" json:"rest_access_disabled"`
 	MCPAccessDisabled  bool `gorm:"not null;default:false" json:"mcp_access_disabled"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
-	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
+	GovernedMetadata JSON `gorm:"type:json" json:"governed_metadata"`
 
 	// Relationships
 	Filters []Filter `gorm:"many2many:tool_filters;" json:"filters,omitempty"`
@@ -542,7 +541,7 @@ type Datasource struct {
 	Active                bool   `gorm:"default:true" json:"active"`
 	Namespace             string `gorm:"default:'';index:idx_ds_namespace" json:"namespace"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
-	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
+	GovernedMetadata JSON `gorm:"type:json" json:"governed_metadata"`
 
 	// Relationships
 	Apps []App `gorm:"many2many:app_datasources;" json:"apps,omitempty"`

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"gorm.io/datatypes"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
@@ -294,7 +293,7 @@ func (s *MicrogatewayManagementServer) StoreApp(ctx context.Context, req *pb.Sto
 
 		// Handle metadata
 		if req.Metadata != "" {
-			app.Metadata = datatypes.JSON(req.Metadata)
+			app.Metadata = database.JSON(req.Metadata)
 		}
 
 		// Upsert the app record. Unscoped: a config sync may have retired

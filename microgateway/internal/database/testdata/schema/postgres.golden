@@ -1,0 +1,497 @@
+TABLE access_tokens
+  constraint access_tokens_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX access_tokens_pkey ON access_tokens USING btree (id)
+  index CREATE INDEX idx_access_tokens_app_id ON access_tokens USING btree (app_id)
+  index CREATE INDEX idx_access_tokens_deleted_at ON access_tokens USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_access_tokens_token_hash ON access_tokens USING btree (token_hash)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('access_tokens_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column token_hash character varying(varchar) nullable=NO len=64
+  column token_encrypted character varying(varchar) nullable=NO len=255
+  column client_id character varying(varchar) nullable=NO len=255
+  column user_id bigint(int8) nullable=NO precision=64 scale=0
+  column app_id bigint(int8) nullable=YES precision=64 scale=0
+  column scope character varying(varchar) nullable=YES len=255
+  column expires_at timestamp with time zone(timestamptz) nullable=NO
+TABLE analytics_events
+  constraint analytics_events_pkey PRIMARY KEY (id)
+  constraint fk_analytics_events_credential FOREIGN KEY (credential_id) REFERENCES credentials(id)
+  constraint fk_apps_events FOREIGN KEY (app_id) REFERENCES apps(id)
+  constraint fk_llms_events FOREIGN KEY (llm_id) REFERENCES llms(id)
+  index CREATE UNIQUE INDEX analytics_events_pkey ON analytics_events USING btree (id)
+  index CREATE INDEX idx_analytics_app ON analytics_events USING btree (app_id, created_at)
+  index CREATE UNIQUE INDEX idx_analytics_events_request_id ON analytics_events USING btree (request_id)
+  index CREATE INDEX idx_analytics_failover_from ON analytics_events USING btree (failover_from_llm_id)
+  index CREATE INDEX idx_analytics_timestamp ON analytics_events USING btree (time_stamp)
+  index CREATE INDEX idx_analytics_user ON analytics_events USING btree (user_id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('analytics_events_id_seq'::regclass)
+  column request_id text(text) nullable=NO
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column llm_id bigint(int8) nullable=YES precision=64 scale=0
+  column credential_id bigint(int8) nullable=YES precision=64 scale=0
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column name text(text) nullable=YES
+  column vendor text(text) nullable=YES
+  column interaction_type text(text) nullable=YES default='proxy'::text
+  column choices bigint(int8) nullable=YES precision=64 scale=0
+  column tool_calls bigint(int8) nullable=YES precision=64 scale=0
+  column chat_id text(text) nullable=YES
+  column currency text(text) nullable=YES default='USD'::text
+  column endpoint text(text) nullable=YES
+  column method text(text) nullable=YES
+  column status_code bigint(int8) nullable=YES precision=64 scale=0
+  column prompt_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column response_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column total_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column cache_write_prompt_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column cache_read_prompt_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column cost numeric(numeric) nullable=YES
+  column total_time_ms bigint(int8) nullable=YES precision=64 scale=0
+  column error_message text(text) nullable=YES
+  column metadata jsonb(jsonb) nullable=YES
+  column request_body text(text) nullable=YES
+  column response_body text(text) nullable=YES
+  column router_kind text(text) nullable=YES
+  column router_slug text(text) nullable=YES
+  column router_pool_name text(text) nullable=YES
+  column route text(text) nullable=YES
+  column route_reason text(text) nullable=YES
+  column router_source_model text(text) nullable=YES
+  column router_target_model text(text) nullable=YES
+  column router_selection_algo text(text) nullable=YES
+  column route_score numeric(numeric) nullable=YES
+  column shadow_route text(text) nullable=YES
+  column failover_from_llm_id bigint(int8) nullable=YES precision=64 scale=0
+  column failover_attempt bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column time_stamp timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE api_tokens
+  constraint api_tokens_pkey PRIMARY KEY (id)
+  constraint fk_apps_tokens FOREIGN KEY (app_id) REFERENCES apps(id)
+  index CREATE UNIQUE INDEX api_tokens_pkey ON api_tokens USING btree (id)
+  index CREATE INDEX idx_api_tokens_deleted_at ON api_tokens USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_api_tokens_token ON api_tokens USING btree (token)
+  index CREATE INDEX idx_token_active ON api_tokens USING btree (is_active)
+  index CREATE INDEX idx_token_namespace ON api_tokens USING btree (namespace)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('api_tokens_id_seq'::regclass)
+  column token text(text) nullable=NO
+  column name text(text) nullable=NO
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column scopes jsonb(jsonb) nullable=YES
+  column is_active boolean(bool) nullable=YES default=true
+  column expires_at timestamp with time zone(timestamptz) nullable=YES
+  column last_used_at timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column namespace text(text) nullable=YES default=''::text
+TABLE app_datasources
+  constraint app_datasources_pkey PRIMARY KEY (app_id, datasource_id)
+  index CREATE UNIQUE INDEX app_datasources_pkey ON app_datasources USING btree (app_id, datasource_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column datasource_id bigint(int8) nullable=NO precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE app_llms
+  constraint app_llms_pkey PRIMARY KEY (app_id, llm_id)
+  index CREATE UNIQUE INDEX app_llms_pkey ON app_llms USING btree (app_id, llm_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column llm_id bigint(int8) nullable=NO precision=64 scale=0
+  column is_active boolean(bool) nullable=YES default=true
+  column custom_budget numeric(numeric) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE app_model_routers
+  constraint app_model_routers_pkey PRIMARY KEY (app_id, model_router_id)
+  index CREATE UNIQUE INDEX app_model_routers_pkey ON app_model_routers USING btree (app_id, model_router_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column model_router_id bigint(int8) nullable=NO precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE app_semantic_routers
+  constraint app_semantic_routers_pkey PRIMARY KEY (app_id, semantic_router_id)
+  index CREATE UNIQUE INDEX app_semantic_routers_pkey ON app_semantic_routers USING btree (app_id, semantic_router_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column semantic_router_id bigint(int8) nullable=NO precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE app_tools
+  constraint app_tools_pkey PRIMARY KEY (app_id, tool_id)
+  index CREATE UNIQUE INDEX app_tools_pkey ON app_tools USING btree (app_id, tool_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column tool_id bigint(int8) nullable=NO precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE apps
+  constraint apps_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX apps_pkey ON apps USING btree (id)
+  index CREATE INDEX idx_app_namespace ON apps USING btree (namespace)
+  index CREATE INDEX idx_apps_deleted_at ON apps USING btree (deleted_at)
+  index CREATE INDEX idx_apps_is_active ON apps USING btree (is_active)
+  index CREATE INDEX idx_apps_owner_email ON apps USING btree (owner_email)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('apps_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column name text(text) nullable=NO
+  column description text(text) nullable=YES
+  column owner_email text(text) nullable=YES
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column is_active boolean(bool) nullable=YES default=true
+  column monthly_budget numeric(numeric) nullable=YES
+  column budget_start_date timestamp with time zone(timestamptz) nullable=YES
+  column budget_reset_day bigint(int8) nullable=YES precision=64 scale=0 default=1
+  column rate_limit_rpm bigint(int8) nullable=YES precision=64 scale=0
+  column allowed_ips jsonb(jsonb) nullable=YES
+  column metadata jsonb(jsonb) nullable=YES
+  column plugin_resources_json jsonb(jsonb) nullable=YES
+  column namespace text(text) nullable=YES default=''::text
+TABLE budget_blocks
+  constraint budget_blocks_pkey PRIMARY KEY (app_id)
+  index CREATE UNIQUE INDEX budget_blocks_pkey ON budget_blocks USING btree (app_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column reason character varying(varchar) nullable=YES len=255
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE budget_usage
+  constraint budget_usage_pkey PRIMARY KEY (id)
+  constraint fk_apps_budget_usage FOREIGN KEY (app_id) REFERENCES apps(id)
+  constraint fk_llms_usage FOREIGN KEY (llm_id) REFERENCES llms(id)
+  index CREATE UNIQUE INDEX budget_usage_pkey ON budget_usage USING btree (id)
+  index CREATE UNIQUE INDEX idx_budget_app_period ON budget_usage USING btree (app_id, period_start, period_end)
+  index CREATE INDEX idx_budget_usage_llm_id ON budget_usage USING btree (llm_id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('budget_usage_id_seq'::regclass)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column llm_id bigint(int8) nullable=YES precision=64 scale=0
+  column period_start timestamp with time zone(timestamptz) nullable=NO
+  column period_end timestamp with time zone(timestamptz) nullable=NO
+  column tokens_used bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column requests_count bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column total_cost numeric(numeric) nullable=YES default=0
+  column prompt_tokens bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column completion_tokens bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE control_payloads
+  constraint control_payloads_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX control_payloads_pkey ON control_payloads USING btree (id)
+  index CREATE INDEX idx_control_payload_correlation ON control_payloads USING btree (correlation_id)
+  index CREATE INDEX idx_control_payload_created ON control_payloads USING btree (created_at)
+  index CREATE INDEX idx_control_payload_plugin ON control_payloads USING btree (plugin_id)
+  index CREATE INDEX idx_control_payload_sent ON control_payloads USING btree (sent)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('control_payloads_id_seq'::regclass)
+  column plugin_id bigint(int8) nullable=NO precision=64 scale=0
+  column payload bytea(bytea) nullable=NO
+  column correlation_id character varying(varchar) nullable=YES len=255
+  column metadata jsonb(jsonb) nullable=YES
+  column sent boolean(bool) nullable=YES default=false
+  column sent_at timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE credentials
+  constraint credentials_pkey PRIMARY KEY (id)
+  constraint fk_apps_credentials FOREIGN KEY (app_id) REFERENCES apps(id)
+  index CREATE UNIQUE INDEX credentials_pkey ON credentials USING btree (id)
+  index CREATE INDEX idx_credentials_deleted_at ON credentials USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_credentials_key_id ON credentials USING btree (key_id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('credentials_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column key_id text(text) nullable=NO
+  column secret_hash text(text) nullable=NO
+  column name text(text) nullable=YES
+  column is_active boolean(bool) nullable=YES default=true
+  column expires_at timestamp with time zone(timestamptz) nullable=YES
+  column last_used_at timestamp with time zone(timestamptz) nullable=YES
+TABLE datasources
+  constraint datasources_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX datasources_pkey ON datasources USING btree (id)
+  index CREATE INDEX idx_datasources_deleted_at ON datasources USING btree (deleted_at)
+  index CREATE INDEX idx_ds_namespace ON datasources USING btree (namespace)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('datasources_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column name text(text) nullable=NO
+  column short_description text(text) nullable=YES
+  column long_description text(text) nullable=YES
+  column icon text(text) nullable=YES
+  column url text(text) nullable=YES
+  column privacy_score bigint(int8) nullable=YES precision=64 scale=0
+  column db_source_type text(text) nullable=YES
+  column db_conn_string_encrypted text(text) nullable=YES
+  column db_conn_api_key_encrypted text(text) nullable=YES
+  column db_name text(text) nullable=YES
+  column embed_vendor text(text) nullable=YES
+  column embed_url text(text) nullable=YES
+  column embed_api_key_encrypted text(text) nullable=YES
+  column embed_model text(text) nullable=YES
+  column active boolean(bool) nullable=YES default=true
+  column namespace text(text) nullable=YES default=''::text
+  column governed_metadata jsonb(jsonb) nullable=YES
+TABLE edge_instances
+  constraint edge_instances_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX edge_instances_pkey ON edge_instances USING btree (id)
+  index CREATE INDEX idx_edge_heartbeat ON edge_instances USING btree (last_heartbeat)
+  index CREATE UNIQUE INDEX idx_edge_instances_edge_id ON edge_instances USING btree (edge_id)
+  index CREATE INDEX idx_edge_namespace ON edge_instances USING btree (namespace, status)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('edge_instances_id_seq'::regclass)
+  column edge_id text(text) nullable=NO
+  column namespace text(text) nullable=NO default=''::text
+  column version character varying(varchar) nullable=YES len=100
+  column build_hash character varying(varchar) nullable=YES len=64
+  column metadata jsonb(jsonb) nullable=YES
+  column last_heartbeat timestamp with time zone(timestamptz) nullable=YES
+  column status character varying(varchar) nullable=YES len=50 default='registered'::character varying
+  column session_id character varying(varchar) nullable=YES len=255
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE filters
+  constraint filters_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX filters_pkey ON filters USING btree (id)
+  index CREATE INDEX idx_filter_namespace ON filters USING btree (namespace)
+  index CREATE INDEX idx_filters_deleted_at ON filters USING btree (deleted_at)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('filters_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column name text(text) nullable=NO
+  column description text(text) nullable=YES
+  column script text(text) nullable=NO
+  column response_filter boolean(bool) nullable=YES default=false
+  column is_active boolean(bool) nullable=YES default=true
+  column order_index bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column kind text(text) nullable=YES default='script'::text
+  column config text(text) nullable=YES
+  column namespace text(text) nullable=YES default=''::text
+TABLE llm_filters
+  constraint llm_filters_pkey PRIMARY KEY (llm_id, filter_id)
+  index CREATE UNIQUE INDEX llm_filters_pkey ON llm_filters USING btree (llm_id, filter_id)
+  column llm_id bigint(int8) nullable=NO precision=64 scale=0
+  column filter_id bigint(int8) nullable=NO precision=64 scale=0
+  column is_active boolean(bool) nullable=YES default=true
+  column order_index bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE llm_plugins
+  constraint llm_plugins_pkey PRIMARY KEY (llm_id, plugin_id)
+  index CREATE INDEX idx_llm_plugins_llm_id ON llm_plugins USING btree (llm_id)
+  index CREATE INDEX idx_llm_plugins_order ON llm_plugins USING btree (order_index)
+  index CREATE UNIQUE INDEX llm_plugins_pkey ON llm_plugins USING btree (llm_id, plugin_id)
+  column llm_id bigint(int8) nullable=NO precision=64 scale=0
+  column plugin_id bigint(int8) nullable=NO precision=64 scale=0
+  column order_index bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column is_active boolean(bool) nullable=YES default=true
+  column config_override jsonb(jsonb) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE llms
+  constraint llms_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_llm_active ON llms USING btree (is_active)
+  index CREATE INDEX idx_llm_namespace ON llms USING btree (namespace)
+  index CREATE INDEX idx_llms_deleted_at ON llms USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_llms_slug ON llms USING btree (slug)
+  index CREATE UNIQUE INDEX llms_pkey ON llms USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('llms_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column name text(text) nullable=NO
+  column slug text(text) nullable=NO
+  column vendor text(text) nullable=NO
+  column endpoint text(text) nullable=YES
+  column api_key_encrypted text(text) nullable=YES
+  column default_model text(text) nullable=YES
+  column max_tokens bigint(int8) nullable=YES precision=64 scale=0 default=4096
+  column timeout_seconds bigint(int8) nullable=YES precision=64 scale=0 default=30
+  column retry_count bigint(int8) nullable=YES precision=64 scale=0 default=3
+  column is_active boolean(bool) nullable=YES default=true
+  column monthly_budget numeric(numeric) nullable=YES
+  column rate_limit_rpm bigint(int8) nullable=YES precision=64 scale=0
+  column metadata jsonb(jsonb) nullable=YES
+  column governed_metadata jsonb(jsonb) nullable=YES
+  column allowed_models jsonb(jsonb) nullable=YES
+  column failover jsonb(jsonb) nullable=YES
+  column auth_mechanism text(text) nullable=YES default='token'::text
+  column auth_config jsonb(jsonb) nullable=YES
+  column namespace text(text) nullable=YES default=''::text
+  column dont_log_bodies boolean(bool) nullable=YES default=false
+TABLE model_mappings
+  constraint fk_pool_vendors_mappings FOREIGN KEY (vendor_id) REFERENCES pool_vendors(id) ON DELETE CASCADE
+  constraint model_mappings_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_mapping_vendor ON model_mappings USING btree (vendor_id)
+  index CREATE INDEX idx_model_mappings_deleted_at ON model_mappings USING btree (deleted_at)
+  index CREATE UNIQUE INDEX model_mappings_pkey ON model_mappings USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('model_mappings_id_seq'::regclass)
+  column vendor_id bigint(int8) nullable=NO precision=64 scale=0
+  column source_model text(text) nullable=NO
+  column target_model text(text) nullable=NO
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+TABLE model_pools
+  constraint fk_model_routers_pools FOREIGN KEY (router_id) REFERENCES model_routers(id) ON DELETE CASCADE
+  constraint model_pools_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_model_pools_deleted_at ON model_pools USING btree (deleted_at)
+  index CREATE INDEX idx_pool_router ON model_pools USING btree (router_id)
+  index CREATE UNIQUE INDEX model_pools_pkey ON model_pools USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('model_pools_id_seq'::regclass)
+  column router_id bigint(int8) nullable=NO precision=64 scale=0
+  column name text(text) nullable=NO
+  column model_pattern text(text) nullable=NO
+  column selection_algorithm text(text) nullable=YES default='round_robin'::text
+  column priority bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+TABLE model_prices
+  constraint model_prices_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_model_price_namespace ON model_prices USING btree (namespace)
+  index CREATE INDEX idx_model_prices_deleted_at ON model_prices USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_model_vendor ON model_prices USING btree (model_name, vendor)
+  index CREATE UNIQUE INDEX model_prices_pkey ON model_prices USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('model_prices_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column model_name text(text) nullable=NO
+  column vendor text(text) nullable=NO
+  column cpt numeric(numeric) nullable=NO
+  column cpit numeric(numeric) nullable=NO
+  column cache_write_pt numeric(numeric) nullable=YES default=0
+  column cache_read_pt numeric(numeric) nullable=YES default=0
+  column currency text(text) nullable=YES default='USD'::text
+  column namespace text(text) nullable=YES default=''::text
+TABLE model_routers
+  constraint model_routers_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_model_routers_deleted_at ON model_routers USING btree (deleted_at)
+  index CREATE INDEX idx_router_active ON model_routers USING btree (is_active)
+  index CREATE INDEX idx_router_namespace ON model_routers USING btree (namespace)
+  index CREATE UNIQUE INDEX idx_router_slug_namespace ON model_routers USING btree (slug, namespace)
+  index CREATE UNIQUE INDEX model_routers_pkey ON model_routers USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('model_routers_id_seq'::regclass)
+  column name text(text) nullable=NO
+  column slug text(text) nullable=NO
+  column description text(text) nullable=YES
+  column api_compat text(text) nullable=YES default='openai'::text
+  column is_active boolean(bool) nullable=YES default=false
+  column namespace text(text) nullable=YES default=''::text
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+TABLE oauth_clients
+  constraint oauth_clients_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_oauth_clients_client_id ON oauth_clients USING btree (client_id)
+  index CREATE INDEX idx_oauth_clients_deleted_at ON oauth_clients USING btree (deleted_at)
+  index CREATE INDEX idx_oauth_clients_user_id ON oauth_clients USING btree (user_id)
+  index CREATE UNIQUE INDEX oauth_clients_pkey ON oauth_clients USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('oauth_clients_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column client_id character varying(varchar) nullable=NO len=255
+  column client_secret character varying(varchar) nullable=NO len=255
+  column client_name character varying(varchar) nullable=NO len=255
+  column redirect_uris text(text) nullable=YES
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column scope character varying(varchar) nullable=YES len=255
+TABLE plugin_kv
+  constraint fk_plugin_kv_plugin FOREIGN KEY (plugin_id) REFERENCES plugins(id)
+  constraint plugin_kv_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_plugin_kv_expire_at ON plugin_kv USING btree (expire_at)
+  index CREATE UNIQUE INDEX idx_plugin_kv_key ON plugin_kv USING btree (key)
+  index CREATE INDEX idx_plugin_kv_plugin_id ON plugin_kv USING btree (plugin_id)
+  index CREATE UNIQUE INDEX plugin_kv_pkey ON plugin_kv USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('plugin_kv_id_seq'::regclass)
+  column key text(text) nullable=NO
+  column value bytea(bytea) nullable=NO
+  column plugin_id bigint(int8) nullable=NO precision=64 scale=0
+  column expire_at timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE plugins
+  constraint plugins_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_plugin_namespace ON plugins USING btree (namespace)
+  index CREATE INDEX idx_plugins_deleted_at ON plugins USING btree (deleted_at)
+  index CREATE INDEX idx_plugins_hook_type ON plugins USING btree (hook_type)
+  index CREATE INDEX idx_plugins_is_active ON plugins USING btree (is_active)
+  index CREATE UNIQUE INDEX plugins_pkey ON plugins USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('plugins_id_seq'::regclass)
+  column name text(text) nullable=NO
+  column description text(text) nullable=YES
+  column command character varying(varchar) nullable=NO len=500
+  column checksum character varying(varchar) nullable=YES len=255
+  column config jsonb(jsonb) nullable=YES
+  column hook_type character varying(varchar) nullable=NO len=50
+  column hook_types jsonb(jsonb) nullable=YES
+  column hook_types_customized boolean(bool) nullable=YES default=false
+  column is_active boolean(bool) nullable=YES
+  column service_scopes jsonb(jsonb) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column namespace text(text) nullable=YES default=''::text
+TABLE pool_vendors
+  constraint fk_model_pools_vendors FOREIGN KEY (pool_id) REFERENCES model_pools(id) ON DELETE CASCADE
+  constraint fk_pool_vendors_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
+  constraint pool_vendors_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_pool_vendors_deleted_at ON pool_vendors USING btree (deleted_at)
+  index CREATE INDEX idx_vendor_llm ON pool_vendors USING btree (llm_id)
+  index CREATE INDEX idx_vendor_pool ON pool_vendors USING btree (pool_id)
+  index CREATE UNIQUE INDEX pool_vendors_pkey ON pool_vendors USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('pool_vendors_id_seq'::regclass)
+  column pool_id bigint(int8) nullable=NO precision=64 scale=0
+  column llm_id bigint(int8) nullable=NO precision=64 scale=0
+  column llm_slug text(text) nullable=NO
+  column weight bigint(int8) nullable=YES precision=64 scale=0 default=1
+  column is_active boolean(bool) nullable=YES default=true
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+TABLE semantic_routers
+  constraint semantic_routers_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_semantic_router_slug_namespace ON semantic_routers USING btree (slug, namespace)
+  index CREATE UNIQUE INDEX semantic_routers_pkey ON semantic_routers USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('semantic_routers_id_seq'::regclass)
+  column name text(text) nullable=NO
+  column slug text(text) nullable=NO
+  column namespace text(text) nullable=YES default=''::text
+  column is_active boolean(bool) nullable=YES default=false
+  column config_json text(text) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE sync_states
+  constraint sync_states_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_sync_states_topic ON sync_states USING btree (topic)
+  index CREATE UNIQUE INDEX sync_states_pkey ON sync_states USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('sync_states_id_seq'::regclass)
+  column topic text(text) nullable=NO
+  column sequence_number bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column last_sync_at timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE tool_filters
+  constraint tool_filters_pkey PRIMARY KEY (tool_id, filter_id)
+  index CREATE UNIQUE INDEX tool_filters_pkey ON tool_filters USING btree (tool_id, filter_id)
+  column tool_id bigint(int8) nullable=NO precision=64 scale=0
+  column filter_id bigint(int8) nullable=NO precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE tools
+  constraint tools_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_tool_namespace ON tools USING btree (namespace)
+  index CREATE INDEX idx_tools_deleted_at ON tools USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_tools_slug ON tools USING btree (slug)
+  index CREATE UNIQUE INDEX tools_pkey ON tools USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('tools_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column name text(text) nullable=NO
+  column slug text(text) nullable=NO
+  column description text(text) nullable=YES
+  column tool_type text(text) nullable=YES
+  column oas_spec text(text) nullable=YES
+  column available_operations text(text) nullable=YES
+  column privacy_score bigint(int8) nullable=YES precision=64 scale=0
+  column auth_key_encrypted text(text) nullable=YES
+  column auth_schema_name text(text) nullable=YES
+  column active boolean(bool) nullable=YES default=true
+  column namespace text(text) nullable=YES default=''::text
+  column rest_access_disabled boolean(bool) nullable=NO default=false
+  column mcp_access_disabled boolean(bool) nullable=NO default=false
+  column governed_metadata jsonb(jsonb) nullable=YES

@@ -13,9 +13,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
@@ -52,7 +49,7 @@ func main() {
 		logger.FatalErr("Connectivity tests failed", err)
 	}
 
-	db, err := openDatabase(appConf)
+	db, err := studio.OpenDatabase(appConf)
 	if err != nil {
 		logger.FatalErr("Failed to connect to the database", err)
 	}
@@ -128,32 +125,6 @@ func main() {
 	}
 
 	logger.Info("Application stopped gracefully")
-}
-
-// openDatabase connects to the configured database and checks it responds.
-func openDatabase(appConf *config.AppConf) (*gorm.DB, error) {
-	var dialector gorm.Dialector
-	switch appConf.DatabaseType {
-	case "sqlite":
-		dialector = sqlite.Open(appConf.DatabaseURL)
-	case "postgres":
-		dialector = postgres.Open(appConf.DatabaseURL)
-	default:
-		return nil, fmt.Errorf("unsupported database type: %s", appConf.DatabaseType)
-	}
-
-	db, err := gorm.Open(dialector, logger.GetGormConfig())
-	if err != nil {
-		return nil, err
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, err
-	}
-	if err := sqlDB.Ping(); err != nil {
-		return nil, err
-	}
-	return db, nil
 }
 
 // docsDisabled and docsPort apply the --no-docs and --docs-port arguments

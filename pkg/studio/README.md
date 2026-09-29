@@ -13,9 +13,15 @@ conf := config.LoadFrom(func(key string) string { return hostSettings[key] })
 conf.BasePath = "/ai-studio"
 conf.SiteURL = "https://control.example.com/ai-studio" // includes the base path
 
+// Studio's own database or schema (DatabaseType/DatabaseURL in conf).
+studioDB, err := studio.OpenDatabase(conf)
+if err != nil {
+	return err
+}
+
 s, err := studio.New(studio.Options{
 	Config:  conf,
-	DB:      studioDB, // Studio's own database or schema; the host closes it
+	DB:      studioDB, // the host closes it after Stop
 	Version: hostVersion,
 	Logger:  &hostLogger,
 	TracerProvider: hostTracerProvider,

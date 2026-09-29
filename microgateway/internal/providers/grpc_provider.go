@@ -8,7 +8,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -423,13 +422,13 @@ func (p *GRPCProvider) ListPlugins(namespace string, hookType string, active boo
 
 // Conversion methods from protobuf to database models
 
-// jsonOrNil turns a JSON string field into a datatypes.JSON column value,
+// jsonOrNil turns a JSON string field into a database.JSON column value,
 // keeping "" as nil so the column is NULL rather than an empty string.
-func jsonOrNil(s string) datatypes.JSON {
+func jsonOrNil(s string) database.JSON {
 	if s == "" {
 		return nil
 	}
-	return datatypes.JSON(s)
+	return database.JSON(s)
 }
 
 func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM {

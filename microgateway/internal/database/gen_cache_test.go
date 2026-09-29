@@ -5,8 +5,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"gorm.io/datatypes"
 )
 
 func TestDeepCopySharesNoMutableState(t *testing.T) {
@@ -14,8 +12,8 @@ func TestDeepCopySharesNoMutableState(t *testing.T) {
 	orig := &App{
 		Name:            "a",
 		BudgetStartDate: &start,
-		Metadata:        datatypes.JSON(`{"k":"v"}`),
-		LLMs:            []LLM{{Name: "l", GovernedMetadata: datatypes.JSON(`{"g":1}`)}},
+		Metadata:        JSON(`{"k":"v"}`),
+		LLMs:            []LLM{{Name: "l", GovernedMetadata: JSON(`{"g":1}`)}},
 		Tools:           []Tool{{Name: "t", Filters: []Filter{{Name: "f"}}}},
 	}
 	orig.ID = 7
