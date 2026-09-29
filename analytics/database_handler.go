@@ -226,13 +226,10 @@ func (h *DatabaseHandler) startWorker() {
 			h.recMutex.Lock()
 			h.recStarted = false
 			h.recMutex.Unlock()
-			close(h.chatRecordChan)
-			close(h.logEntryChan)
-			close(h.toolCallChan)
-			close(h.proxyLogChan)
-			close(h.chatRecordBatchChan)
-			close(h.proxyLogBatchChan)
-			close(h.complianceEventChan)
+			// The channels stay open: a recorder that checked recStarted
+			// before this point may still send, and a send on a closed
+			// channel panics. Nothing ranges over them, so leaving them
+			// open only leaves unread records in the buffers.
 			return
 		}
 	}
