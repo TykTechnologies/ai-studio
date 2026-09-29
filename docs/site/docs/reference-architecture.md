@@ -21,7 +21,7 @@ Both work, but neither gives you central configuration with independently scaled
 - **Studio is the brain, not the pipe.** Application traffic to LLMs goes through the Microgateways. Studio holds configuration, identity, the portal, chat and analytics, and it is only on a request's path when an edge meets an access token it has not validated in the last five minutes. Tokens in use are revalidated in the background before their cache entry expires.
 - **Edges connect out; Studio never connects in.** Each edge opens one long-lived gRPC connection to Studio on port 50051. Edges can therefore sit in private networks, other clouds or on-premises with outbound-only access.
 - **Scale the data plane horizontally.** One 4-vCPU edge sustained **~690 streaming requests per second** (about 3,000 concurrent streams) or **~8,500 short non-streaming requests per second**, adding **about 0.55 ms at p50**. Both limits are CPU. Add nodes behind a load balancer for more.
-- **Run one Studio instance and make its database highly available.** In 2.2 the control plane is designed to run as a single active instance. Its availability comes from a managed, replicated PostgreSQL and a fast restart, not from multiple replicas. Running edges keep serving while Studio is down, but new edges cannot start.
+- **Run Studio as a hot / cold singleton and make its database highly available.** In 2.2 the control plane supports exactly one running instance: one hot instance serving traffic, with an optional cold standby that stays stopped until the hot one is lost. Replicated Studio instances are not supported in 2.2. Availability comes from a managed, replicated PostgreSQL and a fast restart or failover. Running edges keep serving while Studio is down, but new edges cannot start. Support for multiple active replicas is planned for 2.3.
 
 ## The picture
 
@@ -58,7 +58,7 @@ Each edge pool serves one **namespace**. A single-region deployment has one pool
 
 | Component | Role | Runs as | State |
 |---|---|---|---|
-| **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One instance, `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
+| **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One running instance (hot / cold singleton), `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
 | **PostgreSQL** | System of record for configuration, credentials and all analytics shipped from edges | Managed service or HA cluster, PostgreSQL 14+ | Everything that matters |
 | **Microgateway (edge)** | Data plane: authenticates requests, applies access control, filters, guardrails, plugins and budgets, proxies to the LLM, records analytics (`GATEWAY_MODE=edge`) | N stateless-by-design nodes per namespace, `tykio/tyk-microgateway-ent` | A local SQLite file per node: a cache of the configuration snapshot, budget counters, and a local copy of recent analytics (`ANALYTICS_RETENTION_DAYS`). Configuration is rebuilt from Studio on every start. |
 | **Load balancer** | Spreads application traffic across the edges of one pool | Any L7 load balancer or Kubernetes Ingress/Gateway | None |
@@ -133,15 +133,21 @@ Plan the control plane's availability around this table.
 
 ## The control plane
 
-### Run one Studio instance
+### Run Studio as a hot / cold singleton
 
-Run AI Studio as **one active instance**, with its availability provided by the database and by fast restarts:
+> **Replicated Studio instances are not supported in 2.2.** Never run two Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. Support for several active replicas is planned for 2.3.
 
-- **In 2.2, Studio keeps edge connections, the embedded gateway's routing table, loaded Studio plugins and live chat sessions in memory, per process.** With two replicas, a configuration push handled by one replica does not reach edges connected to the other, and UI requests need session affinity. The Helm chart deploys a single replica for this reason.
+Run AI Studio as a **hot / cold singleton**: exactly one **hot** instance serves the UI, the API and the edges, and an optional **cold** standby is installed and configured but stopped. Availability comes from the database and from fast restarts or failover, not from replicas:
+
+- **In 2.2, Studio keeps edge connections, the embedded gateway's routing table, loaded Studio plugins and live chat sessions in memory, per process.** With two instances running, a configuration push handled by one does not reach edges connected to the other, and UI requests need session affinity. Two instances starting together also run the database migrations concurrently. The Helm chart deploys a single replica for this reason.
 - **It does not need more.** Studio is not on the data path: it serves administration, the portal, chat and the edges' control traffic. Scale it vertically if chat usage grows.
-- **A restart is cheap.** Edges reconnect on their own, and callers with cached tokens do not notice.
+- **A restart or failover is cheap.** Edges reconnect on their own, and callers with cached tokens do not notice.
 
-On Kubernetes, use a single-replica Deployment with the `Recreate` strategy (so two instances never run side by side during an upgrade), readiness on `/ready` and liveness on `/health`. On VMs, run one instance under systemd with an automatic restart, and optionally a cold standby that is started only if the primary host is lost.
+Set up the pair like this:
+
+- **Hot instance.** On Kubernetes, a single-replica Deployment with the `Recreate` strategy (so two instances never run side by side during an upgrade), readiness on `/ready` and liveness on `/health`. The scheduler restarts it or moves it to another node, which is the cold failover. On VMs, one instance under systemd with an automatic restart.
+- **Cold standby** (VMs, or a second cluster or region). The same version and configuration as the hot instance: the same `DATABASE_URL`, `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY`, `GRPC_AUTH_TOKEN`, TLS certificates and license, and access to the same `data/` contents (a shared or replicated volume, or restored from backup). Keep it stopped, and upgrade it whenever the hot instance is upgraded.
+- **Failover.** Confirm the hot instance is stopped (fence it, or stop its host) before starting the standby. Then point the UI/API endpoint and the edges' gRPC endpoint (`CONTROL_ENDPOINT`) at the standby, for example with a DNS record or a load balancer target that you switch, so edges reconnect without being reconfigured. Fail back the same way: stop one instance before starting the other.
 
 ### Database
 
@@ -321,7 +327,8 @@ Watch at least:
 
 **Control plane**
 
-- [ ] Studio: one instance, `GATEWAY_MODE=control`, `Recreate` upgrades, persistent `data/` volume
+- [ ] Studio: hot / cold singleton (never two running instances in 2.2), `GATEWAY_MODE=control`, `Recreate` upgrades, persistent `data/` volume
+- [ ] Cold standby, if used: same version, configuration, secrets and `data/` contents; stopped; a documented failover that stops the hot instance first and switches the UI and gRPC endpoints
 - [ ] PostgreSQL 14+, managed or replicated, with automatic failover and backups
 - [ ] `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` (32 characters), `GRPC_AUTH_TOKEN` and `TYK_AI_LICENSE` stored in a secret manager and backed up
 - [ ] gRPC `:50051` with TLS, reachable from edge networks only
