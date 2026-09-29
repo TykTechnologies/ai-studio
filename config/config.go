@@ -64,6 +64,13 @@ type AppConf struct {
 	DisableCors           bool
 	DatabaseURL           string
 	DatabaseType          string
+	// DatabaseSchema (DATABASE_SCHEMA), for postgres only, puts Studio's
+	// tables in this schema instead of the connection's default (public).
+	// studio.OpenDatabase creates it when missing and pins search_path to it
+	// alone. Use it to share a database with another application: Studio's
+	// table names are unprefixed and include common ones such as users,
+	// roles and audit_records.
+	DatabaseSchema        string
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -430,6 +437,8 @@ func LoadFrom(getenv func(string) string) *AppConf {
 		cfgLog.Info().Msgf("Warning: Unsupported DATABASE_TYPE: %s. Defaulting to sqlite", conf.DatabaseType)
 		conf.DatabaseType = "sqlite"
 	}
+
+	conf.DatabaseSchema = getenv("DATABASE_SCHEMA")
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {

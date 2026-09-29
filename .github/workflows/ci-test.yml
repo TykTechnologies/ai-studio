@@ -258,7 +258,7 @@ jobs:
         run: |
           go test -v -race -p 1 -count=1 \
             -run 'PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue' \
-            ./models/ ./services/
+            ./models/ ./services/ ./pkg/studio/
 
       # Packages whose Postgres-gated tests used to run nowhere: the chat
       # queue (LISTEN/NOTIFY), config and startup.

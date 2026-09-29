@@ -194,8 +194,27 @@ func New(opts Options) (_ *Studio, err error) {
 	backgroundCtx, cancel := context.WithCancel(context.Background())
 	s.cancelBackground = cancel
 
+	// Migrations and seeding (through the RBAC seed below) run under a
+	// Postgres advisory lock, so replicas sharing a database do not race
+	// through AutoMigrate and the get-or-create seeds. A no-op on SQLite.
+	releaseMigrationLock, err := models.AcquireMigrationLock(backgroundCtx, s.db)
+	if err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
+	}
+	defer func() {
+		if releaseMigrationLock != nil {
+			releaseMigrationLock()
+		}
+	}()
+
 	if err := models.InitModels(s.db); err != nil {
 		return nil, fmt.Errorf("studio: migrate database: %w", err)
+	}
+	if err := analytics.Migrate(s.db); err != nil {
+		return nil, fmt.Errorf("studio: migrate analytics tables: %w", err)
+	}
+	if err := models.MigrateTIBStores(s.db); err != nil {
+		return nil, fmt.Errorf("studio: migrate identity broker tables: %w", err)
 	}
 	if err := ensureDefaults(s.db, opts.SkipLLMDefaults); err != nil {
 		return nil, fmt.Errorf("studio: seed defaults: %w", err)
@@ -246,6 +265,8 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := service.Authz().Seed(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: seed RBAC roles: %w", err)
 	}
+	releaseMigrationLock()
+	releaseMigrationLock = nil
 
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.

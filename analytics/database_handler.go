@@ -449,17 +449,22 @@ func (h *DatabaseHandler) SetAsGlobalHandler() {
 	SetHandler(h)
 }
 
-// initDB handles database migration - moved from analytics.go
-func initDB(db *gorm.DB) {
-	err := db.AutoMigrate(
+// Migrate creates or updates the analytics tables. pkg/studio runs it with
+// the other migrations under the cross-instance migration lock; the handler
+// runs it again at start, which is a no-op on an up-to-date schema.
+func Migrate(db *gorm.DB) error {
+	return db.AutoMigrate(
 		&models.LLMChatRecord{},
 		&models.LLMChatLogEntry{},
 		&models.ToolCallRecord{},
 		&models.ProxyLog{},
 		&models.ComplianceEvent{},
 	)
+}
 
-	if err != nil {
+// initDB handles database migration - moved from analytics.go
+func initDB(db *gorm.DB) {
+	if err := Migrate(db); err != nil {
 		logger.Warnf("Error migrating analytics tables: %s", sanitizeError(err))
 	}
 }

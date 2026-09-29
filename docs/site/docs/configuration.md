@@ -64,12 +64,17 @@ While most core settings are configured during deployment, you can usually revie
 Remember that fundamental system parameters are typically set via environment variables or Helm values *during deployment*. This includes:
 
 ### Core System Settings
-*   Database Connection (`DATABASE_TYPE`, `DATABASE_URL`)
+*   Database Connection (`DATABASE_TYPE`, `DATABASE_URL`, and for Postgres optionally `DATABASE_SCHEMA`)
 *   License Key (`TYK_AI_LICENSE`)
 *   Secrets Encryption Key (`TYK_AI_SECRET_KEY`)
 *   Base URL (`SITE_URL`)
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
+
+### Sharing a Postgres database
+Studio's table names are unprefixed and include common ones such as `users`, `roles` and `audit_records`. To run Studio in a database another application also uses, set `DATABASE_SCHEMA` to a lower-case schema name: Studio creates the schema if it does not exist (the database user needs the `CREATE` privilege on the database for that, or create the schema beforehand) and keeps all of its tables there, whatever `search_path` the database defaults to. A `DATABASE_URL` that sets a different `search_path` is refused.
+
+Several Studio replicas can share one database (and schema). On start, each migrates and seeds the database under a Postgres advisory lock, so replicas starting together take turns; one that is waiting logs `Another Studio instance is migrating this database`.
 
 ### CSRF protection
 Cookie-authenticated writes (anything the admin UI or portal does while signed in) carry a CSRF token, and when the site is served over HTTPS the request must also carry an `Origin` or `Referer` header naming the site; a request with neither is refused with `403 - referer not supplied`. On plain HTTP neither header is required. Calls authenticated with an API token in the `Authorization` header are exempt from CSRF checks entirely. Behind a TLS-terminating proxy, forward `X-Forwarded-Proto: https` so the HTTPS rules apply. In `DEVMODE` the `SITE_URL` host is trusted as an origin automatically; add further `host[:port]` values with `CSRF_TRUSTED_ORIGINS` (comma-separated).

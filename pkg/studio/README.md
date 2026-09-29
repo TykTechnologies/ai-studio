@@ -97,6 +97,10 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   `third_party/langchaingo`, and the gateway plugin SDK Studio uses lives in
   `pkg/gatewayplugin` and `proto/microgateway_management`, so the
   microgateway module is not needed.
+- **Sharing a Postgres database.** Set `conf.DatabaseSchema`
+  (`DATABASE_SCHEMA`) to keep Studio's tables in a schema of their own inside
+  the host's database; `OpenDatabase` creates it. Replicas may share it:
+  `New` migrates and seeds under a Postgres advisory lock.
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but
