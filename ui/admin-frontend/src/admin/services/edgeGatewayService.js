@@ -26,6 +26,7 @@ export const normalisePushOperation = (a) => ({
   counts: a.counts || {},
   warnings: a.warnings || [],
   skipped: (a.skipped || []).map((t) => ({ edgeId: t.edge_id, namespace: t.namespace, reason: t.reason })),
+  skippedTotal: a.skipped_total || (a.skipped || []).length,
   targets: (a.targets || []).map((t) => ({ edgeId: t.edge_id, namespace: t.namespace, reachable: !!t.reachable, reason: t.reason || '' })),
   edges: a.edges
     ? a.edges.map((e) => ({

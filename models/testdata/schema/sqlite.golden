@@ -443,9 +443,10 @@ TABLE edge_push_commands
   column `created_at` datetime
   column `updated_at` datetime
   column `completed_at` datetime
-  index CREATE INDEX `idx_edge_push_commands_deadline_at` ON `edge_push_commands`(`deadline_at`)
   index CREATE INDEX `idx_edge_push_commands_edge_id` ON `edge_push_commands`(`edge_id`)
-  index CREATE INDEX `idx_edge_push_commands_status` ON `edge_push_commands`(`status`)
+  index CREATE INDEX `idx_edge_push_commands_status_claim` ON `edge_push_commands`(`status`,`claim_expires_at`)
+  index CREATE INDEX `idx_edge_push_commands_status_deadline` ON `edge_push_commands`(`status`,`deadline_at`)
+  index CREATE INDEX `idx_edge_push_commands_status_edge` ON `edge_push_commands`(`status`,`edge_id`)
   index CREATE UNIQUE INDEX `idx_edge_push_commands_op_edge` ON `edge_push_commands`(`operation_id`,`edge_id`)
 TABLE embedders
   column `id` integer PRIMARY KEY AUTOINCREMENT
@@ -1259,6 +1260,7 @@ TABLE push_operations
   column `completed_at` datetime
   constraint PRIMARY KEY (`operation_id`)
   autoindex origin=pk unique=1 (operation_id)
+  index CREATE INDEX `idx_push_operations_completed_at` ON `push_operations`(`completed_at`)
   index CREATE INDEX `idx_push_operations_created_at` ON `push_operations`(`created_at`)
   index CREATE INDEX `idx_push_operations_status` ON `push_operations`(`status`)
 TABLE registered_plugins

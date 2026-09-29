@@ -376,6 +376,7 @@ describe('EdgeGatewayService', () => {
       expect(apiClient.post).toHaveBeenCalledWith('/edges/reload-all');
       expect(result).toMatchObject({ operationId: 'push-all', scope: 'all', targetEdges: ['edge-001'], status: 'in_progress' });
       expect(result.skipped).toEqual([{ edgeId: 'edge-old', namespace: 'ns3', reason: 'offline since 2026-09-28T00:00:00Z' }]);
+      expect(result.skippedTotal).toBe(1);
     });
 
     test('should return null when response has no data', async () => {

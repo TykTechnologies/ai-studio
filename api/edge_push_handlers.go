@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
@@ -42,7 +43,9 @@ func sendPushError(c *gin.Context, err error) {
 	case errors.Is(err, pushes.ErrOperationNotFound):
 		helpers.SendErrorResponse(c, helpers.NewNotFoundError(err.Error()))
 	default:
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		// Database and other internal errors are logged, not returned.
+		logger.Errorf("Edge push request %s %s failed: %v", c.Request.Method, c.Request.URL.Path, err)
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError("The push could not be recorded or read; see the server log."))
 	}
 }
 
@@ -79,6 +82,7 @@ func pushAccepted(c *gin.Context, res *pushes.Result) {
 				"message":          message,
 				"targets":          res.Targets,
 				"skipped":          nonNilTargets(res.Skipped),
+				"skipped_total":    res.SkippedTotal,
 				"warnings":         nonNilStrings(res.Warnings),
 			},
 		},

@@ -121,6 +121,9 @@ const PushProgress = ({ operation, pollIntervalMs = 1500, onFinished }) => {
               {s.edgeId}: {s.reason}
             </div>
           ))}
+          {progress.skippedTotal > progress.skipped.length && (
+            <div>and {progress.skippedTotal - progress.skipped.length} more</div>
+          )}
         </Alert>
       )}
 

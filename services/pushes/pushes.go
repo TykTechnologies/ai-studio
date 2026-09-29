@@ -81,6 +81,8 @@ type Options struct {
 	// namespace pushes (default 5 min): long enough to cover a rolling
 	// restart, short enough that long-gone edges do not expire every push.
 	RecentlyOffline time.Duration
+	// Retention is how long finished pushes are kept (default 7 days).
+	Retention time.Duration
 	// ListenerDSN is the connection string for LISTEN; empty means the
 	// database's own. Tests give each replica its own.
 	ListenerDSN string
@@ -99,6 +101,7 @@ func (o Options) withDefaults() Options {
 	def(&o.JanitorInterval, 2*time.Second)
 	def(&o.ReachableHeartbeat, 90*time.Second)
 	def(&o.RecentlyOffline, 5*time.Minute)
+	def(&o.Retention, 7*24*time.Hour)
 	if o.MaxAttempts <= 0 {
 		o.MaxAttempts = 3
 	}
@@ -141,9 +144,11 @@ type Result struct {
 	Operation models.PushOperation `json:"operation"`
 	Targets   []Target             `json:"targets"`
 	// Skipped are edges of the namespace(s) that were left out because they
-	// have been offline too long to wait for.
-	Skipped  []Target `json:"skipped,omitempty"`
-	Warnings []string `json:"warnings,omitempty"`
+	// have been offline too long to wait for: the first maxSkippedListed of
+	// SkippedTotal.
+	Skipped      []Target `json:"skipped,omitempty"`
+	SkippedTotal int      `json:"skipped_total,omitempty"`
+	Warnings     []string `json:"warnings,omitempty"`
 }
 
 // Coordinator delivers pushes; one per replica.
@@ -164,6 +169,8 @@ type Coordinator struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 	startErr  error
+
+	lastPrune time.Time // janitor goroutine only
 }
 
 // New returns the coordinator for node. It does nothing until Start.
@@ -294,6 +301,7 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 
 	var edges []models.EdgeInstance
 	var skipped []models.EdgeInstance
+	var skippedTotal int64
 	switch req.Scope {
 	case ScopeEdge:
 		if len(req.EdgeIDs) == 0 {
@@ -316,28 +324,33 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 			return nil, fmt.Errorf("%w: %s", ErrEdgeNotFound, strings.Join(missing, ", "))
 		}
 	case ScopeNamespace, ScopeAll:
-		q := db.Model(&models.EdgeInstance{})
-		if req.Scope == ScopeNamespace {
-			q = q.Where("namespace IN ?", models.NamespaceAliases(req.Namespace))
+		// Targets: connected or registered edges, and edges that dropped
+		// off within RecentlyOffline (mid-reconnect or restarting: worth
+		// waiting for). The rest are left out; the database does the
+		// filtering, and only the first few left-out edges are listed.
+		scoped := func() *gorm.DB {
+			q := db.Model(&models.EdgeInstance{})
+			if req.Scope == ScopeNamespace {
+				q = q.Where("namespace IN ?", models.NamespaceAliases(req.Namespace))
+			}
+			return q
 		}
-		var all []models.EdgeInstance
-		if err := q.Order("edge_id").Find(&all).Error; err != nil {
+		cond, args := c.targetCondition(now.Add(-c.opts.RecentlyOffline))
+		if err := scoped().Where(cond, args...).Order("edge_id").Find(&edges).Error; err != nil {
 			return nil, err
 		}
-		cutoff := now.Add(-c.opts.RecentlyOffline)
-		for _, e := range all {
-			switch {
-			case e.Status == models.EdgeStatusConnected || e.Status == models.EdgeStatusRegistered:
-				edges = append(edges, e)
-			case e.Status == models.EdgeStatusDisconnected && e.LastHeartbeat != nil && e.LastHeartbeat.After(cutoff):
-				edges = append(edges, e) // mid-reconnect or restarting: worth waiting for
-			default:
-				skipped = append(skipped, e)
+		if err := scoped().Where("NOT "+cond, args...).Count(&skippedTotal).Error; err != nil {
+			return nil, err
+		}
+		if skippedTotal > 0 {
+			if err := scoped().Where("NOT "+cond, args...).Select("edge_id", "namespace", "last_heartbeat").
+				Order("edge_id").Limit(maxSkippedListed).Find(&skipped).Error; err != nil {
+				return nil, err
 			}
 		}
 		if len(edges) == 0 {
-			if len(skipped) > 0 {
-				return nil, fmt.Errorf("%w: the %d edge(s) %s have been offline for more than %s", ErrNoTargets, len(skipped), scopeLabel(req), c.opts.RecentlyOffline)
+			if skippedTotal > 0 {
+				return nil, fmt.Errorf("%w: the %d edge(s) %s have been offline for more than %s", ErrNoTargets, skippedTotal, scopeLabel(req), c.opts.RecentlyOffline)
 			}
 			return nil, fmt.Errorf("%w: no edges are registered %s", ErrNoTargets, scopeLabel(req))
 		}
@@ -378,10 +391,11 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 	}
 	c.notify()
 
-	res := &Result{Operation: op}
+	res := &Result{Operation: op, SkippedTotal: int(skippedTotal)}
+	live := c.liveNodes()
 	unreachable := 0
 	for _, e := range edges {
-		t := c.target(e)
+		t := c.target(e, live)
 		if !t.Reachable {
 			unreachable++
 		}
@@ -394,26 +408,57 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 		res.Warnings = append(res.Warnings, fmt.Sprintf("%d of %d edge(s) are not connected to the control plane; the push waits up to %s for them to reconnect.",
 			unreachable, len(edges), c.opts.Deadline.Round(time.Second)))
 	}
-	if len(skipped) > 0 {
-		res.Warnings = append(res.Warnings, fmt.Sprintf("%d edge(s) were left out because they have been offline for more than %s.", len(skipped), c.opts.RecentlyOffline))
+	if skippedTotal > 0 {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("%d edge(s) were left out because they have been offline for more than %s.", skippedTotal, c.opts.RecentlyOffline))
 	}
 	logger.Infof("Edge push %s recorded by %s: %d target(s), %d not connected yet", op.OperationID, req.InitiatedBy, len(edges), unreachable)
 	return res, nil
 }
 
-// target reports whether e can be reached now: its stream's replica is live
-// and its last heartbeat is recent.
-func (c *Coordinator) target(e models.EdgeInstance) Target {
+// maxSkippedListed caps how many left-out edges a push result lists (the
+// warning gives the full count).
+var maxSkippedListed = 100
+
+// targetCondition is the SQL for "an edge a namespace push targets", given
+// the cutoff for recently disconnected edges. Heartbeats are written by
+// every replica in its local zone; on SQLite, which compares timestamps as
+// text, both sides go through datetime() so zones compare correctly.
+func (c *Coordinator) targetCondition(cutoff time.Time) (string, []interface{}) {
+	recent := "last_heartbeat > ?"
+	if c.db.Dialector.Name() == "sqlite" {
+		recent = "COALESCE(datetime(last_heartbeat) > datetime(?), 0)"
+	}
+	return "(status IN ? OR (status = ? AND last_heartbeat IS NOT NULL AND " + recent + "))",
+		[]interface{}{[]string{models.EdgeStatusConnected, models.EdgeStatusRegistered}, models.EdgeStatusDisconnected, cutoff.UTC()}
+}
+
+// liveNodes returns the live replicas, or nil if they cannot be listed.
+func (c *Coordinator) liveNodes() map[string]bool {
+	nodes, err := cluster.LiveNodes(c.db)
+	if err != nil {
+		logger.Warnf("Edge pushes: listing live replicas failed: %v", err)
+		return nil
+	}
+	live := make(map[string]bool, len(nodes))
+	for _, n := range nodes {
+		live[n.NodeID] = true
+	}
+	return live
+}
+
+// target reports whether e can be reached now: its stream's replica is
+// live (live is from liveNodes; nil means unknown) and its last heartbeat
+// is recent.
+func (c *Coordinator) target(e models.EdgeInstance, live map[string]bool) Target {
 	t := Target{EdgeID: e.EdgeID, Namespace: e.Namespace}
 	if e.OwnerNodeID == "" || e.Status != models.EdgeStatusConnected {
 		t.Reason = "not connected to any control-plane replica"
 		return t
 	}
-	live, err := cluster.IsLive(c.db, e.OwnerNodeID)
 	switch {
-	case err != nil:
-		t.Reason = "could not check its replica: " + err.Error()
-	case !live:
+	case live == nil:
+		t.Reason = "could not check its control-plane replica"
+	case !live[e.OwnerNodeID]:
 		t.Reason = "its control-plane replica has stopped; waiting for it to reconnect"
 	case e.LastHeartbeat == nil || time.Since(*e.LastHeartbeat) > c.opts.ReachableHeartbeat:
 		t.Reason = "no recent heartbeat"

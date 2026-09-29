@@ -50,7 +50,7 @@ type PushOperation struct {
 	Total       int        `json:"total"`
 	CreatedAt   time.Time  `json:"created_at" gorm:"index"`
 	DeadlineAt  time.Time  `json:"deadline_at"`
-	CompletedAt *time.Time `json:"completed_at"`
+	CompletedAt *time.Time `json:"completed_at" gorm:"index"` // retention
 }
 
 // PushAttempt records one delivery attempt of a command, so a failure can
@@ -66,16 +66,18 @@ type PushAttempt struct {
 type EdgePushCommand struct {
 	ID          int64  `json:"id" gorm:"primaryKey;autoIncrement"`
 	OperationID string `json:"operation_id" gorm:"size:64;not null;uniqueIndex:idx_edge_push_commands_op_edge"`
-	EdgeID      string `json:"edge_id" gorm:"size:255;not null;uniqueIndex:idx_edge_push_commands_op_edge;index"`
+	EdgeID      string `json:"edge_id" gorm:"size:255;not null;uniqueIndex:idx_edge_push_commands_op_edge;index;index:idx_edge_push_commands_status_edge,priority:2"`
 	Namespace   string `json:"namespace" gorm:"size:255"`
-	Status      string `json:"status" gorm:"size:32;not null;index"`
+	// The janitor's and dispatcher's queries lead with status; the
+	// composite indexes serve them (see Coordinator.janitor, dispatch).
+	Status string `json:"status" gorm:"size:32;not null;index:idx_edge_push_commands_status_deadline,priority:1;index:idx_edge_push_commands_status_claim,priority:1;index:idx_edge_push_commands_status_edge,priority:1"`
 
 	Attempts    int `json:"attempts"`
 	MaxAttempts int `json:"max_attempts"`
 	// ClaimedBy is the replica delivering it, on StreamSessionID; the claim
 	// lapses at ClaimExpiresAt if the command is never sent.
 	ClaimedBy       string     `json:"claimed_by" gorm:"size:128"`
-	ClaimExpiresAt  *time.Time `json:"claim_expires_at"`
+	ClaimExpiresAt  *time.Time `json:"claim_expires_at" gorm:"index:idx_edge_push_commands_status_claim,priority:2"`
 	StreamSessionID string     `json:"stream_session_id" gorm:"size:64"`
 	SentAt          *time.Time `json:"sent_at"`
 
@@ -100,7 +102,7 @@ type EdgePushCommand struct {
 	// lost to a concurrent one.
 	Version int64 `json:"-" gorm:"not null;default:0"`
 
-	DeadlineAt  time.Time  `json:"deadline_at" gorm:"index"`
+	DeadlineAt  time.Time  `json:"deadline_at" gorm:"index:idx_edge_push_commands_status_deadline,priority:2"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 	CompletedAt *time.Time `json:"completed_at"`

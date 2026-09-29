@@ -231,6 +231,7 @@ describe("PushConfigurationModal", () => {
     edgeGatewayService.reloadAllEdges.mockResolvedValue(started({
       warnings: ["1 of 2 edge(s) are not connected to the control plane; the push waits up to 5m0s for them to reconnect."],
       skipped: [{ edgeId: "edge-old", namespace: "default", reason: "offline since 2026-09-28T00:00:00Z" }],
+      skippedTotal: 3,
     }));
     edgeGatewayService.getPushProgress.mockResolvedValue(started({
       edges: [
@@ -242,6 +243,7 @@ describe("PushConfigurationModal", () => {
 
     expect(await screen.findByTestId("push-warnings")).toHaveTextContent("not connected to the control plane");
     expect(screen.getByTestId("push-skipped")).toHaveTextContent("edge-old: offline since");
+    expect(screen.getByTestId("push-skipped")).toHaveTextContent("and 2 more");
     expect(await screen.findByTestId("push-edge-edge-a")).toHaveTextContent("Waiting: no recent heartbeat");
   });
 

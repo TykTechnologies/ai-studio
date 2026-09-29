@@ -417,7 +417,7 @@ func (c *Coordinator) janitor() {
 	})
 
 	// Past the deadline.
-	c.eachCommand(c.db.Where("status NOT IN ? AND deadline_at < ?", models.PushCommandTerminal, now), func(cmd models.EdgePushCommand) {
+	c.eachCommand(c.db.Where("status IN ? AND deadline_at < ?", pushCommandOpen, now), func(cmd models.EdgePushCommand) {
 		c.finishIf(cmd.ID, func(cur models.EdgePushCommand) bool { return cur.DeadlineAt.Before(now) }, func(cur models.EdgePushCommand, at time.Time) map[string]interface{} {
 			return map[string]interface{}{
 				"status":       models.PushCommandExpired,
@@ -441,6 +441,12 @@ func (c *Coordinator) janitor() {
 			}
 		})
 	})
+
+	// Finished pushes past their retention, now and then.
+	if now.Sub(c.lastPrune) >= pruneInterval {
+		c.lastPrune = now
+		c.prune(now)
+	}
 
 	// Operations whose commands are all settled.
 	var open []string
@@ -470,6 +476,42 @@ func expiryReason(cmd models.EdgePushCommand) string {
 		return fmt.Sprintf("the edge disconnected (%s) and did not reconnect before the deadline", cmd.Message)
 	default:
 		return "the edge did not finish reloading before the deadline"
+	}
+}
+
+// pushCommandOpen lists the statuses a command can still leave.
+var pushCommandOpen = []string{models.PushCommandPending, models.PushCommandClaimed, models.PushCommandSent}
+
+// pruneInterval is how often a replica's janitor deletes old pushes.
+var pruneInterval = time.Minute
+
+// prune deletes pushes that finished more than Retention ago, in batches.
+// Every replica may run it; deleting twice is harmless.
+func (c *Coordinator) prune(now time.Time) {
+	cutoff := now.Add(-c.opts.Retention)
+	for i := 0; i < 20; i++ {
+		var ids []string
+		if err := c.db.Model(&models.PushOperation{}).
+			Where("status <> ? AND completed_at < ?", models.PushOperationInProgress, cutoff).
+			Order("completed_at").Limit(500).Pluck("operation_id", &ids).Error; err != nil {
+			logger.Warnf("Edge pushes: looking for old pushes to delete failed: %v", err)
+			return
+		}
+		if len(ids) == 0 {
+			return
+		}
+		if err := c.db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Where("operation_id IN ?", ids).Delete(&models.EdgePushCommand{}).Error; err != nil {
+				return err
+			}
+			return tx.Where("operation_id IN ?", ids).Delete(&models.PushOperation{}).Error
+		}); err != nil {
+			logger.Warnf("Edge pushes: deleting old pushes failed: %v", err)
+			return
+		}
+		if len(ids) < 500 {
+			return
+		}
 	}
 }
 
@@ -585,8 +627,9 @@ func (c *Coordinator) Status(ctx context.Context, operationID string) (*Operatio
 	if len(waiting) > 0 {
 		var edges []models.EdgeInstance
 		if err := db.Where("edge_id IN ?", waiting).Find(&edges).Error; err == nil {
+			live := c.liveNodes()
 			for _, e := range edges {
-				st.Targets = append(st.Targets, c.target(e))
+				st.Targets = append(st.Targets, c.target(e, live))
 			}
 		}
 	}

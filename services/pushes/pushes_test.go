@@ -690,3 +690,89 @@ func TestSendOnAStreamThatJustClosedUsesNoAttempt(t *testing.T) {
 		assert.Equal(t, models.PushCommandSucceeded, command(t, db, op, "edge-1").Status)
 	})
 }
+
+// Replicas write heartbeats in their own zone. Which edges a namespace push
+// waits for must not depend on it (SQLite compares timestamps as text).
+func TestNamespacePushHeartbeatsInOtherZones(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		a := newReplica(t, db, "node-a", Options{RecentlyOffline: 5 * time.Minute})
+		east := time.FixedZone("east", 14*3600)
+		west := time.FixedZone("west", -12*3600)
+		staleEast := time.Now().Add(-6 * time.Minute).In(east) // text sorts late
+		recentWest := time.Now().Add(-time.Minute).In(west)   // text sorts early
+		for _, e := range []models.EdgeInstance{
+			{EdgeID: "stale-east", Namespace: "ns1", Status: models.EdgeStatusDisconnected, LastHeartbeat: &staleEast},
+			{EdgeID: "recent-west", Namespace: "ns1", Status: models.EdgeStatusDisconnected, LastHeartbeat: &recentWest},
+			{EdgeID: "never", Namespace: "ns1", Status: models.EdgeStatusDisconnected},
+		} {
+			e := e
+			require.NoError(t, db.Create(&e).Error)
+		}
+		res := push(t, a.c, Request{Scope: ScopeNamespace, Namespace: "ns1"})
+		require.Len(t, res.Targets, 1)
+		assert.Equal(t, "recent-west", res.Targets[0].EdgeID)
+		var skipped []string
+		for _, s := range res.Skipped {
+			skipped = append(skipped, s.EdgeID)
+		}
+		assert.ElementsMatch(t, []string{"stale-east", "never"}, skipped)
+		assert.Equal(t, 2, res.SkippedTotal)
+	})
+}
+
+// A namespace with many long-gone edges lists a few and counts them all.
+func TestSkippedEdgesAreCappedButCounted(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		old := maxSkippedListed
+		maxSkippedListed = 2
+		t.Cleanup(func() { maxSkippedListed = old })
+		a := newReplica(t, db, "node-a", Options{})
+		addEdge(t, db, "live", "ns1", models.EdgeStatusConnected, "node-a")
+		for i := 0; i < 5; i++ {
+			require.NoError(t, db.Create(&models.EdgeInstance{EdgeID: fmt.Sprintf("gone-%d", i), Namespace: "ns1", Status: models.EdgeStatusDisconnected}).Error)
+		}
+		res := push(t, a.c, Request{Scope: ScopeNamespace, Namespace: "ns1"})
+		assert.Len(t, res.Targets, 1)
+		assert.Len(t, res.Skipped, 2)
+		assert.Equal(t, 5, res.SkippedTotal)
+		assert.Contains(t, res.Warnings[len(res.Warnings)-1], "5 edge(s) were left out")
+
+		_, err := a.c.Push(context.Background(), Request{Scope: ScopeEdge, EdgeIDs: []string{"gone-0"}, InitiatedBy: "x"})
+		require.NoError(t, err, "an explicit edge push always includes the edge")
+		require.NoError(t, db.Where("edge_id = ?", "live").Delete(&models.EdgeInstance{}).Error)
+		_, err = a.c.Push(context.Background(), Request{Scope: ScopeNamespace, Namespace: "ns1"})
+		assert.ErrorIs(t, err, ErrNoTargets)
+		assert.Contains(t, err.Error(), "the 5 edge(s)")
+	})
+}
+
+// Finished pushes older than the retention are deleted with their commands;
+// recent and unfinished ones are kept.
+func TestJanitorPrunesOldPushes(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		a := newReplica(t, db, "node-a", Options{Retention: 24 * time.Hour})
+		addEdge(t, db, "edge-1", "default", models.EdgeStatusConnected, "node-a")
+		oldDone := push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}}).Operation.OperationID
+		recentDone := push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}}).Operation.OperationID
+		oldOpen := push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}}).Operation.OperationID
+		longAgo := utcNow().Add(-48 * time.Hour)
+		require.NoError(t, db.Model(&models.PushOperation{}).Where("operation_id = ?", oldDone).
+			Updates(map[string]interface{}{"status": models.PushOperationSucceeded, "completed_at": longAgo}).Error)
+		require.NoError(t, db.Model(&models.PushOperation{}).Where("operation_id = ?", recentDone).
+			Updates(map[string]interface{}{"status": models.PushOperationSucceeded, "completed_at": utcNow()}).Error)
+		require.NoError(t, db.Model(&models.PushOperation{}).Where("operation_id = ?", oldOpen).Update("created_at", longAgo).Error)
+
+		a.c.janitor()
+
+		var ops, cmds int64
+		db.Model(&models.PushOperation{}).Where("operation_id = ?", oldDone).Count(&ops)
+		db.Model(&models.EdgePushCommand{}).Where("operation_id = ?", oldDone).Count(&cmds)
+		assert.Zero(t, ops+cmds, "old finished push deleted with its commands")
+		for _, id := range []string{recentDone, oldOpen} {
+			db.Model(&models.PushOperation{}).Where("operation_id = ?", id).Count(&ops)
+			db.Model(&models.EdgePushCommand{}).Where("operation_id = ?", id).Count(&cmds)
+			assert.Equal(t, int64(1), ops, id)
+			assert.Equal(t, int64(1), cmds, id)
+		}
+	})
+}
