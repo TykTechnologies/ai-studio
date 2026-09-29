@@ -25,6 +25,16 @@ func NewGormKVStore(db *gorm.DB) tap.AuthRegisterBackend {
 	return store
 }
 
+// MigrateTIBStores creates or updates the tables the identity broker's
+// stores use (profiles and KV pairs). pkg/studio runs it under the migration
+// lock; the stores run it again when SSO starts, a no-op by then.
+func MigrateTIBStores(db *gorm.DB) error {
+	if err := MigrateProfiles(db); err != nil {
+		return err
+	}
+	return db.AutoMigrate(&KVPair{})
+}
+
 // KVPair represents a key-value pair in the store
 type KVPair struct {
 	StoreKey   string `gorm:"primary_key"`

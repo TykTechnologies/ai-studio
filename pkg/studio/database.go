@@ -2,6 +2,8 @@ package studio
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -35,7 +37,9 @@ func RegisterDatabaseDriver(name string, open func(dsn string) gorm.Dialector) {
 
 // OpenDatabase connects to the database conf names (DatabaseType "postgres",
 // or "sqlite" once pkg/studio/sqlitedb is imported, at DatabaseURL) and checks
-// it responds. The result is what Options.DB takes. A host opens Studio's
+// it responds. With DatabaseSchema set (postgres only) Studio's tables live
+// in that schema: OpenDatabase creates it when missing and pins every
+// connection's search_path to it alone. The result is what Options.DB takes. A host opens Studio's
 // database with it rather than with gorm itself: Studio builds with its own
 // copy of gorm (third_party/gorm.io), which the host's gorm cannot stand in
 // for. The caller closes it after Stop, through DB().
@@ -50,7 +54,18 @@ func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
 		return nil, fmt.Errorf("studio: unsupported database type: %q (supported: %s)", conf.DatabaseType, registeredDatabaseTypes())
 	}
 
-	db, err := gorm.Open(open(conf.DatabaseURL), logger.GetGormConfig())
+	dsn := conf.DatabaseURL
+	if conf.DatabaseSchema != "" {
+		if conf.DatabaseType != "postgres" {
+			return nil, fmt.Errorf("studio: DATABASE_SCHEMA is for postgres only (DatabaseType is %q)", conf.DatabaseType)
+		}
+		var err error
+		if dsn, err = withSchema(open, dsn, conf.DatabaseSchema); err != nil {
+			return nil, err
+		}
+	}
+
+	db, err := gorm.Open(open(dsn), logger.GetGormConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -74,4 +89,73 @@ func registeredDatabaseTypes() string {
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// schemaName is what DatabaseSchema accepts: an unquoted Postgres identifier
+// in lower case, so it means the same quoted and unquoted.
+var schemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
+
+// withSchema creates schema in the database dsn names when it does not
+// exist yet, and returns dsn with search_path set to that schema alone.
+// Only that schema: Postgres skips search_path entries that do not exist,
+// and gorm's migrator creates tables in current_schema(), so a fallback such
+// as "studio,public" would put tables in public whenever the schema is
+// missing.
+func withSchema(open func(string) gorm.Dialector, dsn, schema string) (string, error) {
+	if !schemaName.MatchString(schema) {
+		return "", fmt.Errorf("studio: DATABASE_SCHEMA %q must be a lower-case identifier (letters, digits, underscores; at most 63)", schema)
+	}
+	scoped, err := dsnWithSearchPath(dsn, schema)
+	if err != nil {
+		return "", err
+	}
+
+	admin, err := gorm.Open(open(dsn), logger.GetGormConfig())
+	if err != nil {
+		return "", err
+	}
+	if sqlDB, err := admin.DB(); err == nil {
+		defer sqlDB.Close()
+	}
+	var exists bool
+	if err := admin.Raw("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = ?)", schema).Scan(&exists).Error; err != nil {
+		return "", fmt.Errorf("studio: look up schema %q: %w", schema, err)
+	}
+	if !exists {
+		// IF NOT EXISTS: replicas starting together may both get here.
+		if err := admin.Exec(`CREATE SCHEMA IF NOT EXISTS "` + schema + `"`).Error; err != nil {
+			return "", fmt.Errorf("studio: create schema %q: %w", schema, err)
+		}
+		logger.Infof("Created database schema %q", schema)
+	}
+	return scoped, nil
+}
+
+// dsnWithSearchPath sets search_path in a Postgres DSN, either a URL
+// (postgres://...) or keyword/value pairs. pgx sends it as a run-time
+// parameter on every connection. A DSN that already sets a different
+// search_path is an error rather than silently overridden.
+func dsnWithSearchPath(dsn, schema string) (string, error) {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return "", fmt.Errorf("studio: parse DATABASE_URL: %w", err)
+		}
+		q := u.Query()
+		if cur := q.Get("search_path"); cur != "" && cur != schema {
+			return "", fmt.Errorf("studio: DATABASE_URL sets search_path=%s but DATABASE_SCHEMA is %s", cur, schema)
+		}
+		q.Set("search_path", schema)
+		u.RawQuery = q.Encode()
+		return u.String(), nil
+	}
+	for _, field := range strings.Fields(dsn) {
+		if k, v, ok := strings.Cut(field, "="); ok && k == "search_path" {
+			if strings.Trim(v, "'") != schema {
+				return "", fmt.Errorf("studio: DATABASE_URL sets search_path=%s but DATABASE_SCHEMA is %s", v, schema)
+			}
+			return dsn, nil
+		}
+	}
+	return strings.TrimSpace(dsn) + " search_path=" + schema, nil
 }

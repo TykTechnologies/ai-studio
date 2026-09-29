@@ -22,7 +22,8 @@ behaviour unchanged:
 
 Decisions that shape the design:
 
-- **Own database.** Studio keeps its own database or schema; the host opens it
+- **Own database.** Studio keeps its own database or schema (`DATABASE_SCHEMA`,
+  see "Sharing the host's Postgres"); the host opens it
   with `studio.OpenDatabase(conf)` and passes the result as `Options.DB`, so
   the host never names Studio's gorm. Studio builds with its own copy of
   gorm (`third_party/gorm.io`), which a host's `replace gorm.io/gorm` cannot
@@ -362,6 +363,30 @@ Studio without access to the private enterprise module, but `go list -m
 all` fails there: it resolves every module in the graph, including the
 enterprise module Studio's `go.mod` names at a placeholder version. The
 Dashboard always builds the enterprise edition, requiring a real version.
+
+## Sharing the host's Postgres
+
+A host can give Studio a schema in its own database instead of a database of
+its own: `Config.DatabaseSchema` (`DATABASE_SCHEMA`) makes
+`studio.OpenDatabase` create the schema when missing and pin `search_path` to
+it alone (not `schema,public`: Postgres skips missing entries and gorm's
+migrator creates tables in `current_schema()`, so a fallback would put
+tables in `public`). Studio's unprefixed table names (`users`, `roles`,
+`audit_records`, `tyk_policies`, ...) then cannot collide with the host's.
+Raw SQL in Studio never qualifies a schema, and the schema snapshot goldens
+are schema-independent, so nothing else changes.
+
+`studio.New` runs every migration and seed, from `models.InitModels` through
+the RBAC seed (plus the analytics and identity broker tables, which used to
+migrate later), under `models.AcquireMigrationLock`: a Postgres session
+advisory lock on a connection of its own, keyed by the current schema, so
+replicas sharing one schema take turns and different schemas do not wait
+for each other. On SQLite, or with a pool of one connection, it is a no-op.
+Tests: `pkg/studio/database_schema_postgres_test.go`. Concurrent unlocked
+boots of a fresh schema did not fail in tests (the seeds are protected by
+unique constraints), so the lock is a guard for upgrades, where replicas
+starting together would run the same ALTERs and backfills, rather than for
+an observed race.
 
 ## langchaingo in tree
 
