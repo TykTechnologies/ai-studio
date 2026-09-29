@@ -320,6 +320,49 @@ host can `go get` (the module proxy builds its zip from the tagged tree;
 The same script checks any commit by hand, e.g.
 `scripts/release/consume-module.sh ce <commit>`.
 
+## Host version floor
+
+When a host imports Studio, Go's version selection picks, for every module,
+the highest version any `go.mod` in the build requires. So each Studio
+requirement above the host's own upgrades the host silently, and a host
+dependency newer than Studio's is what Studio actually runs with there.
+Studio's `go.mod` (and the enterprise module's) therefore follows the Tyk
+Dashboard's:
+
+- Where both require a module, Studio uses the Dashboard's version, up or
+  down (2026-09-30: TIB 1.8, libopenapi 0.36, gorilla/sessions 1.4,
+  go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up; pgx,
+  gosimple/slug and mergo down). The `go` directive matches the Dashboard's
+  (`go 1.26.5`, `toolchain go1.26.6` for Studio's own builds).
+- Where a Studio dependency needs a newer version, the module is in
+  `scripts/host-compat-allow.txt` with the dependency that needs it (the
+  OpenTelemetry 1.46 exporters, the Prometheus client behind the otel
+  Prometheus exporter, go-openapi v0.25+, weaviate). Each was checked by
+  lowering it alone: every one drags others down with it.
+- `mattn/go-sqlite3` is deliberately not aligned: the Dashboard carries the
+  retracted `v2.0.3+incompatible`, and `pkg/studio` does not link SQLite.
+
+`make host-compat` (`scripts/host-compat.sh --build`, a CI job on this
+repository's branches) fetches the Dashboard's `go.mod` at run time (its
+repository is private; never commit a copy) and:
+
+1. fails if Studio or the enterprise module requires anything above the
+   Dashboard's version that the allowlist does not name
+   (`tools/hostcompat`, no network);
+2. builds `pkg/studio` for both editions inside the Dashboard's module
+   graph, its requirements and replaces included, with `CGO_ENABLED=0`, and
+   lists every module that ends up above the Dashboard's `go.mod`. That list
+   also shows raises from the `go.mod` files of Studio's dependencies, which
+   the first check cannot see; most come from
+   `github.com/weaviate/weaviate`, the server module, of which Studio only
+   uses `entities/models`.
+
+A host that never builds the enterprise edition can build, tidy and verify
+Studio without access to the private enterprise module, but `go list -m
+all` fails there: it resolves every module in the graph, including the
+enterprise module Studio's `go.mod` names at a placeholder version. The
+Dashboard always builds the enterprise edition, requiring a real version.
+
 ## langchaingo in tree
 
 Studio's langchaingo fork (Anthropic temperature, OpenAI reasoning_effort and
@@ -346,7 +389,9 @@ Dashboard's replace cannot reach it. `third_party/README.md` has the details.
   what the pins produce. And no package of the root, microgateway or
   enterprise module may import `gorm.io/...`. gorm finds model hooks, column
   types and sentinel errors by type assertion at runtime, so a stray import
-  of another gorm compiles and then fails silently. Also, `go mod tidy`
+  of another gorm compiles and then fails silently. Third-party libraries may use
+  upstream gorm internally (TIB 1.8's `TykTechnologies/storage` does); the
+  check allows those importers by prefix. Also, `go mod tidy`
   would resolve `gorm.io/gorm` to v1.21.16, the version the Tyk gateway
   module requires.
 - The schema snapshot tests (`models/`, `microgateway/internal/database/`)
