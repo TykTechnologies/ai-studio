@@ -115,7 +115,7 @@ jobs:
           cat > enterprise/go.mod << 'EOF'
           module github.com/TykTechnologies/ai-studio-enterprise/v2
 
-          go 1.26.6
+          go 1.26.5
           EOF
 
       - name: Setup Go
@@ -350,6 +350,39 @@ jobs:
         run: make module-check
 
   # ==========================================================================
+  # Host compatibility: the Tyk Dashboard embeds pkg/studio. Studio must not
+  # raise the Dashboard's dependency versions (outside the reasoned
+  # allowlist) and must build inside its module graph with CGO_ENABLED=0.
+  # Reads the Dashboard's private go.mod at run time, so never on forks.
+  # ==========================================================================
+  host-compat:
+    needs: [dep-guard]
+    name: Host Compatibility (Dashboard)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: warp-ubuntu-latest-arm64-4x
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Credentials for private Tyk modules
+        run: git config --global url."https://x-access-token:${{ secrets.CI_SUBMODULE_PAT }}@github.com/TykTechnologies/".insteadOf "https://github.com/TykTechnologies/"
+
+      - name: Check Studio against the Dashboard's go.mod
+        env:
+          GH_TOKEN: ${{ secrets.CI_SUBMODULE_PAT }}
+          GOPRIVATE: github.com/TykTechnologies
+        run: make host-compat
+
+  # ==========================================================================
   # Documentation Build
   # ==========================================================================
   docs-build:
@@ -389,7 +422,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: warp-ubuntu-latest-arm64-2x
-    needs: [frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, docs-build]
+    needs: [frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -411,6 +444,7 @@ jobs:
           echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| gorm Copy Verification | ${{ needs.gorm-verify.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Module Zip Check | ${{ needs.module-check.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Host Compatibility (Dashboard) | ${{ needs.host-compat.result == 'success' && ':white_check_mark:' || (needs.host-compat.result == 'skipped' && ':fast_forward:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Coverage files:" >> $GITHUB_STEP_SUMMARY

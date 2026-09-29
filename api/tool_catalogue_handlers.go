@@ -903,9 +903,9 @@ func getOperationDetailFromSpec(oasSpec []byte, operationID string) (OperationDe
 	}
 
 	// Build a V3 model
-	model, errs := doc.BuildV3Model()
-	if len(errs) > 0 {
-		return OperationDetail{}, fmt.Errorf("failed to build V3 model: %v", errs)
+	model, err := doc.BuildV3Model()
+	if err != nil {
+		return OperationDetail{}, fmt.Errorf("failed to build V3 model: %w", err)
 	}
 
 	// Find the operation by ID

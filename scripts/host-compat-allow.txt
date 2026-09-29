@@ -1,0 +1,35 @@
+# Modules AI Studio may require at a higher version than the Tyk Dashboard
+# does. Go's version selection then raises them in the Dashboard's build.
+# Each entry says what in Studio's graph needs the newer version; checked
+# 2026-09-30 by lowering each on its own (see features/Embedding.md, "Host
+# version floor"). Remove an entry once the Dashboard catches up or the
+# requirer allows the host's version.
+
+# The OpenTelemetry 1.46 exporter family. The Dashboard's otel core is already
+# 1.46; its exporters lag. weaviate v1.38.12 needs a newer otlptracegrpc than
+# the Dashboard's v1.42.0, and the exporters pull the rest.
+go.opentelemetry.io/otel/exporters/otlp/otlptrace                            # otel 1.46 exporters
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc              # weaviate v1.38.12
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp              # otel 1.46 exporters
+go.opentelemetry.io/proto/otlp                                               # otel 1.46 exporters
+go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  # grpc-gateway v2.30 (otel exporters)
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                # otel 1.46 family
+github.com/grpc-ecosystem/grpc-gateway/v2                                    # otel 1.46 exporters
+google.golang.org/genproto/googleapis/api                                    # otel 1.46 exporters
+google.golang.org/genproto/googleapis/rpc                                    # otel 1.46 exporters
+google.golang.org/protobuf                                                   # otel 1.46 exporters, genproto
+
+# Studio's metrics exporter, go.opentelemetry.io/otel/exporters/prometheus
+# v0.68 (otel 1.46 family), needs the newer Prometheus client.
+github.com/prometheus/client_golang  # otel/exporters/prometheus v0.68
+github.com/prometheus/common         # otel/exporters/prometheus v0.68
+github.com/prometheus/procfs         # prometheus/client_golang v1.24
+github.com/klauspost/compress        # prometheus/client_golang v1.24
+go.yaml.in/yaml/v2                   # prometheus/common v0.70
+
+# go-openapi v0.25+ (runtime, analysis, loads, spec) and grpc-gateway v2.30.
+github.com/go-openapi/jsonpointer    # go-openapi analysis/loads/runtime v0.25+
+github.com/go-openapi/jsonreference  # go-openapi analysis/loads/runtime v0.25+
+github.com/go-openapi/swag           # grpc-gateway v2.30
+
+github.com/buger/jsonparser          # weaviate v1.38.12

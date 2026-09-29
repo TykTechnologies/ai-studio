@@ -511,6 +511,10 @@ gorm-vendor: ## Rebuild third_party/gorm.io from the pins in third_party/gorm-pi
 gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports gorm.io
 	@scripts/gorm-verify.sh
 
+.PHONY: host-compat
+host-compat: ## Check Studio against the Tyk Dashboard's go.mod: version floor, then build inside its module graph (needs GH_TOKEN + access)
+	@scripts/host-compat.sh --build
+
 .PHONY: module-check
 module-check: ## Check the Go proxy would accept HEAD as a module zip (commit first)
 	@cd tools/modcheck && go run . -rev HEAD

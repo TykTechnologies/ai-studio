@@ -59,6 +59,12 @@ logs.
   assertion at runtime. So a file that imports the other gorm still
   compiles, and then misbehaves: hooks that encrypt secrets never run,
   columns change type, and not-found checks fail.
+  A third-party library may still use upstream gorm for itself: TIB 1.8
+  pulls in `TykTechnologies/storage` v1.5, whose Postgres driver is built on
+  `gorm.io/gorm`. It never sees Studio's models, so `gorm-verify` allows
+  importers listed in `ALLOWED_GORM_IMPORTERS` (by package prefix; never a
+  Studio path). Standalone binaries then carry that gorm too (the Dashboard
+  links it anyway).
 - The copy's own unit tests pass.
 
 These tests also guard the gorm behaviour AI Studio depends on:
