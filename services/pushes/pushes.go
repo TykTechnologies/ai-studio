@@ -33,6 +33,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -256,6 +257,10 @@ func (c *Coordinator) poke() {
 
 func (c *Coordinator) run() {
 	defer close(c.done)
+	safe.Loop("edge push dispatcher", c.stop, c.loop)
+}
+
+func (c *Coordinator) loop() {
 	poll := time.NewTicker(c.opts.PollInterval)
 	defer poll.Stop()
 	janitor := time.NewTicker(c.opts.JanitorInterval)

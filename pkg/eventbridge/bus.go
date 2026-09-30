@@ -6,6 +6,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/simonfxr/pubsub"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
 // Bus is the interface for the local event bus.
@@ -51,13 +54,26 @@ func NewBus() *PubSubBus {
 
 // Subscribe registers a callback for events on a specific topic.
 func (b *PubSubBus) Subscribe(topic string, fn func(Event)) *pubsub.Subscription {
-	return b.ps.Subscribe(topic, fn)
+	return b.ps.Subscribe(topic, guarded(fn))
+}
+
+// guarded recovers a panic in a subscriber. Subscribers run on the
+// publisher's goroutine (an API request, an edge stream, the cluster log
+// reader): one subscriber's panic must neither end that goroutine (or the
+// process) nor keep the event from the subscribers after it.
+func guarded(fn func(Event)) func(Event) {
+	return func(ev Event) {
+		if safe.Call("event bus subscriber", func() { fn(ev) }) {
+			logger.Current().Warn().Str("topic", ev.Topic).Str("event_id", ev.ID).Msg("An event bus subscriber panicked; it missed this event")
+		}
+	}
 }
 
 // SubscribeAll registers a callback for all events.
 // This is implemented by subscribing to a special wildcard topic that
 // receives all published events.
 func (b *PubSubBus) SubscribeAll(fn func(Event)) *pubsub.Subscription {
+	fn = guarded(fn)
 	sub := b.ps.Subscribe(b.wildcardTopic, fn)
 
 	b.mu.Lock()

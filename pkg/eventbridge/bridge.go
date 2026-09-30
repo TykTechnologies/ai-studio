@@ -6,6 +6,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/simonfxr/pubsub"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
 // GRPCStream is the interface for sending/receiving event frames over gRPC.
@@ -212,6 +214,8 @@ func (b *Bridge) localToRemote(ctx context.Context) {
 // All received events are marked as DirLocal to prevent re-forwarding.
 func (b *Bridge) remoteToLocal(ctx context.Context) {
 	defer b.wg.Done() // Signal completion for clean shutdown
+	// A panic ends this direction of the bridge, not the process.
+	defer safe.Recover("event bridge receive")
 
 	log.Debug().
 		Str("node_id", b.nodeID).

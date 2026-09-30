@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
@@ -147,27 +148,32 @@ func (s *BudgetSyncService) Start() {
 	})
 
 	go func() {
+		defer close(s.done)
 		log.Info().Dur("interval", s.syncInterval).Msg("Starting budget sync service")
-
-		// Perform initial sync immediately
-		s.aggregateAndPublish()
-
-		ticker := time.NewTicker(s.syncInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-s.ctx.Done():
-				log.Info().Msg("Budget sync service stopped")
-				close(s.done)
-				return
-			case <-becameLeader:
-				s.aggregateAndPublish()
-			case <-ticker.C:
-				s.aggregateAndPublish()
-			}
-		}
+		// A panic in a cycle restarts the loop (with an immediate sync)
+		// rather than ending the process.
+		safe.Loop("budget sync", s.ctx.Done(), func() { s.run(becameLeader) })
 	}()
+}
+
+func (s *BudgetSyncService) run(becameLeader <-chan struct{}) {
+	// Perform initial sync immediately
+	s.aggregateAndPublish()
+
+	ticker := time.NewTicker(s.syncInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			log.Info().Msg("Budget sync service stopped")
+			return
+		case <-becameLeader:
+			s.aggregateAndPublish()
+		case <-ticker.C:
+			s.aggregateAndPublish()
+		}
+	}
 }
 
 // PeriodUsage returns an App's spend in dollars for the budget period starting

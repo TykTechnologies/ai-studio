@@ -3,11 +3,13 @@
 // unrecovered panic; embedded in a host (the Dashboard, MDCB), that would
 // take the host down with it, and every edge that depends on it.
 //
-// A recovered panic is logged with its stack through the logger package and
-// counted (Panics, and aistudio_goroutine_panics_total when metrics are on).
+// A recovered panic is logged with its stack through the logger package
+// (logger.Current, so it shows even where Studio's logger was never set up)
+// and counted (Panics, and aistudio_goroutine_panics_total when metrics are
+// on).
 //
 //   - Recover, deferred at the top of a goroutine, ends that goroutine
-//     quietly instead of the process.
+//     quietly instead of the process; RecoverWith also tells its owner.
 //   - Go starts a one-shot goroutine that does so.
 //   - Call runs a function in the current goroutine and reports whether it
 //     panicked, for per-item work (a handler, one event) whose loop should
@@ -38,6 +40,16 @@ func Panics() uint64 { return panics.Load() }
 func Recover(name string) {
 	if r := recover(); r != nil {
 		report(name, r)
+	}
+}
+
+// RecoverWith is Recover that also calls then after a panic, for a
+// goroutine whose owner must learn that it ended (to end a stream, say).
+// It must be deferred directly: defer safe.RecoverWith("recv", cancel).
+func RecoverWith(name string, then func()) {
+	if r := recover(); r != nil {
+		report(name, r)
+		then()
 	}
 }
 
@@ -114,7 +126,7 @@ func Loop(name string, stop <-chan struct{}, fn func(), opts ...LoopOption) {
 		if time.Since(started) >= loopBackoffReset {
 			backoff = loopBackoffMin
 		}
-		logger.Log.Warn().Str("goroutine", name).Dur("backoff", backoff).Msg("Restarting background work after a panic")
+		logger.Current().Warn().Str("goroutine", name).Dur("backoff", backoff).Msg("Restarting background work after a panic")
 		t := time.NewTimer(backoff)
 		select {
 		case <-stop:
@@ -130,7 +142,7 @@ func Loop(name string, stop <-chan struct{}, fn func(), opts ...LoopOption) {
 
 func report(name string, r interface{}) {
 	panics.Add(1)
-	logger.Log.Error().
+	logger.Current().Error().
 		Str("goroutine", name).
 		Str("panic", fmt.Sprint(r)).
 		Str("stack", string(debug.Stack())).

@@ -20,6 +20,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
 )
@@ -98,6 +99,10 @@ func (n *Node) ID() string { return n.id }
 
 func (n *Node) loop() {
 	defer close(n.done)
+	safe.Loop("cluster node heartbeat", n.stop, n.heartbeat)
+}
+
+func (n *Node) heartbeat() {
 	t := time.NewTicker(n.interval)
 	defer t.Stop()
 	failing := false

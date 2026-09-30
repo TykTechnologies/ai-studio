@@ -40,6 +40,29 @@ func TestRecoverDeferred(t *testing.T) {
 	}
 }
 
+func TestRecoverWithCallsThenOnlyAfterPanic(t *testing.T) {
+	var called atomic.Int32
+	run := func(fail bool) {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			defer RecoverWith("test with", func() { called.Add(1) })
+			if fail {
+				panic("boom")
+			}
+		}()
+		<-done
+	}
+	run(false)
+	if called.Load() != 0 {
+		t.Fatal("then ran without a panic")
+	}
+	run(true)
+	if called.Load() != 1 {
+		t.Fatalf("then ran %d times after one panic, want 1", called.Load())
+	}
+}
+
 func TestCallReportsPanic(t *testing.T) {
 	if Call("test call", func() {}) {
 		t.Fatal("Call reported a panic for a function that returned")

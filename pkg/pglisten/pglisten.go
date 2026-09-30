@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/jackc/pgx/v5"
@@ -346,11 +347,33 @@ func (l *Listener) setState(f func()) {
 
 var errStopped = errors.New("listener stopped")
 
-// run owns the connection until Release.
+// run owns the connection until Release. A panic costs the connection: the
+// owner starts over on a new one, as after a disconnect.
 func (l *Listener) run(conn *pgx.Conn) {
 	defer close(l.done)
-	listened := map[string]bool{}
 	reconnected := false
+	safe.Loop(l.name, l.stopCtx.Done(), func() {
+		if conn == nil {
+			if conn = l.reconnect(); conn == nil {
+				return
+			}
+			reconnected = true
+		}
+		l.own(&conn, reconnected)
+	}, safe.AfterPanic(func() {
+		l.setState(func() { l.connected = false })
+		if conn != nil {
+			l.close(conn)
+			conn = nil
+		}
+	}))
+}
+
+// own serves *connp, reconnecting (and updating *connp) when it fails, until
+// Release.
+func (l *Listener) own(connp **pgx.Conn, reconnected bool) {
+	conn := *connp
+	listened := map[string]bool{}
 	for {
 		err := l.reconcile(conn, listened)
 		if err == nil && reconnected {
@@ -359,7 +382,7 @@ func (l *Listener) run(conn *pgx.Conn) {
 			// Anything sent while the connection was down is gone.
 			l.mu.RLock()
 			for _, fn := range l.onReconnect {
-				fn()
+				safe.Call(l.name+" reconnect hook", fn)
 			}
 			l.mu.RUnlock()
 		}
@@ -376,7 +399,9 @@ func (l *Listener) run(conn *pgx.Conn) {
 		slog.Warn(l.name+" disconnected; notifications sent until it reconnects are lost", "error", err)
 		l.setState(func() { l.connected = false })
 		l.close(conn)
-		if conn = l.reconnect(); conn == nil {
+		conn = l.reconnect()
+		*connp = conn
+		if conn == nil {
 			return
 		}
 		listened = map[string]bool{}
@@ -488,7 +513,9 @@ func (l *Listener) dispatch(n *pgconn.Notification) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	for _, sub := range l.subs[n.Channel] {
-		sub.handler(n.Payload)
+		// One subscriber's panic must not cost the others their
+		// notifications, or the listener its connection.
+		safe.Call(l.name+" handler", func() { sub.handler(n.Payload) })
 	}
 }
 

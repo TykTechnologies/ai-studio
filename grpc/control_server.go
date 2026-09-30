@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -340,9 +341,8 @@ func (s *ControlServer) Serve(listener net.Listener) error {
 		opts = append(opts, grpc.Creds(creds))
 	}
 
-	// Add authentication interceptor
-	opts = append(opts, grpc.UnaryInterceptor(s.authInterceptor))
-	opts = append(opts, grpc.StreamInterceptor(s.streamAuthInterceptor))
+	// Panic recovery, then authentication
+	opts = append(opts, s.interceptors()...)
 
 	// Create gRPC server
 	server := grpc.NewServer(opts...)
@@ -594,8 +594,12 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	var edgeID string
 	var edgeConnection *EdgeInstanceConnection
 
-	// Handle incoming messages from edge
+	// Handle incoming messages from edge. A panic handling one ends this
+	// edge's stream (the edge reconnects and its pushes are retried), not
+	// the process.
+	recvPanicked := make(chan struct{})
 	go func() {
+		defer safe.RecoverWith("edge stream receive", func() { close(recvPanicked) })
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
@@ -847,10 +851,14 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	}()
 
 	// Keep connection alive and handle outgoing messages
+	var streamErr error
 	select {
 	case <-stream.Context().Done():
 	case <-s.stopping:
 		log.Debug().Str("edge_id", edgeID).Msg("Control server stopping; ending edge stream")
+	case <-recvPanicked:
+		log.Error().Str("edge_id", edgeID).Msg("Ending the edge's stream after a panic handling its messages; the edge reconnects")
+		streamErr = errRecovered
 	}
 
 	// Cleanup when stream closes
@@ -891,7 +899,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	}
 
 	log.Debug().Str("edge_id", edgeID).Msg("Edge stream closed")
-	return nil
+	return streamErr
 }
 
 // SendHeartbeat handles unary heartbeat requests, a deprecated RPC: edges
@@ -2716,11 +2724,18 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 // startCleanupRoutine starts the periodic cleanup of stale connections
 func (s *ControlServer) startCleanupRoutine() {
 	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
-	go func() {
-		for range s.cleanupTicker.C {
-			s.cleanupStaleConnections()
+	ticks := s.cleanupTicker.C
+	// Ends with Stop: a stopped ticker never closes its channel.
+	go safe.Loop("edge connection cleanup", s.stopping, func() {
+		for {
+			select {
+			case <-s.stopping:
+				return
+			case <-ticks:
+				s.cleanupStaleConnections()
+			}
 		}
-	}()
+	})
 	log.Debug().Msg("Started edge connection cleanup routine")
 }
 

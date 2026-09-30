@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -312,4 +313,37 @@ func TestLeadership_OtherPIDNamespaceTakenOverOnceSilent_Postgres(t *testing.T) 
 		time.Sleep(3 * time.Second)
 		assert.False(t, l.IsLeader())
 	})
+}
+
+// A panic in a lease listener (here on gaining the lease, at Start and again
+// in the renewal loop) drops the belief at once and tells the listeners;
+// the loop restarts and the replica leads again.
+func TestLeadership_PanicDropsBeliefAndRecovers_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	l := NewLeadership(c.replicaDB("a"), LeaderLease, "a", LeadershipOptions{TTL: time.Minute, Renew: 100 * time.Millisecond})
+	var mu sync.Mutex
+	var seen []bool
+	l.OnChange(func(leading bool) {
+		mu.Lock()
+		seen = append(seen, leading)
+		n := len(seen)
+		mu.Unlock()
+		if n == 1 || n == 3 {
+			panic("listener bug")
+		}
+	})
+	before := safe.Panics()
+	l.Start()
+	t.Cleanup(l.Stop)
+
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(seen) == 5
+	}, 10*time.Second, 20*time.Millisecond, "gained, dropped, gained, dropped, gained")
+	assert.True(t, l.IsLeader())
+	mu.Lock()
+	assert.Equal(t, []bool{true, false, true, false, true}, seen)
+	mu.Unlock()
+	assert.Equal(t, before+2, safe.Panics())
 }

@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
 // FollowRetryInterval is how often a Follower that could not subscribe
@@ -106,7 +108,15 @@ func (f *Follower) subscribe() error {
 
 func (f *Follower) retry() {
 	defer close(f.done)
+	safe.Loop(f.opts.Name+" retry", f.stop, f.retryLoop)
+}
+
+func (f *Follower) retryLoop() {
 	for {
+		if f.Listening() {
+			// Subscribed before a panic (in onReconnect, say): done.
+			return
+		}
 		select {
 		case <-f.stop:
 			return

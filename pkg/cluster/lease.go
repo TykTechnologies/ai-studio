@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
 )
@@ -120,7 +121,10 @@ func (l *Leadership) Start() {
 		l.mu.Lock()
 		l.running = true
 		l.mu.Unlock()
-		next := l.tick()
+		var next time.Duration
+		if safe.Call("cluster lease "+l.name, func() { next = l.tick() }) {
+			l.dropBelief()
+		}
 		go l.run(next)
 	})
 }
@@ -184,6 +188,35 @@ func Holder(ctx context.Context, db *gorm.DB, name string) (string, *time.Time, 
 // sooner (a predecessor about to count as gone).
 func (l *Leadership) run(next time.Duration) {
 	defer close(l.done)
+	// After a panic the replica cannot vouch for its renewals: it stops
+	// believing it leads at once, rather than when the belief would run out.
+	safe.Loop("cluster lease "+l.name, l.stop, func() {
+		l.renewLoop(next)
+	}, safe.AfterPanic(func() {
+		next = 0
+		l.dropBelief()
+	}))
+}
+
+// dropBelief ends this replica's belief that it holds the lease (not on
+// SQLite, where the one process always leads) and tells the listeners.
+func (l *Leadership) dropBelief() {
+	l.mu.Lock()
+	l.renewedAt = time.Time{}
+	now := l.believesLocked()
+	changed := now != l.leading
+	l.leading = now
+	listeners := append(make([]func(bool), 0, len(l.listeners)), l.listeners...)
+	l.mu.Unlock()
+	if changed {
+		logger.Warnf("This replica (%s) no longer holds the %q lease: its renewals stopped after a panic", l.node, l.name)
+		for _, fn := range listeners {
+			safe.Call("cluster lease listener", func() { fn(now) })
+		}
+	}
+}
+
+func (l *Leadership) renewLoop(next time.Duration) {
 	t := time.NewTimer(l.wait(next))
 	defer t.Stop()
 	for {
