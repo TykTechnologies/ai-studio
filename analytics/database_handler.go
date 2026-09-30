@@ -143,6 +143,18 @@ func (h *DatabaseHandler) start() {
 	}()
 }
 
+// waitStopped waits, up to d, for the worker of a stopped handler (its
+// context done) to return. A running handler returns at once.
+func (h *DatabaseHandler) waitStopped(d time.Duration) {
+	if h.workerDone == nil || h.ctx.Err() == nil {
+		return
+	}
+	select {
+	case <-h.workerDone:
+	case <-time.After(d):
+	}
+}
+
 // startWorker runs the main worker loop for handling database writes
 func (h *DatabaseHandler) startWorker() {
 	for {
