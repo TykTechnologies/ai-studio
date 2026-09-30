@@ -348,6 +348,14 @@ func (s *ControlServer) Serve(listener net.Listener) error {
 	server := grpc.NewServer(opts...)
 	pb.RegisterConfigurationSyncServiceServer(server, s)
 	s.serverMu.Lock()
+	select {
+	case <-s.stopping:
+		// Stop ran before this server existed, so it had nothing to stop.
+		s.serverMu.Unlock()
+		listener.Close()
+		return nil
+	default:
+	}
 	s.grpcServer = server
 	s.serverMu.Unlock()
 

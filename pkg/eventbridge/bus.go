@@ -2,13 +2,12 @@ package eventbridge
 
 import (
 	"encoding/json"
+	"runtime/debug"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/simonfxr/pubsub"
-
-	"github.com/TykTechnologies/midsommar/v2/logger"
-	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
 // Bus is the interface for the local event bus.
@@ -61,11 +60,20 @@ func (b *PubSubBus) Subscribe(topic string, fn func(Event)) *pubsub.Subscription
 // publisher's goroutine (an API request, an edge stream, the cluster log
 // reader): one subscriber's panic must neither end that goroutine (or the
 // process) nor keep the event from the subscribers after it.
+//
+// The package recovers by itself rather than through pkg/safe: plugins and
+// the microgateway import it, and pkg/safe brings Studio's logger and
+// metrics (gorm, OpenTelemetry, Prometheus) into their module graphs.
 func guarded(fn func(Event)) func(Event) {
 	return func(ev Event) {
-		if safe.Call("event bus subscriber", func() { fn(ev) }) {
-			logger.Current().Warn().Str("topic", ev.Topic).Str("event_id", ev.ID).Msg("An event bus subscriber panicked; it missed this event")
-		}
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Str("topic", ev.Topic).Str("event_id", ev.ID).Interface("panic", r).
+					Str("stack", string(debug.Stack())).
+					Msg("An event bus subscriber panicked; it missed this event")
+			}
+		}()
+		fn(ev)
 	}
 }
 
