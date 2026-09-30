@@ -119,6 +119,14 @@ deleted by any node once they are an hour old (`NodeRetention`), at start
 and every minute. Single replica and SQLite: the same code runs with one
 node.
 
+Each row also carries a `label` for operators (`Options.NodeLabel`, default
+`studio`; `ControlPlaneOptions.NodeLabel`, default `control-plane`, e.g.
+`mdcb-eu-1`; at most 64 characters, no control characters) and
+`leader_eligible` (false for a headless control plane, which never takes the
+leader lease). Both are nullable: a row written before they existed counts
+as unlabelled and eligible. Eligibility is recorded for operators; a
+replica's own code decides whether it contends for the lease.
+
 ### Edge stream ownership
 
 `edge_instances` gains `owner_node_id` and `stream_session_id`. Opening a
@@ -376,9 +384,16 @@ replicas could both take it). Idempotent cleanups (event log, webhook,
 audit, sync-run retention) run on every replica.
 
 `GET /api/v1/cluster/status` (edges:read) reports the live replicas with
-their edge counts and the leader, this replica's event log and relay
-counters, the push backlog (pending, in flight, held by stopped replicas),
-and warnings.
+their label, `leader_eligible`, edge counts and the leader, this replica's
+event log and relay counters, the push backlog (pending, in flight, held by
+stopped replicas), and warnings.
+
+The edges list, detail and namespace listings name each edge's owning
+replica: `owner_node_id`, `owner_label` and `owner_live` (the owner's
+registration is fresh), looked up with one query per page
+(`cluster.Owners`). The Edge Gateways page shows a "Held by" column once the
+listed edges are held by more than one replica, and the edge's detail page
+shows its owner.
 
 ### Replicas that never lead
 

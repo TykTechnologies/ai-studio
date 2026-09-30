@@ -42,6 +42,7 @@ import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
 import { formatPushTime, sameNamespace } from './pendingChanges';
+import { edgeOwnerText, showHeldBy } from './edgeOwner';
 import {
   TitleBox,
   ContentBox,
@@ -196,6 +197,9 @@ const EdgeGatewayList = () => {
   };
 
   const availableNamespaces = getAvailableNamespaces();
+  // Which Studio replica holds each edge, once they are spread over several.
+  const heldBy = showHeldBy(edgeGateways);
+  const columnCount = 6 + (features.hub_spoke_multi_tenant ? 1 : 0) + (heldBy ? 1 : 0);
 
   // "Last pushed 13:12" for the namespace being looked at -- or one entry per
   // namespace with edges when the list is unfiltered -- so the sync chips
@@ -306,6 +310,9 @@ const EdgeGatewayList = () => {
                   )}
                   <StyledTableHeaderCell>Connection</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Config Sync</StyledTableHeaderCell>
+                  {heldBy && (
+                    <StyledTableHeaderCell>Held by</StyledTableHeaderCell>
+                  )}
                   <StyledTableHeaderCell>Version</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Last Heartbeat</StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
@@ -314,7 +321,7 @@ const EdgeGatewayList = () => {
               <TableBody>
                 {edgeGateways.length === 0 ? (
                   <TableRow>
-                    <StyledTableCell colSpan={features.hub_spoke_multi_tenant ? 7 : 6} align="center">
+                    <StyledTableCell colSpan={columnCount} align="center">
                       <Typography variant="body2" color="textSecondary" py={4}>
                         {selectedNamespace
                           ? `No edge gateways found in ${selectedNamespace} namespace`
@@ -351,6 +358,13 @@ const EdgeGatewayList = () => {
                       <StyledTableCell>
                         {getSyncStatusChip(edge)}
                       </StyledTableCell>
+                      {heldBy && (
+                        <StyledTableCell data-testid="edge-held-by">
+                          <Tooltip title={edge.ownerNodeId || 'No replica holds this edge'} arrow>
+                            <Typography variant="body2">{edgeOwnerText(edge)}</Typography>
+                          </Tooltip>
+                        </StyledTableCell>
+                      )}
                       <StyledTableCell>
                         <Typography variant="body2">
                           {edge.version || 'Unknown'}

@@ -631,7 +631,9 @@ plane that does not migrate still writes those.
 
 A host may run several Studio replicas against one database. Each joins
 the cluster in `studio.New` (`Options.NodeID`, default a fresh per-process
-ID): a registry row other replicas use to tell live replicas from dead ones,
+ID; `Options.NodeLabel`, default `studio`, names it for operators on the
+cluster status and the Edge Gateways page, e.g. `dashboard`): a registry
+row other replicas use to tell live replicas from dead ones,
 an event log and bus relay for what every replica must hear, and a claim on
 the leader lease for work that must happen once. Code that is not handed
 the cluster (Enterprise features, say) uses `pkg/replicas`: `IsLeader`,
@@ -715,6 +717,7 @@ cp, err := studio.NewControlPlane(studio.ControlPlaneOptions{
 	Logger:    &hostLogger,
 	TLSConfig: hostTLSConfig, // optional: the host's certificates and ciphers
 	License:   func() string { return hostSettings.AIStudioLicence() },
+	NodeLabel: "mdcb-" + hostname, // shown as "Held by" on the Edge Gateways page
 })
 if err != nil {
 	return err // studio.ErrSchemaMissing / ErrSchemaTooOld / ErrSchemaTooNew, ...

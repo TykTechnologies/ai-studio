@@ -79,6 +79,10 @@ class EdgeGatewayService {
             lastSyncAck: edge.attributes.last_sync_ack,
             createdAt: edge.attributes.created_at,
             updatedAt: edge.attributes.updated_at,
+            // The Studio replica holding the edge's stream (empty when none)
+            ownerNodeId: edge.attributes.owner_node_id || '',
+            ownerLabel: edge.attributes.owner_label || '',
+            ownerLive: !!edge.attributes.owner_live,
           })),
           meta: response.data.meta || {},
         };
@@ -114,6 +118,10 @@ class EdgeGatewayService {
           lastSyncAck: edge.attributes.last_sync_ack,
           createdAt: edge.attributes.created_at,
           updatedAt: edge.attributes.updated_at,
+          // The Studio replica holding the edge's stream (empty when none)
+          ownerNodeId: edge.attributes.owner_node_id || '',
+          ownerLabel: edge.attributes.owner_label || '',
+          ownerLive: !!edge.attributes.owner_live,
         };
       }
 
@@ -147,6 +155,10 @@ class EdgeGatewayService {
             lastSyncAck: edge.attributes.last_sync_ack,
             createdAt: edge.attributes.created_at,
             updatedAt: edge.attributes.updated_at,
+            // The Studio replica holding the edge's stream (empty when none)
+            ownerNodeId: edge.attributes.owner_node_id || '',
+            ownerLabel: edge.attributes.owner_label || '',
+            ownerLive: !!edge.attributes.owner_live,
           })),
           meta: response.data.meta || {},
         };
