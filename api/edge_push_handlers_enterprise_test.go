@@ -206,3 +206,39 @@ func TestPushAPI_Errors(t *testing.T) {
 	w = apitest.PerformRequest(p.router, "GET", "/api/v1/edges/reload-operations", nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+// Clients written against v2.2 read reload-all's {message, operations,
+// operations_count} under "data"; they are still there, next to the one
+// operation (M2).
+func TestPushAPI_ReloadAllKeepsTheV22Fields(t *testing.T) {
+	p := setupPushTestAPI(t)
+	p.edge(t, "edge-a", "ns1", models.EdgeStatusConnected)
+	p.edge(t, "edge-b", "ns2", models.EdgeStatusConnected)
+	p.edge(t, "edge-c", "ns2", models.EdgeStatusConnected)
+
+	w := apitest.PerformRequest(p.router, "POST", "/api/v1/edges/reload-all", nil)
+	require.Equal(t, http.StatusAccepted, w.Code, w.Body.String())
+	var resp struct {
+		Data struct {
+			ID              string `json:"id"`
+			Message         string `json:"message"`
+			OperationsCount int    `json:"operations_count"`
+			Operations      []struct {
+				OperationID string `json:"operation_id"`
+				Namespace   string `json:"namespace"`
+				Status      string `json:"status"`
+			} `json:"operations"`
+			Attributes pushAttrs `json:"attributes"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "Global reload triggered for all namespaces", resp.Data.Message)
+	assert.Equal(t, 2, resp.Data.OperationsCount)
+	require.Len(t, resp.Data.Operations, 2)
+	for i, ns := range []string{"ns1", "ns2"} {
+		assert.Equal(t, ns, resp.Data.Operations[i].Namespace)
+		assert.Equal(t, resp.Data.ID, resp.Data.Operations[i].OperationID, "one operation for every namespace")
+		assert.Equal(t, models.PushOperationInProgress, resp.Data.Operations[i].Status)
+	}
+	assert.Equal(t, "all", resp.Data.Attributes.Scope)
+}

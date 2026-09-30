@@ -89,13 +89,15 @@ func (a *API) listNamespaces(c *gin.Context) {
 }
 
 // @Summary Trigger namespace reload
-// @Description Trigger configuration reload for all edges in a namespace
+// @Description Push the current configuration to every edge in a namespace (connected, registered, or offline for less than 5 minutes; offline edges are waited for until the push's deadline). Returns the push operation (ID "push-..."); follow it with GET /api/v1/reload-operations/{operation_id}/status. 409 when the namespace has no edge to push to (up to v2.2: 404).
 // @Tags namespaces
 // @Accept json
 // @Produce json
 // @Param namespace path string true "Namespace name (use 'global' for global namespace)"
 // @Success 202 {object} ReloadResponse
-// @Failure 404 {object} ErrorResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/namespaces/{namespace}/reload [post]
 // @Security BearerAuth
@@ -175,7 +177,7 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 }
 
 // @Summary Get reload operation status
-// @Description Get the status of a specific reload operation
+// @Description Get the status of a push ("reload") operation, per edge (Enterprise; 402 in Community Edition). status is in_progress until every edge has answered or the deadline passed, then one of succeeded, succeeded_with_warnings, partially_failed, failed or expired (up to v2.2: completed, failed or timed_out).
 // @Tags namespaces
 // @Accept json
 // @Produce json

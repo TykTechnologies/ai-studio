@@ -152,8 +152,9 @@ func (a *API) getEdge(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param edge_id path string true "Edge ID"
-// @Success 200 {object} map[string]interface{}
+// @Success 202 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/{edge_id}/reload [post]
 // @Security BearerAuth
@@ -223,11 +224,12 @@ func (a *API) listReloadOperations(c *gin.Context) {
 }
 
 // @Summary Reload all edge gateways
-// @Description Trigger a configuration reload for all edge gateways (CE: works for single "default" namespace)
+// @Description Trigger a configuration reload for all edge gateways (CE: works for single "default" namespace). 409 when there is no edge to push to.
 // @Tags edges
 // @Accept json
 // @Produce json
 // @Success 202 {object} map[string]interface{}
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth

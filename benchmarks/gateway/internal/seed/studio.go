@@ -398,9 +398,12 @@ func (s *Studio) PushAndWaitForEdges(ctx context.Context, namespace string, minE
 				}
 				return st, fmt.Errorf("reload operation %s: HTTP %d: %s", id, code, truncate(body))
 			}
+			// Final statuses: since #666 "succeeded", "succeeded_with_warnings",
+			// "partially_failed", "failed" and "expired"; up to v2.2
+			// "completed", "failed" and "timed_out".
 			switch status.Data.Attributes.Status {
-			case "completed":
-			case "failed", "timed_out":
+			case "succeeded", "succeeded_with_warnings", "completed":
+			case "failed", "partially_failed", "expired", "timed_out":
 				return st, fmt.Errorf("edge config reload %s: %s: %s (check the edge's logs)", id,
 					status.Data.Attributes.Status, status.Data.Attributes.Message)
 			default:

@@ -243,6 +243,19 @@ type edge struct {
 
 func startEdge(t *testing.T, id, namespace string, fwd *forwarder) *edge {
 	t.Helper()
+	return startEdgeWith(t, id, namespace, fwd, edgeOptions{})
+}
+
+// edgeOptions vary how an edge starts.
+type edgeOptions struct {
+	// handlerAfter sets the reload handler this long after the client has
+	// connected, as cmd/microgateway does (it sets it once its services
+	// are up); zero sets it before the client starts.
+	handlerAfter time.Duration
+}
+
+func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edgeOptions) *edge {
+	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), id+".db")+"?_busy_timeout=5000"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	require.NoError(t, database.Migrate(db))
@@ -269,9 +282,14 @@ func startEdge(t *testing.T, id, namespace string, fwd *forwarder) *edge {
 	handler := services.NewEdgeReloadHandler(client, syncService, db, id, func(resp *pb.ConfigurationReloadResponse) {
 		_ = client.SendReloadStatus(resp)
 	}, nil)
-	client.SetReloadHandler(handler)
+	if opts.handlerAfter == 0 {
+		client.SetReloadHandler(handler)
+	}
 	require.NoError(t, client.Start())
 	t.Cleanup(func() { _ = client.Stop() })
+	if opts.handlerAfter > 0 {
+		time.AfterFunc(opts.handlerAfter, func() { client.SetReloadHandler(handler) })
+	}
 	return &edge{id: id, db: db, client: client, fwd: fwd}
 }
 
@@ -517,5 +535,34 @@ func TestE2E_OfflineEdges(t *testing.T) {
 				assert.Contains(t, c.Message, "not connected to any control-plane replica")
 			}
 		}
+	})
+}
+
+// An edge that restarts while a push waits for it gets the push as soon as
+// it connects, although, like cmd/microgateway, it sets its reload handler
+// only a moment later: the edge holds the push until the handler is set
+// (and control waits for the edge's first heartbeat). Before, the edge
+// dropped it and the push waited for control's one-minute answer timeout,
+// then used a second attempt (M3).
+func TestE2E_PushToEdgeStillStartingUp(t *testing.T) {
+	forEachStudioDB(t, func(t *testing.T, sdb studioDB) {
+		a := startReplica(t, sdb, "node-a")
+		first := startEdge(t, "edge-1", "", newForwarder(t, a.addr))
+		waitOwner(t, a.db, "edge-1", "node-a")
+		require.NoError(t, first.client.Stop())
+		require.Eventually(t, func() bool {
+			_, s := streamOwner(t, a.db, "edge-1")
+			return s == models.EdgeStatusDisconnected
+		}, 20*time.Second, 25*time.Millisecond)
+
+		addLLM(t, a.db, "startup-llm")
+		op := push(t, a, pushes.Request{Scope: pushes.ScopeEdge, EdgeIDs: []string{"edge-1"}})
+
+		start := time.Now()
+		again := startEdgeWith(t, "edge-1", "", newForwarder(t, a.addr), edgeOptions{handlerAfter: time.Second})
+		st := waitPush(t, a, op, models.PushOperationSucceeded, 20*time.Second)
+		t.Logf("push settled %v after the edge started", time.Since(start).Round(time.Millisecond))
+		assert.Equal(t, 1, st.Commands[0].Attempts, "history: %+v", st.Commands[0].History)
+		assert.True(t, again.hasLLM("startup-llm"))
 	})
 }

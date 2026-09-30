@@ -172,18 +172,18 @@ func (e *EdgeInstance) MarkEdgesAsPendingInNamespace(db *gorm.DB, namespace stri
 		Update("sync_status", EdgeSyncStatusPending).Error
 }
 
-// FirstInSyncWithChecksum returns an active edge in the namespace that
-// reports the given checksum as loaded and in sync, or nil when there is
-// none. The pending-changes preview uses its LastSyncAck as the reference
-// point when the namespace has a checksum but no recorded push.
-func (e *EdgeInstance) FirstInSyncWithChecksum(db *gorm.DB, namespace, checksum string) (*EdgeInstance, error) {
-	if checksum == "" {
-		return nil, nil
-	}
+// LatestSyncAck returns the edge in the namespace that most recently
+// confirmed it was in sync with the namespace's configuration (its
+// LastSyncAck, set only when its loaded checksum matched), or nil when no
+// edge ever did. The pending-changes preview uses that ack as the reference
+// point when no push was recorded: the configuration as of then reached an
+// edge, whether or not the edge is connected now and whatever changed since
+// (a change moves the namespace to a new checksum, so requiring the current
+// one reported everything as never pushed after any edit, and requiring a
+// connected edge did so whenever the edges were offline).
+func (e *EdgeInstance) LatestSyncAck(db *gorm.DB, namespace string) (*EdgeInstance, error) {
 	var edge EdgeInstance
-	err := db.Where("namespace IN ? AND status IN ? AND sync_status = ? AND loaded_checksum = ?",
-		NamespaceAliases(namespace), []string{EdgeStatusConnected, EdgeStatusRegistered},
-		EdgeSyncStatusInSync, checksum).
+	err := db.Where("namespace IN ? AND last_sync_ack IS NOT NULL", NamespaceAliases(namespace)).
 		Order("last_sync_ack DESC").First(&edge).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil

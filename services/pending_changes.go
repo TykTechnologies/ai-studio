@@ -164,10 +164,11 @@ func (t *changeTime) parse(s string) error {
 // filed under "default"; a named namespace sees its own objects plus the
 // global ones. This mirrors grpc.ControlServer.getConfigurationSnapshot.
 //
-// When the namespace has a checksum but no recorded push (a database from
-// before last_push_at existed) and an edge is in sync with that checksum,
-// the edge's ack is the reference point (Baseline edge_ack) rather than
-// reporting everything as never pushed.
+// When no push was recorded (a database from before last_push_at existed,
+// or edges that only ever got their configuration when they registered)
+// the latest time an edge confirmed it was in sync is the reference point
+// (Baseline edge_ack) rather than reporting everything as never pushed.
+// Offline edges count: the configuration as of their ack reached them.
 func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges, error) {
 	namespace = models.CanonicalNamespace(namespace)
 
@@ -179,22 +180,20 @@ func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges
 		result.Since = status.LastPushAt
 		if status.LastPushAt != nil {
 			result.Baseline = PendingBaselinePush
-		} else if status.ExpectedChecksum != "" {
-			acked, err := (&models.EdgeInstance{}).FirstInSyncWithChecksum(s.db, namespace, status.ExpectedChecksum)
-			if err != nil {
-				return nil, err
-			}
-			if acked != nil {
-				since := status.LastConfigChange
-				if acked.LastSyncAck != nil {
-					since = *acked.LastSyncAck
-				}
-				result.Since = &since
-				result.Baseline = PendingBaselineEdgeAck
-			}
 		}
 	} else if err != gorm.ErrRecordNotFound {
 		return nil, err
+	}
+	if result.Since == nil {
+		acked, err := (&models.EdgeInstance{}).LatestSyncAck(s.db, namespace)
+		if err != nil {
+			return nil, err
+		}
+		if acked != nil && acked.LastSyncAck != nil {
+			since := *acked.LastSyncAck
+			result.Since = &since
+			result.Baseline = PendingBaselineEdgeAck
+		}
 	}
 
 	rows, err := s.pendingRows(namespace, result.Since)
