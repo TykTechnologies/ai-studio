@@ -10,6 +10,7 @@ package studio
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -144,6 +145,12 @@ type Options struct {
 	CSRFTokenHeader string
 	CSRFTokenURL    string
 
+	// GRPCTLSConfig, when set, is the TLS configuration the gRPC control
+	// server serves edges with, in place of Config's certificate and key
+	// files (Config.GRPCTLSCertPath, GRPCTLSKeyPath): a host with its own
+	// certificate store, cipher suites or minimum version passes its own.
+	GRPCTLSConfig *tls.Config
+
 	// Chromeless makes the console render pages only: no top bar (the
 	// Admin / Portal / Chat switch and the user menu) and no navigation
 	// drawers, because the host draws its own. Sticky page headers then sit
@@ -185,22 +192,11 @@ type Studio struct {
 	proxy     *proxy.Proxy
 	control   *grpc.ControlServer
 
-	// clusterNode registers this replica; clusterLog carries events between
-	// replicas (pkg/cluster).
-	clusterNode *cluster.Node
-	clusterLog  *cluster.Log
-	// relay carries edge-bound and object-change bus events to the other
-	// replicas through clusterLog.
-	relay *cluster.Relay
-	// leadership is this replica's claim on the leader lease, which
-	// singleton background work runs under.
-	leadership *cluster.Leadership
+	// clusterParts is this replica's cluster membership: node, event log,
+	// relay, leader lease and replica signals.
+	clusterParts
 	// relayed applies other replicas' changes to this replica's caches.
 	relayed *relayedChanges
-	// unsubscribeSignals stops delivering other replicas' signals.
-	unsubscribeSignals func()
-	// signals writes this replica's replica signals in the background.
-	signals *signalSender
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (control mode only).
 	pushes *pushes.Coordinator
@@ -367,12 +363,8 @@ func New(opts Options) (_ *Studio, err error) {
 	if nodeID == "" {
 		nodeID = cluster.NewNodeID()
 	}
-	if s.clusterNode, err = cluster.StartNode(s.db, nodeID, opts.Version); err != nil {
-		return nil, fmt.Errorf("studio: %w", err)
-	}
-	s.clusterLog = cluster.NewLog(s.db, nodeID, cluster.LogOptions{})
-	if err := s.clusterLog.Start(backgroundCtx); err != nil {
-		return nil, fmt.Errorf("studio: %w", err)
+	if err := s.joinCluster(backgroundCtx, s.db, nodeID, opts.Version); err != nil {
+		return nil, err
 	}
 	// Singleton jobs (aggregations, alerts, syncs, cleanups) run only on
 	// the replica holding the leader lease.
@@ -542,7 +534,7 @@ func New(opts Options) (_ *Studio, err error) {
 	}, service.Budget)
 
 	if conf.GatewayMode == "control" {
-		if err := s.wireControlPlane(opts.Version); err != nil {
+		if err := s.wireControlPlane(opts.Version, opts.GRPCTLSConfig); err != nil {
 			return nil, err
 		}
 	} else {
@@ -575,25 +567,9 @@ func New(opts Options) (_ *Studio, err error) {
 
 // wireControlPlane builds the gRPC control server and connects the push
 // coordinator, plugin manager and event bus to it.
-func (s *Studio) wireControlPlane(version string) error {
+func (s *Studio) wireControlPlane(version string, tlsConfig *tls.Config) error {
 	conf, service := s.conf, s.service
-	control, err := grpc.NewControlServer(&grpc.Config{
-		GRPCPort:      conf.GRPCPort,
-		GRPCHost:      conf.GRPCHost,
-		TLSEnabled:    conf.GRPCTLSEnabled,
-		TLSCertPath:   conf.GRPCTLSCertPath,
-		TLSKeyPath:    conf.GRPCTLSKeyPath,
-		AuthToken:     conf.GRPCAuthToken,
-		NextAuthToken: conf.GRPCNextAuthToken,
-		EncryptionKey: conf.MicrogatewayEncryptionKey,
-		NodeID:        s.clusterNode.ID(),
-
-		BudgetSyncInterval: conf.BudgetSyncInterval,
-
-		MaxMessageSize:        conf.GRPCMaxMessageSize,
-		MaxConnectionAge:      conf.GRPCMaxConnectionAge,
-		MaxConnectionAgeGrace: conf.GRPCMaxConnectionAgeGrace,
-	}, s.db)
+	control, err := grpc.NewControlServer(controlServerConfig(conf, s.clusterNode.ID(), tlsConfig), s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)
 	}
@@ -644,8 +620,31 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 	// Other replicas' edges and caches must hear about this replica's
 	// events, and this replica about theirs.
 	s.watchRelayedChanges(bus)
-	s.relay = cluster.NewRelay(s.clusterLog, bus, cluster.RelayOptions{})
-	s.relay.Start()
+	s.startRelay(bus, cluster.RelayOptions{})
+}
+
+// controlServerConfig is the gRPC control server's configuration, for a full
+// Studio and a headless control plane alike. tlsConfig, when set, replaces
+// the certificate and key files in conf.
+func controlServerConfig(conf *config.AppConf, nodeID string, tlsConfig *tls.Config) *grpc.Config {
+	return &grpc.Config{
+		GRPCPort:      conf.GRPCPort,
+		GRPCHost:      conf.GRPCHost,
+		TLSEnabled:    conf.GRPCTLSEnabled,
+		TLSCertPath:   conf.GRPCTLSCertPath,
+		TLSKeyPath:    conf.GRPCTLSKeyPath,
+		TLSConfig:     tlsConfig,
+		AuthToken:     conf.GRPCAuthToken,
+		NextAuthToken: conf.GRPCNextAuthToken,
+		EncryptionKey: conf.MicrogatewayEncryptionKey,
+		NodeID:        nodeID,
+
+		BudgetSyncInterval: conf.BudgetSyncInterval,
+
+		MaxMessageSize:        conf.GRPCMaxMessageSize,
+		MaxConnectionAge:      conf.GRPCMaxConnectionAge,
+		MaxConnectionAgeGrace: conf.GRPCMaxConnectionAgeGrace,
+	}
 }
 
 // HTTPHandler returns the admin API and UI handler: the portal, chat,
@@ -736,29 +735,7 @@ func (s *Studio) stop(ctx context.Context) error {
 		s.pushes.Stop()
 	}
 	s.relayed.stop()
-	if s.relay != nil {
-		// Before the log: events still queued are written on the way out.
-		s.relay.Stop()
-	}
-	if s.clusterLog != nil {
-		s.clusterLog.Stop()
-	}
-	replicas.SetBackend(nil)
-	if s.signals != nil {
-		s.signals.close()
-	}
-	if s.unsubscribeSignals != nil {
-		s.unsubscribeSignals()
-	}
-	if s.leadership != nil {
-		// Hand the leader lease over now rather than after its TTL.
-		s.leadership.Stop()
-	}
-	if s.clusterNode != nil {
-		// Last among the cluster pieces: removing the row tells the other
-		// replicas at once that this one is gone.
-		s.clusterNode.Stop(ctx)
-	}
+	s.stopCluster(ctx)
 	if s.analyticsTee != nil {
 		// The handler is process-wide: unwrap it so a later New in this
 		// process does not tee into this instance's stopped sinks.

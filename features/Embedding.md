@@ -623,8 +623,9 @@ a change that breaks older readers (the rules are next to the constants in
 version and a hash of the schema goldens: `TestSchemaVersionMatchesGoldens`
 and `make schema-golden` fail when the goldens change without a bump. The
 goldens cover `models.InitModels` (with the profile and KV tables), which
-holds the Enterprise tables too; the analytics tables `analytics.Migrate`
-adds (`proxy_logs`, `compliance_events`, ...) are outside them.
+holds the Enterprise tables too, and the analytics tables
+(`models.AnalyticsModels`, which `analytics.Migrate` creates): a control
+plane that does not migrate still writes those.
 
 ## Several replicas
 
@@ -699,6 +700,69 @@ change handlers. Each is logged with its stack and counted in
 `logger.Current()`: the host's logger once `logger.Use` or `logger.Init`
 ran, zerolog's global logger before that (the microgateway uses Studio's
 event bus without setting Studio's logger up).
+
+## Headless control plane (`studio.NewControlPlane`)
+
+A product that holds edge (microgateway) connections for a region, such as
+MDCB, runs Studio as a pure control plane next to the full Studio embedded
+in the Dashboard, on the same Postgres database:
+
+```go
+cp, err := studio.NewControlPlane(studio.ControlPlaneOptions{
+	Config:    conf,      // gRPC, encryption and licence settings
+	DB:        sharedDB,  // the database the full Studio migrates (Postgres)
+	Version:   hostVersion,
+	Logger:    &hostLogger,
+	TLSConfig: hostTLSConfig, // optional: the host's certificates and ciphers
+	License:   func() string { return hostSettings.AIStudioLicence() },
+})
+if err != nil {
+	return err // studio.ErrSchemaMissing / ErrSchemaTooOld / ErrSchemaTooNew, ...
+}
+defer cp.Stop(ctx)
+go cp.Serve(edgeListener) // nil: Config.GRPCHost:GRPCPort
+```
+
+What it runs:
+
+- the gRPC control server: edge registration, configuration snapshots,
+  analytics pulses (recorded in the shared database, and copied to
+  `AnalyticsSinks`), token validation;
+- edge push delivery for the edges whose streams it holds (a push made on
+  the full Studio is delivered by whichever replica holds the edge);
+- cluster membership: a `cluster_nodes` row, the event log, replica signals
+  (budget and governed-metadata caches), and the bus relay, which carries the
+  full Studio's edge-bound events (`budget.sync`, configuration changes) to
+  its edges;
+- licence validity checks (Enterprise), without telemetry.
+
+What it leaves out: migrations and seeds, the API and UI, the AI gateway,
+authentication, plugins, the marketplace, the plugin scheduler, usage and
+licence telemetry, and metrics or trace exporters (it uses the host's
+`TracerProvider` and `MeterProvider` when given, and records nothing of its
+own otherwise).
+
+- **Postgres only.** SQLite serves one process; `NewControlPlane` returns
+  `studio.ErrControlPlaneNeedsPostgres`.
+- **No DDL.** It calls `studio.CheckSchema` first and never changes the
+  schema: upgrade the full Studio before the control plane, which can lag it
+  across additive migrations.
+- **Never the leader.** It joins the cluster without contending for the
+  leader lease, and `pkg/replicas.IsLeader` is false on it for good. So
+  singleton work (budget blocks, alerts and `budget.sync`, marketplace sync,
+  telemetry) stays with the full Studio, even while it is down: nothing
+  takes that work over in a control plane. Its edges keep the last budget
+  blocks they received until the full Studio is back.
+- **Logger.** `Logger` nil logs JSON to stderr at `Config.LogLevel`, without
+  touching zerolog's global logger.
+- **One instance per process**, shared with `New`: a Studio and a control
+  plane cannot run in one process. After `Stop`, either may start again.
+- **Edge-to-control plugin traffic (phase 1 limit).** Plugin control
+  payloads (`SendPluginControlBatch`) and edge `DirUp` events need a plugin
+  host. A control plane has none: payloads are answered with a per-payload
+  error ("plugin manager not available") that the edge logs, and `DirUp`
+  events reach only its own bus. Relaying both to the full Studio is the
+  next step.
 
 ## langchaingo in tree
 
