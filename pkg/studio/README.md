@@ -27,6 +27,9 @@ s, err := studio.New(studio.Options{
 	TracerProvider: hostTracerProvider,
 	MeterProvider:  hostMeterProvider,
 	OnLicenceInvalid: func(err error) { /* alert, degrade, or stop Studio */ },
+	// Enterprise: the AI Studio licence from the host's own settings (read at
+	// start and at every check; s.ReloadLicense() applies a renewal at once).
+	License: func() string { return hostSettings.AIStudioLicence() },
 
 	// The host signs users in; Studio provisions and authorises them.
 	Auth:      hostAuthenticator, // Authenticate(*http.Request) (*studio.Identity, error)

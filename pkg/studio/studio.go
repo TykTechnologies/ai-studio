@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -88,6 +89,13 @@ type Options struct {
 	// OnLicenceInvalid is called when an Enterprise licence fails its
 	// periodic re-check. Nil exits the process.
 	OnLicenceInvalid func(error)
+
+	// License supplies the AI Studio Enterprise licence (the same JWT as
+	// TYK_AI_LICENSE, validated the same way) from the host's own
+	// settings. It is read at start and at every validity check, so a
+	// renewed licence takes effect without a restart; call ReloadLicense to
+	// apply one at once. Nil uses Config.LicenseKey.
+	License func() string
 
 	// UIAssets is the built admin frontend, rooted at its build directory
 	// (for example os.DirFS over the unpacked tyk-ai-studio-ui release
@@ -259,6 +267,7 @@ func New(opts Options) (_ *Studio, err error) {
 	// Licensing (Enterprise: validates the licence and starts periodic checks).
 	s.licensing = licensing.NewService(licensing.Config{
 		LicenseKey:           conf.LicenseKey,
+		LicenseSource:        opts.License,
 		TelemetryURL:         conf.LicenseTelemetryURL,
 		TelemetryPeriod:      conf.LicenseTelemetryPeriod,
 		TelemetryDisabled:    conf.LicenseDisableTelemetry,
@@ -721,4 +730,39 @@ func cookiePath(basePath string) string {
 		return basePath
 	}
 	return "/"
+}
+
+// ReloadLicense re-reads the licence (Options.License, or Config.LicenseKey)
+// and validates it now, for a host that has just stored a renewed one.
+// Community Edition has no licence and returns nil. An error leaves the
+// licence Studio already holds in place; the host can show it.
+func (s *Studio) ReloadLicense() error {
+	if r, ok := s.licensing.(licensing.Revalidator); ok {
+		return r.Revalidate()
+	}
+	return nil
+}
+
+// LicenseStatus is the Enterprise licence as Studio holds it, for a host to
+// show next to its own licence.
+type LicenseStatus struct {
+	Enterprise bool      // an Enterprise build (Community Edition has no licence)
+	Valid      bool      // the licence is valid now
+	ExpiresAt  time.Time // zero without a licence
+	DaysLeft   int       // -1 without a licence
+	// Entitlements are the licence's feature names.
+	Entitlements []string
+}
+
+// LicenseStatus reports the licence Studio holds.
+func (s *Studio) LicenseStatus() LicenseStatus {
+	st := LicenseStatus{Enterprise: config.IsEnterprise(), Valid: s.licensing.IsValid(), DaysLeft: s.licensing.DaysLeft()}
+	if info := s.licensing.GetLicenseInfo(); info != nil {
+		st.ExpiresAt = info.ExpiresAt
+		for name := range info.Features {
+			st.Entitlements = append(st.Entitlements, name)
+		}
+		sort.Strings(st.Entitlements)
+	}
+	return st
 }

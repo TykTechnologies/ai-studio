@@ -94,6 +94,18 @@ the filter-script switch `FILTER_SCRIPT_ALLOW_OS`, OCI registry credentials
   validation at boot. A failed periodic re-check calls
   `licensing.Config.OnInvalid`; with no callback set the process exits, which
   is what the standalone binaries rely on.
+- The licence from the host (S1): a host embedding Studio passes the
+  customer's **AI Studio Enterprise licence** (the same JWT as
+  `TYK_AI_LICENSE`, validated unchanged: two licences, the host's own and
+  Studio's; no licence generator changes and no host licence claims).
+  `studio.Options.License` (`licensing.Config.LicenseSource`) supplies it
+  from the host's settings and is read at start and at every validity
+  check, so a renewal takes effect without a restart;
+  `(*studio.Studio).ReloadLicense()` validates a newly stored licence at
+  once (an error leaves the held licence in place, for the host to show).
+  `(*studio.Studio).LicenseStatus()` reports validity, expiry, days left
+  and entitlements for the host to show next to its own licence. Nil
+  `License` uses `Config.LicenseKey`.
 - Email templates are embedded (package `templates`). A `templates/` directory
   in the working directory still takes precedence, so deployments can
   customise them, but a process started elsewhere renders the defaults
