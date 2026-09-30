@@ -404,3 +404,7 @@ func nodeIDs(nodes []models.ClusterNode) []string {
 	}
 	return ids
 }
+
+func TestNodePrunesLongStoppedNodes_Postgres(t *testing.T) {
+	pruneCase(t, newTestCluster(t).replicaDB("nodes"))
+}

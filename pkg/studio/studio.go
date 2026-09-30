@@ -346,6 +346,13 @@ func New(opts Options) (_ *Studio, err error) {
 	// Singleton jobs (aggregations, alerts, syncs, cleanups) run only on
 	// the replica holding the leader lease.
 	s.leadership = cluster.NewLeadership(s.db, cluster.LeaderLease, nodeID, cluster.LeadershipOptions{})
+	// Leader-only work that was skipped while another replica held the
+	// lease catches up as soon as this one gains it (pkg/replicas.OnLeading).
+	s.leadership.OnChange(func(leading bool) {
+		if leading {
+			replicas.BecameLeader()
+		}
+	})
 	s.leadership.Start()
 	s.connectReplicas()
 

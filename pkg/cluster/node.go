@@ -26,11 +26,19 @@ import (
 
 // Defaults for the node registry. A node counts as live while its row was
 // refreshed within LivenessWindow; that is four refreshes, so one slow
-// database round trip never makes a live node look dead.
+// database round trip never makes a live node look dead. Rows of nodes that
+// stopped without removing theirs (a crash, a kill) are deleted once they
+// are NodeRetention old, by whichever node prunes first: nothing refers to
+// a node that long dead (its leases, claims and edge streams were taken
+// over long before), and until then the rows show what ran recently.
 var (
 	HeartbeatInterval = 5 * time.Second
 	LivenessWindow    = 20 * time.Second
+	NodeRetention     = time.Hour
 )
+
+// pruneEvery is how many refreshes pass between two prunes of dead rows.
+const pruneEvery = 12
 
 // NewNodeID returns an ID for this process: hostname, pid and a random
 // suffix. The suffix matters in containers, where every process may be pid
@@ -49,7 +57,7 @@ func NewNodeID() string {
 type Node struct {
 	db       *gorm.DB
 	id       string
-	hostname string
+	proc     processInfo
 	version  string
 	started  time.Time
 	interval time.Duration
@@ -63,11 +71,12 @@ type Node struct {
 // first write happens before it returns, so a failure to reach the database
 // is reported rather than discovered later.
 func StartNode(db *gorm.DB, id, version string) (*Node, error) {
-	host, _ := os.Hostname()
 	n := &Node{
-		db:       db,
+		// A refresh is one statement; gorm's default transaction around it
+		// would make it three, on every replica, every few seconds.
+		db:       db.Session(&gorm.Session{SkipDefaultTransaction: true}),
 		id:       id,
-		hostname: host,
+		proc:     thisProcess(),
 		version:  version,
 		started:  time.Now().UTC(),
 		interval: HeartbeatInterval,
@@ -77,6 +86,8 @@ func StartNode(db *gorm.DB, id, version string) (*Node, error) {
 	if err := n.beat(); err != nil {
 		return nil, fmt.Errorf("cluster: register node %s: %w", id, err)
 	}
+	nodesHere.Store(id, struct{}{})
+	n.prune()
 	go n.loop()
 	logger.Infof("Cluster node %s registered", id)
 	return n, nil
@@ -90,11 +101,15 @@ func (n *Node) loop() {
 	t := time.NewTicker(n.interval)
 	defer t.Stop()
 	failing := false
+	beats := 0
 	for {
 		select {
 		case <-n.stop:
 			return
 		case <-t.C:
+			if beats++; beats%pruneEvery == 0 {
+				n.prune()
+			}
 			if err := n.beat(); err != nil {
 				if !failing {
 					logger.Warnf("Cluster node %s could not refresh its registration (other replicas will consider it dead after %s): %v", n.id, LivenessWindow, err)
@@ -113,14 +128,31 @@ func (n *Node) loop() {
 func (n *Node) beat() error {
 	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "node_id"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{"last_seen": nowExpr(n.db), "hostname": n.hostname, "version": n.version}),
+		DoUpdates: clause.Assignments(map[string]interface{}{"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version}),
 	}).Create(map[string]interface{}{
-		"node_id":    n.id,
-		"hostname":   n.hostname,
-		"version":    n.version,
-		"started_at": n.started,
-		"last_seen":  nowExpr(n.db),
+		"node_id":       n.id,
+		"hostname":      n.proc.Hostname,
+		"version":       n.version,
+		"started_at":    n.started,
+		"last_seen":     nowExpr(n.db),
+		"pid":           n.proc.PID,
+		"boot_id":       n.proc.BootID,
+		"pid_namespace": n.proc.PIDNamespace,
 	}).Error
+}
+
+// prune deletes the rows of nodes silent for NodeRetention. Every node runs
+// it now and then; the delete is conditional, so running it twice at once
+// is harmless.
+func (n *Node) prune() {
+	res := n.db.Where("last_seen < ?", sinceExpr(n.db, NodeRetention)).Delete(&models.ClusterNode{})
+	if res.Error != nil {
+		logger.Warnf("Cluster node %s could not delete the registrations of long-stopped replicas: %v", n.id, res.Error)
+		return
+	}
+	if res.RowsAffected > 0 {
+		logger.Infof("Cluster: deleted the registrations of %d replica(s) stopped for more than %s", res.RowsAffected, NodeRetention)
+	}
 }
 
 // Stop ends the refreshes and removes the node's row, so other replicas
@@ -129,6 +161,7 @@ func (n *Node) Stop(ctx context.Context) {
 	n.stopOnce.Do(func() {
 		close(n.stop)
 		<-n.done
+		nodesHere.Delete(n.id)
 		if err := n.db.WithContext(ctx).Where("node_id = ?", n.id).Delete(&models.ClusterNode{}).Error; err != nil {
 			logger.Warnf("Cluster node %s could not remove its registration; others will see it expire: %v", n.id, err)
 		}

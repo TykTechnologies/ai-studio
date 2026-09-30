@@ -350,6 +350,9 @@ TABLE cluster_nodes
   column version character varying(varchar) nullable=YES len=64
   column started_at timestamp with time zone(timestamptz) nullable=YES
   column last_seen timestamp with time zone(timestamptz) nullable=YES
+  column pid bigint(int8) nullable=YES precision=64 scale=0
+  column boot_id character varying(varchar) nullable=YES len=64
+  column pid_namespace character varying(varchar) nullable=YES len=64
 TABLE credentials
   constraint credentials_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX credentials_pkey ON credentials USING btree (id)

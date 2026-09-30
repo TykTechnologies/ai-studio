@@ -256,19 +256,33 @@ func (c *Coordinator) run() {
 	defer poll.Stop()
 	janitor := time.NewTicker(c.opts.JanitorInterval)
 	defer janitor.Stop()
+	// While no push is open anywhere the janitor looks only every
+	// idleJanitorRounds ticks, unless a push was announced (a notification,
+	// or a push or stream on this replica) since it last looked.
+	idle, woken, skipped := false, false, 0
 	for {
 		select {
 		case <-c.stop:
 			return
 		case <-janitor.C:
-			c.janitor()
+			if idle && !woken && skipped < idleJanitorRounds-1 {
+				skipped++
+				continue
+			}
+			idle = !c.janitor()
+			woken, skipped = false, 0
 		case <-c.wake:
+			woken = true
 			c.dispatch()
 		case <-poll.C:
 			c.dispatch()
 		}
 	}
 }
+
+// idleJanitorRounds is how many janitor intervals an idle janitor waits
+// between looks (10 s with the defaults).
+const idleJanitorRounds = 5
 
 // now is the database's clock on Postgres, so every replica compares
 // timestamps against the same clock; SQLite serves one process.
