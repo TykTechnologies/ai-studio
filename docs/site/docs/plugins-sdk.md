@@ -701,6 +701,8 @@ return &pb.PluginResponse{
 }, nil
 ```
 
+A blocking plugin can answer with its own `StatusCode`, `Headers` and `Body` (a cache hit, for example). The gateway sets `Content-Length` and `Transfer-Encoding` itself from the body it writes and ignores a plugin's value for them, as well as the connection headers (`Connection`, `Keep-Alive`, `Trailer`, `Upgrade`). Set `Content-Type` to match the body.
+
 ### Non-Blocking Errors
 
 Log the error and continue:

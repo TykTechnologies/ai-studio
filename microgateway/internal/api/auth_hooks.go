@@ -135,22 +135,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		// Check if plugin blocked the request
 		if pluginResp, ok := result.(*interfaces.PluginResponse); ok {
 			if pluginResp.Block {
-				statusCode := pluginResp.StatusCode
-				if statusCode == 0 {
-					statusCode = http.StatusForbidden
-				}
-
-				// Set headers from plugin
-				for key, value := range pluginResp.Headers {
-					w.Header().Set(key, value)
-				}
-
-				w.WriteHeader(statusCode)
-
-				if len(pluginResp.Body) > 0 {
-					w.Write(pluginResp.Body)
-				}
-
+				writeBlockedPluginResponse(w, pluginResp)
 				return true // Block request
 			}
 
@@ -412,22 +397,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		// Check if plugin blocked
 		if pluginResp, ok := result.(*interfaces.PluginResponse); ok {
 			if pluginResp.Block {
-				statusCode := pluginResp.StatusCode
-				if statusCode == 0 {
-					statusCode = http.StatusForbidden
-				}
-
-				// Set headers from plugin
-				for key, value := range pluginResp.Headers {
-					w.Header().Set(key, value)
-				}
-
-				w.WriteHeader(statusCode)
-
-				if len(pluginResp.Body) > 0 {
-					w.Write(pluginResp.Body)
-				}
-
+				writeBlockedPluginResponse(w, pluginResp)
 				return true // Block request
 			}
 
@@ -585,4 +555,40 @@ func respondWithError(w http.ResponseWriter, statusCode int, message string, err
 		resp["details"] = err.Error()
 	}
 	json.NewEncoder(w).Encode(resp)
+}
+
+// pluginFramingHeaders are headers net/http derives from the body it writes
+// (or that only concern one connection). A plugin's value for them is not
+// trusted: a plugin replaying a stored response, such as a cache, may carry
+// another response's Content-Length, and a wrong one empties the body.
+var pluginFramingHeaders = map[string]bool{
+	"Content-Length":    true,
+	"Transfer-Encoding": true,
+	"Connection":        true,
+	"Keep-Alive":        true,
+	"Trailer":           true,
+	"Upgrade":           true,
+}
+
+// writeBlockedPluginResponse writes the response a pre- or post-auth plugin
+// answered a request with instead of letting it through.
+func writeBlockedPluginResponse(w http.ResponseWriter, pluginResp *interfaces.PluginResponse) {
+	statusCode := pluginResp.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusForbidden
+	}
+
+	// Set headers from plugin, except the framing net/http sets from the body
+	for key, value := range pluginResp.Headers {
+		if pluginFramingHeaders[http.CanonicalHeaderKey(key)] {
+			continue
+		}
+		w.Header().Set(key, value)
+	}
+
+	w.WriteHeader(statusCode)
+
+	if len(pluginResp.Body) > 0 {
+		w.Write(pluginResp.Body)
+	}
 }
