@@ -5,6 +5,7 @@
 // embedded mode by hand; see pkg/studio/README.md.
 //
 //	go run ./examples/embed-host -addr :8090
+//	TYK_AI_LICENSE=... go run -tags enterprise ./examples/embed-host   # Enterprise Edition
 //
 // Then open http://localhost:8090/, sign in as "admin" (a Studio
 // administrator) or any other name (a regular user), and follow the link
@@ -44,6 +45,10 @@ const (
 
 var validName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 
+// licenseSource supplies the Enterprise licence (main_enterprise.go); nil in
+// the Community Edition.
+var licenseSource func() string
+
 // cookieAuth is the host's authenticator: whoever the host_user cookie names
 // is signed in. A real host would check its own session here.
 type cookieAuth struct{}
@@ -69,6 +74,7 @@ func main() {
 	dbPath := flag.String("db", "embed-host.db", "SQLite database for Studio")
 	uiDir := flag.String("ui", "", "directory holding the unpacked UI release assets (required with -tags studio_noui)")
 	chromeless := flag.Bool("chromeless", false, "render Studio's pages without its top bar and drawers, as a host that draws its own navigation would")
+	proxyPort := flag.String("proxy-port", envOr("EMBED_HOST_PROXY_PORT", "9095"), "port of Studio's AI gateway (env EMBED_HOST_PROXY_PORT)")
 	flag.Parse()
 
 	// Studio's configuration comes from the host, not the environment.
@@ -82,7 +88,7 @@ func main() {
 		"TELEMETRY_ENABLED":   "false",
 		"MARKETPLACE_ENABLED": "false",
 		"DEVMODE":             "true", // plain HTTP: cookies without the Secure flag
-		"PROXY_PORT":          "9095",
+		"PROXY_PORT":          *proxyPort,
 	}
 	conf := config.LoadFrom(func(key string) string { return settings[key] })
 
@@ -100,6 +106,7 @@ func main() {
 		LogoutURL: "/logout",
 		// A host that draws its own navigation sets Chromeless.
 		Chromeless: *chromeless,
+		License:    licenseSource,
 	}
 	if *uiDir != "" {
 		opts.UIAssets = os.DirFS(*uiDir)
@@ -147,6 +154,13 @@ func main() {
 	if sqlDB, err := db.DB(); err == nil {
 		sqlDB.Close()
 	}
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 func home(w http.ResponseWriter, r *http.Request) {

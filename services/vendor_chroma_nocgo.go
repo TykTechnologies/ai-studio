@@ -3,4 +3,5 @@
 package services
 
 // chromaSupported mirrors data_session.ChromaSupported: Chroma needs cgo.
-const chromaSupported = false
+// A variable so tests can take either build's path.
+var chromaSupported = false
