@@ -37,6 +37,7 @@ The list view displays all registered edge gateways with key status information:
 | **Namespace** | The namespace the edge belongs to (Enterprise) |
 | **Connection** | Connection status based on heartbeat: Connected, Disconnected, or Stale |
 | **Config Sync** | Whether the edge has the latest configuration |
+| **Held by** | The AI Studio replica holding the edge's connection, by its label (for example `dashboard` or `mdcb-eu-1`), or its node ID when it has none. Shown only when the listed edges are spread over more than one replica; "(not responding)" marks a replica that has stopped refreshing its registration, and the edge reconnects elsewhere shortly |
 | **Version** | Software version and build hash of the edge gateway |
 | **Last Heartbeat** | Time since the last heartbeat was received |
 
@@ -44,7 +45,7 @@ The list view displays all registered edge gateways with key status information:
 
 Click on any edge gateway to view detailed information:
 
-- **Basic Information:** Edge ID, namespace, status, and session ID
+- **Basic Information:** Edge ID, namespace, status, session ID, and the replica holding the edge's connection ("Held by")
 - **Version Information:** Software version, build hash, and last heartbeat timestamp
 - **Configuration Sync Status:** Detailed sync status including checksums and last sync acknowledgment
 - **Timestamps:** When the edge was registered and last updated

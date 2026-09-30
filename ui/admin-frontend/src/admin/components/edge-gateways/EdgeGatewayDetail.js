@@ -30,6 +30,7 @@ import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
 import { formatPushTime } from './pendingChanges';
+import { edgeOwnerText } from './edgeOwner';
 import {
   TitleBox,
   ContentBox,
@@ -271,6 +272,22 @@ const EdgeGatewayDetail = () => {
                     {edgeGateway.sessionId || 'N/A'}
                   </Typography>
                 </Box>
+
+                {edgeGateway.ownerNodeId && (
+                  <Box mb={2} data-testid="edge-held-by">
+                    <Typography variant="body2" color="textSecondary">
+                      Held by
+                    </Typography>
+                    <Typography variant="body1">
+                      {edgeOwnerText(edgeGateway)}
+                    </Typography>
+                    {edgeGateway.ownerLabel && (
+                      <Typography variant="caption" color="textSecondary" sx={{ wordBreak: 'break-all' }}>
+                        {edgeGateway.ownerNodeId}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
