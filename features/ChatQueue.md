@@ -295,9 +295,12 @@ QUEUE_BUFFER_SIZE=200                        # Local channel buffer size (defaul
   - Automatic connection recycling every 5 minutes
   - Better error handling and reconnection logic
 - **One shared listener per database (2.2)**: every PostgreSQL queue in a process
-  receives notifications through a single `pq.Listener` connection per database
-  (`chat_session/queue_postgres_listener.go`). It is opened outside the
-  application's pool on the first session and closed with the last one.
+  receives notifications through a single listener connection per database
+  (`pkg/pglisten`, used from `chat_session/queue_postgres_listener.go`). It is
+  opened outside the application's pool on the first session and closed with
+  the last one. It connects with pgx from the same DSN as the pool, so any DSN
+  the pool accepts works (no `sslmode`, `sslmode=prefer`, pgx options such as
+  `default_query_exec_mode`); until 2.2 it used lib/pq, which refused those.
   - A session registers its four channels on that listener and holds no
     connection of its own. NOTIFY goes through the application's pool.
   - Sessions that share a session ID in one process each receive every
@@ -313,7 +316,7 @@ QUEUE_BUFFER_SIZE=200                        # Local channel buffer size (defaul
   NOTIFY from a caller without a deadline are all bounded by
   `POSTGRES_QUEUE_NOTIFY_TIMEOUT` (default 5s). An exhausted pool makes session
   creation fail with an error instead of hanging.
-- **Reconnection**: `pq.Listener` reconnects on its own, starting at
+- **Reconnection**: the shared listener reconnects on its own, starting at
   `POSTGRES_QUEUE_RECONNECT_INTERVAL` and backing off up to that interval times
   `POSTGRES_QUEUE_MAX_RECONNECT_RETRIES`, then re-issues every LISTEN.
   Notifications sent while it is disconnected are lost (a warning is logged).

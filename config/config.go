@@ -71,6 +71,11 @@ type AppConf struct {
 	// table names are unprefixed and include common ones such as users,
 	// roles and audit_records.
 	DatabaseSchema        string
+	// MigrationLockTimeout (MIGRATION_LOCK_TIMEOUT, default 15m), for
+	// postgres only, bounds how long a starting Studio waits for another
+	// instance sharing its database to finish migrating before it gives up
+	// with an error.
+	MigrationLockTimeout time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -504,6 +509,14 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	}
 
 	conf.DatabaseSchema = getenv("DATABASE_SCHEMA")
+	conf.MigrationLockTimeout = 15 * time.Minute
+	if v := getenv("MIGRATION_LOCK_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			conf.MigrationLockTimeout = d
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid MIGRATION_LOCK_TIMEOUT value: %s, using default 15m", v)
+		}
+	}
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {

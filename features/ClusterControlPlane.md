@@ -206,7 +206,33 @@ origin node) and sends `NOTIFY` with its id. Each replica keeps a cursor and
 reads new rows on NOTIFY and every second; it also re-reads a 30 s window and
 skips ids it has seen, so a row whose transaction committed after a later id
 is not missed. Rows older than 15 minutes are pruned. The listener is the
-chat queue's shared `pq` listener, moved to `pkg/pglisten`.
+chat queue's shared listener, moved to `pkg/pglisten`.
+
+The listener connects with pgx from the pool's own DSN, so it accepts
+exactly what the pool accepts (no `sslmode`, `sslmode=prefer`,
+`default_query_exec_mode`...). Before the post-2.2 fix it used lib/pq,
+which refused those DSNs; and the log's failed start left `Stop` waiting on
+a reader that never ran, so Studio hung at startup without opening a port.
+Now:
+
+- The notifications are only an accelerator, for the event log and for
+  push delivery alike: when the listener cannot connect or subscribe,
+  `pglisten.Follow` logs a warning, the service polls alone (every second)
+  and the listener is retried every 30 s; once it connects, a catch-up read
+  runs. Startup never fails, and never waits, on the listener.
+  `LogStats.Listening` and a cluster-status warning show a replica running
+  without it. Other start errors (a failing query) still fail `studio.New`.
+- `Log.Stop` and `pushes.Coordinator.Stop` return at once whether `Start`
+  ran, failed or succeeded; a `Start` after `Stop` does nothing.
+- One goroutine owns the listener's connection: it waits for notifications,
+  issues LISTEN/UNLISTEN (bringing the connection in line with the
+  subscribed channels whenever they change), pings after 90 s of quiet and
+  reconnects with backoff. Subscribing wakes it by cancelling its wait,
+  which pgx's deadline-based cancellation does without closing the
+  connection.
+- Behind PgBouncer in transaction mode, LISTEN does not work (the server
+  connection changes between statements); the log and pushes then run on
+  their poll.
 
 `pkg/cluster.Relay` joins every replica's event bus to the log. It relays
 two kinds of bus events, from a queue (the bus is synchronous, so a

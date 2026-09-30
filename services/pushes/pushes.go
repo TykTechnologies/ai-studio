@@ -159,9 +159,7 @@ type Coordinator struct {
 	opts    Options
 
 	channel  string
-	listener *pglisten.Listener
-	sub      *pglisten.Subscription
-	unhook   func()
+	follower *pglisten.Follower
 
 	wake      chan struct{}
 	stop      chan struct{}
@@ -188,13 +186,23 @@ func New(db *gorm.DB, node string, streams Streams, opts Options) *Coordinator {
 
 // Start runs the dispatcher and the janitor until Stop. On Postgres it also
 // listens for new pushes so the replica holding a target's stream delivers
-// it at once rather than on its next poll.
+// it at once rather than on its next poll; when the listener cannot connect
+// it polls alone and keeps trying to listen in the background.
 func (c *Coordinator) Start(ctx context.Context) error {
 	c.startOnce.Do(func() { c.startErr = c.start(ctx) })
 	return c.startErr
 }
 
-func (c *Coordinator) start(ctx context.Context) error {
+// errStoppedBeforeStart is what Start returns after Stop.
+var errStoppedBeforeStart = errors.New("pushes: stopped before it started")
+
+func (c *Coordinator) start(ctx context.Context) (err error) {
+	// Stop waits for the dispatcher; without one it must not wait at all.
+	defer func() {
+		if err != nil {
+			close(c.done)
+		}
+	}()
 	if c.db.Dialector.Name() == "postgres" {
 		var schema string
 		if err := c.db.WithContext(ctx).Raw("SELECT current_schema()").Scan(&schema).Error; err != nil {
@@ -203,24 +211,17 @@ func (c *Coordinator) start(ctx context.Context) error {
 		c.channel = "studio_edge_push_" + schema
 		dsn := c.opts.ListenerDSN
 		if dsn == "" {
-			var err error
-			if dsn, err = pglisten.DSN(c.db); err != nil {
-				return fmt.Errorf("pushes: %w", err)
-			}
+			dsn, err = pglisten.DSN(c.db)
 		}
-		l, err := pglisten.Acquire(dsn, pglisten.Options{Name: "Edge push listener", ConnectTimeout: 30 * time.Second})
 		if err != nil {
-			return fmt.Errorf("pushes: %w", err)
+			logger.Warnf("Edge pushes: %v; other replicas' pushes are picked up every %s without notifications", err, c.opts.PollInterval)
+			err = nil
+		} else {
+			// Notifications lost while the listener reconnected are made up
+			// for by the poll anyway; waking now just shortens the wait.
+			c.follower = pglisten.Follow(dsn, c.channel, pglisten.Options{Name: "Edge push listener", ConnectTimeout: 30 * time.Second},
+				func(string) { c.poke() }, c.poke)
 		}
-		sub, err := l.Subscribe(c.channel, func(string) { c.poke() }, 30*time.Second)
-		if err != nil {
-			l.Release()
-			return fmt.Errorf("pushes: %w", err)
-		}
-		c.listener, c.sub = l, sub
-		// Notifications lost while the listener reconnected are made up for
-		// by the poll anyway; waking now just shortens the wait.
-		c.unhook = l.OnReconnect(c.poke)
 	}
 	go c.run()
 	return nil
@@ -229,16 +230,19 @@ func (c *Coordinator) start(ctx context.Context) error {
 // Stop ends the dispatcher and janitor. Commands this replica had claimed
 // stay claimed; the janitor of another replica (or this one, after a
 // restart) returns them to pending once this node's registration lapses.
+//
+// It returns promptly whether or not Start ran or succeeded; a Start after
+// Stop does nothing.
 func (c *Coordinator) Stop() {
 	c.stopOnce.Do(func() {
+		c.startOnce.Do(func() {
+			c.startErr = errStoppedBeforeStart
+			close(c.done)
+		})
 		close(c.stop)
 		<-c.done
-		if c.listener != nil {
-			if c.unhook != nil {
-				c.unhook()
-			}
-			c.listener.Unsubscribe(c.channel, c.sub, 10*time.Second)
-			c.listener.Release()
+		if c.follower != nil {
+			c.follower.Close()
 		}
 	})
 }
