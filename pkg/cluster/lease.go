@@ -50,8 +50,12 @@ type Leadership struct {
 	node string
 	opts LeadershipOptions
 
-	mu          sync.Mutex
-	leaderUntil time.Time // local monotonic deadline of our belief
+	mu sync.Mutex
+	// renewedAt is when the last successful renewal started (zero: not
+	// held). The belief lasts believeFor after it, measured with
+	// time.Since, which uses the monotonic clock: a wall-clock step (NTP)
+	// cannot extend it.
+	renewedAt time.Time
 	listeners   []func(bool)
 	leading     bool
 
@@ -94,7 +98,16 @@ func (l *Leadership) Stop() {
 func (l *Leadership) IsLeader() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return time.Now().Before(l.leaderUntil)
+	return l.believesLocked()
+}
+
+// believeFor is how long a renewal is believed: one renewal period short of
+// the TTL, since the database lets others take the lease TTL after our
+// write, which started after renewedAt.
+func (l *Leadership) believeFor() time.Duration { return l.opts.TTL - l.opts.Renew }
+
+func (l *Leadership) believesLocked() bool {
+	return !l.renewedAt.IsZero() && time.Since(l.renewedAt) < l.believeFor()
 }
 
 // OnChange registers fn to be called (on the lease goroutine) when this
@@ -141,15 +154,13 @@ func (l *Leadership) tick() {
 	}
 	l.mu.Lock()
 	if held {
-		// Believe it one renewal period short of the TTL: the database
-		// lets others take it at TTL after our write, which started after
-		// `started`.
-		l.leaderUntil = started.Add(l.opts.TTL - l.opts.Renew)
+		l.renewedAt = started
 	} else if err == nil {
-		l.leaderUntil = time.Time{}
+		l.renewedAt = time.Time{}
 	}
-	// On an error the belief simply runs out at leaderUntil.
-	now := time.Now().Before(l.leaderUntil)
+	// On an error the belief simply runs out believeFor after the last
+	// successful renewal.
+	now := l.believesLocked()
 	changed := now != l.leading
 	l.leading = now
 	listeners := append(make([]func(bool), 0, len(l.listeners)), l.listeners...)
@@ -197,7 +208,7 @@ func (l *Leadership) release() {
 	}
 	l.mu.Lock()
 	was := l.leading
-	l.leaderUntil = time.Time{}
+	l.renewedAt = time.Time{}
 	l.leading = false
 	listeners := append(make([]func(bool), 0, len(l.listeners)), l.listeners...)
 	l.mu.Unlock()

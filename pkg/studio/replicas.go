@@ -96,7 +96,11 @@ func (ss *signalSender) flush() {
 			if err == nil {
 				break
 			}
-			time.Sleep(backoff)
+			select {
+			case <-time.After(backoff):
+			case <-ss.stop:
+				// Shutting down: use the remaining attempts without waiting.
+			}
 		}
 		if err != nil {
 			logger.Errorf("Could not tell the other replicas that %q changed; they may serve stale data until their next refresh: %v", name, err)
