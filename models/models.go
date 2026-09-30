@@ -67,6 +67,7 @@ func InitModels(db *gorm.DB) error {
 		&ClusterNode{},        // Running Studio replicas (pkg/cluster)
 		&ClusterEvent{},       // Cluster event log (pkg/cluster)
 		&ClusterLease{},       // Leader lease for singleton jobs (pkg/cluster)
+		&StudioSchema{},       // Schema version (see schema_version.go)
 		&PushOperation{},      // Configuration pushes (services/pushes)
 		&EdgePushCommand{},    // One per push and target edge
 		&Plugin{},             // Plugin configurations

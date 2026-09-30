@@ -1374,6 +1374,13 @@ TABLE semantic_routers
   index CREATE INDEX `idx_semantic_routers_deleted_at` ON `semantic_routers`(`deleted_at`)
   index CREATE INDEX `idx_semantic_routers_embedder_id` ON `semantic_routers`(`embedder_id`)
   index CREATE UNIQUE INDEX `idx_semantic_router_slug_namespace` ON `semantic_routers`(`slug`,`namespace`)
+TABLE studio_schema
+  column `id` integer
+  column `version` integer NOT NULL
+  column `min_reader_version` integer NOT NULL
+  column `written_by` text
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`id`)
 TABLE submission_activities
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

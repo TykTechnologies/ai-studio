@@ -1502,6 +1502,14 @@ TABLE semantic_routers
   column settings text(text) nullable=YES
   column routes text(text) nullable=YES
   column embedder_id bigint(int8) nullable=YES precision=64 scale=0
+TABLE studio_schema
+  constraint studio_schema_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX studio_schema_pkey ON studio_schema USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0
+  column version bigint(int8) nullable=NO precision=64 scale=0
+  column min_reader_version bigint(int8) nullable=NO precision=64 scale=0
+  column written_by text(text) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE submission_activities
   constraint submission_activities_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_submission_activities_deleted_at ON submission_activities USING btree (deleted_at)

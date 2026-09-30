@@ -573,6 +573,39 @@ unique constraints), so the lock is a guard for upgrades, where replicas
 starting together would run the same ALTERs and backfills, rather than for
 an observed race.
 
+### Schema version and `studio.CheckSchema`
+
+The last step under the migration lock records the schema in `studio_schema`
+(one row, `models.RecordSchemaVersion`): `version` (`models.SchemaVersion`),
+`min_reader_version` (`models.MinReaderSchemaVersion`, the oldest schema
+version whose code can still read this one), the Studio version that wrote
+it and when. It never lowers the record: an older Studio started against a
+database a newer one migrated keeps the newer version (its own migrations
+only add), and logs a warning.
+
+An instance that must not migrate the database, such as a headless control
+plane sharing it with a full Studio, calls `studio.CheckSchema(ctx, db)`
+first. It only reads (no DDL) and fails with:
+
+- `studio.ErrSchemaMissing`: no record; no Studio of this generation has
+  migrated the database yet.
+- `studio.ErrSchemaTooOld`: the record's `version` is below this build's
+  `SchemaVersion`; upgrade the full Studio first.
+- `studio.ErrSchemaTooNew`: the record's `min_reader_version` is above this
+  build's `SchemaVersion`; a newer Studio made a change this build cannot
+  read, so upgrade it.
+
+A newer schema that still lists this build as a reader is accepted, so the
+headless instance may lag the full one across additive migrations. Every
+schema change bumps `SchemaVersion`; `MinReaderSchemaVersion` rises only for
+a change that breaks older readers (the rules are next to the constants in
+`models/schema_version.go`). `models/testdata/schema/VERSION` records the
+version and a hash of the schema goldens: `TestSchemaVersionMatchesGoldens`
+and `make schema-golden` fail when the goldens change without a bump. The
+goldens cover `models.InitModels` (with the profile and KV tables), which
+holds the Enterprise tables too; the analytics tables `analytics.Migrate`
+adds (`proxy_logs`, `compliance_events`, ...) are outside them.
+
 ## Several replicas
 
 A host may run several Studio replicas against one database. Each joins
