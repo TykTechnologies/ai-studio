@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
@@ -260,6 +261,15 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		return
 	}
 	s.published.Store(&spend)
+
+	// Every replica keeps its own spend figures (its edge snapshots use
+	// them); blocks, alerts and the sync to edges happen once for the
+	// cluster, on the leader. The cluster relay carries its budget.sync to
+	// the edges of every replica.
+	if !replicas.IsLeader() {
+		s.lastUsage = nil
+		return
+	}
 
 	for _, app := range apps {
 		u := spend[app.ID]

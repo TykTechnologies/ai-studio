@@ -26,8 +26,11 @@ Built in three steps:
   delivery hazards found on the way: concurrent `Send` on one gRPC stream
   (both sides), a replica shutdown that waited for its edges to leave, the
   edge's loaded-checksum race, and `EDGE_RECONNECT_INTERVAL` being ignored.
-- **8c:** `DirDown` fan-out, cross-replica gateway reload and budget cache
-  invalidation, leader-only background jobs, `GET /cluster/status`.
+- **8c, done:** the bus relay (`pkg/cluster.Relay`), the leader lease
+  (`pkg/cluster.Leadership`) and `pkg/replicas` (leadership and signals for
+  core and Enterprise code), the scheduler lease as a conditional update,
+  cross-replica gateway reload, budget cache clearing and plugin lifecycle,
+  leader-only jobs, and `GET /api/v1/cluster/status`.
 
 ## What goes wrong today with more than one replica
 
@@ -160,29 +163,88 @@ is *reachable* when its owner node is live and its last heartbeat is fresh.
   `GET /edges/reload-operations` lists the last day's pushes with their
   outcome counts, which is what the CE dialog shows.
 
-### Fan-out events: `cluster_events`
+### Fan-out events: `cluster_events` and the bus relay
 
-A replica publishing a cluster-wide event inserts a row (topic, direction,
-payload, origin node) and sends `NOTIFY` with its id. Each replica keeps a
-cursor and reads new rows on NOTIFY and every second; it also re-reads a
-30 s window and skips ids it has seen, so a row whose transaction committed
-after a later id is not missed. Rows older than 15 minutes are pruned. The
-listener is the chat queue's shared `pq` listener, moved to `pkg/pglisten`.
-Uses:
+A replica publishing a cluster-wide event inserts a row (topic, payload,
+origin node) and sends `NOTIFY` with its id. Each replica keeps a cursor and
+reads new rows on NOTIFY and every second; it also re-reads a 30 s window and
+skips ids it has seen, so a row whose transaction committed after a later id
+is not missed. Rows older than 15 minutes are pruned. The listener is the
+chat queue's shared `pq` listener, moved to `pkg/pglisten`.
 
-- `DirDown` events: each replica forwards them to its own edges.
-- `system.llm.*` / datasource / filter changes: other replicas reload their
-  embedded gateway.
-- Budget and team-budget cache invalidation.
+`pkg/cluster.Relay` joins every replica's event bus to the log. It relays
+two kinds of bus events, from a queue (the bus is synchronous, so a
+publisher never waits for the database; a full queue drops and counts):
 
-The checksum recompute is not an event consumer: the replica that made the
-change recomputes every namespace known to the database, which is enough.
+- **Events for edges (`DirDown`)**: budget sync, plugins' events. Every
+  replica republishes them on its bus, and its edge bridges forward them to
+  the edges whose streams it holds, so each edge gets each event once.
+- **Object changes (`system.*`)**: every replica's plugins and caches hear
+  about changes made on any replica.
 
-### Singleton jobs
+Relayed events keep their ID and carry `RelayedFrom` (local metadata, never
+serialized), which also stops them being relayed again. Consumers choose:
 
-The scheduler lease becomes a conditional update. Budget-sync aggregation
-and alerts, marketplace sync, telemetry and retention jobs run only on the
-lease holder; each replica still pushes budget state to its own edges.
+| Consumer | Relayed events |
+|---|---|
+| Edge bridges | forward (that is the point) |
+| Plugins (plugin event service) | receive: each replica runs its own plugin processes |
+| Webhooks (Enterprise) | skip: the origin persists them (idempotent on ID anyway) |
+| Checksum recompute | skip: the origin recomputes every namespace |
+| Resource-instance refresh | skip: the origin made the RPC and wrote the rows |
+| `pkg/studio` watcher | apply: reload the gateway, clear budgets, update plugins |
+
+Changes without an object event travel as **replica signals**
+(`pkg/replicas.Signal`, cluster log topic `replica.signal`): `budgets` (App
+budget reset, team-budget switch) and `governed_metadata` (schema or
+vocabulary change, Enterprise). The replica that made the change refreshes
+itself; the others run their `OnSignal` handlers.
+
+What each replica keeps current, and how:
+
+- **Embedded gateway** (LLMs with filters and plugins, datasources):
+  reloaded, coalesced, on any `system.llm|datasource|filter|plugin.*`
+  event, local or relayed (not every local write path reloaded it before).
+- **Budget caches**: cleared on relayed `system.app.*` and the `budgets`
+  signal. Team budget settings also have a 30 s TTL.
+- **Studio plugins**: a relayed `system.plugin.*` event re-reads the
+  plugin's permission entries into the catalogue (no writes: the origin
+  refreshed the system roles), stops a deleted or deactivated plugin,
+  restarts one that was running, and starts one Studio loads at start.
+  Scheduled tasks start their plugin if the scheduler's replica has not.
+- **Governed metadata schemas** (Enterprise): dropped on the signal.
+- **Webhook targets** (Enterprise): 30 s refresh, as before.
+
+What stays per replica and needs deployment support: chat and agent
+sessions and MCP SSE sessions (session affinity), branding uploads and log
+export files (a shared volume), `file://` plugin commands (present on every
+replica).
+
+### Singleton jobs: the leader lease
+
+`pkg/cluster.Leadership` holds the `leader` row of `cluster_leases`: taken
+and renewed (every 10 s, TTL 30 s) with one conditional write against the
+database clock, released on shutdown. A replica believes it leads only until
+its last renewal plus the TTL minus one renewal period, by its monotonic
+clock, so it stops acting before another replica can take over, even
+without the database. `pkg/replicas.IsLeader` is the check for code that
+does not hold the lease itself. Leader-only:
+
+- budget blocks, alerts and the `budget.sync` to edges (every replica still
+  computes spend for its own snapshots; the relay carries the leader's
+  sync to every replica's edges);
+- marketplace background sync (a manual refresh runs where it is asked);
+- usage telemetry (CE) and licence telemetry (Enterprise).
+
+The plugin scheduler keeps its own lease (`scheduler_leases`), now also a
+conditional update on the database clock (it was read-then-save, so two
+replicas could both take it). Idempotent cleanups (event log, webhook,
+audit, sync-run retention) run on every replica.
+
+`GET /api/v1/cluster/status` (edges:read) reports the live replicas with
+their edge counts and the leader, this replica's event log and relay
+counters, the push backlog (pending, in flight, held by stopped replicas),
+and warnings.
 
 ## User feedback
 

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 )
 
 // HostIdentity is a user as the host application Studio is embedded in has
@@ -31,6 +33,13 @@ type HostIdentity struct {
 	// memberships to Studio's own administration. Names Studio does not know
 	// are ignored.
 	Groups []string
+	// Roles names the Studio roles (by slug: "editor", "viewer", a custom
+	// role's slug) the host assigns the user, Enterprise. They are kept as
+	// host-managed role bindings: added and removed as the host says, and
+	// read-only in Studio's administration. Roles an administrator assigns
+	// in Studio are left alone. Nil leaves host-managed roles as they are.
+	// Admin remains the switch for the Administrator role.
+	Roles []string
 }
 
 var (
@@ -79,6 +88,13 @@ func (s *Service) ProvisionHostUser(id HostIdentity) (*models.User, error) {
 		return nil, ErrHostUserDisabled
 	} else if changed, err = s.syncHostUser(user, id); err != nil {
 		return nil, err
+	}
+	if id.Roles != nil {
+		rolesChanged, err := s.Authz().SyncHostRoles(context.Background(), user.ID, id.Roles)
+		if err != nil {
+			return nil, fmt.Errorf("sync host roles: %w", err)
+		}
+		changed = changed || rolesChanged
 	}
 	if changed {
 		// Reload so the user carries its groups as stored, as it does when
@@ -187,20 +203,56 @@ func (s *Service) syncHostUser(user *models.User, id HostIdentity) (bool, error)
 	if name == "" {
 		name = user.Name
 	}
-	if user.Email == id.Email && user.Name == name && user.IsAdmin == id.Admin &&
+
+	// Admin controls the Administrator role the user holds directly. With
+	// roles (Enterprise) is_admin also reflects roles granted through
+	// teams, so it is not what the host's flag is compared with: a team
+	// granting Administrator would otherwise look like a change on every
+	// request.
+	adminChanged := false
+	if s.Authz().Enabled() {
+		direct, err := s.Authz().HasDirectAdministrator(context.Background(), user.ID)
+		if err != nil {
+			return false, fmt.Errorf("read host user roles: %w", err)
+		}
+		if direct != id.Admin {
+			err := s.Authz().SetFullAdmin(context.Background(), nil, user.ID, id.Admin)
+			switch {
+			case errors.Is(err, rbac.ErrLastOwner):
+				// The host cannot demote the only Owner: keep them one
+				// rather than refuse them sign-in.
+				logger.Warnf("Host identity for user %d is not an administrator, but the user is the only Owner; keeping the Owner role", user.ID)
+			case err != nil:
+				return false, fmt.Errorf("update host user administrator role: %w", err)
+			default:
+				adminChanged = true
+			}
+			var fresh models.User
+			if err := s.DB.Select("is_admin").First(&fresh, user.ID).Error; err != nil {
+				return false, err
+			}
+			user.IsAdmin = fresh.IsAdmin
+		}
+	}
+	isAdmin := user.IsAdmin
+	if !s.Authz().Enabled() {
+		isAdmin = id.Admin
+	}
+
+	if user.Email == id.Email && user.Name == name && user.IsAdmin == isAdmin &&
 		models.SameIDs(user.ExtractGroupIDs(), groups) {
-		return false, nil
+		return adminChanged, nil
 	}
 
 	dto := UserDTO{
 		Email:                id.Email,
 		Name:                 name,
-		IsAdmin:              id.Admin,
+		IsAdmin:              isAdmin,
 		ShowChat:             user.ShowChat,
 		ShowPortal:           user.ShowPortal,
 		EmailVerified:        true,
-		NotificationsEnabled: user.NotificationsEnabled && id.Admin,
-		AccessToSSOConfig:    user.AccessToSSOConfig && id.Admin,
+		NotificationsEnabled: user.NotificationsEnabled && isAdmin,
+		AccessToSSOConfig:    user.AccessToSSOConfig && isAdmin,
 		Groups:               groups,
 	}
 	updated, err := s.UpdateUser(user, dto)

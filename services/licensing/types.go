@@ -1,6 +1,7 @@
 package licensing
 
 import (
+	"strings"
 	"time"
 )
 
@@ -56,6 +57,12 @@ func (f Feature) Int() int {
 type Config struct {
 	// License key (JWT token)
 	LicenseKey string
+	// LicenseSource, when set, supplies the licence instead of LicenseKey,
+	// and is read at start and at every validity check: a host embedding
+	// Studio keeps the licence in its own settings, and a renewed licence
+	// takes effect without a restart. It is the same AI Studio Enterprise
+	// licence, validated the same way.
+	LicenseSource func() string
 
 	// Telemetry configuration
 	TelemetryURL            string
@@ -99,3 +106,19 @@ const (
 	FeatureAssetCatalog        = "feature_asset_catalog"      // Asset Catalog plugin: portal asset types with governance (ENT)
 	FeatureRBAC                = "feature_rbac"               // Fine-grained roles and permissions (ENT)
 )
+
+// Key returns the licence to validate now: LicenseSource's when set,
+// LicenseKey otherwise.
+func (c Config) Key() string {
+	if c.LicenseSource != nil {
+		return strings.TrimSpace(c.LicenseSource())
+	}
+	return c.LicenseKey
+}
+
+// Revalidator is implemented by licensing services that can re-read and
+// re-check the licence on demand (Enterprise). A host calls it through
+// studio.ReloadLicense after storing a renewed licence.
+type Revalidator interface {
+	Revalidate() error
+}

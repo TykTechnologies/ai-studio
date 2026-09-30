@@ -47,6 +47,8 @@ const theme = createTheme({
 const roles = [
   { id: '1', attributes: { name: 'Administrator', slug: 'administrator', is_system: true, description: '' } },
   { id: '3', attributes: { name: 'Viewer', slug: 'viewer', is_system: true, description: '' } },
+  { id: '4', attributes: { name: 'Auditor', slug: 'auditor', is_system: true, description: '' } },
+  { id: '5', attributes: { name: 'Editor', slug: 'editor', is_system: true, description: '' } },
 ];
 
 const userPayload = (extra = {}) => ({
@@ -120,5 +122,33 @@ describe('UserForm with roles (Enterprise)', () => {
     const [, body] = apiClient.patch.mock.calls[0];
     expect(body.data.attributes.is_admin).toBe(false);
     expect(body.data.attributes).not.toHaveProperty('role_ids');
+  });
+
+  // Team roles belong to the team: preselecting them made saving the form
+  // turn them into direct roles. Roles the host application assigns are
+  // shown locked.
+  it('edits direct roles only, and shows host-assigned roles locked', async () => {
+    apiClient.get.mockImplementation((url) => {
+      if (url === '/users/5') {
+        return Promise.resolve(userPayload({
+          roles: [
+            { id: 3, name: 'Viewer', slug: 'viewer', is_system: true, via: 'direct' },
+            { id: 4, name: 'Auditor', slug: 'auditor', is_system: true, via: 'host' },
+            { id: 5, name: 'Editor', slug: 'editor', is_system: true, via: 'group', group_id: 2, group_name: 'Dev team' },
+          ],
+        }));
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+    renderForm();
+    await screen.findByTestId('user-roles-field');
+    expect(await screen.findByTestId('role-chip-locked-4')).toBeInTheDocument();
+    expect(screen.getByText(/assigned by the application AI Studio is embedded in/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /update user/i }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const [, body] = apiClient.patch.mock.calls[0];
+    expect(body.data.attributes.role_ids.sort()).toEqual([3, 4]);
+    expect(body.data.attributes.role_ids).not.toContain(5);
   });
 });

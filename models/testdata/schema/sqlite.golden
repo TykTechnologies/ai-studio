@@ -307,6 +307,14 @@ TABLE cluster_events
   column `payload` blob
   column `created_at` datetime NOT NULL
   index CREATE INDEX `idx_cluster_events_created_at` ON `cluster_events`(`created_at`)
+TABLE cluster_leases
+  column `name` text
+  column `holder` text NOT NULL
+  column `acquired_at` datetime
+  column `renewed_at` datetime
+  column `expires_at` datetime NOT NULL
+  constraint PRIMARY KEY (`name`)
+  autoindex origin=pk unique=1 (name)
 TABLE cluster_nodes
   column `node_id` text
   column `hostname` text
@@ -445,6 +453,7 @@ TABLE edge_push_commands
   column `completed_at` datetime
   index CREATE INDEX `idx_edge_push_commands_edge_id` ON `edge_push_commands`(`edge_id`)
   index CREATE INDEX `idx_edge_push_commands_status_claim` ON `edge_push_commands`(`status`,`claim_expires_at`)
+  index CREATE INDEX `idx_edge_push_commands_status_created` ON `edge_push_commands`(`status`,`created_at`)
   index CREATE INDEX `idx_edge_push_commands_status_deadline` ON `edge_push_commands`(`status`,`deadline_at`)
   index CREATE INDEX `idx_edge_push_commands_status_edge` ON `edge_push_commands`(`status`,`edge_id`)
   index CREATE UNIQUE INDEX `idx_edge_push_commands_op_edge` ON `edge_push_commands`(`operation_id`,`edge_id`)
@@ -1286,6 +1295,7 @@ TABLE role_bindings
   column `scope_type` text
   column `scope_id` text
   column `created_by` integer
+  column `source` text NOT NULL DEFAULT ""
   column `created_at` datetime
   constraint CONSTRAINT `fk_role_bindings_role` FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`)
   index CREATE INDEX `idx_role_bindings_role` ON `role_bindings`(`role_id`)

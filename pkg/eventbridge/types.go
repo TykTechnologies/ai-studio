@@ -74,6 +74,14 @@ type Event struct {
 
 	// Payload is the application-specific data as JSON
 	Payload json.RawMessage `json:"payload"`
+
+	// RelayedFrom is set on a control-plane replica when the event was
+	// published on another replica and relayed through the cluster event
+	// log (pkg/cluster.Relay); it names that replica. It is local metadata:
+	// never serialized, never sent to edges or plugins. Consumers that act
+	// once for the whole cluster (a checksum recompute, say) skip relayed
+	// events; consumers that keep per-replica state act on them.
+	RelayedFrom string `json:"-"`
 }
 
 // EventFrame is the wire format for events over gRPC.

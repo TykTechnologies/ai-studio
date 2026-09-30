@@ -510,6 +510,11 @@ func (s *Service) SubscribeResourceInstanceChanges(bus eventbridge.Bus) {
 	}
 
 	bus.Subscribe(plugin_sdk.ResourceInstanceChangedEvent, func(evt eventbridge.Event) {
+		// The replica where the plugin published it refreshes the rows; a
+		// relayed copy would repeat the RPC and the writes.
+		if evt.RelayedFrom != "" {
+			return
+		}
 		var payload struct {
 			ResourceTypeSlug string `json:"resource_type_slug"`
 			InstanceID       string `json:"instance_id"`

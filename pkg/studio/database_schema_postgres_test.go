@@ -146,7 +146,7 @@ func TestConcurrentMigrationsSerialise_Postgres(t *testing.T) {
 				errs <- fmt.Errorf("tib: %w", err)
 				return
 			}
-			if err := ensureDefaults(db, true); err != nil {
+			if err := ensureDefaults(db, true, true); err != nil {
 				errs <- fmt.Errorf("seed: %w", err)
 			}
 		}(db)

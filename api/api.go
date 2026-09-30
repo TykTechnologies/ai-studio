@@ -77,6 +77,7 @@ type API struct {
 	disableCORS                   bool
 	auth                          *auth.AuthService
 	proxy                         *proxy.Proxy
+	clusterStatus                 ClusterStatusFunc
 	// frontend holds the built admin UI, rooted at its build directory.
 	frontend                      fs.FS
 	// basePath is the path prefix the API and UI are served under ("" for
@@ -1266,6 +1267,7 @@ func (a *API) setupRoutes() error {
 
 	// Sync status routes (admin only - for edge gateway sync monitoring)
 	syncStatusHandlers := NewSyncStatusHandlers(a.service.SyncStatusService)
+	v1.GET("/cluster/status", authz.Read("edges"), a.getClusterStatus)
 	v1.GET("/sync/status", authz.Read("edges"), syncStatusHandlers.GetSyncStatus)
 	v1.GET("/sync/pending-changes", authz.Read("edges"), syncStatusHandlers.GetPendingChanges)
 	v1.GET("/sync/status/:namespace", authz.Read("edges"), syncStatusHandlers.GetNamespaceSyncStatus)

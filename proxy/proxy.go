@@ -188,6 +188,10 @@ type Config struct {
 	ServerWriteTimeout time.Duration
 	ServerIdleTimeout  time.Duration
 
+	// DebugHTTPProxy logs every request the standalone proxy server
+	// receives. DEBUG_HTTP_PROXY=true also turns it on.
+	DebugHTTPProxy bool
+
 	// Datasource endpoint limits (zero values use defaults)
 	DatasourceMaxBodyBytes   int64 // Max request body size in bytes (default: 1MB)
 	DatasourceMaxResults     int   // Max documents returned per query (default: 100)
@@ -365,7 +369,7 @@ func (p *Proxy) Start() error {
 	}
 	handler := fixDoubleSlash(p.createHandler())
 
-	debugHTTPProxy := os.Getenv("DEBUG_HTTP_PROXY") == "true"
+	debugHTTPProxy := p.config.DebugHTTPProxy || os.Getenv("DEBUG_HTTP_PROXY") == "true"
 	if debugHTTPProxy {
 		originalHandler := handler
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
