@@ -90,6 +90,11 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   Studio off the OpenTelemetry globals. Without them Studio configures
   tracing and metrics from `Config` the way the standalone binary does,
   which installs a global tracer provider and propagator.
+- **Analytics.** Studio always writes analytics to its own database, since
+  budgets and spend are computed from it. To also ship records into the
+  host's pipeline, pass `AnalyticsSinks`: each sink gets a copy of every
+  record through its own bounded queue, and records a slow sink cannot take
+  are dropped (and logged) rather than slowing requests.
 - **Replace directives.** Go ignores `replace` directives in dependencies,
   and a host needs to copy none of this repository's. The only one left, `./enterprise`, points
   this repository's own builds at the submodule; an enterprise host requires

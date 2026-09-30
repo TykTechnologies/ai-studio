@@ -83,6 +83,13 @@ type Options struct {
 	// Config.MetricsPath.
 	MeterProvider metric.MeterProvider
 
+	// AnalyticsSinks receive a copy of every analytics record (chat
+	// records, proxy logs, tool calls, compliance events, batches from
+	// edges) besides Studio's own database, which budgets and spend are
+	// computed from. Each sink has its own bounded queue: a slow sink loses
+	// records (counted and logged) rather than slowing requests.
+	AnalyticsSinks []analytics.AnalyticsHandler
+
 	// OnLicenceInvalid is called when an Enterprise licence fails its
 	// periodic re-check. Nil exits the process.
 	OnLicenceInvalid func(error)
@@ -168,6 +175,10 @@ type Studio struct {
 	telemetry        *services.TelemetryManager
 	tracingShutdown  tracing.Shutdown
 	cancelBackground context.CancelFunc
+	// analyticsTee copies analytics records to Options.AnalyticsSinks;
+	// analyticsPrimary is the handler it wraps, put back on Stop.
+	analyticsTee     *analytics.Tee
+	analyticsPrimary analytics.AnalyticsHandler
 
 	stopOnce sync.Once
 	stopErr  error
@@ -425,6 +436,11 @@ func New(opts Options) (_ *Studio, err error) {
 	}
 
 	analytics.StartRecording(backgroundCtx, s.db)
+	if len(opts.AnalyticsSinks) > 0 {
+		s.analyticsPrimary = analytics.GetHandler()
+		s.analyticsTee = analytics.NewTee(s.analyticsPrimary, opts.AnalyticsSinks...)
+		analytics.SetHandler(s.analyticsTee)
+	}
 	// One budget service (and team budget service) for the API and the
 	// proxy, so resets and allocation changes clear the cache the proxy reads.
 	service.InitBudgets(notificationService)
@@ -632,6 +648,14 @@ func (s *Studio) stop(ctx context.Context) error {
 		// Last among the cluster pieces: removing the row tells the other
 		// replicas at once that this one is gone.
 		s.clusterNode.Stop(ctx)
+	}
+	if s.analyticsTee != nil {
+		// The handler is process-wide: unwrap it so a later New in this
+		// process does not tee into this instance's stopped sinks.
+		if analytics.GetHandler() == analytics.AnalyticsHandler(s.analyticsTee) {
+			analytics.SetHandler(s.analyticsPrimary)
+		}
+		s.analyticsTee.Stop(5 * time.Second)
 	}
 	if s.service != nil {
 		if err := s.service.Stop(); err != nil {
