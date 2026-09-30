@@ -69,6 +69,9 @@ func replicaServer(t *testing.T, db *gorm.DB, nodeID string) *ControlServer {
 	t.Cleanup(func() { os.Unsetenv("MICROGATEWAY_ENCRYPTION_KEY") })
 	s, err := NewControlServer(&Config{AuthToken: testAuthToken, MaxConcurrentStreams: 100, NodeID: nodeID}, db)
 	require.NoError(t, err)
+	// The fake edges here send no heartbeats: their streams take pushes at
+	// once (TestControlServer_PushWaitsForReadyStream covers the wait).
+	s.pushReadyGrace = 0
 	t.Cleanup(s.Stop)
 	return s
 }

@@ -398,6 +398,17 @@ jobs:
       - name: Check no public package imports the enterprise module
         run: make enterprise-import-guard
 
+      # Plugin modules replace midsommar/v2 with this tree, so a root go.mod
+      # raise must be followed there or `go build` stops at "updates to go.mod
+      # needed" (make plugins, plugin-publish, the dev watcher). The
+      # community and tyk-internal plugins live in their own repositories and
+      # are not checked here; fork pull requests have no enterprise/plugins,
+      # which the script skips.
+      - name: Check in-repo plugin modules are tidy
+        env:
+          PLUGIN_MOD_ROOTS: examples enterprise/plugins
+        run: make plugins-mod-check
+
   # ==========================================================================
   # Module zip check: the committed tree must make a module zip the Go proxy
   # accepts, or nobody can `go get` Studio (see tools/modcheck)

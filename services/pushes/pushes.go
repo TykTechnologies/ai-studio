@@ -41,7 +41,7 @@ import (
 // streams this replica holds, and a way to send on one.
 type Streams interface {
 	// LocalStreams returns, for every edge with a live stream on this
-	// replica, the stream's session ID.
+	// replica that is ready for pushes, the stream's session ID.
 	LocalStreams() map[string]string
 	// SendReload sends req on the edge's stream, failing if that stream is
 	// no longer the one identified by session. When nothing was sent

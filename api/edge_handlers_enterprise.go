@@ -172,8 +172,9 @@ func (a *API) getEdge(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param edge_id path string true "Edge ID"
-// @Success 202 {object} SuccessResponse
+// @Success 202 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/{edge_id}/reload [post]
 // @Security BearerAuth
@@ -255,11 +256,12 @@ func (a *API) deleteEdge(c *gin.Context) {
 }
 
 // @Summary Reload all edge gateways
-// @Description Trigger a configuration reload for all edge gateways across all namespaces
+// @Description Push the current configuration to every edge gateway in every namespace, as one operation. The response carries the operation under data.attributes and, for clients written against v2.2, data.message, data.operations (one entry per namespace, all with the same operation_id) and data.operations_count. 409 when there is no edge to push to (up to v2.2: 202 with no operations).
 // @Tags edges
 // @Accept json
 // @Produce json
 // @Success 202 {object} map[string]interface{}
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth
@@ -270,7 +272,7 @@ func (a *API) reloadAllEdges(c *gin.Context) {
 		sendPushError(c, err)
 		return
 	}
-	pushAccepted(c, res)
+	reloadAllAccepted(c, res)
 }
 
 // serializeEdge converts an EdgeInstance model to API response format

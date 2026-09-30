@@ -283,4 +283,85 @@ describe("PushConfigurationModal", () => {
     expect(screen.getByRole("button", { name: /push configuration/i })).toBeInTheDocument();
     expect(edgeGatewayService.getPushProgress).not.toHaveBeenCalled();
   });
+
+  // Every edge offline for longer than the push waits (409): the reason is
+  // at the top of the dialog, the dialog no longer claims it will push to
+  // every namespace, and Push stays disabled for that target (L7).
+  it("puts 'nothing to push to' at the top and disables Push for that target", async () => {
+    const err = new Error("no edges to push to: the 1 edge(s) in any namespace have been offline for more than 5m0s");
+    err.status = 409;
+    edgeGatewayService.reloadAllEdges.mockRejectedValue(err);
+    renderModal();
+    expect(screen.getByText(/will push configuration to all 2 namespaces/)).toBeInTheDocument();
+    await clickPush();
+
+    const alert = await screen.findByTestId("push-error");
+    expect(alert).toHaveTextContent("Nothing to push to");
+    expect(alert).toHaveTextContent("have been offline for more than 5m0s");
+    // Above everything else in the dialog, not below the preview.
+    const intro = screen.getByText(/Push the latest configuration to edge gateways/);
+    expect(alert.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const preview = screen.getByTestId("pending-changes-default");
+    expect(alert.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    expect(screen.queryByText(/will push configuration to all 2 namespaces/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /push configuration/i })).toBeDisabled();
+    expect(screen.getByText(/No edge gateway can receive this push/)).toBeInTheDocument();
+
+    // Another target may have edges to push to.
+    fireEvent.click(screen.getByLabelText("Specific Namespace"));
+    fireEvent.mouseDown(screen.getByLabelText(/select namespace/i));
+    fireEvent.click(await screen.findByRole("option", { name: /default/ }));
+    expect(screen.queryByTestId("push-error")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /push configuration/i })).not.toBeDisabled();
+  });
+
+  it("leaves Push enabled after other errors", async () => {
+    const err = new Error("The push could not be recorded or read; see the server log.");
+    err.status = 500;
+    edgeGatewayService.reloadAllEdges.mockRejectedValue(err);
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByTestId("push-error")).toHaveTextContent("see the server log");
+    expect(screen.getByRole("button", { name: /push configuration/i })).not.toBeDisabled();
+  });
+
+  // The warning from starting a push ("... waits up to 5m0s for them to
+  // reconnect") stands only while an edge is still waiting to connect; once
+  // the edge has its push (reloading) it is gone (M3).
+  it("drops the not-connected warning once no edge is waiting for a connection", async () => {
+    const waitWarning = "1 of 1 edge(s) are not connected to the control plane; the push waits up to 5m0s for them to reconnect.";
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started({
+      targetEdges: ["edge-a"],
+      warnings: [waitWarning],
+      targets: [{ edgeId: "edge-a", namespace: "default", reachable: false, reason: "not connected to any control-plane replica" }],
+    }));
+    const edge = (over) => ({ edgeId: "edge-a", message: "", warning: "", attempts: 0, maxAttempts: 3, ...over });
+    edgeGatewayService.getPushProgress
+      .mockResolvedValueOnce(started({ edges: [edge({ status: "pending", reachable: false, waitingReason: "not connected to any control-plane replica" })] }))
+      .mockResolvedValue(started({ edges: [edge({ status: "sent", phase: "PULL_STARTED", attempts: 1 })] }));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByTestId("push-warnings")).toHaveTextContent("waits up to 5m0s");
+    expect(screen.getByText(/Edges that are not connected are waited for/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("push-edge-edge-a")).toHaveTextContent("Reloading"));
+    expect(screen.queryByTestId("push-warnings")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Edges that are not connected are waited for/)).not.toBeInTheDocument();
+    expect(screen.getByText(/The push carries on if you close this dialog/)).toBeInTheDocument();
+  });
+
+  it("keeps the not-connected warning while something is pending (Community Edition)", async () => {
+    const waitWarning = "1 of 2 edge(s) are not connected to the control plane; the push waits up to 5m0s for them to reconnect.";
+    edgeGatewayService.reloadAllEdges.mockResolvedValue(started({ warnings: [waitWarning] }));
+    edgeGatewayService.getPushProgress
+      .mockResolvedValueOnce(started({ counts: { pending: 1, sent: 1 }, edges: null }))
+      .mockResolvedValue(started({ counts: { sent: 2 }, edges: null }));
+    renderModal();
+    await clickPush();
+
+    expect(await screen.findByTestId("push-warnings")).toHaveTextContent("waits up to 5m0s");
+    await waitFor(() => expect(screen.queryByTestId("push-warnings")).not.toBeInTheDocument());
+  });
 });

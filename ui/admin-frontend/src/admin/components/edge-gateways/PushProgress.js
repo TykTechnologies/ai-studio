@@ -40,12 +40,25 @@ const edgeDetail = (edge) => {
 };
 
 /**
+ * Whether the push is still waiting for an edge to connect. Until the first
+ * progress report, what starting the push said stands; then Enterprise
+ * reports each edge (waiting: pending and not reachable) and Community
+ * Edition the counts (waiting: anything still pending).
+ */
+const waitingForConnection = (progress, polled) => {
+  if (!polled) return true;
+  if (progress.edges) return progress.edges.some((e) => e.status === 'pending' && e.reachable !== true);
+  return (progress.counts?.pending || 0) > 0;
+};
+
+/**
  * Follows a push until every edge has answered (or the push's deadline has
  * passed) and says, per edge, what happened. `operation` is what starting
  * the push returned.
  */
 const PushProgress = ({ operation, pollIntervalMs = 1500, onFinished }) => {
   const [progress, setProgress] = useState(operation);
+  const [polled, setPolled] = useState(false);
   const [pollError, setPollError] = useState(null);
   const finishedRef = useRef(false);
   const onFinishedRef = useRef(onFinished);
@@ -58,7 +71,10 @@ const PushProgress = ({ operation, pollIntervalMs = 1500, onFinished }) => {
       try {
         const next = await edgeGatewayService.getPushProgress(operation.operationId);
         if (cancelled) return;
-        if (next) setProgress((prev) => ({ ...prev, ...next, warnings: mergeWarnings(prev.warnings, next.warnings) }));
+        if (next) {
+          setProgress((prev) => ({ ...prev, ...next }));
+          setPolled(true);
+        }
         setPollError(null);
         if (next && PUSH_FINAL_STATUSES.includes(next.status)) {
           if (!finishedRef.current) {
@@ -83,6 +99,17 @@ const PushProgress = ({ operation, pollIntervalMs = 1500, onFinished }) => {
   const outcome = OUTCOME[progress.status] || OUTCOME.in_progress;
   const inProgress = !PUSH_FINAL_STATUSES.includes(progress.status);
   const total = progress.targetEdges.length || progress.edges?.length || 0;
+  // The warnings from starting the push are about edges that were not
+  // connected ("the push waits up to 5m0s...") and edges left out; they
+  // stand only while an edge is still waiting to connect, not once every
+  // edge has its push (a reloading edge is not waiting). Later reports carry
+  // their own warnings (per edge, on Enterprise). Left-out edges stay listed
+  // below either way.
+  const waiting = inProgress && waitingForConnection(progress, polled);
+  const warnings = mergeWarnings(waiting ? operation.warnings : [], polled ? progress.warnings : []);
+  // Only starting the push reports the edges left out.
+  const skipped = operation.skipped || [];
+  const skippedTotal = operation.skippedTotal || skipped.length;
 
   return (
     <Box data-testid="push-progress">
@@ -97,32 +124,36 @@ const PushProgress = ({ operation, pollIntervalMs = 1500, onFinished }) => {
               aria-label="Push progress"
             />
             <Typography variant="caption" color="text.secondary">
-              Edges that are not connected are waited for
-              {progress.deadlineAt ? ` until ${new Date(progress.deadlineAt).toLocaleTimeString()}` : ''}.
+              {waiting && (
+                <>
+                  Edges that are not connected are waited for
+                  {progress.deadlineAt ? ` until ${new Date(progress.deadlineAt).toLocaleTimeString()}` : ''}.{' '}
+                </>
+              )}
               The push carries on if you close this dialog.
             </Typography>
           </Box>
         )}
       </Alert>
 
-      {progress.warnings.length > 0 && (
+      {warnings.length > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }} data-testid="push-warnings">
-          {progress.warnings.map((w) => (
+          {warnings.map((w) => (
             <div key={w}>{w}</div>
           ))}
         </Alert>
       )}
 
-      {progress.skipped.length > 0 && (
+      {skipped.length > 0 && (
         <Alert severity="info" sx={{ mb: 2 }} data-testid="push-skipped">
           <AlertTitle>Not pushed to</AlertTitle>
-          {progress.skipped.map((s) => (
+          {skipped.map((s) => (
             <div key={s.edgeId}>
               {s.edgeId}: {s.reason}
             </div>
           ))}
-          {progress.skippedTotal > progress.skipped.length && (
-            <div>and {progress.skippedTotal - progress.skipped.length} more</div>
+          {skippedTotal > skipped.length && (
+            <div>and {skippedTotal - skipped.length} more</div>
           )}
         </Alert>
       )}

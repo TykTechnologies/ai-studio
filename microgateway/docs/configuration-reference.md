@@ -139,7 +139,7 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | `CONTROL_ENDPOINT` | string | - | Control instance gRPC endpoint |
 | `EDGE_ID` | string | auto-generated | Unique identifier for this edge |
 | `EDGE_NAMESPACE` | string | `""` | Namespace for configuration filtering |
-| `EDGE_RECONNECT_INTERVAL` | duration | `5s` | Reconnection attempt interval |
+| `EDGE_RECONNECT_INTERVAL` | duration | `5s` | First reconnection delay; doubles per failed attempt up to 30s (or this value, if longer) |
 | `EDGE_HEARTBEAT_INTERVAL` | duration | `30s` | Heartbeat frequency to control |
 | `EDGE_SYNC_TIMEOUT` | duration | `10s` | Configuration sync timeout |
 
