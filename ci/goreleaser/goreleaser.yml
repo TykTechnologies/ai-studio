@@ -81,7 +81,7 @@ nfpms:
         dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
       - src: ci/install/data/PORTS.md
         dst: /opt/tyk-ai-studio/PORTS.md
-      - src: "templates/*"
+      - src: "templates/*.tmpl"
         dst: "/opt/tyk-ai-studio/templates"
       - src: "config/docs_links.json"
         dst: "/opt/tyk-ai-studio/config/docs_links.json"
@@ -127,7 +127,7 @@ nfpms:
         dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
       - src: ci/install/data/PORTS.md
         dst: /opt/tyk-ai-studio/PORTS.md
-      - src: "templates/*"
+      - src: "templates/*.tmpl"
         dst: "/opt/tyk-ai-studio/templates"
       - src: "config/docs_links.json"
         dst: "/opt/tyk-ai-studio/config/docs_links.json"

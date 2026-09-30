@@ -520,9 +520,13 @@ func (a *API) handleMe(c *gin.Context) {
 
 // showSSOConfig reports whether the user may see identity provider
 // configuration: the sso-profiles permission under RBAC, else the legacy
-// admin flag plus AccessToSSOConfig.
+// admin flag plus AccessToSSOConfig. Never when a host application signs
+// users in: Studio's SSO routes are off then.
 func (a *API) showSSOConfig(u *models.User, perms authz.Set) bool {
 	if !sso.IsEnterpriseAvailable() {
+		return false
+	}
+	if a.config != nil && !a.config.LocalAccountsEnabled() {
 		return false
 	}
 	if a.service.Authz().Enabled() {
@@ -807,7 +811,9 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 	}
 
 	appConf := config.Get("")
-	consentPageBaseURL, err_parse_site_url := url.Parse(appConf.SiteURL)
+	// The consent page is SITE_URL's origin plus the base path Studio is
+	// served under; a path in SITE_URL alone does not move it (as in v2.2.0).
+	finalConsentURL, err_parse_site_url := a.publicURL(appConf.SiteURL, "/oauth/consent")
 	if err_parse_site_url != nil {
 		log.Printf("Error parsing SiteURL '%s' for consent redirect: %v", appConf.SiteURL, err_parse_site_url)
 		errorRedirectURL, _ := url.Parse(redirectURI)
@@ -822,9 +828,6 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	// JoinPath keeps any path in SITE_URL, such as a base path Studio is
-	// served under.
-	finalConsentURL := consentPageBaseURL.JoinPath("oauth", "consent")
 	finalConsentURL.RawQuery = url.Values{"auth_req_id": {pendingRequest.ID}}.Encode()
 	c.Redirect(http.StatusFound, finalConsentURL.String())
 }
@@ -1362,17 +1365,18 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 	}
 
 	appConf := config.Get("")
-	baseURL, err := url.Parse(appConf.AuthServerURL)
-	if err != nil {
+	if _, err := url.Parse(appConf.AuthServerURL); err != nil {
 		log.Printf("Error parsing AuthServerURL '%s': %v", appConf.AuthServerURL, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "server_configuration_error", "error_description": "Invalid authorization server URL configured."})
 		return
 	}
 
-	// JoinPath keeps any path in the issuer URL, such as a base path Studio
-	// is served under.
+	// The endpoints are the issuer's origin plus the base path Studio is
+	// served under; a path in the issuer URL alone does not move them (as in
+	// v2.2.0).
 	resolve := func(p string) string {
-		return baseURL.JoinPath(p).String()
+		u, _ := a.publicURL(appConf.AuthServerURL, p)
+		return u.String()
 	}
 
 	metadata := OAuthServerMetadata{
