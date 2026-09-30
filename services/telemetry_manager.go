@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -30,6 +31,11 @@ type TelemetryManager struct {
 	version          string
 	ctx              context.Context
 	cancel           context.CancelFunc
+	// reported: this process has sent (or attempted) a report, so a later
+	// leadership gain does not add one.
+	reported atomic.Bool
+	// stopLeading removes the leadership handler.
+	stopLeading func()
 }
 
 // TelemetryPayload represents the structure of data sent to the telemetry service
@@ -70,8 +76,12 @@ func (tm *TelemetryManager) Start() {
 	logger.Debugf("Telemetry data will be sent to: %s", TelemetryURL)
 	logger.Debug("To disable telemetry, set environment variable: TELEMETRY_ENABLED=false")
 
-	// Send initial telemetry data
-	go tm.collectAndSend()
+	// Send initial telemetry data. A replica that is not the leader yet
+	// (another replica holds the lease, or this process's crashed
+	// predecessor still does) sends it when it becomes the leader instead,
+	// unless a report went out meanwhile.
+	tm.stopLeading = replicas.OnLeading(func() { go tm.sendFirst() })
+	go tm.sendFirst()
 
 	// Start periodic collection
 	ticker := time.NewTicker(TelemetryPeriod)
@@ -91,9 +101,20 @@ func (tm *TelemetryManager) Start() {
 
 // Stop halts the telemetry collection process
 func (tm *TelemetryManager) Stop() {
+	if tm.stopLeading != nil {
+		tm.stopLeading()
+	}
 	if tm.cancel != nil {
 		tm.cancel()
 	}
+}
+
+// sendFirst sends this process's first report, once, if it is the leader.
+func (tm *TelemetryManager) sendFirst() {
+	if !tm.enabled || !replicas.IsLeader() || !tm.reported.CompareAndSwap(false, true) {
+		return
+	}
+	tm.collectAndSend()
 }
 
 // collectAndSend gathers telemetry data and sends it to the telemetry service
@@ -105,6 +126,7 @@ func (tm *TelemetryManager) collectAndSend() {
 	if !replicas.IsLeader() {
 		return
 	}
+	tm.reported.Store(true)
 
 	logger.Debug("Collecting telemetry data...")
 

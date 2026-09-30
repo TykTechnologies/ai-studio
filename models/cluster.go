@@ -12,6 +12,14 @@ type ClusterNode struct {
 	Version   string    `json:"version" gorm:"size:64"`
 	StartedAt time.Time `json:"started_at"`
 	LastSeen  time.Time `json:"last_seen" gorm:"index"`
+	// PID, BootID (the running kernel) and PIDNamespace locate the
+	// replica's process, so a replica restarted on the same host after a
+	// crash can tell that the lease holder is its dead predecessor and
+	// take over at once (pkg/cluster.Leadership). Empty on rows written
+	// before they existed.
+	PID          int    `json:"pid" gorm:"column:pid"`
+	BootID       string `json:"boot_id" gorm:"column:boot_id;size:64"`
+	PIDNamespace string `json:"pid_namespace" gorm:"column:pid_namespace;size:64"`
 }
 
 // ClusterEvent is one entry of the cluster event log: an event every other

@@ -53,3 +53,15 @@ func TestSignalsAndHandlers(t *testing.T) {
 	b.sendErr = errors.New("database is down")
 	Signal(context.Background(), "budgets") // logged, not returned
 }
+
+func TestOnLeading(t *testing.T) {
+	calls := 0
+	remove := OnLeading(func() { calls++ })
+	t.Cleanup(OnLeading(func() { panic("a broken handler") })) // does not stop the others
+
+	BecameLeader()
+	assert.Equal(t, 1, calls)
+	remove()
+	BecameLeader()
+	assert.Equal(t, 1, calls, "removed")
+}

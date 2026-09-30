@@ -581,7 +581,8 @@ ID): a registry row other replicas use to tell live replicas from dead ones,
 an event log and bus relay for what every replica must hear, and a claim on
 the leader lease for work that must happen once. Code that is not handed
 the cluster (Enterprise features, say) uses `pkg/replicas`: `IsLeader`,
-`Signal` and `OnSignal`. See `features/ClusterControlPlane.md` for the
+`OnLeading` (catch up on leader-only work skipped before the lease was
+held), `Signal` and `OnSignal`. See `features/ClusterControlPlane.md` for the
 guarantees, and the reference architecture for what a deployment must
 provide (session affinity, shared files).
 

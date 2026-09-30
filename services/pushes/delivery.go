@@ -369,7 +369,16 @@ func (c *Coordinator) verify(cmd models.EdgePushCommand) (status, warning, expec
 // janitor is the same on every replica and only makes changes that are
 // re-checked against the command as it is when made, so replicas running
 // it at once agree.
-func (c *Coordinator) janitor() {
+//
+// It reports whether any push was open.
+func (c *Coordinator) janitor() bool {
+	// With no push open there is nothing to requeue, retry, expire or
+	// settle: one query instead of the seven below, which every replica
+	// would otherwise run every JanitorInterval while idle.
+	if !c.hasOpenWork() {
+		c.pruneNowAndThen()
+		return false
+	}
 	now := c.now()
 
 	// Replicas that stopped (crashed, or lost the database) while holding
@@ -443,10 +452,7 @@ func (c *Coordinator) janitor() {
 	})
 
 	// Finished pushes past their retention, now and then.
-	if now.Sub(c.lastPrune) >= pruneInterval {
-		c.lastPrune = now
-		c.prune(now)
-	}
+	c.pruneNowAndThen()
 
 	// Operations whose commands are all settled.
 	var open []string
@@ -455,6 +461,7 @@ func (c *Coordinator) janitor() {
 			c.settle(id)
 		}
 	}
+	return true
 }
 
 func (c *Coordinator) eachCommand(q *gorm.DB, fn func(models.EdgePushCommand)) {
@@ -484,6 +491,26 @@ var pushCommandOpen = []string{models.PushCommandPending, models.PushCommandClai
 
 // pruneInterval is how often a replica's janitor deletes old pushes.
 var pruneInterval = time.Minute
+
+// hasOpenWork reports whether any command can still change state or any
+// operation is unsettled: the janitor's work. On an error it says yes, so
+// the janitor runs and reports it.
+func (c *Coordinator) hasOpenWork() bool {
+	var open bool
+	err := c.db.Raw(`SELECT EXISTS (SELECT 1 FROM edge_push_commands WHERE status IN ?) OR EXISTS (SELECT 1 FROM push_operations WHERE status = ?)`,
+		pushCommandOpen, models.PushOperationInProgress).Scan(&open).Error
+	return err != nil || open
+}
+
+// pruneNowAndThen prunes at most once per pruneInterval (by this replica's
+// clock; the cut-off is the database's).
+func (c *Coordinator) pruneNowAndThen() {
+	if !c.lastPrune.IsZero() && time.Since(c.lastPrune) < pruneInterval {
+		return
+	}
+	c.lastPrune = time.Now()
+	c.prune(c.now())
+}
 
 // prune deletes pushes that finished more than Retention ago, in batches.
 // Every replica may run it; deleting twice is harmless.

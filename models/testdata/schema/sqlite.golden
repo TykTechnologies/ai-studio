@@ -321,6 +321,9 @@ TABLE cluster_nodes
   column `version` text
   column `started_at` datetime
   column `last_seen` datetime
+  column `pid` integer
+  column `boot_id` text
+  column `pid_namespace` text
   constraint PRIMARY KEY (`node_id`)
   autoindex origin=pk unique=1 (node_id)
   index CREATE INDEX `idx_cluster_nodes_last_seen` ON `cluster_nodes`(`last_seen`)

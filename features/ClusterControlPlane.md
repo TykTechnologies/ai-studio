@@ -105,10 +105,19 @@ once (a reload may run twice on an edge).
 
 ### Replica identity and liveness: `cluster_nodes`
 
-Each replica has a node ID (`Options.NodeID`, default `hostname-pid`) and
-upserts `cluster_nodes(node_id, hostname, version, started_at, last_seen)`
-every 5 s. A node is live while `last_seen` is under 20 s old. Single
-replica and SQLite: the same code runs with one node.
+Each replica has a node ID (`Options.NodeID`, default
+`hostname-pid-random`, fresh for every process so a restarted replica never
+inherits its predecessor's claims) and upserts `cluster_nodes(node_id,
+hostname, version, started_at, last_seen, pid, boot_id, pid_namespace)`
+every 5 s (one statement). A node is live while `last_seen` is under 20 s
+old. `pid`, `boot_id` (the running kernel's boot ID: different on every
+machine and after every reboot, shared by the containers of one machine)
+and `pid_namespace` locate the process, so a replica restarted after a
+crash can recognise its dead predecessor (see the leader lease). A node
+that stops cleanly deletes its row; the rows of nodes that crashed are
+deleted by any node once they are an hour old (`NodeRetention`), at start
+and every minute. Single replica and SQLite: the same code runs with one
+node.
 
 ### Edge stream ownership
 
@@ -166,7 +175,12 @@ is *reachable* when its owner node is live and its last heartbeat is fresh.
   dead replicas, lapsed claims and commands the edge has been silent on
   past the answer timeout (up to 3 attempts, then `failed` with every
   attempt in the history), and expires commands past their deadline with
-  the specific reason.
+  the specific reason. It first asks whether any command or operation is
+  open at all (one query); when none is, it only prunes, and looks again
+  after 10 s rather than 2 s unless a push is announced first (a
+  notification from any replica, or a push or stream on this one). An idle
+  hub no longer runs its seven queries every 2 s; a push whose notification
+  was lost is picked up by an idle janitor within 10 s.
 - The operation's status is derived from its commands: `in_progress`,
   `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`,
   `expired`.
@@ -203,7 +217,9 @@ carry both spellings, so no alias is returned.
 
 A replica publishing a cluster-wide event inserts a row (topic, payload,
 origin node) and sends `NOTIFY` with its id. Each replica keeps a cursor and
-reads new rows on NOTIFY and every second; it also re-reads a 30 s window and
+reads new rows on NOTIFY, after every listener reconnect, and every 5 s (the
+poll only covers a listener connection that died unnoticed; at 1 s it was
+two queries a second on every replica); it also re-reads a 30 s window and
 skips ids it has seen, so a row whose transaction committed after a later id
 is not missed. Rows older than 15 minutes are pruned. The listener is the
 chat queue's shared listener, moved to `pkg/pglisten`.
@@ -290,7 +306,57 @@ database clock, released on shutdown. A replica believes it leads only until
 its last renewal plus the TTL minus one renewal period, by its monotonic
 clock, so it stops acting before another replica can take over, even
 without the database. `pkg/replicas.IsLeader` is the check for code that
-does not hold the lease itself. Leader-only:
+does not hold the lease itself.
+
+**After a crash.** A process that is killed never releases the lease, and
+its restart has a new node ID, so without more it would wait up to the TTL
+(30 s) while leader-only work (start-up marketplace sync, first telemetry
+report, budget blocks to edges) is skipped. v2.2.0 had no lease, so this
+was a regression for single-node installs. Now:
+
+- **SQLite** serves one process by design (the event log is inert there),
+  so that process leads from `Start` to `Stop`, whatever the row says. It
+  still writes itself into the row, for the status page. v2.2.0 behaved the
+  same: every process ran every job.
+- **Postgres**: when another node holds the lease, the replica reads the
+  holder's registration (one query per renewal period on non-leaders) and
+  takes the lease over at once, with a write conditional on the holder
+  being unchanged, only when the holder is provably its dead predecessor.
+  It must never take a live replica's lease: that replica would keep
+  acting as leader for up to 20 s more. So the evidence is local to the
+  host:
+  - same `boot_id` and hostname (a hostname alone is not enough: machines
+    cloned from one image share one), otherwise wait for the TTL; a holder
+    without a registration or registered before these columns existed
+    also waits;
+  - same `pid_namespace` (bare metal, VMs, systemd, one container): the
+    holder is gone when its pid does not exist (`kill(pid, 0)`), or when it
+    is this process's own pid (a container's pid 1 in a reused namespace)
+    and no node of this process has that ID (tests run several replicas in
+    one process). A live pid, including a reused one, keeps the lease: two
+    Studio processes on one host sharing a database both keep working;
+  - another pid namespace on the same machine and hostname (a container
+    restarted in its pod: pid 1 again, new namespace) cannot be checked by
+    pid, and looks like two live containers given one hostname (host
+    networking, an explicit `hostname:`). Silence separates them: the
+    holder is gone once it has not refreshed its registration for
+    `PredecessorSilence` (two heartbeats, 10 s), re-checked exactly when
+    that is due and again in the write. So a crashed container's successor
+    leads 5 to 10 s after the crash instead of up to 30 s.
+  - Other platforms (no boot ID): wait for the TTL.
+- **Catching up.** Leader-only work skipped because the lease was not held
+  yet runs when it is gained: `pkg/replicas.OnLeading` (fired by
+  `pkg/studio` on the lease's change listener) wakes the marketplace sync,
+  the first usage-telemetry report (once per process) and a budget sync to
+  the edges at once. Enterprise licence telemetry starts a minute after
+  start and is not hooked.
+
+The plugin scheduler's own lease (`scheduler_leases`, 2 min TTL) is
+unchanged: its instance ID is `hostname-pid-counter`, as in v2.2.0, so a
+container restart (pid 1 again) keeps it, and elsewhere a crash waits out
+the TTL.
+
+Leader-only:
 
 - budget blocks, alerts and the `budget.sync` to edges (every replica still
   computes spend for its own snapshots; the relay carries the leader's
@@ -402,6 +468,23 @@ Ownership:
 Change detection:
 - a change made on a replica with no edges marks the edges on other
   replicas' namespaces pending; heartbeats on any replica compute drift.
+
+Leader lease (`pkg/cluster/lease_test.go`, `services/replicas_leader_test.go`,
+`grpc/budget_sync_leader_test.go`):
+- replicas starting at once: exactly one leads; stopping it hands over at
+  once; a holder that loses the database stops believing before anyone
+  else can take over;
+- SQLite: a restarted process leads at once although the row still names
+  its killed predecessor;
+- Postgres: a holder on this machine and hostname whose process exited, or
+  whose pid is this process's own, is taken over at once; a live pid on this
+  host, a replica of this process, another machine with the same hostname,
+  another hostname and a pre-upgrade registration are not; a holder in
+  another pid namespace is taken over once silent for `PredecessorSilence`,
+  and never while it keeps refreshing;
+- marketplace sync, first telemetry report and budget sync run when the
+  replica becomes the leader after its start-up run was skipped;
+- node rows an hour old are pruned, recent ones kept.
 
 Event log:
 - every event reaches every replica exactly once in handlers (despite

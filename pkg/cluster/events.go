@@ -32,9 +32,12 @@ type Handler func(Event)
 // LogOptions tune the event log. The zero value gives the defaults.
 type LogOptions struct {
 	// PollInterval is how often the log is read without a notification
-	// (default 1 s). Notifications only make delivery faster: a lost one
+	// (default 5 s). Notifications only make delivery faster: a lost one
 	// (listener reconnecting, NOTIFY dropped) delays an event by at most
-	// this long.
+	// this long. Every notification wakes a read, and so does every
+	// listener reconnect, so the poll only covers a listener whose
+	// connection died unnoticed. Each poll is two queries on every
+	// replica, idle or not.
 	PollInterval time.Duration
 	// Window is how far back every read looks again for rows it has not
 	// seen (default 30 s). An id is allocated before its row commits, so a
@@ -56,7 +59,7 @@ type LogOptions struct {
 
 func (o LogOptions) withDefaults() LogOptions {
 	if o.PollInterval <= 0 {
-		o.PollInterval = time.Second
+		o.PollInterval = 5 * time.Second
 	}
 	if o.Window <= 0 {
 		o.Window = 30 * time.Second
@@ -461,8 +464,9 @@ func (l *Log) readFailed(err error) {
 	if first {
 		logger.Warnf("Cluster event log: reading events failed; retrying (events from other replicas are delayed until it recovers): %v", err)
 	}
-	// Do not hammer a database that is down: skip reads for a moment.
-	l.backoffUntil = time.Now().Add(l.opts.PollInterval * 2)
+	// Do not hammer a database that is down: skip reads for a moment
+	// (notifications included, so not for longer than a couple of seconds).
+	l.backoffUntil = time.Now().Add(min(l.opts.PollInterval*2, 2*time.Second))
 }
 
 func (l *Log) readSucceeded() {

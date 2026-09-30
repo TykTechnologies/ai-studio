@@ -62,12 +62,29 @@ func (s *MarketplaceService) Start(ctx context.Context) {
 		Dur("sync_interval", s.syncInterval).
 		Msg("Starting marketplace service")
 
+	// A replica that becomes the leader later (another replica held the
+	// lease at start, or this process's crashed predecessor still did)
+	// syncs then, rather than up to a whole interval later. Registered
+	// before the check below, so no change of leader falls in between.
+	becameLeader := make(chan struct{}, 1)
+	defer replicas.OnLeading(func() {
+		select {
+		case becameLeader <- struct{}{}:
+		default:
+		}
+	})()
+
 	// Initial sync. With several replicas the background sync runs on the
 	// leader only (it fetches the indexes and writes the shared tables);
 	// a refresh asked for through the API runs wherever it is asked.
 	if replicas.IsLeader() {
 		if err := s.SyncAll(ctx, false); err != nil {
 			log.Error().Err(err).Msg("Initial marketplace sync failed")
+		}
+		// Leadership gained before the check is covered by this sync.
+		select {
+		case <-becameLeader:
+		default:
 		}
 	}
 
@@ -77,6 +94,14 @@ func (s *MarketplaceService) Start(ctx context.Context) {
 
 	for {
 		select {
+		case <-becameLeader:
+			if !replicas.IsLeader() {
+				continue
+			}
+			log.Info().Msg("This replica became the leader; syncing the marketplace indexes now")
+			if err := s.SyncAll(ctx, false); err != nil {
+				log.Error().Err(err).Msg("Marketplace sync failed")
+			}
 		case <-ticker.C:
 			if !replicas.IsLeader() {
 				continue

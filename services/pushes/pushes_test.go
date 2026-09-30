@@ -7,7 +7,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -775,4 +777,53 @@ func TestJanitorPrunesOldPushes(t *testing.T) {
 			assert.Equal(t, int64(1), cmds, id)
 		}
 	})
+}
+
+// With no push open the janitor has nothing to do but prune, and it still
+// prunes; the moment a push is open it does its full round again.
+func TestIdleJanitorOnlyPrunes(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		a := newReplica(t, db, "node-a", Options{Retention: 24 * time.Hour})
+		addEdge(t, db, "edge-1", "default", models.EdgeStatusConnected, "node-a")
+		oldDone := push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}}).Operation.OperationID
+		require.NoError(t, db.Model(&models.EdgePushCommand{}).Where("operation_id = ?", oldDone).Update("status", models.PushCommandSucceeded).Error)
+		require.NoError(t, db.Model(&models.PushOperation{}).Where("operation_id = ?", oldDone).
+			Updates(map[string]interface{}{"status": models.PushOperationSucceeded, "completed_at": utcNow().Add(-48 * time.Hour)}).Error)
+		assert.False(t, a.c.hasOpenWork())
+
+		a.c.janitor()
+		var ops int64
+		db.Model(&models.PushOperation{}).Count(&ops)
+		assert.Zero(t, ops, "pruned while idle")
+
+		push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}})
+		assert.True(t, a.c.hasOpenWork(), "a pending command is open work")
+	})
+}
+
+// An idle janitor looks for open pushes every fifth interval, not every
+// interval (each look is a query on every replica); a push, here or
+// announced by another replica, makes it look at the next interval.
+func TestIdleJanitorLooksLessOften(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "p.db")+"?_busy_timeout=5000"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	migrate(t, db)
+	var looks atomic.Int32
+	require.NoError(t, db.Callback().Row().After("gorm:row").Register("test:count_janitor_looks", func(tx *gorm.DB) {
+		if strings.Contains(tx.Statement.SQL.String(), "SELECT EXISTS") {
+			looks.Add(1)
+		}
+	}))
+	r := newReplica(t, db, "node-a", Options{JanitorInterval: 50 * time.Millisecond, PollInterval: time.Hour})
+	require.NoError(t, r.c.Start(context.Background()))
+	t.Cleanup(r.c.Stop)
+
+	time.Sleep(1500 * time.Millisecond) // 30 intervals
+	idleLooks := looks.Load()
+	assert.GreaterOrEqual(t, idleLooks, int32(3))
+	assert.LessOrEqual(t, idleLooks, int32(12), "an idle janitor looks every fifth interval")
+
+	r.c.poke() // what a push or a notification does
+	before := looks.Load()
+	require.Eventually(t, func() bool { return looks.Load() > before }, 150*time.Millisecond, 5*time.Millisecond, "looks at the next interval after a wake")
 }

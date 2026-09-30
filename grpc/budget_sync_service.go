@@ -89,6 +89,8 @@ type BudgetSyncService struct {
 	// lastUsage is each App's usage at the previous sync; Apps whose usage
 	// moved are analysed for alerts. Only the sync goroutine touches it.
 	lastUsage map[uint32]float64
+	// stopLeading removes the leadership handler.
+	stopLeading func()
 }
 
 // SetEdgeBudgetSource makes every sync carry budget blocks and analyse
@@ -132,6 +134,17 @@ func NewBudgetSyncService(db *gorm.DB, eventBus eventbridge.Bus) *BudgetSyncServ
 // It aggregates usage and publishes to edges at the configured interval.
 func (s *BudgetSyncService) Start() {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+	// Blocks, alerts and the sync to edges are the leader's: a replica that
+	// becomes the leader (for instance a restarted hub whose crashed
+	// predecessor held the lease a moment longer) syncs at once instead of
+	// leaving edges on stale blocks for up to an interval.
+	becameLeader := make(chan struct{}, 1)
+	s.stopLeading = replicas.OnLeading(func() {
+		select {
+		case becameLeader <- struct{}{}:
+		default:
+		}
+	})
 
 	go func() {
 		log.Info().Dur("interval", s.syncInterval).Msg("Starting budget sync service")
@@ -148,6 +161,8 @@ func (s *BudgetSyncService) Start() {
 				log.Info().Msg("Budget sync service stopped")
 				close(s.done)
 				return
+			case <-becameLeader:
+				s.aggregateAndPublish()
 			case <-ticker.C:
 				s.aggregateAndPublish()
 			}
@@ -176,6 +191,9 @@ func (s *BudgetSyncService) PeriodUsage(appID uint, periodStart time.Time) (floa
 
 // Stop gracefully stops the budget sync service.
 func (s *BudgetSyncService) Stop() {
+	if s.stopLeading != nil {
+		s.stopLeading()
+	}
 	if s.cancel != nil {
 		s.cancel()
 		// Wait for goroutine to finish
