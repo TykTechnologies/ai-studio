@@ -20,6 +20,12 @@ env:
   # (tyk-identity-broker, storage, ...) is public and comes through the proxy.
   # (Fetching those with git broke CI when a cached clone missed a new tag.)
   GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
+  # GitHub gives pull requests from forks no secrets, so they cannot check
+  # out the private enterprise submodule. They run the Community Edition
+  # checks only; a maintainer runs the rest by pushing the branch into this
+  # repository (see CONTRIBUTING.md). The go-unit-tests matrix repeats this
+  # expression, because env is not available there.
+  FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
 jobs:
   # ==========================================================================
@@ -102,14 +108,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: [ce, ent]
+        # Fork pull requests run CE only (see FORK_PR above).
+        edition: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && '["ce"]' || '["ce", "ent"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 2
           submodules: ${{ matrix.edition == 'ent' }}
-          token: ${{ secrets.CI_SUBMODULE_PAT }}
+          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
 
       - name: Create enterprise stub for CE builds
         if: matrix.edition == 'ce'
@@ -223,13 +230,24 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/midsommar_test?sslmode=disable
     steps:
       # The enterprise submodule is checked out for the audit suite below;
-      # the other packages are built without the enterprise tag.
+      # the other packages are built without the enterprise tag. Fork pull
+      # requests get a stub instead and skip the audit suite.
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 2
-          submodules: true
-          token: ${{ secrets.CI_SUBMODULE_PAT }}
+          submodules: ${{ env.FORK_PR != 'true' }}
+          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
+
+      - name: Create enterprise stub for fork pull requests
+        if: env.FORK_PR == 'true'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/ai-studio-enterprise/v2
+
+          go 1.26.5
+          EOF
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -288,6 +306,7 @@ jobs:
           go test -v -race -count=1 -run 'Postgres' ./internal/services/ ./internal/database/
 
       - name: Run enterprise audit Postgres tests
+        if: env.FORK_PR != 'true'
         working-directory: enterprise
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/audit_test?sslmode=disable
@@ -303,12 +322,23 @@ jobs:
     name: gorm Copy Verification
     runs-on: warp-ubuntu-latest-arm64-2x
     steps:
-      # The enterprise module is part of the import check.
+      # The enterprise module is part of the import check. Fork pull requests
+      # check the root and microgateway modules in the CE edition only.
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          submodules: true
-          token: ${{ secrets.CI_SUBMODULE_PAT }}
+          submodules: ${{ env.FORK_PR != 'true' }}
+          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
+
+      - name: Create enterprise stub for fork pull requests
+        if: env.FORK_PR == 'true'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/ai-studio-enterprise/v2
+
+          go 1.26.5
+          EOF
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -323,9 +353,13 @@ jobs:
           echo "placeholder" > ui/admin-frontend/build/index.html
 
       - name: Verify the gorm copy
+        env:
+          CE_ONLY: ${{ env.FORK_PR == 'true' && '1' || '' }}
         run: make gorm-verify
 
       - name: Verify nothing uses upstream langchaingo
+        env:
+          CE_ONLY: ${{ env.FORK_PR == 'true' && '1' || '' }}
         run: make langchaingo-verify
 
       - name: Check no public package imports the enterprise module
@@ -443,13 +477,17 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Tests | ${{ needs.frontend-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Unit Tests (CE) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Go Unit Tests (ENT) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Unit Tests (ENT) | ${{ env.FORK_PR == 'true' && ':fast_forward:' || (contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| gorm Copy Verification | ${{ needs.gorm-verify.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Module Zip Check | ${{ needs.module-check.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Host Compatibility (Dashboard) | ${{ needs.host-compat.result == 'success' && ':white_check_mark:' || (needs.host-compat.result == 'skipped' && ':fast_forward:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$FORK_PR" = true ]; then
+            echo "Pull request from a fork: the enterprise checks did not run. A maintainer runs them before merging (see CONTRIBUTING.md)." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "Coverage files:" >> $GITHUB_STEP_SUMMARY
           ls -la coverage-*.out 2>/dev/null || echo "No coverage files found"
 
