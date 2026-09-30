@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -127,7 +128,11 @@ type Options struct {
 	// keys still authenticate requests Auth has no identity for.
 	Auth Authenticator
 	// LoginURL and LogoutURL are where the console sends a user to sign in
-	// or out when Auth is set.
+	// or out when Auth is set. The console replaces "{return_to}" anywhere
+	// in LoginURL (e.g. "/login?next={return_to}") with the page the user
+	// asked for, URL-encoded: a path on Studio's origin under the base path,
+	// with its query and hash. The host validates it and returns the user
+	// there after signing in. A LoginURL without it is used as it is.
 	LoginURL, LogoutURL string
 
 	// CSRF, when set, replaces Studio's CSRF protection for
@@ -320,6 +325,18 @@ func New(opts Options) (_ *Studio, err error) {
 	// computed against the full catalogue.
 	if err := service.RebuildPermissionCatalogue(); err != nil {
 		logger.Warnf("Failed to register plugin permission resources: %v", err)
+	}
+
+	// A build without cgo has no Chroma client: say so up front for the
+	// Chroma datasources it cannot search, rather than only at query time.
+	if unavailable, err := service.UnavailableVectorStoreDatasources(); err != nil {
+		logger.Warnf("Failed to check datasources for unavailable vector stores: %v", err)
+	} else if len(unavailable) > 0 {
+		names := make([]string, 0, len(unavailable))
+		for _, d := range unavailable {
+			names = append(names, fmt.Sprintf("%q (id %d)", d.Name, d.ID))
+		}
+		logger.Warnf("This build has no cgo, so Chroma is unavailable: searches of these Chroma datasources fail until they are moved to another vector store: %s", strings.Join(names, ", "))
 	}
 
 	// Seed RBAC system roles and migrate legacy admin flags into bindings

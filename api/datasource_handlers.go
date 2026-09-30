@@ -92,11 +92,12 @@ func (a *API) createDatasource(c *gin.Context) {
 		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
-		c.JSON(datasourceWriteStatus(err), ErrorResponse{
+		status := datasourceWriteStatus(err)
+		c.JSON(status, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
+			}{{Title: http.StatusText(status), Detail: err.Error()}},
 		})
 		return
 	}
@@ -248,11 +249,12 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
-		c.JSON(datasourceWriteStatus(err), ErrorResponse{
+		status := datasourceWriteStatus(err)
+		c.JSON(status, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
+			}{{Title: http.StatusText(status), Detail: err.Error()}},
 		})
 		return
 	}
@@ -727,10 +729,11 @@ func embedderName(ds *models.Datasource) string {
 }
 
 // datasourceWriteStatus maps a datasource create/update error to a status:
-// an unusable embedder choice is the caller's error.
+// an unusable embedder choice, or a vector store this build cannot use
+// (Chroma without cgo), is the caller's error.
 func datasourceWriteStatus(err error) int {
 	var privacy *services.EmbedderPrivacyError
-	if errors.As(err, &privacy) || errors.Is(err, services.ErrEmbedderInvalid) {
+	if errors.As(err, &privacy) || errors.Is(err, services.ErrEmbedderInvalid) || errors.Is(err, services.ErrVectorStoreUnavailable) {
 		return http.StatusBadRequest
 	}
 	return http.StatusInternalServerError

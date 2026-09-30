@@ -251,7 +251,7 @@ require (
 
 require (
 	github.com/TykTechnologies/ai-studio-enterprise/v2 v2.0.0-00010101000000-000000000000
-	github.com/TykTechnologies/midsommar/v2 v2.0.0
+	github.com/TykTechnologies/midsommar/v2 v2.2.1-0.20260930035819-6301ffbeec24
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/d5/tengo/v2 v2.17.0 // indirect
 	github.com/gin-gonic/gin v1.10.1

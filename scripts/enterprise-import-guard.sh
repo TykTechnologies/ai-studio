@@ -12,15 +12,17 @@
 # Enterprise tests of core packages live in enterprise/_coretests and are
 # linked in, gitignored, by scripts/enterprise-link-tests.sh.
 #
-# Allowed: the enterprise binaries' main packages, and the microgateway
-# module and tests/ tree, which no program embedding Studio imports.
+# Allowed: the enterprise binaries' main packages (main_enterprise.go, and
+# examples/embed-host/main_enterprise.go: a main package cannot be imported,
+# so no host's tidy reads it), and the microgateway module and tests/ tree,
+# which no program embedding Studio imports.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
 if matches=$(git grep -n '"github\.com/TykTechnologies/ai-studio-enterprise' -- '*.go' \
-  ':!main_enterprise.go' ':!microgateway/' ':!tests/' ':!third_party/'); then
+  ':!main_enterprise.go' ':!examples/embed-host/main_enterprise.go' ':!microgateway/' ':!tests/' ':!third_party/'); then
   echo "These files import the private enterprise module; register the feature through a core hook," >&2
   echo "and put enterprise tests of core packages in enterprise/_coretests:" >&2
   echo "$matches" >&2

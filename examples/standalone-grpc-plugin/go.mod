@@ -12,7 +12,7 @@ require (
 )
 
 require (
-	github.com/TykTechnologies/midsommar/v2 v2.0.0 // indirect
+	github.com/TykTechnologies/midsommar/v2 v2.2.1-0.20260930035819-6301ffbeec24 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect

@@ -280,6 +280,16 @@ with the corresponding `VENDOR_TESTS_*` variables set. `test-vendors-filters`
 adds the `enterprise` tag: the community scripting runner does not execute
 filter scripts, so a CE build would report every filter as a no-op.
 
+The enterprise tag alone is not enough: the in-process gateway gets the
+enterprise filter engine, guardrail providers and Semantic Router engine
+only from blank imports, as `microgateway/cmd/microgateway/main_enterprise.go`
+does. `tests/vendorconformance/enterprise_test.go` holds those imports
+(`//go:build enterprise`, no `vendorlive`), and its
+`TestEnterpriseHarnessRegistersRuntime` runs in the enterprise unit tests
+in CI without credentials. The live filter and guardrail tests call the same
+check first, so a harness that drifts from the enterprise main fails at once
+with the import to add, instead of reporting every filter as broken.
+
 ---
 
 ## 6. Build order
