@@ -349,8 +349,13 @@ as a module cannot compile the default `ui` package.
   is only in `main`).
 - The `ui-assets` job in `release.yml` builds the frontend once per tag,
   packs it as `tyk-ai-studio-ui-<tag>.tar.gz` with a `.sha256`, and uploads
-  both to the tag's GitHub release, creating a draft release when there is
-  none. It is the only job with `contents: write`.
+  both to the tag's GitHub release. When there is none it creates it,
+  published (not a draft; a prerelease for a `-rc` tag, never marked latest)
+  with placeholder notes, and it publishes a draft left by an earlier run. It
+  is the only job with `contents: write`. The release notes are then added
+  by hand with `gh release edit <tag> --notes-file notes.md` (plus
+  `--latest` for a final release); `gh release create <tag>` fails with
+  "already exists" once the job has run.
 - A host builds with `-tags studio_noui`, unpacks the tarball for the Studio
   version it imports, and passes `os.DirFS(dir)` (or its own embed of the
   directory) as `Options.UIAssets`. `examples/embed-host -ui <dir>` does
@@ -436,6 +441,14 @@ packages (type aliases and wrappers, generated when the code moved) so that
 existing plugins keep compiling. The proto package name is unchanged, so the
 wire format and gRPC method names are the same.
 
+`microgateway/go.mod` requires `midsommar/v2` at a pseudo-version of a main
+commit that has `pkg/gatewayplugin` (the local `replace ../` still applies
+to in-repo builds). It used to require `v2.0.0`, whose module zip the proxy
+cannot build (v2.0.0 and v2.2.0 both committed files with `:` in their
+names), so a plugin importing the old paths could not be fetched through the
+proxy unless it also pinned `midsommar/v2` itself. Raise the requirement to
+the release tag when the next one is cut.
+
 ## Releases a host can import
 
 Every `v*` tag is a version of `github.com/TykTechnologies/midsommar/v2` a
@@ -451,7 +464,10 @@ host can `go get` (the module proxy builds its zip from the tagged tree;
 - runs `scripts/release/consume-module.sh` for both editions: a throwaway
   host with a clean module cache imports the tag through the proxy, runs
   `go mod tidy` and builds with `CGO_ENABLED=0`. The Community Edition run
-  has no credentials at all.
+  has no credentials at all, and runs even when `enterprise-tag` fails (the
+  enterprise run then fails at once, naming it). The proxy can take a while
+  to see a new tag, so `go get` retries with a doubling backoff (15 s up to
+  5 min) for up to 30 minutes (`CONSUME_MODULE_DEADLINE`, in seconds).
 
 The same script checks any commit by hand, e.g.
 `scripts/release/consume-module.sh ce <commit>`.
