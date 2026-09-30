@@ -67,7 +67,8 @@ type Config struct {
 	HostAuth          Authenticator
 	ProvisionHostUser func(services.HostIdentity) (*models.User, error)
 	// HostLoginURL and HostLogoutURL are where the console sends a user to
-	// sign in or out when the host authenticates.
+	// sign in or out when the host authenticates. The console fills in a
+	// "{return_to}" placeholder in HostLoginURL (see studio.Options.LoginURL).
 	HostLoginURL  string
 	HostLogoutURL string
 

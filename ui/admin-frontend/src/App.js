@@ -9,6 +9,7 @@ import {
 import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
 import { basePath, hostLoginURL, isHostAuth, stripBase, withBase } from "./runtimeConfig";
+import { hostSignInURL } from "./admin/utils/authRedirect";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import SuccessBanner from "./admin/components/common/SuccessBanner";
@@ -49,10 +50,11 @@ const NotificationsPage = React.lazy(() => import("./pages/NotificationsPage"));
 const ToolDocumentationPage = React.lazy(() => import("./portal/pages/ToolDocumentationPage"));
 
 // Sends a signed-out visitor to sign in: to the host application's sign-in
-// page when it authenticates users, else to Studio's login route.
+// page when it authenticates users (with the page they asked for, when the
+// login URL takes it), else to Studio's login route.
 const SignInRedirect = () => {
   if (isHostAuth() && hostLoginURL()) {
-    window.location.assign(hostLoginURL());
+    window.location.assign(hostSignInURL());
     return <CircularProgress />;
   }
   return <Navigate to="/login" replace />;
@@ -83,6 +85,20 @@ const RouteLoadingFallback = () => (
     <CircularProgress />
   </Box>
 );
+
+// Registration and password reset are Studio's own accounts, which are off
+// when the host application signs users in (their APIs answer 404): those
+// routes then lead to the console's home, and from there to sign-in.
+const LocalAccountRoute = ({ isAuthenticated, children }) => {
+  if (isHostAuth()) {
+    return <Navigate to="/" replace />;
+  }
+  return isAuthenticated ? (
+    <Navigate to="/portal/dashboard" replace />
+  ) : (
+    <Suspense fallback={<RouteLoadingFallback />}>{children}</Suspense>
+  );
+};
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -137,12 +153,13 @@ function App() {
         setConfigLoaded(true);
 
         // Skip auth check for password reset and forgot password routes
+        // (Studio's own accounts; with host sign-in they redirect instead)
         const currentPath = stripBase(window.location.pathname);
-        if (currentPath === '/register' ||
+        if (!isHostAuth() && (currentPath === '/register' ||
           currentPath === '/reset-password' ||
           currentPath === '/auth/reset-password' ||
           currentPath === '/forgot-password' ||
-          currentPath === '/auth/forgot-password') {
+          currentPath === '/auth/forgot-password')) {
           setIsAuthenticated(false);
           return;
         }
@@ -251,38 +268,26 @@ function App() {
             <Route
               path="/register"
               element={
-                isAuthenticated ? (
-                  <Navigate to="/portal/dashboard" replace />
-                ) : (
-                  <Suspense fallback={<RouteLoadingFallback />}>
-                    <Register />
-                  </Suspense>
-                )
+                <LocalAccountRoute isAuthenticated={isAuthenticated}>
+                  <Register />
+                </LocalAccountRoute>
               }
             />
             <Route
               path="/forgot-password"
               element={
-                isAuthenticated ? (
-                  <Navigate to="/portal/dashboard" replace />
-                ) : (
-                  <Suspense fallback={<RouteLoadingFallback />}>
-                    <ForgotPassword />
-                  </Suspense>
-                )
+                <LocalAccountRoute isAuthenticated={isAuthenticated}>
+                  <ForgotPassword />
+                </LocalAccountRoute>
               }
             />
             {/* Handle both /reset-password and /auth/reset-password */}
             <Route
               path="/reset-password"
               element={
-                isAuthenticated ? (
-                  <Navigate to="/portal/dashboard" replace />
-                ) : (
-                  <Suspense fallback={<RouteLoadingFallback />}>
-                    <ResetPassword />
-                  </Suspense>
-                )
+                <LocalAccountRoute isAuthenticated={isAuthenticated}>
+                  <ResetPassword />
+                </LocalAccountRoute>
               }
             />
             <Route
