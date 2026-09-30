@@ -74,11 +74,20 @@ func main() {
 	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Any server failing stops the process, as a signal would.
+	// Any server failing stops the process, as a signal would, but the
+	// process then exits non-zero, so a supervisor that restarts on failure
+	// (systemd Restart=on-failure, restart: on-failure) does.
+	failed := make(chan error, 1)
 	serve := func(name string, run func() error) {
 		go func() {
 			if err := run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				logger.Errorf("%s error: %v", name, err)
+				if shutdownCtx.Err() == nil {
+					select {
+					case failed <- fmt.Errorf("%s: %w", name, err):
+					default:
+					}
+				}
 				stop()
 			}
 		}()
@@ -126,6 +135,12 @@ func main() {
 		}
 	}
 
+	select {
+	case err := <-failed:
+		// Exits with status 1.
+		logger.FatalErr("AI Studio stopped because a server failed", err)
+	default:
+	}
 	logger.Info("Application stopped gracefully")
 }
 

@@ -164,7 +164,7 @@ func queueTimeout(config PostgreSQLConfig) time.Duration {
 	return DefaultPostgreSQLConfig().NotifyTimeout
 }
 
-// reconnectCeiling is the longest pq.Listener waits between reconnect
+// reconnectCeiling is the longest the shared listener waits between reconnect
 // attempts; it backs off from ReconnectInterval up to this.
 func reconnectCeiling(config PostgreSQLConfig) time.Duration {
 	retries := config.MaxReconnectRetries

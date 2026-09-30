@@ -488,11 +488,24 @@ are schema-independent, so nothing else changes.
 
 `studio.New` runs every migration and seed, from `models.InitModels` through
 the RBAC seed (plus the analytics and identity broker tables, which used to
-migrate later), under `models.AcquireMigrationLock`: a Postgres session
-advisory lock on a connection of its own, keyed by the current schema, so
-replicas sharing one schema take turns and different schemas do not wait
-for each other. On SQLite, or with a pool of one connection, it is a no-op.
-Tests: `pkg/studio/database_schema_postgres_test.go`. Concurrent unlocked
+migrate later), under `models.AcquireMigrationLock`: a Postgres
+transaction-level advisory lock (`pg_try_advisory_xact_lock`, polled every
+500 ms) held by an open transaction on a connection of its own, keyed by
+the current schema, so replicas sharing one schema take turns and different
+schemas do not wait for each other. On SQLite, or with a pool of one
+connection, it is a no-op. Tests: `pkg/studio/database_schema_postgres_test.go`,
+`models/migration_lock_postgres_test.go`.
+
+It started as a session-level lock. Behind PgBouncer in transaction mode
+that leaked: the lock stayed on whichever pooled server connection took it,
+the unlock ran on another one, and every later instance waited for ever.
+A transaction keeps one server connection until it ends, and ending it (or
+the server dropping the session) releases the lock. The holder runs
+`SELECT 1` in its transaction every 5 s, so a server's
+`idle_in_transaction_session_timeout` does not end it mid-migration; if the
+lock is lost anyway, a warning is logged and the migration carries on. The
+wait is bounded: `Config.MigrationLockTimeout` (`MIGRATION_LOCK_TIMEOUT`,
+default 15 min), after which `New` fails with an error naming the lock. Concurrent unlocked
 boots of a fresh schema did not fail in tests (the seeds are protected by
 unique constraints), so the lock is a guard for upgrades, where replicas
 starting together would run the same ALTERs and backfills, rather than for

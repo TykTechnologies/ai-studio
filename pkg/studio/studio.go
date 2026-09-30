@@ -258,7 +258,15 @@ func New(opts Options) (_ *Studio, err error) {
 	// Migrations and seeding (through the RBAC seed below) run under a
 	// Postgres advisory lock, so replicas sharing a database do not race
 	// through AutoMigrate and the get-or-create seeds. A no-op on SQLite.
-	releaseMigrationLock, err := models.AcquireMigrationLock(backgroundCtx, s.db)
+	// Bounded: an instance that never finishes (or a lock left behind)
+	// must not keep this one waiting for ever.
+	lockWait := conf.MigrationLockTimeout
+	if lockWait <= 0 {
+		lockWait = models.DefaultMigrationLockWait
+	}
+	lockCtx, cancelLockWait := context.WithTimeout(backgroundCtx, lockWait)
+	releaseMigrationLock, err := models.AcquireMigrationLock(lockCtx, s.db)
+	cancelLockWait()
 	if err != nil {
 		return nil, fmt.Errorf("studio: %w", err)
 	}

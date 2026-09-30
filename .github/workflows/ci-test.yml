@@ -305,13 +305,14 @@ jobs:
         run: |
           go test -v -race -count=1 -run 'Postgres' ./internal/services/ ./internal/database/
 
-      - name: Run enterprise audit Postgres tests
+      - name: Run enterprise audit and webhooks Postgres tests
         if: env.FORK_PR != 'true'
         working-directory: enterprise
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/audit_test?sslmode=disable
         run: |
           go test -tags enterprise -v -race -count=1 ./features/audit/...
+          go test -tags enterprise -v -race -count=1 -run '_Postgres' ./features/webhooks/
 
   # ==========================================================================
   # gorm copy: third_party/gorm.io is exactly what third_party/gorm-pin
