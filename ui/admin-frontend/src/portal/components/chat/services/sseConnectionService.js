@@ -60,7 +60,7 @@ export const setupSSEConnection = ({
       
       setSessionId(newSessionId);
       // Update URL with new session ID
-      const newUrl = withBase(`/chat/${chatId}?continue_id=${newSessionId}`);
+      const newUrl = withBase(`/chat/${encodeURIComponent(chatId)}?continue_id=${encodeURIComponent(newSessionId)}`);
       try {
         window.history.replaceState({}, "", newUrl);
       } catch (err) {

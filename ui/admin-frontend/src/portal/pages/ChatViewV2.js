@@ -61,7 +61,7 @@ const ChatViewV2 = () => {
         setSession(sess);
         applySelection(sess);
         try {
-          window.history.replaceState({}, '', withBase(`/chat/${chatId}?continue_id=${sess.session_id}`));
+          window.history.replaceState({}, '', withBase(`/chat/${encodeURIComponent(chatId)}?continue_id=${encodeURIComponent(sess.session_id)}`));
         } catch (e) {
           // ignore
         }
