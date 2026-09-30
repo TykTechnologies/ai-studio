@@ -147,11 +147,11 @@ func TestEdgeInstance_NamespaceQueriesAcceptEverySpelling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), counts[EdgeSyncStatusInSync])
 
-	acked, err := (&EdgeInstance{}).FirstInSyncWithChecksum(db, "global", "abc")
+	acked, err := (&EdgeInstance{}).LatestSyncAck(db, "global")
 	require.NoError(t, err)
 	require.NotNil(t, acked)
 	assert.Contains(t, []string{"stored-default", "legacy-empty"}, acked.EdgeID)
-	missing, err := (&EdgeInstance{}).FirstInSyncWithChecksum(db, "default", "zzz")
+	missing, err := (&EdgeInstance{}).LatestSyncAck(db, "nowhere")
 	require.NoError(t, err)
 	assert.Nil(t, missing)
 

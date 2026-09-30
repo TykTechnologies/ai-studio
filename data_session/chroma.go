@@ -10,6 +10,7 @@ package data_session
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -33,6 +34,51 @@ func newChromaStore(d *models.Datasource, embedder *embeddings.EmbedderImpl) (ve
 		chroma.WithEmbedder(embedder),
 		chroma.WithNameSpace(d.DBName),
 	)
+}
+
+// errPrecomputedEmbeddings is what precomputedEmbeddings returns if chroma-go
+// ever asks it to embed text.
+var errPrecomputedEmbeddings = errors.New("chroma: Studio supplies precomputed vectors; this collection handle cannot embed text")
+
+// precomputedEmbeddings is the embedding function Studio hands chroma-go for
+// every collection it opens directly. Studio computes vectors itself (or
+// receives them) and always passes them in, so chroma-go never needs to embed
+// anything; this function refuses rather than producing vectors of its own.
+//
+// It must be passed explicitly: when GetCollection has no embedding function
+// it fails validation, and CreateCollection then builds chroma-go's default
+// one, which downloads an ONNX runtime whose API version the linked
+// onnxruntime_go may not accept (v1.26 asks for API 24; chroma-go v0.2.5
+// fetches ORT 1.21), failing every store and search.
+type precomputedEmbeddings struct{}
+
+func (precomputedEmbeddings) EmbedDocuments(context.Context, []string) ([]chromaEmbeddings.Embedding, error) {
+	return nil, errPrecomputedEmbeddings
+}
+
+func (precomputedEmbeddings) EmbedQuery(context.Context, string) (chromaEmbeddings.Embedding, error) {
+	return nil, errPrecomputedEmbeddings
+}
+
+// openChromaCollection gets the named collection, creating it (L2 space) if
+// it does not exist, always with precomputedEmbeddings.
+func openChromaCollection(ctx context.Context, client chromago.Client, d *models.Datasource, purpose string) (chromago.Collection, error) {
+	ef := precomputedEmbeddings{}
+	collection, err := client.GetCollection(ctx, d.DBName, chromago.WithEmbeddingFunctionGet(ef))
+	if err == nil {
+		return collection, nil
+	}
+	slog.Info("Chroma collection not found, creating new one", "collection", d.DBName, "purpose", purpose, "error", err.Error())
+	collection, err = client.CreateCollection(ctx, d.DBName,
+		chromago.WithEmbeddingFunctionCreate(ef),
+		chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
+		chromago.WithIfNotExistsCreate(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("Created new Chroma collection", "collection", d.DBName, "purpose", purpose)
+	return collection, nil
 }
 
 // chromaMetadataValue unwraps a Chroma v2 MetadataValue (or a pointer to
@@ -60,22 +106,10 @@ func (ds *DataSession) storeToChroma(ctx context.Context, store vectorstores.Vec
 		return fmt.Errorf("failed to create chroma client: %w", err)
 	}
 
-	// Get or create collection
-	collection, err := client.GetCollection(ctx, d.DBName)
+	// Get or create collection (we're providing pre-computed embeddings)
+	collection, err := openChromaCollection(ctx, client, d, "store")
 	if err != nil {
-		// Try to create if doesn't exist
-		slog.Info("Chroma collection not found, creating new one", "collection", d.DBName, "error", err.Error())
-
-		// Create with no-op embedding function (we're providing pre-computed embeddings)
-		// Use default embedding function which won't be called since we provide embeddings
-		collection, err = client.CreateCollection(ctx, d.DBName,
-			chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
-			chromago.WithIfNotExistsCreate(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to get/create chroma collection '%s' at %s: %w", d.DBName, d.DBConnString, err)
-		}
-		slog.Info("Created new Chroma collection", "collection", d.DBName)
+		return fmt.Errorf("failed to get/create chroma collection '%s' at %s: %w", d.DBName, d.DBConnString, err)
 	}
 
 	// Add documents with embeddings using v2 API
@@ -120,20 +154,10 @@ func (ds *DataSession) searchChromaByVector(ctx context.Context, store vectorsto
 		return nil, fmt.Errorf("failed to create chroma client: %w", err)
 	}
 
-	// Get collection - if it doesn't exist or has validation issues, try to create it
-	collection, err := client.GetCollection(ctx, d.DBName)
+	// Get collection - if it doesn't exist, create it (L2 distance metric)
+	collection, err := openChromaCollection(ctx, client, d, "query")
 	if err != nil {
-		slog.Info("Chroma collection not found for query, creating new one", "collection", d.DBName, "error", err.Error())
-
-		// Create collection with L2 distance metric
-		collection, err = client.CreateCollection(ctx, d.DBName,
-			chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
-			chromago.WithIfNotExistsCreate(),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get/create chroma collection '%s' for query: %w", d.DBName, err)
-		}
-		slog.Info("Created new Chroma collection for query", "collection", d.DBName)
+		return nil, fmt.Errorf("failed to get/create chroma collection '%s' for query: %w", d.DBName, err)
 	}
 
 	// Convert to Chroma embedding
@@ -292,8 +316,7 @@ func (ds *DataSession) deleteChromaByMetadata(ctx context.Context, d *models.Dat
 	}
 
 	// Get collection with no-op embedder (we're not doing vector operations)
-	noopEmbedder := chromaEmbeddings.NewConsistentHashEmbeddingFunction()
-	collection, err := client.GetCollection(ctx, d.DBName, chromago.WithEmbeddingFunctionGet(noopEmbedder))
+	collection, err := client.GetCollection(ctx, d.DBName, chromago.WithEmbeddingFunctionGet(precomputedEmbeddings{}))
 	if err != nil {
 		return 0, fmt.Errorf("failed to get chroma collection '%s': %w", d.DBName, err)
 	}
@@ -339,8 +362,7 @@ func (ds *DataSession) queryChromaByMetadata(ctx context.Context, d *models.Data
 	}
 
 	// Get collection with no-op embedder (we're not doing vector operations)
-	noopEmbedder := chromaEmbeddings.NewConsistentHashEmbeddingFunction()
-	collection, err := client.GetCollection(ctx, d.DBName, chromago.WithEmbeddingFunctionGet(noopEmbedder))
+	collection, err := client.GetCollection(ctx, d.DBName, chromago.WithEmbeddingFunctionGet(precomputedEmbeddings{}))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get chroma collection '%s': %w", d.DBName, err)
 	}

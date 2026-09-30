@@ -235,6 +235,8 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 	ssoConfig := &sso.Config{
 		APISecret: config.TIBAPISecret,
 		LogLevel:  logLevel,
+		// The broker's state cookie is Secure exactly when the session cookie is.
+		CookieSecure: config.CookieSecure,
 	}
 	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
 	// The identity broker keeps process-wide state; skip it when a host
