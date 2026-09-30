@@ -139,6 +139,9 @@ type HubSpokeConfig struct {
 	ClientTLSCertPath string        `env:"EDGE_TLS_CERT_PATH"`
 	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
 	ClientTLSCAPath   string        `env:"EDGE_TLS_CA_PATH"`
+	// ClientTLSServerName is the name the control plane's certificate is
+	// checked against, when it differs from EDGE_CONTROL_ENDPOINT's host.
+	ClientTLSServerName string      `env:"EDGE_TLS_SERVER_NAME"`
 	SkipTLSVerify     bool          `env:"EDGE_SKIP_TLS_VERIFY" envDefault:"false"`
 	AllowInsecure     bool          `env:"EDGE_ALLOW_INSECURE" envDefault:"false"` // Security: Explicit opt-in for development
 	

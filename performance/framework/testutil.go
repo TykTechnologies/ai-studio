@@ -96,6 +96,11 @@ func NewBenchmarkDB(t *testing.B) *BenchmarkDB {
 		&models.LLMPlugin{},
 		&models.LLMChatRecord{},
 		&models.ProxyLog{},
+		// The rest of the analytics tables (analytics.Migrate; the recorder
+		// no longer creates them itself).
+		&models.LLMChatLogEntry{},
+		&models.ToolCallRecord{},
+		&models.ComplianceEvent{},
 		&models.EdgeInstance{},
 		&models.ModelPrice{},
 		&models.LLMSettings{},

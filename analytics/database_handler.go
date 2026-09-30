@@ -101,8 +101,6 @@ func (h *DatabaseHandler) start() {
 	h.recStarted = true
 	h.recMutex.Unlock()
 
-	initDB(h.db)
-
 	defaultBufferSize := 1000
 	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_SIZE")
 	if n := bufferSizeSetting.Load(); n > 0 {
@@ -463,8 +461,9 @@ func (h *DatabaseHandler) SetAsGlobalHandler() {
 }
 
 // Migrate creates or updates the analytics tables. pkg/studio runs it with
-// the other migrations under the cross-instance migration lock; the handler
-// runs it again at start, which is a no-op on an up-to-date schema.
+// the other migrations under the cross-instance migration lock. The handler
+// does not migrate: it may write to a database whose schema another instance
+// owns, so whoever owns the schema calls Migrate before recording starts.
 func Migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.LLMChatRecord{},
@@ -473,11 +472,4 @@ func Migrate(db *gorm.DB) error {
 		&models.ProxyLog{},
 		&models.ComplianceEvent{},
 	)
-}
-
-// initDB handles database migration - moved from analytics.go
-func initDB(db *gorm.DB) {
-	if err := Migrate(db); err != nil {
-		logger.Warnf("Error migrating analytics tables: %s", sanitizeError(err))
-	}
 }

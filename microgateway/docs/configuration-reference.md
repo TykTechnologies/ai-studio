@@ -151,7 +151,8 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | `EDGE_TLS_ENABLED` | bool | `false` | Enable TLS for edge connection |
 | `EDGE_TLS_CERT_PATH` | string | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | string | - | Client private key path |
-| `EDGE_TLS_CA_PATH` | string | - | CA certificate path |
+| `EDGE_TLS_CA_PATH` | string | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
+| `EDGE_TLS_SERVER_NAME` | string | - | Name the control plane's certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` |
 | `EDGE_SKIP_TLS_VERIFY` | bool | `false` | Skip TLS certificate verification |
 
 ### Namespace Configuration Examples
