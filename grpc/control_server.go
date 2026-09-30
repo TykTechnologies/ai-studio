@@ -1510,8 +1510,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
 		if err != nil {
-			log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt API key for microgateway")
-			encryptedAPIKey = resolvedAPIKey // Fallback to plaintext
+			// Never send the key in plaintext: leave the LLM out, as for
+			// tools, datasources and tokens.
+			log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt LLM API key - excluding LLM from snapshot")
+			continue
 		}
 
 		// Resolve secret references in metadata and serialize to JSON string
