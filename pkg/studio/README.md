@@ -116,8 +116,15 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but
-  Chroma datasources are then unavailable. See "Building without cgo" in
-  `features/Embedding.md`.
+  Chroma datasources are then unavailable: creating one (or switching one to
+  Chroma) is refused with a 400, `New` logs a warning naming any existing
+  ones, and a search across several datasources skips them. See "Building
+  without cgo" in `features/Embedding.md`.
+- **Configuration from the host.** `config.LoadFrom` applies the same
+  defaults as the environment loader but does not log the "environment
+  variable is not set" notices. The documentation site server runs only in
+  the standalone binary, so a `LoadFrom` configuration has no docs link
+  (`DocsURL` empty) unless the host sets `DOCS_URL_OVERRIDE`.
 - **Enterprise edition.** The enterprise module is the private repository
   `github.com/TykTechnologies/ai-studio-enterprise` (module path
   `github.com/TykTechnologies/ai-studio-enterprise/v2`, tagged with the same
@@ -133,5 +140,9 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 ## Example
 
 `examples/embed-host` is a small runnable host: `go run ./examples/embed-host`
-(after building the frontend), then open http://localhost:8090/.
+(after building the frontend), then open http://localhost:8090/. For the
+Enterprise Edition, run it with `-tags enterprise` and `TYK_AI_LICENSE` set
+(`examples/embed-host/main_enterprise.go` imports `enterprise/all` and passes
+the licence as `Options.License`). `-proxy-port` (or
+`EMBED_HOST_PROXY_PORT`) moves the AI gateway off its default port 9095.
 

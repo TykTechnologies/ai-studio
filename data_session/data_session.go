@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -81,61 +82,80 @@ func NewDataSession(sources map[uint]*models.Datasource) *DataSession {
 	}
 }
 
+// Search queries every datasource in the session and returns the combined
+// results. A datasource that fails (an unreachable store, a missing
+// embedder, Chroma in a build without cgo) is logged and skipped so the
+// others still answer; Search errors only when every datasource fails.
 func (ds *DataSession) Search(query string, n int) ([]schema.Document, error) {
 	var results = make([]schema.Document, 0)
+	var errs []error
 	for _, d := range ds.Sources {
-		embedder, err := ds.getEmbedder(d)
+		docs, err := ds.searchSource(d, query, n)
 		if err != nil {
-			return nil, err
+			slog.Warn("datasource search failed; skipping it", "datasource_id", d.ID, "datasource", d.Name, "type", d.DBSourceType, "err", err)
+			errs = append(errs, fmt.Errorf("datasource %q: %w", d.Name, err))
+			continue
 		}
-
-		store, err := ds.getStore(d, embedder)
-		if err != nil {
-			return nil, err
-		}
-
-		ctx, done := context.WithTimeout(context.Background(), 10*time.Second)
-		defer done()
-
-		docs, err := store.SimilaritySearch(ctx, query, n)
-		if err != nil {
-			return nil, err
-		}
-
-		for i := range docs {
-			// Convert ChromaDB MetadataValue types to actual Go values
-			convertedMetadata := make(map[string]any)
-			for k, v := range docs[i].Metadata {
-				// Check if value is a ChromaDB v2.MetadataValue and extract the actual value
-				if chromaVal, ok := chromaMetadataValue(v); ok {
-					convertedMetadata[k] = chromaVal
-				} else if pbVal, ok := v.(*structpb.Value); ok {
-					// Handle protobuf Value (for Pinecone compatibility)
-					convertedMetadata[k] = pbVal.AsInterface()
-				} else {
-					convertedMetadata[k] = v
-				}
-			}
-			docs[i].Metadata = convertedMetadata
-
-			enc, ok := docs[i].Metadata["encoding"]
-			if ok {
-				if enc == "base64" {
-					// base64 decode content
-					decodedContent, err := base64.StdEncoding.DecodeString(docs[i].PageContent)
-					if err != nil {
-						slog.Error("error decoding base64 content", "err", err)
-						continue
-					}
-					docs[i].PageContent = string(decodedContent)
-				}
-			}
-		}
-
 		results = append(results, docs...)
+	}
+	if len(errs) > 0 && len(errs) == len(ds.Sources) {
+		return nil, errors.Join(errs...)
 	}
 
 	return results, nil
+}
+
+// searchSource runs a similarity search against one datasource.
+func (ds *DataSession) searchSource(d *models.Datasource, query string, n int) ([]schema.Document, error) {
+	embedder, err := ds.getEmbedder(d)
+	if err != nil {
+		return nil, err
+	}
+
+	store, err := ds.getStore(d, embedder)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, done := context.WithTimeout(context.Background(), 10*time.Second)
+	defer done()
+
+	docs, err := store.SimilaritySearch(ctx, query, n)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range docs {
+		// Convert ChromaDB MetadataValue types to actual Go values
+		convertedMetadata := make(map[string]any)
+		for k, v := range docs[i].Metadata {
+			// Check if value is a ChromaDB v2.MetadataValue and extract the actual value
+			if chromaVal, ok := chromaMetadataValue(v); ok {
+				convertedMetadata[k] = chromaVal
+			} else if pbVal, ok := v.(*structpb.Value); ok {
+				// Handle protobuf Value (for Pinecone compatibility)
+				convertedMetadata[k] = pbVal.AsInterface()
+			} else {
+				convertedMetadata[k] = v
+			}
+		}
+		docs[i].Metadata = convertedMetadata
+
+		enc, ok := docs[i].Metadata["encoding"]
+		if ok {
+			if enc == "base64" {
+				// base64 decode content
+				decodedContent, err := base64.StdEncoding.DecodeString(docs[i].PageContent)
+				if err != nil {
+					slog.Error("error decoding base64 content", "err", err)
+					continue
+				}
+				docs[i].PageContent = string(decodedContent)
+			}
+		}
+	}
+
+	return docs, nil
 }
 
 // SearchByVector performs similarity search using a pre-computed embedding vector

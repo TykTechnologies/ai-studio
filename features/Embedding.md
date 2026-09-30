@@ -174,9 +174,8 @@ for the host-facing API.
 
 `BASE_PATH` (`AppConf.BasePath`, normalised to `/prefix` or `""`) serves the
 API and UI under a path prefix. `SITE_URL` (and `AUTH_SERVER_URL`, which
-defaults to it) should include the prefix: emails, the OAuth consent
-redirect and the OAuth metadata are built from it, and a warning is logged
-when it does not end with the base path.
+defaults to it) should include the prefix: email links are built from it,
+and a warning is logged when it does not end with the base path.
 
 - Routes stay registered at the root. `API.Handler()` (what
   `studio.HTTPHandler` and the standalone server serve) strips the prefix;
@@ -186,12 +185,17 @@ when it does not end with the base path.
   scoped to the base path.
 - Logout expires Studio's session cookie and the identity broker's
   `_gothic_session`, and nothing else (it used to expire every cookie on the
-  request, which would sign a user out of the host too).
+  request, which would sign a user out of the host too). Behaviour change
+  for standalone Studio too: logout no longer expires the CSRF cookie
+  (`_gorilla_csrf`, or `CSRF_COOKIE_NAME`). The cookie carries no
+  session, so this is intended and not exploitable.
 - Post-SSO redirects and the email-verified page's redirect go to the base
   path instead of `/`.
-- OAuth: the consent redirect and the authorization server metadata keep the
-  path of `SITE_URL`/`AUTH_SERVER_URL` (`url.JoinPath` instead of resolving
-  absolute paths, which dropped it). RFC 8414 discovery for a pathed issuer
+- OAuth: the consent redirect and the authorization server metadata
+  endpoints are the origin of `SITE_URL`/`AUTH_SERVER_URL` plus `BASE_PATH`
+  (`API.publicURL`). A path in `SITE_URL` without `BASE_PATH` is ignored, as
+  in v2.2.0, so a standalone Studio served from the root keeps root URLs;
+  the issuer is still `AUTH_SERVER_URL` verbatim. RFC 8414 discovery for a pathed issuer
   happens at the host root (`/.well-known/oauth-authorization-server/<base>`);
   `studio.OAuthMetadataHandler()` serves it there. The gateway's protected
   resource metadata is unchanged: the gateway keeps its own port.
@@ -302,7 +306,16 @@ One frontend build serves any base path:
 
 `examples/embed-host` is a runnable host: its own login page and cookie, an
 `Authenticator` over that cookie, Studio at `/ai-studio`, and the OAuth
-discovery document at the host root.
+discovery document at the host root. `-tags enterprise` builds the
+Enterprise Edition (`examples/embed-host/main_enterprise.go`, allowed by
+`make enterprise-import-guard` like the root `main_enterprise.go`, since a
+main package is never imported); `-proxy-port` sets the gateway port.
+
+`config.LoadFrom` (a host's settings) does not log the standalone binary's
+"environment variable is not set" notices, and leaves the docs link out
+(`DocsURL` empty, `DocsDisabled` set) unless `DOCS_URL_OVERRIDE` is given:
+the documentation site server runs only in `main`. `config.Load` and
+`config.Get` (the environment) behave as before.
 
 Verified by hand in a browser: the standalone binary with
 `BASE_PATH=/ai-studio` (registration, login, admin, portal and chat,
@@ -567,6 +580,13 @@ A host may build with `CGO_ENABLED=0` (the Tyk Dashboard's dev builds do), so
   through cgo. `data_session/chroma.go` is `//go:build cgo`, and
   `chroma_nocgo.go` stands in for it: Chroma datasources return
   `ErrChromaUnavailable`, and Chroma is left out of the vector store lists.
+  Creating a Chroma datasource, or switching one to Chroma, fails with
+  `services.ErrVectorStoreUnavailable` (400); an existing one can still be
+  edited or moved to another store. `studio.New` logs a warning naming the
+  existing Chroma datasources. `DataSession.Search` skips (and logs) a
+  datasource that fails, so the others still answer, and errors only when
+  every datasource fails (it used to abort on the first failure, as v2.2.0
+  did).
   chroma-go v0.4 was not an option: it adds an embedded runtime, and
   `chroma-go-local@v0.3.4`, which it requires, failed checksum-database
   verification (2026-09-29).
