@@ -135,6 +135,17 @@ for the host-facing API.
   `Options.TracerProvider`/`Propagator` (`tracing.Use`) and
   `Options.MeterProvider` (`metrics.InitWithProvider`) keep Studio off
   zerolog's and OpenTelemetry's globals.
+- `Options.AnalyticsSinks` ships analytics into the host's own pipeline.
+  `analytics.Tee` wraps Studio's database handler, which always stays
+  (budgets and spend read `llm_chat_records`), and gives each sink a copy of
+  every record (chat records, proxy logs, tool calls, compliance events and
+  edge batches; a request's proxy log and chat record reach an
+  `ExchangeRecorder` sink together). Each sink has a bounded queue
+  (`analytics.TeeQueueSize`, 10000) drained by its own goroutine, so a slow
+  sink loses records, counted in `Tee.Dropped` and logged, instead of
+  slowing requests, and a panicking sink is recovered. `Stop` gives the
+  sinks up to 5 seconds to drain and puts the database handler back as the
+  process-wide handler.
 - Package `ui` embeds the built frontend (`ui.FS`, rooted at the build
   directory); `api.New` takes it as an `fs.FS`, and `Options.UIAssets`
   overrides it.
