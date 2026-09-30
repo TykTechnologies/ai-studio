@@ -31,6 +31,7 @@ var (
 	ErrInvalidSubject    = errors.New("invalid binding subject")
 	ErrDuplicateRole     = errors.New("a role with that name already exists")
 	ErrDuplicateBinding  = errors.New("that role is already assigned to this subject")
+	ErrHostManaged       = errors.New("this role is assigned by the application AI Studio is embedded in; change it there")
 )
 
 // Subject identifies who a role is bound to.
@@ -68,7 +69,7 @@ type RoleSummary struct {
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`
 	IsSystem  bool   `json:"is_system"`
-	Via       string `json:"via,omitempty"`        // "direct" | "group"
+	Via       string `json:"via,omitempty"`        // "direct" | "group" | "host" (direct, assigned by the host application)| "group"
 	GroupID   uint   `json:"group_id,omitempty"`   // when Via == "group"
 	GroupName string `json:"group_name,omitempty"` // when Via == "group"
 }
@@ -147,6 +148,18 @@ type Service interface {
 	// IsLastOwner reports whether the user is the only Owner, and therefore
 	// cannot be deleted or demoted. Always false in CE.
 	IsLastOwner(ctx context.Context, userID uint) (bool, error)
+	// SyncHostRoles makes the user's host-managed role bindings (direct,
+	// global, Source RoleBindingSourceHost) match the role slugs the host
+	// application gives. Unknown slugs are logged and skipped; a role the
+	// user already holds through an administrator's binding is left to
+	// that binding; the last Owner binding is never removed. It writes
+	// nothing when they already match, and reports whether it changed
+	// anything. No-op in CE.
+	SyncHostRoles(ctx context.Context, userID uint, slugs []string) (bool, error)
+	// HasDirectAdministrator reports whether the user holds the
+	// Administrator or Owner role directly (not through a team): what the
+	// host's Admin flag controls. False in CE.
+	HasDirectAdministrator(ctx context.Context, userID uint) (bool, error)
 
 	// Seed creates the system roles and migrates legacy admin flags into
 	// bindings. Idempotent. No-op in CE.
