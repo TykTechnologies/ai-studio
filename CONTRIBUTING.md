@@ -61,6 +61,28 @@ If you want to work on a new idea of relatively small scope:
 If you want to work on a bigger idea, we **strongly** recommend that you start with
 some bugs or smaller features. It is always better to discuss your idea with our team first, before implementing it.
 
+### CI on pull requests from forks
+
+GitHub gives workflows on pull requests from forks no repository secrets, so
+they cannot check out the private enterprise module. A pull request from a
+fork runs the Community Edition checks (frontend, Go unit tests, Postgres
+tests, gorm and langchaingo verification, docs build); the enterprise unit
+tests, the enterprise audit tests, the UI end-to-end suite and the
+SentinelOne scan are skipped.
+
+Maintainers: once you have reviewed the change, run the skipped checks by
+pushing the pull request's head into this repository and opening a draft pull
+request from it, then merge the original pull request when that goes green:
+
+```bash
+git fetch origin pull/<number>/head
+git push origin FETCH_HEAD:refs/heads/oss/pr-<number>
+gh pr create --draft --head oss/pr-<number> --title "[CI mirror] #<number> (do not merge)"
+```
+
+Never switch these workflows to `pull_request_target`: that would run the
+fork's code with the repository's secrets.
+
 ### Downloading the project
 You need to clone Tyk AI Studio from GitHub to your GOPATH folder, or alternatively you can run `go get -d github.com/TykTechnologies/ai-studio` which automatically downloads project to the right path.
 

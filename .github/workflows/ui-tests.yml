@@ -27,6 +27,9 @@ env:
 jobs:
   ui-e2e-tests:
     name: UI E2E Tests
+    # The suite runs the enterprise build, and fork pull requests get no
+    # secrets to check out the private enterprise submodule (see CONTRIBUTING.md).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
