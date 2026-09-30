@@ -314,7 +314,7 @@ const Users = memo(() => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Users</Typography>
         <Can permission={P.USERS_WRITE}>
           <PrimaryButton

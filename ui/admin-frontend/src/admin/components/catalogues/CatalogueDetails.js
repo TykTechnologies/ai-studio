@@ -108,7 +108,7 @@ const CatalogueDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">LLM catalog details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

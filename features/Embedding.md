@@ -338,6 +338,26 @@ given a tarball made as the release job makes it, serves the full console
 under `/ai-studio`.
 
 
+## Pages without Studio's chrome
+
+A host that draws its own navigation (the Tyk Dashboard's top bar and
+sidebar) sets `Options.Chromeless`:
+
+- The bootstrap (`window.__TYK_AI_STUDIO__`) and `/auth/config` carry
+  `chrome: "none"` (`"full"` otherwise).
+- `layouts/MainLayout.js` then leaves out `TopNavigation` (the Admin /
+  Portal / Chat switch and the user menu) and the admin, portal and chat
+  drawers; pages take the full width.
+- Sticky page headers sit below `--studio-header-height`, a CSS variable
+  that defaults to the 64px top bar (`index.css`) and that
+  `runtimeConfig.applyChrome` sets to 0 when chromeless. Pages used to
+  hard-code `top="64px"`.
+- The host links straight to Studio's routes under the base path
+  (`/admin/llms`, `/portal/dashboard`, `/chat/...`). A navigation manifest
+  endpoint, so the host can build its menu from what the user may see,
+  follows separately.
+- `examples/embed-host -chromeless` shows it.
+
 ## Module layout
 
 A host imports the root module only. The root module does not require the

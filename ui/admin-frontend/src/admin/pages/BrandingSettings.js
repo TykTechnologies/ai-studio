@@ -269,7 +269,7 @@ const BrandingSettings = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Branding Settings</Typography>
         <Box display="flex" gap={2}>
           <Button

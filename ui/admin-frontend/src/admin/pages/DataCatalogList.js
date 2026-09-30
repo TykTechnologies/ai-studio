@@ -126,7 +126,7 @@ const DataCatalogList = () => {
   return (
     <>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Data catalogs</Typography>
           <Can permission={P.DATA_CATALOGUES_WRITE}>
             <PrimaryButton

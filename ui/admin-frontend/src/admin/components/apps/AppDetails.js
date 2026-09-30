@@ -634,7 +634,7 @@ const AppDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">App details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

@@ -54,7 +54,7 @@ const DataCatalogDetail = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Data catalog details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

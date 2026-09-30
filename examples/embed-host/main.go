@@ -65,6 +65,7 @@ func main() {
 	addr := flag.String("addr", ":8090", "listen address")
 	dbPath := flag.String("db", "embed-host.db", "SQLite database for Studio")
 	uiDir := flag.String("ui", "", "directory holding the unpacked UI release assets (required with -tags studio_noui)")
+	chromeless := flag.Bool("chromeless", false, "render Studio's pages without its top bar and drawers, as a host that draws its own navigation would")
 	flag.Parse()
 
 	// Studio's configuration comes from the host, not the environment.
@@ -94,6 +95,8 @@ func main() {
 		Auth:      cookieAuth{},
 		LoginURL:  "/login",
 		LogoutURL: "/logout",
+		// A host that draws its own navigation sets Chromeless.
+		Chromeless: *chromeless,
 	}
 	if *uiDir != "" {
 		opts.UIAssets = os.DirFS(*uiDir)

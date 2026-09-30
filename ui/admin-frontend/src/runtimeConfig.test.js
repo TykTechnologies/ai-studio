@@ -7,6 +7,8 @@ import {
   hostLoginURL,
   csrfTokenHeader,
   csrfTokenURL,
+  isChromeless,
+  applyChrome,
 } from "./runtimeConfig";
 
 describe("runtimeConfig", () => {
@@ -53,5 +55,18 @@ describe("runtimeConfig", () => {
     expect(hostLoginURL()).toBe("/login");
     expect(csrfTokenHeader()).toBe("X-Host-CSRF");
     expect(csrfTokenURL()).toBe("/host/csrf");
+  });
+
+  it("draws its own chrome unless the host asks for pages only", () => {
+    const root = document.createElement("div");
+    expect(isChromeless()).toBe(false);
+    applyChrome(root);
+    expect(root.style.getPropertyValue("--studio-header-height")).toBe("");
+
+    window.__TYK_AI_STUDIO__ = { chrome: "none" };
+    expect(isChromeless()).toBe(true);
+    applyChrome(root);
+    expect(root.style.getPropertyValue("--studio-header-height")).toBe("0px");
+    expect(root.dataset.studioChrome).toBe("none");
   });
 });

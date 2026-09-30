@@ -1,3 +1,9 @@
+/* Height of the console's top bar; 0 when the host draws the navigation
+   (runtimeConfig.applyChrome). Sticky page headers sit below it. */
+:root {
+  --studio-header-height: 64px;
+}
+
 @font-face {
   font-family: Inter-Bold;
   src: url('./common/fonts/Inter-Bold.woff2') format('woff2'),

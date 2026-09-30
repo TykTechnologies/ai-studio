@@ -197,7 +197,7 @@ const CatalogBrowse = ({ type: routeType = "" }) => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box>
           <Typography variant="headingXLarge" component="h1">
             {heading}

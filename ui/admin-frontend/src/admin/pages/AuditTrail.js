@@ -363,7 +363,7 @@ const AuditTrail = () => {
   };
 
   const header = (
-    <TitleBox top="64px">
+    <TitleBox top="var(--studio-header-height)">
       <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
         <HistoryIcon sx={{ fontSize: 32 }} />
         <Typography variant="headingXLarge">Audit Trail</Typography>

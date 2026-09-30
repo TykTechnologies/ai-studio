@@ -123,7 +123,7 @@ const FilterList = memo(() => {
   if (config && !config.is_enterprise) {
     return (
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Filters</Typography>
         </TitleBox>
         <ContentBox>
@@ -139,7 +139,7 @@ const FilterList = memo(() => {
   return (
     <>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Filters</Typography>
           <Can permission={P.FILTERS_WRITE}>
             <PrimaryButton

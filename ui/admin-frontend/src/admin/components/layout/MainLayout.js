@@ -8,11 +8,12 @@ import SyncStatusBanner from "../common/SyncStatusBanner";
 import PermissionDeniedToaster from "../rbac/PermissionDeniedToaster";
 import { CONTENT_MAX_WIDTH } from "../../../constants/layout";
 
-const MainLayout = ({ hideAppBar }) => {
+// hideDrawer leaves out the admin navigation, for a host that draws its own.
+const MainLayout = ({ hideAppBar, hideDrawer }) => {
   return (
     <Box sx={{ display: "flex" }}>
       {!hideAppBar && <MyAppBar />}
-      <Drawer />
+      {!hideDrawer && <Drawer />}
 
       <Box
         component="main"

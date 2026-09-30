@@ -262,7 +262,7 @@ const AttestationTemplates = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Attestation Templates</Typography>
         <PrimaryButton startIcon={<AddIcon />} onClick={handleOpenCreate}>
           Add Template

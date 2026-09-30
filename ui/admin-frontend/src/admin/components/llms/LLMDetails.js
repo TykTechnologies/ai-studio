@@ -416,7 +416,7 @@ const LLMDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">LLM provider details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

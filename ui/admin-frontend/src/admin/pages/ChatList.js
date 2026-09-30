@@ -181,7 +181,7 @@ const ChatList = () => {
   return (
     <>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Chats</Typography>
           <Can permission={P.CHATS_WRITE}>
             <PrimaryButton

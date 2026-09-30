@@ -230,7 +230,7 @@ const CatalogueForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           {id ? "Edit LLM catalog" : "Add LLM catalog"}
         </Typography>

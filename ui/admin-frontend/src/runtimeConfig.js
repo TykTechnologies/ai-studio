@@ -50,3 +50,18 @@ export const hostLogoutURL = () => bootstrap().logoutURL || "";
 // and sent back in that same request header.
 export const csrfTokenHeader = () => bootstrap().csrfTokenHeader || "X-CSRF-Token";
 export const csrfTokenURL = () => bootstrap().csrfTokenURL || withBase("/csrf-token");
+
+// chrome is "none" when the host application draws the navigation: the
+// console then renders pages only, without its top bar and drawers.
+export const isChromeless = () => bootstrap().chrome === "none";
+
+// The height of the console's top bar, as the CSS variable
+// --studio-header-height that sticky page headers sit below. Without the
+// bar it is 0.
+export const HEADER_HEIGHT_VAR = "--studio-header-height";
+export const applyChrome = (root = typeof document !== "undefined" ? document.documentElement : null) => {
+  if (root && isChromeless()) {
+    root.style.setProperty(HEADER_HEIGHT_VAR, "0px");
+    root.dataset.studioChrome = "none";
+  }
+};

@@ -296,7 +296,7 @@ const LLMSettingsForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           {id ? "Edit model call setting" : "Add model call setting"}
         </Typography>

@@ -94,7 +94,7 @@ const EmbedderList = () => {
 
   return (
     <Box sx={{ p: 0 }}>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Embedders</Typography>
         <Can permission={P.EMBEDDERS_WRITE}>
           <PrimaryButton variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/admin/embedders/new")}>

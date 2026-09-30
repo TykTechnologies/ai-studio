@@ -147,7 +147,7 @@ const ModelRouterList = () => {
   return (
     <Box sx={{ p: 0 }}>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model Routers</Typography>
           <Can permission={P.MODEL_ROUTERS_WRITE}>
             <PrimaryButton

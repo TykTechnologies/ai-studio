@@ -120,7 +120,7 @@ const ChatDashboard = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Chats</Typography>
       </TitleBox>
       <ContentBox>

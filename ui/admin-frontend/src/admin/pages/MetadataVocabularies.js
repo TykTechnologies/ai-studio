@@ -167,7 +167,7 @@ const MetadataVocabularies = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <LabelOutlinedIcon />
           <Typography variant="headingXLarge">Metadata Vocabularies</Typography>

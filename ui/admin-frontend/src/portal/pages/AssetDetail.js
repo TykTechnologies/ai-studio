@@ -664,7 +664,7 @@ const AssetDetail = ({ type }) => {
 
   return (
     <>
-      <TitleBox top="64px" sx={{ alignItems: "flex-start", gap: 2, flexWrap: "wrap" }}>
+      <TitleBox top="var(--studio-header-height)" sx={{ alignItems: "flex-start", gap: 2, flexWrap: "wrap" }}>
         <Box sx={{ display: "flex", gap: 2, alignItems: "center", minWidth: 0 }}>
           <AssetAvatar name={attrs.name} seed={itemKey(item)} logoUrl={attrs.logo_url} size={64} />
           <Box sx={{ minWidth: 0 }}>

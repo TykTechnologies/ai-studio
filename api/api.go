@@ -1406,6 +1406,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	cfg.LogoutURL = boot.LogoutURL
 	cfg.CSRFTokenHeader = boot.CSRFTokenHeader
 	cfg.CSRFTokenURL = boot.CSRFTokenURL
+	cfg.Chrome = boot.Chrome
 	if boot.AuthMode == "host" {
 		cfg.TIBEnabled = false
 	}

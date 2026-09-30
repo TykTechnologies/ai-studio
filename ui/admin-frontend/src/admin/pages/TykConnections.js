@@ -220,7 +220,7 @@ const TykConnections = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Tyk Connections</Typography>
         <Can permission={P.TYK_CONNECTIONS_WRITE}>{addButton}</Can>
       </TitleBox>

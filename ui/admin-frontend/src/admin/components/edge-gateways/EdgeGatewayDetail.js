@@ -146,7 +146,7 @@ const EdgeGatewayDetail = () => {
   if (error && !edgeGateway) {
     return (
       <Box>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Edge Gateway Details</Typography>
           <SecondaryLinkButton
             component={Link}
@@ -168,7 +168,7 @@ const EdgeGatewayDetail = () => {
   if (!edgeGateway) {
     return (
       <Box>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Edge Gateway Not Found</Typography>
           <SecondaryLinkButton
             component={Link}
@@ -196,7 +196,7 @@ const EdgeGatewayDetail = () => {
 
   return (
     <Box>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box display="flex" alignItems="center" gap={2}>
           <Typography variant="headingXLarge">
             {edgeGateway.edgeId}

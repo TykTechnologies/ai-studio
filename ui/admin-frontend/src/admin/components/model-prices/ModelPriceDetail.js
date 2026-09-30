@@ -51,7 +51,7 @@ const ModelPriceDetail = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Model price details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

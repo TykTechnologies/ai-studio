@@ -176,7 +176,7 @@ const SemanticRouterList = () => {
   return (
     <Box sx={{ p: 0 }}>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Semantic Routers</Typography>
           <Can permission={P.SEMANTIC_ROUTERS_WRITE}>
             <PrimaryButton
