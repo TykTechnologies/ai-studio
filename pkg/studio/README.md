@@ -33,7 +33,7 @@ s, err := studio.New(studio.Options{
 
 	// The host signs users in; Studio provisions and authorises them.
 	Auth:      hostAuthenticator, // Authenticate(*http.Request) (*studio.Identity, error)
-	LoginURL:  "/login",
+	LoginURL:  "/login?next={return_to}", // {return_to}: the page to come back to
 	LogoutURL: "/logout",
 	CSRF:      hostCSRFMiddleware, // optional; Studio's own otherwise
 })
@@ -56,7 +56,11 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - `HTTPHandler` is the admin API and UI, served under `Config.BasePath`; it
   strips the prefix itself. Session and CSRF cookies are scoped to the base
   path, and logout leaves the host's cookies alone. The console follows the
-  base path and, with `Auth`, sends signed-out users to `LoginURL`.
+  base path and, with `Auth`, sends signed-out users to `LoginURL`. A
+  `{return_to}` placeholder in `LoginURL` is replaced with the page they
+  asked for (URL-encoded path under the base path, with query and hash), so
+  the host can bring them back to it; validate it as a local path before
+  redirecting. Without the placeholder, `LoginURL` is used as it is.
 - `Chromeless` renders pages only, without Studio's top bar and navigation
   drawers, for a host that draws its own navigation and links to Studio's
   routes under the base path. `GET <base>/common/nav` returns the surfaces
@@ -116,8 +120,15 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but
-  Chroma datasources are then unavailable. See "Building without cgo" in
-  `features/Embedding.md`.
+  Chroma datasources are then unavailable: creating one (or switching one to
+  Chroma) is refused with a 400, `New` logs a warning naming any existing
+  ones, and a search across several datasources skips them. See "Building
+  without cgo" in `features/Embedding.md`.
+- **Configuration from the host.** `config.LoadFrom` applies the same
+  defaults as the environment loader but does not log the "environment
+  variable is not set" notices. The documentation site server runs only in
+  the standalone binary, so a `LoadFrom` configuration has no docs link
+  (`DocsURL` empty) unless the host sets `DOCS_URL_OVERRIDE`.
 - **Enterprise edition.** The enterprise module is the private repository
   `github.com/TykTechnologies/ai-studio-enterprise` (module path
   `github.com/TykTechnologies/ai-studio-enterprise/v2`, tagged with the same
@@ -133,5 +144,9 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 ## Example
 
 `examples/embed-host` is a small runnable host: `go run ./examples/embed-host`
-(after building the frontend), then open http://localhost:8090/.
+(after building the frontend), then open http://localhost:8090/. For the
+Enterprise Edition, run it with `-tags enterprise` and `TYK_AI_LICENSE` set
+(`examples/embed-host/main_enterprise.go` imports `enterprise/all` and passes
+the licence as `Options.License`). `-proxy-port` (or
+`EMBED_HOST_PROXY_PORT`) moves the AI gateway off its default port 9095.
 

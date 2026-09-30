@@ -5,6 +5,7 @@
 // embedded mode by hand; see pkg/studio/README.md.
 //
 //	go run ./examples/embed-host -addr :8090
+//	TYK_AI_LICENSE=... go run -tags enterprise ./examples/embed-host   # Enterprise Edition
 //
 // Then open http://localhost:8090/, sign in as "admin" (a Studio
 // administrator) or any other name (a regular user), and follow the link
@@ -22,9 +23,12 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,6 +44,10 @@ const (
 )
 
 var validName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+
+// licenseSource supplies the Enterprise licence (main_enterprise.go); nil in
+// the Community Edition.
+var licenseSource func() string
 
 // cookieAuth is the host's authenticator: whoever the host_user cookie names
 // is signed in. A real host would check its own session here.
@@ -66,6 +74,7 @@ func main() {
 	dbPath := flag.String("db", "embed-host.db", "SQLite database for Studio")
 	uiDir := flag.String("ui", "", "directory holding the unpacked UI release assets (required with -tags studio_noui)")
 	chromeless := flag.Bool("chromeless", false, "render Studio's pages without its top bar and drawers, as a host that draws its own navigation would")
+	proxyPort := flag.String("proxy-port", envOr("EMBED_HOST_PROXY_PORT", "9095"), "port of Studio's AI gateway (env EMBED_HOST_PROXY_PORT)")
 	flag.Parse()
 
 	// Studio's configuration comes from the host, not the environment.
@@ -79,7 +88,7 @@ func main() {
 		"TELEMETRY_ENABLED":   "false",
 		"MARKETPLACE_ENABLED": "false",
 		"DEVMODE":             "true", // plain HTTP: cookies without the Secure flag
-		"PROXY_PORT":          "9095",
+		"PROXY_PORT":          *proxyPort,
 	}
 	conf := config.LoadFrom(func(key string) string { return settings[key] })
 
@@ -93,10 +102,11 @@ func main() {
 		DB:        db,
 		Version:   "embed-host",
 		Auth:      cookieAuth{},
-		LoginURL:  "/login",
+		LoginURL:  "/login?next={return_to}", // the console fills in the page a signed-out visitor asked for
 		LogoutURL: "/logout",
 		// A host that draws its own navigation sets Chromeless.
 		Chromeless: *chromeless,
+		License:    licenseSource,
 	}
 	if *uiDir != "" {
 		opts.UIAssets = os.DirFS(*uiDir)
@@ -146,6 +156,13 @@ func main() {
 	}
 }
 
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
 func home(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -168,11 +185,36 @@ func login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: hostCookie, Value: name, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
-		http.Redirect(w, r, basePath+"/", http.StatusFound)
+		http.Redirect(w, r, returnTo(r.FormValue("next")), http.StatusFound)
 		return
 	}
-	fmt.Fprint(w, `<!doctype html><title>Embed host sign-in</title>
+	fmt.Fprintf(w, `<!doctype html><title>Embed host sign-in</title>
 <h1>Embed host sign-in</h1>
-<form method="post"><label>User <input name="user" value="admin"></label> <button>Sign in</button></form>
-<p>"admin" is a Studio administrator; any other name is a regular user.</p>`)
+<form method="post"><label>User <input name="user" value="admin"></label> <input type="hidden" name="next" value="%s"> <button>Sign in</button></form>
+<p>"admin" is a Studio administrator; any other name is a regular user.</p>`, html.EscapeString(r.URL.Query().Get("next")))
+}
+
+// returnTo is where to go after signing in: the Studio page the console
+// passed as next, when it is one (a path under the base path, never another
+// site), else Studio's home.
+func returnTo(next string) string {
+	home := basePath + "/"
+	if strings.ContainsAny(next, "\\\r\n") {
+		return home
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || !strings.HasPrefix(u.Path, "/") {
+		return home
+	}
+	// Judge the cleaned path, so "/ai-studio/../x" or "//evil.example" cannot
+	// pass the prefix check and still leave Studio (or the site).
+	clean := path.Clean(u.Path)
+	if clean != basePath && !strings.HasPrefix(clean, basePath+"/") {
+		return home
+	}
+	if strings.HasSuffix(u.Path, "/") && clean != "/" {
+		clean += "/"
+	}
+	u.Path = clean
+	return u.String()
 }

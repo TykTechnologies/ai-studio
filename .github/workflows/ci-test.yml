@@ -176,6 +176,12 @@ jobs:
         if: matrix.edition == 'ent'
         run: make ent-link
 
+      # go vet over our own code; third_party/ (the vendored gorm) is left
+      # out, see third_party/README.md. The ent edition also vets the
+      # enterprise module.
+      - name: Go vet
+        run: scripts/vet.sh ${{ matrix.edition }}
+
       # A host embedding pkg/studio may build without cgo (the Dashboard's dev
       # builds do), so pkg/studio must compile with CGO_ENABLED=0.
       - name: Build pkg/studio without cgo
@@ -287,13 +293,32 @@ jobs:
         run: |
           go test -v -race -p 1 -count=1 ./chat_session/ ./config/ ./startup/
 
-      # The edge and the enterprise audit suite get databases of their own:
-      # the edge schema has its own apps/llms tables.
-      - name: Create edge and audit databases
+      # The cluster code runs on every Postgres deployment: the event log and
+      # node registry, the shared LISTEN connection, durable pushes and the
+      # leader lease. Each test works in a schema of its own; the push and
+      # lease tests run their SQLite and Postgres cases side by side.
+      - name: Run cluster Postgres tests
+        run: |
+          go test -v -race -p 1 -count=1 \
+            ./pkg/cluster/ ./pkg/pglisten/ ./services/pushes/ ./services/scheduler/
+
+      # The edge, the enterprise audit suite and the budget tracker test get
+      # databases of their own: the edge schema has its own apps/llms tables,
+      # and the budget test drops and recreates the tables it uses.
+      - name: Create edge, audit and budget databases
         run: |
           command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
           PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE mgw_test'
           PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE audit_test'
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE budget_test'
+
+      # Pushes and the event-bus relay across several control-server replicas
+      # on one database, and the budget usage tracker's queries.
+      - name: Run gRPC push, relay and budget Postgres tests
+        env:
+          BUDGET_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/budget_test?sslmode=disable
+        run: |
+          go test -v -race -count=1 -run 'TestPushCluster_|TestRelay_|_Postgres' ./grpc/
 
       # Analytics writer, budget ledger and budget sync against Postgres
       # (ON CONFLICT, GREATEST, enforced foreign keys), and the edge schema
@@ -304,6 +329,13 @@ jobs:
           MGW_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/mgw_test?sslmode=disable
         run: |
           go test -v -race -count=1 -run 'Postgres' ./internal/services/ ./internal/database/
+
+      # Real edges against several Studio replicas sharing DATABASE_URL (a
+      # schema per test): pushes land whatever happens to the connections.
+      - name: Run microgateway cluster Postgres tests
+        working-directory: microgateway
+        run: |
+          go test -v -race -count=1 ./tests/cluster/
 
       - name: Run enterprise audit and webhooks Postgres tests
         if: env.FORK_PR != 'true'

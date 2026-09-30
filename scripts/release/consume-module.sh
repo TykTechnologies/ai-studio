@@ -60,14 +60,24 @@ GOMOD
   echo 'func main() { fmt.Println(studio.ErrAlreadyRunning) }'
 } > main.go
 
-# A tag pushed seconds ago may not be on the proxy yet; retry for a while.
+# A tag pushed seconds ago may not be on the proxy yet, and the proxy can
+# take a while to see it (it caches "not found" for some minutes). Retry with
+# a doubling backoff, capped at 5 minutes between attempts, for up to
+# CONSUME_MODULE_DEADLINE seconds (30 minutes by default).
+DEADLINE=$(( $(date +%s) + ${CONSUME_MODULE_DEADLINE:-1800} ))
 get() {
-  for i in 1 2 3 4 5 6; do
+  local delay=15 attempt=1
+  while :; do
     if go get "$1@$VERSION"; then return 0; fi
-    echo "consume-module: go get $1@$VERSION failed (attempt $i); retrying" >&2
-    sleep 20
+    if [ $(( $(date +%s) + delay )) -gt "$DEADLINE" ]; then
+      echo "consume-module: go get $1@$VERSION still failing after $attempt attempts; giving up" >&2
+      return 1
+    fi
+    echo "consume-module: go get $1@$VERSION failed (attempt $attempt); retrying in ${delay}s" >&2
+    sleep "$delay"
+    attempt=$(( attempt + 1 ))
+    delay=$(( delay * 2 > 300 ? 300 : delay * 2 ))
   done
-  return 1
 }
 get "$CORE"
 [ "$EDITION" = ent ] && get "$ENT"

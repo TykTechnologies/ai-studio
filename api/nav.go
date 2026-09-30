@@ -451,11 +451,10 @@ func (a *API) getNavManifest(c *gin.Context) {
 			plugins, err = a.service.PluginManifestService.GetSidebarMenuItemsFor(allow)
 			logNavError("admin plugin sections", err)
 		}
-		localSignIn := a.config == nil || a.config.LocalAccountsEnabled()
 		in := navInputs{
 			features:          feature,
 			enterprise:        config.IsEnterprise(),
-			identityProviders: localSignIn && a.showSSOConfig(u, perms),
+			identityProviders: a.showSSOConfig(u, perms), // off when the host signs users in
 			plugins:           plugins,
 		}
 		if admin := filterNav(adminNav(in), func(item NavItem) bool {

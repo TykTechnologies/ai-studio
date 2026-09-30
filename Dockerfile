@@ -78,8 +78,8 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /build/tyk-ai-studio ./tyk-ai-studio
 
-# Copy templates directory
-COPY templates ./templates
+# Copy the templates (only the .tmpl files; templates/ also holds Go source)
+COPY templates/*.tmpl ./templates/
 
 # Copy docs_links.json file
 COPY config/docs_links.json ./config/docs_links.json

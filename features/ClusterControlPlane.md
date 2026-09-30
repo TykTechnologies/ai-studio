@@ -296,6 +296,12 @@ three in-process replicas sharing a schema, and real microgateway edge
 clients over gRPC (`microgateway/tests/cluster`). Every Go test here also
 runs on SQLite, and on Postgres when `DATABASE_URL` is set.
 
+CI runs them on Postgres in the "Go Postgres Tests" job
+(`.github/workflows/ci-test.yml`): `pkg/cluster`, `pkg/pglisten`,
+`services/pushes` and `services/scheduler` whole, `grpc` filtered to
+`TestPushCluster_|TestRelay_|_Postgres`, and `microgateway/tests/cluster`,
+all with `-race`. The unit jobs cover the SQLite cases.
+
 Where they are (8b):
 - `services/pushes`: the coordinator's rules with fake streams (targets,
   claims, requeues, timeouts, deadlines, attempts, checksum verification,
