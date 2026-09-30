@@ -183,8 +183,8 @@ when it does not end with the base path.
 `studio.Options.Auth` (an `auth.Authenticator`) lets the host authenticate
 every request: `Authenticate(r)` returns the signed-in user as a
 `studio.Identity` (`services.HostIdentity`: subject, email, name, admin,
-groups), nil when the request has no host identity, or an error to reject
-it.
+groups, roles), nil when the request has no host identity, or an error to
+reject it.
 
 - It runs first in `auth.GetAuthenticatedUser`, so `AuthMiddleware`, RBAC,
   the audit trail (`auth_method = host`) and every handler reading `"user"`
@@ -202,6 +202,20 @@ it.
   and group rules apply. Unchanged identities write nothing but a login
   stamp at most every 15 minutes. Disabled users are refused, and an email
   linked to another subject is a conflict.
+- **Roles (Enterprise).** `Roles` names Studio roles by slug (`editor`,
+  `viewer`, a custom role's slug). They become host-managed role bindings
+  (`role_bindings.source = 'host'`, direct and global): added and removed
+  as the host says on each sign-in (nil leaves them, an empty list removes
+  them; unknown slugs are logged and skipped). Roles an administrator
+  assigns in Studio are never touched, and a role the user already holds
+  that way stays with that binding. Studio's administration shows host
+  roles locked (`via: "host"` on the user's roles), keeps them when an
+  administrator saves the user's roles, and refuses to delete one
+  (`409`). `Admin` still decides the Administrator role, compared with the
+  user's direct Administrator (or Owner) binding: a team granting
+  Administrator is not a difference to write on every request. The host
+  cannot remove the last Owner, by `Admin` or `Roles`: the Owner role is
+  kept and logged, and the user is still signed in.
 - Host users are externally managed like SSO users
   (`User.IsExternallyManaged`): no API key unless
   `ALLOW_SSO_USER_API_KEYS`, and an issued key lapses once the user stops

@@ -1415,6 +1415,7 @@ TABLE role_bindings
   column scope_type character varying(varchar) nullable=YES len=32
   column scope_id character varying(varchar) nullable=YES len=64
   column created_by bigint(int8) nullable=YES precision=64 scale=0
+  column source character varying(varchar) nullable=NO len=16 default=''::character varying
   column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE roles
   constraint roles_pkey PRIMARY KEY (id)

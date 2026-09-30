@@ -1295,6 +1295,7 @@ TABLE role_bindings
   column `scope_type` text
   column `scope_id` text
   column `created_by` integer
+  column `source` text NOT NULL DEFAULT ""
   column `created_at` datetime
   constraint CONSTRAINT `fk_role_bindings_role` FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`)
   index CREATE INDEX `idx_role_bindings_role` ON `role_bindings`(`role_id`)

@@ -42,6 +42,12 @@ const (
 	RoleBindingSubjectGroup = "group"
 )
 
+// RoleBindingSourceHost marks a binding the application embedding Studio
+// assigns (services.HostIdentity.Roles): the host keeps it in step, and
+// Studio's administration cannot remove it. An empty source is a binding an
+// administrator (or Studio itself) made.
+const RoleBindingSourceHost = "host"
+
 // Role is a named bundle of permissions. Permissions are stored as the
 // catalogue strings ("llms:read"); the single wildcard "*" is reserved for
 // the Owner and Administrator system roles.
@@ -84,8 +90,11 @@ type RoleBinding struct {
 	ScopeType   string    `gorm:"size:32;uniqueIndex:idx_role_bindings_unique,priority:4" json:"scope_type"`
 	ScopeID     string    `gorm:"size:64;uniqueIndex:idx_role_bindings_unique,priority:5" json:"scope_id"`
 	CreatedBy   uint      `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
-	Role        *Role     `gorm:"foreignKey:RoleID" json:"role,omitempty"`
+	// Source is RoleBindingSourceHost for a binding the host application
+	// manages, empty otherwise.
+	Source    string    `gorm:"size:16;not null;default:''" json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+	Role      *Role     `gorm:"foreignKey:RoleID" json:"role,omitempty"`
 }
 
 // TableName pins the table name.
