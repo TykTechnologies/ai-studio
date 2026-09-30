@@ -102,8 +102,10 @@ class PluginLoaderService {
 
       this.loadedComponents.set(component_tag, WebComponentWrapper);
 
-      // Mark plugin as loaded
-      await this.markPluginLoaded(plugin_id);
+      // Viewing a plugin page writes nothing on the server. It used to POST
+      // /plugins/:id/ui/load, which needs plugins:write (a false "permission
+      // denied" for read-only users) and, for administrators, wrote the
+      // plugin row, an audit entry and a config-sync refresh on every view.
 
       console.log(`Successfully loaded Web Component: ${component_tag}`);
       return WebComponentWrapper;
@@ -221,9 +223,6 @@ class PluginLoaderService {
       const Component = factory();
 
       this.loadedComponents.set(exposed, Component);
-
-      // Mark plugin as loaded
-      await this.markPluginLoaded(plugin_id);
 
       console.log(`Successfully loaded Module Federation component: ${exposed}`);
       return Component;
@@ -459,18 +458,6 @@ class PluginLoaderService {
     } catch (error) {
       console.error('Failed to get sidebar menu items:', error);
       return [];
-    }
-  }
-
-  /**
-   * Mark a plugin as loaded
-   * @param {number} pluginId - Plugin ID
-   */
-  async markPluginLoaded(pluginId) {
-    try {
-      await apiClient.post(`/plugins/${pluginId}/ui/load`);
-    } catch (error) {
-      console.warn(`Failed to mark plugin ${pluginId} as loaded:`, error);
     }
   }
 

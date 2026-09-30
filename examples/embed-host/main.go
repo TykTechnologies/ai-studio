@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strings"
 	"syscall"
 	"time"
 
@@ -93,7 +94,7 @@ func main() {
 		DB:        db,
 		Version:   "embed-host",
 		Auth:      cookieAuth{},
-		LoginURL:  "/login",
+		LoginURL:  "/login?next={return_to}", // the console fills in the page a signed-out visitor asked for
 		LogoutURL: "/logout",
 		// A host that draws its own navigation sets Chromeless.
 		Chromeless: *chromeless,
@@ -168,11 +169,21 @@ func login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: hostCookie, Value: name, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
-		http.Redirect(w, r, basePath+"/", http.StatusFound)
+		http.Redirect(w, r, returnTo(r.FormValue("next")), http.StatusFound)
 		return
 	}
-	fmt.Fprint(w, `<!doctype html><title>Embed host sign-in</title>
+	fmt.Fprintf(w, `<!doctype html><title>Embed host sign-in</title>
 <h1>Embed host sign-in</h1>
-<form method="post"><label>User <input name="user" value="admin"></label> <button>Sign in</button></form>
-<p>"admin" is a Studio administrator; any other name is a regular user.</p>`)
+<form method="post"><label>User <input name="user" value="admin"></label> <input type="hidden" name="next" value="%s"> <button>Sign in</button></form>
+<p>"admin" is a Studio administrator; any other name is a regular user.</p>`, html.EscapeString(r.URL.Query().Get("next")))
+}
+
+// returnTo is where to go after signing in: the Studio page the console
+// passed as next, when it is one (a path under the base path, never another
+// site), else Studio's home.
+func returnTo(next string) string {
+	if (next == basePath || strings.HasPrefix(next, basePath+"/")) && !strings.ContainsAny(next, "\\\r\n") {
+		return next
+	}
+	return basePath + "/"
 }
