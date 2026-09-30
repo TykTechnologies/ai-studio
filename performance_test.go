@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"context"
 	"fmt"
 	"os"
@@ -25,7 +26,10 @@ import (
 func setupPerformanceTestDB(t *testing.T) (*gorm.DB, *QueryCountLogger) {
 	queryLogger := &QueryCountLogger{}
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	// A file, not ":memory:": every pooled connection to ":memory:" is a
+	// database of its own, so the control server's background workers
+	// (budget sync, analytics) saw no tables and the test failed at random.
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "perf.db")+"?_busy_timeout=10000&_journal_mode=WAL"), &gorm.Config{
 		Logger: queryLogger,
 	})
 	require.NoError(t, err)
@@ -160,6 +164,10 @@ func TestAnalyticsPulseBatchProcessing_Performance(t *testing.T) {
 	db, _ := setupPerformanceTestDB(t)
 
 	ctx := context.Background()
+	// The analytics recorder is process-wide: without a reset it keeps
+	// writing to the database of whichever test started it first.
+	analytics.ResetHandler()
+	t.Cleanup(analytics.ResetHandler)
 	analytics.InitDefault(ctx, db)
 
 	config := &grpc.Config{
