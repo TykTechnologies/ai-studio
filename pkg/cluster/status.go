@@ -16,6 +16,11 @@ type NodeStatus struct {
 	Version   string    `json:"version"`
 	StartedAt time.Time `json:"started_at"`
 	LastSeen  time.Time `json:"last_seen"`
+	// Label names the replica for operators (empty when it has none).
+	Label string `json:"label"`
+	// LeaderEligible is false for a replica that never takes the leader
+	// lease (a headless control plane).
+	LeaderEligible bool `json:"leader_eligible"`
 	// Edges is how many connected edges hold a stream to this replica.
 	Edges int64 `json:"edges"`
 	// Leader: this replica holds the leader lease.
@@ -93,6 +98,7 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 		st.Nodes = append(st.Nodes, NodeStatus{
 			NodeID: n.NodeID, Hostname: n.Hostname, Version: n.Version,
 			StartedAt: n.StartedAt, LastSeen: n.LastSeen,
+			Label: n.Label, LeaderEligible: n.CanLead(),
 			Edges: edges[n.NodeID], Leader: n.NodeID == leader, Self: n.NodeID == self,
 		})
 	}

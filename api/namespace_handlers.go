@@ -172,6 +172,7 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 	for i, edge := range edges {
 		response.Data[i] = serializeEdgeWithHealth(&edge)
 	}
+	a.withEdgeOwners(c.Request.Context(), response.Data)
 
 	c.JSON(http.StatusOK, response)
 }

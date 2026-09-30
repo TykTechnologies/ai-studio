@@ -17,6 +17,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -54,12 +55,41 @@ func NewNodeID() string {
 	return fmt.Sprintf("%s-%d-%s", host, os.Getpid(), hex.EncodeToString(b))
 }
 
+// NodeOptions describe a replica to the others and to operators.
+type NodeOptions struct {
+	// Label names the replica on the status page and the Edge Gateways
+	// page ("studio", "dashboard", "mdcb-eu-1"): at most MaxLabelLength
+	// characters, no control characters. Empty leaves it unlabelled.
+	Label string
+	// NeverLeads records that the replica never takes the leader lease (a
+	// headless control plane). It is recorded for operators; the replica's
+	// own code decides whether it contends for the lease.
+	NeverLeads bool
+}
+
+// MaxLabelLength bounds NodeOptions.Label (the column's size).
+const MaxLabelLength = 64
+
+func (o NodeOptions) validate() error {
+	if len([]rune(o.Label)) > MaxLabelLength {
+		return fmt.Errorf("node label is longer than %d characters", MaxLabelLength)
+	}
+	for _, r := range o.Label {
+		if unicode.IsControl(r) {
+			return fmt.Errorf("node label %q contains a control character", o.Label)
+		}
+	}
+	return nil
+}
+
 // Node is this replica's entry in the registry.
 type Node struct {
 	db       *gorm.DB
 	id       string
 	proc     processInfo
 	version  string
+	label    string
+	canLead  bool
 	started  time.Time
 	interval time.Duration
 
@@ -70,9 +100,19 @@ type Node struct {
 
 // StartNode registers the replica and keeps its row fresh until Stop. The
 // first write happens before it returns, so a failure to reach the database
-// is reported rather than discovered later.
-func StartNode(db *gorm.DB, id, version string) (*Node, error) {
+// is reported rather than discovered later. At most one NodeOptions is used;
+// without one the replica is unlabelled and may lead.
+func StartNode(db *gorm.DB, id, version string, opts ...NodeOptions) (*Node, error) {
+	var o NodeOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	if err := o.validate(); err != nil {
+		return nil, fmt.Errorf("cluster: register node %s: %w", id, err)
+	}
 	n := &Node{
+		label:   o.Label,
+		canLead: !o.NeverLeads,
 		// A refresh is one statement; gorm's default transaction around it
 		// would make it three, on every replica, every few seconds.
 		db:       db.Session(&gorm.Session{SkipDefaultTransaction: true}),
@@ -133,11 +173,16 @@ func (n *Node) heartbeat() {
 func (n *Node) beat() error {
 	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "node_id"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version}),
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version,
+			"label": n.label, "leader_eligible": n.canLead,
+		}),
 	}).Create(map[string]interface{}{
-		"node_id":       n.id,
-		"hostname":      n.proc.Hostname,
-		"version":       n.version,
+		"node_id":         n.id,
+		"hostname":        n.proc.Hostname,
+		"version":         n.version,
+		"label":           n.label,
+		"leader_eligible": n.canLead,
 		"started_at":    n.started,
 		"last_seen":     nowExpr(n.db),
 		"pid":           n.proc.PID,

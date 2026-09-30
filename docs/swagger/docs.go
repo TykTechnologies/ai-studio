@@ -22263,6 +22263,18 @@ const docTemplate = `{
                         "namespace": {
                             "type": "string"
                         },
+                        "owner_label": {
+                            "description": "Label of the Studio replica holding the edge's stream (empty when none)",
+                            "type": "string"
+                        },
+                        "owner_live": {
+                            "description": "The owning replica's registration is fresh",
+                            "type": "boolean"
+                        },
+                        "owner_node_id": {
+                            "description": "Node ID of the Studio replica holding the edge's stream (empty when not connected)",
+                            "type": "string"
+                        },
                         "session_id": {
                             "type": "string"
                         },

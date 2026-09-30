@@ -163,6 +163,7 @@ func TestControlPlaneNextToAFullStudio_Postgres(t *testing.T) {
 	require.NoError(t, db.Create(&models.LLMChatRecord{Name: "m", AppID: app.ID, Cost: 12345, TimeStamp: time.Now()}).Error)
 
 	opts := headlessOptions(t, db)
+	opts.NodeLabel = "mdcb-test"
 	c, err := NewControlPlane(opts)
 	require.NoError(t, err)
 	stopped := false
@@ -196,6 +197,19 @@ func TestControlPlaneNextToAFullStudio_Postgres(t *testing.T) {
 		var e models.EdgeInstance
 		return db.Where("edge_id = ?", edgeID).Take(&e).Error == nil && e.OwnerNodeID == c.NodeID()
 	}, 10*time.Second, 50*time.Millisecond, "the headless replica holds the edge's stream")
+
+	// Operators see which replica is which, and which holds the edge.
+	st, err := cluster.Snapshot(context.Background(), db, c.NodeID(), nil, nil)
+	require.NoError(t, err)
+	labels := map[string]cluster.NodeStatus{}
+	for _, n := range st.Nodes {
+		labels[n.NodeID] = n
+	}
+	assert.Equal(t, "mdcb-test", labels[c.NodeID()].Label)
+	assert.False(t, labels[c.NodeID()].LeaderEligible)
+	assert.Equal(t, int64(1), labels[c.NodeID()].Edges)
+	assert.Equal(t, DefaultNodeLabel, labels[peer.node].Label)
+	assert.True(t, labels[peer.node].LeaderEligible)
 
 	// The full Studio leads; its budget sync reaches this replica's edge
 	// through the relay.
