@@ -370,7 +370,7 @@ const WebhookDeliveries = () => {
   const targetName = (id) => targets.find((t) => t.id === id)?.name;
 
   const header = (
-    <TitleBox top="64px">
+    <TitleBox top="var(--studio-header-height)">
       <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
         <IconButton onClick={() => navigate("/admin/webhooks")} aria-label="back to targets">
           <ArrowBackIcon />

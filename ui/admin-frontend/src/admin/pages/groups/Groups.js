@@ -104,7 +104,7 @@ const Groups = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Teams</Typography>
         <PrimaryButton
           variant="contained"

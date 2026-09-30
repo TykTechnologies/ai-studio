@@ -173,7 +173,7 @@ const TykConnectionForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">{editing ? "Edit connection" : "Connect a Tyk Dashboard"}</Typography>
         <SecondaryLinkButton startIcon={<ArrowBackIcon />} onClick={backToList} color="inherit">
           Back to connections

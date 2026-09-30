@@ -372,7 +372,7 @@ const ChatForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           {id ? "Edit chat" : "Add chat"}
         </Typography>

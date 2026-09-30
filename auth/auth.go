@@ -80,6 +80,10 @@ type Config struct {
 	CSRF            func(http.Handler) http.Handler
 	CSRFTokenHeader string
 	CSRFTokenURL    string
+
+	// Chromeless tells the console to leave out its own top bar and
+	// navigation drawers, because the host application draws them.
+	Chromeless bool
 }
 
 // Authenticator authenticates a request on behalf of a host application.

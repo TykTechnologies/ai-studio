@@ -468,7 +468,7 @@ const ModelRouterForm = () => {
 
   return (
     <Box sx={{ p: 0 }}>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <SecondaryLinkButton
             component={Link}

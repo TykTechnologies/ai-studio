@@ -303,7 +303,7 @@ const SSOProfiles = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Identity provider profiles</Typography>
         <PrimaryButton
           variant="contained"

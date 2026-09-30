@@ -150,7 +150,7 @@ const PortalDrawer = ({ open }) => {
       menuItems={getMenuItems()}
       showToolbar={false}
       customStyles={{
-        marginTop: '64px'
+        marginTop: 'var(--studio-header-height)'
       }}
       defaultOpen={open !== false}
       defaultExpandedItems={{

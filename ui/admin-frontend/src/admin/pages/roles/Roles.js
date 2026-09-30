@@ -194,7 +194,7 @@ const Roles = () => {
   if (!enterpriseAvailable) {
     return (
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Roles</Typography>
         </TitleBox>
         <ContentBox>
@@ -209,7 +209,7 @@ const Roles = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Roles</Typography>
         <Can permission={P.ROLES_WRITE}>
           <PrimaryButton variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/admin/roles/new')}>

@@ -13,6 +13,7 @@ import { logout } from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
 import { DRAWER_WIDTH, CONTENT_MAX_WIDTH } from "../constants/layout";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
+import { isChromeless } from "../runtimeConfig";
 import { usePermissions } from "../admin/context/PermissionsContext";
 import {
   UnsavedChangesProvider,
@@ -151,7 +152,11 @@ const MainLayoutContent = () => {
   const showPortal =
     entitlements?.ui_options?.show_portal && features.feature_portal;
 
-  const topNav = (
+  // Embedded in a host that draws the navigation: pages only, no top bar
+  // (tab switch, user menu) and no drawers.
+  const chromeless = isChromeless();
+
+  const topNav = chromeless ? null : (
     <TopNavigation
       showAdmin={showAdmin}
       showChat={showChat}
@@ -170,23 +175,23 @@ const MainLayoutContent = () => {
       {currentTab === "admin" ? (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           {topNav}
-          <Box sx={{ mt: "64px" }}>
-            <AdminLayout hideAppBar />
+          <Box sx={{ mt: "var(--studio-header-height)" }}>
+            <AdminLayout hideAppBar hideDrawer={chromeless} />
           </Box>
         </Box>
       ) : (
         <Box sx={{ display: "flex" }}>
           {topNav}
-          {currentTab === "chat" && showChat && (
+          {!chromeless && currentTab === "chat" && showChat && (
             <ChatDrawer chats={entitlements?.chats} open />
           )}
-          {currentTab === "portal" && showPortal && <PortalDrawer open />}
+          {!chromeless && currentTab === "portal" && showPortal && <PortalDrawer open />}
           <Box
             component="main"
             sx={{
               flexGrow: 1,
-              marginTop: "64px",
-              width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
+              marginTop: "var(--studio-header-height)",
+              width: chromeless ? "100%" : { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
               minWidth: 0,
             }}
           >

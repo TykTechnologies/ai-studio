@@ -384,7 +384,7 @@ const PluginDetail = () => {
 
   return (
     <Box>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box display="flex" alignItems="center" gap={2}>
           <Typography variant="headingXLarge">
             {plugin.name}

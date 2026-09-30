@@ -54,6 +54,9 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   strips the prefix itself. Session and CSRF cookies are scoped to the base
   path, and logout leaves the host's cookies alone. The console follows the
   base path and, with `Auth`, sends signed-out users to `LoginURL`.
+- `Chromeless` renders pages only, without Studio's top bar and navigation
+  drawers, for a host that draws its own navigation and links to Studio's
+  routes under the base path.
 - With `Auth`, every request is offered to the host first. The identity it
   returns (subject, email, name, admin, optional group names) becomes a
   Studio user on first sight and is kept in step after that; Studio's own

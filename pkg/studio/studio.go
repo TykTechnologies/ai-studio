@@ -120,6 +120,12 @@ type Options struct {
 	CSRF            func(http.Handler) http.Handler
 	CSRFTokenHeader string
 	CSRFTokenURL    string
+
+	// Chromeless makes the console render pages only: no top bar (the
+	// Admin / Portal / Chat switch and the user menu) and no navigation
+	// drawers, because the host draws its own. Sticky page headers then sit
+	// at the top of the page instead of below Studio's 64px bar.
+	Chromeless bool
 }
 
 // Identity is a user as the host has authenticated them. Subject and Email
@@ -393,6 +399,7 @@ func New(opts Options) (_ *Studio, err error) {
 		CSRF:                   opts.CSRF,
 		CSRFTokenHeader:        opts.CSRFTokenHeader,
 		CSRFTokenURL:           opts.CSRFTokenURL,
+		Chromeless:             opts.Chromeless,
 	}
 	authService := auth.NewAuthService(authConfig, mailService, service, notificationService)
 

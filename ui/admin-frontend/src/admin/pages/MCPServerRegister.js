@@ -452,7 +452,7 @@ const MCPServerRegister = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Register MCP server</Typography>
         <SecondaryLinkButton startIcon={<ArrowBackIcon />} onClick={() => navigate("/admin/mcp-servers")} color="inherit">
           Back to MCP servers

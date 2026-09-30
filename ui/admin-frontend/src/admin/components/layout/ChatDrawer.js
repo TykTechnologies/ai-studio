@@ -144,7 +144,7 @@ const ChatDrawer = () => {
       menuItems={getMenuItems()}
       showToolbar={false}
       customStyles={{
-        marginTop: '64px'
+        marginTop: 'var(--studio-header-height)'
       }}
       defaultExpandedItems={{
         'chat-rooms': true,

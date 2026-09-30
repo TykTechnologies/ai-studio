@@ -158,7 +158,7 @@ const ComplianceOverview = () => {
   if (!isEnterpriseAvailable && !loading) {
     return (
       <Box sx={{ p: 3 }}>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <SecurityIcon sx={{ fontSize: 32 }} />
             <Typography variant="headingXLarge">Compliance Overview</Typography>
@@ -194,7 +194,7 @@ const ComplianceOverview = () => {
 
   return (
     <Box>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <SecurityIcon sx={{ fontSize: 32 }} />
           <Typography variant="headingXLarge">Compliance Overview</Typography>

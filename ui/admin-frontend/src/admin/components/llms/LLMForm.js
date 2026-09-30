@@ -521,7 +521,7 @@ const LLMForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">{id ? "Edit LLM provider" : "Add LLM provider"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

@@ -206,7 +206,7 @@ const Secrets = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Secrets</Typography>
         <Can permission={P.SECRETS_WRITE}>
           <PrimaryButton

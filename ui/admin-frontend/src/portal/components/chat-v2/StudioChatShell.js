@@ -23,7 +23,7 @@ const Layout = ({ title, subtitle, icon, onBack, onNewChat, sidebar, hideFileUpl
 
   return (
     <>
-      <TitleBox top="64px" data-print-role="toolbar">
+      <TitleBox top="var(--studio-header-height)" data-print-role="toolbar">
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, minWidth: 0 }}>
           {onBack && (
             <IconButton onClick={onBack} size="small" aria-label="Back">

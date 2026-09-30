@@ -148,7 +148,7 @@ const LLMSettingsList = () => {
   return (
     <Box sx={{ p: 0 }}>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model call settings</Typography>
           <Can permission={P.LLM_SETTINGS_WRITE}>
             <PrimaryButton

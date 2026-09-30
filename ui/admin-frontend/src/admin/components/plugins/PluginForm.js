@@ -354,7 +354,7 @@ const PluginForm = ({ mode = 'create' }) => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           {isEdit ? 'Edit plugin' : 'Add plugin'}
         </Typography>

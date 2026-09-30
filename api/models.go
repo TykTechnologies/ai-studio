@@ -1274,6 +1274,9 @@ type FrontendConfig struct {
 	// presents a CSRF token for cookie-authenticated writes.
 	CSRFTokenHeader string `json:"csrfTokenHeader"`
 	CSRFTokenURL    string `json:"csrfTokenURL"`
+	// Chrome is "none" when the host application draws the navigation, and
+	// the console then leaves out its top bar and drawers; "full" otherwise.
+	Chrome string `json:"chrome"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

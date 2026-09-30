@@ -66,7 +66,7 @@ const EmbedderForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">{isEdit ? "Edit embedder" : "Add embedder"}</Typography>
         <SecondaryLinkButton component={Link} to="/admin/embedders" startIcon={<ArrowBackIcon />} color="inherit">
           Back to embedders
