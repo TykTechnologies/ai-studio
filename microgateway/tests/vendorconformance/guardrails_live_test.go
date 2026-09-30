@@ -36,6 +36,7 @@ func guardrailURL(h *harness) string {
 
 // TestGuardrailFilters drives the four probes through the guardrailed route.
 func TestGuardrailFilters(t *testing.T) {
+	requireEnterpriseRuntime(t)
 	h := setup(t)
 	if h.guardrailed == nil {
 		t.Skip("no vendor configured to carry the guardrailed route")

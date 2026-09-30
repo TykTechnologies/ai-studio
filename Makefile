@@ -511,6 +511,10 @@ gorm-vendor: ## Rebuild third_party/gorm.io from the pins in third_party/gorm-pi
 gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports gorm.io
 	@scripts/gorm-verify.sh
 
+.PHONY: vet
+vet: ## go vet the root, microgateway and enterprise modules in both editions, excluding third_party/ (VET_EDITION=ce|ent|all)
+	@scripts/vet.sh $(or $(VET_EDITION),all)
+
 .PHONY: host-compat
 host-compat: ## Check Studio against the Tyk Dashboard's go.mod: version floor, then build inside its module graph (needs GH_TOKEN + access)
 	@scripts/host-compat.sh --build
