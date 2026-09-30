@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
@@ -112,6 +113,7 @@ func (a *API) setTeamBudgetSettings(c *gin.Context) {
 		return
 	}
 	a.service.Budget.ClearCache()
+	replicas.Signal(c.Request.Context(), replicas.SignalBudgets)
 	c.JSON(http.StatusOK, TeamBudgetSettingsBody{Enabled: a.service.TeamBudget.Enabled()})
 }
 

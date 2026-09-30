@@ -24,3 +24,14 @@ type ClusterEvent struct {
 	Payload   []byte    `json:"payload"`
 	CreatedAt time.Time `json:"created_at" gorm:"not null;index"`
 }
+
+// ClusterLease is a named lease held by at most one replica at a time: the
+// cluster's leader for singleton work (pkg/cluster.Leadership). Taking and
+// renewing it are conditional writes against the database's clock.
+type ClusterLease struct {
+	Name       string    `json:"name" gorm:"primaryKey;size:64"`
+	Holder     string    `json:"holder" gorm:"size:128;not null"`
+	AcquiredAt time.Time `json:"acquired_at"`
+	RenewedAt  time.Time `json:"renewed_at"`
+	ExpiresAt  time.Time `json:"expires_at" gorm:"not null"`
+}

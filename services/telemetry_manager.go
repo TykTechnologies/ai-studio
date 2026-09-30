@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -55,6 +56,9 @@ func NewTelemetryManager(db *gorm.DB, enabled bool, version string) *TelemetryMa
 	}
 }
 
+// telemetryEndpoint is where reports go (tests point it elsewhere).
+var telemetryEndpoint = TelemetryURL
+
 // Start begins the telemetry collection process
 func (tm *TelemetryManager) Start() {
 	if !tm.enabled {
@@ -95,6 +99,10 @@ func (tm *TelemetryManager) Stop() {
 // collectAndSend gathers telemetry data and sends it to the telemetry service
 func (tm *TelemetryManager) collectAndSend() {
 	if !tm.enabled {
+		return
+	}
+	// One report for the deployment, not one per replica.
+	if !replicas.IsLeader() {
 		return
 	}
 
@@ -158,7 +166,7 @@ func (tm *TelemetryManager) sendTelemetry(payload TelemetryPayload) error {
 		Timeout: 30 * time.Second,
 	}
 
-	req, err := http.NewRequestWithContext(tm.ctx, "POST", TelemetryURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(tm.ctx, "POST", telemetryEndpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create telemetry request: %w", err)
 	}
