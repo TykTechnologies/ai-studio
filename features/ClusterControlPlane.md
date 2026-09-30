@@ -393,6 +393,35 @@ it as a reader is accepted, so such a replica can be upgraded after the full
 ones. See `features/Embedding.md` ("Schema version and `studio.CheckSchema`")
 for the bump rules and the golden guard.
 
+### Panics in the cluster machinery
+
+The replica's long-lived loops (node heartbeat, lease renewal, event log
+reader, relay, Postgres listener and its follower retry, push dispatcher and
+janitor, the control server's budget sync and connection cleanup, the replica
+signal sender) run under `safe.Loop`: a panic is logged with its stack,
+counted (`aistudio_goroutine_panics_total`), and the loop starts again after
+a backoff (1 s, doubling to 30 s) instead of ending the process. Each loop
+still closes its done channel once, when it stops, so `Stop` behaves as
+before. Restarts start the loop from the top; a few need more:
+
+- **Lease.** A panic (in a renewal, or in a lease listener) drops the
+  leader belief at once and tells the listeners, rather than letting it run
+  out: the replica cannot vouch for renewals it did not make. The restarted
+  loop renews, and the replica leads again if it still holds the row.
+- **Postgres listener.** A panic costs the connection: it is closed and the
+  owner reconnects, and the reconnect hooks run (notifications may be lost),
+  exactly as after a disconnect. A panicking subscriber handler or
+  reconnect hook is recovered on its own, so it neither loses the
+  connection nor leaves the listener's lock held.
+- **Edge streams.** A panic handling an edge's messages ends that edge's
+  stream with `Internal`; the edge reconnects, to this replica or another,
+  and pushes in flight on the stream are requeued, as when a stream drops.
+
+Event bus subscribers run on the publisher's goroutine (an API request, an
+edge stream, the event log reader); each is recovered on its own, so one
+subscriber's panic neither ends the publisher nor keeps the event from the
+others.
+
 ## User feedback
 
 - The push dialog tracks the operation to its end: per-edge state

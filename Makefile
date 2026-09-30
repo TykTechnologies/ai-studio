@@ -532,6 +532,10 @@ ent-link: ## Link enterprise tests of core packages in from enterprise/_coretest
 enterprise-import-guard: ## Check no public package imports the private enterprise module
 	@scripts/enterprise-import-guard.sh
 
+.PHONY: logging-guard
+logging-guard: ## Check the control-plane packages log only through the logger package (an embedding host's logger)
+	@scripts/logging-guard.sh
+
 .PHONY: langchaingo-verify
 langchaingo-verify: ## Check nothing builds with upstream github.com/tmc/langchaingo (use third_party/langchaingo)
 	@scripts/langchaingo-verify.sh

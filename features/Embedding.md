@@ -639,6 +639,67 @@ held), `Signal` and `OnSignal`. See `features/ClusterControlPlane.md` for the
 guarantees, and the reference architecture for what a deployment must
 provide (session affinity, shared files).
 
+## The host's logger, and panics
+
+`Options.Logger` (`logger.Use`) makes the host's `zerolog.Logger` the one
+Studio's own logging goes through; Studio leaves zerolog's global logger and
+level alone. Every line the edge control plane writes reaches it: the gRPC
+control server and budget sync, `pkg/cluster`, `pkg/pglisten`, edge pushes,
+analytics recording, `secrets`, `pkg/safe` and `pkg/studio`.
+`make logging-guard` (CI) keeps zerolog's global logger, `log/slog` and the
+standard library's `log` out of those packages. Other packages (the proxy,
+the API, `services/grpc`, ...) still partly log through zerolog's global
+logger, which is the host's to configure.
+
+A host that logs with logrus (MDCB) passes a zerolog logger over a writer
+into logrus. zerolog hands a `zerolog.LevelWriter` each line, one JSON
+object, with its level:
+
+```go
+type logrusWriter struct{ l *logrus.Logger }
+
+func (w logrusWriter) Write(p []byte) (int, error) { return w.WriteLevel(zerolog.InfoLevel, p) }
+
+func (w logrusWriter) WriteLevel(level zerolog.Level, p []byte) (int, error) {
+	var fields map[string]interface{}
+	if err := json.Unmarshal(p, &fields); err != nil {
+		w.l.Info(strings.TrimSpace(string(p)))
+		return len(p), nil
+	}
+	msg, _ := fields[zerolog.MessageFieldName].(string)
+	delete(fields, zerolog.MessageFieldName)
+	delete(fields, zerolog.LevelFieldName)
+	entry := w.l.WithFields(logrus.Fields(fields))
+	switch {
+	case level <= zerolog.DebugLevel:
+		entry.Debug(msg)
+	case level == zerolog.InfoLevel:
+		entry.Info(msg)
+	case level == zerolog.WarnLevel:
+		entry.Warn(msg)
+	default:
+		entry.Error(msg)
+	}
+	return len(p), nil
+}
+
+zl := zerolog.New(logrusWriter{l: log}).Level(zerolog.DebugLevel).With().Timestamp().Logger()
+studio.New(studio.Options{Logger: &zl, ...})
+```
+
+A panic in Studio's background work must not take the host down. `pkg/safe`
+recovers them: the gRPC control server's interceptors (a panicking call
+fails with `Internal`; a panic handling an edge's stream messages ends that
+edge's stream, which reconnects), supervised restarts with backoff for the
+long-lived loops (budget sync, cluster heartbeat, lease, event log, relay,
+Postgres listener, edge pushes, analytics writer, replica signals), and
+per-item recovery for event bus subscribers, listener handlers and replica
+change handlers. Each is logged with its stack and counted in
+`aistudio_goroutine_panics_total{goroutine}`. The panic log goes through
+`logger.Current()`: the host's logger once `logger.Use` or `logger.Init`
+ran, zerolog's global logger before that (the microgateway uses Studio's
+event bus without setting Studio's logger up).
+
 ## langchaingo in tree
 
 Studio's langchaingo fork (Anthropic temperature, OpenAI reasoning_effort and

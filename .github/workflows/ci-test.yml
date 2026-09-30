@@ -398,6 +398,9 @@ jobs:
       - name: Check no public package imports the enterprise module
         run: make enterprise-import-guard
 
+      - name: Check the control plane logs only through the logger package
+        run: make logging-guard
+
       # Plugin modules replace midsommar/v2 with this tree, so a root go.mod
       # raise must be followed there or `go build` stops at "updates to go.mod
       # needed" (make plugins, plugin-publish, the dev watcher). The

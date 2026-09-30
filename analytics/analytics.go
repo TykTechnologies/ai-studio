@@ -3,11 +3,11 @@ package analytics
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -158,23 +158,23 @@ func RecordContentMessage(
 	// Get cache token information from the response if available
 	if len(cr.Choices) > 0 && cr.Choices[0].GenerationInfo != nil {
 		// Log the keys in GenerationInfo for debugging
-		slog.Info("GenerationInfo keys", "keys", cr.Choices[0].GenerationInfo)
+		logger.Log.Debug().Interface("keys", cr.Choices[0].GenerationInfo).Msg("GenerationInfo keys")
 
 		// Try int first, then float64
 		if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(int); ok {
 			rec.CacheWritePromptTokens = cacheWrite
-			slog.Info("Cache write tokens (int)", "value", rec.CacheWritePromptTokens)
+			logger.Log.Debug().Int("value", rec.CacheWritePromptTokens).Msg("Cache write tokens (int)")
 		} else if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(float64); ok {
 			rec.CacheWritePromptTokens = int(cacheWrite)
-			slog.Info("Cache write tokens (float64)", "value", rec.CacheWritePromptTokens)
+			logger.Log.Debug().Int("value", rec.CacheWritePromptTokens).Msg("Cache write tokens (float64)")
 		}
 
 		if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(int); ok {
 			rec.CacheReadPromptTokens = cacheRead
-			slog.Info("Cache read tokens (int)", "value", rec.CacheReadPromptTokens)
+			logger.Log.Debug().Int("value", rec.CacheReadPromptTokens).Msg("Cache read tokens (int)")
 		} else if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(float64); ok {
 			rec.CacheReadPromptTokens = int(cacheRead)
-			slog.Info("Cache read tokens (float64)", "value", rec.CacheReadPromptTokens)
+			logger.Log.Debug().Int("value", rec.CacheReadPromptTokens).Msg("Cache read tokens (float64)")
 		}
 	}
 
@@ -201,12 +201,13 @@ func RecordContentMessage(
 		price.CacheWritePT*float64(rec.CacheWritePromptTokens) +
 		price.CacheReadPT*float64(rec.CacheReadPromptTokens)
 
-	slog.Debug("Calculated cost before scaling",
-		"cost", cost,
-		"responseTokens", responseTokens,
-		"promptTokens", promptTokens,
-		"cacheWriteTokens", rec.CacheWritePromptTokens,
-		"cacheReadTokens", rec.CacheReadPromptTokens)
+	logger.Log.Debug().
+		Float64("cost", cost).
+		Int("responseTokens", responseTokens).
+		Int("promptTokens", promptTokens).
+		Int("cacheWriteTokens", rec.CacheWritePromptTokens).
+		Int("cacheReadTokens", rec.CacheReadPromptTokens).
+		Msg("Calculated cost before scaling")
 
 	rec.Cost = cost * 10000
 	rec.Currency = price.Currency

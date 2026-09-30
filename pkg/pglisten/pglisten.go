@@ -15,10 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -169,13 +169,13 @@ func Acquire(dsn string, opts Options) (*Listener, error) {
 	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
 	cancel()
 	if err != nil {
-		slog.Error(opts.Name+" connection failed", "error", err)
+		logger.Log.Error().Err(err).Msg(opts.Name + " connection failed")
 		if timedOut {
 			return nil, fmt.Errorf("%s could not connect to PostgreSQL within %s: %w", opts.Name, opts.ConnectTimeout, err)
 		}
 		return nil, fmt.Errorf("%s could not connect to PostgreSQL: %w", opts.Name, err)
 	}
-	slog.Info(opts.Name + " connected")
+	logger.Log.Info().Msg(opts.Name + " connected")
 
 	stopCtx, stop := context.WithCancel(context.Background())
 	l := &Listener{
@@ -259,7 +259,7 @@ func (l *Listener) Unsubscribe(channel string, sub *Subscription, timeout time.D
 	}
 	l.wake()
 	if err := l.await(gen, "", timeout, false); err != nil {
-		slog.Warn("error unlistening from PostgreSQL channel", "channel", channel, "error", err)
+		logger.Log.Warn().Err(err).Str("channel", channel).Msg("error unlistening from PostgreSQL channel")
 	}
 }
 
@@ -378,7 +378,7 @@ func (l *Listener) own(connp **pgx.Conn, reconnected bool) {
 		err := l.reconcile(conn, listened)
 		if err == nil && reconnected {
 			reconnected = false
-			slog.Info(l.name + " reconnected")
+			logger.Log.Info().Msg(l.name + " reconnected")
 			// Anything sent while the connection was down is gone.
 			l.mu.RLock()
 			for _, fn := range l.onReconnect {
@@ -396,7 +396,7 @@ func (l *Listener) own(connp **pgx.Conn, reconnected bool) {
 			l.close(conn)
 			return
 		}
-		slog.Warn(l.name+" disconnected; notifications sent until it reconnects are lost", "error", err)
+		logger.Log.Warn().Err(err).Msg(l.name + " disconnected; notifications sent until it reconnects are lost")
 		l.setState(func() { l.connected = false })
 		l.close(conn)
 		conn = l.reconnect()
@@ -447,7 +447,7 @@ func (l *Listener) reconcile(conn *pgx.Conn, listened map[string]bool) error {
 			if !serverRefused(conn, err) {
 				return err
 			}
-			slog.Warn("error unlistening from PostgreSQL channel", "channel", channel, "error", err)
+			logger.Log.Warn().Err(err).Str("channel", channel).Msg("error unlistening from PostgreSQL channel")
 		}
 		delete(listened, channel)
 	}
@@ -500,7 +500,7 @@ func (l *Listener) wait(conn *pgx.Conn) error {
 				if l.stopCtx.Err() != nil {
 					return errStopped
 				}
-				slog.Warn(l.name+" ping failed", "error", err)
+				logger.Log.Warn().Err(err).Msg(l.name + " ping failed")
 				return err
 			}
 		default:
@@ -556,7 +556,7 @@ func (l *Listener) reconnect() *pgx.Conn {
 		if l.stopCtx.Err() != nil {
 			return nil
 		}
-		slog.Error(l.name+" connection failed", "error", err)
+		logger.Log.Error().Err(err).Msg(l.name + " connection failed")
 		if wait *= 2; wait > l.opts.ReconnectCeiling {
 			wait = l.opts.ReconnectCeiling
 		}
@@ -567,6 +567,6 @@ func (l *Listener) close(conn *pgx.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := conn.Close(ctx); err != nil {
-		slog.Debug("error closing "+l.name, "error", err)
+		logger.Log.Debug().Err(err).Msg("error closing " + l.name)
 	}
 }

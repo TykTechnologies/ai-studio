@@ -1,10 +1,10 @@
 package pglisten
 
 import (
-	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
@@ -60,7 +60,7 @@ func Follow(dsn, channel string, opts Options, handler Handler, onReconnect func
 		close(f.done)
 		return f
 	}
-	slog.Warn(opts.Name+" is not available; relying on polling until it is (retrying every "+FollowRetryInterval.String()+")", "error", err)
+	logger.Log.Warn().Err(err).Msg(opts.Name + " is not available; relying on polling until it is (retrying every " + FollowRetryInterval.String() + ")")
 	go f.retry()
 	return f
 }
@@ -123,10 +123,10 @@ func (f *Follower) retryLoop() {
 		case <-time.After(FollowRetryInterval):
 		}
 		if err := f.subscribe(); err != nil {
-			slog.Debug(f.opts.Name+" is still not available", "error", err)
+			logger.Log.Debug().Err(err).Msg(f.opts.Name + " is still not available")
 			continue
 		}
-		slog.Info(f.opts.Name + " is available again; notifications resume")
+		logger.Log.Info().Msg(f.opts.Name + " is available again; notifications resume")
 		// Whatever was published while it was missing was only polled for.
 		f.onReconnect()
 		return
