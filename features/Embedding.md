@@ -59,13 +59,25 @@ environment when unset:
 - `services.SetBrandingStoragePath(path)` for branding assets.
 - `grpc.Config.EncryptionKey` for the key edges decrypt credentials with.
 
+Tuning and debug settings shared with the microgateway (same variable names)
+are on `AppConf` too: `AnalyticsBufferSize`, `BudgetSyncInterval`,
+`DebugHTTPProxy`, `MetricsNoLegacyNames`, `CORSAllowedOrigins`,
+`SkipFilterDefaults` and `FilterLimits` (the Enterprise filter-script limits,
+by variable name: `config.FilterLimitNames`). `pkg/studio` hands them to their
+packages (`analytics.SetBufferSize`, `metrics.SetLegacyNames`,
+`corsutil.SetAllowedOrigins`, `grpc.Config.BudgetSyncInterval`,
+`proxy.Config.DebugHTTPProxy`); the packages read the environment only when
+Studio has not set them (the microgateway). `config.Installed` returns the
+installed configuration without loading one, for code shared with the
+microgateway. The deferred Postgres chat queue uses `AppConf.DatabaseURL`
+before `DATABASE_URL`.
+
 Deliberately still environment-only: the network and plugin security knobs
 (`ALLOW_INTERNAL_NETWORK_ACCESS`, `PLUGIN_COMMAND_ALLOWLIST`,
 `PLUGIN_BLOCK_INTERNAL_URLS`, the plugin allowed directories, `pkg/netguard`),
-OCI registry credentials (`OCI_PLUGINS_REGISTRY_*`, which reference other
-variables by name), `$ENV/` secret references, and tuning and debug switches
-shared with the microgateway (`ANALYTICS_BUFFER_SIZE`, `BUDGET_SYNC_INTERVAL`,
-`DEBUG_HTTP_PROXY`, the metrics legacy-names switch).
+the filter-script switch `FILTER_SCRIPT_ALLOW_OS`, OCI registry credentials
+(`OCI_PLUGINS_REGISTRY_*`, which reference other variables by name), and
+`$ENV/` secret references.
 
 ## Errors instead of exits (Phase 1)
 

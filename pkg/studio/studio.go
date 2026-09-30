@@ -36,6 +36,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
@@ -219,6 +220,11 @@ func New(opts Options) (_ *Studio, err error) {
 
 	secrets.SetEncryptionKey(conf.SecretKey)
 	services.SetBrandingStoragePath(conf.BrandingStoragePath)
+	// Tuning settings shared with the microgateway: the packages read them
+	// from the environment unless Studio sets them.
+	analytics.SetBufferSize(conf.AnalyticsBufferSize)
+	metrics.SetLegacyNames(!conf.MetricsNoLegacyNames)
+	corsutil.SetAllowedOrigins(conf.CORSAllowedOrigins)
 	secrets.WarnIfEncryptionUnconfigured()
 
 	backgroundCtx, cancel := context.WithCancel(context.Background())
@@ -246,7 +252,7 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := models.MigrateTIBStores(s.db); err != nil {
 		return nil, fmt.Errorf("studio: migrate identity broker tables: %w", err)
 	}
-	if err := ensureDefaults(s.db, opts.SkipLLMDefaults); err != nil {
+	if err := ensureDefaults(s.db, opts.SkipLLMDefaults, conf.SkipFilterDefaults); err != nil {
 		return nil, fmt.Errorf("studio: seed defaults: %w", err)
 	}
 
@@ -462,6 +468,7 @@ func New(opts Options) (_ *Studio, err error) {
 		UnifiedRouterBasePath: conf.UnifiedRouterPath,
 		DisableUnifiedRouter:  conf.UnifiedRouterDisabled,
 		ServerTiming:          conf.GatewayServerTiming,
+		DebugHTTPProxy:        conf.DebugHTTPProxy,
 	}, service.Budget)
 
 	if conf.GatewayMode == "control" {
@@ -510,6 +517,8 @@ func (s *Studio) wireControlPlane(version string) error {
 		NextAuthToken: conf.GRPCNextAuthToken,
 		EncryptionKey: conf.MicrogatewayEncryptionKey,
 		NodeID:        s.clusterNode.ID(),
+
+		BudgetSyncInterval: conf.BudgetSyncInterval,
 	}, s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)

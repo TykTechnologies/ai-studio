@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -430,10 +431,17 @@ func NewDeferredPostgreSQLQueueFactory(config PostgreSQLConfig) *DeferredPostgre
 
 // CreateQueue creates a new PostgreSQL queue by connecting to the database using DATABASE_URL
 func (f *DeferredPostgreSQLQueueFactory) CreateQueue(sessionID string, config map[string]interface{}) (MessageQueue, error) {
-	// Connect to database using environment configuration
-	databaseURL := os.Getenv("DATABASE_URL")
+	// Studio's database URL (a host embedding Studio sets it on the
+	// configuration, not in the environment), else DATABASE_URL.
+	databaseURL := ""
+	if conf := appconfig.Installed(); conf != nil {
+		databaseURL = conf.DatabaseURL
+	}
 	if databaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL environment variable is required for PostgreSQL queues")
+		databaseURL = os.Getenv("DATABASE_URL")
+	}
+	if databaseURL == "" {
+		return nil, fmt.Errorf("a database URL (AppConf.DatabaseURL or DATABASE_URL) is required for PostgreSQL queues")
 	}
 
 	db, err := f.poolFor(databaseURL)
