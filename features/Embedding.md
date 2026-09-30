@@ -370,18 +370,33 @@ navigate to:
   Awesome name), `exact`, and the `permission` that unlocks it. Plugin
   sections carry `pluginId`. Entries the user may not open are already
   left out, with the drawer's rule: a group stays while one of its pages
-  does.
+  does. Empty for a user with no admin permissions.
+- `portal`: Overview, Apps, Browse (the catalog, one entry per asset type
+  with its feature, and one per plugin resource type the user has
+  instances of), Community, then the portal plugin sections the user's
+  teams may see (a one-page section links straight to its page). Empty
+  unless the user may use the portal and the portal or gateway is
+  licensed.
+- `chat`: Overview, the chat rooms the user is entitled to, their five
+  most recent conversations (with "View all conversations"), and the
+  active agents they may talk to (public ones and those shared with one of
+  their teams), sorted by name. Empty groups are left out. Empty unless
+  the user may use chat and chat is licensed.
 
-The manifest is the one source of truth: the console's admin drawer
-(`Drawer.js`) renders from it, reloading when the user's permissions change
-or a plugin UI is installed. Group order, feature gates (portal, chat,
+Each lookup behind a menu (plugin sections, resource types, chats, history,
+agents) fails on its own: it is logged and costs its entries, never the
+manifest.
+
+The manifest is the one source of truth: the console's admin, portal and
+chat drawers render from it (`useNavManifest`), reloading when the user's
+permissions change or a plugin UI is installed. Group order, feature gates (portal, chat,
 gateway-only, Enterprise-only groups) and plugin placement are tested in
-`api/nav_test.go`. `TestAdminNavGolden` writes the full menu to
+`api/nav_test.go`. `TestNavGolden` writes the full menus to
 `ui/admin-frontend/src/admin/nav.golden.json` (`UPDATE_NAV_GOLDEN=1` to
-regenerate), and `nav.golden.test.js` checks every page in it against
-`admin/routes.js`, including that the menu and the route need the same
-permission. The portal and chat drawers still build their menus in the
-console.
+regenerate), and `nav.golden.test.js` checks every page in it against the
+console's routes (`admin/routes.js`, `routes/PortalRoutes.js`,
+`routes/ChatRoutes.js`), and for admin pages that the menu and the route
+need the same permission.
 - `examples/embed-host -chromeless` shows it.
 
 ## Module layout

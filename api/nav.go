@@ -1,13 +1,16 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -31,12 +34,15 @@ type NavItem struct {
 }
 
 // NavManifest is the navigation a user may see: the surfaces (Admin,
-// Portal, Chat) the console's top bar switches between, and the admin
-// drawer. The console's admin drawer renders from it, and a host that draws
-// its own navigation (Options.Chromeless) builds its menu from it.
+// Portal, Chat) the console's top bar switches between, and the menu of
+// each. The console's drawers render from it, and a host that draws its own
+// navigation (Options.Chromeless) builds its menu from it. A surface the
+// user may not use has an empty menu.
 type NavManifest struct {
 	Surfaces []NavItem `json:"surfaces"`
 	Admin    []NavItem `json:"admin"`
+	Portal   []NavItem `json:"portal"`
+	Chat     []NavItem `json:"chat"`
 }
 
 // navInputs is what the admin menu depends on besides permissions.
@@ -198,22 +204,29 @@ func pluginNav(sections []services.SidebarMenuItem) []NavItem {
 			perm = string(authz.Execute("plugins"))
 		}
 		g := NavItem{ID: s.ID, Text: s.Label, Icon: "puzzle-piece", Path: s.Path, Title: s.Title, Permission: perm, PluginID: s.PluginID}
-		for _, sub := range s.SubItems {
-			subPerm := sub.RequiredPermission
-			if subPerm == "" {
-				subPerm = perm
+		for _, page := range pluginPages(s) {
+			if page.Permission == "" {
+				page.Permission = perm
 			}
-			// Exact-match a page whose path is a prefix of a sibling's, so
-			// both do not highlight on the child route.
-			exact := false
-			for _, other := range s.SubItems {
-				if other.ID != sub.ID && other.Path != "" && sub.Path != "" && strings.HasPrefix(other.Path, sub.Path+"/") {
-					exact = true
-				}
-			}
-			g.Items = append(g.Items, NavItem{ID: sub.ID, Text: sub.Text, Path: sub.Path, Exact: exact, Permission: subPerm, PluginID: s.PluginID})
+			g.Items = append(g.Items, page)
 		}
 		out = append(out, g)
+	}
+	return out
+}
+
+// pluginPages are a plugin section's pages. A page whose path is a prefix
+// of a sibling's is exact, so both do not highlight on the child route.
+func pluginPages(s services.SidebarMenuItem) []NavItem {
+	var out []NavItem
+	for _, sub := range s.SubItems {
+		exact := false
+		for _, other := range s.SubItems {
+			if other.ID != sub.ID && other.Path != "" && sub.Path != "" && strings.HasPrefix(other.Path, sub.Path+"/") {
+				exact = true
+			}
+		}
+		out = append(out, NavItem{ID: sub.ID, Text: sub.Text, Path: sub.Path, Exact: exact, Permission: sub.RequiredPermission, PluginID: s.PluginID})
 	}
 	return out
 }
@@ -246,8 +259,153 @@ func filterNav(items []NavItem, allowed func(NavItem) bool) []NavItem {
 	return out
 }
 
+// navResourceType is a plugin resource type the user can browse in the
+// portal.
+type navResourceType struct {
+	PluginID uint
+	Slug     string
+	Name     string
+}
+
+// portalNavInputs is what the portal menu depends on.
+type portalNavInputs struct {
+	features      func(string) bool
+	resourceTypes []navResourceType
+	plugins       []services.SidebarMenuItem
+}
+
+// portalNav is the portal menu. "Browse" is the one place to find something
+// to build with: the unified catalog, then one entry per asset type and per
+// plugin resource type, each a filtered view of the same catalog.
+func portalNav(in portalNavInputs) []NavItem {
+	f := in.features
+	allAssets := NavItem{ID: "browse-all", Text: "All assets", Path: "/portal/catalog", Exact: true}
+	browse := group("browse", "Browse", "rectangle-history",
+		[]NavItem{
+			allAssets,
+			{ID: "browse-llms", Text: "LLM providers", Path: "/portal/catalog/llms"},
+			{ID: "browse-datasources", Text: "Data sources", Path: "/portal/catalog/datasources"},
+			{ID: "browse-tools", Text: "Tools", Path: "/portal/catalog/tools"},
+		},
+		when(f("feature_model_router"), NavItem{ID: "browse-model-routers", Text: "Model routers", Path: "/portal/catalog/model-routers"}),
+		when(f("feature_semantic_router"), NavItem{ID: "browse-semantic-routers", Text: "Semantic routers", Path: "/portal/catalog/semantic-routers"}),
+		when(f("feature_tyk_mcp"), NavItem{ID: "browse-mcp-servers", Text: "MCP servers", Path: "/portal/catalog/mcp-servers"}),
+	)
+	for _, rt := range in.resourceTypes {
+		browse.Items = append(browse.Items, NavItem{
+			ID:       fmt.Sprintf("browse-resource-%d-%s", rt.PluginID, rt.Slug),
+			Text:     rt.Name,
+			Path:     fmt.Sprintf("/portal/catalog/resources/%d/%s", rt.PluginID, url.PathEscape(rt.Slug)),
+			PluginID: rt.PluginID,
+		})
+	}
+	out := []NavItem{
+		{ID: "dashboard", Text: "Overview", Icon: "house", Path: "/portal/dashboard"},
+		{ID: "my-apps", Text: "Apps", Icon: "grid-2-plus", Path: "/portal/apps"},
+		browse,
+		group("contributions", "Community", "puzzle-piece", []NavItem{
+			{ID: "my-contributions", Text: "My Contributions", Path: "/portal/contributions"},
+			{ID: "submit-resource", Text: "Submit Resource", Path: "/portal/submissions/new"},
+		}),
+	}
+	// Portal plugin sections, in the order the plugins registered them. A
+	// section with one page links to it directly.
+	for _, s := range in.plugins {
+		section := NavItem{ID: s.ID, Text: s.Label, Icon: "puzzle-piece", PluginID: s.PluginID}
+		if len(s.SubItems) == 1 {
+			section.Path = s.SubItems[0].Path
+		} else {
+			// Portal plugin pages are filtered by the user's teams (done
+			// above), not by admin permissions.
+			for _, page := range pluginPages(s) {
+				page.Permission = ""
+				section.Items = append(section.Items, page)
+			}
+		}
+		out = append(out, section)
+	}
+	return out
+}
+
+// chatNavInputs is what the chat menu depends on.
+type chatNavInputs struct {
+	chats   []models.Chat
+	history []models.ChatHistoryRecord
+	agents  []models.AgentConfig
+}
+
+// chatNav is the chat menu: the chat rooms the user may use, their most
+// recent conversations and the agents they may talk to.
+func chatNav(in chatNavInputs) []NavItem {
+	out := []NavItem{{ID: "overview", Text: "Overview", Icon: "house", Path: "/chat/dashboard"}}
+	rooms := NavItem{ID: "chat-rooms", Text: "Chats", Icon: "message-lines"}
+	for _, ch := range in.chats {
+		rooms.Items = append(rooms.Items, NavItem{ID: fmt.Sprintf("chat-%d", ch.ID), Text: ch.Name, Path: fmt.Sprintf("/chat/%d", ch.ID)})
+	}
+	if len(rooms.Items) > 0 {
+		out = append(out, rooms)
+	}
+	if len(in.history) > 0 {
+		past := NavItem{ID: "past-conversations", Text: "Past Conversations", Icon: "rectangle-history"}
+		for _, r := range in.history {
+			past.Items = append(past.Items, NavItem{
+				ID:    fmt.Sprintf("history-%d", r.ID),
+				Text:  r.Name,
+				Path:  fmt.Sprintf("/chat/%d?continue_id=%s", r.ChatID, url.QueryEscape(r.SessionID)),
+				Exact: true,
+			})
+		}
+		past.Items = append(past.Items, NavItem{ID: "view-all-conversations", Text: "View all conversations", Path: "/chat/dashboard", Exact: true})
+		out = append(out, past)
+	}
+	if len(in.agents) > 0 {
+		agents := append([]models.AgentConfig(nil), in.agents...)
+		sort.SliceStable(agents, func(i, j int) bool { return agents[i].Name < agents[j].Name })
+		group := NavItem{ID: "agents", Text: "Agents", Icon: "microchip-ai"}
+		for _, ag := range agents {
+			group.Items = append(group.Items, NavItem{ID: fmt.Sprintf("agent-%d", ag.ID), Text: ag.Name, Path: fmt.Sprintf("/chat/agent/%d", ag.ID)})
+		}
+		out = append(out, group)
+	}
+	return out
+}
+
+// chatHistoryInNav is how many recent conversations the chat menu lists.
+const chatHistoryInNav = 5
+
+// accessibleActiveAgents returns the active agents the user may talk to:
+// public ones (no teams) and those shared with one of the user's teams.
+func (a *API) accessibleActiveAgents(u *models.User) ([]models.AgentConfig, error) {
+	var agents []models.AgentConfig
+	if err := a.service.DB.Preload("Groups").Where("is_active = ?", true).Find(&agents).Error; err != nil {
+		return nil, err
+	}
+	var groupIDs []uint
+	if err := a.service.DB.Table("user_groups").Where("user_id = ?", u.ID).Pluck("group_id", &groupIDs).Error; err != nil {
+		return nil, err
+	}
+	mine := make(map[uint]bool, len(groupIDs))
+	for _, id := range groupIDs {
+		mine[id] = true
+	}
+	out := agents[:0]
+	for _, ag := range agents {
+		ok := len(ag.Groups) == 0
+		for _, g := range ag.Groups {
+			if mine[g.ID] {
+				ok = true
+				break
+			}
+		}
+		if ok {
+			out = append(out, ag)
+		}
+	}
+	return out, nil
+}
+
 // @Summary Get the navigation manifest
-// @Description The surfaces and admin menu entries the signed-in user may open, for a host that draws Studio's navigation itself
+// @Description The surfaces and the admin, portal and chat menu entries the signed-in user may open, for a host that draws Studio's navigation itself
 // @Tags system
 // @Produce json
 // @Success 200 {object} NavManifest
@@ -272,7 +430,7 @@ func (a *API) getNavManifest(c *gin.Context) {
 	fs := a.featureSet()
 	feature := func(name string) bool { v, _ := fs[name].(bool); return v }
 
-	manifest := NavManifest{Surfaces: []NavItem{}, Admin: []NavItem{}}
+	manifest := NavManifest{Surfaces: []NavItem{}, Admin: []NavItem{}, Portal: []NavItem{}, Chat: []NavItem{}}
 	hasAdmin := !perms.IsEmpty()
 	if hasAdmin {
 		manifest.Surfaces = append(manifest.Surfaces, NavItem{ID: "admin", Text: "Admin", Icon: "gear", Path: "/admin"})
@@ -283,29 +441,67 @@ func (a *API) getNavManifest(c *gin.Context) {
 	if u.ShowChat && feature("feature_chat") {
 		manifest.Surfaces = append(manifest.Surfaces, NavItem{ID: "chat", Text: "Chat", Icon: "message-lines", Path: "/chat/dashboard"})
 	}
-	if !hasAdmin {
-		c.JSON(http.StatusOK, manifest)
-		return
+
+	// Each menu degrades on its own: a failing lookup costs its entries
+	// (logged), never the whole manifest.
+	if hasAdmin {
+		allow := func(p string) bool { return authz.Can(c, authz.Permission(p)) }
+		var plugins []services.SidebarMenuItem
+		if a.service.PluginManifestService != nil {
+			plugins, err = a.service.PluginManifestService.GetSidebarMenuItemsFor(allow)
+			logNavError("admin plugin sections", err)
+		}
+		localSignIn := a.config == nil || a.config.LocalAccountsEnabled()
+		in := navInputs{
+			features:          feature,
+			enterprise:        config.IsEnterprise(),
+			identityProviders: localSignIn && a.showSSOConfig(u, perms),
+			plugins:           plugins,
+		}
+		if admin := filterNav(adminNav(in), func(item NavItem) bool {
+			return item.Permission == "" || allow(item.Permission)
+		}); admin != nil {
+			manifest.Admin = admin
+		}
 	}
 
-	allow := func(p string) bool { return authz.Can(c, authz.Permission(p)) }
-	var plugins []services.SidebarMenuItem
-	if a.service.PluginManifestService != nil {
-		// A broken plugin manifest costs the plugin sections, not the menu.
-		plugins, _ = a.service.PluginManifestService.GetSidebarMenuItemsFor(allow)
+	// The portal drawer's rule: the portal or the gateway is licensed, and
+	// the user may use the portal.
+	if u.ShowPortal && (feature("feature_portal") || feature("feature_gateway")) {
+		in := portalNavInputs{features: feature}
+		if a.service.PluginManifestService != nil {
+			in.plugins, err = a.service.PluginManifestService.GetPortalSidebarMenuItemsForUser(extractUserGroupNames(c))
+			logNavError("portal plugin sections", err)
+		}
+		types, err := a.service.AccessiblePluginResourceInstances(u.ID, authz.Can(c, authz.Write("groups")), nil)
+		logNavError("plugin resource types", err)
+		for _, rt := range types {
+			if len(rt.Instances) > 0 {
+				in.resourceTypes = append(in.resourceTypes, navResourceType{PluginID: rt.Type.PluginID, Slug: rt.Type.Slug, Name: sanitizeString(rt.Type.Name)})
+			}
+		}
+		manifest.Portal = portalNav(in)
 	}
-	localSignIn := a.config == nil || a.config.LocalAccountsEnabled()
-	in := navInputs{
-		features:          feature,
-		enterprise:        config.IsEnterprise(),
-		identityProviders: localSignIn && a.showSSOConfig(u, perms),
-		plugins:           plugins,
+
+	if u.ShowChat && feature("feature_chat") {
+		var in chatNavInputs
+		if ent, err := a.service.GetUserEntitlements(u.ID); err == nil {
+			in.chats = ent.Chats
+		} else {
+			logNavError("chats", err)
+		}
+		in.history, _, _, err = a.service.ListChatHistoryRecordsByUserIDPaginated(u.ID, chatHistoryInNav, 1, false)
+		logNavError("chat history", err)
+		in.agents, err = a.accessibleActiveAgents(u)
+		logNavError("agents", err)
+		manifest.Chat = chatNav(in)
 	}
-	manifest.Admin = filterNav(adminNav(in), func(item NavItem) bool {
-		return item.Permission == "" || allow(item.Permission)
-	})
-	if manifest.Admin == nil {
-		manifest.Admin = []NavItem{}
-	}
+
 	c.JSON(http.StatusOK, manifest)
+}
+
+func logNavError(what string, err error) {
+	if err != nil {
+		logger.Warnf("Navigation manifest: %s unavailable: %v", what, err)
+	}
 }

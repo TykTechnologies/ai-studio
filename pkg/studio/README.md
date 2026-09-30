@@ -60,7 +60,7 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - `Chromeless` renders pages only, without Studio's top bar and navigation
   drawers, for a host that draws its own navigation and links to Studio's
   routes under the base path. `GET <base>/common/nav` returns the surfaces
-  and admin menu the signed-in user may open, to build that navigation from.
+  and the admin, portal and chat menus the signed-in user may open, to build that navigation from.
 - With `Auth`, every request is offered to the host first. The identity it
   returns (subject, email, name, admin, optional group names) becomes a
   Studio user on first sight and is kept in step after that; Studio's own

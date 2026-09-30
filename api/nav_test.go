@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -129,13 +130,23 @@ func TestFilterNavByPermission(t *testing.T) {
 	assert.Empty(t, nav)
 }
 
-// The admin menu with every feature on is kept as a golden file in the
-// frontend, where a Jest test checks each path against admin/routes.js.
+// The menus with every feature on are kept as a golden file in the
+// frontend, where a Jest test checks each path against the console's routes.
 // UPDATE_NAV_GOLDEN=1 rewrites it.
-func TestAdminNavGolden(t *testing.T) {
-	plugins := []services.SidebarMenuItem{}
-	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true, identityProviders: true, plugins: plugins}), allowAll)
-	got, err := json.MarshalIndent(nav, "", "  ")
+func TestNavGolden(t *testing.T) {
+	golden := map[string][]NavItem{
+		"admin": filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true, identityProviders: true}), allowAll),
+		"portal": portalNav(portalNavInputs{
+			features:      features(allFeatures()),
+			resourceTypes: []navResourceType{{PluginID: 7, Slug: "datasets", Name: "Datasets"}},
+		}),
+		"chat": chatNav(chatNavInputs{
+			chats:   []models.Chat{{ID: 3, Name: "Support"}},
+			history: []models.ChatHistoryRecord{{ID: 9, ChatID: 3, SessionID: "s-1", Name: "Yesterday"}},
+			agents:  []models.AgentConfig{{ID: 4, Name: "Helper"}},
+		}),
+	}
+	got, err := json.MarshalIndent(golden, "", "  ")
 	require.NoError(t, err)
 	got = append(got, '\n')
 	path := filepath.Join("..", "ui", "admin-frontend", "src", "admin", "nav.golden.json")
@@ -144,7 +155,48 @@ func TestAdminNavGolden(t *testing.T) {
 	}
 	want, err := os.ReadFile(path)
 	require.NoError(t, err, "run with UPDATE_NAV_GOLDEN=1 to create it")
-	assert.Equal(t, string(want), string(got), "the admin menu changed; rerun with UPDATE_NAV_GOLDEN=1 and review the diff")
+	assert.Equal(t, string(want), string(got), "the navigation changed; rerun with UPDATE_NAV_GOLDEN=1 and review the diff")
+}
+
+func TestPortalNav(t *testing.T) {
+	plugins := []services.SidebarMenuItem{
+		{ID: "one", Label: "One page", PluginID: 2, SubItems: []services.SidebarSubItem{{ID: "o1", Text: "Home", Path: "/portal/plugins/one"}}},
+		{ID: "two", Label: "Two pages", PluginID: 3, SubItems: []services.SidebarSubItem{
+			{ID: "t1", Text: "List", Path: "/portal/plugins/two", RequiredPermission: "plugins:execute"},
+			{ID: "t2", Text: "Mine", Path: "/portal/plugins/two/mine"},
+		}},
+	}
+	nav := portalNav(portalNavInputs{
+		features:      features(map[string]bool{"feature_portal": true}),
+		resourceTypes: []navResourceType{{PluginID: 5, Slug: "my set", Name: "Sets"}},
+		plugins:       plugins,
+	})
+	assert.Equal(t, []string{"Overview", "Apps", "Browse", "Community", "One page", "Two pages"}, labels(nav))
+	assert.Equal(t, []string{"All assets", "LLM providers", "Data sources", "Tools", "Sets"}, labels(find(nav, "browse").Items),
+		"routers and MCP servers only with their features")
+	assert.Equal(t, "/portal/catalog/resources/5/my%20set", find(nav, "browse-resource-5-my set").Path)
+	assert.Equal(t, "/portal/plugins/one", find(nav, "one").Path, "a one-page section links to its page")
+	assert.Empty(t, find(nav, "one").Items)
+	assert.True(t, find(nav, "t1").Exact)
+	assert.Empty(t, find(nav, "t1").Permission, "portal pages are filtered by team, not admin permission")
+
+	all := portalNav(portalNavInputs{features: features(allFeatures())})
+	assert.Equal(t, []string{"All assets", "LLM providers", "Data sources", "Tools", "Model routers", "Semantic routers", "MCP servers"}, labels(find(all, "browse").Items))
+}
+
+func TestChatNav(t *testing.T) {
+	assert.Equal(t, []string{"Overview"}, labels(chatNav(chatNavInputs{})), "empty groups are left out")
+
+	nav := chatNav(chatNavInputs{
+		chats:   []models.Chat{{ID: 1, Name: "General"}},
+		history: []models.ChatHistoryRecord{{ID: 8, ChatID: 1, SessionID: "a b&c", Name: "Earlier"}},
+		agents:  []models.AgentConfig{{ID: 2, Name: "Zed"}, {ID: 1, Name: "Ada"}},
+	})
+	assert.Equal(t, []string{"Overview", "Chats", "Past Conversations", "Agents"}, labels(nav))
+	assert.Equal(t, "/chat/1", find(nav, "chat-1").Path)
+	assert.Equal(t, "/chat/1?continue_id=a+b%26c", find(nav, "history-8").Path)
+	assert.Equal(t, []string{"Earlier", "View all conversations"}, labels(find(nav, "past-conversations").Items))
+	assert.Equal(t, []string{"Ada", "Zed"}, labels(find(nav, "agents").Items), "agents sorted by name")
 }
 
 func indexOf(s []string, v string) int {
