@@ -82,6 +82,14 @@ type Event struct {
 	// once for the whole cluster (a checksum recompute, say) skip relayed
 	// events; consumers that keep per-replica state act on them.
 	RelayedFrom string `json:"-"`
+
+	// FromEdge is set on a control plane for an event one of its edges sent
+	// over its stream. The bridge republishes those as DirLocal (so they are
+	// never forwarded again), which leaves this the only way to tell them
+	// from events published on the control plane itself. A headless control
+	// plane relays them to the replicas that host plugins. Local metadata,
+	// like RelayedFrom: never serialized.
+	FromEdge bool `json:"-"`
 }
 
 // EventFrame is the wire format for events over gRPC.

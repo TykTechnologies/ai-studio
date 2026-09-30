@@ -197,6 +197,9 @@ type Studio struct {
 	clusterParts
 	// relayed applies other replicas' changes to this replica's caches.
 	relayed *relayedChanges
+	// edgePayloads hands this replica's plugins the edge payloads headless
+	// control planes forward, while this replica leads.
+	edgePayloads *edgePayloadHost
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (control mode only).
 	pushes *pushes.Coordinator
@@ -546,6 +549,12 @@ func New(opts Options) (_ *Studio, err error) {
 		service.InitWebhooks(conf.Webhooks, opts.Version)
 		service.InitTykMCP(conf.TykMCP, opts.Version)
 	}
+	// Headless control planes (MDCB) hold edges but run no plugins: their
+	// edges' plugin payloads reach the plugins here, on the leader. In
+	// either mode: the edges may all be held by headless replicas.
+	if service.AIStudioPluginManager != nil {
+		s.edgePayloads = newEdgePayloadHost(s.db, s.clusterLog, service.AIStudioPluginManager)
+	}
 
 	frontend := opts.UIAssets
 	if frontend == nil {
@@ -734,6 +743,7 @@ func (s *Studio) stop(ctx context.Context) error {
 	if s.pushes != nil {
 		s.pushes.Stop()
 	}
+	s.edgePayloads.stop()
 	s.relayed.stop()
 	s.stopCluster(ctx)
 	if s.analyticsTee != nil {

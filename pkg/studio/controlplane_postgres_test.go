@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,6 +40,8 @@ const (
 	// a control plane cannot share a process, so the full Studio runs in a
 	// child test binary.
 	peerEnv = "STUDIO_TEST_FULL_STUDIO_PEER"
+	// peerWatchTopic is the topic the peer reports edge events on.
+	peerWatchTopic = "test.edge.report"
 )
 
 // controlModeConfig makes conf serve edges: the settings a full Studio in
@@ -276,6 +279,15 @@ func edgeContext(ctx context.Context) context.Context {
 type edgeStream struct {
 	mu  sync.Mutex
 	got []*pb.ControlMessage
+	st  pb.ConfigurationSyncService_SubscribeToChangesClient
+}
+
+// sendEvent publishes an event from the edge, as its event bridge does.
+func (es *edgeStream) sendEvent(t *testing.T, id, topic string) {
+	t.Helper()
+	require.NoError(t, es.st.Send(&pb.EdgeMessage{Message: &pb.EdgeMessage_Event{Event: &pb.EventFrame{
+		Id: id, Topic: topic, Origin: "edge-on-headless", Dir: int32(eventbridge.DirUp), Payload: []byte(`{"n":1}`),
+	}}}))
 }
 
 func openEdgeStream(t *testing.T, client pb.ConfigurationSyncServiceClient, edgeID string) *edgeStream {
@@ -284,7 +296,7 @@ func openEdgeStream(t *testing.T, client pb.ConfigurationSyncServiceClient, edge
 	t.Cleanup(cancel)
 	st, err := client.SubscribeToChanges(ctx)
 	require.NoError(t, err)
-	es := &edgeStream{}
+	es := &edgeStream{st: st}
 	go func() {
 		for {
 			m, err := st.Recv()
@@ -433,6 +445,22 @@ func (p *fullStudioPeer) expect(t *testing.T, want string, d time.Duration) {
 	}
 }
 
+// events asks how many events on peerWatchTopic the peer's bus carried.
+func (p *fullStudioPeer) events(t *testing.T, want int) {
+	t.Helper()
+	_, err := fmt.Fprintln(p.stdin, "events")
+	require.NoError(t, err)
+	p.expect(t, fmt.Sprintf("PEER EVENTS %d", want), 10*time.Second)
+}
+
+// payloads asks how many edge plugin payloads the peer handed its plugins.
+func (p *fullStudioPeer) payloads(t *testing.T, want int) {
+	t.Helper()
+	_, err := fmt.Fprintln(p.stdin, "payloads")
+	require.NoError(t, err)
+	p.expect(t, fmt.Sprintf("PEER PAYLOADS %d", want), 10*time.Second)
+}
+
 func (p *fullStudioPeer) push(t *testing.T, edgeID string) {
 	t.Helper()
 	_, err := fmt.Fprintf(p.stdin, "push %s\n", edgeID)
@@ -480,11 +508,30 @@ func TestHelperFullStudioPeer(t *testing.T) {
 		fmt.Println("PEER ERR", err)
 		t.Fatal(err)
 	}
+	// What reaches this Studio's plugins from the edges of a headless
+	// replica: events on peerWatchTopic, and forwarded plugin payloads
+	// (handed to this stand-in for the plugin manager).
+	var watched atomic.Int64
+	sub := s.control.GetEventBus().Subscribe(peerWatchTopic, func(ev eventbridge.Event) {
+		watched.Add(1)
+		fmt.Printf("PEER EVENT %s relayed=%t\n", ev.ID, ev.RelayedFrom != "")
+	})
+	defer s.control.GetEventBus().Unsubscribe(sub)
+	var routed atomic.Int64
+	s.edgePayloads.setRouter(printingRouter{n: &routed})
 	fmt.Println("PEER READY")
 
 	sc := bufio.NewScanner(os.Stdin)
 	for sc.Scan() {
 		f := strings.Fields(sc.Text())
+		if len(f) == 1 && f[0] == "events" {
+			fmt.Printf("PEER EVENTS %d\n", watched.Load())
+			continue
+		}
+		if len(f) == 1 && f[0] == "payloads" {
+			fmt.Printf("PEER PAYLOADS %d\n", routed.Load())
+			continue
+		}
 		if len(f) == 2 && f[0] == "push" {
 			_, err := s.pushes.Push(context.Background(), pushes.Request{Scope: pushes.ScopeEdge, EdgeIDs: []string{f[1]}, InitiatedBy: "test"})
 			if err != nil {
@@ -496,4 +543,151 @@ func TestHelperFullStudioPeer(t *testing.T) {
 	}
 	stopStudio(t, s)
 	fmt.Println("PEER STOPPED")
+}
+
+// printingRouter stands in for the peer's plugin manager: it reports each
+// edge plugin payload it is handed.
+type printingRouter struct{ n *atomic.Int64 }
+
+func (r printingRouter) RouteEdgePayload(_ context.Context, p *pb.PluginControlPayload) error {
+	r.n.Add(1)
+	fmt.Printf("PEER PAYLOAD %d %s %s\n", p.PluginId, p.CorrelationId, p.Payload)
+	return nil
+}
+
+// What a headless replica's edges send for plugins reaches the full
+// Studio's: their events once, on its bus and never back down to edges, and
+// their plugin payloads through the log to the leader's plugins.
+func TestControlPlaneCarriesEdgeTrafficToTheFullStudio_Postgres(t *testing.T) {
+	dsn := schemaTestDSN(t)
+	schema := fmt.Sprintf("studio_headless_%d", time.Now().UnixNano())
+	dropSchemaAfter(t, dsn, schema)
+	db := openSchema(t, dsn, schema)
+	peer := startFullStudioPeer(t, dsn, schema)
+
+	c, err := NewControlPlane(headlessOptions(t, db))
+	require.NoError(t, err)
+	t.Cleanup(func() { stopControlPlane(t, c) })
+	lis, err := listenLocal()
+	require.NoError(t, err)
+	go func() { _ = c.Serve(lis) }()
+
+	conn, err := grpclib.NewClient(lis.Addr().String(), grpclib.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+	client := pb.NewConfigurationSyncServiceClient(conn)
+	const edgeID = "edge-on-headless"
+	reg, err := client.RegisterEdge(edgeContext(context.Background()), &pb.EdgeRegistrationRequest{EdgeId: edgeID, Version: "test"})
+	require.NoError(t, err)
+	require.True(t, reg.Success, reg.Message)
+	edge := openEdgeStream(t, client, edgeID)
+
+	require.Eventually(t, func() bool {
+		holder, _, err := cluster.Holder(context.Background(), db, cluster.LeaderLease)
+		return err == nil && holder == peer.node
+	}, 30*time.Second, 100*time.Millisecond, "the full Studio leads")
+
+	// An event the edge publishes up reaches the full Studio's bus, once.
+	mark := edge.count()
+	edge.sendEvent(t, "evt-1", peerWatchTopic)
+	peer.expect(t, "PEER EVENT evt-1 relayed=true", 30*time.Second)
+	time.Sleep(time.Second)
+	peer.events(t, 1)
+	assert.False(t, edge.sawSince(mark, func(m *pb.ControlMessage) bool {
+		return m.GetEvent() != nil && m.GetEvent().Topic == peerWatchTopic
+	}), "the edge's own event came back down to it")
+
+	// A plugin payload goes through the log to the leader's plugins, and
+	// the edge learns it was queued.
+	resp, err := client.SendPluginControlBatch(edgeContext(context.Background()), &pb.PluginControlBatch{
+		EdgeId: edgeID,
+		Payloads: []*pb.PluginControlPayload{
+			{PluginId: 7, Payload: []byte("stats"), EdgeId: edgeID, CorrelationId: "corr-1"},
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.Success, resp.Message)
+	assert.Contains(t, resp.Message, "queued for the plugin host")
+	peer.expect(t, "PEER PAYLOAD 7 corr-1 stats", 30*time.Second)
+}
+
+// With two full Studios, only the leader hands a forwarded payload to its
+// plugins: each payload is handled once in the cluster.
+func TestControlPlanePayloadsGoToTheLeaderOnly_Postgres(t *testing.T) {
+	dsn := schemaTestDSN(t)
+	schema := fmt.Sprintf("studio_headless_%d", time.Now().UnixNano())
+	dropSchemaAfter(t, dsn, schema)
+	db := openSchema(t, dsn, schema)
+	first := startFullStudioPeer(t, dsn, schema)
+	second := startFullStudioPeer(t, dsn, schema)
+
+	var leader, other *fullStudioPeer
+	require.Eventually(t, func() bool {
+		holder, _, err := cluster.Holder(context.Background(), db, cluster.LeaderLease)
+		if err != nil {
+			return false
+		}
+		switch holder {
+		case first.node:
+			leader, other = first, second
+		case second.node:
+			leader, other = second, first
+		}
+		return leader != nil
+	}, 30*time.Second, 100*time.Millisecond, "one full Studio leads")
+
+	c, err := NewControlPlane(headlessOptions(t, db))
+	require.NoError(t, err)
+	t.Cleanup(func() { stopControlPlane(t, c) })
+	fwd := edgePayloadForwarder{log: c.clusterLog}
+	for i := 1; i <= 3; i++ {
+		require.NoError(t, fwd.ForwardEdgePayload(context.Background(), &pb.PluginControlPayload{
+			PluginId: 7, Payload: []byte("stats"), CorrelationId: fmt.Sprintf("corr-%d", i),
+		}))
+	}
+	for i := 1; i <= 3; i++ {
+		leader.expect(t, fmt.Sprintf("PEER PAYLOAD 7 corr-%d stats", i), 30*time.Second)
+	}
+	time.Sleep(2 * time.Second)
+	leader.payloads(t, 3)
+	other.payloads(t, 0)
+}
+
+// A replica that has just become the leader takes the payloads of the last
+// edgePayloadReplay from the log (a crashed leader may not have handled
+// them, and none was handled while no replica led), each row once however
+// often it arrives.
+func TestEdgePayloadHost_CatchesUpOnBecomingLeader_Postgres(t *testing.T) {
+	db := migratedSchema(t)
+	payload := func(corr string) []byte {
+		b, err := encodeEdgePayload(&pb.PluginControlPayload{PluginId: 7, CorrelationId: corr})
+		require.NoError(t, err)
+		return b
+	}
+	old := models.ClusterEvent{Topic: pluginControlTopic, Origin: "headless", Payload: payload("too-old")}
+	require.NoError(t, db.Exec("INSERT INTO cluster_events (topic, origin, payload, created_at) VALUES (?, ?, ?, now() - interval '10 minutes')", old.Topic, old.Origin, old.Payload).Error)
+	recent := models.ClusterEvent{Topic: pluginControlTopic, Origin: "headless", Payload: payload("recent"), CreatedAt: time.Now()}
+	require.NoError(t, db.Exec("INSERT INTO cluster_events (topic, origin, payload, created_at) VALUES (?, ?, ?, now())", recent.Topic, recent.Origin, recent.Payload).Error)
+	other := models.ClusterEvent{Topic: "bus.event", Origin: "headless", Payload: []byte(`{}`)}
+	require.NoError(t, db.Exec("INSERT INTO cluster_events (topic, origin, payload, created_at) VALUES (?, ?, ?, now())", other.Topic, other.Origin, other.Payload).Error)
+	var recentID int64
+	require.NoError(t, db.Raw("SELECT id FROM cluster_events WHERE payload = ?", recent.Payload).Scan(&recentID).Error)
+
+	leading := &atomic.Bool{}
+	leading.Store(true)
+	replicas.SetBackend(fakeLeadership{leading: leading})
+	t.Cleanup(func() { replicas.SetBackend(nil) })
+	sink := &payloadSink{}
+	h := newEdgePayloadHost(db, nil, sink)
+	t.Cleanup(h.stop)
+
+	h.catchUp()
+	require.Eventually(t, func() bool { return len(sink.snapshot()) == 1 }, 10*time.Second, 20*time.Millisecond)
+	// The log delivers the same row too, and a second catch-up reads it again.
+	h.deliver(cluster.Event{ID: recentID, Topic: pluginControlTopic, Payload: recent.Payload})
+	h.catchUp()
+	time.Sleep(500 * time.Millisecond)
+	got := sink.snapshot()
+	require.Len(t, got, 1, "each row once; nothing older than the replay window, nothing on other topics")
+	assert.Equal(t, "recent", got[0].CorrelationId)
 }

@@ -55,6 +55,14 @@ type EdgePayloadRouter interface {
 	RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error
 }
 
+// EdgePayloadForwarder takes an edge's plugin payload to another replica
+// that hosts the plugins, for a replica without them (a headless control
+// plane). A nil error means the payload is queued for that replica, not that
+// a plugin has handled it.
+type EdgePayloadForwarder interface {
+	ForwardEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error
+}
+
 // EdgeInstance represents an active edge instance connection
 type EdgeInstanceConnection struct {
 	EdgeID        string
@@ -121,6 +129,9 @@ type ControlServer struct {
 
 	// Plugin manager for routing edge payloads to plugins
 	pluginManager EdgePayloadRouter
+	// edgePayloads takes the payloads to a replica with plugins when this
+	// one has none (a headless control plane).
+	edgePayloads EdgePayloadForwarder
 
 	// Event bridge: local event bus for control node
 	eventBus eventbridge.Bus
@@ -1292,12 +1303,15 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		Int("payloads_count", len(req.Payloads)).
 		Msg("AI Studio control server: received plugin control batch from edge")
 
-	var processedCount uint64
+	var processedCount, forwardedCount uint64
 	var errors []*pb.PluginPayloadError
 
 	// Process each payload - route to corresponding plugin
 	for _, payload := range req.Payloads {
-		err := s.routeEdgePayloadToPlugin(ctx, payload)
+		forwarded, err := s.routeEdgePayloadToPlugin(ctx, payload)
+		if err == nil && forwarded {
+			forwardedCount++
+		}
 		if err != nil {
 			logger.Log.Warn().
 				Err(err).
@@ -1325,9 +1339,13 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		Int64("processing_time_ms", totalProcessingTime.Milliseconds()).
 		Msg("Plugin control batch processed")
 
+	message := fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads))
+	if forwardedCount > 0 {
+		message += fmt.Sprintf(" (%d queued for the plugin host)", forwardedCount)
+	}
 	return &pb.PluginControlBatchResponse{
 		Success:        len(errors) == 0,
-		Message:        fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads)),
+		Message:        message,
 		ProcessedCount: processedCount,
 		SequenceNumber: req.SequenceNumber,
 		ProcessedAt:    timestamppb.Now(),
@@ -1335,15 +1353,27 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 	}, nil
 }
 
-// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI Studio plugin
-func (s *ControlServer) routeEdgePayloadToPlugin(ctx context.Context, payload *pb.PluginControlPayload) error {
-	// Check if plugin manager is available (set after server creation)
-	if s.pluginManager == nil {
-		return fmt.Errorf("plugin manager not available")
+// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI
+// Studio plugin, or, on a replica without plugins, forwards it to one that
+// has them (forwarded reports which).
+func (s *ControlServer) routeEdgePayloadToPlugin(ctx context.Context, payload *pb.PluginControlPayload) (forwarded bool, err error) {
+	if s.pluginManager != nil {
+		// Route to plugin manager which will handle AcceptEdgePayload call
+		return false, s.pluginManager.RouteEdgePayload(ctx, payload)
 	}
+	if s.edgePayloads != nil {
+		if err := s.edgePayloads.ForwardEdgePayload(ctx, payload); err != nil {
+			return true, fmt.Errorf("could not queue the payload for the plugin host: %w", err)
+		}
+		return true, nil
+	}
+	return false, fmt.Errorf("plugin manager not available")
+}
 
-	// Route to plugin manager which will handle AcceptEdgePayload call
-	return s.pluginManager.RouteEdgePayload(ctx, payload)
+// SetEdgePayloadForwarder has a replica without plugins (no SetPluginManager)
+// forward edges' plugin payloads to one that has them. Set it before Serve.
+func (s *ControlServer) SetEdgePayloadForwarder(f EdgePayloadForwarder) {
+	s.edgePayloads = f
 }
 
 // SetPluginManager sets the plugin manager reference for routing edge payloads
