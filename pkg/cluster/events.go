@@ -264,6 +264,10 @@ func (l *Log) Publish(ctx context.Context, topic string, payload []byte) error {
 	return nil
 }
 
+// Enabled reports whether this database carries the log (Postgres). On
+// other databases Publish does nothing and no event is delivered.
+func (l *Log) Enabled() bool { return l.enabled }
+
 // Stats returns the log's progress.
 func (l *Log) Stats() LogStats {
 	l.statsMu.Lock()

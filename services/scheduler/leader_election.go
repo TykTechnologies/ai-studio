@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
 )
 
 // instanceCounter is used to generate unique instance IDs within the same process (for testing)
@@ -35,75 +36,86 @@ func NewLeaderElectionManager(db *gorm.DB) *LeaderElectionManager {
 	}
 }
 
-// TryBecomeLeader attempts to acquire or renew leadership lease
-// Returns (isLeader bool, err error)
+// TryBecomeLeader acquires the lease if it is free or expired, or renews it
+// if this instance holds it. The take-over is one conditional UPDATE, so of
+// several replicas trying at once exactly one wins; on Postgres every
+// replica compares against the database's clock.
 func (l *LeaderElectionManager) TryBecomeLeader() (bool, error) {
-	now := time.Now()
-	leaseExpiry := now.Add(l.leaseTTL)
-
-	// Try to get existing lease (ID=1 is singleton)
-	var lease models.SchedulerLease
-	result := l.db.FirstOrCreate(&lease, models.SchedulerLease{ID: 1})
-
-	if result.Error != nil {
-		return false, fmt.Errorf("failed to get lease: %w", result.Error)
+	now, err := l.now()
+	if err != nil {
+		return false, fmt.Errorf("failed to read the database clock: %w", err)
 	}
 
-	// Check if current lease is expired or we are already the leader
-	if lease.ExpiresAt.Before(now) || lease.LeaderID == l.instanceID {
-		// Claim/renew leadership
-		lease.LeaderID = l.instanceID
-		lease.InstanceID = l.instanceID
-		lease.ExpiresAt = leaseExpiry
-		lease.HeartbeatAt = now
-
-		if err := l.db.Save(&lease).Error; err != nil {
-			return false, fmt.Errorf("failed to save lease: %w", err)
-		}
-
-		return true, nil
+	// The singleton row (ID=1), created expired if missing. Concurrent
+	// creators do not collide: the second insert does nothing.
+	seed := models.SchedulerLease{ID: 1, InstanceID: "unclaimed", LeaderID: "", ExpiresAt: now.Add(-time.Second), HeartbeatAt: now}
+	if err := l.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&seed).Error; err != nil {
+		return false, fmt.Errorf("failed to get lease: %w", err)
 	}
 
-	// Someone else is leader
-	return false, nil
+	res := l.db.Model(&models.SchedulerLease{}).
+		Where("id = ? AND (leader_id = ? OR "+l.before("expires_at")+")", 1, l.instanceID, now).
+		Updates(map[string]interface{}{
+			"leader_id":    l.instanceID,
+			"instance_id":  l.instanceID,
+			"expires_at":   now.Add(l.leaseTTL),
+			"heartbeat_at": now,
+			"updated_at":   now,
+		})
+	if res.Error != nil {
+		return false, fmt.Errorf("failed to save lease: %w", res.Error)
+	}
+	return res.RowsAffected == 1, nil
 }
 
 // IsLeader checks if this instance is currently the leader
 func (l *LeaderElectionManager) IsLeader() (bool, error) {
-	var lease models.SchedulerLease
-	if err := l.db.First(&lease, 1).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return false, nil
-		}
+	now, err := l.now()
+	if err != nil {
 		return false, err
 	}
-
-	// Check if we're the leader and lease hasn't expired
-	if lease.LeaderID == l.instanceID && lease.ExpiresAt.After(time.Now()) {
-		return true, nil
+	var n int64
+	if err := l.db.Model(&models.SchedulerLease{}).
+		Where("id = ? AND leader_id = ? AND NOT "+l.before("expires_at"), 1, l.instanceID, now).
+		Count(&n).Error; err != nil {
+		return false, err
 	}
-
-	return false, nil
+	return n == 1, nil
 }
 
-// ReleaseLease releases leadership (called on graceful shutdown)
+// ReleaseLease releases leadership (called on graceful shutdown), so
+// another replica takes over at its next attempt rather than after the TTL.
 func (l *LeaderElectionManager) ReleaseLease() error {
-	var lease models.SchedulerLease
-	if err := l.db.First(&lease, 1).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil // No lease to release
-		}
+	now, err := l.now()
+	if err != nil {
 		return err
 	}
+	return l.db.Model(&models.SchedulerLease{}).
+		Where("id = ? AND leader_id = ?", 1, l.instanceID).
+		Updates(map[string]interface{}{"expires_at": now.Add(-time.Minute), "updated_at": now}).Error
+}
 
-	// Only release if we're the leader
-	if lease.LeaderID == l.instanceID {
-		// Expire the lease immediately
-		lease.ExpiresAt = time.Now().Add(-1 * time.Minute)
-		return l.db.Save(&lease).Error
+// now is the database's clock on Postgres (replicas' clocks may differ),
+// the local clock in UTC otherwise.
+func (l *LeaderElectionManager) now() (time.Time, error) {
+	if l.db.Dialector.Name() == "postgres" {
+		var t time.Time
+		if err := l.db.Raw("SELECT now()").Scan(&t).Error; err != nil {
+			return time.Time{}, err
+		}
+		return t.UTC(), nil
 	}
+	return time.Now().UTC(), nil
+}
 
-	return nil
+// before is the condition "column is earlier than the ? argument". SQLite
+// compares timestamps as text, and rows written before this change carry
+// the local zone, so both sides go through datetime() there.
+func (l *LeaderElectionManager) before(column string) string {
+	if l.db.Dialector.Name() == "sqlite" {
+		return "COALESCE(datetime(" + column + ") < datetime(?), 1)"
+	}
+	return column + " < ?"
 }
 
 // GetInstanceID returns this instance's unique identifier

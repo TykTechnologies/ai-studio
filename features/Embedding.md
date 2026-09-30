@@ -59,13 +59,25 @@ environment when unset:
 - `services.SetBrandingStoragePath(path)` for branding assets.
 - `grpc.Config.EncryptionKey` for the key edges decrypt credentials with.
 
+Tuning and debug settings shared with the microgateway (same variable names)
+are on `AppConf` too: `AnalyticsBufferSize`, `BudgetSyncInterval`,
+`DebugHTTPProxy`, `MetricsNoLegacyNames`, `CORSAllowedOrigins`,
+`SkipFilterDefaults` and `FilterLimits` (the Enterprise filter-script limits,
+by variable name: `config.FilterLimitNames`). `pkg/studio` hands them to their
+packages (`analytics.SetBufferSize`, `metrics.SetLegacyNames`,
+`corsutil.SetAllowedOrigins`, `grpc.Config.BudgetSyncInterval`,
+`proxy.Config.DebugHTTPProxy`); the packages read the environment only when
+Studio has not set them (the microgateway). `config.Installed` returns the
+installed configuration without loading one, for code shared with the
+microgateway. The deferred Postgres chat queue uses `AppConf.DatabaseURL`
+before `DATABASE_URL`.
+
 Deliberately still environment-only: the network and plugin security knobs
 (`ALLOW_INTERNAL_NETWORK_ACCESS`, `PLUGIN_COMMAND_ALLOWLIST`,
 `PLUGIN_BLOCK_INTERNAL_URLS`, the plugin allowed directories, `pkg/netguard`),
-OCI registry credentials (`OCI_PLUGINS_REGISTRY_*`, which reference other
-variables by name), `$ENV/` secret references, and tuning and debug switches
-shared with the microgateway (`ANALYTICS_BUFFER_SIZE`, `BUDGET_SYNC_INTERVAL`,
-`DEBUG_HTTP_PROXY`, the metrics legacy-names switch).
+the filter-script switch `FILTER_SCRIPT_ALLOW_OS`, OCI registry credentials
+(`OCI_PLUGINS_REGISTRY_*`, which reference other variables by name), and
+`$ENV/` secret references.
 
 ## Errors instead of exits (Phase 1)
 
@@ -82,6 +94,18 @@ shared with the microgateway (`ANALYTICS_BUFFER_SIZE`, `BUDGET_SYNC_INTERVAL`,
   validation at boot. A failed periodic re-check calls
   `licensing.Config.OnInvalid`; with no callback set the process exits, which
   is what the standalone binaries rely on.
+- The licence from the host (S1): a host embedding Studio passes the
+  customer's **AI Studio Enterprise licence** (the same JWT as
+  `TYK_AI_LICENSE`, validated unchanged: two licences, the host's own and
+  Studio's; no licence generator changes and no host licence claims).
+  `studio.Options.License` (`licensing.Config.LicenseSource`) supplies it
+  from the host's settings and is read at start and at every validity
+  check, so a renewal takes effect without a restart;
+  `(*studio.Studio).ReloadLicense()` validates a newly stored licence at
+  once (an error leaves the held licence in place, for the host to show).
+  `(*studio.Studio).LicenseStatus()` reports validity, expiry, days left
+  and entitlements for the host to show next to its own licence. Nil
+  `License` uses `Config.LicenseKey`.
 - Email templates are embedded (package `templates`). A `templates/` directory
   in the working directory still takes precedence, so deployments can
   customise them, but a process started elsewhere renders the defaults
@@ -182,8 +206,8 @@ when it does not end with the base path.
 `studio.Options.Auth` (an `auth.Authenticator`) lets the host authenticate
 every request: `Authenticate(r)` returns the signed-in user as a
 `studio.Identity` (`services.HostIdentity`: subject, email, name, admin,
-groups), nil when the request has no host identity, or an error to reject
-it.
+groups, roles), nil when the request has no host identity, or an error to
+reject it.
 
 - It runs first in `auth.GetAuthenticatedUser`, so `AuthMiddleware`, RBAC,
   the audit trail (`auth_method = host`) and every handler reading `"user"`
@@ -201,6 +225,20 @@ it.
   and group rules apply. Unchanged identities write nothing but a login
   stamp at most every 15 minutes. Disabled users are refused, and an email
   linked to another subject is a conflict.
+- **Roles (Enterprise).** `Roles` names Studio roles by slug (`editor`,
+  `viewer`, a custom role's slug). They become host-managed role bindings
+  (`role_bindings.source = 'host'`, direct and global): added and removed
+  as the host says on each sign-in (nil leaves them, an empty list removes
+  them; unknown slugs are logged and skipped). Roles an administrator
+  assigns in Studio are never touched, and a role the user already holds
+  that way stays with that binding. Studio's administration shows host
+  roles locked (`via: "host"` on the user's roles), keeps them when an
+  administrator saves the user's roles, and refuses to delete one
+  (`409`). `Admin` still decides the Administrator role, compared with the
+  user's direct Administrator (or Owner) binding: a team granting
+  Administrator is not a difference to write on every request. The host
+  cannot remove the last Owner, by `Admin` or `Roles`: the Owner role is
+  kept and logged, and the user is still signed in.
 - Host users are externally managed like SSO users
   (`User.IsExternallyManaged`): no API key unless
   `ALLOW_SSO_USER_API_KEYS`, and an issued key lapses once the user stops
@@ -404,9 +442,12 @@ an observed race.
 A host may run several Studio replicas against one database. Each joins
 the cluster in `studio.New` (`Options.NodeID`, default a fresh per-process
 ID): a registry row other replicas use to tell live replicas from dead ones,
-and an event log for what every replica must hear. Edge streams record their
-owning replica. See `features/ClusterControlPlane.md` for the guarantees
-and what is still being built.
+an event log and bus relay for what every replica must hear, and a claim on
+the leader lease for work that must happen once. Code that is not handed
+the cluster (Enterprise features, say) uses `pkg/replicas`: `IsLeader`,
+`Signal` and `OnSignal`. See `features/ClusterControlPlane.md` for the
+guarantees, and the reference architecture for what a deployment must
+provide (session affinity, shared files).
 
 ## langchaingo in tree
 

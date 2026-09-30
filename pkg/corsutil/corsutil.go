@@ -13,11 +13,22 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 )
 
 // EnvAllowedOrigins configures the allowed origins for the endpoints that
 // previously used a wildcard CORS policy.
 const EnvAllowedOrigins = "CORS_ALLOWED_ORIGINS"
+
+// allowedOrigins is SetAllowedOrigins' value; nil means the environment.
+var allowedOrigins atomic.Pointer[string]
+
+// SetAllowedOrigins sets the comma-separated origin list (Studio passes
+// AppConf.CORSAllowedOrigins); without it, CORS_ALLOWED_ORIGINS decides.
+// An empty list allows any origin.
+func SetAllowedOrigins(origins string) {
+	allowedOrigins.Store(&origins)
+}
 
 // AllowOrigin returns the value to send as Access-Control-Allow-Origin for a
 // request with the given Origin header, and whether an explicit origin list
@@ -25,6 +36,9 @@ const EnvAllowedOrigins = "CORS_ALLOWED_ORIGINS"
 // returned origin means the header must be omitted.
 func AllowOrigin(requestOrigin string) (string, bool) {
 	configured := os.Getenv(EnvAllowedOrigins)
+	if v := allowedOrigins.Load(); v != nil {
+		configured = *v
+	}
 	if configured == "" {
 		return "*", false
 	}

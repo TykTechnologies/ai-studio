@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/attribute"
 	otelmetric "go.opentelemetry.io/otel/metric"
@@ -55,9 +56,23 @@ var (
 	legacyNames bool
 )
 
+// legacyNamesSetting is SetLegacyNames' value; nil means the environment.
+var legacyNamesSetting atomic.Pointer[bool]
+
+// SetLegacyNames sets whether the aistudio_* instruments are emitted next
+// to the gen_ai.* ones (Studio passes AppConf.MetricsLegacyNames); without
+// it, METRICS_LEGACY_NAMES decides. Call it before Init.
+func SetLegacyNames(on bool) {
+	legacyNamesSetting.Store(&on)
+}
+
 // initGenAI registers the gen_ai.* instruments. Called from Init.
 func initGenAI(meter otelmetric.Meter) {
-	legacyNames = os.Getenv(EnvLegacyNames) != "false"
+	if v := legacyNamesSetting.Load(); v != nil {
+		legacyNames = *v
+	} else {
+		legacyNames = os.Getenv(EnvLegacyNames) != "false"
+	}
 
 	var err error
 

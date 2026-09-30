@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -38,6 +39,16 @@ type DatabaseHandler struct {
 var sensitiveDataPattern = regexp.MustCompile(`(?i)(token|key|secret|password|credential|authorization|bearer|api_key|auth)\s*[:=]\s*['"]?([^\s'",]+)['"]?`)
 
 // sanitizeError removes potentially sensitive data from error messages for safe logging
+// bufferSizeSetting is SetBufferSize's value; 0 means the environment.
+var bufferSizeSetting atomic.Int64
+
+// SetBufferSize sets how many records wait in memory to be written (Studio
+// passes AppConf.AnalyticsBufferSize); without it, ANALYTICS_BUFFER_SIZE
+// decides. Call it before StartRecording.
+func SetBufferSize(n int) {
+	bufferSizeSetting.Store(int64(n))
+}
+
 func sanitizeError(err error) string {
 	if err == nil {
 		return ""
@@ -94,7 +105,9 @@ func (h *DatabaseHandler) start() {
 
 	defaultBufferSize := 1000
 	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_SIZE")
-	if analyticsBufferSizeStr != "" {
+	if n := bufferSizeSetting.Load(); n > 0 {
+		defaultBufferSize = int(n)
+	} else if analyticsBufferSizeStr != "" {
 		bfr, err := strconv.Atoi(analyticsBufferSizeStr)
 		if err != nil {
 			logger.Warnf("ANALYTICS_BUFFER_SIZE must be a string, error: %s", sanitizeError(err))

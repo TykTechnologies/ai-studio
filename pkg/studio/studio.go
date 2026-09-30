@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
@@ -93,6 +96,13 @@ type Options struct {
 	// OnLicenceInvalid is called when an Enterprise licence fails its
 	// periodic re-check. Nil exits the process.
 	OnLicenceInvalid func(error)
+
+	// License supplies the AI Studio Enterprise licence (the same JWT as
+	// TYK_AI_LICENSE, validated the same way) from the host's own
+	// settings. It is read at start and at every validity check, so a
+	// renewed licence takes effect without a restart; call ReloadLicense to
+	// apply one at once. Nil uses Config.LicenseKey.
+	License func() string
 
 	// UIAssets is the built admin frontend, rooted at its build directory
 	// (for example os.DirFS over the unpacked tyk-ai-studio-ui release
@@ -167,6 +177,18 @@ type Studio struct {
 	// replicas (pkg/cluster).
 	clusterNode *cluster.Node
 	clusterLog  *cluster.Log
+	// relay carries edge-bound and object-change bus events to the other
+	// replicas through clusterLog.
+	relay *cluster.Relay
+	// leadership is this replica's claim on the leader lease, which
+	// singleton background work runs under.
+	leadership *cluster.Leadership
+	// relayed applies other replicas' changes to this replica's caches.
+	relayed *relayedChanges
+	// unsubscribeSignals stops delivering other replicas' signals.
+	unsubscribeSignals func()
+	// signals writes this replica's replica signals in the background.
+	signals *signalSender
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (control mode only).
 	pushes *pushes.Coordinator
@@ -217,6 +239,11 @@ func New(opts Options) (_ *Studio, err error) {
 
 	secrets.SetEncryptionKey(conf.SecretKey)
 	services.SetBrandingStoragePath(conf.BrandingStoragePath)
+	// Tuning settings shared with the microgateway: the packages read them
+	// from the environment unless Studio sets them.
+	analytics.SetBufferSize(conf.AnalyticsBufferSize)
+	metrics.SetLegacyNames(!conf.MetricsNoLegacyNames)
+	corsutil.SetAllowedOrigins(conf.CORSAllowedOrigins)
 	secrets.WarnIfEncryptionUnconfigured()
 
 	backgroundCtx, cancel := context.WithCancel(context.Background())
@@ -244,13 +271,14 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := models.MigrateTIBStores(s.db); err != nil {
 		return nil, fmt.Errorf("studio: migrate identity broker tables: %w", err)
 	}
-	if err := ensureDefaults(s.db, opts.SkipLLMDefaults); err != nil {
+	if err := ensureDefaults(s.db, opts.SkipLLMDefaults, conf.SkipFilterDefaults); err != nil {
 		return nil, fmt.Errorf("studio: seed defaults: %w", err)
 	}
 
 	// Licensing (Enterprise: validates the licence and starts periodic checks).
 	s.licensing = licensing.NewService(licensing.Config{
 		LicenseKey:           conf.LicenseKey,
+		LicenseSource:        opts.License,
 		TelemetryURL:         conf.LicenseTelemetryURL,
 		TelemetryPeriod:      conf.LicenseTelemetryPeriod,
 		TelemetryDisabled:    conf.LicenseDisableTelemetry,
@@ -309,6 +337,11 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := s.clusterLog.Start(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: %w", err)
 	}
+	// Singleton jobs (aggregations, alerts, syncs, cleanups) run only on
+	// the replica holding the leader lease.
+	s.leadership = cluster.NewLeadership(s.db, cluster.LeaderLease, nodeID, cluster.LeadershipOptions{})
+	s.leadership.Start()
+	s.connectReplicas()
 
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.
@@ -460,6 +493,7 @@ func New(opts Options) (_ *Studio, err error) {
 		UnifiedRouterBasePath: conf.UnifiedRouterPath,
 		DisableUnifiedRouter:  conf.UnifiedRouterDisabled,
 		ServerTiming:          conf.GatewayServerTiming,
+		DebugHTTPProxy:        conf.DebugHTTPProxy,
 	}, service.Budget)
 
 	if conf.GatewayMode == "control" {
@@ -487,6 +521,9 @@ func New(opts Options) (_ *Studio, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("studio: build API: %w", err)
 	}
+	s.api.SetClusterStatus(func(ctx context.Context) (interface{}, error) {
+		return cluster.Snapshot(ctx, s.db, nodeID, s.clusterLog, s.relay)
+	})
 
 	return s, nil
 }
@@ -505,6 +542,8 @@ func (s *Studio) wireControlPlane(version string) error {
 		NextAuthToken: conf.GRPCNextAuthToken,
 		EncryptionKey: conf.MicrogatewayEncryptionKey,
 		NodeID:        s.clusterNode.ID(),
+
+		BudgetSyncInterval: conf.BudgetSyncInterval,
 	}, s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)
@@ -552,6 +591,12 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 		}
 	}
 	service.SetEventBus(bus)
+
+	// Other replicas' edges and caches must hear about this replica's
+	// events, and this replica about theirs.
+	s.watchRelayedChanges(bus)
+	s.relay = cluster.NewRelay(s.clusterLog, bus, cluster.RelayOptions{})
+	s.relay.Start()
 }
 
 // HTTPHandler returns the admin API and UI handler: the portal, chat,
@@ -641,8 +686,24 @@ func (s *Studio) stop(ctx context.Context) error {
 	if s.pushes != nil {
 		s.pushes.Stop()
 	}
+	s.relayed.stop()
+	if s.relay != nil {
+		// Before the log: events still queued are written on the way out.
+		s.relay.Stop()
+	}
 	if s.clusterLog != nil {
 		s.clusterLog.Stop()
+	}
+	replicas.SetBackend(nil)
+	if s.signals != nil {
+		s.signals.close()
+	}
+	if s.unsubscribeSignals != nil {
+		s.unsubscribeSignals()
+	}
+	if s.leadership != nil {
+		// Hand the leader lease over now rather than after its TTL.
+		s.leadership.Stop()
 	}
 	if s.clusterNode != nil {
 		// Last among the cluster pieces: removing the row tells the other
@@ -693,4 +754,39 @@ func cookiePath(basePath string) string {
 		return basePath
 	}
 	return "/"
+}
+
+// ReloadLicense re-reads the licence (Options.License, or Config.LicenseKey)
+// and validates it now, for a host that has just stored a renewed one.
+// Community Edition has no licence and returns nil. An error leaves the
+// licence Studio already holds in place; the host can show it.
+func (s *Studio) ReloadLicense() error {
+	if r, ok := s.licensing.(licensing.Revalidator); ok {
+		return r.Revalidate()
+	}
+	return nil
+}
+
+// LicenseStatus is the Enterprise licence as Studio holds it, for a host to
+// show next to its own licence.
+type LicenseStatus struct {
+	Enterprise bool      // an Enterprise build (Community Edition has no licence)
+	Valid      bool      // the licence is valid now
+	ExpiresAt  time.Time // zero without a licence
+	DaysLeft   int       // -1 without a licence
+	// Entitlements are the licence's feature names.
+	Entitlements []string
+}
+
+// LicenseStatus reports the licence Studio holds.
+func (s *Studio) LicenseStatus() LicenseStatus {
+	st := LicenseStatus{Enterprise: config.IsEnterprise(), Valid: s.licensing.IsValid(), DaysLeft: s.licensing.DaysLeft()}
+	if info := s.licensing.GetLicenseInfo(); info != nil {
+		st.ExpiresAt = info.ExpiresAt
+		for name := range info.Features {
+			st.Entitlements = append(st.Entitlements, name)
+		}
+		sort.Strings(st.Entitlements)
+	}
+	return st
 }
