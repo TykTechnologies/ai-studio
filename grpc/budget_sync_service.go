@@ -6,13 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/rs/zerolog/log"
 )
 
 // AppBudgetData contains budget usage and period info for a single app
@@ -116,9 +116,9 @@ func NewBudgetSyncService(db *gorm.DB, eventBus eventbridge.Bus) *BudgetSyncServ
 	if intervalStr := os.Getenv("BUDGET_SYNC_INTERVAL"); intervalStr != "" {
 		if parsed, err := time.ParseDuration(intervalStr); err == nil {
 			interval = parsed
-			log.Info().Dur("interval", interval).Msg("Budget sync interval configured from environment")
+			logger.Log.Info().Dur("interval", interval).Msg("Budget sync interval configured from environment")
 		} else {
-			log.Warn().Str("value", intervalStr).Err(err).Msg("Invalid BUDGET_SYNC_INTERVAL, using default")
+			logger.Log.Warn().Str("value", intervalStr).Err(err).Msg("Invalid BUDGET_SYNC_INTERVAL, using default")
 		}
 	}
 
@@ -149,7 +149,7 @@ func (s *BudgetSyncService) Start() {
 
 	go func() {
 		defer close(s.done)
-		log.Info().Dur("interval", s.syncInterval).Msg("Starting budget sync service")
+		logger.Log.Info().Dur("interval", s.syncInterval).Msg("Starting budget sync service")
 		// A panic in a cycle restarts the loop (with an immediate sync)
 		// rather than ending the process.
 		safe.Loop("budget sync", s.ctx.Done(), func() { s.run(becameLeader) })
@@ -166,7 +166,7 @@ func (s *BudgetSyncService) run(becameLeader <-chan struct{}) {
 	for {
 		select {
 		case <-s.ctx.Done():
-			log.Info().Msg("Budget sync service stopped")
+			logger.Log.Info().Msg("Budget sync service stopped")
 			return
 		case <-becameLeader:
 			s.aggregateAndPublish()
@@ -206,7 +206,7 @@ func (s *BudgetSyncService) Stop() {
 		select {
 		case <-s.done:
 		case <-time.After(5 * time.Second):
-			log.Warn().Msg("Budget sync service stop timed out")
+			logger.Log.Warn().Msg("Budget sync service stop timed out")
 		}
 	}
 }
@@ -268,7 +268,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	// Get all apps with their budget_start_date
 	var apps []models.App
 	if err := s.db.Select("id", "budget_start_date").Find(&apps).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to fetch apps for budget sync")
+		logger.Log.Error().Err(err).Msg("Failed to fetch apps for budget sync")
 		return
 	}
 
@@ -281,7 +281,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	// kept the database scanning continuously on a busy hub.
 	spend, err := s.usage.usage(s.db, apps, now)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to query budget usage")
+		logger.Log.Error().Err(err).Msg("Failed to query budget usage")
 		return
 	}
 	s.published.Store(&spend)
@@ -322,7 +322,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	if src != nil {
 		found, err := src.EdgeBlocks()
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to compute budget blocks; keeping edges' last set")
+			logger.Log.Error().Err(err).Msg("Failed to compute budget blocks; keeping edges' last set")
 		} else {
 			blocksIncluded = true
 			blocks = make(map[uint32]string, len(found))
@@ -361,7 +361,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 
 	// Skip publishing if there is nothing to sync
 	if len(appBudgets) == 0 && !blocksIncluded {
-		log.Debug().Msg("No budget usage data to sync")
+		logger.Log.Debug().Msg("No budget usage data to sync")
 		return
 	}
 
@@ -378,11 +378,11 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 
 	// Publish via event bridge (DirDown = control to edges)
 	if err := eventbridge.PublishDown(s.eventBus, "control", BudgetSyncTopic, payload); err != nil {
-		log.Error().Err(err).Msg("Failed to publish budget sync event")
+		logger.Log.Error().Err(err).Msg("Failed to publish budget sync event")
 		return
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Int("app_count", len(appBudgets)).
 		Uint64("sequence", payload.SequenceNumber).
 		Msg("Published budget sync to edges")
