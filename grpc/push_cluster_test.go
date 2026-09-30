@@ -79,9 +79,17 @@ func fastPushOptions() pushes.Options {
 
 func startPushReplica(t *testing.T, db *gorm.DB, id string, opts pushes.Options) *pushReplica {
 	t.Helper()
+	return startPushReplicaWithGrace(t, db, id, opts, 0)
+}
+
+// startPushReplicaWithGrace starts a replica whose streams take pushes only
+// after a heartbeat or the grace period (see ControlServer.pushReady).
+func startPushReplicaWithGrace(t *testing.T, db *gorm.DB, id string, opts pushes.Options, grace time.Duration) *pushReplica {
+	t.Helper()
 	node, err := cluster.StartNode(db, id, "test")
 	require.NoError(t, err)
 	server := replicaServer(t, db, id)
+	server.pushReadyGrace = grace
 	c := pushes.New(db, id, server, opts)
 	server.SetPushDelivery(c)
 	require.NoError(t, c.Start(context.Background()))
@@ -410,5 +418,30 @@ func TestPushCluster_FlappingEdgeExhaustsAttempts(t *testing.T) {
 			}
 		}
 		assert.Equal(t, map[int]bool{1: true, 2: true, 3: true}, closed, "%+v", cmd.History)
+	})
+}
+
+// An edge from before early heartbeats (v2.2) drops a push that reaches it
+// while it is still starting up. Control waits for the stream's first
+// heartbeat or the grace period before delivering, so the push waiting for
+// it arrives once it can take it: one attempt, not a minute's timeout and a
+// second attempt (M3).
+func TestPushCluster_OldEdgeStartingUpGetsThePushAfterTheGrace(t *testing.T) {
+	forEachClusterDB(t, func(t *testing.T, db *gorm.DB) {
+		a := startPushReplicaWithGrace(t, db, "node-a", fastPushOptions(), 400*time.Millisecond)
+		now := time.Now()
+		require.NoError(t, db.Create(&models.EdgeInstance{EdgeID: "edge-1", Namespace: "default", Status: models.EdgeStatusDisconnected, LastHeartbeat: &now}).Error)
+		op := pushTo(t, a.pushes, pushes.Request{Scope: pushes.ScopeEdge, EdgeIDs: []string{"edge-1"}})
+
+		connectedAt := time.Now()
+		e := startFakeEdge(t, a, "edge-1", "default")
+		e.setAnswer(func(*pb.ConfigurationReloadRequest) (pb.ReloadPhase, string, bool) {
+			if time.Since(connectedAt) < 300*time.Millisecond {
+				return 0, "", true // no reload handler yet: dropped
+			}
+			return pb.ReloadPhase_READY, "Configuration up to date, no changes needed", false
+		})
+		st := waitForPush(t, a.pushes, op, models.PushOperationSucceeded)
+		assert.Equal(t, 1, st.Commands[0].Attempts, "history: %+v", st.Commands[0].History)
 	})
 }

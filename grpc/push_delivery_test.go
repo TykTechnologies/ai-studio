@@ -257,3 +257,56 @@ func TestControlServer_StopEndsEdgeStreams(t *testing.T) {
 		}
 	}
 }
+
+// A stream is given pushes only once the edge is ready for them: after its
+// first heartbeat (current edges send one as soon as the stream is open),
+// which also wakes the coordinator, or, for edges that send no early
+// heartbeat (v2.2 and before), after the grace period. Until then an edge
+// that is still starting up would drop the push (M3).
+func TestControlServer_PushWaitsForReadyStream(t *testing.T) {
+	db := setupTestDB(t)
+	server := replicaServer(t, db, "node-a")
+	server.pushReadyGrace = time.Hour
+	rec := &recordingPushes{}
+	server.SetPushDelivery(rec)
+	registerEdge(t, server, "edge-1", "default")
+
+	stream, stop := connect(t, server, "edge-1", "default")
+	defer stop()
+	assert.NotContains(t, server.LocalStreams(), "edge-1", "no pushes before the edge's first heartbeat")
+	opened, _, _ := rec.snapshot()
+	assert.Equal(t, []string{"edge-1"}, opened)
+
+	heartbeat(stream, "edge-1")
+	require.Eventually(t, func() bool { return server.LocalStreams()["edge-1"] != "" }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { o, _, _ := rec.snapshot(); return len(o) == 2 }, 5*time.Second, 10*time.Millisecond,
+		"the first heartbeat wakes the coordinator")
+
+	heartbeat(stream, "edge-1")
+	require.Eventually(t, func() bool {
+		n := 0
+		for _, m := range stream.sent() {
+			if m.GetHeartbeatResponse() != nil {
+				n++
+			}
+		}
+		return n == 2
+	}, 5*time.Second, 10*time.Millisecond)
+	opened, _, _ = rec.snapshot()
+	assert.Len(t, opened, 2, "later heartbeats do not")
+}
+
+// An edge that sends no heartbeat early gets pushes after the grace period.
+func TestControlServer_PushReadyAfterGrace(t *testing.T) {
+	db := setupTestDB(t)
+	server := replicaServer(t, db, "node-a")
+	server.pushReadyGrace = 200 * time.Millisecond
+	registerEdge(t, server, "edge-1", "default")
+
+	start := time.Now()
+	_, stop := connect(t, server, "edge-1", "default")
+	defer stop()
+	assert.NotContains(t, server.LocalStreams(), "edge-1")
+	require.Eventually(t, func() bool { return server.LocalStreams()["edge-1"] != "" }, 5*time.Second, 10*time.Millisecond)
+	assert.GreaterOrEqual(t, time.Since(start), 200*time.Millisecond)
+}

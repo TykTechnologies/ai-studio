@@ -141,7 +141,7 @@ When you push configuration:
    - **Failed**: the edge could not apply it (its error is shown), or three delivery attempts in a row were cut short.
    - **Timed out**: the edge did not connect, or did not finish, before the deadline.
 
-You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline. If an edge's connection drops while it is reloading, or the AI Studio instance it was connected to stops, the push is sent again when the edge reconnects (from 2.3, to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes and lists them. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
+You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline (an edge that is restarting gets it as soon as it is up; edges from 2.2 and before, which drop a push that arrives while they are still starting, get it 10 seconds after they connect). The "not connected" warning stays only while an edge is still waiting to connect. When no edge can receive the push (every edge offline for more than 5 minutes, or none registered), the modal says so at its top and disables **Push** until you choose another target. If an edge's connection drops while it is reloading, or the AI Studio instance it was connected to stops, the push is sent again when the edge reconnects (from 2.3, to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes and lists them. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
 
 How an edge applies a snapshot:
 
@@ -244,7 +244,7 @@ Returns what has changed in a namespace since its last push, as shown in the pus
 }
 ```
 
-`changes` is capped at 200 entries; `total` is the real count. `baseline` says what `since` was taken from: `push` (the recorded last push), `edge_ack` (no push was ever recorded, for example on a database upgraded from before pushes were stamped, but an edge is in sync with the namespace checksum, so its acknowledgement is used and the UI says "since the last sync") or `none` (nothing to measure from; every object is listed as created).
+`changes` is capped at 200 entries; `total` is the real count. `baseline` says what `since` was taken from: `push` (the recorded last push), `edge_ack` (no push was ever recorded, for example on a database upgraded from before pushes were stamped, or when the edges only got their configuration when they registered: the latest time an edge confirmed it was in sync is used, whether or not that edge is connected now, and the UI says "since the last sync") or `none` (no edge ever confirmed; every object is listed as created).
 
 A reload makes each edge pull the snapshot through `GetFullConfiguration`, which marks that edge in sync immediately rather than waiting for its next heartbeat; the other edges in the namespace stay pending until they pull.
 
@@ -256,7 +256,7 @@ POST /api/v1/namespaces/{namespace}/reload   # one namespace (Enterprise)
 POST /api/v1/edges/reload-all                # every edge gateway
 ```
 
-Each answers `202 Accepted` with the push operation: `operation_id`, `target_edges`, `targets` (each with `reachable` and, if not, the reason), `skipped` (edges left out because they have been offline for more than 5 minutes), `warnings` and `deadline_at`. It answers `404` for an unknown edge, `409` when there is nothing to push to, and `503` when this AI Studio runs no control server.
+Each answers `202 Accepted` with the push operation: `operation_id`, `target_edges`, `targets` (each with `reachable` and, if not, the reason), `skipped` (edges left out because they have been offline for more than 5 minutes), `warnings` and `deadline_at`. It answers `404` for an unknown edge, `409` when there is nothing to push to, and `503` when this AI Studio runs no control server. On Enterprise, `reload-all` also returns `data.message`, `data.operations` and `data.operations_count` as 2.2 did (see the upgrade note below).
 
 ```
 GET /api/v1/reload-operations/{operation_id}/status   # Enterprise
@@ -264,6 +264,16 @@ GET /api/v1/edges/reload-operations                  # the last day's pushes
 ```
 
 The status reports the operation's `status` (`in_progress`, `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`, `expired`), `progress`, `counts` per outcome, and `edges`: for each edge its `status`, the phase it last reported, `message`, `warning`, `attempts` and the history of every delivery attempt. From 2.3, any AI Studio replica answers it. The listing gives each push's status, counts and message.
+
+#### Upgrading scripts from 2.2
+
+The paths and the response envelope are unchanged, and every attribute 2.2 returned is still there. What scripts may need to change:
+
+- **Final status.** 2.2 ended an operation with `completed`, `failed` or `timed_out`. Now it is `succeeded` or `succeeded_with_warnings` when every edge loaded the configuration, and `partially_failed`, `failed` or `expired` otherwise; `in_progress` until then. A script that waits for `completed` never finishes.
+- **Operation IDs** start with `push-` (2.2: `reload-` or `edge-reload-`).
+- **Reload-all (Enterprise)** starts one operation for every edge instead of one per namespace. `data.operations` has one entry per namespace pushed to, all with the same `operation_id`, so polling each entry still works.
+- **Status codes.** A namespace with no edge to push to answers `409` (2.2: `404`); reload-all with no edge at all answers `409` (2.2: `202` with no operations); an edge that is offline answers `202` and the push waits for it (2.2: `500`).
+- **The listing** (`GET /edges/reload-operations`) returns the last day's pushes from the database, with `counts` per outcome instead of `target_edges`; the status endpoint lists each push's edges.
 
 ## Troubleshooting
 
@@ -273,7 +283,7 @@ The status reports the operation's `status` (`in_progress`, `succeeded`, `succee
 - Verify the edge gateway is running and healthy
 - Check edge gateway logs for connection errors
 - Ensure firewall rules allow gRPC traffic (default port 50051)
-- After a control plane restart or outage, edges reconnect on their own, retrying with exponential backoff (5 seconds doubling to at most 5 minutes). Edges older than the fix of 2026-09-24 stopped retrying after the first failed attempt and needed a restart once the outage lasted longer than about 5 seconds.
+- After a control plane restart or outage, edges reconnect on their own, retrying with exponential backoff: `EDGE_RECONNECT_INTERVAL` (default 5 seconds) doubling to at most 30 seconds (up to 2.2, and until the fix of 2026-09-30, at most 5 minutes, so an edge could come back minutes after the control plane). Edges older than the fix of 2026-09-24 stopped retrying after the first failed attempt and needed a restart once the outage lasted longer than about 5 seconds.
 
 ### Edge Analytics Missing in AI Studio
 

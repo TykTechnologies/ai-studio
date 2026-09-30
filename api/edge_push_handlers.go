@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
@@ -52,6 +53,11 @@ func sendPushError(c *gin.Context, err error) {
 // pushAccepted answers a push request: the operation, which edges it
 // targets and whether each is reachable now, and any warnings.
 func pushAccepted(c *gin.Context, res *pushes.Result) {
+	c.JSON(http.StatusAccepted, pushAcceptedBody(res))
+}
+
+// pushAcceptedBody is pushAccepted's response body.
+func pushAcceptedBody(res *pushes.Result) gin.H {
 	op := res.Operation
 	edges := make([]string, len(res.Targets))
 	reachable := 0
@@ -65,7 +71,7 @@ func pushAccepted(c *gin.Context, res *pushes.Result) {
 	if reachable == len(res.Targets) {
 		message = fmt.Sprintf("Push recorded for %d edge(s).", len(res.Targets))
 	}
-	c.JSON(http.StatusAccepted, gin.H{
+	return gin.H{
 		"data": gin.H{
 			"type": "reload-operations",
 			"id":   op.OperationID,
@@ -86,7 +92,44 @@ func pushAccepted(c *gin.Context, res *pushes.Result) {
 				"warnings":         nonNilStrings(res.Warnings),
 			},
 		},
-	})
+	}
+}
+
+// reloadAllAccepted answers POST /edges/reload-all on Enterprise. Up to
+// v2.2 that endpoint started one operation per namespace and answered
+// {message, operations: [{operation_id, namespace, status}],
+// operations_count} under "data"; it now starts one operation for every
+// edge. Those three fields are kept next to the new ones for clients
+// written against v2.2: one entry per namespace pushed to, all with the
+// same operation_id (poll it once).
+func reloadAllAccepted(c *gin.Context, res *pushes.Result) {
+	body := pushAcceptedBody(res)
+	data := body["data"].(gin.H)
+	var namespaces []string
+	seen := map[string]bool{}
+	for _, t := range res.Targets {
+		ns := t.Namespace
+		if ns == "" {
+			ns = "global" // as v2.2 listed it
+		}
+		if !seen[ns] {
+			seen[ns] = true
+			namespaces = append(namespaces, ns)
+		}
+	}
+	sort.Strings(namespaces)
+	operations := make([]gin.H, len(namespaces))
+	for i, ns := range namespaces {
+		operations[i] = gin.H{
+			"operation_id": res.Operation.OperationID,
+			"namespace":    ns,
+			"status":       res.Operation.Status,
+		}
+	}
+	data["message"] = "Global reload triggered for all namespaces"
+	data["operations"] = operations
+	data["operations_count"] = len(operations)
+	c.JSON(http.StatusAccepted, body)
 }
 
 // pushStatusAttributes is the full report of one push, per edge.

@@ -62,6 +62,12 @@ type EdgeInstanceConnection struct {
 	Stream        pb.ConfigurationSyncService_SubscribeToChangesServer
 	LastHeartbeat time.Time
 
+	// openedAt is when the stream registered; heartbeatSeen is set by its
+	// first heartbeat (under mu). Together they say whether the edge is
+	// ready for pushes (see pushReady).
+	openedAt      time.Time
+	heartbeatSeen bool
+
 	// Event bridge components for this connection
 	streamAdapter *eventbridge.StreamAdapter
 	eventBridge   *eventbridge.Bridge
@@ -106,6 +112,9 @@ type ControlServer struct {
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (services/pushes; set after creation).
 	pushes PushDelivery
+	// pushReadyGrace: a stream gets pushes once it has sent a heartbeat, or
+	// once it has been open this long (see pushReady).
+	pushReadyGrace time.Duration
 
 	// Plugin manager for routing edge payloads to plugins
 	pluginManager EdgePayloadRouter
@@ -189,6 +198,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		eventBus:              eventbridge.NewBus(),
 		encryptionKey:         encryptionKey,
 		nodeID:                cfg.NodeID,
+		pushReadyGrace:        defaultPushReadyGrace,
 	}
 	if server.nodeID == "" {
 		server.nodeID = "control"
@@ -588,6 +598,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						SessionID:     streamSession,
 						Stream:        stream,
 						LastHeartbeat: time.Now(),
+						openedAt:      time.Now(),
 						streamAdapter: streamAdapter,
 						eventBridge:   bridge,
 						bridgeCtx:     bridgeCtx,
@@ -627,6 +638,8 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 				if edgeConnection != nil {
 					edgeConnection.mu.Lock()
 					edgeConnection.LastHeartbeat = time.Now()
+					firstHeartbeat := !edgeConnection.heartbeatSeen
+					edgeConnection.heartbeatSeen = true
 					edgeConnection.mu.Unlock()
 
 					// Get loaded config info from heartbeat
@@ -694,6 +707,13 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						},
 					}
 					stream.Send(response)
+
+					// The edge is ready for pushes now; deliver any waiting.
+					if firstHeartbeat {
+						if p := s.pushDelivery(); p != nil {
+							p.StreamOpened(edgeID)
+						}
+					}
 				}
 
 			case *pb.EdgeMessage_ConfigRequest:
@@ -2508,14 +2528,34 @@ func (s *ControlServer) pushDelivery() PushDelivery {
 	return s.pushes
 }
 
-// LocalStreams lists the edges with a live stream on this replica, with the
-// stream's session.
+// defaultPushReadyGrace is how long a stream that has not sent a heartbeat
+// waits before it is given pushes anyway.
+const defaultPushReadyGrace = 10 * time.Second
+
+// pushReady reports whether pushes may be sent on this stream. An edge
+// opens its stream while it is still starting up; up to v2.2 (and until
+// this check existed) the microgateway set its reload handler only after
+// its services were up, dropped a push that arrived before then, and the
+// push waited for control's answer timeout (a minute) before it was sent
+// again. So a stream gets pushes after its first heartbeat, which current
+// edges send as soon as the stream is open (and they hold a push that
+// arrives before the handler is set), or, for older edges whose first
+// heartbeat comes a full interval later, once it has been open for the
+// grace period. The caller holds s.edgeMutex.
+func (s *ControlServer) pushReady(edge *EdgeInstanceConnection) bool {
+	edge.mu.RLock()
+	defer edge.mu.RUnlock()
+	return edge.heartbeatSeen || time.Since(edge.openedAt) >= s.pushReadyGrace
+}
+
+// LocalStreams lists the edges with a live stream on this replica that are
+// ready for pushes (see pushReady), with the stream's session.
 func (s *ControlServer) LocalStreams() map[string]string {
 	s.edgeMutex.RLock()
 	defer s.edgeMutex.RUnlock()
 	out := make(map[string]string, len(s.edgeConnections))
 	for edgeID, edge := range s.edgeConnections {
-		if edge.Stream != nil && edge.Stream.Context().Err() == nil {
+		if edge.Stream != nil && edge.Stream.Context().Err() == nil && s.pushReady(edge) {
 			out[edgeID] = edge.SessionID
 		}
 	}
