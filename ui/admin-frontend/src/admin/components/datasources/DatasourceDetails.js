@@ -110,7 +110,7 @@ const DatasourceDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Data source details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

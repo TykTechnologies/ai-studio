@@ -63,6 +63,36 @@ func SetBuildInfo(version, buildHash, buildTime string) {
 // @Success 200 {object} map[string]interface{}
 // @Router /common/system [get]
 func (a *API) handleFeatureSet(c *gin.Context) {
+	featureSet := a.featureSet()
+
+	// Determine edition
+	edition := "community"
+	if budget.IsEnterpriseAvailable() {
+		edition = "enterprise"
+	}
+
+	response := gin.H{
+		"features":   featureSet,
+		"edition":    edition,
+		"version":    appVersion,
+		"build_hash": appBuildHash,
+		"build_time": appBuildTime,
+	}
+
+	// License expiry warning
+	if a.licensingService != nil {
+		daysLeft := a.licensingService.DaysLeft()
+		if daysLeft >= 0 && daysLeft < 30 {
+			response["license_days_left"] = daysLeft
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// featureSet is what /common/system reports under "features" and what the
+// navigation manifest (/common/nav) is gated on.
+func (a *API) featureSet() map[string]interface{} {
 	featureSet := make(map[string]interface{})
 
 	// Default: all core features enabled (CE behavior)
@@ -98,30 +128,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	if cfg := config.Get(""); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
 	}
-
-	// Determine edition
-	edition := "community"
-	if budget.IsEnterpriseAvailable() {
-		edition = "enterprise"
-	}
-
-	response := gin.H{
-		"features":   featureSet,
-		"edition":    edition,
-		"version":    appVersion,
-		"build_hash": appBuildHash,
-		"build_time": appBuildTime,
-	}
-
-	// License expiry warning
-	if a.licensingService != nil {
-		daysLeft := a.licensingService.DaysLeft()
-		if daysLeft >= 0 && daysLeft < 30 {
-			response["license_days_left"] = daysLeft
-		}
-	}
-
-	c.JSON(http.StatusOK, response)
+	return featureSet
 }
 
 // @Summary Login user
@@ -501,12 +508,7 @@ func (a *API) handleMe(c *gin.Context) {
 
 	response.Attributes.UIOptions.ShowChat = u.ShowChat
 	response.Attributes.UIOptions.ShowPortal = u.ShowPortal
-	if rbacSvc.Enabled() {
-		// Identity provider configuration follows the sso-profiles permission.
-		response.Attributes.UIOptions.ShowSSOConfig = perms.Has(authz.Read("sso-profiles")) && sso.IsEnterpriseAvailable()
-	} else {
-		response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig && sso.IsEnterpriseAvailable()
-	}
+	response.Attributes.UIOptions.ShowSSOConfig = a.showSSOConfig(u, perms)
 	response.Attributes.UIOptions.SkipQuickStart = u.SkipQuickStart
 	response.Attributes.Entitlements.Catalogues = serializeCatalogues(entitlements.Catalogues)
 	response.Attributes.Entitlements.DataCatalogues = serializeDataCatalogues(entitlements.DataCatalogues)
@@ -514,6 +516,19 @@ func (a *API) handleMe(c *gin.Context) {
 	response.Attributes.Entitlements.Chats = serializeChats(entitlements.Chats, a.config.DB)
 
 	c.JSON(http.StatusOK, response)
+}
+
+// showSSOConfig reports whether the user may see identity provider
+// configuration: the sso-profiles permission under RBAC, else the legacy
+// admin flag plus AccessToSSOConfig.
+func (a *API) showSSOConfig(u *models.User, perms authz.Set) bool {
+	if !sso.IsEnterpriseAvailable() {
+		return false
+	}
+	if a.service.Authz().Enabled() {
+		return perms.Has(authz.Read("sso-profiles"))
+	}
+	return u.IsAdmin && u.AccessToSSOConfig
 }
 
 // Helper function to convert map to slice

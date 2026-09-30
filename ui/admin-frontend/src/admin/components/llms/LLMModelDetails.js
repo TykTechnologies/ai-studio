@@ -205,7 +205,7 @@ const LLMModelDetails = () => {
   if (!model) {
     return (
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model usage</Typography>
           <SecondaryLinkButton startIcon={<ArrowBackIcon />} onClick={backToProvider} color="inherit">
             Back to provider
@@ -220,7 +220,7 @@ const LLMModelDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box>
           <Typography variant="headingXLarge" component="h1" sx={{ fontFamily: "monospace" }}>
             {model}

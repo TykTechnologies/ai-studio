@@ -4,6 +4,11 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 import registerGovernedMetadataElements from './admin/components/metadata/webc/governedMetadataElements';
+import { applyChrome } from './runtimeConfig';
+
+// Without Studio's top bar (embedded in a host that draws navigation),
+// sticky page headers sit at the top of the page.
+applyChrome();
 
 // <governed-metadata-fields> / <governed-metadata-badges> for plugin UIs.
 registerGovernedMetadataElements();

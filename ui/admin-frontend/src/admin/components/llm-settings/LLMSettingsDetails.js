@@ -165,7 +165,7 @@ const LLMSettingsDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Model call setting details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

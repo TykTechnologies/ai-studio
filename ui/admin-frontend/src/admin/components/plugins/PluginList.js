@@ -234,7 +234,7 @@ const PluginList = () => {
 
   return (
     <Box sx={{ p: 0 }}>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Plugins</Typography>
         <PrimaryButton
           variant="contained"

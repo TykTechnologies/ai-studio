@@ -182,7 +182,7 @@ const ChatDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Chat details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

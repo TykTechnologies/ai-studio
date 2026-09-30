@@ -232,7 +232,7 @@ const ToolCatalogueForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           {id ? "Edit tool catalog" : "Add tool catalog"}
         </Typography>

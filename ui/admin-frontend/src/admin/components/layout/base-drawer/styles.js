@@ -20,7 +20,7 @@ export const StyledDrawer = styled(MuiDrawer, {
       overflowY: open ? 'auto' : 'hidden',
       overflowX: 'hidden',
       position: 'relative',
-      maxHeight: 'calc(100vh - 64px)',
+      maxHeight: 'calc(100vh - var(--studio-header-height))',
       '& .MuiListItemText-root, & .MuiSvgIcon-root:not(.MuiListItemIcon-root svg)': {
         opacity: open ? 1 : 0,
         transition: theme.transitions.create('opacity', {

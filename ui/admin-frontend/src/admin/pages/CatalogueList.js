@@ -211,7 +211,7 @@ const CatalogueList = memo(() => {
   return (
     <>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">LLM catalogs</Typography>
           <Can permission={P.CATALOGUES_WRITE}>
             <PrimaryButton

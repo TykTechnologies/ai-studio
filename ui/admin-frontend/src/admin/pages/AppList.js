@@ -259,7 +259,7 @@ const AppList = () => {
   return (
     <>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Apps</Typography>
           <Can permission={P.APPS_WRITE}>
             <PrimaryButton

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/TykTechnologies/midsommar/v2/auth"
 )
 
 func TestWithBasePath(t *testing.T) {
@@ -49,8 +51,8 @@ func TestWithBasePathAtRootPassesRequestsThrough(t *testing.T) {
 func TestInjectBootstrap(t *testing.T) {
 	index := []byte(`<!doctype html><html><head><link href="./static/css/main.css"></head></html>`)
 
-	out := string(injectBootstrap(index, frontendBootstrap{BasePath: "/ai-studio", AuthMode: "host", LoginURL: "/login", CSRFTokenHeader: "X-CSRF-Token", CSRFTokenURL: "/ai-studio/csrf-token"}))
-	assert.Contains(t, out, `<head><base href="/ai-studio/"><script>window.__TYK_AI_STUDIO__={"basePath":"/ai-studio","authMode":"host","loginURL":"/login","csrfTokenHeader":"X-CSRF-Token","csrfTokenURL":"/ai-studio/csrf-token"};</script>`)
+	out := string(injectBootstrap(index, frontendBootstrap{BasePath: "/ai-studio", AuthMode: "host", LoginURL: "/login", CSRFTokenHeader: "X-CSRF-Token", CSRFTokenURL: "/ai-studio/csrf-token", Chrome: "none"}))
+	assert.Contains(t, out, `<head><base href="/ai-studio/"><script>window.__TYK_AI_STUDIO__={"basePath":"/ai-studio","authMode":"host","loginURL":"/login","csrfTokenHeader":"X-CSRF-Token","csrfTokenURL":"/ai-studio/csrf-token","chrome":"none"};</script>`)
 	assert.Contains(t, out, `href="./static/css/main.css"`, "relative asset URLs resolve against the <base> element")
 
 	root := string(injectBootstrap(index, frontendBootstrap{AuthMode: "local"}))
@@ -58,6 +60,14 @@ func TestInjectBootstrap(t *testing.T) {
 
 	hostile := string(injectBootstrap([]byte("<head></head>"), frontendBootstrap{BasePath: `/x</script><script>alert(1)`}))
 	assert.False(t, strings.Contains(hostile, "</script><script>alert(1)"), "a setting cannot close the script element")
+}
+
+// The console draws its own top bar and drawers unless the host asks for
+// pages only.
+func TestFrontendBootstrapChrome(t *testing.T) {
+	assert.Equal(t, "full", (&API{}).frontendBootstrap().Chrome)
+	assert.Equal(t, "full", (&API{config: &auth.Config{}}).frontendBootstrap().Chrome)
+	assert.Equal(t, "none", (&API{config: &auth.Config{Chromeless: true}}).frontendBootstrap().Chrome)
 }
 
 // A configured CSRF_KEY gives every replica and restart the same token key;

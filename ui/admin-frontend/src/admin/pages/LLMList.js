@@ -177,7 +177,7 @@ const LLMList = () => {
   return (
     <Box sx={{ p: 0 }}>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">LLM providers</Typography>
           <Can permission={P.LLMS_WRITE}>
             <PrimaryButton

@@ -151,7 +151,7 @@ const ToolList = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Tools</Typography>
         <Stack direction="row" spacing={2}>
           <Can permission={P.TOOLS_WRITE}>

@@ -180,7 +180,7 @@ const ModelPriceList = () => {
   return (
     <>
       <>
-        <TitleBox top="64px">
+        <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model prices</Typography>
           <Can permission={P.MODEL_PRICES_WRITE}>
             <PrimaryButton

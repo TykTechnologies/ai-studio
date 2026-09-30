@@ -11,14 +11,18 @@ import {
   MenuItem,
   OutlinedInput,
   Select,
+  Tooltip,
 } from '@mui/material';
+import { Lock as LockIcon } from '@mui/icons-material';
 import { listRoles, sortRoles } from '../../services/rbacService';
 
 /**
  * Multi-select of roles, system roles first. `value` and `onChange` deal in
  * role IDs (numbers). Loads the role list itself unless `roles` is given.
+ * `lockedIds` are roles that stay selected and cannot be removed here (the
+ * host application assigns them).
  */
-const RoleSelect = ({ value = [], onChange, roles: providedRoles, label = 'Roles', helperText, disabled = false, id = 'role-select' }) => {
+const RoleSelect = ({ value = [], onChange, roles: providedRoles, label = 'Roles', helperText, disabled = false, id = 'role-select', lockedIds = [] }) => {
   const [roles, setRoles] = useState(providedRoles || []);
   const [loading, setLoading] = useState(!providedRoles);
 
@@ -41,17 +45,24 @@ const RoleSelect = ({ value = [], onChange, roles: providedRoles, label = 'Roles
     };
   }, [providedRoles]);
 
+  const locked = (lockedIds || []).map(Number);
   const selected = (value || []).map(Number);
   const byId = new Map(roles.map((r) => [Number(r.id), r]));
   const system = roles.filter((r) => r.attributes.is_system);
   const custom = roles.filter((r) => !r.attributes.is_system);
 
-  const renderItem = (role) => (
-    <MenuItem key={role.id} value={Number(role.id)}>
-      <Checkbox size="small" checked={selected.includes(Number(role.id))} />
-      <ListItemText primary={role.attributes.name} secondary={role.attributes.description} />
-    </MenuItem>
-  );
+  const renderItem = (role) => {
+    const isLocked = locked.includes(Number(role.id));
+    return (
+      <MenuItem key={role.id} value={Number(role.id)} disabled={isLocked} data-testid={`role-option-${role.id}`}>
+        <Checkbox size="small" checked={isLocked || selected.includes(Number(role.id))} />
+        <ListItemText
+          primary={role.attributes.name}
+          secondary={isLocked ? 'Assigned by the host application' : role.attributes.description}
+        />
+      </MenuItem>
+    );
+  };
 
   return (
     <FormControl fullWidth size="small" disabled={disabled || loading}>
@@ -61,13 +72,21 @@ const RoleSelect = ({ value = [], onChange, roles: providedRoles, label = 'Roles
         id={id}
         multiple
         value={selected}
-        onChange={(e) => onChange?.(e.target.value.map(Number))}
+        onChange={(e) => onChange?.([...new Set([...e.target.value.map(Number), ...locked])])}
         input={<OutlinedInput label={label} />}
         renderValue={(ids) => (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
             {ids.map((rid) => {
               const role = byId.get(Number(rid));
-              return <Chip key={rid} size="small" label={role?.attributes?.name || `#${rid}`} />;
+              const name = role?.attributes?.name || `#${rid}`;
+              if (locked.includes(Number(rid))) {
+                return (
+                  <Tooltip key={rid} title="Assigned by the host application; change it there">
+                    <Chip size="small" icon={<LockIcon fontSize="small" />} label={name} data-testid={`role-chip-locked-${rid}`} />
+                  </Tooltip>
+                );
+              }
+              return <Chip key={rid} size="small" label={name} />;
             })}
           </Box>
         )}

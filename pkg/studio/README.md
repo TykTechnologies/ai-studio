@@ -27,6 +27,9 @@ s, err := studio.New(studio.Options{
 	TracerProvider: hostTracerProvider,
 	MeterProvider:  hostMeterProvider,
 	OnLicenceInvalid: func(err error) { /* alert, degrade, or stop Studio */ },
+	// Enterprise: the AI Studio licence from the host's own settings (read at
+	// start and at every check; s.ReloadLicense() applies a renewal at once).
+	License: func() string { return hostSettings.AIStudioLicence() },
 
 	// The host signs users in; Studio provisions and authorises them.
 	Auth:      hostAuthenticator, // Authenticate(*http.Request) (*studio.Identity, error)
@@ -54,6 +57,10 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   strips the prefix itself. Session and CSRF cookies are scoped to the base
   path, and logout leaves the host's cookies alone. The console follows the
   base path and, with `Auth`, sends signed-out users to `LoginURL`.
+- `Chromeless` renders pages only, without Studio's top bar and navigation
+  drawers, for a host that draws its own navigation and links to Studio's
+  routes under the base path. `GET <base>/common/nav` returns the surfaces
+  and admin menu the signed-in user may open, to build that navigation from.
 - With `Auth`, every request is offered to the host first. The identity it
   returns (subject, email, name, admin, optional group names) becomes a
   Studio user on first sight and is kept in step after that; Studio's own
@@ -90,6 +97,11 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   Studio off the OpenTelemetry globals. Without them Studio configures
   tracing and metrics from `Config` the way the standalone binary does,
   which installs a global tracer provider and propagator.
+- **Analytics.** Studio always writes analytics to its own database, since
+  budgets and spend are computed from it. To also ship records into the
+  host's pipeline, pass `AnalyticsSinks`: each sink gets a copy of every
+  record through its own bounded queue, and records a slow sink cannot take
+  are dropped (and logged) rather than slowing requests.
 - **Replace directives.** Go ignores `replace` directives in dependencies,
   and a host needs to copy none of this repository's. The only one left, `./enterprise`, points
   this repository's own builds at the submodule; an enterprise host requires

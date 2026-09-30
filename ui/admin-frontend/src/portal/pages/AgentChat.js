@@ -270,7 +270,7 @@ const AgentChat = () => {
   return (
     <>
       {/* Header */}
-      <TitleBox top="64px" data-print-role="toolbar">
+      <TitleBox top="var(--studio-header-height)" data-print-role="toolbar">
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
           <IconButton onClick={handleBack} size="small">
             <ArrowBackIcon />

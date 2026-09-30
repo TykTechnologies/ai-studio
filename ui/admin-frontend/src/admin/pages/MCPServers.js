@@ -216,7 +216,7 @@ const MCPServers = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">MCP servers</Typography>
         <Stack direction="row" spacing={2}>
           <Can permission={P.TYK_CONNECTIONS_EXECUTE}>{activeConnections.length > 0 && syncButton}</Can>

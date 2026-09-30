@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,9 +86,23 @@ type Options struct {
 	// Config.MetricsPath.
 	MeterProvider metric.MeterProvider
 
+	// AnalyticsSinks receive a copy of every analytics record (chat
+	// records, proxy logs, tool calls, compliance events, batches from
+	// edges) besides Studio's own database, which budgets and spend are
+	// computed from. Each sink has its own bounded queue: a slow sink loses
+	// records (counted and logged) rather than slowing requests.
+	AnalyticsSinks []analytics.AnalyticsHandler
+
 	// OnLicenceInvalid is called when an Enterprise licence fails its
 	// periodic re-check. Nil exits the process.
 	OnLicenceInvalid func(error)
+
+	// License supplies the AI Studio Enterprise licence (the same JWT as
+	// TYK_AI_LICENSE, validated the same way) from the host's own
+	// settings. It is read at start and at every validity check, so a
+	// renewed licence takes effect without a restart; call ReloadLicense to
+	// apply one at once. Nil uses Config.LicenseKey.
+	License func() string
 
 	// UIAssets is the built admin frontend, rooted at its build directory
 	// (for example os.DirFS over the unpacked tyk-ai-studio-ui release
@@ -122,6 +137,12 @@ type Options struct {
 	CSRF            func(http.Handler) http.Handler
 	CSRFTokenHeader string
 	CSRFTokenURL    string
+
+	// Chromeless makes the console render pages only: no top bar (the
+	// Admin / Portal / Chat switch and the user menu) and no navigation
+	// drawers, because the host draws its own. Sticky page headers then sit
+	// at the top of the page instead of below Studio's 64px bar.
+	Chromeless bool
 }
 
 // Identity is a user as the host has authenticated them. Subject and Email
@@ -182,6 +203,10 @@ type Studio struct {
 	telemetry        *services.TelemetryManager
 	tracingShutdown  tracing.Shutdown
 	cancelBackground context.CancelFunc
+	// analyticsTee copies analytics records to Options.AnalyticsSinks;
+	// analyticsPrimary is the handler it wraps, put back on Stop.
+	analyticsTee     *analytics.Tee
+	analyticsPrimary analytics.AnalyticsHandler
 
 	stopOnce sync.Once
 	stopErr  error
@@ -259,6 +284,7 @@ func New(opts Options) (_ *Studio, err error) {
 	// Licensing (Enterprise: validates the licence and starts periodic checks).
 	s.licensing = licensing.NewService(licensing.Config{
 		LicenseKey:           conf.LicenseKey,
+		LicenseSource:        opts.License,
 		TelemetryURL:         conf.LicenseTelemetryURL,
 		TelemetryPeriod:      conf.LicenseTelemetryPeriod,
 		TelemetryDisabled:    conf.LicenseDisableTelemetry,
@@ -417,6 +443,7 @@ func New(opts Options) (_ *Studio, err error) {
 		CSRF:                   opts.CSRF,
 		CSRFTokenHeader:        opts.CSRFTokenHeader,
 		CSRFTokenURL:           opts.CSRFTokenURL,
+		Chromeless:             opts.Chromeless,
 	}
 	authService := auth.NewAuthService(authConfig, mailService, service, notificationService)
 
@@ -449,6 +476,11 @@ func New(opts Options) (_ *Studio, err error) {
 	}
 
 	analytics.StartRecording(backgroundCtx, s.db)
+	if len(opts.AnalyticsSinks) > 0 {
+		s.analyticsPrimary = analytics.GetHandler()
+		s.analyticsTee = analytics.NewTee(s.analyticsPrimary, opts.AnalyticsSinks...)
+		analytics.SetHandler(s.analyticsTee)
+	}
 	// One budget service (and team budget service) for the API and the
 	// proxy, so resets and allocation changes clear the cache the proxy reads.
 	service.InitBudgets(notificationService)
@@ -685,6 +717,14 @@ func (s *Studio) stop(ctx context.Context) error {
 		// replicas at once that this one is gone.
 		s.clusterNode.Stop(ctx)
 	}
+	if s.analyticsTee != nil {
+		// The handler is process-wide: unwrap it so a later New in this
+		// process does not tee into this instance's stopped sinks.
+		if analytics.GetHandler() == analytics.AnalyticsHandler(s.analyticsTee) {
+			analytics.SetHandler(s.analyticsPrimary)
+		}
+		s.analyticsTee.Stop(5 * time.Second)
+	}
 	if s.service != nil {
 		if err := s.service.Stop(); err != nil {
 			errs = append(errs, err)
@@ -721,4 +761,39 @@ func cookiePath(basePath string) string {
 		return basePath
 	}
 	return "/"
+}
+
+// ReloadLicense re-reads the licence (Options.License, or Config.LicenseKey)
+// and validates it now, for a host that has just stored a renewed one.
+// Community Edition has no licence and returns nil. An error leaves the
+// licence Studio already holds in place; the host can show it.
+func (s *Studio) ReloadLicense() error {
+	if r, ok := s.licensing.(licensing.Revalidator); ok {
+		return r.Revalidate()
+	}
+	return nil
+}
+
+// LicenseStatus is the Enterprise licence as Studio holds it, for a host to
+// show next to its own licence.
+type LicenseStatus struct {
+	Enterprise bool      // an Enterprise build (Community Edition has no licence)
+	Valid      bool      // the licence is valid now
+	ExpiresAt  time.Time // zero without a licence
+	DaysLeft   int       // -1 without a licence
+	// Entitlements are the licence's feature names.
+	Entitlements []string
+}
+
+// LicenseStatus reports the licence Studio holds.
+func (s *Studio) LicenseStatus() LicenseStatus {
+	st := LicenseStatus{Enterprise: config.IsEnterprise(), Valid: s.licensing.IsValid(), DaysLeft: s.licensing.DaysLeft()}
+	if info := s.licensing.GetLicenseInfo(); info != nil {
+		st.ExpiresAt = info.ExpiresAt
+		for name := range info.Features {
+			st.Entitlements = append(st.Entitlements, name)
+		}
+		sort.Strings(st.Entitlements)
+	}
+	return st
 }

@@ -24,6 +24,12 @@ func (s *communityService) Seed(context.Context) error                      { re
 func (s *communityService) RefreshSystemRoles(context.Context) error        { return nil }
 func (s *communityService) SyncAdminFlag(context.Context, ...uint) error    { return nil }
 func (s *communityService) IsLastOwner(context.Context, uint) (bool, error) { return false, nil }
+func (s *communityService) SyncHostRoles(context.Context, uint, []string) (bool, error) {
+	return false, nil
+}
+func (s *communityService) HasDirectAdministrator(context.Context, uint) (bool, error) {
+	return false, nil
+}
 
 // Resolve is the CE rule: admins hold everything, everyone else nothing.
 func (s *communityService) Resolve(_ context.Context, user *models.User) (authz.Set, error) {

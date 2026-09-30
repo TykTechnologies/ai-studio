@@ -241,7 +241,7 @@ const UserDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">User details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

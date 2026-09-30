@@ -316,7 +316,7 @@ const SubmissionReview = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Typography variant="headingXLarge">
             Review: {payload.name || "Untitled"}

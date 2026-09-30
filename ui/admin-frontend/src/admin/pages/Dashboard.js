@@ -566,7 +566,7 @@ const Dashboard = () => {
             />
           )}
 
-          <TitleBox top="64px">
+          <TitleBox top="var(--studio-header-height)">
             <Typography variant="headingXLarge">Analytics</Typography>
             <Stack direction="row" spacing={2} alignItems="center">
               <Box display="flex" alignItems="center" gap={2}>

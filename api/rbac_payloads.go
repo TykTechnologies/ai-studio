@@ -113,16 +113,46 @@ func (a *API) finishUsers(c *gin.Context, users []UserResponse) []UserResponse {
 	}
 	if svc := a.service.Authz(); svc.Enabled() {
 		if byUser, err := svc.RolesForSubjects(c.Request.Context(), models.RoleBindingSubjectUser, ids); err == nil {
+			hostRoles := a.hostManagedRoles(c, ids)
 			for i := range users {
 				users[i].Attributes.Roles = roleSummaries(byUser[ids[i]])
 				for j := range users[i].Attributes.Roles {
 					users[i].Attributes.Roles[j].Via = "direct"
+					if hostRoles[ids[i]][users[i].Attributes.Roles[j].ID] {
+						users[i].Attributes.Roles[j].Via = "host"
+					}
 				}
 			}
 		}
 		a.attachTeamRoles(c, users, ids)
 	}
 	return users
+}
+
+// hostManagedRoles returns, per user, the roles the host application
+// assigns them (bindings with source "host"), in one query.
+func (a *API) hostManagedRoles(c *gin.Context, userIDs []uint) map[uint]map[uint]bool {
+	out := map[uint]map[uint]bool{}
+	if len(userIDs) == 0 {
+		return out
+	}
+	var rows []struct {
+		SubjectID uint
+		RoleID    uint
+	}
+	if err := a.service.DB.WithContext(c.Request.Context()).Model(&models.RoleBinding{}).Select("subject_id, role_id").
+		Where("subject_type = ? AND subject_id IN ? AND source = ? AND scope_type = ''", models.RoleBindingSubjectUser, userIDs, models.RoleBindingSourceHost).
+		Scan(&rows).Error; err != nil {
+		logger.Warnf("users: host-managed roles not marked, lookup failed: %v", err)
+		return out
+	}
+	for _, r := range rows {
+		if out[r.SubjectID] == nil {
+			out[r.SubjectID] = map[uint]bool{}
+		}
+		out[r.SubjectID][r.RoleID] = true
+	}
+	return out
 }
 
 // userGroupRow is one user→team membership from the join table.
@@ -291,10 +321,21 @@ func (a *API) reconcileUserRoles(c *gin.Context, userID uint, desired []uint) bo
 		want[id] = true
 	}
 	have := map[uint]uint{} // roleID -> bindingID
+	hostManaged := map[uint]bool{}
 	for _, b := range current {
-		if b.ScopeType == "" {
-			have[b.RoleID] = b.ID
+		if b.ScopeType != "" {
+			continue
 		}
+		if b.Source == models.RoleBindingSourceHost {
+			// The host application keeps these; leave them whatever the
+			// form says (the UI shows them read-only).
+			hostManaged[b.RoleID] = true
+			continue
+		}
+		have[b.RoleID] = b.ID
+	}
+	for roleID := range hostManaged {
+		delete(want, roleID)
 	}
 	changed := false
 	for roleID := range want {

@@ -725,7 +725,7 @@ const ChatView = () => {
 
   return (
     <>
-      <TitleBox top="64px" data-print-role="toolbar">
+      <TitleBox top="var(--studio-header-height)" data-print-role="toolbar">
         <Typography variant="headingXLarge">{chatName}</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button

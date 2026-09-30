@@ -655,7 +655,7 @@ const Webhooks = () => {
   const menuTarget = menu.target;
 
   const header = (
-    <TitleBox top="64px">
+    <TitleBox top="var(--studio-header-height)">
       <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
         <WebhookIcon sx={{ fontSize: 32 }} />
         <Typography variant="headingXLarge">Webhooks</Typography>

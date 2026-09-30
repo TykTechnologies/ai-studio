@@ -205,7 +205,7 @@ const ToolDetails = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Tool details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}

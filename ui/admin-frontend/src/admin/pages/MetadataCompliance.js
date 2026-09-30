@@ -138,7 +138,7 @@ const MetadataCompliance = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <RuleOutlinedIcon />
           <Typography variant="headingXLarge">Metadata Coverage</Typography>

@@ -54,6 +54,7 @@ type frontendBootstrap struct {
 	LogoutURL       string `json:"logoutURL,omitempty"`
 	CSRFTokenHeader string `json:"csrfTokenHeader"`
 	CSRFTokenURL    string `json:"csrfTokenURL"`
+	Chrome          string `json:"chrome"`
 }
 
 func (a *API) frontendBootstrap() frontendBootstrap {
@@ -62,9 +63,13 @@ func (a *API) frontendBootstrap() frontendBootstrap {
 		AuthMode:        "local",
 		CSRFTokenHeader: "X-CSRF-Token",
 		CSRFTokenURL:    a.publicPath("/csrf-token"),
+		Chrome:          "full",
 	}
 	if a.config == nil {
 		return b
+	}
+	if a.config.Chromeless {
+		b.Chrome = "none"
 	}
 	if !a.config.LocalAccountsEnabled() {
 		b.AuthMode = "host"

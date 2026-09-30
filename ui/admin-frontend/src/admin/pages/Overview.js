@@ -86,7 +86,7 @@ const Overview = () => {
   return (
     <>
       <QuickStartContainer quickStartState={quickStartState} />
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           Hi {userName || '[user name]'}, welcome to Tyk AI Studio!
         </Typography>

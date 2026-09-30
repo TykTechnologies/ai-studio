@@ -46,6 +46,8 @@ const UserForm = () => {
   const { isEnterprise } = useEdition();
   const [roleIds, setRoleIds] = useState([]);
   const [initialRoleIds, setInitialRoleIds] = useState([]);
+  // Roles the host application assigns (embedded Studio): shown, locked.
+  const [hostRoleIds, setHostRoleIds] = useState([]);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [confirmSelfDemotion, setConfirmSelfDemotion] = useState(false);
   const [name, setName] = useState("");
@@ -149,9 +151,16 @@ const UserForm = () => {
       const budgetTeam = userData.attributes.budget_team_id ? String(userData.attributes.budget_team_id) : "";
       setBudgetTeamId(budgetTeam);
       setLoadedBudgetTeamId(budgetTeam);
-      const ids = (userData.attributes.roles || []).map((r) => Number(r.id));
+      // The form edits the user's own roles. Team roles ("group") are the
+      // team's to change, so they are not preselected (saving would turn
+      // them into direct roles); host roles are shown but locked.
+      const userRoles = userData.attributes.roles || [];
+      const ids = userRoles
+        .filter((r) => !r.via || r.via === "direct" || r.via === "host")
+        .map((r) => Number(r.id));
       setRoleIds(ids);
       setInitialRoleIds(ids);
+      setHostRoleIds(userRoles.filter((r) => r.via === "host").map((r) => Number(r.id)));
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -381,7 +390,7 @@ const UserForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">{id ? "Edit user" : "Add user"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -516,7 +525,12 @@ const UserForm = () => {
                         value={roleIds}
                         onChange={setRoleIds}
                         roles={availableRoles}
-                        helperText="Roles decide what this user can see and do in the administration UI and API. Team roles apply on top."
+                        lockedIds={hostRoleIds}
+                        helperText={
+                          hostRoleIds.length > 0
+                            ? "Roles decide what this user can see and do in the administration UI and API. Team roles apply on top. Locked roles are assigned by the application AI Studio is embedded in and can only be changed there."
+                            : "Roles decide what this user can see and do in the administration UI and API. Team roles apply on top."
+                        }
                       />
                     </Box>
                   )}

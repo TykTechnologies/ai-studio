@@ -124,7 +124,7 @@ const ToolCatalogueList = memo(() => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Tool catalogs</Typography>
         <Can permission={P.TOOL_CATALOGUES_WRITE}>
           <PrimaryButton

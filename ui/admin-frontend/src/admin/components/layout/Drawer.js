@@ -1,291 +1,74 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import BaseDrawer from './base-drawer';
-import useAdminData from '../../hooks/useAdminData';
 import Icon from '../../../components/common/Icon';
-import pluginLoaderService from '../../services/pluginLoaderService';
+import pubClient from '../../utils/pubClient';
 import { usePermissions } from '../../context/PermissionsContext';
-import { P, toArray } from '../../rbac/permissions';
+import { toArray } from '../../rbac/permissions';
+
+/**
+ * The admin menu comes from GET /common/nav (api/nav.go), the same manifest
+ * a host that draws Studio's navigation itself builds its menu from: which
+ * groups exist, their order, feature gates and plugin sections are decided
+ * there, filtered by the user's permissions. nav.golden.json holds the full
+ * menu, checked against routes.js by nav.golden.test.js.
+ */
+export const toMenuItems = (items = []) =>
+  items.map((item) => ({
+    id: item.id,
+    text: item.text,
+    path: item.path,
+    title: item.title,
+    exact: item.exact,
+    permission: item.permission,
+    icon: item.icon ? <Icon name={item.icon} /> : undefined,
+    ...(item.items ? { subItems: toMenuItems(item.items) } : {}),
+  }));
 
 const Drawer = () => {
-  const { features, uiOptions, config, loading, error } = useAdminData();
-  const { canAny } = usePermissions();
-  const [pluginMenuItems, setPluginMenuItems] = useState([]);
+  const { permissions, canAny } = usePermissions();
+  const [items, setItems] = useState(null);
 
-  useEffect(() => {
-    loadPluginMenuItems();
-
-    // Listen for plugin loader refresh events
-    const handlePluginRefresh = () => {
-      console.log('Drawer received plugin refresh event, reloading menu items');
-      loadPluginMenuItems();
-    };
-
-    window.addEventListener('plugin-loader-refreshed', handlePluginRefresh);
-
-    return () => {
-      window.removeEventListener('plugin-loader-refreshed', handlePluginRefresh);
-    };
+  const loadMenu = useCallback(async () => {
+    try {
+      const response = await pubClient.get('/common/nav');
+      setItems(response.data?.admin || []);
+    } catch (error) {
+      console.error('Failed to load the admin menu:', error);
+      // Keep the menu already shown; with none yet, show an empty drawer.
+      setItems((current) => current || []);
+    }
   }, []);
 
-  const loadPluginMenuItems = async () => {
-    try {
-      const menuItems = await pluginLoaderService.getSidebarMenuItems();
-      setPluginMenuItems(menuItems);
-    } catch (error) {
-      console.error('Failed to load plugin menu items:', error);
-    }
-  };
+  // Reload when the user's permissions change (a role was granted or
+  // revoked) and when a plugin's UI is installed or removed. The key is a
+  // string so a new Set with the same contents does not reload.
+  const permissionKey = [...(permissions || [])].sort().join(',');
+  useEffect(() => {
+    loadMenu();
+  }, [loadMenu, permissionKey]);
 
-  // Items carry the permission that unlocks them; groups with nothing left
-  // to show are dropped by BaseDrawer.
+  useEffect(() => {
+    window.addEventListener('plugin-loader-refreshed', loadMenu);
+    return () => window.removeEventListener('plugin-loader-refreshed', loadMenu);
+  }, [loadMenu]);
+
+  // The server has already filtered the menu; this hides an entry at once
+  // when a permission is revoked, before the reload lands.
   const isItemAllowed = useCallback(
     (item) => !item.permission || canAny(toArray(item.permission)),
     [canAny]
   );
 
-  if (loading || error) {
+  const menuItems = useMemo(() => toMenuItems(items || []), [items]);
+
+  if (items === null) {
     return null;
   }
-
-  // Plugin-contributed sections. Plugin pages call plugin RPCs, so they
-  // default to plugins:execute unless the manifest names a permission. Each
-  // plugin keeps its own top-level section; they are sorted by label so the
-  // order does not depend on installation order.
-  const getPluginMenuItems = () =>
-    [...pluginMenuItems]
-      .sort((a, b) =>
-        String(a.label || '').localeCompare(String(b.label || '')) ||
-        String(a.id || '').localeCompare(String(b.id || ''))
-      )
-      .map(item => ({
-        id: item.id,
-        text: item.label,
-        icon: <Icon name="puzzle-piece" />, // Default icon for plugins
-        path: item.path,
-        title: item.title,
-        permission: item.required_permission || P.PLUGINS_EXECUTE,
-        subItems: item.sub_items?.map(subItem => ({
-          id: subItem.id,
-          text: subItem.text,
-          path: subItem.path,
-          permission: subItem.required_permission || item.required_permission || P.PLUGINS_EXECUTE,
-          // Exact-match a page whose path is a prefix of a sibling page so both
-          // do not highlight on the child route.
-          exact: (item.sub_items || []).some(
-            other => other !== subItem && other.path && subItem.path && other.path.startsWith(`${subItem.path}/`)
-          ),
-        })) || []
-      }));
-
-  // Group order: the pages an administrator visits daily first (who may use
-  // what: Access, then the Catalogs that grant it), the things being governed
-  // next, then the surfaces (Portal, Community, Governance), plugin sections
-  // in one predictable place, and system pages last.
-  const getMenuItems = () => [
-    {
-      id: 'overview',
-      text: 'Overview',
-      icon: <Icon name="house" />,
-      path: '/admin',
-      exact: true
-    },
-    {
-      id: 'dashboard',
-      text: 'Analytics',
-      icon: <Icon name="monitor-waveform" />,
-      path: '/admin/dash',
-      permission: P.ANALYTICS_READ,
-    },
-    {
-      id: 'access',
-      text: 'Access',
-      icon: <Icon name="users" />,
-      subItems: [
-        { id: 'users', text: 'Users', path: '/admin/users', permission: P.USERS_READ },
-        ...(features.feature_groups && (!features.feature_gateway ||
-        features.feature_portal ||
-        features.feature_chat)
-          ? [{ id: 'groups', text: 'Teams', path: '/admin/groups', permission: P.GROUPS_READ }]
-          : []),
-        ...(features.feature_rbac
-          ? [{ id: 'roles', text: 'Roles', path: '/admin/roles', permission: P.ROLES_READ }]
-          : []),
-        ...(uiOptions?.show_sso_config && config?.tibEnabled
-          ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles', permission: P.SSO_PROFILES_READ }]
-          : []),
-      ],
-    },
-    // Catalogs are how teams are granted providers, data sources and tools,
-    // so they sit directly after Access rather than at the bottom.
-    ...(features.feature_groups && (features.feature_portal || features.feature_chat)
-      ? [
-          {
-            id: 'catalogs',
-            text: 'Catalogs',
-            icon: <Icon name="rectangle-history" />,
-            // Named after the pages they open ("LLM catalogs", "Data catalogs",
-            // "Tool catalogs"). They used to repeat the labels of the
-            // management pages below, so the menu had two items called
-            // "Tools", one of them next to "MCP servers".
-            subItems: [
-              ...(features.feature_portal
-                ? [{ id: 'catalog-llms', text: 'LLM catalogs', path: '/admin/catalogs/llms', permission: P.CATALOGUES_READ }]
-                : []),
-              { id: 'catalog-data', text: 'Data catalogs', path: '/admin/catalogs/data', permission: P.DATA_CATALOGUES_READ },
-              ...(features.feature_chat
-                ? [{ id: 'catalog-tools', text: 'Tool catalogs', path: '/admin/catalogs/tools', permission: P.TOOL_CATALOGUES_READ }]
-                : []),
-            ],
-          },
-        ]
-      : []),
-    {
-      id: 'llm-management',
-      text: 'LLM management',
-      icon: <Icon name="microchip-ai" />,
-      subItems: [
-        { id: 'llms', text: 'LLM providers', path: '/admin/llms', permission: P.LLMS_READ },
-        { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices', permission: P.MODEL_PRICES_READ },
-        { id: 'embedders', text: 'Embedders', path: '/admin/embedders', permission: P.EMBEDDERS_READ },
-        ...(features.feature_model_router
-          ? [{ id: 'model-routers', text: 'Model Routers', path: '/admin/model-routers', permission: P.MODEL_ROUTERS_READ }]
-          : []),
-        ...(features.feature_semantic_router
-          ? [{ id: 'semantic-routers', text: 'Semantic Routers', path: '/admin/semantic-routers', permission: P.SEMANTIC_ROUTERS_READ }]
-          : []),
-      ],
-    },
-    {
-      id: 'context-management',
-      text: 'Context management',
-      icon: <Icon name="layer-group" />,
-      subItems: [
-        { id: 'datasources', text: 'Data sources', path: '/admin/datasources', permission: P.DATASOURCES_READ },
-        ...(features.feature_chat
-          ? [{ id: 'tools', text: 'Tools', path: '/admin/tools', permission: P.TOOLS_READ }]
-          : []),
-        ...(features.feature_tyk_mcp
-          ? [{ id: 'mcp-servers', text: 'MCP servers', path: '/admin/mcp-servers', permission: P.MCP_SERVERS_READ, exact: true }]
-          : []),
-        ...(config?.is_enterprise
-          ? [{ id: 'filters', text: 'Filters', path: '/admin/filters', permission: P.FILTERS_READ }]
-          : []),
-      ],
-    },
-    // Apps have exactly one home. With the portal enabled they live under
-    // "AI Portal" next to the edge gateways that serve them; in gateway-only
-    // mode (no portal, no chat) there is no portal section, so the same page
-    // is reached through "Apps & credentials" instead. The two conditions are
-    // mutually exclusive, so at most one "Apps" entry can ever render.
-    ...(features.feature_gateway &&
-    !features.feature_portal &&
-    !features.feature_chat
-      ? [
-          {
-            id: 'apps-credentials',
-            text: 'Apps & credentials',
-            icon: <Icon name="grid-2-plus" />,
-            subItems: [{ id: 'apps', text: 'Apps', path: '/admin/apps', permission: P.APPS_READ }],
-          },
-        ]
-      : []),
-    ...(features.feature_portal
-      ? [
-          {
-            id: 'ai-portal',
-            text: 'AI Portal',
-            icon: <Icon name="display" />,
-            subItems: [
-              { id: 'portal-apps', text: 'Apps', path: '/admin/apps', permission: P.APPS_READ },
-              { id: 'edge-gateways', text: 'Edge Gateways', path: '/admin/edge-gateways', permission: P.EDGES_READ },
-              ...(features.feature_tyk_mcp
-                ? [{ id: 'mcp-credentials', text: 'MCP credentials', path: '/admin/mcp-credentials', permission: P.MCP_CREDENTIALS_READ }]
-                : []),
-            ],
-          },
-        ]
-      : []),
-    ...(features.feature_portal
-      ? [
-          {
-            id: 'community',
-            text: 'Community',
-            icon: <Icon name="puzzle-piece" />,
-            subItems: [
-              { id: 'submission-queue', text: 'Submission Queue', path: '/admin/submissions', permission: P.SUBMISSIONS_READ },
-              { id: 'attestation-templates', text: 'Attestation Templates', path: '/admin/attestation-templates', permission: P.ATTESTATION_TEMPLATES_READ },
-            ],
-          },
-        ]
-      : []),
-    // Governance only holds Enterprise pages, so the whole group is hidden in
-    // the Community Edition rather than showing an empty section.
-    ...(config?.is_enterprise
-      ? [
-          {
-            id: 'governance',
-            text: 'Governance',
-            icon: <Icon name="shield" />,
-            subItems: [
-              { id: 'compliance', text: 'Compliance overview', path: '/admin/compliance', permission: P.COMPLIANCE_READ },
-              { id: 'audit', text: 'Audit trail', path: '/admin/audit', permission: P.AUDIT_READ },
-              { id: 'metadata-schemas', text: 'Metadata schemas', path: '/admin/metadata/schemas', permission: P.METADATA_READ },
-              { id: 'metadata-vocabularies', text: 'Metadata vocabularies', path: '/admin/metadata/vocabularies', permission: P.METADATA_READ },
-              { id: 'metadata-compliance', text: 'Metadata coverage', path: '/admin/metadata/coverage', permission: P.METADATA_READ },
-              ...(features.feature_webhooks
-                ? [{ id: 'webhooks', text: 'Webhooks', path: '/admin/webhooks', permission: P.WEBHOOKS_READ }]
-                : []),
-            ],
-          },
-        ]
-      : []),
-    // Plugin-contributed sections sit here, after Governance and before the
-    // system pages, instead of being appended wherever the list happens to end.
-    ...getPluginMenuItems(),
-    {
-      id: 'settings',
-      text: 'Settings',
-      icon: <Icon name="gear" />,
-      subItems: [
-        { id: 'secrets', text: 'Secrets', path: '/admin/secrets', permission: P.SECRETS_READ },
-        { id: 'branding', text: 'Branding', path: '/admin/branding', permission: P.BRANDING_WRITE },
-        ...(features.feature_tyk_mcp
-          ? [{ id: 'tyk-connections', text: 'Tyk Connections', path: '/admin/tyk-connections', permission: P.TYK_CONNECTIONS_READ }]
-          : []),
-      ],
-    },
-    ...(features.feature_chat
-      ? [
-          {
-            id: 'chat',
-            text: 'Chat',
-            icon: <Icon name="message-lines" />,
-            subItems: [
-              { id: 'chats', text: 'Chats', path: '/admin/chats', permission: P.CHATS_READ },
-              { id: 'agents', text: 'Agents', path: '/admin/agents', permission: P.AGENTS_READ },
-              { id: 'llm-settings', text: 'Model call settings', path: '/admin/llm-settings', permission: P.LLM_SETTINGS_READ },
-            ],
-          },
-        ]
-      : []),
-    {
-      id: 'plugins',
-      text: 'Plugins',
-      icon: <Icon name="screwdriver-wrench" />,
-      subItems: [
-        { id: 'marketplace', text: 'Marketplace', path: '/admin/marketplace', permission: P.MARKETPLACE_READ },
-        { id: 'plugin-list', text: 'Installed Plugins', path: '/admin/plugins', permission: P.PLUGINS_READ },
-        ...(config?.is_enterprise
-          ? [{ id: 'marketplace-settings', text: 'Marketplace Sources', path: '/admin/marketplace-settings', permission: P.MARKETPLACE_WRITE }]
-          : []),
-      ],
-    },
-  ];
 
   return (
     <BaseDrawer
       id="admin"
-      menuItems={getMenuItems()}
+      menuItems={menuItems}
       isCollapsible={true}
       isItemAllowed={isItemAllowed}
     />

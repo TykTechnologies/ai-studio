@@ -33,6 +33,8 @@ func rbacErrorResponse(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, authz.Body("Owner Is User-Only", err.Error(), authz.CodeOwnerUserOnly))
 	case errors.Is(err, rbac.ErrOwnerRequired):
 		c.JSON(http.StatusForbidden, authz.Body("Owner Required", err.Error(), authz.CodeOwnerRequired))
+	case errors.Is(err, rbac.ErrHostManaged):
+		c.JSON(http.StatusConflict, authz.Body("Assigned By The Host Application", err.Error(), ""))
 	case errors.Is(err, rbac.ErrDuplicateRole), errors.Is(err, rbac.ErrDuplicateBinding):
 		c.JSON(http.StatusConflict, authz.Body("Conflict", err.Error(), ""))
 	case errors.Is(err, rbac.ErrInvalidPermission), errors.Is(err, rbac.ErrInvalidSubject):
@@ -84,7 +86,10 @@ type RoleBindingAttributes struct {
 	Role        *rbac.RoleSummary `json:"role,omitempty"`
 	ScopeType   string            `json:"scope_type"`
 	ScopeID     string            `json:"scope_id"`
-	CreatedAt   time.Time         `json:"created_at"`
+	// Source is "host" for a binding the host application manages
+	// (read-only here), empty otherwise.
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // RoleBindingResponse wraps a binding.
@@ -155,6 +160,7 @@ func serializeBinding(b *models.RoleBinding) RoleBindingResponse {
 			Role:        roleSummaryOf(b.Role),
 			ScopeType:   b.ScopeType,
 			ScopeID:     b.ScopeID,
+			Source:      b.Source,
 			CreatedAt:   b.CreatedAt,
 		},
 	}

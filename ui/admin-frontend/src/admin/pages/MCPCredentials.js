@@ -564,7 +564,7 @@ const MCPCredentials = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">MCP credentials</Typography>
         <Can permission={P.MCP_CREDENTIALS_EXECUTE}>
           <PrimaryButton variant="contained" startIcon={<KeyIcon />} onClick={() => setMintOpen(true)} data-testid="open-mint" disabled={connections.length === 0}>

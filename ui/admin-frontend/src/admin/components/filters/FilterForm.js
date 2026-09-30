@@ -219,7 +219,7 @@ const FilterForm = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
           {id ? "Edit filter" : "Add filter"}
         </Typography>

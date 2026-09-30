@@ -94,6 +94,18 @@ the filter-script switch `FILTER_SCRIPT_ALLOW_OS`, OCI registry credentials
   validation at boot. A failed periodic re-check calls
   `licensing.Config.OnInvalid`; with no callback set the process exits, which
   is what the standalone binaries rely on.
+- The licence from the host (S1): a host embedding Studio passes the
+  customer's **AI Studio Enterprise licence** (the same JWT as
+  `TYK_AI_LICENSE`, validated unchanged: two licences, the host's own and
+  Studio's; no licence generator changes and no host licence claims).
+  `studio.Options.License` (`licensing.Config.LicenseSource`) supplies it
+  from the host's settings and is read at start and at every validity
+  check, so a renewal takes effect without a restart;
+  `(*studio.Studio).ReloadLicense()` validates a newly stored licence at
+  once (an error leaves the held licence in place, for the host to show).
+  `(*studio.Studio).LicenseStatus()` reports validity, expiry, days left
+  and entitlements for the host to show next to its own licence. Nil
+  `License` uses `Config.LicenseKey`.
 - Email templates are embedded (package `templates`). A `templates/` directory
   in the working directory still takes precedence, so deployments can
   customise them, but a process started elsewhere renders the defaults
@@ -123,6 +135,17 @@ for the host-facing API.
   `Options.TracerProvider`/`Propagator` (`tracing.Use`) and
   `Options.MeterProvider` (`metrics.InitWithProvider`) keep Studio off
   zerolog's and OpenTelemetry's globals.
+- `Options.AnalyticsSinks` ships analytics into the host's own pipeline.
+  `analytics.Tee` wraps Studio's database handler, which always stays
+  (budgets and spend read `llm_chat_records`), and gives each sink a copy of
+  every record (chat records, proxy logs, tool calls, compliance events and
+  edge batches; a request's proxy log and chat record reach an
+  `ExchangeRecorder` sink together). Each sink has a bounded queue
+  (`analytics.TeeQueueSize`, 10000) drained by its own goroutine, so a slow
+  sink loses records, counted in `Tee.Dropped` and logged, instead of
+  slowing requests, and a panicking sink is recovered. `Stop` gives the
+  sinks up to 5 seconds to drain and puts the database handler back as the
+  process-wide handler.
 - Package `ui` embeds the built frontend (`ui.FS`, rooted at the build
   directory); `api.New` takes it as an `fs.FS`, and `Options.UIAssets`
   overrides it.
@@ -183,8 +206,8 @@ when it does not end with the base path.
 `studio.Options.Auth` (an `auth.Authenticator`) lets the host authenticate
 every request: `Authenticate(r)` returns the signed-in user as a
 `studio.Identity` (`services.HostIdentity`: subject, email, name, admin,
-groups), nil when the request has no host identity, or an error to reject
-it.
+groups, roles), nil when the request has no host identity, or an error to
+reject it.
 
 - It runs first in `auth.GetAuthenticatedUser`, so `AuthMiddleware`, RBAC,
   the audit trail (`auth_method = host`) and every handler reading `"user"`
@@ -202,6 +225,20 @@ it.
   and group rules apply. Unchanged identities write nothing but a login
   stamp at most every 15 minutes. Disabled users are refused, and an email
   linked to another subject is a conflict.
+- **Roles (Enterprise).** `Roles` names Studio roles by slug (`editor`,
+  `viewer`, a custom role's slug). They become host-managed role bindings
+  (`role_bindings.source = 'host'`, direct and global): added and removed
+  as the host says on each sign-in (nil leaves them, an empty list removes
+  them; unknown slugs are logged and skipped). Roles an administrator
+  assigns in Studio are never touched, and a role the user already holds
+  that way stays with that binding. Studio's administration shows host
+  roles locked (`via: "host"` on the user's roles), keeps them when an
+  administrator saves the user's roles, and refuses to delete one
+  (`409`). `Admin` still decides the Administrator role, compared with the
+  user's direct Administrator (or Owner) binding: a team granting
+  Administrator is not a difference to write on every request. The host
+  cannot remove the last Owner, by `Admin` or `Roles`: the Owner role is
+  kept and logged, and the user is still signed in.
 - Host users are externally managed like SSO users
   (`User.IsExternallyManaged`): no API key unless
   `ALLOW_SSO_USER_API_KEYS`, and an issued key lapses once the user stops
@@ -300,6 +337,52 @@ Verified: with `ui/admin-frontend/build` moved away, the default build of
 given a tarball made as the release job makes it, serves the full console
 under `/ai-studio`.
 
+
+## Pages without Studio's chrome
+
+A host that draws its own navigation (the Tyk Dashboard's top bar and
+sidebar) sets `Options.Chromeless`:
+
+- The bootstrap (`window.__TYK_AI_STUDIO__`) and `/auth/config` carry
+  `chrome: "none"` (`"full"` otherwise).
+- `layouts/MainLayout.js` then leaves out `TopNavigation` (the Admin /
+  Portal / Chat switch and the user menu) and the admin, portal and chat
+  drawers; pages take the full width.
+- Sticky page headers sit below `--studio-header-height`, a CSS variable
+  that defaults to the 64px top bar (`index.css`) and that
+  `runtimeConfig.applyChrome` sets to 0 when chromeless. Pages used to
+  hard-code `top="64px"`.
+- The host links straight to Studio's routes under the base path
+  (`/admin/llms`, `/portal/dashboard`, `/chat/...`), and builds its menu
+  from `GET /common/nav` (below).
+
+### Navigation manifest
+
+`GET /common/nav` (`api/nav.go`) returns what the signed-in user may
+navigate to:
+
+- `surfaces`: Admin (`/admin`, when the user holds any permission), AI
+  Portal (`/portal/dashboard`) and Chat (`/chat/dashboard`), gated as the
+  console's top bar gates them (the user's show-portal / show-chat options
+  and the licensed features).
+- `admin`: the admin menu, as groups (`items`) of pages, each with `id`,
+  `text`, `path` (a console route without the base path), `icon` (a Font
+  Awesome name), `exact`, and the `permission` that unlocks it. Plugin
+  sections carry `pluginId`. Entries the user may not open are already
+  left out, with the drawer's rule: a group stays while one of its pages
+  does.
+
+The manifest is the one source of truth: the console's admin drawer
+(`Drawer.js`) renders from it, reloading when the user's permissions change
+or a plugin UI is installed. Group order, feature gates (portal, chat,
+gateway-only, Enterprise-only groups) and plugin placement are tested in
+`api/nav_test.go`. `TestAdminNavGolden` writes the full menu to
+`ui/admin-frontend/src/admin/nav.golden.json` (`UPDATE_NAV_GOLDEN=1` to
+regenerate), and `nav.golden.test.js` checks every page in it against
+`admin/routes.js`, including that the menu and the route need the same
+permission. The portal and chat drawers still build their menus in the
+console.
+- `examples/embed-host -chromeless` shows it.
 
 ## Module layout
 
