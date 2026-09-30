@@ -1,303 +1,436 @@
-[
-  {
-    "id": "overview",
-    "text": "Overview",
-    "path": "/admin",
-    "icon": "house",
-    "exact": true
-  },
-  {
-    "id": "dashboard",
-    "text": "Analytics",
-    "path": "/admin/dash",
-    "icon": "monitor-waveform",
-    "permission": "analytics:read"
-  },
-  {
-    "id": "access",
-    "text": "Access",
-    "icon": "users",
-    "items": [
-      {
-        "id": "users",
-        "text": "Users",
-        "path": "/admin/users",
-        "permission": "users:read"
-      },
-      {
-        "id": "groups",
-        "text": "Teams",
-        "path": "/admin/groups",
-        "permission": "groups:read"
-      },
-      {
-        "id": "roles",
-        "text": "Roles",
-        "path": "/admin/roles",
-        "permission": "roles:read"
-      },
-      {
-        "id": "sso-profiles",
-        "text": "Identity providers",
-        "path": "/admin/sso-profiles",
-        "permission": "sso-profiles:read"
-      }
-    ]
-  },
-  {
-    "id": "catalogs",
-    "text": "Catalogs",
-    "icon": "rectangle-history",
-    "items": [
-      {
-        "id": "catalog-llms",
-        "text": "LLM catalogs",
-        "path": "/admin/catalogs/llms",
-        "permission": "catalogues:read"
-      },
-      {
-        "id": "catalog-data",
-        "text": "Data catalogs",
-        "path": "/admin/catalogs/data",
-        "permission": "data-catalogues:read"
-      },
-      {
-        "id": "catalog-tools",
-        "text": "Tool catalogs",
-        "path": "/admin/catalogs/tools",
-        "permission": "tool-catalogues:read"
-      }
-    ]
-  },
-  {
-    "id": "llm-management",
-    "text": "LLM management",
-    "icon": "microchip-ai",
-    "items": [
-      {
-        "id": "llms",
-        "text": "LLM providers",
-        "path": "/admin/llms",
-        "permission": "llms:read"
-      },
-      {
-        "id": "model-prices",
-        "text": "Model prices",
-        "path": "/admin/model-prices",
-        "permission": "model-prices:read"
-      },
-      {
-        "id": "embedders",
-        "text": "Embedders",
-        "path": "/admin/embedders",
-        "permission": "embedders:read"
-      },
-      {
-        "id": "model-routers",
-        "text": "Model Routers",
-        "path": "/admin/model-routers",
-        "permission": "model-routers:read"
-      },
-      {
-        "id": "semantic-routers",
-        "text": "Semantic Routers",
-        "path": "/admin/semantic-routers",
-        "permission": "semantic-routers:read"
-      }
-    ]
-  },
-  {
-    "id": "context-management",
-    "text": "Context management",
-    "icon": "layer-group",
-    "items": [
-      {
-        "id": "datasources",
-        "text": "Data sources",
-        "path": "/admin/datasources",
-        "permission": "datasources:read"
-      },
-      {
-        "id": "tools",
-        "text": "Tools",
-        "path": "/admin/tools",
-        "permission": "tools:read"
-      },
-      {
-        "id": "mcp-servers",
-        "text": "MCP servers",
-        "path": "/admin/mcp-servers",
-        "exact": true,
-        "permission": "mcp-servers:read"
-      },
-      {
-        "id": "filters",
-        "text": "Filters",
-        "path": "/admin/filters",
-        "permission": "filters:read"
-      }
-    ]
-  },
-  {
-    "id": "ai-portal",
-    "text": "AI Portal",
-    "icon": "display",
-    "items": [
-      {
-        "id": "portal-apps",
-        "text": "Apps",
-        "path": "/admin/apps",
-        "permission": "apps:read"
-      },
-      {
-        "id": "edge-gateways",
-        "text": "Edge Gateways",
-        "path": "/admin/edge-gateways",
-        "permission": "edges:read"
-      },
-      {
-        "id": "mcp-credentials",
-        "text": "MCP credentials",
-        "path": "/admin/mcp-credentials",
-        "permission": "mcp-credentials:read"
-      }
-    ]
-  },
-  {
-    "id": "community",
-    "text": "Community",
-    "icon": "puzzle-piece",
-    "items": [
-      {
-        "id": "submission-queue",
-        "text": "Submission Queue",
-        "path": "/admin/submissions",
-        "permission": "submissions:read"
-      },
-      {
-        "id": "attestation-templates",
-        "text": "Attestation Templates",
-        "path": "/admin/attestation-templates",
-        "permission": "attestation-templates:read"
-      }
-    ]
-  },
-  {
-    "id": "governance",
-    "text": "Governance",
-    "icon": "shield",
-    "items": [
-      {
-        "id": "compliance",
-        "text": "Compliance overview",
-        "path": "/admin/compliance",
-        "permission": "compliance:read"
-      },
-      {
-        "id": "audit",
-        "text": "Audit trail",
-        "path": "/admin/audit",
-        "permission": "audit:read"
-      },
-      {
-        "id": "metadata-schemas",
-        "text": "Metadata schemas",
-        "path": "/admin/metadata/schemas",
-        "permission": "metadata:read"
-      },
-      {
-        "id": "metadata-vocabularies",
-        "text": "Metadata vocabularies",
-        "path": "/admin/metadata/vocabularies",
-        "permission": "metadata:read"
-      },
-      {
-        "id": "metadata-compliance",
-        "text": "Metadata coverage",
-        "path": "/admin/metadata/coverage",
-        "permission": "metadata:read"
-      },
-      {
-        "id": "webhooks",
-        "text": "Webhooks",
-        "path": "/admin/webhooks",
-        "permission": "webhooks:read"
-      }
-    ]
-  },
-  {
-    "id": "settings",
-    "text": "Settings",
-    "icon": "gear",
-    "items": [
-      {
-        "id": "secrets",
-        "text": "Secrets",
-        "path": "/admin/secrets",
-        "permission": "secrets:read"
-      },
-      {
-        "id": "branding",
-        "text": "Branding",
-        "path": "/admin/branding",
-        "permission": "branding:write"
-      },
-      {
-        "id": "tyk-connections",
-        "text": "Tyk Connections",
-        "path": "/admin/tyk-connections",
-        "permission": "tyk-connections:read"
-      }
-    ]
-  },
-  {
-    "id": "chat",
-    "text": "Chat",
-    "icon": "message-lines",
-    "items": [
-      {
-        "id": "chats",
-        "text": "Chats",
-        "path": "/admin/chats",
-        "permission": "chats:read"
-      },
-      {
-        "id": "agents",
-        "text": "Agents",
-        "path": "/admin/agents",
-        "permission": "agents:read"
-      },
-      {
-        "id": "llm-settings",
-        "text": "Model call settings",
-        "path": "/admin/llm-settings",
-        "permission": "llm-settings:read"
-      }
-    ]
-  },
-  {
-    "id": "plugins",
-    "text": "Plugins",
-    "icon": "screwdriver-wrench",
-    "items": [
-      {
-        "id": "marketplace",
-        "text": "Marketplace",
-        "path": "/admin/marketplace",
-        "permission": "marketplace:read"
-      },
-      {
-        "id": "plugin-list",
-        "text": "Installed Plugins",
-        "path": "/admin/plugins",
-        "permission": "plugins:read"
-      },
-      {
-        "id": "marketplace-settings",
-        "text": "Marketplace Sources",
-        "path": "/admin/marketplace-settings",
-        "permission": "marketplace:write"
-      }
-    ]
-  }
-]
+{
+  "admin": [
+    {
+      "id": "overview",
+      "text": "Overview",
+      "path": "/admin",
+      "icon": "house",
+      "exact": true
+    },
+    {
+      "id": "dashboard",
+      "text": "Analytics",
+      "path": "/admin/dash",
+      "icon": "monitor-waveform",
+      "permission": "analytics:read"
+    },
+    {
+      "id": "access",
+      "text": "Access",
+      "icon": "users",
+      "items": [
+        {
+          "id": "users",
+          "text": "Users",
+          "path": "/admin/users",
+          "permission": "users:read"
+        },
+        {
+          "id": "groups",
+          "text": "Teams",
+          "path": "/admin/groups",
+          "permission": "groups:read"
+        },
+        {
+          "id": "roles",
+          "text": "Roles",
+          "path": "/admin/roles",
+          "permission": "roles:read"
+        },
+        {
+          "id": "sso-profiles",
+          "text": "Identity providers",
+          "path": "/admin/sso-profiles",
+          "permission": "sso-profiles:read"
+        }
+      ]
+    },
+    {
+      "id": "catalogs",
+      "text": "Catalogs",
+      "icon": "rectangle-history",
+      "items": [
+        {
+          "id": "catalog-llms",
+          "text": "LLM catalogs",
+          "path": "/admin/catalogs/llms",
+          "permission": "catalogues:read"
+        },
+        {
+          "id": "catalog-data",
+          "text": "Data catalogs",
+          "path": "/admin/catalogs/data",
+          "permission": "data-catalogues:read"
+        },
+        {
+          "id": "catalog-tools",
+          "text": "Tool catalogs",
+          "path": "/admin/catalogs/tools",
+          "permission": "tool-catalogues:read"
+        }
+      ]
+    },
+    {
+      "id": "llm-management",
+      "text": "LLM management",
+      "icon": "microchip-ai",
+      "items": [
+        {
+          "id": "llms",
+          "text": "LLM providers",
+          "path": "/admin/llms",
+          "permission": "llms:read"
+        },
+        {
+          "id": "model-prices",
+          "text": "Model prices",
+          "path": "/admin/model-prices",
+          "permission": "model-prices:read"
+        },
+        {
+          "id": "embedders",
+          "text": "Embedders",
+          "path": "/admin/embedders",
+          "permission": "embedders:read"
+        },
+        {
+          "id": "model-routers",
+          "text": "Model Routers",
+          "path": "/admin/model-routers",
+          "permission": "model-routers:read"
+        },
+        {
+          "id": "semantic-routers",
+          "text": "Semantic Routers",
+          "path": "/admin/semantic-routers",
+          "permission": "semantic-routers:read"
+        }
+      ]
+    },
+    {
+      "id": "context-management",
+      "text": "Context management",
+      "icon": "layer-group",
+      "items": [
+        {
+          "id": "datasources",
+          "text": "Data sources",
+          "path": "/admin/datasources",
+          "permission": "datasources:read"
+        },
+        {
+          "id": "tools",
+          "text": "Tools",
+          "path": "/admin/tools",
+          "permission": "tools:read"
+        },
+        {
+          "id": "mcp-servers",
+          "text": "MCP servers",
+          "path": "/admin/mcp-servers",
+          "exact": true,
+          "permission": "mcp-servers:read"
+        },
+        {
+          "id": "filters",
+          "text": "Filters",
+          "path": "/admin/filters",
+          "permission": "filters:read"
+        }
+      ]
+    },
+    {
+      "id": "ai-portal",
+      "text": "AI Portal",
+      "icon": "display",
+      "items": [
+        {
+          "id": "portal-apps",
+          "text": "Apps",
+          "path": "/admin/apps",
+          "permission": "apps:read"
+        },
+        {
+          "id": "edge-gateways",
+          "text": "Edge Gateways",
+          "path": "/admin/edge-gateways",
+          "permission": "edges:read"
+        },
+        {
+          "id": "mcp-credentials",
+          "text": "MCP credentials",
+          "path": "/admin/mcp-credentials",
+          "permission": "mcp-credentials:read"
+        }
+      ]
+    },
+    {
+      "id": "community",
+      "text": "Community",
+      "icon": "puzzle-piece",
+      "items": [
+        {
+          "id": "submission-queue",
+          "text": "Submission Queue",
+          "path": "/admin/submissions",
+          "permission": "submissions:read"
+        },
+        {
+          "id": "attestation-templates",
+          "text": "Attestation Templates",
+          "path": "/admin/attestation-templates",
+          "permission": "attestation-templates:read"
+        }
+      ]
+    },
+    {
+      "id": "governance",
+      "text": "Governance",
+      "icon": "shield",
+      "items": [
+        {
+          "id": "compliance",
+          "text": "Compliance overview",
+          "path": "/admin/compliance",
+          "permission": "compliance:read"
+        },
+        {
+          "id": "audit",
+          "text": "Audit trail",
+          "path": "/admin/audit",
+          "permission": "audit:read"
+        },
+        {
+          "id": "metadata-schemas",
+          "text": "Metadata schemas",
+          "path": "/admin/metadata/schemas",
+          "permission": "metadata:read"
+        },
+        {
+          "id": "metadata-vocabularies",
+          "text": "Metadata vocabularies",
+          "path": "/admin/metadata/vocabularies",
+          "permission": "metadata:read"
+        },
+        {
+          "id": "metadata-compliance",
+          "text": "Metadata coverage",
+          "path": "/admin/metadata/coverage",
+          "permission": "metadata:read"
+        },
+        {
+          "id": "webhooks",
+          "text": "Webhooks",
+          "path": "/admin/webhooks",
+          "permission": "webhooks:read"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "text": "Settings",
+      "icon": "gear",
+      "items": [
+        {
+          "id": "secrets",
+          "text": "Secrets",
+          "path": "/admin/secrets",
+          "permission": "secrets:read"
+        },
+        {
+          "id": "branding",
+          "text": "Branding",
+          "path": "/admin/branding",
+          "permission": "branding:write"
+        },
+        {
+          "id": "tyk-connections",
+          "text": "Tyk Connections",
+          "path": "/admin/tyk-connections",
+          "permission": "tyk-connections:read"
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "text": "Chat",
+      "icon": "message-lines",
+      "items": [
+        {
+          "id": "chats",
+          "text": "Chats",
+          "path": "/admin/chats",
+          "permission": "chats:read"
+        },
+        {
+          "id": "agents",
+          "text": "Agents",
+          "path": "/admin/agents",
+          "permission": "agents:read"
+        },
+        {
+          "id": "llm-settings",
+          "text": "Model call settings",
+          "path": "/admin/llm-settings",
+          "permission": "llm-settings:read"
+        }
+      ]
+    },
+    {
+      "id": "plugins",
+      "text": "Plugins",
+      "icon": "screwdriver-wrench",
+      "items": [
+        {
+          "id": "marketplace",
+          "text": "Marketplace",
+          "path": "/admin/marketplace",
+          "permission": "marketplace:read"
+        },
+        {
+          "id": "plugin-list",
+          "text": "Installed Plugins",
+          "path": "/admin/plugins",
+          "permission": "plugins:read"
+        },
+        {
+          "id": "marketplace-settings",
+          "text": "Marketplace Sources",
+          "path": "/admin/marketplace-settings",
+          "permission": "marketplace:write"
+        }
+      ]
+    }
+  ],
+  "chat": [
+    {
+      "id": "overview",
+      "text": "Overview",
+      "path": "/chat/dashboard",
+      "icon": "house"
+    },
+    {
+      "id": "chat-rooms",
+      "text": "Chats",
+      "icon": "message-lines",
+      "items": [
+        {
+          "id": "chat-3",
+          "text": "Support",
+          "path": "/chat/3"
+        }
+      ]
+    },
+    {
+      "id": "past-conversations",
+      "text": "Past Conversations",
+      "icon": "rectangle-history",
+      "items": [
+        {
+          "id": "history-9",
+          "text": "Yesterday",
+          "path": "/chat/3?continue_id=s-1",
+          "exact": true
+        },
+        {
+          "id": "view-all-conversations",
+          "text": "View all conversations",
+          "path": "/chat/dashboard",
+          "exact": true
+        }
+      ]
+    },
+    {
+      "id": "agents",
+      "text": "Agents",
+      "icon": "microchip-ai",
+      "items": [
+        {
+          "id": "agent-4",
+          "text": "Helper",
+          "path": "/chat/agent/4"
+        }
+      ]
+    }
+  ],
+  "portal": [
+    {
+      "id": "dashboard",
+      "text": "Overview",
+      "path": "/portal/dashboard",
+      "icon": "house"
+    },
+    {
+      "id": "my-apps",
+      "text": "Apps",
+      "path": "/portal/apps",
+      "icon": "grid-2-plus"
+    },
+    {
+      "id": "browse",
+      "text": "Browse",
+      "icon": "rectangle-history",
+      "items": [
+        {
+          "id": "browse-all",
+          "text": "All assets",
+          "path": "/portal/catalog",
+          "exact": true
+        },
+        {
+          "id": "browse-llms",
+          "text": "LLM providers",
+          "path": "/portal/catalog/llms"
+        },
+        {
+          "id": "browse-datasources",
+          "text": "Data sources",
+          "path": "/portal/catalog/datasources"
+        },
+        {
+          "id": "browse-tools",
+          "text": "Tools",
+          "path": "/portal/catalog/tools"
+        },
+        {
+          "id": "browse-model-routers",
+          "text": "Model routers",
+          "path": "/portal/catalog/model-routers"
+        },
+        {
+          "id": "browse-semantic-routers",
+          "text": "Semantic routers",
+          "path": "/portal/catalog/semantic-routers"
+        },
+        {
+          "id": "browse-mcp-servers",
+          "text": "MCP servers",
+          "path": "/portal/catalog/mcp-servers"
+        },
+        {
+          "id": "browse-resource-7-datasets",
+          "text": "Datasets",
+          "path": "/portal/catalog/resources/7/datasets",
+          "pluginId": 7
+        }
+      ]
+    },
+    {
+      "id": "contributions",
+      "text": "Community",
+      "icon": "puzzle-piece",
+      "items": [
+        {
+          "id": "my-contributions",
+          "text": "My Contributions",
+          "path": "/portal/contributions"
+        },
+        {
+          "id": "submit-resource",
+          "text": "Submit Resource",
+          "path": "/portal/submissions/new"
+        }
+      ]
+    }
+  ]
+}
