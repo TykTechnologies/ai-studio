@@ -531,6 +531,12 @@ enterprise-import-guard: ## Check no public package imports the private enterpri
 langchaingo-verify: ## Check nothing builds with upstream github.com/tmc/langchaingo (use third_party/langchaingo)
 	@scripts/langchaingo-verify.sh
 
+# PLUGIN_MOD_ROOTS limits the directories searched (default: examples,
+# enterprise/plugins, community/plugins, tyk-internal/plugins where present).
+.PHONY: plugins-mod-check
+plugins-mod-check: ## Check every in-repo plugin module's go.mod is tidy against this tree (PLUGIN_MOD_BUILD=1 also builds them)
+	@scripts/plugins-mod-check.sh $(if $(PLUGIN_MOD_BUILD),--build) $(PLUGIN_MOD_ROOTS)
+
 # ============================================================================
 # Plugin Release (build -> sign -> push -> marketplace index entry)
 # ============================================================================

@@ -189,6 +189,12 @@ Midsommar embeds the Tyk Identity Broker (TIB) to provide SSO functionality:
 - **Configuration:** Enabled via the `TIBEnabled` configuration flag
 - **Security:** Secured with `TIBAPISecret` for internal communication
 - **Initialization:** Initialized during API startup when enabled
+- **State cookie:** The broker keeps OAuth/OIDC login state in the
+  `_gothic_session` cookie (`sso.NewStateStore`): `Path=/`, `HttpOnly`,
+  `SameSite=Lax`, and `Secure` exactly when the session cookie is (not in
+  `DEVMODE`). The options are explicit because gorilla/sessions v1.4 defaults
+  to `Secure; SameSite=None`, which browsers drop over plain HTTP, failing
+  the callback with "could not find a matching session".
 
 The integration is configured in [api/api.go](../api/api.go):
 

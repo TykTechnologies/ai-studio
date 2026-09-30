@@ -442,16 +442,24 @@ Dashboard's:
 
 - Where both require a module, Studio uses the Dashboard's version, up or
   down (2026-09-30: TIB 1.8, libopenapi 0.36, gorilla/sessions 1.4,
-  go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up; pgx,
+  go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up;
   gosimple/slug and mergo down). The `go` directive matches the Dashboard's
   (`go 1.26.5`, `toolchain go1.26.6` for Studio's own builds).
 - Where a Studio dependency needs a newer version, the module is in
   `scripts/host-compat-allow.txt` with the dependency that needs it (the
   OpenTelemetry 1.46 exporters, the Prometheus client behind the otel
   Prometheus exporter, go-openapi v0.25+, weaviate). Each was checked by
-  lowering it alone: every one drags others down with it.
+  lowering it alone: every one drags others down with it. One raise is a
+  choice rather than a need: pgx stays at 5.10 (v2.2.0's version, for its
+  hardening against hostile servers) above the Dashboard's 5.9.2.
 - `mattn/go-sqlite3` is deliberately not aligned: the Dashboard carries the
   retracted `v2.0.3+incompatible`, and `pkg/studio` does not link SQLite.
+- The in-repo plugin modules (`examples/`, `enterprise/plugins/`, and the
+  `community/` and `tyk-internal/` submodules) replace Studio's module with
+  the checkout, so any version change here needs `go mod tidy` in each of
+  them too, or their `go build` stops at "updates to go.mod needed".
+  `make plugins-mod-check` checks them (CI covers `examples` and
+  `enterprise/plugins`; the submodules are separate repositories).
 
 `make host-compat` (`scripts/host-compat.sh --build`, a CI job on this
 repository's branches) fetches the Dashboard's `go.mod` at run time (its
@@ -567,6 +575,11 @@ A host may build with `CGO_ENABLED=0` (the Tyk Dashboard's dev builds do), so
   through cgo. `data_session/chroma.go` is `//go:build cgo`, and
   `chroma_nocgo.go` stands in for it: Chroma datasources return
   `ErrChromaUnavailable`, and Chroma is left out of the vector store lists.
+  Studio always supplies vectors, so every collection it opens directly
+  gets an explicit embedding function that refuses to embed
+  (`precomputedEmbeddings`). Without one, chroma-go builds its default ONNX
+  function, which downloads ORT 1.21 while the Dashboard-aligned
+  `onnxruntime_go` v1.26 asks for API 24, and every store and search fails.
   chroma-go v0.4 was not an option: it adds an embedded runtime, and
   `chroma-go-local@v0.3.4`, which it requires, failed checksum-database
   verification (2026-09-29).
