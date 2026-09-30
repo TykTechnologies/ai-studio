@@ -466,13 +466,7 @@ func (h *DatabaseHandler) SetAsGlobalHandler() {
 // the other migrations under the cross-instance migration lock; the handler
 // runs it again at start, which is a no-op on an up-to-date schema.
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&models.LLMChatRecord{},
-		&models.LLMChatLogEntry{},
-		&models.ToolCallRecord{},
-		&models.ProxyLog{},
-		&models.ComplianceEvent{},
-	)
+	return db.AutoMigrate(models.AnalyticsModels()...)
 }
 
 // initDB handles database migration - moved from analytics.go
