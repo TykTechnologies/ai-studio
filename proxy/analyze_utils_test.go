@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -338,4 +340,47 @@ func generateLargeData(size int) []byte {
 		data[i] = byte(i % 256)
 	}
 	return data
+}
+
+// TestBuildChatRecord_OpenAICacheTokens pins that OpenAI cache tokens are both
+// recorded and not double counted. prompt_tokens already includes them, so the
+// fresh prompt tokens are prompt_tokens minus the cache tokens, and TotalTokens
+// must come out equal to the total_tokens the vendor itself reported (#678).
+func TestBuildChatRecord_OpenAICacheTokens(t *testing.T) {
+	const model = "openai.gpt-5.6-luna"
+
+	mockService := new(MockService)
+	mockService.On("GetModelPriceByModelNameAndVendor", model, string(models.OPENAI)).
+		Return(&models.ModelPrice{
+			ModelName:    model,
+			Vendor:       string(models.OPENAI),
+			CPT:          0.000006,
+			CPIT:         0.000002,
+			CacheReadPT:  0.0000002,
+			CacheWritePT: 0.0000025,
+			Currency:     "USD",
+		}, nil)
+
+	resp := &responses.OpenAIResponse{}
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"model": "`+model+`",
+		"choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+		"usage": {
+			"prompt_tokens": 6020,
+			"completion_tokens": 6,
+			"total_tokens": 6026,
+			"prompt_tokens_details": {"cache_write_tokens": 14, "cached_tokens": 6004}
+		}
+	}`), resp))
+
+	req, err := http.NewRequest(http.MethodPost, "/", nil)
+	require.NoError(t, err)
+
+	rec := buildChatRecord(mockService, &models.LLM{Vendor: models.OPENAI}, &models.App{}, resp, req, time.Now())
+
+	assert.Equal(t, 2, rec.PromptTokens, "prompt tokens must exclude the cached tokens")
+	assert.Equal(t, 6, rec.ResponseTokens)
+	assert.Equal(t, 6004, rec.CacheReadPromptTokens)
+	assert.Equal(t, 14, rec.CacheWritePromptTokens)
+	assert.Equal(t, 6026, rec.TotalTokens, "total must match the vendor's own total_tokens")
 }

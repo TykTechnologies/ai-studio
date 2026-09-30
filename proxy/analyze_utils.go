@@ -158,9 +158,12 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 	cacheWriteTokens := response.GetCacheWritePromptTokens()
 	cacheReadTokens := response.GetCacheReadPromptTokens()
 
-	// Subtract cached tokens from prompt tokens to avoid double counting for Google models.
-	// Google's promptTokenCount includes cachedContentTokenCount.
-	if llm.Vendor == models.GOOGLEAI {
+	// Subtract cached tokens from prompt tokens for vendors whose prompt token
+	// count already includes them, so the cache tokens are not counted twice in
+	// TotalTokens or in the cost below: Google's promptTokenCount includes
+	// cachedContentTokenCount, and OpenAI's prompt_tokens includes
+	// prompt_tokens_details.cached_tokens (and cache_write_tokens).
+	if llm.Vendor == models.GOOGLEAI || llm.Vendor == models.OPENAI {
 		pt = pt - cacheReadTokens - cacheWriteTokens
 	}
 
