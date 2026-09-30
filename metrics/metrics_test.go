@@ -373,3 +373,16 @@ func TestHandlerBeforeInit(t *testing.T) {
 		t.Error("Handler() should return nil before Init()")
 	}
 }
+
+func TestRecordGoroutinePanic(t *testing.T) {
+	h := Init()
+	RecordGoroutinePanic(context.Background(), "relay")
+
+	body := scrape(t, h)
+	if !strings.Contains(body, "aistudio_goroutine_panics_total") {
+		t.Error("missing aistudio_goroutine_panics_total metric")
+	}
+	if !strings.Contains(body, `goroutine="relay"`) {
+		t.Error("missing goroutine label")
+	}
+}
