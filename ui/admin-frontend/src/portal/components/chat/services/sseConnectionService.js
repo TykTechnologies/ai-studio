@@ -1,4 +1,5 @@
 import pubClient from '../../../../admin/utils/pubClient';
+import { withBase } from '../../../../runtimeConfig';
 import { detectErrorType, generateTempId } from '../utils/chatMessageUtils';
 
 export const setupSSEConnection = ({
@@ -59,7 +60,7 @@ export const setupSSEConnection = ({
       
       setSessionId(newSessionId);
       // Update URL with new session ID
-      const newUrl = `/chat/${chatId}?continue_id=${newSessionId}`;
+      const newUrl = withBase(`/chat/${chatId}?continue_id=${newSessionId}`);
       try {
         window.history.replaceState({}, "", newUrl);
       } catch (err) {
