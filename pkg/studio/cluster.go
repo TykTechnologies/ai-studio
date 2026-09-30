@@ -31,10 +31,24 @@ type clusterParts struct {
 	signals *signalSender
 }
 
+// Labels a replica gets when its host names none.
+const (
+	DefaultNodeLabel         = "studio"
+	DefaultControlPlaneLabel = "control-plane"
+)
+
+// nodeLabel is label, or def when it is empty.
+func nodeLabel(label, def string) string {
+	if label == "" {
+		return def
+	}
+	return label
+}
+
 // joinCluster registers this replica and starts reading the event log. With
 // one replica (or SQLite) this is one row and an idle reader.
-func (c *clusterParts) joinCluster(ctx context.Context, db *gorm.DB, nodeID, version string) (err error) {
-	if c.clusterNode, err = cluster.StartNode(db, nodeID, version); err != nil {
+func (c *clusterParts) joinCluster(ctx context.Context, db *gorm.DB, nodeID, version string, node cluster.NodeOptions) (err error) {
+	if c.clusterNode, err = cluster.StartNode(db, nodeID, version, node); err != nil {
 		return fmt.Errorf("studio: %w", err)
 	}
 	c.clusterLog = cluster.NewLog(db, nodeID, cluster.LogOptions{})

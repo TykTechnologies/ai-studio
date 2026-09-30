@@ -34,6 +34,7 @@ type EdgeResponse struct {
 		LastSyncAck    *time.Time `json:"last_sync_ack"`
 		CreatedAt      time.Time  `json:"created_at"`
 		UpdatedAt      time.Time  `json:"updated_at"`
+		EdgeOwner
 	} `json:"attributes"`
 }
 
@@ -113,6 +114,7 @@ func (a *API) listEdges(c *gin.Context) {
 	for i, edge := range edges {
 		response.Data[i] = serializeEdgeWithHealth(&edge)
 	}
+	a.withEdgeOwners(c.Request.Context(), response.Data)
 
 	c.JSON(http.StatusOK, response)
 }
@@ -163,7 +165,9 @@ func (a *API) getEdge(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeEdgeWithHealth(edge)})
+	data := []EdgeResponse{serializeEdgeWithHealth(edge)}
+	a.withEdgeOwners(c.Request.Context(), data)
+	c.JSON(http.StatusOK, gin.H{"data": data[0]})
 }
 
 // @Summary Trigger edge reload
@@ -299,6 +303,7 @@ func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
 			LastSyncAck    *time.Time             `json:"last_sync_ack"`
 			CreatedAt      time.Time              `json:"created_at"`
 			UpdatedAt      time.Time              `json:"updated_at"`
+			EdgeOwner
 		}{
 			EdgeID:         edge.EdgeID,
 			Namespace:      namespace,
@@ -314,6 +319,7 @@ func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
 			LastSyncAck:    edge.LastSyncAck,
 			CreatedAt:      edge.CreatedAt,
 			UpdatedAt:      edge.UpdatedAt,
+			EdgeOwner:      EdgeOwner{OwnerNodeID: edge.OwnerNodeID},
 		},
 	}
 }
@@ -342,6 +348,7 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			LastSyncAck    *time.Time             `json:"last_sync_ack"`
 			CreatedAt      time.Time              `json:"created_at"`
 			UpdatedAt      time.Time              `json:"updated_at"`
+			EdgeOwner
 		}{
 			EdgeID:         edge.EdgeInstance.EdgeID,
 			Namespace:      namespace,
@@ -357,6 +364,7 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			LastSyncAck:    edge.EdgeInstance.LastSyncAck,
 			CreatedAt:      edge.EdgeInstance.CreatedAt,
 			UpdatedAt:      edge.EdgeInstance.UpdatedAt,
+			EdgeOwner:      EdgeOwner{OwnerNodeID: edge.EdgeInstance.OwnerNodeID},
 		},
 	}
 }

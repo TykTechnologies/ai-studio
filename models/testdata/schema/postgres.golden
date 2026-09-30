@@ -353,6 +353,8 @@ TABLE cluster_nodes
   column pid bigint(int8) nullable=YES precision=64 scale=0
   column boot_id character varying(varchar) nullable=YES len=64
   column pid_namespace character varying(varchar) nullable=YES len=64
+  column label character varying(varchar) nullable=YES len=64
+  column leader_eligible boolean(bool) nullable=YES
 TABLE compliance_events
   constraint compliance_events_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX compliance_events_pkey ON compliance_events USING btree (id)

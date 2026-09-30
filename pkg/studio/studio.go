@@ -120,6 +120,11 @@ type Options struct {
 	// replica restart needs: it must not inherit its predecessor's claims.
 	NodeID string
 
+	// NodeLabel names this replica on the cluster status and the Edge
+	// Gateways page (at most 64 characters, e.g. "dashboard"). Empty means
+	// DefaultNodeLabel.
+	NodeLabel string
+
 	// SkipLLMDefaults skips seeding the default LLM configurations and
 	// their secrets.
 	SkipLLMDefaults bool
@@ -363,7 +368,9 @@ func New(opts Options) (_ *Studio, err error) {
 	if nodeID == "" {
 		nodeID = cluster.NewNodeID()
 	}
-	if err := s.joinCluster(backgroundCtx, s.db, nodeID, opts.Version); err != nil {
+	if err := s.joinCluster(backgroundCtx, s.db, nodeID, opts.Version, cluster.NodeOptions{
+		Label: nodeLabel(opts.NodeLabel, DefaultNodeLabel),
+	}); err != nil {
 		return nil, err
 	}
 	// Singleton jobs (aggregations, alerts, syncs, cleanups) run only on

@@ -25,7 +25,8 @@ import (
 //     without a default. Added tables, nullable or defaulted columns and
 //     indexes leave it alone, so older readers keep working.
 const (
-	SchemaVersion          = 1
+	// 2: cluster_nodes.label and leader_eligible (nullable, additive).
+	SchemaVersion          = 2
 	MinReaderSchemaVersion = 1
 )
 

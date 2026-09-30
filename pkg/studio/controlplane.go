@@ -71,6 +71,11 @@ type ControlPlaneOptions struct {
 	// per process.
 	NodeID string
 
+	// NodeLabel names this replica on the cluster status and the Edge
+	// Gateways page, where operators see which edges it holds (at most 64
+	// characters, e.g. "mdcb-eu-1"). Empty means DefaultControlPlaneLabel.
+	NodeLabel string
+
 	// TracerProvider, Propagator and MeterProvider are the host's; when nil
 	// the control plane records no spans or metrics of its own. It never
 	// starts an exporter or serves a metrics endpoint.
@@ -178,7 +183,10 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 	if nodeID == "" {
 		nodeID = cluster.NewNodeID()
 	}
-	if err := c.joinCluster(backgroundCtx, c.db, nodeID, opts.Version); err != nil {
+	if err := c.joinCluster(backgroundCtx, c.db, nodeID, opts.Version, cluster.NodeOptions{
+		Label:      nodeLabel(opts.NodeLabel, DefaultControlPlaneLabel),
+		NeverLeads: true,
+	}); err != nil {
 		return nil, err
 	}
 	// No leader lease: pkg/replicas answers "not the leader" for good, and
