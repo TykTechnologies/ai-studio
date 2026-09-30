@@ -353,9 +353,35 @@ sidebar) sets `Options.Chromeless`:
   `runtimeConfig.applyChrome` sets to 0 when chromeless. Pages used to
   hard-code `top="64px"`.
 - The host links straight to Studio's routes under the base path
-  (`/admin/llms`, `/portal/dashboard`, `/chat/...`). A navigation manifest
-  endpoint, so the host can build its menu from what the user may see,
-  follows separately.
+  (`/admin/llms`, `/portal/dashboard`, `/chat/...`), and builds its menu
+  from `GET /common/nav` (below).
+
+### Navigation manifest
+
+`GET /common/nav` (`api/nav.go`) returns what the signed-in user may
+navigate to:
+
+- `surfaces`: Admin (`/admin`, when the user holds any permission), AI
+  Portal (`/portal/dashboard`) and Chat (`/chat/dashboard`), gated as the
+  console's top bar gates them (the user's show-portal / show-chat options
+  and the licensed features).
+- `admin`: the admin menu, as groups (`items`) of pages, each with `id`,
+  `text`, `path` (a console route without the base path), `icon` (a Font
+  Awesome name), `exact`, and the `permission` that unlocks it. Plugin
+  sections carry `pluginId`. Entries the user may not open are already
+  left out, with the drawer's rule: a group stays while one of its pages
+  does.
+
+The manifest is the one source of truth: the console's admin drawer
+(`Drawer.js`) renders from it, reloading when the user's permissions change
+or a plugin UI is installed. Group order, feature gates (portal, chat,
+gateway-only, Enterprise-only groups) and plugin placement are tested in
+`api/nav_test.go`. `TestAdminNavGolden` writes the full menu to
+`ui/admin-frontend/src/admin/nav.golden.json` (`UPDATE_NAV_GOLDEN=1` to
+regenerate), and `nav.golden.test.js` checks every page in it against
+`admin/routes.js`, including that the menu and the route need the same
+permission. The portal and chat drawers still build their menus in the
+console.
 - `examples/embed-host -chromeless` shows it.
 
 ## Module layout

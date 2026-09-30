@@ -536,6 +536,9 @@ func (a *API) setupRoutes() error {
 	authed.POST("/me/api-key/roll", a.rollMyAPIKey)
 	authed.DELETE("/me/api-key", a.revokeMyAPIKey)
 	authed.GET("/system", a.handleFeatureSet)
+	// What the user may navigate to, for the console's admin drawer and a
+	// host that draws Studio's navigation itself (nav.go).
+	authed.GET("/nav", a.getNavManifest)
 
 	// PORTAL FEATURES
 	authed.GET("/catalogues/:id/llms", a.getCatalogueLLMs)
