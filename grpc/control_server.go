@@ -363,6 +363,11 @@ func (s *ControlServer) Serve(listener net.Listener) error {
 
 	// Start serving
 	if err := server.Serve(listener); err != nil {
+		// Stop between building the server and serving it: the shutdown
+		// asked for, not a failure.
+		if errors.Is(err, grpc.ErrServerStopped) {
+			return nil
+		}
 		return fmt.Errorf("gRPC server failed: %w", err)
 	}
 
