@@ -82,9 +82,11 @@ func TestPendingChanges_EdgeReloadStampsThePreview(t *testing.T) {
 	assert.Len(t, edges, 2)
 }
 
-// A database from before last_push_at existed: the namespace has a checksum
-// and an edge that loaded it, but no push stamp. The preview measures from
-// the edge's ack instead of calling everything "never pushed".
+// No push stamp (a database from before last_push_at existed, or edges that
+// only got their configuration when they registered): the preview measures
+// from the latest edge ack instead of calling everything "never pushed".
+// The ack counts whether or not the edge is connected, and after a change
+// has moved the namespace to a new checksum (L7).
 func TestPendingChanges_EdgeAckBaselineWhenNoPushRecorded(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	svc := services.NewSyncStatusService(db)
@@ -102,7 +104,7 @@ func TestPendingChanges_EdgeAckBaselineWhenNoPushRecorded(t *testing.T) {
 	row := &models.NamespaceSyncStatus{Namespace: "default", ExpectedChecksum: "abc", ConfigVersion: "1", LastConfigChange: before}
 	require.NoError(t, row.Upsert(db))
 
-	t.Run("no edge holds the checksum: still never pushed", func(t *testing.T) {
+	t.Run("no edge ever acked: still never pushed", func(t *testing.T) {
 		pc, err := svc.GetPendingChanges("default")
 		require.NoError(t, err)
 		assert.Nil(t, pc.Since)
@@ -125,8 +127,20 @@ func TestPendingChanges_EdgeAckBaselineWhenNoPushRecorded(t *testing.T) {
 		assert.Equal(t, 1, pc.Total)
 	})
 
-	t.Run("an edge holding another checksum does not count", func(t *testing.T) {
-		require.NoError(t, db.Model(&models.EdgeInstance{}).Where("edge_id = ?", "edge-1").Update("loaded_checksum", "zzz").Error)
+	t.Run("an edge that has fallen behind and gone offline still counts", func(t *testing.T) {
+		require.NoError(t, db.Model(&models.EdgeInstance{}).Where("edge_id = ?", "edge-1").Updates(map[string]interface{}{
+			"loaded_checksum": "zzz", "sync_status": models.EdgeSyncStatusPending, "status": models.EdgeStatusDisconnected}).Error)
+		require.NoError(t, (&models.NamespaceSyncStatus{Namespace: "default", ExpectedChecksum: "def", ConfigVersion: "2", LastConfigChange: after}).Upsert(db))
+		pc, err := svc.GetPendingChanges("default")
+		require.NoError(t, err)
+		require.NotNil(t, pc.Since)
+		assert.WithinDuration(t, ack, *pc.Since, time.Second)
+		assert.Equal(t, services.PendingBaselineEdgeAck, pc.Baseline)
+		assert.Equal(t, map[string]string{"app:Fresh": services.PendingChangeCreated}, changeKeys(pc))
+	})
+
+	t.Run("an edge that never acked does not count", func(t *testing.T) {
+		require.NoError(t, db.Model(&models.EdgeInstance{}).Where("edge_id = ?", "edge-1").Update("last_sync_ack", nil).Error)
 		pc, err := svc.GetPendingChanges("default")
 		require.NoError(t, err)
 		assert.Nil(t, pc.Since)

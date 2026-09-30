@@ -148,6 +148,8 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	if st.Database == "postgres" {
 		if log != nil && !st.EventLog.Enabled {
 			st.Warnings = append(st.Warnings, "The cluster event log is not running on this replica: other replicas' changes do not reach it.")
+		} else if log != nil && !st.EventLog.Listening {
+			st.Warnings = append(st.Warnings, "This replica's PostgreSQL listener is not connected: other replicas' changes reach it by polling, up to a second late (see its log).")
 		}
 		if st.EventLog.LastError != "" {
 			st.Warnings = append(st.Warnings, "Reading the cluster event log fails: "+st.EventLog.LastError)

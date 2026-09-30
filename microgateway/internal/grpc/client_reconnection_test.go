@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -277,25 +278,14 @@ func TestSimpleEdgeClient_MessageHandlers(t *testing.T) {
 		err := client.handleReloadRequest(req)
 		assert.NoError(t, err, "Should handle missing reload handler gracefully")
 
-		// Test with mock reload handler
-		reloadCalled := false
-		var receivedReq *pb.ConfigurationReloadRequest
-
-		mockHandler := &mockReloadHandler{
-			handleFunc: func(req *pb.ConfigurationReloadRequest) {
-				reloadCalled = true
-				receivedReq = req
-			},
-		}
-
-		client.SetReloadHandler(mockHandler)
+		// The request held while no handler was set is handed to the
+		// handler when it is set; later ones go to it directly.
+		handler := &recordingReloadHandler{}
+		client.SetReloadHandler(handler)
+		require.Eventually(t, func() bool { return len(handler.handled()) == 1 }, 5*time.Second, 5*time.Millisecond)
 		err = client.handleReloadRequest(req)
 		assert.NoError(t, err)
-
-		// Verify the handler was called
-		time.Sleep(10 * time.Millisecond) // Allow time for async call
-		assert.True(t, reloadCalled, "Reload handler should be called")
-		assert.Equal(t, req.OperationId, receivedReq.OperationId)
+		assert.Equal(t, []string{req.OperationId, req.OperationId}, handler.handled())
 	})
 }
 

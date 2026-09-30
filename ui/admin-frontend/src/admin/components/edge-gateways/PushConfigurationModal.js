@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -11,6 +11,7 @@ import {
   MenuItem,
   Button,
   Alert,
+  AlertTitle,
   CircularProgress,
   Box,
   RadioGroup,
@@ -41,6 +42,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // The target a push was refused for because no edge gateway could receive
+  // it (409: every edge offline too long, or none registered). Pushing the
+  // same target again would fail the same way, so Push stays disabled until
+  // the target changes.
+  const [noTargetsFor, setNoTargetsFor] = useState(null);
+  const errorRef = useRef(null);
   // The push once it is recorded; PushProgress follows it from there.
   const [operation, setOperation] = useState(null);
   const success = operation !== null;
@@ -62,11 +69,29 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
 
   const pending = usePendingChanges(previewNamespaces, open && !success);
 
+  const targetKey = `${targetType}:${targetType === 'namespace' ? selectedNamespace : ''}`;
+  const noTargets = noTargetsFor !== null && noTargetsFor === targetKey;
+
+  // An error is shown at the top of the dialog; bring it into view, since the
+  // preview above the buttons can be long.
+  useEffect(() => {
+    if (error && errorRef.current && errorRef.current.scrollIntoView) {
+      errorRef.current.scrollIntoView({ block: 'nearest' });
+    }
+  }, [error]);
+
+  const changeTarget = (type, namespace) => {
+    setTargetType(type);
+    setSelectedNamespace(namespace);
+    setError(null);
+  };
+
   const handleClose = () => {
     if (!loading) {
       setTargetType('all');
       setSelectedNamespace('');
       setError(null);
+      setNoTargetsFor(null);
       setOperation(null);
       onClose();
     }
@@ -116,6 +141,9 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
     } catch (err) {
       console.error('Error pushing configuration:', err);
       setError(err.message);
+      if (err.status === 409) {
+        setNoTargetsFor(targetKey);
+      }
     } finally {
       setLoading(false);
     }
@@ -123,10 +151,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
 
   const isValid = targetType === 'all' || Boolean(selectedNamespace);
   // A disabled control must say why it is disabled.
-  const disabledReason =
-    !isValid && targetType === 'namespace'
-      ? 'Select a namespace to push to, or choose All Namespaces.'
-      : '';
+  let disabledReason = '';
+  if (!isValid && targetType === 'namespace') {
+    disabledReason = 'Select a namespace to push to, or choose All Namespaces.';
+  } else if (noTargets) {
+    disabledReason = 'No edge gateway can receive this push; see the message above.';
+  }
 
   // When the preview says nothing has changed the push is still allowed
   // (a gateway may have been re-registered, or someone wants a fresh load),
@@ -144,6 +174,13 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
       </DialogTitle>
 
       <DialogContent>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} ref={errorRef} data-testid="push-error">
+            {noTargets && <AlertTitle>Nothing to push to</AlertTitle>}
+            {error}
+          </Alert>
+        )}
+
         <Typography variant="body2" color="textSecondary" paragraph>
           Push the latest configuration to edge gateways. This will reload all affected edge instances
           with the current configuration from the control server.
@@ -156,7 +193,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
               <FormLabel component="legend">Target</FormLabel>
               <RadioGroup
                 value={targetType}
-                onChange={(e) => setTargetType(e.target.value)}
+                onChange={(e) => changeTarget(e.target.value, selectedNamespace)}
               >
                 <FormControlLabel
                   value="namespace"
@@ -178,7 +215,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
                   labelId="pushconfigurationmodal-select-namespace-label"
                   value={selectedNamespace}
                   label="Select Namespace"
-                  onChange={(e) => setSelectedNamespace(e.target.value)}
+                  onChange={(e) => changeTarget(targetType, e.target.value)}
                 >
                   {availableNamespaces.map((namespace) => (
                     <MenuItem key={namespace.name} value={namespace.name}>
@@ -189,16 +226,18 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
               </FormControl>
             )}
 
-            {targetType === 'all' && (
+            {targetType === 'all' && !noTargets && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 This will push configuration to all {availableNamespaces.length} namespaces with active edges.
               </Alert>
             )}
           </>
         ) : (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            This will push configuration to all edge gateways.
-          </Alert>
+          !noTargets && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This will push configuration to all edge gateways.
+            </Alert>
+          )
         )}
 
         {/* What the push will actually change, so the user is not confirming blind. */}
@@ -208,12 +247,6 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
             byNamespace={pending.byNamespace}
             onNavigate={handleClose}
           />
-        )}
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
         )}
 
         {operation && (
@@ -251,7 +284,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
           <Button
             onClick={handleSubmit}
             variant="contained"
-            disabled={loading || !isValid}
+            disabled={loading || !isValid || noTargets}
             startIcon={loading ? <CircularProgress size={16} /> : <PushIcon />}
           >
             {submitLabel}

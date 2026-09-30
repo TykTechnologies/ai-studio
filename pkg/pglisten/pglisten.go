@@ -1,7 +1,9 @@
 // Package pglisten shares one PostgreSQL LISTEN connection per database
-// among every subscriber in the process. The connection is a pq.Listener
-// opened outside the application's pool, so subscribers never hold or wait
-// for pool connections to hear notifications.
+// among every subscriber in the process. The connection is opened with pgx
+// from the same connection string as the application's pool (gorm uses pgx
+// too), so any DSN the pool accepts works here, but it lives outside the
+// pool: subscribers never hold or wait for pool connections to hear
+// notifications.
 //
 // NOTIFY is not a delivery guarantee: notifications sent while the listener
 // is reconnecting are lost. A subscriber that must not miss anything keeps
@@ -10,6 +12,7 @@
 package pglisten
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,12 +21,18 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgconn/ctxwatch"
 )
 
-// PingInterval is how often a listener checks its connection; pq.Listener
-// only notices a dead connection when it next uses it.
+// PingInterval is how long a listener waits without a notification before
+// it checks its connection; a dead connection is otherwise only noticed
+// when it is next used.
 var PingInterval = 90 * time.Second
+
+// commandTimeout bounds one LISTEN, UNLISTEN or ping on the connection.
+const commandTimeout = 30 * time.Second
 
 // Handler receives the payload of a notification on one channel. It is
 // called from the dispatch goroutine and must not block.
@@ -31,11 +40,12 @@ type Handler func(payload string)
 
 // Options configure the connection of a listener's first Acquire.
 type Options struct {
-	// ReconnectInterval is the first wait between reconnect attempts;
-	// pq.Listener backs off from it up to ReconnectCeiling.
+	// ReconnectInterval is the first wait between reconnect attempts; the
+	// listener backs off from it up to ReconnectCeiling.
 	ReconnectInterval time.Duration
 	ReconnectCeiling  time.Duration
-	// ConnectTimeout bounds the wait for the first connection.
+	// ConnectTimeout bounds the wait for the first connection, and for each
+	// reconnect attempt.
 	ConnectTimeout time.Duration
 	// Name labels the listener in logs.
 	Name string
@@ -62,27 +72,43 @@ type Subscription struct {
 	handler Handler
 }
 
-// Listener fans notifications from one pq.Listener out to subscribers.
+// Listener fans notifications from one connection out to subscribers.
+//
+// One goroutine owns the connection: it waits for notifications, issues
+// every LISTEN and UNLISTEN, pings and reconnects, so nothing else ever
+// touches the connection. Subscribe and Unsubscribe change the set of
+// subscribed channels and wake the owner, which brings the connection's
+// LISTENs in line with that set. Waking it cancels its wait for a
+// notification; with pgx's deadline-based cancellation that leaves the
+// connection intact (a partly read message is resumed on the next read).
 type Listener struct {
-	dsn      string
-	name     string
-	listener *pq.Listener
-	refs     int
+	dsn    string
+	name   string
+	opts   Options
+	config *pgx.ConnConfig
+	refs   int // guarded by listenersMu
 
-	// mu guards subs and onReconnect. dispatch holds the read lock while it
-	// calls handlers, so an unsubscribe returns only once no handler of it is
-	// running.
+	// mu guards subs, gen and onReconnect. The owner holds the read lock
+	// while it calls handlers, so an unsubscribe returns only once no
+	// handler of it is running.
 	mu          sync.RWMutex
 	subs        map[string][]*Subscription
+	gen         uint64 // bumped whenever the set of channels changes
 	onReconnect map[int]func()
 	nextHook    int
 
-	// ctlMu orders LISTEN and UNLISTEN, so a channel's last subscriber
-	// leaving cannot UNLISTEN after a new first subscriber's LISTEN.
-	ctlMu sync.Mutex
+	// stateMu guards what the owner reports and how it is woken.
+	stateMu   sync.Mutex
+	connected bool
+	applied   uint64           // the gen whose channels are LISTENed on the connection
+	failed    map[string]error // channels whose LISTEN the server refused at applied
+	changed   chan struct{}    // closed and replaced whenever the above change
+	pending   bool             // the channel set changed since the owner last looked
+	interrupt func()           // cancels the owner's wait for a notification
 
-	stop chan struct{}
-	done chan struct{}
+	stopCtx context.Context
+	stop    context.CancelFunc
+	done    chan struct{}
 }
 
 var (
@@ -109,7 +135,8 @@ func DSN(db *gorm.DB, fallbacks ...string) (string, error) {
 
 // Acquire returns the listener for dsn, connecting it if this is its first
 // user (opts apply only then). It waits at most opts.ConnectTimeout for the
-// connection. Each Acquire needs a Release.
+// connection and fails at once when the connection is refused. Each Acquire
+// needs a Release.
 func Acquire(dsn string, opts Options) (*Listener, error) {
 	listenersMu.Lock()
 	defer listenersMu.Unlock()
@@ -120,44 +147,50 @@ func Acquire(dsn string, opts Options) (*Listener, error) {
 	}
 	opts = opts.withDefaults()
 
-	firstEvent := make(chan error, 1)
-	var once sync.Once
+	// pgx.ParseConfig is what gorm's postgres driver parses the DSN with,
+	// so the listener takes the same sslmode default (prefer), the same
+	// options (default_query_exec_mode...) and the same runtime parameters
+	// (search_path...) as the pool.
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", opts.Name, err)
+	}
+	// Waking the owner cancels its wait for a notification. Deadline-based
+	// cancellation (pgx's default, set here so a future default cannot
+	// change it) only interrupts the read; a CancelRequest would not be
+	// needed and the connection stays usable.
+	config.BuildContextWatcherHandler = func(c *pgconn.PgConn) ctxwatch.Handler {
+		return &pgconn.DeadlineContextWatcherHandler{Conn: c.Conn()}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), opts.ConnectTimeout)
+	conn, err := pgx.ConnectConfig(ctx, config)
+	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	cancel()
+	if err != nil {
+		slog.Error(opts.Name+" connection failed", "error", err)
+		if timedOut {
+			return nil, fmt.Errorf("%s could not connect to PostgreSQL within %s: %w", opts.Name, opts.ConnectTimeout, err)
+		}
+		return nil, fmt.Errorf("%s could not connect to PostgreSQL: %w", opts.Name, err)
+	}
+	slog.Info(opts.Name + " connected")
+
+	stopCtx, stop := context.WithCancel(context.Background())
 	l := &Listener{
 		dsn:         dsn,
 		name:        opts.Name,
+		opts:        opts,
+		config:      config,
 		refs:        1,
 		subs:        map[string][]*Subscription{},
 		onReconnect: map[int]func(){},
-		stop:        make(chan struct{}),
+		changed:     make(chan struct{}),
+		stopCtx:     stopCtx,
+		stop:        stop,
 		done:        make(chan struct{}),
 	}
-	l.listener = pq.NewListener(dsn, opts.ReconnectInterval, opts.ReconnectCeiling, func(ev pq.ListenerEventType, err error) {
-		switch ev {
-		case pq.ListenerEventConnected:
-			slog.Info(opts.Name + " connected")
-			once.Do(func() { firstEvent <- nil })
-		case pq.ListenerEventDisconnected:
-			slog.Warn(opts.Name+" disconnected; notifications sent until it reconnects are lost", "error", err)
-		case pq.ListenerEventReconnected:
-			slog.Info(opts.Name + " reconnected")
-		case pq.ListenerEventConnectionAttemptFailed:
-			slog.Error(opts.Name+" connection failed", "error", err)
-			once.Do(func() { firstEvent <- err })
-		}
-	})
-
-	select {
-	case err := <-firstEvent:
-		if err != nil {
-			l.listener.Close()
-			return nil, fmt.Errorf("%s could not connect to PostgreSQL: %w", opts.Name, err)
-		}
-	case <-time.After(opts.ConnectTimeout):
-		l.listener.Close()
-		return nil, fmt.Errorf("%s could not connect to PostgreSQL within %s", opts.Name, opts.ConnectTimeout)
-	}
-
-	go l.dispatch()
+	go l.run(conn)
 	listeners[dsn] = l
 	return l, nil
 }
@@ -172,42 +205,38 @@ func (l *Listener) Release() {
 		return
 	}
 	delete(listeners, l.dsn)
-	close(l.stop)
+	l.stop()
 	<-l.done
-	if err := l.listener.Close(); err != nil {
-		slog.Warn("error closing "+l.name, "error", err)
-	}
 }
 
 // Subscribe registers handler for channel, issuing LISTEN when it is the
-// channel's first subscriber. It gives up after timeout.
+// channel's first subscriber. It waits for the LISTEN (and, while the
+// listener is reconnecting, for the connection) for at most timeout.
 func (l *Listener) Subscribe(channel string, handler Handler, timeout time.Duration) (*Subscription, error) {
 	sub := &Subscription{handler: handler}
-
-	l.ctlMu.Lock()
-	defer l.ctlMu.Unlock()
 
 	l.mu.Lock()
 	first := len(l.subs[channel]) == 0
 	l.subs[channel] = append(l.subs[channel], sub)
+	if first {
+		l.gen++
+	}
+	gen := l.gen
 	l.mu.Unlock()
 
 	if !first {
 		return sub, nil
 	}
-	if err := l.withTimeout(timeout, func() error { return l.listener.Listen(channel) }, func() {
-		// LISTEN completed after we gave up: undo it unless someone else
-		// has subscribed to the channel since.
-		l.mu.RLock()
-		inUse := len(l.subs[channel]) > 0
-		l.mu.RUnlock()
-		if !inUse {
-			_ = l.listener.Unlisten(channel)
-		}
-	}); err != nil && !errors.Is(err, pq.ErrChannelAlreadyOpen) {
+	l.wake()
+	if err := l.await(gen, channel, timeout, true); err != nil {
+		// The owner drops the LISTEN again if it got that far, unless
+		// someone else has subscribed to the channel since.
 		l.mu.Lock()
-		l.removeLocked(channel, sub)
+		if l.removeLocked(channel, sub) {
+			l.gen++
+		}
 		l.mu.Unlock()
+		l.wake()
 		return nil, fmt.Errorf("failed to listen to channel %s: %w", channel, err)
 	}
 	return sub, nil
@@ -216,17 +245,19 @@ func (l *Listener) Subscribe(channel string, handler Handler, timeout time.Durat
 // Unsubscribe removes sub and issues UNLISTEN when it was the channel's last
 // subscriber. Once it returns, sub's handler is not running and will not run.
 func (l *Listener) Unsubscribe(channel string, sub *Subscription, timeout time.Duration) {
-	l.ctlMu.Lock()
-	defer l.ctlMu.Unlock()
-
 	l.mu.Lock()
 	last := l.removeLocked(channel, sub)
+	if last {
+		l.gen++
+	}
+	gen := l.gen
 	l.mu.Unlock()
 
 	if !last {
 		return
 	}
-	if err := l.withTimeout(timeout, func() error { return l.listener.Unlisten(channel) }, nil); err != nil && !errors.Is(err, pq.ErrChannelNotOpen) {
+	l.wake()
+	if err := l.await(gen, "", timeout, false); err != nil {
 		slog.Warn("error unlistening from PostgreSQL channel", "channel", channel, "error", err)
 	}
 }
@@ -266,70 +297,249 @@ func (l *Listener) removeLocked(channel string, sub *Subscription) bool {
 	return false
 }
 
-// withTimeout runs op, which may block while the listener reconnects, for at
-// most timeout. late runs if op finishes successfully after the timeout.
-func (l *Listener) withTimeout(timeout time.Duration, op func() error, late func()) error {
-	result := make(chan error, 1)
-	var mu sync.Mutex
-	gaveUp := false
-	go func() {
-		err := op()
-		mu.Lock()
-		defer mu.Unlock()
-		if gaveUp {
-			if err == nil && late != nil {
-				late()
-			}
-			return
-		}
-		result <- err
-	}()
-	select {
-	case err := <-result:
-		return err
-	case <-time.After(timeout):
-		mu.Lock()
-		defer mu.Unlock()
-		select {
-		case err := <-result:
+// wake tells the owner the channel set changed.
+func (l *Listener) wake() {
+	l.stateMu.Lock()
+	l.pending = true
+	if l.interrupt != nil {
+		l.interrupt()
+	}
+	l.stateMu.Unlock()
+}
+
+// await waits until the connection carries the channel set of gen and
+// returns the server's error for channel, if it refused its LISTEN. With
+// needConnected false (an UNLISTEN), a listener that is reconnecting
+// counts as done: the new connection only LISTENs what is subscribed then.
+func (l *Listener) await(gen uint64, channel string, timeout time.Duration, needConnected bool) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		l.stateMu.Lock()
+		connected, applied, changed := l.connected, l.applied, l.changed
+		err := l.failed[channel]
+		l.stateMu.Unlock()
+		if connected && applied >= gen {
 			return err
-		default:
 		}
-		gaveUp = true
-		return fmt.Errorf("PostgreSQL listener did not answer within %s", timeout)
+		if !connected && !needConnected {
+			return nil
+		}
+		select {
+		case <-changed:
+		case <-deadline.C:
+			return fmt.Errorf("PostgreSQL listener did not answer within %s", timeout)
+		case <-l.stopCtx.Done():
+			return errors.New("PostgreSQL listener closed")
+		}
 	}
 }
 
-func (l *Listener) dispatch() {
+// setState updates what the owner reports and wakes every await.
+func (l *Listener) setState(f func()) {
+	l.stateMu.Lock()
+	f()
+	close(l.changed)
+	l.changed = make(chan struct{})
+	l.stateMu.Unlock()
+}
+
+var errStopped = errors.New("listener stopped")
+
+// run owns the connection until Release.
+func (l *Listener) run(conn *pgx.Conn) {
 	defer close(l.done)
-	ping := time.NewTicker(PingInterval)
-	defer ping.Stop()
+	listened := map[string]bool{}
+	reconnected := false
 	for {
-		select {
-		case <-l.stop:
-			return
-		case <-ping.C:
-			go func() {
-				if err := l.listener.Ping(); err != nil {
-					slog.Warn(l.name+" ping failed", "error", err)
-				}
-			}()
-		case n := <-l.listener.Notify:
-			// nil means the connection was re-established; anything sent
-			// while it was down is gone.
-			if n == nil {
-				l.mu.RLock()
-				for _, fn := range l.onReconnect {
-					fn()
-				}
-				l.mu.RUnlock()
-				continue
-			}
+		err := l.reconcile(conn, listened)
+		if err == nil && reconnected {
+			reconnected = false
+			slog.Info(l.name + " reconnected")
+			// Anything sent while the connection was down is gone.
 			l.mu.RLock()
-			for _, sub := range l.subs[n.Channel] {
-				sub.handler(n.Extra)
+			for _, fn := range l.onReconnect {
+				fn()
 			}
 			l.mu.RUnlock()
 		}
+		if err == nil {
+			err = l.wait(conn)
+		}
+		if err == nil {
+			continue
+		}
+		if l.stopCtx.Err() != nil {
+			l.close(conn)
+			return
+		}
+		slog.Warn(l.name+" disconnected; notifications sent until it reconnects are lost", "error", err)
+		l.setState(func() { l.connected = false })
+		l.close(conn)
+		if conn = l.reconnect(); conn == nil {
+			return
+		}
+		listened = map[string]bool{}
+		reconnected = true
+	}
+}
+
+// reconcile LISTENs every subscribed channel the connection is not
+// listening to yet and UNLISTENs every channel nobody is subscribed to any
+// more. It returns an error only when the connection is unusable.
+func (l *Listener) reconcile(conn *pgx.Conn, listened map[string]bool) error {
+	l.stateMu.Lock()
+	l.pending = false
+	l.stateMu.Unlock()
+
+	l.mu.RLock()
+	gen := l.gen
+	want := make(map[string]bool, len(l.subs))
+	for channel := range l.subs {
+		want[channel] = true
+	}
+	l.mu.RUnlock()
+
+	failed := map[string]error{}
+	for channel := range want {
+		if listened[channel] {
+			continue
+		}
+		if err := l.exec(conn, "LISTEN "+pgx.Identifier{channel}.Sanitize()); err != nil {
+			if !serverRefused(conn, err) {
+				return err
+			}
+			failed[channel] = err
+			continue
+		}
+		listened[channel] = true
+	}
+	for channel := range listened {
+		if want[channel] {
+			continue
+		}
+		if err := l.exec(conn, "UNLISTEN "+pgx.Identifier{channel}.Sanitize()); err != nil {
+			if !serverRefused(conn, err) {
+				return err
+			}
+			slog.Warn("error unlistening from PostgreSQL channel", "channel", channel, "error", err)
+		}
+		delete(listened, channel)
+	}
+	l.setState(func() {
+		l.connected = true
+		l.applied = gen
+		l.failed = failed
+	})
+	return nil
+}
+
+// wait delivers notifications until the channel set changes (nil), the
+// listener stops or the connection fails (an error).
+func (l *Listener) wait(conn *pgx.Conn) error {
+	for {
+		ctx, cancel := context.WithTimeout(l.stopCtx, PingInterval)
+		l.stateMu.Lock()
+		if l.pending {
+			l.stateMu.Unlock()
+			cancel()
+			return nil
+		}
+		l.interrupt = cancel
+		l.stateMu.Unlock()
+
+		n, err := conn.WaitForNotification(ctx)
+
+		l.stateMu.Lock()
+		l.interrupt = nil
+		l.stateMu.Unlock()
+		ctxErr := ctx.Err()
+		cancel()
+
+		if n != nil {
+			l.dispatch(n)
+		}
+		switch {
+		case err == nil:
+		case l.stopCtx.Err() != nil:
+			return errStopped
+		case conn.IsClosed() || ctxErr == nil:
+			// Not our cancellation: the connection failed.
+			return err
+		case errors.Is(ctxErr, context.DeadlineExceeded):
+			// Quiet for PingInterval: make sure the connection is alive.
+			pctx, pcancel := context.WithTimeout(l.stopCtx, commandTimeout)
+			err := conn.Ping(pctx)
+			pcancel()
+			if err != nil {
+				if l.stopCtx.Err() != nil {
+					return errStopped
+				}
+				slog.Warn(l.name+" ping failed", "error", err)
+				return err
+			}
+		default:
+			// Woken by wake: the loop's next turn returns to reconcile.
+		}
+	}
+}
+
+func (l *Listener) dispatch(n *pgconn.Notification) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, sub := range l.subs[n.Channel] {
+		sub.handler(n.Payload)
+	}
+}
+
+func (l *Listener) exec(conn *pgx.Conn, sql string) error {
+	ctx, cancel := context.WithTimeout(l.stopCtx, commandTimeout)
+	defer cancel()
+	// PgConn's Exec is the simple protocol whatever the DSN's
+	// default_query_exec_mode: nothing is prepared, which also suits
+	// PgBouncer.
+	_, err := conn.PgConn().Exec(ctx, sql).ReadAll()
+	return err
+}
+
+// serverRefused reports whether err is the server rejecting a statement on
+// a connection that is still usable (a LISTEN on a hot standby, say),
+// rather than the connection failing.
+func serverRefused(conn *pgx.Conn, err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && !conn.IsClosed()
+}
+
+// reconnect connects again, backing off from ReconnectInterval up to
+// ReconnectCeiling. It returns nil once the listener is released.
+func (l *Listener) reconnect() *pgx.Conn {
+	wait := l.opts.ReconnectInterval
+	for {
+		select {
+		case <-l.stopCtx.Done():
+			return nil
+		case <-time.After(wait):
+		}
+		ctx, cancel := context.WithTimeout(l.stopCtx, l.opts.ConnectTimeout)
+		conn, err := pgx.ConnectConfig(ctx, l.config)
+		cancel()
+		if err == nil {
+			return conn
+		}
+		if l.stopCtx.Err() != nil {
+			return nil
+		}
+		slog.Error(l.name+" connection failed", "error", err)
+		if wait *= 2; wait > l.opts.ReconnectCeiling {
+			wait = l.opts.ReconnectCeiling
+		}
+	}
+}
+
+func (l *Listener) close(conn *pgx.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Close(ctx); err != nil {
+		slog.Debug("error closing "+l.name, "error", err)
 	}
 }

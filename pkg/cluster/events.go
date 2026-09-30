@@ -81,7 +81,10 @@ func (o LogOptions) withDefaults() LogOptions {
 
 // LogStats describe a log's progress, for status pages and tests.
 type LogStats struct {
-	Enabled            bool
+	Enabled bool
+	// Listening reports whether notifications wake the reader; without
+	// them (the listener cannot connect) it reads every PollInterval.
+	Listening          bool
 	Cursor             int64     // highest id handled
 	Delivered          uint64    // events handed to handlers
 	LastRead           time.Time // last successful read
@@ -114,9 +117,7 @@ type Log struct {
 	statsMu sync.Mutex
 	stats   LogStats
 
-	listener     *pglisten.Listener
-	sub          *pglisten.Subscription
-	removeHook   func()
+	follower     *pglisten.Follower
 	wake         chan struct{}
 	stop         chan struct{}
 	done         chan struct{}
@@ -170,16 +171,26 @@ func (l *Log) Subscribe(topic string, h Handler) (unsubscribe func()) {
 // Start begins reading. On Postgres it positions the log after the events
 // already published (so none is replayed), listens for notifications, and
 // reads on every notification, every PollInterval and after every listener
-// reconnect. On other databases it does nothing.
+// reconnect. The notifications only make delivery faster: when the listener
+// cannot connect, the log reads every PollInterval and keeps trying to
+// listen in the background. On other databases it does nothing.
 func (l *Log) Start(ctx context.Context) error {
 	l.startOnce.Do(func() { l.startErr = l.start(ctx) })
 	return l.startErr
 }
 
-func (l *Log) start(ctx context.Context) error {
+// errStoppedBeforeStart is what Start returns after Stop.
+var errStoppedBeforeStart = errors.New("cluster event log: stopped before it started")
+
+func (l *Log) start(ctx context.Context) (err error) {
+	// Stop waits for the reader; without one it must not wait at all.
+	defer func() {
+		if err != nil || !l.enabled {
+			close(l.done)
+		}
+	}()
 	l.setStats(func(s *LogStats) { s.Enabled = l.enabled })
 	if !l.enabled {
-		close(l.done)
 		return nil
 	}
 
@@ -209,26 +220,22 @@ func (l *Log) start(ctx context.Context) error {
 
 	dsn := l.opts.ListenerDSN
 	if dsn == "" {
-		var err error
-		if dsn, err = pglisten.DSN(l.db); err != nil {
-			return fmt.Errorf("cluster event log: %w", err)
-		}
+		dsn, err = pglisten.DSN(l.db)
 	}
-	listener, err := pglisten.Acquire(dsn, pglisten.Options{Name: "Cluster event listener", ConnectTimeout: 30 * time.Second})
 	if err != nil {
-		return fmt.Errorf("cluster event log: %w", err)
+		logger.Warnf("Cluster event log: %v; reading the log every %s without notifications", err, l.opts.PollInterval)
+	} else {
+		follower := pglisten.Follow(dsn, l.channel, pglisten.Options{Name: "Cluster event listener", ConnectTimeout: 30 * time.Second},
+			func(string) { l.poke() },
+			func() {
+				l.setStats(func(s *LogStats) { s.ListenerReconnects++ })
+				logger.Info("Cluster event listener reconnected; reading the event log to catch up")
+				l.poke()
+			})
+		l.statsMu.Lock()
+		l.follower = follower
+		l.statsMu.Unlock()
 	}
-	sub, err := listener.Subscribe(l.channel, func(string) { l.poke() }, 30*time.Second)
-	if err != nil {
-		listener.Release()
-		return fmt.Errorf("cluster event log: %w", err)
-	}
-	l.listener, l.sub = listener, sub
-	l.removeHook = listener.OnReconnect(func() {
-		l.setStats(func(s *LogStats) { s.ListenerReconnects++ })
-		logger.Info("Cluster event listener reconnected; reading the event log to catch up")
-		l.poke()
-	})
 
 	go l.run()
 	return nil
@@ -275,20 +282,26 @@ func (l *Log) Enabled() bool { return l.enabled }
 func (l *Log) Stats() LogStats {
 	l.statsMu.Lock()
 	defer l.statsMu.Unlock()
-	return l.stats
+	s := l.stats
+	s.Listening = l.follower != nil && l.follower.Listening()
+	return s
 }
 
-// Stop ends reading. No handler runs after it returns.
+// Stop ends reading. No handler runs after it returns. It returns promptly
+// whether or not Start ran or succeeded; a Start after Stop does nothing.
 func (l *Log) Stop() {
 	l.stopOnce.Do(func() {
+		l.startOnce.Do(func() {
+			l.startErr = errStoppedBeforeStart
+			close(l.done)
+		})
 		close(l.stop)
 		<-l.done
-		if l.listener != nil {
-			if l.removeHook != nil {
-				l.removeHook()
-			}
-			l.listener.Unsubscribe(l.channel, l.sub, 10*time.Second)
-			l.listener.Release()
+		l.statsMu.Lock()
+		follower := l.follower
+		l.statsMu.Unlock()
+		if follower != nil {
+			follower.Close()
 		}
 	})
 }

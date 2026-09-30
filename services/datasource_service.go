@@ -2,13 +2,41 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
+
+// ErrVectorStoreUnavailable is returned when a datasource would use a vector
+// store this build cannot reach: Chroma in a build without cgo.
+var ErrVectorStoreUnavailable = errors.New("vector store not available in this build")
+
+// vectorStoreAvailable reports whether this build can use dbSourceType.
+// Chroma needs cgo (see data_session/chroma.go), and a CGO_ENABLED=0 build
+// (an embedding host's) leaves it out of the vector store list.
+func vectorStoreAvailable(dbSourceType string) error {
+	if !chromaSupported && strings.EqualFold(dbSourceType, "chroma") {
+		return fmt.Errorf("%w: chroma needs a build with cgo; choose another vector store", ErrVectorStoreUnavailable)
+	}
+	return nil
+}
+
+// UnavailableVectorStoreDatasources returns the datasources whose vector
+// store this build cannot use (Chroma without cgo). Startup logs them: they
+// fail every search and ingestion until moved to another store.
+func (s *Service) UnavailableVectorStoreDatasources() ([]models.Datasource, error) {
+	if chromaSupported {
+		return nil, nil
+	}
+	var sources []models.Datasource
+	err := s.DB.Select("id", "name", "db_source_type").Where("LOWER(db_source_type) = ?", "chroma").Order("id").Find(&sources).Error
+	return sources, err
+}
 
 // CreateDatasource creates a new datasource using the default DB connection.
 func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName string, embed EmbedderInput, active bool, namespace ...string) (*models.Datasource, error) {
@@ -21,6 +49,9 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 
 // CreateDatasourceWithDB creates a new datasource using the provided DB connection (supports transactions).
 func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName string, embed EmbedderInput, active bool, namespace ...string) (*models.Datasource, error) {
+	if err := vectorStoreAvailable(dbSourceType); err != nil {
+		return nil, err
+	}
 	datasource := &models.Datasource{
 		Name:             name,
 		ShortDescription: shortDesc,
@@ -144,6 +175,13 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		datasource.DBConnString = dbConnString
 	}
 	if dbSourceType != "" {
+		// Moving a datasource to a store this build cannot use is refused;
+		// one already on it can still be edited or moved off it.
+		if !strings.EqualFold(dbSourceType, datasource.DBSourceType) {
+			if err := vectorStoreAvailable(dbSourceType); err != nil {
+				return nil, err
+			}
+		}
 		datasource.DBSourceType = dbSourceType
 	}
 

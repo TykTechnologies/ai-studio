@@ -72,7 +72,7 @@ GATEWAY_MODE=edge
 | `EDGE_ID` | No | Generated | Unique identifier for this edge |
 | `EDGE_NAMESPACE` | No | `""` | Namespace for configuration filtering |
 | `EDGE_AUTH_TOKEN` | If control requires | - | Authentication token |
-| `EDGE_RECONNECT_INTERVAL` | No | `5s` | Reconnection attempt interval |
+| `EDGE_RECONNECT_INTERVAL` | No | `5s` | First reconnection delay; doubles per failed attempt up to 30s (or this value, if longer) |
 | `EDGE_HEARTBEAT_INTERVAL` | No | `30s` | Heartbeat frequency |
 | `EDGE_SYNC_TIMEOUT` | No | `10s` | Configuration sync timeout |
 

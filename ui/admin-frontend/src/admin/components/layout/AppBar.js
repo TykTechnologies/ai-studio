@@ -30,7 +30,11 @@ const MyAppBar = () => {
     const fetchSystemSettings = async () => {
       try {
         const response = await pubClient.get("/common/system");
-        setDocsUrl(response.data.features.docs_url + "/docs/quickstart");
+        // No docs_url (an embedding host runs no docs server): no link.
+        const docsBase = response.data?.features?.docs_url;
+        if (docsBase) {
+          setDocsUrl(docsBase + "/docs/quickstart");
+        }
       } catch (error) {
         console.error("Failed to fetch system settings:", error);
       }

@@ -4,6 +4,7 @@ import { Link as RouterLink } from "react-router-dom";
 import pubClient from "../../admin/utils/pubClient";
 import AuthLayout from "./AuthLayout";
 import { hostLoginURL, isHostAuth, withBase } from "../../runtimeConfig";
+import { hostSignInURL } from "../../admin/utils/authRedirect";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 import {
   StyledTextField,
@@ -205,7 +206,7 @@ const HostSignIn = () => {
   const loginURL = hostLoginURL();
   useEffect(() => {
     if (loginURL) {
-      window.location.assign(loginURL);
+      window.location.assign(hostSignInURL());
     }
   }, [loginURL]);
   return (

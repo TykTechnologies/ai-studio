@@ -272,7 +272,11 @@ match. On PostgreSQL the service creates `pg_trgm` GIN indexes at startup
 (`target_url_snapshot`, `topic`, `last_error` on deliveries; `name`, `url`,
 `description` on targets) and uses `ILIKE`, so those searches are
 index-assisted; if the extension cannot be created (missing privilege) a
-warning is logged and searches fall back to sequential scans. Every
+warning is logged and searches fall back to sequential scans. The indexes
+name the operator class by the schema `pg_trgm` is installed in (looked up
+in `pg_extension`; the extension is installed in Studio's schema only when
+the database does not have it), so they are created with `DATABASE_SCHEMA`
+set and `pg_trgm` in `public`, which is not on Studio's `search_path`. Every
 delivery search is bounded to a time window (the caller's `start_date`, or
 the last 30 days) and never touches the response snippet column. SQLite is
 single-node and scans the window. Exact delivery or event ids are matched

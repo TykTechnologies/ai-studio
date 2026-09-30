@@ -74,7 +74,19 @@ Remember that fundamental system parameters are typically set via environment va
 ### Sharing a Postgres database
 Studio's table names are unprefixed and include common ones such as `users`, `roles` and `audit_records`. To run Studio in a database another application also uses, set `DATABASE_SCHEMA` to a lower-case schema name: Studio creates the schema if it does not exist (the database user needs the `CREATE` privilege on the database for that, or create the schema beforehand) and keeps all of its tables there, whatever `search_path` the database defaults to. A `DATABASE_URL` that sets a different `search_path` is refused.
 
-Several Studio replicas can share one database (and schema). On start, each migrates and seeds the database under a Postgres advisory lock, so replicas starting together take turns; one that is waiting logs `Another Studio instance is migrating this database`.
+Several Studio replicas can share one database (and schema). On start, each migrates and seeds the database under a Postgres advisory lock, so replicas starting together take turns; one that is waiting logs `Another Studio instance is migrating this database`. The lock belongs to a transaction, so the server releases it if the holder dies. A replica gives up waiting after `MIGRATION_LOCK_TIMEOUT` (default `15m`) and exits with an error naming the lock; raise it if your migrations take longer.
+
+### Postgres connection string
+`DATABASE_URL` takes a `postgres://` URL or `key=value` pairs, with any option the pgx driver accepts. Without `sslmode`, Studio uses TLS when the server offers it and a plain connection when it does not (`prefer`); set `sslmode=require` or `verify-full` to insist on TLS. Every connection Studio makes, including the one it keeps open for LISTEN/NOTIFY, uses the same string.
+
+### Behind PgBouncer
+Studio works behind PgBouncer in transaction mode with these settings:
+
+*   **Use the simple protocol.** Add `default_query_exec_mode=simple_protocol` to `DATABASE_URL`, for example `postgres://studio:secret@pgbouncer:6432/studio?default_query_exec_mode=simple_protocol`. Without it, Studio prepares statements on the server, which fails with `prepared statement ... already exists` when PgBouncer's `max_prepared_statements` is `0`. With prepared statement support enabled in PgBouncer, an upgrade that changed tables has also been seen to fail with `cached plan must not change result type`. Upgrades from 2.2.0 and restarts behind PgBouncer work with the simple protocol.
+*   **Notifications do not pass through.** LISTEN needs a session, so behind transaction pooling the cluster event log and edge push delivery fall back to polling, at most a second late. The Postgres chat queue (`QUEUE_TYPE=postgres`) needs LISTEN, so use the in-memory or NATS queue instead.
+*   **`DATABASE_SCHEMA` needs a pinned `search_path`.** PgBouncer does not keep a client's `search_path` on PostgreSQL before 18, because the server does not report it. Give Studio its own database role and pin the schema on that role (`ALTER ROLE studio SET search_path = studio`), or use session pooling.
+
+Session pooling needs none of these settings.
 
 ### CSRF protection
 Cookie-authenticated writes (anything the admin UI or portal does while signed in) carry a CSRF token, and when the site is served over HTTPS the request must also carry an `Origin` or `Referer` header naming the site; a request with neither is refused with `403 - referer not supplied`. On plain HTTP neither header is required. Calls authenticated with an API token in the `Authorization` header are exempt from CSRF checks entirely. Behind a TLS-terminating proxy, forward `X-Forwarded-Proto: https` so the HTTPS rules apply. In `DEVMODE` the `SITE_URL` host is trusted as an origin automatically; add further `host[:port]` values with `CSRF_TRUSTED_ORIGINS` (comma-separated).
@@ -83,7 +95,7 @@ CSRF tokens are signed with a key generated when Studio starts, so a restart inv
 
 ### Serving under a path prefix
 
-To serve AI Studio under a path such as `https://example.com/ai-studio` instead of at the root of its own host name, set `BASE_PATH=/ai-studio` and include the prefix in `SITE_URL` (`SITE_URL=https://example.com/ai-studio`). The admin interface, portal, chat and API are then served under the prefix, and session and CSRF cookies are scoped to it. A reverse proxy in front of Studio may forward requests with or without the prefix; both work. OAuth clients that discover the authorization server from its issuer URL look for the metadata at `/.well-known/oauth-authorization-server/ai-studio` on the host root, so route that path to Studio's `/ai-studio/.well-known/oauth-authorization-server`.
+To serve AI Studio under a path such as `https://example.com/ai-studio` instead of at the root of its own host name, set `BASE_PATH=/ai-studio` and include the prefix in `SITE_URL` (`SITE_URL=https://example.com/ai-studio`). The admin interface, portal, chat and API are then served under the prefix, and session and CSRF cookies are scoped to it. A reverse proxy in front of Studio may forward requests with or without the prefix; both work. OAuth clients that discover the authorization server from its issuer URL look for the metadata at `/.well-known/oauth-authorization-server/ai-studio` on the host root, so route that path to Studio's `/ai-studio/.well-known/oauth-authorization-server`. The OAuth consent redirect and the endpoints in that metadata are built from the origin of `SITE_URL` (`AUTH_SERVER_URL`) plus `BASE_PATH`, so a path in `SITE_URL` without `BASE_PATH` does not move them.
 
 ### Unified Endpoint (Main Ingress)
 The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) sits at `/v1` by default. Move it when embedding the gateway in a host that already owns `/v1`, or remove it entirely; the per-LLM endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected either way.

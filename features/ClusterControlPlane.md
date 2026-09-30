@@ -31,6 +31,11 @@ Built in three steps:
   core and Enterprise code), the scheduler lease as a conditional update,
   cross-replica gateway reload, budget cache clearing and plugin lifecycle,
   leader-only jobs, and `GET /api/v1/cluster/status`.
+- **Post-2.2 sweep follow-ups (M2, M3, L3, L7, L8):** pushes reach an edge
+  that is still starting up at once (the edge holds them until its reload
+  handler is set; control waits for the stream's first heartbeat or a
+  10 s grace); the edge's reconnect backoff is capped at 30 s; v2.2 fields
+  on Enterprise reload-all; the API contract change is documented below.
 
 ## What goes wrong today with more than one replica
 
@@ -136,14 +141,24 @@ is *reachable* when its owner node is live and its last heartbeat is fresh.
   it only if `version` is unchanged, otherwise it reads it again. So no
   transition and no history entry is lost to a concurrent one (a stream
   closing while the send is being recorded; a READY racing a requeue).
-- Every replica runs a dispatcher, woken by NOTIFY, by an edge opening a
-  stream, and by a 1 s poll: for each `pending` command whose edge has a
-  stream on this replica, it claims it (`claimed`, `claimed_by`, the
+- Every replica runs a dispatcher, woken by NOTIFY, by an edge's first
+  heartbeat on a stream, and by a 1 s poll: for each `pending` command
+  whose edge has a stream on this replica that is ready for pushes, it
+  claims it (`claimed`, `claimed_by`, the
   stream session, `attempts + 1`), sends the reload request on exactly
   that stream and marks it `sent`. Only one replica wins a claim. A send
   that finds the stream already gone (the dispatcher's view is a moment
   old) hands the claim back without using an attempt; a transport error on
   a live stream uses one.
+- A stream is ready for pushes after its first heartbeat, or once it has
+  been open for 10 s. An edge opens its stream while it is still starting
+  up; the microgateway used to set its reload handler only once its
+  services were up, drop a push that arrived before, and leave it for the
+  answer timeout (a minute, and an attempt). Edges now send a heartbeat as
+  soon as the stream is open and hold a push that arrives before the
+  handler is set (up to 16, a resend of the same operation replaces the
+  held one), handing it over when the handler is set; the grace covers
+  older edges, whose first heartbeat comes a full interval (30 s) later.
 - Reload responses arrive on the stream of the replica that sent the
   command, and are attributed to the edge the stream registered as (not
   the edge the message names). Each phase is recorded and resets the answer
@@ -177,6 +192,27 @@ is *reachable* when its owner node is live and its last heartbeat is fresh.
   `GET /edges/reload-operations` lists the last day's pushes with their
   outcome counts, which is what the CE dialog shows.
 
+#### API changes from v2.2 (upgrade note)
+
+Paths and the response envelope (`data.type`, `data.id`,
+`data.attributes.operation_id|target_namespace|status|message`) are
+unchanged, and every v2.2 attribute is still returned. What changed:
+
+| | v2.2 | now |
+|---|---|---|
+| final `status` | `completed`, `failed`, `timed_out` | `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`, `expired` (`in_progress` until then; no `initiated`) |
+| operation IDs | `reload-...`, `edge-reload-...` | `push-<uuid>` |
+| ENT `reload-all` | one operation per namespace: `data.{message, operations[], operations_count}` | one operation (`data.attributes`); `data.message`, `data.operations` (one entry per namespace pushed to, all with the same `operation_id`) and `data.operations_count` are kept for v2.2 clients |
+| no edge at all | ENT `reload-all` 202 with no operations | 409 |
+| namespace with no edge to push to | 404 | 409 |
+| offline edge (`/edges/:id/reload`) | 500 | 202, and the push waits for the edge until its deadline |
+| `GET /edges/reload-operations` | operations in memory on this replica, with `target_edges` | the last day's operations from the database, with outcome `counts` (no `target_edges`; the status endpoint lists the edges) |
+
+A script that waits for `completed` never finishes: it must treat
+`succeeded` (and `succeeded_with_warnings`) as done and `failed`,
+`partially_failed` and `expired` as failed. A single `status` field cannot
+carry both spellings, so no alias is returned.
+
 ### Fan-out events: `cluster_events` and the bus relay
 
 A replica publishing a cluster-wide event inserts a row (topic, payload,
@@ -186,7 +222,33 @@ poll only covers a listener connection that died unnoticed; at 1 s it was
 two queries a second on every replica); it also re-reads a 30 s window and
 skips ids it has seen, so a row whose transaction committed after a later id
 is not missed. Rows older than 15 minutes are pruned. The listener is the
-chat queue's shared `pq` listener, moved to `pkg/pglisten`.
+chat queue's shared listener, moved to `pkg/pglisten`.
+
+The listener connects with pgx from the pool's own DSN, so it accepts
+exactly what the pool accepts (no `sslmode`, `sslmode=prefer`,
+`default_query_exec_mode`...). Before the post-2.2 fix it used lib/pq,
+which refused those DSNs; and the log's failed start left `Stop` waiting on
+a reader that never ran, so Studio hung at startup without opening a port.
+Now:
+
+- The notifications are only an accelerator, for the event log and for
+  push delivery alike: when the listener cannot connect or subscribe,
+  `pglisten.Follow` logs a warning, the service polls alone (every second)
+  and the listener is retried every 30 s; once it connects, a catch-up read
+  runs. Startup never fails, and never waits, on the listener.
+  `LogStats.Listening` and a cluster-status warning show a replica running
+  without it. Other start errors (a failing query) still fail `studio.New`.
+- `Log.Stop` and `pushes.Coordinator.Stop` return at once whether `Start`
+  ran, failed or succeeded; a `Start` after `Stop` does nothing.
+- One goroutine owns the listener's connection: it waits for notifications,
+  issues LISTEN/UNLISTEN (bringing the connection in line with the
+  subscribed channels whenever they change), pings after 90 s of quiet and
+  reconnects with backoff. Subscribing wakes it by cancelling its wait,
+  which pgx's deadline-based cancellation does without closing the
+  connection.
+- Behind PgBouncer in transaction mode, LISTEN does not work (the server
+  connection changes between statements); the log and pushes then run on
+  their poll.
 
 `pkg/cluster.Relay` joins every replica's event bus to the log. It relays
 two kinds of bus events, from a queue (the bus is synchronous, so a
@@ -323,7 +385,16 @@ and warnings.
   them").
 - Reload-all is one operation over every edge; it lists the edges it
   left out (offline too long) and refuses (with the reason) when there is
-  nothing to push to.
+  nothing to push to. The dialog shows that refusal at its top, stops
+  saying it will push to every namespace, and disables Push until the
+  target changes.
+- The "not connected; the push waits up to 5 minutes" warning stands only
+  while an edge is still waiting to connect; an edge that has its push
+  (reloading) no longer counts.
+- The change preview measures from the last push or, when none was
+  recorded, from the latest time an edge confirmed it was in sync
+  (connected or not, whatever changed since); it says "never pushed" only
+  when no edge ever confirmed.
 - Community Edition shows the push's outcome counts and message (the
   per-edge report is an Enterprise endpoint).
 - `GET /api/v1/cluster/status` (admin): live nodes, their edge counts,
@@ -335,6 +406,12 @@ Unit tests use fakes; the rest run on Postgres (`DATABASE_URL`) with two or
 three in-process replicas sharing a schema, and real microgateway edge
 clients over gRPC (`microgateway/tests/cluster`). Every Go test here also
 runs on SQLite, and on Postgres when `DATABASE_URL` is set.
+
+CI runs them on Postgres in the "Go Postgres Tests" job
+(`.github/workflows/ci-test.yml`): `pkg/cluster`, `pkg/pglisten`,
+`services/pushes` and `services/scheduler` whole, `grpc` filtered to
+`TestPushCluster_|TestRelay_|_Postgres`, and `microgateway/tests/cluster`,
+all with `-race`. The unit jobs cover the SQLite cases.
 
 Where they are (8b):
 - `services/pushes`: the coordinator's rules with fake streams (targets,
@@ -360,6 +437,11 @@ Delivery and routing:
   delivered; one that never connects: `expired`, "not connected";
 - an edge connected at push time that disconnects before answering and
   reconnects to another replica: redelivered there, `succeeded`, attempts 2;
+- an edge that restarts while a push waits for it, and sets its reload
+  handler a moment after connecting (as cmd/microgateway does): the push
+  succeeds in seconds with one attempt (`TestE2E_PushToEdgeStillStartingUp`);
+  an older edge that drops pushes while starting up gets it after the grace
+  (`TestPushCluster_OldEdgeStartingUpGetsThePushAfterTheGrace`);
 - the replica holding a claim is killed before sending, and after sending:
   the command returns to `pending` and another replica delivers it;
 - two replicas both hold a stream for the edge during a reconnect: exactly

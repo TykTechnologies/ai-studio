@@ -131,7 +131,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.2 // indirect
+	github.com/jackc/pgx/v5 v5.10.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jensneuse/abstractlogger v0.0.4 // indirect
 	github.com/jensneuse/pipeline v0.0.0-20200117120358-9fb4de085cd6 // indirect
@@ -251,7 +251,7 @@ require (
 
 require (
 	github.com/TykTechnologies/ai-studio-enterprise/v2 v2.0.0-00010101000000-000000000000
-	github.com/TykTechnologies/midsommar/v2 v2.0.0
+	github.com/TykTechnologies/midsommar/v2 v2.2.1-0.20260930035819-6301ffbeec24
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/d5/tengo/v2 v2.17.0 // indirect
 	github.com/gin-gonic/gin v1.10.1

@@ -71,6 +71,11 @@ type AppConf struct {
 	// table names are unprefixed and include common ones such as users,
 	// roles and audit_records.
 	DatabaseSchema        string
+	// MigrationLockTimeout (MIGRATION_LOCK_TIMEOUT, default 15m), for
+	// postgres only, bounds how long a starting Studio waits for another
+	// instance sharing its database to finish migrating before it gives up
+	// with an error.
+	MigrationLockTimeout time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -309,7 +314,7 @@ var globalConfig atomic.Pointer[AppConf]
 // process environment.
 func Load(envFile string) *AppConf {
 	fileVals := readEnvFile(envFile)
-	return LoadFrom(func(key string) string {
+	return loadFrom(true, func(key string) string {
 		if v := os.Getenv(key); v != "" {
 			return v
 		}
@@ -374,18 +379,35 @@ func readEnvFile(envFile string) map[string]string {
 // LoadFrom builds a configuration from getenv, which maps a variable name to
 // its value ("" when unset), applying the same defaults and validation as
 // Load. It lets a host build the configuration from its own settings rather
-// than from the process environment.
+// than from the process environment. Unlike Load it does not log the
+// "environment variable is not set" notices, since a host supplies only the
+// settings it needs; and because only the standalone binary runs the
+// documentation server, the docs link is left out (DocsURL empty,
+// DocsDisabled set) unless DOCS_URL_OVERRIDE names one.
 func LoadFrom(getenv func(string) string) *AppConf {
+	return loadFrom(false, getenv)
+}
+
+// loadFrom is LoadFrom; fromEnv is set when getenv reads the standalone
+// binary's environment (Load, Get).
+func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf := &AppConf{}
+
+	// notSet logs the notices about unset variables, which only mean
+	// something to an operator configuring the standalone binary.
+	notSet := cfgLog
+	if !fromEnv {
+		notSet = zerolog.Nop()
+	}
 
 	conf.SMTPServer = getenv("SMTP_SERVER")
 	if conf.SMTPServer == "" {
-		cfgLog.Warn().Msg("Warning: SMTP_SERVER environment variable is not set")
+		notSet.Warn().Msg("Warning: SMTP_SERVER environment variable is not set")
 	}
 
 	smtpPortStr := getenv("SMTP_PORT")
 	if smtpPortStr == "" {
-		cfgLog.Warn().Msg("Warning: SMTP_PORT environment variable is not set")
+		notSet.Warn().Msg("Warning: SMTP_PORT environment variable is not set")
 	} else {
 		port, err := strconv.Atoi(smtpPortStr)
 		if err != nil {
@@ -397,17 +419,17 @@ func LoadFrom(getenv func(string) string) *AppConf {
 
 	conf.SMTPUser = getenv("SMTP_USER")
 	if conf.SMTPUser == "" {
-		cfgLog.Warn().Msg("Warning: SMTP_USER environment variable is not set")
+		notSet.Warn().Msg("Warning: SMTP_USER environment variable is not set")
 	}
 
 	conf.SMTPPass = getenv("SMTP_PASS")
 	if conf.SMTPPass == "" {
-		cfgLog.Warn().Msg("Warning: SMTP_PASS environment variable is not set")
+		notSet.Warn().Msg("Warning: SMTP_PASS environment variable is not set")
 	}
 
 	allowRegStr := getenv("ALLOW_REGISTRATIONS")
 	if allowRegStr == "" {
-		cfgLog.Warn().Msg("Warning: ALLOW_REGISTRATIONS environment variable is not set")
+		notSet.Warn().Msg("Warning: ALLOW_REGISTRATIONS environment variable is not set")
 	} else {
 		allowReg, err := strconv.ParseBool(allowRegStr)
 		if err != nil {
@@ -424,24 +446,24 @@ func LoadFrom(getenv func(string) string) *AppConf {
 
 	conf.FromEmail = getenv("FROM_EMAIL")
 	if conf.FromEmail == "" {
-		cfgLog.Warn().Msg("Warning: FROM_EMAIL environment variable is not set")
+		notSet.Warn().Msg("Warning: FROM_EMAIL environment variable is not set")
 	}
 
 	conf.SiteURL = getenv("SITE_URL")
 	if conf.SiteURL == "" {
-		cfgLog.Warn().Msg("Warning: SITE_URL environment variable is not set")
+		notSet.Warn().Msg("Warning: SITE_URL environment variable is not set")
 	}
 
 	conf.BasePath = NormalizeBasePath(getenv("BASE_PATH"))
 	if conf.BasePath != "" && conf.SiteURL != "" {
 		if u, err := url.Parse(conf.SiteURL); err == nil && strings.TrimRight(u.Path, "/") != conf.BasePath {
-			cfgLog.Warn().Msgf("Warning: SITE_URL (%s) should end with BASE_PATH (%s); links in emails and OAuth metadata are built from SITE_URL", conf.SiteURL, conf.BasePath)
+			cfgLog.Warn().Msgf("Warning: SITE_URL (%s) should end with BASE_PATH (%s); links in emails are built from SITE_URL", conf.SiteURL, conf.BasePath)
 		}
 	}
 
 	conf.ServerPort = getenv("SERVER_PORT")
 	if conf.ServerPort == "" {
-		cfgLog.Warn().Msg("Warning: SERVER_PORT environment variable is not set, defaulting to 8080")
+		notSet.Warn().Msg("Warning: SERVER_PORT environment variable is not set, defaulting to 8080")
 		conf.ServerPort = "8080"
 	}
 
@@ -460,7 +482,7 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	conf.CertFile = getenv("CERT_FILE")
 	conf.KeyFile = getenv("KEY_FILE")
 	if conf.KeyFile == "" || conf.CertFile == "" {
-		cfgLog.Warn().Msg("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
+		notSet.Warn().Msg("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
 	devMode := getenv("DEVMODE")
@@ -471,13 +493,13 @@ func LoadFrom(getenv func(string) string) *AppConf {
 
 	conf.DatabaseURL = getenv("DATABASE_URL")
 	if conf.DatabaseURL == "" {
-		cfgLog.Info().Msg("Warning: DATABASE_URL environment variable is not set, defaulting to SQLite")
+		notSet.Info().Msg("Warning: DATABASE_URL environment variable is not set, defaulting to SQLite")
 		conf.DatabaseURL = "midsommar.db"
 	}
 
 	conf.DatabaseType = getenv("DATABASE_TYPE")
 	if conf.DatabaseType == "" {
-		cfgLog.Info().Msg("Warning: DATABASE_TYPE environment variable is not set, defaulting to sqlite")
+		notSet.Info().Msg("Warning: DATABASE_TYPE environment variable is not set, defaulting to sqlite")
 		conf.DatabaseType = "sqlite"
 	}
 
@@ -487,6 +509,14 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	}
 
 	conf.DatabaseSchema = getenv("DATABASE_SCHEMA")
+	conf.MigrationLockTimeout = 15 * time.Minute
+	if v := getenv("MIGRATION_LOCK_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			conf.MigrationLockTimeout = d
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid MIGRATION_LOCK_TIMEOUT value: %s, using default 15m", v)
+		}
+	}
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
@@ -533,8 +563,15 @@ func LoadFrom(getenv func(string) string) *AppConf {
 
 	// Default DocsURL constructed from port, can be overridden for production/proxy setups
 	conf.DocsURL = fmt.Sprintf("http://localhost:%d", conf.DocsPort)
+	if !fromEnv {
+		// A host: nothing serves the documentation site (the docs server
+		// runs only in the standalone binary), so there is no link to it.
+		conf.DocsURL = ""
+		conf.DocsDisabled = true
+	}
 	if override := getenv("DOCS_URL_OVERRIDE"); override != "" {
 		conf.DocsURL = override
+		conf.DocsDisabled = false
 	}
 
 	docsDisabledStr := getenv("DOCS_DISABLED")
@@ -554,7 +591,7 @@ func LoadFrom(getenv func(string) string) *AppConf {
 
 	conf.ProxyURL = getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
-		cfgLog.Info().Msg("Warning: PROXY_URL environment variable is not set")
+		notSet.Info().Msg("Warning: PROXY_URL environment variable is not set")
 	}
 
 	// Display URLs for Tools and Datasources (optional, fallback to ProxyURL in API handler)
@@ -632,10 +669,10 @@ func LoadFrom(getenv func(string) string) *AppConf {
 	if conf.AuthServerURL == "" {
 		if conf.SiteURL != "" {
 			conf.AuthServerURL = conf.SiteURL
-			cfgLog.Info().Msgf("AUTH_SERVER_URL not set, using SITE_URL: %s", conf.AuthServerURL)
+			notSet.Info().Msgf("AUTH_SERVER_URL not set, using SITE_URL: %s", conf.AuthServerURL)
 		} else {
 			conf.AuthServerURL = "http://localhost:3000"
-			cfgLog.Info().Msg("Warning: AUTH_SERVER_URL and SITE_URL not set, defaulting to http://localhost:3000")
+			notSet.Info().Msg("Warning: AUTH_SERVER_URL and SITE_URL not set, defaulting to http://localhost:3000")
 		}
 	}
 
@@ -644,10 +681,10 @@ func LoadFrom(getenv func(string) string) *AppConf {
 		var baseURL string
 		if conf.ProxyURL != "" {
 			baseURL = conf.ProxyURL
-			cfgLog.Info().Msgf("PROXY_OAUTH_METADATA_URL not set, using PROXY_URL: %s", baseURL)
+			notSet.Info().Msgf("PROXY_OAUTH_METADATA_URL not set, using PROXY_URL: %s", baseURL)
 		} else {
 			baseURL = "http://localhost:9090"
-			cfgLog.Info().Msg("Warning: PROXY_OAUTH_METADATA_URL and PROXY_URL not set, defaulting to http://localhost:9090")
+			notSet.Info().Msg("Warning: PROXY_OAUTH_METADATA_URL and PROXY_URL not set, defaulting to http://localhost:9090")
 		}
 		conf.ProxyOAuthMetadataURL = baseURL + "/.well-known/oauth-protected-resource"
 	}
@@ -1402,7 +1439,7 @@ func Get(envFile string) *AppConf {
 		return conf
 	}
 	ExportEnvFile(envFile)
-	globalConfig.CompareAndSwap(nil, LoadFrom(os.Getenv))
+	globalConfig.CompareAndSwap(nil, loadFrom(true, os.Getenv))
 	return globalConfig.Load()
 }
 

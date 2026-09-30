@@ -53,3 +53,13 @@ func TestInstalledNeverLoads(t *testing.T) {
 	Set(conf)
 	assert.Same(t, conf, Installed())
 }
+
+// MIGRATION_LOCK_TIMEOUT bounds a starting Studio's wait for another
+// instance's migrations (default 15m).
+func TestLoadFrom_MigrationLockTimeout(t *testing.T) {
+	assert.Equal(t, 15*time.Minute, LoadFrom(func(string) string { return "" }).MigrationLockTimeout)
+	set := LoadFrom(func(k string) string { return map[string]string{"MIGRATION_LOCK_TIMEOUT": "90s"}[k] })
+	assert.Equal(t, 90*time.Second, set.MigrationLockTimeout)
+	bad := LoadFrom(func(k string) string { return map[string]string{"MIGRATION_LOCK_TIMEOUT": "0"}[k] })
+	assert.Equal(t, 15*time.Minute, bad.MigrationLockTimeout, "invalid values keep the default")
+}

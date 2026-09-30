@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, Snackbar } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import pubClient from '../../admin/utils/pubClient';
+import { withBase } from '../../runtimeConfig';
 import ChatSidebar from '../components/chat/ChatSidebar';
 import { ChatUiProvider } from '../components/chat-v2/ChatUiContext';
 import StudioChatShell from '../components/chat-v2/StudioChatShell';
@@ -60,7 +61,7 @@ const ChatViewV2 = () => {
         setSession(sess);
         applySelection(sess);
         try {
-          window.history.replaceState({}, '', `/chat/${chatId}?continue_id=${sess.session_id}`);
+          window.history.replaceState({}, '', withBase(`/chat/${encodeURIComponent(chatId)}?continue_id=${encodeURIComponent(sess.session_id)}`));
         } catch (e) {
           // ignore
         }

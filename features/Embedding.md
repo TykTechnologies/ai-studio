@@ -174,9 +174,8 @@ for the host-facing API.
 
 `BASE_PATH` (`AppConf.BasePath`, normalised to `/prefix` or `""`) serves the
 API and UI under a path prefix. `SITE_URL` (and `AUTH_SERVER_URL`, which
-defaults to it) should include the prefix: emails, the OAuth consent
-redirect and the OAuth metadata are built from it, and a warning is logged
-when it does not end with the base path.
+defaults to it) should include the prefix: email links are built from it,
+and a warning is logged when it does not end with the base path.
 
 - Routes stay registered at the root. `API.Handler()` (what
   `studio.HTTPHandler` and the standalone server serve) strips the prefix;
@@ -186,12 +185,17 @@ when it does not end with the base path.
   scoped to the base path.
 - Logout expires Studio's session cookie and the identity broker's
   `_gothic_session`, and nothing else (it used to expire every cookie on the
-  request, which would sign a user out of the host too).
+  request, which would sign a user out of the host too). Behaviour change
+  for standalone Studio too: logout no longer expires the CSRF cookie
+  (`_gorilla_csrf`, or `CSRF_COOKIE_NAME`). The cookie carries no
+  session, so this is intended and not exploitable.
 - Post-SSO redirects and the email-verified page's redirect go to the base
   path instead of `/`.
-- OAuth: the consent redirect and the authorization server metadata keep the
-  path of `SITE_URL`/`AUTH_SERVER_URL` (`url.JoinPath` instead of resolving
-  absolute paths, which dropped it). RFC 8414 discovery for a pathed issuer
+- OAuth: the consent redirect and the authorization server metadata
+  endpoints are the origin of `SITE_URL`/`AUTH_SERVER_URL` plus `BASE_PATH`
+  (`API.publicURL`). A path in `SITE_URL` without `BASE_PATH` is ignored, as
+  in v2.2.0, so a standalone Studio served from the root keeps root URLs;
+  the issuer is still `AUTH_SERVER_URL` verbatim. RFC 8414 discovery for a pathed issuer
   happens at the host root (`/.well-known/oauth-authorization-server/<base>`);
   `studio.OAuthMetadataHandler()` serves it there. The gateway's protected
   resource metadata is unchanged: the gateway keeps its own port.
@@ -294,15 +298,49 @@ One frontend build serves any base path:
 - Host sign-in: with `authMode: "host"` a signed-out visitor goes to
   `loginURL` (the login route shows a pointer to it), and logout goes to
   `logoutURL` after Studio's own sign-out.
+  - Deep links: the console replaces `{return_to}` anywhere in `loginURL`
+    (`Options.LoginURL: "/login?next={return_to}"`) with the page the
+    visitor asked for, URL-encoded: the browser path under the base path,
+    with query and hash (`%2Fai-studio%2Fadmin%2Fllms%3Ftab%3Dkeys`). From
+    the login or password pages it is the console's home. The host must
+    check it is a local path under the base path before redirecting to it
+    (`examples/embed-host` `returnTo`). A `loginURL` without the
+    placeholder is used unchanged, so existing hosts see no difference.
+    This applies to the first visit and to a session that expires later
+    (`authRedirect.hostSignInURL`). Standalone Studio is unchanged: it goes
+    to `/login` and, as in v2.2.0, lands on the user's home after sign-in.
+  - Local-account pages: `/register`, `/forgot-password`,
+    `/reset-password` (and `/auth/reset-password`) lead to the console's
+    home, and from there to sign-in, instead of rendering forms whose APIs
+    answer 404. `/common/me` reports `show_sso_config: false`, so the
+    `/admin/sso-profiles` routes are not registered, and the navigation
+    manifest leaves out Identity providers (both through
+    `api.showSSOConfig`).
 - Fixed on the way: the admin plugin iframe loaded `/plugins/assets/...`,
-  which no route serves (now `/api/v1/plugins/assets/...`), and "mark plugin
-  UI loaded" posted to a doubled `/api/v1/api/v1/...`.
+  which no route serves (now `/api/v1/plugins/assets/...`). "Mark plugin
+  UI loaded" posted to a doubled `/api/v1/api/v1/...`, which the SPA
+  fallback answered; with the path fixed it reached
+  `POST /api/v1/plugins/:id/ui/load` (plugins:write), so read-only users
+  saw a permission-denied toast on every plugin page and an administrator's
+  page view wrote `registered_plugins`, an audit entry and a config-sync
+  refresh. Nothing reads the "loaded" state, so the console no longer
+  posts it: viewing a plugin page writes nothing, as in v2.2.0. The
+  endpoint stays for API clients.
 - `config/docs_links.json` is embedded (an on-disk copy still overrides it),
   so documentation links work from any working directory.
 
 `examples/embed-host` is a runnable host: its own login page and cookie, an
 `Authenticator` over that cookie, Studio at `/ai-studio`, and the OAuth
-discovery document at the host root.
+discovery document at the host root. `-tags enterprise` builds the
+Enterprise Edition (`examples/embed-host/main_enterprise.go`, allowed by
+`make enterprise-import-guard` like the root `main_enterprise.go`, since a
+main package is never imported); `-proxy-port` sets the gateway port.
+
+`config.LoadFrom` (a host's settings) does not log the standalone binary's
+"environment variable is not set" notices, and leaves the docs link out
+(`DocsURL` empty, `DocsDisabled` set) unless `DOCS_URL_OVERRIDE` is given:
+the documentation site server runs only in `main`. `config.Load` and
+`config.Get` (the environment) behave as before.
 
 Verified by hand in a browser: the standalone binary with
 `BASE_PATH=/ai-studio` (registration, login, admin, portal and chat,
@@ -324,8 +362,13 @@ as a module cannot compile the default `ui` package.
   is only in `main`).
 - The `ui-assets` job in `release.yml` builds the frontend once per tag,
   packs it as `tyk-ai-studio-ui-<tag>.tar.gz` with a `.sha256`, and uploads
-  both to the tag's GitHub release, creating a draft release when there is
-  none. It is the only job with `contents: write`.
+  both to the tag's GitHub release. When there is none it creates it,
+  published (not a draft; a prerelease for a `-rc` tag, never marked latest)
+  with placeholder notes, and it publishes a draft left by an earlier run. It
+  is the only job with `contents: write`. The release notes are then added
+  by hand with `gh release edit <tag> --notes-file notes.md` (plus
+  `--latest` for a final release); `gh release create <tag>` fails with
+  "already exists" once the job has run.
 - A host builds with `-tags studio_noui`, unpacks the tarball for the Studio
   version it imports, and passes `os.DirFS(dir)` (or its own embed of the
   directory) as `Options.UIAssets`. `examples/embed-host -ui <dir>` does
@@ -411,6 +454,14 @@ packages (type aliases and wrappers, generated when the code moved) so that
 existing plugins keep compiling. The proto package name is unchanged, so the
 wire format and gRPC method names are the same.
 
+`microgateway/go.mod` requires `midsommar/v2` at a pseudo-version of a main
+commit that has `pkg/gatewayplugin` (the local `replace ../` still applies
+to in-repo builds). It used to require `v2.0.0`, whose module zip the proxy
+cannot build (v2.0.0 and v2.2.0 both committed files with `:` in their
+names), so a plugin importing the old paths could not be fetched through the
+proxy unless it also pinned `midsommar/v2` itself. Raise the requirement to
+the release tag when the next one is cut.
+
 ## Releases a host can import
 
 Every `v*` tag is a version of `github.com/TykTechnologies/midsommar/v2` a
@@ -426,7 +477,10 @@ host can `go get` (the module proxy builds its zip from the tagged tree;
 - runs `scripts/release/consume-module.sh` for both editions: a throwaway
   host with a clean module cache imports the tag through the proxy, runs
   `go mod tidy` and builds with `CGO_ENABLED=0`. The Community Edition run
-  has no credentials at all.
+  has no credentials at all, and runs even when `enterprise-tag` fails (the
+  enterprise run then fails at once, naming it). The proxy can take a while
+  to see a new tag, so `go get` retries with a doubling backoff (15 s up to
+  5 min) for up to 30 minutes (`CONSUME_MODULE_DEADLINE`, in seconds).
 
 The same script checks any commit by hand, e.g.
 `scripts/release/consume-module.sh ce <commit>`.
@@ -442,16 +496,24 @@ Dashboard's:
 
 - Where both require a module, Studio uses the Dashboard's version, up or
   down (2026-09-30: TIB 1.8, libopenapi 0.36, gorilla/sessions 1.4,
-  go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up; pgx,
+  go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up;
   gosimple/slug and mergo down). The `go` directive matches the Dashboard's
   (`go 1.26.5`, `toolchain go1.26.6` for Studio's own builds).
 - Where a Studio dependency needs a newer version, the module is in
   `scripts/host-compat-allow.txt` with the dependency that needs it (the
   OpenTelemetry 1.46 exporters, the Prometheus client behind the otel
   Prometheus exporter, go-openapi v0.25+, weaviate). Each was checked by
-  lowering it alone: every one drags others down with it.
+  lowering it alone: every one drags others down with it. One raise is a
+  choice rather than a need: pgx stays at 5.10 (v2.2.0's version, for its
+  hardening against hostile servers) above the Dashboard's 5.9.2.
 - `mattn/go-sqlite3` is deliberately not aligned: the Dashboard carries the
   retracted `v2.0.3+incompatible`, and `pkg/studio` does not link SQLite.
+- The in-repo plugin modules (`examples/`, `enterprise/plugins/`, and the
+  `community/` and `tyk-internal/` submodules) replace Studio's module with
+  the checkout, so any version change here needs `go mod tidy` in each of
+  them too, or their `go build` stops at "updates to go.mod needed".
+  `make plugins-mod-check` checks them (CI covers `examples` and
+  `enterprise/plugins`; the submodules are separate repositories).
 
 `make host-compat` (`scripts/host-compat.sh --build`, a CI job on this
 repository's branches) fetches the Dashboard's `go.mod` at run time (its
@@ -488,11 +550,24 @@ are schema-independent, so nothing else changes.
 
 `studio.New` runs every migration and seed, from `models.InitModels` through
 the RBAC seed (plus the analytics and identity broker tables, which used to
-migrate later), under `models.AcquireMigrationLock`: a Postgres session
-advisory lock on a connection of its own, keyed by the current schema, so
-replicas sharing one schema take turns and different schemas do not wait
-for each other. On SQLite, or with a pool of one connection, it is a no-op.
-Tests: `pkg/studio/database_schema_postgres_test.go`. Concurrent unlocked
+migrate later), under `models.AcquireMigrationLock`: a Postgres
+transaction-level advisory lock (`pg_try_advisory_xact_lock`, polled every
+500 ms) held by an open transaction on a connection of its own, keyed by
+the current schema, so replicas sharing one schema take turns and different
+schemas do not wait for each other. On SQLite, or with a pool of one
+connection, it is a no-op. Tests: `pkg/studio/database_schema_postgres_test.go`,
+`models/migration_lock_postgres_test.go`.
+
+It started as a session-level lock. Behind PgBouncer in transaction mode
+that leaked: the lock stayed on whichever pooled server connection took it,
+the unlock ran on another one, and every later instance waited for ever.
+A transaction keeps one server connection until it ends, and ending it (or
+the server dropping the session) releases the lock. The holder runs
+`SELECT 1` in its transaction every 5 s, so a server's
+`idle_in_transaction_session_timeout` does not end it mid-migration; if the
+lock is lost anyway, a warning is logged and the migration carries on. The
+wait is bounded: `Config.MigrationLockTimeout` (`MIGRATION_LOCK_TIMEOUT`,
+default 15 min), after which `New` fails with an error naming the lock. Concurrent unlocked
 boots of a fresh schema did not fail in tests (the seeds are protected by
 unique constraints), so the lock is a guard for upgrades, where replicas
 starting together would run the same ALTERs and backfills, rather than for
@@ -568,6 +643,18 @@ A host may build with `CGO_ENABLED=0` (the Tyk Dashboard's dev builds do), so
   through cgo. `data_session/chroma.go` is `//go:build cgo`, and
   `chroma_nocgo.go` stands in for it: Chroma datasources return
   `ErrChromaUnavailable`, and Chroma is left out of the vector store lists.
+  Creating a Chroma datasource, or switching one to Chroma, fails with
+  `services.ErrVectorStoreUnavailable` (400); an existing one can still be
+  edited or moved to another store. `studio.New` logs a warning naming the
+  existing Chroma datasources. `DataSession.Search` skips (and logs) a
+  datasource that fails, so the others still answer, and errors only when
+  every datasource fails (it used to abort on the first failure, as v2.2.0
+  did).
+  Studio always supplies vectors, so every collection it opens directly
+  gets an explicit embedding function that refuses to embed
+  (`precomputedEmbeddings`). Without one, chroma-go builds its default ONNX
+  function, which downloads ORT 1.21 while the Dashboard-aligned
+  `onnxruntime_go` v1.26 asks for API 24, and every store and search fails.
   chroma-go v0.4 was not an option: it adds an embedded runtime, and
   `chroma-go-local@v0.3.4`, which it requires, failed checksum-database
   verification (2026-09-29).

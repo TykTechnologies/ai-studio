@@ -10,6 +10,16 @@ export const apiErrorMessage = (error, fallback) =>
   error?.response?.data?.error ||
   fallback;
 
+/**
+ * An Error with the API's message and the HTTP status (`status`), so a caller
+ * can tell "nothing to push to" (409) from other failures.
+ */
+const apiError = (error, fallback) => {
+  const err = new Error(apiErrorMessage(error, fallback));
+  err.status = error?.response?.status;
+  return err;
+};
+
 /** A push operation ("reload") as the API reports it, in camelCase. */
 export const normalisePushOperation = (a) => ({
   operationId: a.operation_id,
@@ -165,7 +175,7 @@ class EdgeGatewayService {
       return attributes ? normalisePushOperation(attributes) : null;
     } catch (error) {
       console.error('Error triggering configuration reload:', error);
-      throw new Error(apiErrorMessage(error, 'Failed to trigger configuration reload'));
+      throw apiError(error, 'Failed to trigger configuration reload');
     }
   }
 
@@ -177,7 +187,7 @@ class EdgeGatewayService {
       return attributes ? normalisePushOperation(attributes) : null;
     } catch (error) {
       console.error('Error triggering global reload:', error);
-      throw new Error(apiErrorMessage(error, 'Failed to trigger global reload'));
+      throw apiError(error, 'Failed to trigger global reload');
     }
   }
 
@@ -222,9 +232,7 @@ class EdgeGatewayService {
       return attributes ? normalisePushOperation(attributes) : null;
     } catch (error) {
       console.error('Error fetching reload status:', error);
-      const err = new Error(apiErrorMessage(error, 'Failed to fetch reload status'));
-      err.status = error.response?.status;
-      throw err;
+      throw apiError(error, 'Failed to fetch reload status');
     }
   }
 
