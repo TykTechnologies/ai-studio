@@ -28,6 +28,13 @@ func TestHeadlessRelayFilter(t *testing.T) {
 	// A full replica keeps the default: its own plugins already had its
 	// edges' events.
 	assert.False(t, cluster.RelayedByDefault(eventbridge.Event{Topic: "metrics.report", Dir: eventbridge.DirLocal, FromEdge: true}))
+
+	// Object change events come from Studio, never from an edge: an edge
+	// publishing one must not make other replicas reload plugins or clear
+	// caches, from a full replica or a headless one.
+	fromEdge := eventbridge.Event{Topic: "system.plugin.updated", Dir: eventbridge.DirLocal, FromEdge: true}
+	assert.False(t, cluster.RelayedByDefault(fromEdge))
+	assert.False(t, headlessRelayFilter(fromEdge))
 }
 
 // fakeLeadership answers IsLeader from a switch.

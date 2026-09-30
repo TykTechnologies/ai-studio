@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,8 +41,13 @@ const pluginControlTopic = "plugin.control"
 // every replica relays, and whatever its edges sent (FromEdge), so that the
 // plugins on the full replicas see them. A full replica keeps
 // cluster.RelayedByDefault: its own plugins already had its edges' events.
+// An edge's system.* events are not relayed: object changes come from
+// Studio.
 func headlessRelayFilter(ev eventbridge.Event) bool {
-	return ev.FromEdge || cluster.RelayedByDefault(ev)
+	if ev.FromEdge {
+		return !strings.HasPrefix(ev.Topic, "system.")
+	}
+	return cluster.RelayedByDefault(ev)
 }
 
 func encodeEdgePayload(p *pb.PluginControlPayload) ([]byte, error) {
