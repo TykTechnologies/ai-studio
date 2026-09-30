@@ -294,9 +294,34 @@ One frontend build serves any base path:
 - Host sign-in: with `authMode: "host"` a signed-out visitor goes to
   `loginURL` (the login route shows a pointer to it), and logout goes to
   `logoutURL` after Studio's own sign-out.
+  - Deep links: the console replaces `{return_to}` anywhere in `loginURL`
+    (`Options.LoginURL: "/login?next={return_to}"`) with the page the
+    visitor asked for, URL-encoded: the browser path under the base path,
+    with query and hash (`%2Fai-studio%2Fadmin%2Fllms%3Ftab%3Dkeys`). From
+    the login or password pages it is the console's home. The host must
+    check it is a local path under the base path before redirecting to it
+    (`examples/embed-host` `returnTo`). A `loginURL` without the
+    placeholder is used unchanged, so existing hosts see no difference.
+    This applies to the first visit and to a session that expires later
+    (`authRedirect.hostSignInURL`). Standalone Studio is unchanged: it goes
+    to `/login` and, as in v2.2.0, lands on the user's home after sign-in.
+  - Local-account pages: `/register`, `/forgot-password`,
+    `/reset-password` (and `/auth/reset-password`) lead to the console's
+    home, and from there to sign-in, instead of rendering forms whose APIs
+    answer 404. `/common/me` reports `show_sso_config: false`, so the
+    `/admin/sso-profiles` routes are not registered, and the navigation
+    manifest leaves out Identity providers (both through
+    `api.showSSOConfig`).
 - Fixed on the way: the admin plugin iframe loaded `/plugins/assets/...`,
-  which no route serves (now `/api/v1/plugins/assets/...`), and "mark plugin
-  UI loaded" posted to a doubled `/api/v1/api/v1/...`.
+  which no route serves (now `/api/v1/plugins/assets/...`). "Mark plugin
+  UI loaded" posted to a doubled `/api/v1/api/v1/...`, which the SPA
+  fallback answered; with the path fixed it reached
+  `POST /api/v1/plugins/:id/ui/load` (plugins:write), so read-only users
+  saw a permission-denied toast on every plugin page and an administrator's
+  page view wrote `registered_plugins`, an audit entry and a config-sync
+  refresh. Nothing reads the "loaded" state, so the console no longer
+  posts it: viewing a plugin page writes nothing, as in v2.2.0. The
+  endpoint stays for API clients.
 - `config/docs_links.json` is embedded (an on-disk copy still overrides it),
   so documentation links work from any working directory.
 
