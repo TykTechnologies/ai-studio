@@ -66,7 +66,7 @@ networks:
 
 services:
   tyk-ai-studio:
-    image: tykio/tyk-ai-studio:v2.0.0  # Enterprise: tykio/tyk-ai-studio-ent:v2.0.0
+    image: tykio/tyk-ai-studio:v2.2.0  # Enterprise: tykio/tyk-ai-studio-ent:v2.2.0
     networks:
       - tyk-network
     volumes:
@@ -83,7 +83,7 @@ services:
     restart: always
 
   microgateway:
-    image: tykio/tyk-microgateway:v2.0.0  # Enterprise: tykio/tyk-microgateway-ent:v2.0.0
+    image: tykio/tyk-microgateway:v2.2.0  # Enterprise: tykio/tyk-microgateway-ent:v2.2.0
     networks:
       - tyk-network
     volumes:
