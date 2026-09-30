@@ -22,8 +22,10 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"regexp"
 	"strings"
 	"syscall"
@@ -182,8 +184,23 @@ func login(w http.ResponseWriter, r *http.Request) {
 // passed as next, when it is one (a path under the base path, never another
 // site), else Studio's home.
 func returnTo(next string) string {
-	if (next == basePath || strings.HasPrefix(next, basePath+"/")) && !strings.ContainsAny(next, "\\\r\n") {
-		return next
+	home := basePath + "/"
+	if strings.ContainsAny(next, "\\\r\n") {
+		return home
 	}
-	return basePath + "/"
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || !strings.HasPrefix(u.Path, "/") {
+		return home
+	}
+	// Judge the cleaned path, so "/ai-studio/../x" or "//evil.example" cannot
+	// pass the prefix check and still leave Studio (or the site).
+	clean := path.Clean(u.Path)
+	if clean != basePath && !strings.HasPrefix(clean, basePath+"/") {
+		return home
+	}
+	if strings.HasSuffix(u.Path, "/") && clean != "/" {
+		clean += "/"
+	}
+	u.Path = clean
+	return u.String()
 }
