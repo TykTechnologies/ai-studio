@@ -520,9 +520,13 @@ func (a *API) handleMe(c *gin.Context) {
 
 // showSSOConfig reports whether the user may see identity provider
 // configuration: the sso-profiles permission under RBAC, else the legacy
-// admin flag plus AccessToSSOConfig.
+// admin flag plus AccessToSSOConfig. Never when a host application signs
+// users in: Studio's SSO routes are off then.
 func (a *API) showSSOConfig(u *models.User, perms authz.Set) bool {
 	if !sso.IsEnterpriseAvailable() {
+		return false
+	}
+	if a.config != nil && !a.config.LocalAccountsEnabled() {
 		return false
 	}
 	if a.service.Authz().Enabled() {

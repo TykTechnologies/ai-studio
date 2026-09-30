@@ -128,7 +128,11 @@ type Options struct {
 	// keys still authenticate requests Auth has no identity for.
 	Auth Authenticator
 	// LoginURL and LogoutURL are where the console sends a user to sign in
-	// or out when Auth is set.
+	// or out when Auth is set. The console replaces "{return_to}" anywhere
+	// in LoginURL (e.g. "/login?next={return_to}") with the page the user
+	// asked for, URL-encoded: a path on Studio's origin under the base path,
+	// with its query and hash. The host validates it and returns the user
+	// there after signing in. A LoginURL without it is used as it is.
 	LoginURL, LogoutURL string
 
 	// CSRF, when set, replaces Studio's CSRF protection for

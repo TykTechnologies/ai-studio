@@ -298,9 +298,34 @@ One frontend build serves any base path:
 - Host sign-in: with `authMode: "host"` a signed-out visitor goes to
   `loginURL` (the login route shows a pointer to it), and logout goes to
   `logoutURL` after Studio's own sign-out.
+  - Deep links: the console replaces `{return_to}` anywhere in `loginURL`
+    (`Options.LoginURL: "/login?next={return_to}"`) with the page the
+    visitor asked for, URL-encoded: the browser path under the base path,
+    with query and hash (`%2Fai-studio%2Fadmin%2Fllms%3Ftab%3Dkeys`). From
+    the login or password pages it is the console's home. The host must
+    check it is a local path under the base path before redirecting to it
+    (`examples/embed-host` `returnTo`). A `loginURL` without the
+    placeholder is used unchanged, so existing hosts see no difference.
+    This applies to the first visit and to a session that expires later
+    (`authRedirect.hostSignInURL`). Standalone Studio is unchanged: it goes
+    to `/login` and, as in v2.2.0, lands on the user's home after sign-in.
+  - Local-account pages: `/register`, `/forgot-password`,
+    `/reset-password` (and `/auth/reset-password`) lead to the console's
+    home, and from there to sign-in, instead of rendering forms whose APIs
+    answer 404. `/common/me` reports `show_sso_config: false`, so the
+    `/admin/sso-profiles` routes are not registered, and the navigation
+    manifest leaves out Identity providers (both through
+    `api.showSSOConfig`).
 - Fixed on the way: the admin plugin iframe loaded `/plugins/assets/...`,
-  which no route serves (now `/api/v1/plugins/assets/...`), and "mark plugin
-  UI loaded" posted to a doubled `/api/v1/api/v1/...`.
+  which no route serves (now `/api/v1/plugins/assets/...`). "Mark plugin
+  UI loaded" posted to a doubled `/api/v1/api/v1/...`, which the SPA
+  fallback answered; with the path fixed it reached
+  `POST /api/v1/plugins/:id/ui/load` (plugins:write), so read-only users
+  saw a permission-denied toast on every plugin page and an administrator's
+  page view wrote `registered_plugins`, an audit entry and a config-sync
+  refresh. Nothing reads the "loaded" state, so the console no longer
+  posts it: viewing a plugin page writes nothing, as in v2.2.0. The
+  endpoint stays for API clients.
 - `config/docs_links.json` is embedded (an on-disk copy still overrides it),
   so documentation links work from any working directory.
 
@@ -337,8 +362,13 @@ as a module cannot compile the default `ui` package.
   is only in `main`).
 - The `ui-assets` job in `release.yml` builds the frontend once per tag,
   packs it as `tyk-ai-studio-ui-<tag>.tar.gz` with a `.sha256`, and uploads
-  both to the tag's GitHub release, creating a draft release when there is
-  none. It is the only job with `contents: write`.
+  both to the tag's GitHub release. When there is none it creates it,
+  published (not a draft; a prerelease for a `-rc` tag, never marked latest)
+  with placeholder notes, and it publishes a draft left by an earlier run. It
+  is the only job with `contents: write`. The release notes are then added
+  by hand with `gh release edit <tag> --notes-file notes.md` (plus
+  `--latest` for a final release); `gh release create <tag>` fails with
+  "already exists" once the job has run.
 - A host builds with `-tags studio_noui`, unpacks the tarball for the Studio
   version it imports, and passes `os.DirFS(dir)` (or its own embed of the
   directory) as `Options.UIAssets`. `examples/embed-host -ui <dir>` does
@@ -424,6 +454,14 @@ packages (type aliases and wrappers, generated when the code moved) so that
 existing plugins keep compiling. The proto package name is unchanged, so the
 wire format and gRPC method names are the same.
 
+`microgateway/go.mod` requires `midsommar/v2` at a pseudo-version of a main
+commit that has `pkg/gatewayplugin` (the local `replace ../` still applies
+to in-repo builds). It used to require `v2.0.0`, whose module zip the proxy
+cannot build (v2.0.0 and v2.2.0 both committed files with `:` in their
+names), so a plugin importing the old paths could not be fetched through the
+proxy unless it also pinned `midsommar/v2` itself. Raise the requirement to
+the release tag when the next one is cut.
+
 ## Releases a host can import
 
 Every `v*` tag is a version of `github.com/TykTechnologies/midsommar/v2` a
@@ -439,7 +477,10 @@ host can `go get` (the module proxy builds its zip from the tagged tree;
 - runs `scripts/release/consume-module.sh` for both editions: a throwaway
   host with a clean module cache imports the tag through the proxy, runs
   `go mod tidy` and builds with `CGO_ENABLED=0`. The Community Edition run
-  has no credentials at all.
+  has no credentials at all, and runs even when `enterprise-tag` fails (the
+  enterprise run then fails at once, naming it). The proxy can take a while
+  to see a new tag, so `go get` retries with a doubling backoff (15 s up to
+  5 min) for up to 30 minutes (`CONSUME_MODULE_DEADLINE`, in seconds).
 
 The same script checks any commit by hand, e.g.
 `scripts/release/consume-module.sh ce <commit>`.

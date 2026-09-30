@@ -33,7 +33,7 @@ s, err := studio.New(studio.Options{
 
 	// The host signs users in; Studio provisions and authorises them.
 	Auth:      hostAuthenticator, // Authenticate(*http.Request) (*studio.Identity, error)
-	LoginURL:  "/login",
+	LoginURL:  "/login?next={return_to}", // {return_to}: the page to come back to
 	LogoutURL: "/logout",
 	CSRF:      hostCSRFMiddleware, // optional; Studio's own otherwise
 })
@@ -56,7 +56,11 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
 - `HTTPHandler` is the admin API and UI, served under `Config.BasePath`; it
   strips the prefix itself. Session and CSRF cookies are scoped to the base
   path, and logout leaves the host's cookies alone. The console follows the
-  base path and, with `Auth`, sends signed-out users to `LoginURL`.
+  base path and, with `Auth`, sends signed-out users to `LoginURL`. A
+  `{return_to}` placeholder in `LoginURL` is replaced with the page they
+  asked for (URL-encoded path under the base path, with query and hash), so
+  the host can bring them back to it; validate it as a local path before
+  redirecting. Without the placeholder, `LoginURL` is used as it is.
 - `Chromeless` renders pages only, without Studio's top bar and navigation
   drawers, for a host that draws its own navigation and links to Studio's
   routes under the base path. `GET <base>/common/nav` returns the surfaces
