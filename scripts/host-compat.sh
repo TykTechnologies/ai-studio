@@ -110,6 +110,12 @@ if [ -n "${1:-}" ]; then
   run "$(basename "$1")" "$1" "${HOST_ALLOW:-$ROOT/scripts/host-compat-allow.tyk-analytics.txt}"
 else
   for repo in ${HOST_REPOS:-tyk-analytics tyk-sink}; do
+    # A repository name only: it becomes a path under $WORK and scripts/.
+    if [[ ! $repo =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+      echo "host-compat: invalid repository name in HOST_REPOS: $repo" >&2
+      failed+=("$repo")
+      continue
+    fi
     mod="$WORK/$repo.go.mod"
     if ! gh api "repos/TykTechnologies/$repo/contents/go.mod" -H "Accept: application/vnd.github.raw" > "$mod"; then
       echo "=== host-compat: $repo ==="
