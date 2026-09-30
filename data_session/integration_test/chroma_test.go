@@ -12,10 +12,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/TykTechnologies/midsommar/v2/data_session"
+	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-// noopEmbedder returns a consistent hash embedding function for GetCollection calls.
-// Chroma v2 API requires an embedding function even when we're providing our own embeddings.
+// noopEmbedder returns a consistent hash embedding function for GetCollection
+// and CreateCollection calls. Chroma v2 API requires an embedding function even
+// when we're providing our own embeddings; without one CreateCollection builds
+// chroma-go's default (ONNX) one, which fails with the linked onnxruntime_go.
 func noopEmbedder() chromaEmbeddings.EmbeddingFunction {
 	return chromaEmbeddings.NewConsistentHashEmbeddingFunction()
 }
@@ -36,6 +41,7 @@ func storeTestDocumentsDirectly(t *testing.T, chromaAddr, collectionName string,
 
 	// Create collection with L2 distance metric
 	collection, err := client.CreateCollection(ctx, collectionName,
+		chromago.WithEmbeddingFunctionCreate(noopEmbedder()),
 		chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
 		chromago.WithIfNotExistsCreate(),
 	)
@@ -151,7 +157,7 @@ func TestChromaSearchEmptyCollection(t *testing.T) {
 	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(chroma.Addr()))
 	require.NoError(t, err)
 
-	collection, err := client.CreateCollection(ctx, collectionName)
+	collection, err := client.CreateCollection(ctx, collectionName, chromago.WithEmbeddingFunctionCreate(noopEmbedder()))
 	require.NoError(t, err)
 
 	// Search empty collection using Chroma's native API
@@ -270,7 +276,7 @@ func TestChromaListNamespaces(t *testing.T) {
 	}
 
 	for _, name := range collections {
-		_, err := client.CreateCollection(ctx, name)
+		_, err := client.CreateCollection(ctx, name, chromago.WithEmbeddingFunctionCreate(noopEmbedder()))
 		require.NoError(t, err)
 	}
 
@@ -306,7 +312,7 @@ func TestChromaDeleteNamespace(t *testing.T) {
 	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(chroma.Addr()))
 	require.NoError(t, err)
 
-	_, err = client.CreateCollection(ctx, collectionName)
+	_, err = client.CreateCollection(ctx, collectionName, chromago.WithEmbeddingFunctionCreate(noopEmbedder()))
 	require.NoError(t, err)
 
 	// Verify it exists
@@ -335,6 +341,7 @@ func TestChromaMultipleDocumentsStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	collection, err := client.CreateCollection(ctx, collectionName,
+		chromago.WithEmbeddingFunctionCreate(noopEmbedder()),
 		chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
 	)
 	require.NoError(t, err)
@@ -387,6 +394,7 @@ func TestChromaDirectClientOperations(t *testing.T) {
 
 	// Create collection
 	collection, err := client.CreateCollection(ctx, collectionName,
+		chromago.WithEmbeddingFunctionCreate(noopEmbedder()),
 		chromago.WithHNSWSpaceCreate(chromaEmbeddings.L2),
 	)
 	require.NoError(t, err)
@@ -418,4 +426,54 @@ func TestChromaDirectClientOperations(t *testing.T) {
 	// Cleanup
 	err = client.DeleteCollection(ctx, collectionName)
 	require.NoError(t, err)
+}
+
+// TestChromaDataSessionVectorsRoundTrip stores and searches precomputed
+// vectors through DataSession's public API (the path behind
+// POST /datasource/{slug}/vector and StoreDocumentsWithVectors), on a fresh
+// collection and on one that already exists. Neither may need chroma-go's
+// default (ONNX) embedding function.
+func TestChromaDataSessionVectorsRoundTrip(t *testing.T) {
+	chroma := requireChroma(t)
+
+	for _, preexisting := range []bool{false, true} {
+		name := "fresh"
+		if preexisting {
+			name = "existing"
+		}
+		t.Run(name, func(t *testing.T) {
+			collectionName := "test_ds_" + name + "_" + uuid.New().String()[:8]
+			if preexisting {
+				storeTestDocumentsDirectly(t, chroma.Addr(), collectionName, 3)
+			}
+
+			ds := data_session.NewDataSession(map[uint]*models.Datasource{
+				1: {
+					Name:         "chroma",
+					DBSourceType: data_session.VECTOR_CHROMA,
+					DBConnString: chroma.Addr(),
+					DBName:       collectionName,
+					// Never called: the vectors are supplied.
+					Embedder: &models.Embedder{Vendor: models.OPENAI, APIKey: "sk-unused", ModelName: "text-embedding-3-small"},
+				},
+			})
+
+			contents := []string{"vector round trip one", "vector round trip two"}
+			vectors, err := NewMockEmbedder(testDimensions).EmbedDocuments(context.Background(), contents)
+			require.NoError(t, err)
+			require.NoError(t, ds.StoreDocumentsWithVectors(1, contents, vectors, []map[string]any{
+				{"filename": "one.txt"}, {"filename": "two.txt"},
+			}))
+
+			docs, err := ds.SearchByVector(1, vectors[0], 1)
+			require.NoError(t, err)
+			require.Len(t, docs, 1)
+			assert.Equal(t, contents[0], docs[0].PageContent)
+			assert.Equal(t, "one.txt", docs[0].Metadata["filename"])
+
+			client, err := chromago.NewHTTPClient(chromago.WithBaseURL(chroma.Addr()))
+			require.NoError(t, err)
+			_ = client.DeleteCollection(context.Background(), collectionName)
+		})
+	}
 }

@@ -20,7 +20,6 @@ import (
 	"github.com/TykTechnologies/tyk-identity-broker/tothic"
 	"github.com/TykTechnologies/tyk-identity-broker/tyk-api"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
 )
 
@@ -57,6 +56,9 @@ type InternalTIB struct {
 type Config struct {
 	APISecret string
 	LogLevel  string
+	// CookieSecure marks the broker's state cookie Secure (see
+	// sso.NewStateStore).
+	CookieSecure bool
 }
 
 type SSOService struct {
@@ -97,7 +99,7 @@ func (s *SSOService) InitInternalTIB() {
 	initializer.SetConfigHandler(kvStore)
 
 	tothic.TothErrorHandler = tykerrors.HandleError
-	tothic.Store = sessions.NewCookieStore([]byte(s.config.APISecret))
+	tothic.Store = sso.NewStateStore([]byte(s.config.APISecret), s.config.CookieSecure)
 
 	s.InternalTIB = internalTIB
 

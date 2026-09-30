@@ -9,8 +9,7 @@ replace github.com/TykTechnologies/midsommar/microgateway => ../../../../../micr
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 
 require (
-	github.com/TykTechnologies/midsommar/microgateway v0.0.0 // indirect
-	github.com/fatih/color v1.17.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
@@ -22,9 +21,9 @@ require (
 	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/simonfxr/pubsub v0.0.5 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )

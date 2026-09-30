@@ -33,3 +33,8 @@ github.com/go-openapi/jsonreference  # go-openapi analysis/loads/runtime v0.25+
 github.com/go-openapi/swag           # grpc-gateway v2.30
 
 github.com/buger/jsonparser          # weaviate v1.38.12
+
+# pgx 5.10 hardens the client against hostile servers (bounded decoders, a
+# SCRAM iteration cap, require_auth, TLS CancelRequest). v2.2.0 shipped it;
+# the standalone binaries keep it rather than drop to the Dashboard's 5.9.2.
+github.com/jackc/pgx/v5              # v2.2.0 parity: 5.10 server-hardening fixes
