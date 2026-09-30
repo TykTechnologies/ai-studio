@@ -31,6 +31,7 @@ import (
 //
 //	make test-vendors-filters
 func TestBedrockRequestFilters(t *testing.T) {
+	requireEnterpriseRuntime(t)
 	h := setup(t)
 	if h.filteredBedrock == nil {
 		t.Skip("bedrock has no credentials; nothing to filter")

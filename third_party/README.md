@@ -67,6 +67,12 @@ logs.
   links it anyway).
 - The copy's own unit tests pass.
 
+`go vet` does not cover the copy. Upstream gorm trips vet's `lostcancel`
+check (`callbacks.go`, `finisher_api.go`), and the copy is never edited by
+hand, so `make vet` (`scripts/vet.sh`, run in the CI unit jobs per edition)
+vets the root, microgateway and enterprise modules without `third_party/`.
+A plain `go vet ./...` at the root reports those two upstream findings.
+
 These tests also guard the gorm behaviour AI Studio depends on:
 
 - `models/schema_snapshot_test.go` and
