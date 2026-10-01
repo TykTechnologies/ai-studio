@@ -36,6 +36,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	// All models: the writer also reads apps to stamp each record's team.
 	require.NoError(t, models.InitModels(db))
+	require.NoError(t, analytics.Migrate(db))
 
 	return db
 }

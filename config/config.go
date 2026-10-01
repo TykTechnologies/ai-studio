@@ -121,6 +121,15 @@ type AppConf struct {
 	GRPCTLSKeyPath    string
 	GRPCAuthToken     string
 	GRPCNextAuthToken string
+	// GRPCMaxMessageSize bounds a control server message in bytes
+	// (GRPC_MAX_MESSAGE_SIZE, default 16 MB, as on the edge).
+	GRPCMaxMessageSize int
+	// GRPCMaxConnectionAge closes edge connections after about this long so
+	// they rebalance over replicas behind a load balancer, with
+	// GRPCMaxConnectionAgeGrace for streams to finish
+	// (GRPC_MAX_CONNECTION_AGE, GRPC_MAX_CONNECTION_AGE_GRACE; default off).
+	GRPCMaxConnectionAge      time.Duration
+	GRPCMaxConnectionAgeGrace time.Duration
 
 	// Licensing Configuration (Enterprise Edition)
 	LicenseKey                  string
@@ -730,6 +739,16 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.GRPCTLSKeyPath = getenv("GRPC_TLS_KEY_PATH")
 	conf.GRPCAuthToken = getenv("GRPC_AUTH_TOKEN")
 	conf.GRPCNextAuthToken = getenv("GRPC_AUTH_TOKEN_NEXT")
+	conf.GRPCMaxMessageSize = 16 * 1024 * 1024
+	if v := getenv("GRPC_MAX_MESSAGE_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.GRPCMaxMessageSize = n
+		} else {
+			cfgLog.Warn().Msgf("Invalid GRPC_MAX_MESSAGE_SIZE value %q; using %d", v, conf.GRPCMaxMessageSize)
+		}
+	}
+	conf.GRPCMaxConnectionAge = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE", 0)
+	conf.GRPCMaxConnectionAgeGrace = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE_GRACE", 0)
 
 	// OCI Plugin configuration
 	conf.OCIPlugins = getOCIConfig(getenv)

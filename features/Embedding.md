@@ -571,6 +571,13 @@ schemas do not wait for each other. On SQLite, or with a pool of one
 connection, it is a no-op. Tests: `pkg/studio/database_schema_postgres_test.go`,
 `models/migration_lock_postgres_test.go`.
 
+Nothing else migrates. The analytics recorder used to run
+`analytics.Migrate` when it started, outside the lock, and
+`grpc.NewControlServer` started a recorder of its own (on a context that was
+never cancelled); both are gone, so starting the recorder or the control
+server runs no DDL. A host that records analytics without `studio.New`
+calls `analytics.Migrate` itself, under its own lock.
+
 It started as a session-level lock. Behind PgBouncer in transaction mode
 that leaked: the lock stayed on whichever pooled server connection took it,
 the unlock ran on another one, and every later instance waited for ever.

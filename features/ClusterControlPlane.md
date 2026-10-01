@@ -127,6 +127,12 @@ that ends a stream (close, stale sweep) is conditional on the session it
 belongs to, so a stale replica never overwrites a newer connection. An edge
 is *reachable* when its owner node is live and its last heartbeat is fresh.
 
+Edges heartbeat on their stream. The deprecated unary `SendHeartbeat` RPC
+(no current edge calls it) used to look the edge up in the replica's own
+stream table and answer NotFound on any other replica; it now reads and
+updates `edge_instances`, so it works on every replica, and leaves ownership
+alone.
+
 ### Pushes: `push_operations` and `edge_push_commands`
 
 - The API resolves the targets from the database (not local memory),

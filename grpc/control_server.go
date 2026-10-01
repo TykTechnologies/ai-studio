@@ -35,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -153,6 +154,79 @@ type Config struct {
 	// BudgetSyncInterval is how often budget usage is synced to edges.
 	// Zero means BUDGET_SYNC_INTERVAL, or 30s.
 	BudgetSyncInterval time.Duration
+
+	// MaxMessageSize bounds a message in either direction, in bytes (zero:
+	// 16 MB, the edge's own GRPC_MAX_MESSAGE_SIZE default). Configuration
+	// snapshots and analytics pulses outgrow gRPC's 4 MB default.
+	MaxMessageSize int
+	// KeepaliveMinTime is the shortest interval between client pings the
+	// server accepts, with or without an open stream (zero: 10s; edges ping
+	// every 30s). A client pinging more often is disconnected.
+	KeepaliveMinTime time.Duration
+	// MaxConnectionAge, when set, closes each connection after about this
+	// long, so edges spread again over replicas behind a load balancer;
+	// streams get MaxConnectionAgeGrace to finish. Zero keeps connections
+	// open: an edge's stream is long-lived, and pushes in flight on a closed
+	// stream go back to pending.
+	MaxConnectionAge      time.Duration
+	MaxConnectionAgeGrace time.Duration
+}
+
+// Keepalive and size defaults for the control server.
+const (
+	defaultMaxMessageSize   = 16 * 1024 * 1024
+	defaultKeepaliveMinTime = 10 * time.Second
+	// The server pings a connection idle this long and drops it when the
+	// ping is not answered within the timeout (a half-open edge).
+	defaultKeepaliveTime    = 30 * time.Second
+	defaultKeepaliveTimeout = 5 * time.Second
+)
+
+// serverTuning is Config's transport settings with the defaults applied.
+type serverTuning struct {
+	maxMessageSize                          int
+	keepaliveMinTime                        time.Duration
+	keepaliveTime, keepaliveTimeout         time.Duration
+	maxConnectionAge, maxConnectionAgeGrace time.Duration
+}
+
+func (c *Config) serverTuning() serverTuning {
+	t := serverTuning{
+		maxMessageSize:        c.MaxMessageSize,
+		keepaliveMinTime:      c.KeepaliveMinTime,
+		keepaliveTime:         defaultKeepaliveTime,
+		keepaliveTimeout:      defaultKeepaliveTimeout,
+		maxConnectionAge:      c.MaxConnectionAge,
+		maxConnectionAgeGrace: c.MaxConnectionAgeGrace,
+	}
+	if t.maxMessageSize <= 0 {
+		t.maxMessageSize = defaultMaxMessageSize
+	}
+	if t.keepaliveMinTime <= 0 {
+		t.keepaliveMinTime = defaultKeepaliveMinTime
+	}
+	return t
+}
+
+// serverOptions are the transport options every control server listener
+// gets: keepalive that admits the edges' pings and message sizes that fit a
+// full snapshot. (MaxConcurrentStreams limits edge streams across all
+// connections, in SubscribeToChanges, not HTTP/2 streams per connection.)
+func (t serverTuning) serverOptions() []grpc.ServerOption {
+	params := keepalive.ServerParameters{Time: t.keepaliveTime, Timeout: t.keepaliveTimeout}
+	if t.maxConnectionAge > 0 {
+		params.MaxConnectionAge = t.maxConnectionAge
+		params.MaxConnectionAgeGrace = t.maxConnectionAgeGrace
+	}
+	return []grpc.ServerOption{
+		grpc.KeepaliveParams(params),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             t.keepaliveMinTime,
+			PermitWithoutStream: true,
+		}),
+		grpc.MaxRecvMsgSize(t.maxMessageSize),
+		grpc.MaxSendMsgSize(t.maxMessageSize),
+	}
 }
 
 // validateEncryptionKey checks the key edges use to decrypt the credentials
@@ -204,10 +278,10 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		server.nodeID = "control"
 	}
 
-	// Initialize AI Studio's analytics system for processing edge pulse data
-	ctx := context.Background()
-	analytics.StartRecording(ctx, db)
-	log.Debug().Msg("AI Studio analytics system initialized for control server")
+	// Edge analytics pulses are recorded through the process-wide analytics
+	// handler, which the host starts (pkg/studio does, after its migrations,
+	// with a context it cancels on Stop). Starting it here used to create
+	// analytics tables outside the migration lock.
 
 	log.Debug().Msg("Event bridge bus initialized for control server")
 
@@ -251,7 +325,7 @@ func (s *ControlServer) Start() error {
 // embedding host uses it to supply its own listener.
 func (s *ControlServer) Serve(listener net.Listener) error {
 	// Setup gRPC server options
-	var opts []grpc.ServerOption
+	opts := s.config.serverTuning().serverOptions()
 
 	// Add TLS if enabled
 	if s.config.TLSEnabled {
@@ -820,25 +894,31 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	return nil
 }
 
-// SendHeartbeat handles heartbeat requests
+// SendHeartbeat handles unary heartbeat requests, a deprecated RPC: edges
+// heartbeat on their stream (SubscribeToChanges), which also tracks stream
+// ownership. The unary call is answered from the
+// database, so it works on any replica, not only the one holding the edge's
+// stream; it records the heartbeat and leaves ownership alone.
 func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	var edgeInstance models.EdgeInstance
+	if err := edgeInstance.GetByEdgeID(s.db.WithContext(ctx), req.EdgeId); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Error(codes.NotFound, "edge instance not found")
+		}
+		return nil, status.Error(codes.Unavailable, "failed to look up edge instance")
+	}
+	if err := edgeInstance.UpdateHeartbeat(s.db.WithContext(ctx)); err != nil {
+		return nil, status.Error(codes.Unavailable, "failed to record heartbeat")
+	}
+
+	// This replica holds the edge's stream: keep its view current too.
 	s.edgeMutex.RLock()
 	edge, exists := s.edgeConnections[req.EdgeId]
 	s.edgeMutex.RUnlock()
-
-	if !exists {
-		return nil, status.Error(codes.NotFound, "edge instance not found")
-	}
-
-	// Update heartbeat with thread safety
-	edge.mu.Lock()
-	edge.LastHeartbeat = time.Now()
-	edge.mu.Unlock()
-
-	// Update database
-	var edgeInstance models.EdgeInstance
-	if err := edgeInstance.GetByEdgeID(s.db, req.EdgeId); err == nil {
-		edgeInstance.UpdateHeartbeat(s.db)
+	if exists {
+		edge.mu.Lock()
+		edge.LastHeartbeat = time.Now()
+		edge.mu.Unlock()
 	}
 
 	return &pb.HeartbeatResponse{
@@ -1430,8 +1510,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
 		if err != nil {
-			log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt API key for microgateway")
-			encryptedAPIKey = resolvedAPIKey // Fallback to plaintext
+			// Never send the key in plaintext: leave the LLM out, as for
+			// tools, datasources and tokens.
+			log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt LLM API key - excluding LLM from snapshot")
+			continue
 		}
 
 		// Resolve secret references in metadata and serialize to JSON string

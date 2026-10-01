@@ -86,6 +86,7 @@ func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 	db := setupDB(t)
 
 	// Now start analytics AFTER migrations, ensuring the table is ready.
+	require.NoError(t, analytics.Migrate(db))
 	ctx, cancel := context.WithCancel(context.Background())
 	analytics.StartRecording(ctx, db)
 

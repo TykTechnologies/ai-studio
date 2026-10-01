@@ -588,6 +588,10 @@ func (s *Studio) wireControlPlane(version string) error {
 		NodeID:        s.clusterNode.ID(),
 
 		BudgetSyncInterval: conf.BudgetSyncInterval,
+
+		MaxMessageSize:        conf.GRPCMaxMessageSize,
+		MaxConnectionAge:      conf.GRPCMaxConnectionAge,
+		MaxConnectionAgeGrace: conf.GRPCMaxConnectionAgeGrace,
 	}, s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)
