@@ -184,6 +184,28 @@ func TestBus_TopicIsolation(t *testing.T) {
 	assert.Equal(t, "2", eventsB[0].ID)
 }
 
+// Subscribers run on the publisher's goroutine: one that panics must not
+// take the publisher down, nor keep the event from the other subscribers,
+// and a subscription wrapped for that still unsubscribes.
+func TestBus_PanickingSubscriberIsContained(t *testing.T) {
+	bus := NewBus()
+	var topicHits, allHits int
+	bad := bus.Subscribe("t", func(Event) { panic("subscriber bug") })
+	bus.Subscribe("t", func(Event) { topicHits++ })
+	badAll := bus.SubscribeAll(func(Event) { panic("wildcard subscriber bug") })
+	bus.SubscribeAll(func(Event) { allHits++ })
+
+	require.NotPanics(t, func() { bus.Publish(Event{ID: "1", Topic: "t"}) })
+	assert.Equal(t, 1, topicHits)
+	assert.Equal(t, 1, allHits)
+
+	bus.Unsubscribe(bad)
+	bus.Unsubscribe(badAll)
+	bus.Publish(Event{ID: "2", Topic: "t"})
+	assert.Equal(t, 2, topicHits)
+	assert.Equal(t, 2, allHits)
+}
+
 func TestBus_Unsubscribe(t *testing.T) {
 	bus := NewBus()
 

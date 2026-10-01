@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 )
@@ -83,7 +84,7 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error
 	// Upgrade any legacy-format encrypted secrets to authenticated encryption.
 	// Runs in the background so scrypt's deliberate cost never delays startup;
 	// decrypt handles both formats, so reads are correct while it runs.
-	go func() {
+	safe.Go("legacy secret re-encryption", func() {
 		logger.Info("Starting background re-encryption of legacy secrets (if any)")
 		if migrated, err := secrets.ReencryptLegacySecrets(db); err != nil {
 			logger.Errorf("Failed to re-encrypt legacy secrets: %v", err)
@@ -92,7 +93,7 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error
 		} else {
 			logger.Info("No legacy-format secrets to re-encrypt")
 		}
-	}()
+	})
 
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {

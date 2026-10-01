@@ -9,10 +9,22 @@
 #      upstream gorm internally; it never touches Studio's models;
 #   3. the copy's own tests pass.
 # See third_party/README.md.
+#
+# CE_ONLY=1 checks the root and microgateway modules in the CE edition only,
+# for checkouts without the private enterprise submodule (CI on pull requests
+# from forks, which gets a stub enterprise/go.mod).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
+
+modules=(. microgateway enterprise)
+editions=("" enterprise)
+if [ "${CE_ONLY:-}" = 1 ]; then
+  modules=(. microgateway)
+  editions=("")
+  echo "gorm-verify: CE_ONLY=1, not checking the enterprise module or the enterprise edition" >&2
+fi
 
 "$ROOT/scripts/gorm-vendor.sh" --verify
 
@@ -27,12 +39,12 @@ fi
 # (an extended regexp of import-path prefixes). Never add a Studio path.
 ALLOWED_GORM_IMPORTERS='github\.com/TykTechnologies/storage/'
 
-for mod in . microgateway enterprise; do
+for mod in "${modules[@]}"; do
   if [ ! -f "$mod/go.mod" ]; then
     echo "gorm-verify: $mod/go.mod missing (is the enterprise submodule checked out?)" >&2
     exit 1
   fi
-  for tags in "" enterprise; do
+  for tags in "${editions[@]}"; do
     # go list runs on its own so that a failure stops the check rather
     # than reading as "no gorm.io packages".
     deps=$(cd "$mod" && go list -deps -test ${tags:+-tags "$tags"} -f '{{.ImportPath}} {{join .Imports " "}}' ./...)

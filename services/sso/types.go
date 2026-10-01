@@ -23,6 +23,11 @@ const (
 type Config struct {
 	APISecret string
 	LogLevel  string
+	// CookieSecure marks the identity broker's state cookie Secure. Set it
+	// the way the session cookie is (auth.Config.CookieSecure): a browser
+	// drops a Secure cookie set over plain HTTP, and the login callback then
+	// finds no state.
+	CookieSecure bool
 }
 
 // NonceTokenRequest represents a request to create a nonce token for SSO authentication

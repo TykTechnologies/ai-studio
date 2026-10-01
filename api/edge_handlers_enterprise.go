@@ -34,6 +34,7 @@ type EdgeResponse struct {
 		LastSyncAck    *time.Time `json:"last_sync_ack"`
 		CreatedAt      time.Time  `json:"created_at"`
 		UpdatedAt      time.Time  `json:"updated_at"`
+		EdgeOwner
 	} `json:"attributes"`
 }
 
@@ -113,6 +114,7 @@ func (a *API) listEdges(c *gin.Context) {
 	for i, edge := range edges {
 		response.Data[i] = serializeEdgeWithHealth(&edge)
 	}
+	a.withEdgeOwners(c.Request.Context(), response.Data)
 
 	c.JSON(http.StatusOK, response)
 }
@@ -163,7 +165,9 @@ func (a *API) getEdge(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeEdgeWithHealth(edge)})
+	data := []EdgeResponse{serializeEdgeWithHealth(edge)}
+	a.withEdgeOwners(c.Request.Context(), data)
+	c.JSON(http.StatusOK, gin.H{"data": data[0]})
 }
 
 // @Summary Trigger edge reload
@@ -172,8 +176,9 @@ func (a *API) getEdge(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param edge_id path string true "Edge ID"
-// @Success 202 {object} SuccessResponse
+// @Success 202 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/{edge_id}/reload [post]
 // @Security BearerAuth
@@ -255,11 +260,12 @@ func (a *API) deleteEdge(c *gin.Context) {
 }
 
 // @Summary Reload all edge gateways
-// @Description Trigger a configuration reload for all edge gateways across all namespaces
+// @Description Push the current configuration to every edge gateway in every namespace, as one operation. The response carries the operation under data.attributes and, for clients written against v2.2, data.message, data.operations (one entry per namespace, all with the same operation_id) and data.operations_count. 409 when there is no edge to push to (up to v2.2: 202 with no operations).
 // @Tags edges
 // @Accept json
 // @Produce json
 // @Success 202 {object} map[string]interface{}
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth
@@ -270,7 +276,7 @@ func (a *API) reloadAllEdges(c *gin.Context) {
 		sendPushError(c, err)
 		return
 	}
-	pushAccepted(c, res)
+	reloadAllAccepted(c, res)
 }
 
 // serializeEdge converts an EdgeInstance model to API response format
@@ -297,6 +303,7 @@ func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
 			LastSyncAck    *time.Time             `json:"last_sync_ack"`
 			CreatedAt      time.Time              `json:"created_at"`
 			UpdatedAt      time.Time              `json:"updated_at"`
+			EdgeOwner
 		}{
 			EdgeID:         edge.EdgeID,
 			Namespace:      namespace,
@@ -312,6 +319,7 @@ func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
 			LastSyncAck:    edge.LastSyncAck,
 			CreatedAt:      edge.CreatedAt,
 			UpdatedAt:      edge.UpdatedAt,
+			EdgeOwner:      EdgeOwner{OwnerNodeID: edge.OwnerNodeID},
 		},
 	}
 }
@@ -340,6 +348,7 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			LastSyncAck    *time.Time             `json:"last_sync_ack"`
 			CreatedAt      time.Time              `json:"created_at"`
 			UpdatedAt      time.Time              `json:"updated_at"`
+			EdgeOwner
 		}{
 			EdgeID:         edge.EdgeInstance.EdgeID,
 			Namespace:      namespace,
@@ -355,6 +364,7 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			LastSyncAck:    edge.EdgeInstance.LastSyncAck,
 			CreatedAt:      edge.EdgeInstance.CreatedAt,
 			UpdatedAt:      edge.EdgeInstance.UpdatedAt,
+			EdgeOwner:      EdgeOwner{OwnerNodeID: edge.EdgeInstance.OwnerNodeID},
 		},
 	}
 }

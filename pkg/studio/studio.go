@@ -10,12 +10,14 @@ package studio
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +41,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
@@ -117,6 +120,11 @@ type Options struct {
 	// replica restart needs: it must not inherit its predecessor's claims.
 	NodeID string
 
+	// NodeLabel names this replica on the cluster status and the Edge
+	// Gateways page (at most 64 letters, digits, spaces and . _ - : / ( ),
+	// e.g. "dashboard"). Empty means DefaultNodeLabel.
+	NodeLabel string
+
 	// SkipLLMDefaults skips seeding the default LLM configurations and
 	// their secrets.
 	SkipLLMDefaults bool
@@ -127,7 +135,11 @@ type Options struct {
 	// keys still authenticate requests Auth has no identity for.
 	Auth Authenticator
 	// LoginURL and LogoutURL are where the console sends a user to sign in
-	// or out when Auth is set.
+	// or out when Auth is set. The console replaces "{return_to}" anywhere
+	// in LoginURL (e.g. "/login?next={return_to}") with the page the user
+	// asked for, URL-encoded: a path on Studio's origin under the base path,
+	// with its query and hash. The host validates it and returns the user
+	// there after signing in. A LoginURL without it is used as it is.
 	LoginURL, LogoutURL string
 
 	// CSRF, when set, replaces Studio's CSRF protection for
@@ -137,6 +149,12 @@ type Options struct {
 	CSRF            func(http.Handler) http.Handler
 	CSRFTokenHeader string
 	CSRFTokenURL    string
+
+	// GRPCTLSConfig, when set, is the TLS configuration the gRPC control
+	// server serves edges with, in place of Config's certificate and key
+	// files (Config.GRPCTLSCertPath, GRPCTLSKeyPath): a host with its own
+	// certificate store, cipher suites or minimum version passes its own.
+	GRPCTLSConfig *tls.Config
 
 	// Chromeless makes the console render pages only: no top bar (the
 	// Admin / Portal / Chat switch and the user menu) and no navigation
@@ -179,22 +197,14 @@ type Studio struct {
 	proxy     *proxy.Proxy
 	control   *grpc.ControlServer
 
-	// clusterNode registers this replica; clusterLog carries events between
-	// replicas (pkg/cluster).
-	clusterNode *cluster.Node
-	clusterLog  *cluster.Log
-	// relay carries edge-bound and object-change bus events to the other
-	// replicas through clusterLog.
-	relay *cluster.Relay
-	// leadership is this replica's claim on the leader lease, which
-	// singleton background work runs under.
-	leadership *cluster.Leadership
+	// clusterParts is this replica's cluster membership: node, event log,
+	// relay, leader lease and replica signals.
+	clusterParts
 	// relayed applies other replicas' changes to this replica's caches.
 	relayed *relayedChanges
-	// unsubscribeSignals stops delivering other replicas' signals.
-	unsubscribeSignals func()
-	// signals writes this replica's replica signals in the background.
-	signals *signalSender
+	// edgePayloads hands this replica's plugins the edge payloads headless
+	// control planes forward, while this replica leads.
+	edgePayloads *edgePayloadHost
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (control mode only).
 	pushes *pushes.Coordinator
@@ -258,7 +268,15 @@ func New(opts Options) (_ *Studio, err error) {
 	// Migrations and seeding (through the RBAC seed below) run under a
 	// Postgres advisory lock, so replicas sharing a database do not race
 	// through AutoMigrate and the get-or-create seeds. A no-op on SQLite.
-	releaseMigrationLock, err := models.AcquireMigrationLock(backgroundCtx, s.db)
+	// Bounded: an instance that never finishes (or a lock left behind)
+	// must not keep this one waiting for ever.
+	lockWait := conf.MigrationLockTimeout
+	if lockWait <= 0 {
+		lockWait = models.DefaultMigrationLockWait
+	}
+	lockCtx, cancelLockWait := context.WithTimeout(backgroundCtx, lockWait)
+	releaseMigrationLock, err := models.AcquireMigrationLock(lockCtx, s.db)
+	cancelLockWait()
 	if err != nil {
 		return nil, fmt.Errorf("studio: %w", err)
 	}
@@ -322,10 +340,27 @@ func New(opts Options) (_ *Studio, err error) {
 		logger.Warnf("Failed to register plugin permission resources: %v", err)
 	}
 
+	// A build without cgo has no Chroma client: say so up front for the
+	// Chroma datasources it cannot search, rather than only at query time.
+	if unavailable, err := service.UnavailableVectorStoreDatasources(); err != nil {
+		logger.Warnf("Failed to check datasources for unavailable vector stores: %v", err)
+	} else if len(unavailable) > 0 {
+		names := make([]string, 0, len(unavailable))
+		for _, d := range unavailable {
+			names = append(names, fmt.Sprintf("%q (id %d)", d.Name, d.ID))
+		}
+		logger.Warnf("This build has no cgo, so Chroma is unavailable: searches of these Chroma datasources fail until they are moved to another vector store: %s", strings.Join(names, ", "))
+	}
+
 	// Seed RBAC system roles and migrate legacy admin flags into bindings
 	// (Enterprise; no-op in Community Edition). Idempotent on every boot.
 	if err := service.Authz().Seed(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: seed RBAC roles: %w", err)
+	}
+	// Last under the lock: the schema is now this build's (CheckSchema
+	// reads it back for instances that do not migrate).
+	if err := models.RecordSchemaVersion(s.db, schemaWriter(opts.Version)); err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
 	}
 	releaseMigrationLock()
 	releaseMigrationLock = nil
@@ -336,16 +371,21 @@ func New(opts Options) (_ *Studio, err error) {
 	if nodeID == "" {
 		nodeID = cluster.NewNodeID()
 	}
-	if s.clusterNode, err = cluster.StartNode(s.db, nodeID, opts.Version); err != nil {
-		return nil, fmt.Errorf("studio: %w", err)
-	}
-	s.clusterLog = cluster.NewLog(s.db, nodeID, cluster.LogOptions{})
-	if err := s.clusterLog.Start(backgroundCtx); err != nil {
-		return nil, fmt.Errorf("studio: %w", err)
+	if err := s.joinCluster(backgroundCtx, s.db, nodeID, opts.Version, cluster.NodeOptions{
+		Label: nodeLabel(opts.NodeLabel, DefaultNodeLabel),
+	}); err != nil {
+		return nil, err
 	}
 	// Singleton jobs (aggregations, alerts, syncs, cleanups) run only on
 	// the replica holding the leader lease.
 	s.leadership = cluster.NewLeadership(s.db, cluster.LeaderLease, nodeID, cluster.LeadershipOptions{})
+	// Leader-only work that was skipped while another replica held the
+	// lease catches up as soon as this one gains it (pkg/replicas.OnLeading).
+	s.leadership.OnChange(func(leading bool) {
+		if leading {
+			replicas.BecameLeader()
+		}
+	})
 	s.leadership.Start()
 	s.connectReplicas()
 
@@ -407,14 +447,14 @@ func New(opts Options) (_ *Studio, err error) {
 	// Rows recorded before email framing was stripped at write time still
 	// read "Subject: ... Dear Administrator ..." in the bell. Rewrite them
 	// once, off the startup path; a second run finds nothing to change.
-	go func() {
+	safe.Go("notification body backfill", func() {
 		changed, err := notificationService.BackfillLegacyBodies()
 		if err != nil {
 			logger.Warnf("Notification body backfill stopped after %d rows: %v", changed, err)
 		} else if changed > 0 {
 			logger.Infof("Rewrote %d legacy notification bodies", changed)
 		}
-	}()
+	})
 
 	authConfig := &auth.Config{
 		DB:                     s.db,
@@ -504,7 +544,7 @@ func New(opts Options) (_ *Studio, err error) {
 	}, service.Budget)
 
 	if conf.GatewayMode == "control" {
-		if err := s.wireControlPlane(opts.Version); err != nil {
+		if err := s.wireControlPlane(opts.Version, opts.GRPCTLSConfig); err != nil {
 			return nil, err
 		}
 	} else {
@@ -515,6 +555,12 @@ func New(opts Options) (_ *Studio, err error) {
 		s.wireEventBus(eventbridge.NewBus())
 		service.InitWebhooks(conf.Webhooks, opts.Version)
 		service.InitTykMCP(conf.TykMCP, opts.Version)
+	}
+	// Headless control planes (MDCB) hold edges but run no plugins: their
+	// edges' plugin payloads reach the plugins here, on the leader. In
+	// either mode: the edges may all be held by headless replicas.
+	if service.AIStudioPluginManager != nil {
+		s.edgePayloads = newEdgePayloadHost(s.db, s.clusterLog, service.AIStudioPluginManager)
 	}
 
 	frontend := opts.UIAssets
@@ -537,21 +583,9 @@ func New(opts Options) (_ *Studio, err error) {
 
 // wireControlPlane builds the gRPC control server and connects the push
 // coordinator, plugin manager and event bus to it.
-func (s *Studio) wireControlPlane(version string) error {
+func (s *Studio) wireControlPlane(version string, tlsConfig *tls.Config) error {
 	conf, service := s.conf, s.service
-	control, err := grpc.NewControlServer(&grpc.Config{
-		GRPCPort:      conf.GRPCPort,
-		GRPCHost:      conf.GRPCHost,
-		TLSEnabled:    conf.GRPCTLSEnabled,
-		TLSCertPath:   conf.GRPCTLSCertPath,
-		TLSKeyPath:    conf.GRPCTLSKeyPath,
-		AuthToken:     conf.GRPCAuthToken,
-		NextAuthToken: conf.GRPCNextAuthToken,
-		EncryptionKey: conf.MicrogatewayEncryptionKey,
-		NodeID:        s.clusterNode.ID(),
-
-		BudgetSyncInterval: conf.BudgetSyncInterval,
-	}, s.db)
+	control, err := grpc.NewControlServer(controlServerConfig(conf, s.clusterNode.ID(), tlsConfig), s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)
 	}
@@ -602,8 +636,31 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 	// Other replicas' edges and caches must hear about this replica's
 	// events, and this replica about theirs.
 	s.watchRelayedChanges(bus)
-	s.relay = cluster.NewRelay(s.clusterLog, bus, cluster.RelayOptions{})
-	s.relay.Start()
+	s.startRelay(bus, cluster.RelayOptions{})
+}
+
+// controlServerConfig is the gRPC control server's configuration, for a full
+// Studio and a headless control plane alike. tlsConfig, when set, replaces
+// the certificate and key files in conf.
+func controlServerConfig(conf *config.AppConf, nodeID string, tlsConfig *tls.Config) *grpc.Config {
+	return &grpc.Config{
+		GRPCPort:      conf.GRPCPort,
+		GRPCHost:      conf.GRPCHost,
+		TLSEnabled:    conf.GRPCTLSEnabled,
+		TLSCertPath:   conf.GRPCTLSCertPath,
+		TLSKeyPath:    conf.GRPCTLSKeyPath,
+		TLSConfig:     tlsConfig,
+		AuthToken:     conf.GRPCAuthToken,
+		NextAuthToken: conf.GRPCNextAuthToken,
+		EncryptionKey: conf.MicrogatewayEncryptionKey,
+		NodeID:        nodeID,
+
+		BudgetSyncInterval: conf.BudgetSyncInterval,
+
+		MaxMessageSize:        conf.GRPCMaxMessageSize,
+		MaxConnectionAge:      conf.GRPCMaxConnectionAge,
+		MaxConnectionAgeGrace: conf.GRPCMaxConnectionAgeGrace,
+	}
 }
 
 // HTTPHandler returns the admin API and UI handler: the portal, chat,
@@ -693,30 +750,9 @@ func (s *Studio) stop(ctx context.Context) error {
 	if s.pushes != nil {
 		s.pushes.Stop()
 	}
+	s.edgePayloads.stop()
 	s.relayed.stop()
-	if s.relay != nil {
-		// Before the log: events still queued are written on the way out.
-		s.relay.Stop()
-	}
-	if s.clusterLog != nil {
-		s.clusterLog.Stop()
-	}
-	replicas.SetBackend(nil)
-	if s.signals != nil {
-		s.signals.close()
-	}
-	if s.unsubscribeSignals != nil {
-		s.unsubscribeSignals()
-	}
-	if s.leadership != nil {
-		// Hand the leader lease over now rather than after its TTL.
-		s.leadership.Stop()
-	}
-	if s.clusterNode != nil {
-		// Last among the cluster pieces: removing the row tells the other
-		// replicas at once that this one is gone.
-		s.clusterNode.Stop(ctx)
-	}
+	s.stopCluster(ctx)
 	if s.analyticsTee != nil {
 		// The handler is process-wide: unwrap it so a later New in this
 		// process does not tee into this instance's stopped sinks.

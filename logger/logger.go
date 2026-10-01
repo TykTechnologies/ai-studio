@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -47,6 +48,7 @@ func Init(level string) {
 
 	// Set log level
 	SetLevel(level)
+	configured.Store(true)
 }
 
 // Use makes l the logger Studio's own logging goes through, without touching
@@ -54,6 +56,22 @@ func Init(level string) {
 func Use(l zerolog.Logger) {
 	Log = l
 	currentLevel = l.GetLevel()
+	configured.Store(true)
+}
+
+// configured: Init or Use has set Log.
+var configured atomic.Bool
+
+// Current returns Log once Init or Use has set it, and zerolog's global
+// logger before that. Log's zero value discards everything, which suits
+// Studio's routine logging in a process that never sets it up (the
+// microgateway runs Studio packages without calling Init); what must never
+// go unseen, such as a recovered panic, logs through Current instead.
+func Current() *zerolog.Logger {
+	if configured.Load() {
+		return &Log
+	}
+	return &log.Logger
 }
 
 // SetLevel sets the global log level

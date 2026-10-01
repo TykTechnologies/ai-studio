@@ -1,8 +1,16 @@
 midsommar:
   image:
     repository: tykio/tyk-ai-studio
-    tag: v2.0.0
+    tag: v2.2.0
     pullPolicy: IfNotPresent
+
+  # Deployment strategy. Recreate stops the running pod before starting the
+  # new one, so two Studio instances never run side by side during an
+  # upgrade: required with SQLite (one process per database file) and the
+  # supported way to run a single Studio (see the reference architecture).
+  # From 2.3, several replicas on PostgreSQL can use RollingUpdate.
+  strategy:
+    type: Recreate
 
   # Service configuration
   service:
@@ -147,7 +155,7 @@ microgateway:
   enabled: true
   image:
     repository: tykio/tyk-microgateway    # Enterprise: tykio/tyk-microgateway-ent
-    tag: v2.0.0
+    tag: v2.2.0
   service:
     type: ClusterIP
     port: 8080

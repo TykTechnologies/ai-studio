@@ -18,6 +18,7 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `midsommar.image.repository` | Docker image repository | `tykio/midsommar` |
 | `midsommar.image.tag` | Docker image tag | `latest` |
 | `midsommar.service.type` | Kubernetes service type | `ClusterIP` |
+| `midsommar.strategy` | Deployment strategy. `Recreate` stops the old pod before the new one starts, so two Studio instances never run side by side during an upgrade | `{type: Recreate}` |
 | `config.allowRegistrations` | Enable user registrations | `"true"` |
 | `config.adminEmail` | Admin email address | `"you@tyk.io"` |
 | `config.siteUrl` | Site URL | `"http://localhost:3000"` |

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,13 +22,23 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
-// setupTestDB creates an in-memory SQLite database for testing
+// setupTestDB creates an in-memory SQLite database for testing. The analytics
+// writer records on its own goroutine, and every connection to a plain
+// ":memory:" DSN is a separate empty database, so the test's reads failed with
+// "no such table" whenever the pool opened a second connection. A named
+// shared-cache database on a single connection is one database for both.
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	t.Helper()
+	name := strings.ReplaceAll(t.Name(), "/", "_")
+	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 
-	err = db.AutoMigrate(&models.LLMChatRecord{})
-	require.NoError(t, err)
+	// All models: the writer also reads apps to stamp each record's team.
+	require.NoError(t, models.InitModels(db))
+	require.NoError(t, analytics.Migrate(db))
 
 	return db
 }

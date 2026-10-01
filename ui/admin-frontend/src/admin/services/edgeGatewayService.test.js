@@ -61,6 +61,28 @@ describe('EdgeGatewayService', () => {
         lastSyncAck: undefined,
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T12:00:00Z',
+        // No replica holds this edge's stream.
+        ownerNodeId: '',
+        ownerLabel: '',
+        ownerLive: false,
+      });
+    });
+
+    test('should map the replica holding the edge', async () => {
+      const held = JSON.parse(JSON.stringify(mockEdgeResponse));
+      Object.assign(held.data.data[0].attributes, {
+        owner_node_id: 'mdcb-1-123-abcd',
+        owner_label: 'mdcb-eu-1',
+        owner_live: true,
+      });
+      apiClient.get.mockResolvedValueOnce(held);
+
+      const result = await edgeGatewayService.listEdgeGateways();
+
+      expect(result.data[0]).toMatchObject({
+        ownerNodeId: 'mdcb-1-123-abcd',
+        ownerLabel: 'mdcb-eu-1',
+        ownerLive: true,
       });
     });
 

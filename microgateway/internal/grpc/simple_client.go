@@ -3,7 +3,6 @@ package grpc
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"math"
 	"math/rand"
@@ -65,8 +64,16 @@ type SimpleEdgeClient struct {
 	// Callback for configuration updates
 	onConfigChange func(*pb.ConfigurationSnapshot)
 
-	// Reload handling (use interface to avoid import cycle)
+	// Reload handling (use interface to avoid import cycle). reloadMu
+	// guards reloadHandler and heldReloads: the handler is set from main
+	// while the stream's receive loop reads it. A push that arrives before
+	// the handler is set (control delivers waiting pushes as soon as the
+	// stream opens, and cmd/microgateway sets the handler after its
+	// services are up) is held and handed over when it is set, instead of
+	// being dropped and left for control's answer timeout.
+	reloadMu      sync.Mutex
 	reloadHandler interface{}
+	heldReloads   []*pb.ConfigurationReloadRequest
 
 	// Control payload queue for edge-to-control plugin communication
 	controlPayloadQueue *ControlPayloadQueue
@@ -111,7 +118,8 @@ func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime strin
 		stopCh:            make(chan struct{}),
 	}
 
-	// EDGE_RECONNECT_INTERVAL is the base of the reconnect backoff.
+	// EDGE_RECONNECT_INTERVAL is the base of the reconnect backoff, which
+	// doubles per attempt up to maxReconnectBackoff.
 	if cfg != nil && cfg.HubSpoke.ReconnectInterval > 0 {
 		client.reconnectInterval = cfg.HubSpoke.ReconnectInterval
 	}
@@ -305,10 +313,33 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 	return resp, nil
 }
 
-// SetReloadHandler sets the reload handler for processing reload requests
+// maxHeldReloads bounds the pushes held while no reload handler is set.
+// Each push asks for the same thing (pull the current configuration), so
+// dropping the oldest loses nothing but its answer; control retries it.
+const maxHeldReloads = 16
+
+// SetReloadHandler sets the reload handler for processing reload requests.
+// Pushes that arrived before it was set are handed to it now, in order, on
+// a goroutine of their own (a reload takes seconds; the caller is usually
+// main, still starting up).
 func (c *SimpleEdgeClient) SetReloadHandler(handler interface{}) {
+	c.reloadMu.Lock()
 	c.reloadHandler = handler
+	var held []*pb.ConfigurationReloadRequest
+	if handler != nil {
+		held, c.heldReloads = c.heldReloads, nil
+	}
+	c.reloadMu.Unlock()
 	log.Debug().Msg("Reload handler set for edge client")
+
+	if len(held) > 0 {
+		log.Info().Int("count", len(held)).Msg("Handing pushes received during start-up to the reload handler")
+		go func() {
+			for _, req := range held {
+				dispatchReload(handler, req)
+			}
+		}()
+	}
 }
 
 // SetControlPayloadQueue sets the control payload queue for edge-to-control plugin communication
@@ -463,6 +494,13 @@ func (c *SimpleEdgeClient) establishStream() error {
 		cancel()
 		return fmt.Errorf("failed to send stream registration: %w", err)
 	}
+
+	// A heartbeat straight away, rather than after the first interval: it
+	// reports the loaded checksum at once, and control delivers waiting
+	// pushes to a stream only after its first heartbeat (or a grace period,
+	// for edges that do not send one early). Pushes that arrive before the
+	// reload handler is set are held (see HandleReloadRequest).
+	c.sendHeartbeatMessage()
 
 	// Start message handling goroutines
 	go c.handleIncomingMessages()
@@ -813,15 +851,36 @@ func (c *SimpleEdgeClient) HandleReloadRequest(req *pb.ConfigurationReloadReques
 		Str("operation_id", req.OperationId).
 		Msg("SimpleEdgeClient received reload request")
 
-	if c.reloadHandler != nil {
-		if handler, ok := c.reloadHandler.(interface{ HandleReloadRequest(*pb.ConfigurationReloadRequest) }); ok {
-			handler.HandleReloadRequest(req)
-		} else {
-			log.Error().Msg("Reload handler does not implement HandleReloadRequest method")
+	c.reloadMu.Lock()
+	handler := c.reloadHandler
+	if handler == nil {
+		// Not ready yet: hold it for SetReloadHandler. A push control sends
+		// again (same operation) replaces the one held.
+		for i, h := range c.heldReloads {
+			if h.OperationId == req.OperationId {
+				c.heldReloads = append(c.heldReloads[:i], c.heldReloads[i+1:]...)
+				break
+			}
 		}
-	} else {
-		log.Warn().Msg("No reload handler set - reload request ignored")
+		if len(c.heldReloads) >= maxHeldReloads {
+			c.heldReloads = c.heldReloads[1:]
+		}
+		c.heldReloads = append(c.heldReloads, req)
+		c.reloadMu.Unlock()
+		log.Info().Str("operation_id", req.OperationId).Msg("Reload request held until the reload handler is set")
+		return
 	}
+	c.reloadMu.Unlock()
+	dispatchReload(handler, req)
+}
+
+// dispatchReload hands req to handler.
+func dispatchReload(handler interface{}, req *pb.ConfigurationReloadRequest) {
+	if h, ok := handler.(interface{ HandleReloadRequest(*pb.ConfigurationReloadRequest) }); ok {
+		h.HandleReloadRequest(req)
+		return
+	}
+	log.Error().Msg("Reload handler does not implement HandleReloadRequest method")
 }
 
 // Stop closes the connection to control server
@@ -879,6 +938,14 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 
 // sendHeartbeat sends a heartbeat message to the control instance
 func (c *SimpleEdgeClient) sendHeartbeat() {
+	c.sendHeartbeatMessage()
+
+	// Send pending control payloads (piggybacking on heartbeat interval)
+	c.sendPendingControlPayloads()
+}
+
+// sendHeartbeatMessage sends one heartbeat with the loaded checksum.
+func (c *SimpleEdgeClient) sendHeartbeatMessage() {
 	loadedChecksum, loadedVersion := c.loadedConfig()
 	heartbeat := &pb.EdgeMessage{
 		Message: &pb.EdgeMessage_Heartbeat{
@@ -906,9 +973,6 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 			Str("checksum", loadedChecksum).
 			Msg("Heartbeat sent with config checksum")
 	}
-
-	// Send pending control payloads (piggybacking on heartbeat interval)
-	c.sendPendingControlPayloads()
 }
 
 // sendPendingControlPayloads sends pending plugin control payloads to the control server
@@ -966,7 +1030,7 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 
 	// Initial backoff parameters
 	baseDelay := c.reconnectInterval
-	maxDelay := 5 * time.Minute
+	maxDelay := reconnectBackoffCap(baseDelay)
 	backoffMultiplier := 2.0
 	jitterFactor := 0.1
 
@@ -1026,6 +1090,23 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		c.reconnectAttempts = 0
 		return
 	}
+}
+
+// maxReconnectBackoff caps the reconnect backoff (before jitter). The
+// backoff doubles from EDGE_RECONNECT_INTERVAL; uncapped (it used to stop
+// at 5 minutes) an edge could come back minutes after control did: with a
+// 2 s interval and a 70 s outage, about a minute late. 30 s keeps a large
+// fleet from hammering a recovering control plane while bounding how late
+// an edge reconnects.
+const maxReconnectBackoff = 30 * time.Second
+
+// reconnectBackoffCap is the backoff cap for a reconnect interval: 30 s,
+// or the interval itself if that is longer.
+func reconnectBackoffCap(interval time.Duration) time.Duration {
+	if interval > maxReconnectBackoff {
+		return interval
+	}
+	return maxReconnectBackoff
 }
 
 // stopping reports whether Stop has been called.
@@ -1131,22 +1212,12 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 
 	// Configure transport credentials (TLS or insecure)
 	if c.config.HubSpoke.ClientTLSEnabled {
-		var tlsConfig *tls.Config
-
-		if c.config.HubSpoke.SkipTLSVerify {
-			tlsConfig = &tls.Config{InsecureSkipVerify: true}
-			log.Warn().Msg("🔒 SECURITY: TLS certificate verification disabled - not recommended for production")
-		} else {
-			tlsConfig = &tls.Config{}
+		tlsConfig, err := clientTLSConfig(c.config.HubSpoke)
+		if err != nil {
+			return nil, err
 		}
-
-		// Load client certificates if provided
-		if c.config.HubSpoke.ClientTLSCertPath != "" && c.config.HubSpoke.ClientTLSKeyPath != "" {
-			cert, err := tls.LoadX509KeyPair(c.config.HubSpoke.ClientTLSCertPath, c.config.HubSpoke.ClientTLSKeyPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load client certificates: %w", err)
-			}
-			tlsConfig.Certificates = []tls.Certificate{cert}
+		if c.config.HubSpoke.SkipTLSVerify {
+			log.Warn().Msg("🔒 SECURITY: TLS certificate verification disabled - not recommended for production")
 		}
 
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))

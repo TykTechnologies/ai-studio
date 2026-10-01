@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -33,6 +34,8 @@ type DatabaseHandler struct {
 	teams *teamStamper
 	ctx                 context.Context
 	cancel              context.CancelFunc
+	// workerDone is closed when the worker has returned.
+	workerDone chan struct{}
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
@@ -101,8 +104,6 @@ func (h *DatabaseHandler) start() {
 	h.recStarted = true
 	h.recMutex.Unlock()
 
-	initDB(h.db)
-
 	defaultBufferSize := 1000
 	analyticsBufferSizeStr := os.Getenv("ANALYTICS_BUFFER_SIZE")
 	if n := bufferSizeSetting.Load(); n > 0 {
@@ -132,13 +133,38 @@ func (h *DatabaseHandler) start() {
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
 
-	// Start background workers
-	go h.startWorker()
+	// Start background workers. A panic writing one record loses that
+	// record, not the worker (nor the process); workerDone closes once the
+	// worker has stopped for good.
+	h.workerDone = make(chan struct{})
+	go func() {
+		defer close(h.workerDone)
+		safe.Loop("analytics writer", h.ctx.Done(), h.startWorker)
+	}()
+}
+
+// waitStopped waits, up to d, for the worker of a stopped handler (its
+// context done) to return. A running handler returns at once.
+func (h *DatabaseHandler) waitStopped(d time.Duration) {
+	if h.workerDone == nil || h.ctx.Err() == nil {
+		return
+	}
+	select {
+	case <-h.workerDone:
+	case <-time.After(d):
+	}
 }
 
 // startWorker runs the main worker loop for handling database writes
 func (h *DatabaseHandler) startWorker() {
 	for {
+		// Stopping wins over buffered records: select picks among ready
+		// cases at random, so without this a stopped handler could go on
+		// writing its buffers out after Stop returned.
+		if h.ctx.Err() != nil {
+			h.shutdown()
+			return
+		}
 		select {
 		case record := <-h.chatRecordChan:
 			h.teams.stamp(record)
@@ -235,17 +261,22 @@ func (h *DatabaseHandler) startWorker() {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
 			}
 		case <-h.ctx.Done():
-			logger.Info("shutting down database analytics handler")
-			h.recMutex.Lock()
-			h.recStarted = false
-			h.recMutex.Unlock()
-			// The channels stay open: a recorder that checked recStarted
-			// before this point may still send, and a send on a closed
-			// channel panics. Nothing ranges over them, so leaving them
-			// open only leaves unread records in the buffers.
+			h.shutdown()
 			return
 		}
 	}
+}
+
+// shutdown marks the handler stopped as its worker returns.
+func (h *DatabaseHandler) shutdown() {
+	logger.Info("shutting down database analytics handler")
+	h.recMutex.Lock()
+	h.recStarted = false
+	h.recMutex.Unlock()
+	// The channels stay open: a recorder that checked recStarted
+	// before this point may still send, and a send on a closed
+	// channel panics. Nothing ranges over them, so leaving them
+	// open only leaves unread records in the buffers.
 }
 
 // createRecordWithRetry executes database operations with retry logic for lock errors
@@ -295,7 +326,19 @@ func (h *DatabaseHandler) Stop() {
 	if h.cancel != nil {
 		h.cancel()
 	}
+	// Wait for a write in progress (bounded: a write stuck on the database
+	// must not hold up shutdown), so nothing is written after Stop returns.
+	if h.workerDone != nil {
+		select {
+		case <-h.workerDone:
+		case <-time.After(stopWait):
+			logger.Warnf("Analytics worker still writing %s after Stop; not waiting longer", stopWait)
+		}
+	}
 }
+
+// stopWait bounds how long Stop waits for the worker.
+var stopWait = 5 * time.Second
 
 // Implement AnalyticsHandler interface methods
 func (h *DatabaseHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
@@ -463,21 +506,9 @@ func (h *DatabaseHandler) SetAsGlobalHandler() {
 }
 
 // Migrate creates or updates the analytics tables. pkg/studio runs it with
-// the other migrations under the cross-instance migration lock; the handler
-// runs it again at start, which is a no-op on an up-to-date schema.
+// the other migrations under the cross-instance migration lock. The handler
+// does not migrate: it may write to a database whose schema another instance
+// owns, so whoever owns the schema calls Migrate before recording starts.
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&models.LLMChatRecord{},
-		&models.LLMChatLogEntry{},
-		&models.ToolCallRecord{},
-		&models.ProxyLog{},
-		&models.ComplianceEvent{},
-	)
-}
-
-// initDB handles database migration - moved from analytics.go
-func initDB(db *gorm.DB) {
-	if err := Migrate(db); err != nil {
-		logger.Warnf("Error migrating analytics tables: %s", sanitizeError(err))
-	}
+	return db.AutoMigrate(models.AnalyticsModels()...)
 }

@@ -2,11 +2,11 @@ package secrets
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"reflect"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -59,14 +59,14 @@ func GetValue(reference string, preserveRef bool) string {
 		if dbRef != nil {
 			val, err := GetSecretByVarName(dbRef, name, preserveRef)
 			if err != nil {
-				log.Println(err)
+				logger.Log.Warn().Err(err).Str("secret", name).Msg("Could not resolve secret reference")
 				return reference
 			}
 
 			return val.Value
 		}
 
-		log.Println("database reference is nil!")
+		logger.Log.Warn().Str("secret", name).Msg("Could not resolve secret reference: no database")
 		return reference
 	default:
 		return reference
@@ -109,7 +109,7 @@ func FilterSensitiveFields(obj interface{}) interface{} {
 func FilterSesitiveFieldsArr(in interface{}) interface{} {
 	s := reflect.ValueOf(in)
 	if s.Kind() != reflect.Slice {
-		log.Printf("FilterSesitiveFieldsArr: given a non-slice type %T, returning input unchanged", in)
+		logger.Log.Warn().Msgf("FilterSesitiveFieldsArr: given a non-slice type %T, returning input unchanged", in)
 		return in
 	}
 

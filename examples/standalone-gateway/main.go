@@ -74,7 +74,10 @@ func realWorldExample() {
 			log.Fatalf("Failed to connect to database: %v", err)
 		}
 
-		// Initialize analytics first
+		// Initialize analytics first (the recorder does not create its tables)
+		if err := analytics.Migrate(db); err != nil {
+			log.Fatalf("Failed to migrate analytics tables: %v", err)
+		}
 		ctx := context.Background()
 		analytics.InitDefault(ctx, db)
 

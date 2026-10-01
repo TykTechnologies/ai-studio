@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -101,6 +102,43 @@ func TestRelay_CarriesEdgeAndObjectEventsToEveryReplica(t *testing.T) {
 }
 
 // A burst keeps its order per publishing replica.
+// Stopping a relay while the log is delivering other replicas' events onto
+// its bus is safe (under -race): the bus library's Unsubscribe is not
+// synchronised with a Publish in flight on another goroutine.
+func TestRelay_StopWhileDelivering(t *testing.T) {
+	c := newTestCluster(t)
+	a := c.startRelayReplica("a", RelayOptions{})
+
+	// Replica b's log reader publishes a relayed event on b's bus, where it
+	// reaches the relay's own subscription first (the bus invokes the newest
+	// first) and is then held in the subscriber below until b's relay stops.
+	// Nothing orders the reader's visit to the relay's subscription before
+	// the relay's Stop except the relay itself: the test must not signal
+	// from the reader, so it waits for the delivery by time.
+	b := c.startReplica("b", LogOptions{PollInterval: 50 * time.Millisecond})
+	bus := eventbridge.NewBus()
+	stopping := make(chan struct{})
+	var held atomic.Bool
+	bus.SubscribeAll(func(ev eventbridge.Event) {
+		if ev.RelayedFrom == "" || held.Swap(true) {
+			return
+		}
+		select {
+		case <-stopping:
+		case <-time.After(5 * time.Second):
+		}
+	})
+	relay := NewRelay(b.log, bus, RelayOptions{})
+	relay.Start()
+	t.Cleanup(relay.Stop)
+
+	busPublish(t, a.bus, "system.test.stop", eventbridge.DirLocal)
+	time.Sleep(time.Second)
+	close(stopping)
+	relay.Stop()
+	assert.True(t, held.Load(), "the event was relayed")
+}
+
 func TestRelay_KeepsOrder(t *testing.T) {
 	c := newTestCluster(t)
 	a := c.startRelayReplica("a", RelayOptions{})

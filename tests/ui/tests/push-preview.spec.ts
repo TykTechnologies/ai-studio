@@ -29,7 +29,7 @@ async function api(page: Page, method: 'get' | 'post' | 'patch', path: string, d
 }
 
 test('the push dialog lists what changed and the banner clears after the push', async ({ page, loginPage, adminMainPage }) => {
-    test.setTimeout(120000);
+    test.setTimeout(150000);
 
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
@@ -76,9 +76,13 @@ test('the push dialog lists what changed and the banner clears after the push', 
     await expect(row.getByRole('link', { name: llm.attributes.name })).toHaveAttribute('href', `/admin/llms/${llm.id}`);
     await expect(dialog.getByTestId('pending-changes-summary').first()).toContainText(/change/);
 
-    // Push, then the banner clears once the edge acknowledges.
+    // Push. The dialog follows the push (PushProgress) until the edge has
+    // loaded it: "Pushing configuration" while it runs, then "Configuration
+    // pushed" (or "..., with warnings"). Then the banner clears.
     await dialog.getByRole('button', { name: /^Push (Configuration|anyway)$/ }).click();
-    await expect(dialog.getByText(/successfully pushed|push initiated/i)).toBeVisible({ timeout: 20000 });
+    const outcome = dialog.getByTestId('push-outcome');
+    await expect(outcome).toBeVisible({ timeout: 20000 });
+    await expect(outcome).toContainText(/Configuration pushed/, { timeout: 60000 });
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(banner).toBeHidden({ timeout: 30000 });
 

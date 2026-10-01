@@ -106,6 +106,19 @@ func (a *API) publicPath(path string) string {
 	return a.basePath + path
 }
 
+// publicURL returns path (which starts with "/") as an absolute URL on
+// rawURL's origin (SITE_URL or AUTH_SERVER_URL), under the base path. Any
+// path in rawURL is ignored: with BASE_PATH empty this gives the v2.2.0
+// result, where a path in SITE_URL did not move Studio's routes, and under a
+// base path it gives the routes where Studio serves them.
+func (a *API) publicURL(rawURL, path string) (*url.URL, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	return &url.URL{Scheme: u.Scheme, User: u.User, Host: u.Host, Path: a.publicPath(path)}, nil
+}
+
 // cookiePath is the path Studio's cookies are scoped to.
 func (a *API) cookiePath() string {
 	if a.basePath == "" {

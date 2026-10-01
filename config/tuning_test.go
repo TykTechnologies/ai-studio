@@ -53,3 +53,35 @@ func TestInstalledNeverLoads(t *testing.T) {
 	Set(conf)
 	assert.Same(t, conf, Installed())
 }
+
+// The control server's transport settings match the edge's defaults
+// (GRPC_MAX_MESSAGE_SIZE is 16 MB on both sides); connection ageing is off.
+func TestLoadFrom_GRPCTransport(t *testing.T) {
+	defaults := LoadFrom(func(string) string { return "" })
+	assert.Equal(t, 16*1024*1024, defaults.GRPCMaxMessageSize)
+	assert.Zero(t, defaults.GRPCMaxConnectionAge)
+	assert.Zero(t, defaults.GRPCMaxConnectionAgeGrace)
+
+	env := map[string]string{
+		"GRPC_MAX_MESSAGE_SIZE":         "33554432",
+		"GRPC_MAX_CONNECTION_AGE":       "1h",
+		"GRPC_MAX_CONNECTION_AGE_GRACE": "30s",
+	}
+	c := LoadFrom(func(k string) string { return env[k] })
+	assert.Equal(t, 32*1024*1024, c.GRPCMaxMessageSize)
+	assert.Equal(t, time.Hour, c.GRPCMaxConnectionAge)
+	assert.Equal(t, 30*time.Second, c.GRPCMaxConnectionAgeGrace)
+
+	bad := LoadFrom(func(k string) string { return map[string]string{"GRPC_MAX_MESSAGE_SIZE": "-5"}[k] })
+	assert.Equal(t, 16*1024*1024, bad.GRPCMaxMessageSize, "invalid values keep the default")
+}
+
+// MIGRATION_LOCK_TIMEOUT bounds a starting Studio's wait for another
+// instance's migrations (default 15m).
+func TestLoadFrom_MigrationLockTimeout(t *testing.T) {
+	assert.Equal(t, 15*time.Minute, LoadFrom(func(string) string { return "" }).MigrationLockTimeout)
+	set := LoadFrom(func(k string) string { return map[string]string{"MIGRATION_LOCK_TIMEOUT": "90s"}[k] })
+	assert.Equal(t, 90*time.Second, set.MigrationLockTimeout)
+	bad := LoadFrom(func(k string) string { return map[string]string{"MIGRATION_LOCK_TIMEOUT": "0"}[k] })
+	assert.Equal(t, 15*time.Minute, bad.MigrationLockTimeout, "invalid values keep the default")
+}

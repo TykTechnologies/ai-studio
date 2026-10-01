@@ -2,9 +2,11 @@ package eventbridge
 
 import (
 	"encoding/json"
+	"runtime/debug"
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/simonfxr/pubsub"
 )
 
@@ -51,13 +53,35 @@ func NewBus() *PubSubBus {
 
 // Subscribe registers a callback for events on a specific topic.
 func (b *PubSubBus) Subscribe(topic string, fn func(Event)) *pubsub.Subscription {
-	return b.ps.Subscribe(topic, fn)
+	return b.ps.Subscribe(topic, guarded(fn))
+}
+
+// guarded recovers a panic in a subscriber. Subscribers run on the
+// publisher's goroutine (an API request, an edge stream, the cluster log
+// reader): one subscriber's panic must neither end that goroutine (or the
+// process) nor keep the event from the subscribers after it.
+//
+// The package recovers by itself rather than through pkg/safe: plugins and
+// the microgateway import it, and pkg/safe brings Studio's logger and
+// metrics (gorm, OpenTelemetry, Prometheus) into their module graphs.
+func guarded(fn func(Event)) func(Event) {
+	return func(ev Event) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Str("topic", ev.Topic).Str("event_id", ev.ID).Interface("panic", r).
+					Str("stack", string(debug.Stack())).
+					Msg("An event bus subscriber panicked; it missed this event")
+			}
+		}()
+		fn(ev)
+	}
 }
 
 // SubscribeAll registers a callback for all events.
 // This is implemented by subscribing to a special wildcard topic that
 // receives all published events.
 func (b *PubSubBus) SubscribeAll(fn func(Event)) *pubsub.Subscription {
+	fn = guarded(fn)
 	sub := b.ps.Subscribe(b.wildcardTopic, fn)
 
 	b.mu.Lock()

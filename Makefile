@@ -511,9 +511,14 @@ gorm-vendor: ## Rebuild third_party/gorm.io from the pins in third_party/gorm-pi
 gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports gorm.io
 	@scripts/gorm-verify.sh
 
+.PHONY: vet
+vet: ## go vet the root, microgateway and enterprise modules in both editions, excluding third_party/ (VET_EDITION=ce|ent|all)
+	@scripts/vet.sh $(or $(VET_EDITION),all)
+
 .PHONY: host-compat
-host-compat: ## Check Studio against the Tyk Dashboard's go.mod: version floor, then build inside its module graph (needs GH_TOKEN + access)
-	@scripts/host-compat.sh --build
+HOST_REPOS ?= tyk-analytics tyk-sink
+host-compat: ## Check Studio against the Tyk Dashboard's and MDCB's go.mod (HOST_REPOS): version floor, then build inside each module graph (needs GH_TOKEN + access)
+	@HOST_REPOS="$(HOST_REPOS)" scripts/host-compat.sh --build
 
 .PHONY: module-check
 module-check: ## Check the Go proxy would accept HEAD as a module zip (commit first)
@@ -527,9 +532,19 @@ ent-link: ## Link enterprise tests of core packages in from enterprise/_coretest
 enterprise-import-guard: ## Check no public package imports the private enterprise module
 	@scripts/enterprise-import-guard.sh
 
+.PHONY: logging-guard
+logging-guard: ## Check the control-plane packages log only through the logger package (an embedding host's logger)
+	@scripts/logging-guard.sh
+
 .PHONY: langchaingo-verify
 langchaingo-verify: ## Check nothing builds with upstream github.com/tmc/langchaingo (use third_party/langchaingo)
 	@scripts/langchaingo-verify.sh
+
+# PLUGIN_MOD_ROOTS limits the directories searched (default: examples,
+# enterprise/plugins, community/plugins, tyk-internal/plugins where present).
+.PHONY: plugins-mod-check
+plugins-mod-check: ## Check every in-repo plugin module's go.mod is tidy against this tree (PLUGIN_MOD_BUILD=1 also builds them)
+	@scripts/plugins-mod-check.sh $(if $(PLUGIN_MOD_BUILD),--build) $(PLUGIN_MOD_ROOTS)
 
 # ============================================================================
 # Plugin Release (build -> sign -> push -> marketplace index entry)

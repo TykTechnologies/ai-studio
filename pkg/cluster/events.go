@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -32,9 +34,12 @@ type Handler func(Event)
 // LogOptions tune the event log. The zero value gives the defaults.
 type LogOptions struct {
 	// PollInterval is how often the log is read without a notification
-	// (default 1 s). Notifications only make delivery faster: a lost one
+	// (default 5 s). Notifications only make delivery faster: a lost one
 	// (listener reconnecting, NOTIFY dropped) delays an event by at most
-	// this long.
+	// this long. Every notification wakes a read, and so does every
+	// listener reconnect, so the poll only covers a listener whose
+	// connection died unnoticed. Each poll is two queries on every
+	// replica, idle or not.
 	PollInterval time.Duration
 	// Window is how far back every read looks again for rows it has not
 	// seen (default 30 s). An id is allocated before its row commits, so a
@@ -54,15 +59,20 @@ type LogOptions struct {
 	ListenerDSN string
 }
 
+// DefaultLogRetention is how long the event log keeps rows unless
+// LogOptions.Retention says otherwise: the longest a reader can fall behind
+// and still read every event.
+const DefaultLogRetention = 15 * time.Minute
+
 func (o LogOptions) withDefaults() LogOptions {
 	if o.PollInterval <= 0 {
-		o.PollInterval = time.Second
+		o.PollInterval = 5 * time.Second
 	}
 	if o.Window <= 0 {
 		o.Window = 30 * time.Second
 	}
 	if o.Retention < 2*o.Window {
-		o.Retention = 15 * time.Minute
+		o.Retention = DefaultLogRetention
 		if o.Retention < 2*o.Window {
 			o.Retention = 2 * o.Window
 		}
@@ -78,7 +88,10 @@ func (o LogOptions) withDefaults() LogOptions {
 
 // LogStats describe a log's progress, for status pages and tests.
 type LogStats struct {
-	Enabled            bool
+	Enabled bool
+	// Listening reports whether notifications wake the reader; without
+	// them (the listener cannot connect) it reads every PollInterval.
+	Listening          bool
 	Cursor             int64     // highest id handled
 	Delivered          uint64    // events handed to handlers
 	LastRead           time.Time // last successful read
@@ -111,9 +124,7 @@ type Log struct {
 	statsMu sync.Mutex
 	stats   LogStats
 
-	listener     *pglisten.Listener
-	sub          *pglisten.Subscription
-	removeHook   func()
+	follower     *pglisten.Follower
 	wake         chan struct{}
 	stop         chan struct{}
 	done         chan struct{}
@@ -167,16 +178,26 @@ func (l *Log) Subscribe(topic string, h Handler) (unsubscribe func()) {
 // Start begins reading. On Postgres it positions the log after the events
 // already published (so none is replayed), listens for notifications, and
 // reads on every notification, every PollInterval and after every listener
-// reconnect. On other databases it does nothing.
+// reconnect. The notifications only make delivery faster: when the listener
+// cannot connect, the log reads every PollInterval and keeps trying to
+// listen in the background. On other databases it does nothing.
 func (l *Log) Start(ctx context.Context) error {
 	l.startOnce.Do(func() { l.startErr = l.start(ctx) })
 	return l.startErr
 }
 
-func (l *Log) start(ctx context.Context) error {
+// errStoppedBeforeStart is what Start returns after Stop.
+var errStoppedBeforeStart = errors.New("cluster event log: stopped before it started")
+
+func (l *Log) start(ctx context.Context) (err error) {
+	// Stop waits for the reader; without one it must not wait at all.
+	defer func() {
+		if err != nil || !l.enabled {
+			close(l.done)
+		}
+	}()
 	l.setStats(func(s *LogStats) { s.Enabled = l.enabled })
 	if !l.enabled {
-		close(l.done)
 		return nil
 	}
 
@@ -206,26 +227,22 @@ func (l *Log) start(ctx context.Context) error {
 
 	dsn := l.opts.ListenerDSN
 	if dsn == "" {
-		var err error
-		if dsn, err = pglisten.DSN(l.db); err != nil {
-			return fmt.Errorf("cluster event log: %w", err)
-		}
+		dsn, err = pglisten.DSN(l.db)
 	}
-	listener, err := pglisten.Acquire(dsn, pglisten.Options{Name: "Cluster event listener", ConnectTimeout: 30 * time.Second})
 	if err != nil {
-		return fmt.Errorf("cluster event log: %w", err)
+		logger.Warnf("Cluster event log: %v; reading the log every %s without notifications", err, l.opts.PollInterval)
+	} else {
+		follower := pglisten.Follow(dsn, l.channel, pglisten.Options{Name: "Cluster event listener", ConnectTimeout: 30 * time.Second},
+			func(string) { l.poke() },
+			func() {
+				l.setStats(func(s *LogStats) { s.ListenerReconnects++ })
+				logger.Info("Cluster event listener reconnected; reading the event log to catch up")
+				l.poke()
+			})
+		l.statsMu.Lock()
+		l.follower = follower
+		l.statsMu.Unlock()
 	}
-	sub, err := listener.Subscribe(l.channel, func(string) { l.poke() }, 30*time.Second)
-	if err != nil {
-		listener.Release()
-		return fmt.Errorf("cluster event log: %w", err)
-	}
-	l.listener, l.sub = listener, sub
-	l.removeHook = listener.OnReconnect(func() {
-		l.setStats(func(s *LogStats) { s.ListenerReconnects++ })
-		logger.Info("Cluster event listener reconnected; reading the event log to catch up")
-		l.poke()
-	})
 
 	go l.run()
 	return nil
@@ -264,6 +281,53 @@ func (l *Log) Publish(ctx context.Context, topic string, payload []byte) error {
 	return nil
 }
 
+// PublishBatch appends one event per payload, all on topic, in one
+// statement with one notification: for a burst of events (an edge's batch of
+// plugin payloads) that would otherwise cost a round trip each. Either every
+// event is appended or none is.
+func (l *Log) PublishBatch(ctx context.Context, topic string, payloads [][]byte) error {
+	if !l.enabled || len(payloads) == 0 {
+		return nil
+	}
+	channel := l.channel
+	if channel == "" {
+		var schema string
+		if err := l.db.WithContext(ctx).Raw("SELECT current_schema()").Scan(&schema).Error; err != nil {
+			return fmt.Errorf("cluster: publish %s: %w", topic, err)
+		}
+		channel = "studio_cluster_events_" + schema
+	}
+	// One parameter per payload, all in one statement. The space in "( ?"
+	// matters: gorm expands a slice placed right after "(" into a list of
+	// its elements, and a []byte is a slice.
+	args := make([]interface{}, 0, len(payloads)+3)
+	args = append(args, topic, l.node)
+	values := make([]string, len(payloads))
+	for i, p := range payloads {
+		if p == nil {
+			p = []byte{}
+		}
+		values[i] = "( ?::bytea)"
+		args = append(args, p)
+	}
+	args = append(args, channel)
+	// The rows and the notification commit together.
+	var n int64
+	err := l.db.WithContext(ctx).Raw(
+		`WITH ins AS (INSERT INTO cluster_events (topic, origin, payload, created_at)
+		   SELECT ?, ?, v.p, now() FROM (VALUES `+strings.Join(values, ", ")+`) AS v(p) RETURNING id)
+		 SELECT c.n FROM (SELECT count(*) AS n, max(id) AS last FROM ins) c,
+		   LATERAL (SELECT pg_notify(?, c.last::text)) notified`,
+		args...).Scan(&n).Error
+	if err != nil {
+		return fmt.Errorf("cluster: publish %s: %w", topic, err)
+	}
+	if n != int64(len(payloads)) {
+		return fmt.Errorf("cluster: publish %s: %d of %d events appended", topic, n, len(payloads))
+	}
+	return nil
+}
+
 // Enabled reports whether this database carries the log (Postgres). On
 // other databases Publish does nothing and no event is delivered.
 func (l *Log) Enabled() bool { return l.enabled }
@@ -272,20 +336,26 @@ func (l *Log) Enabled() bool { return l.enabled }
 func (l *Log) Stats() LogStats {
 	l.statsMu.Lock()
 	defer l.statsMu.Unlock()
-	return l.stats
+	s := l.stats
+	s.Listening = l.follower != nil && l.follower.Listening()
+	return s
 }
 
-// Stop ends reading. No handler runs after it returns.
+// Stop ends reading. No handler runs after it returns. It returns promptly
+// whether or not Start ran or succeeded; a Start after Stop does nothing.
 func (l *Log) Stop() {
 	l.stopOnce.Do(func() {
+		l.startOnce.Do(func() {
+			l.startErr = errStoppedBeforeStart
+			close(l.done)
+		})
 		close(l.stop)
 		<-l.done
-		if l.listener != nil {
-			if l.removeHook != nil {
-				l.removeHook()
-			}
-			l.listener.Unsubscribe(l.channel, l.sub, 10*time.Second)
-			l.listener.Release()
+		l.statsMu.Lock()
+		follower := l.follower
+		l.statsMu.Unlock()
+		if follower != nil {
+			follower.Close()
 		}
 	})
 }
@@ -299,6 +369,10 @@ func (l *Log) poke() {
 
 func (l *Log) run() {
 	defer close(l.done)
+	safe.Loop("cluster event log", l.stop, l.loop)
+}
+
+func (l *Log) loop() {
 	poll := time.NewTicker(l.opts.PollInterval)
 	defer poll.Stop()
 	prune := time.NewTicker(l.opts.PruneInterval)
@@ -448,8 +522,9 @@ func (l *Log) readFailed(err error) {
 	if first {
 		logger.Warnf("Cluster event log: reading events failed; retrying (events from other replicas are delayed until it recovers): %v", err)
 	}
-	// Do not hammer a database that is down: skip reads for a moment.
-	l.backoffUntil = time.Now().Add(l.opts.PollInterval * 2)
+	// Do not hammer a database that is down: skip reads for a moment
+	// (notifications included, so not for longer than a couple of seconds).
+	l.backoffUntil = time.Now().Add(min(l.opts.PollInterval*2, 2*time.Second))
 }
 
 func (l *Log) readSucceeded() {

@@ -12,7 +12,27 @@ type ClusterNode struct {
 	Version   string    `json:"version" gorm:"size:64"`
 	StartedAt time.Time `json:"started_at"`
 	LastSeen  time.Time `json:"last_seen" gorm:"index"`
+	// PID, BootID (the running kernel) and PIDNamespace locate the
+	// replica's process, so a replica restarted on the same host after a
+	// crash can tell that the lease holder is its dead predecessor and
+	// take over at once (pkg/cluster.Leadership). Empty on rows written
+	// before they existed.
+	PID          int    `json:"pid" gorm:"column:pid"`
+	BootID       string `json:"boot_id" gorm:"column:boot_id;size:64"`
+	PIDNamespace string `json:"pid_namespace" gorm:"column:pid_namespace;size:64"`
+	// Label names the replica for operators (a full Studio "studio" or
+	// "dashboard", a headless control plane "mdcb-<host>"). Empty on rows
+	// written before labels existed.
+	Label string `json:"label" gorm:"column:label;size:64"`
+	// LeaderEligible is false for a replica that never takes the leader
+	// lease (a headless control plane). Nil on rows written before it
+	// existed, which means eligible. A pointer without a gorm default: a
+	// bool with default:true would turn an explicit false into true.
+	LeaderEligible *bool `json:"leader_eligible" gorm:"column:leader_eligible"`
 }
+
+// CanLead reports whether the replica may take the leader lease.
+func (n ClusterNode) CanLead() bool { return n.LeaderEligible == nil || *n.LeaderEligible }
 
 // ClusterEvent is one entry of the cluster event log: an event every other
 // replica must see (pkg/cluster). Readers track the ids they have handled;

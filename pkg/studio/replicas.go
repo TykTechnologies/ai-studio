@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
 // signalTopic is the cluster log topic replica signals (pkg/replicas)
@@ -19,11 +21,16 @@ const signalTopic = "replica.signal"
 
 // replicaBackend connects pkg/replicas to this Studio's cluster membership.
 type replicaBackend struct {
-	s       *Studio
+	c       *clusterParts
 	signals *signalSender
 }
 
-func (b replicaBackend) IsLeader() bool { return b.s.leadership.IsLeader() }
+// IsLeader: holding the leader lease. A replica without one (a headless
+// control plane) never leads; pkg/replicas would take no backend at all to
+// mean the only replica, which leads.
+func (b replicaBackend) IsLeader() bool {
+	return b.c.leadership != nil && b.c.leadership.IsLeader()
+}
 
 // Signal queues the signal; it never waits for the database (it is called
 // from API requests).
@@ -68,6 +75,10 @@ func (ss *signalSender) send(name string) {
 
 func (ss *signalSender) run() {
 	defer close(ss.done)
+	safe.Loop("replica signal sender", ss.stop, ss.loop)
+}
+
+func (ss *signalSender) loop() {
 	for {
 		select {
 		case <-ss.wake:
@@ -116,14 +127,15 @@ func (ss *signalSender) close() {
 	})
 }
 
-// connectReplicas makes pkg/replicas answer for this Studio: leadership
-// from the leader lease, signals over the cluster event log.
-func (s *Studio) connectReplicas() {
-	s.unsubscribeSignals = s.clusterLog.Subscribe(signalTopic, func(ev cluster.Event) {
+// connectReplicas makes pkg/replicas answer for this replica: leadership
+// from the leader lease (never, without one), signals over the cluster
+// event log.
+func (c *clusterParts) connectReplicas() {
+	c.unsubscribeSignals = c.clusterLog.Subscribe(signalTopic, func(ev cluster.Event) {
 		replicas.Deliver(string(ev.Payload))
 	})
-	s.signals = newSignalSender(s.clusterLog)
-	replicas.SetBackend(replicaBackend{s: s, signals: s.signals})
+	c.signals = newSignalSender(c.clusterLog)
+	replicas.SetBackend(replicaBackend{c: c, signals: c.signals})
 }
 
 // coalescer runs fn in the background after a trigger, once for any number
@@ -173,7 +185,13 @@ func (c *coalescer) loop() {
 		}
 		c.pending = false
 		c.mu.Unlock()
-		if err := c.fn(); err != nil {
+		// A panic counts as a failed run: the coalescer keeps running
+		// (a goroutine that died here would leave it "running" for good).
+		var err error
+		if safe.Call(c.name, func() { err = c.fn() }) {
+			err = errors.New("panicked")
+		}
+		if err != nil {
 			logger.Errorf("Applying a change from another replica (%s) failed; this replica may serve the old configuration until the next change: %v", c.name, err)
 		}
 	}
@@ -234,7 +252,10 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 	go func() {
 		defer close(rc.pluginsDone)
 		for ch := range rc.plugins {
-			service.ApplyPluginChangeFromReplica(ch.topic, ch.id)
+			// One plugin's failure must not stop the others' changes.
+			safe.Call("plugin change from another replica", func() {
+				service.ApplyPluginChangeFromReplica(ch.topic, ch.id)
+			})
 		}
 	}()
 	sub := bus.SubscribeAll(func(ev eventbridge.Event) {

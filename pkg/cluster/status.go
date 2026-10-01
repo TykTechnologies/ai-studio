@@ -16,6 +16,11 @@ type NodeStatus struct {
 	Version   string    `json:"version"`
 	StartedAt time.Time `json:"started_at"`
 	LastSeen  time.Time `json:"last_seen"`
+	// Label names the replica for operators (empty when it has none).
+	Label string `json:"label"`
+	// LeaderEligible is false for a replica that never takes the leader
+	// lease (a headless control plane).
+	LeaderEligible bool `json:"leader_eligible"`
 	// Edges is how many connected edges hold a stream to this replica.
 	Edges int64 `json:"edges"`
 	// Leader: this replica holds the leader lease.
@@ -93,6 +98,7 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 		st.Nodes = append(st.Nodes, NodeStatus{
 			NodeID: n.NodeID, Hostname: n.Hostname, Version: n.Version,
 			StartedAt: n.StartedAt, LastSeen: n.LastSeen,
+			Label: n.Label, LeaderEligible: n.CanLead(),
 			Edges: edges[n.NodeID], Leader: n.NodeID == leader, Self: n.NodeID == self,
 		})
 	}
@@ -148,6 +154,8 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	if st.Database == "postgres" {
 		if log != nil && !st.EventLog.Enabled {
 			st.Warnings = append(st.Warnings, "The cluster event log is not running on this replica: other replicas' changes do not reach it.")
+		} else if log != nil && !st.EventLog.Listening {
+			st.Warnings = append(st.Warnings, "This replica's PostgreSQL listener is not connected: other replicas' changes reach it by polling, up to a second late (see its log).")
 		}
 		if st.EventLog.LastError != "" {
 			st.Warnings = append(st.Warnings, "Reading the cluster event log fails: "+st.EventLog.LastError)

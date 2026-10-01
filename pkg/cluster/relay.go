@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/simonfxr/pubsub"
 )
 
@@ -19,8 +20,13 @@ const RelayTopic = "bus.event"
 // RelayedByDefault reports whether a bus event must reach every replica:
 // events for edges (DirDown), which each replica forwards to the edges whose
 // streams it holds, and object change events (system.*), which keep every
-// replica's caches and plugins current.
+// replica's caches and plugins current. Nothing an edge sent (FromEdge) is
+// relayed by default: object changes come from Studio, and an edge's
+// system.* event must not make other replicas reload plugins or caches.
 func RelayedByDefault(ev eventbridge.Event) bool {
+	if ev.FromEdge {
+		return false
+	}
 	return ev.Dir == eventbridge.DirDown || strings.HasPrefix(ev.Topic, "system.")
 }
 
@@ -82,6 +88,13 @@ type Relay struct {
 	done     chan struct{}
 	stopOnce sync.Once
 
+	// publishing is held while an event from the log is published on the
+	// bus, and by Stop before it unsubscribes from the bus: the bus
+	// library's Unsubscribe is not synchronised with a Publish in flight on
+	// another goroutine. closed (under it) turns later events away.
+	publishing sync.Mutex
+	closed     bool
+
 	sent, received, dropped atomic.Uint64
 }
 
@@ -113,11 +126,16 @@ func (r *Relay) Start() {
 // publish timeout each.
 func (r *Relay) Stop() {
 	r.stopOnce.Do(func() {
-		if r.sub != nil {
-			r.bus.Unsubscribe(r.sub)
-		}
+		// Stop taking the log's events, and wait for one being published,
+		// before leaving the bus.
 		if r.unsubLog != nil {
 			r.unsubLog()
+		}
+		r.publishing.Lock()
+		r.closed = true
+		r.publishing.Unlock()
+		if r.sub != nil {
+			r.bus.Unsubscribe(r.sub)
 		}
 		close(r.stop)
 		<-r.done
@@ -146,6 +164,11 @@ func (r *Relay) fromBus(ev eventbridge.Event) {
 
 func (r *Relay) run() {
 	defer close(r.done)
+	// A panic loses the event being written, not the relay.
+	safe.Loop("cluster relay", r.stop, r.loop)
+}
+
+func (r *Relay) loop() {
 	for {
 		select {
 		case ev := <-r.queue:
@@ -204,6 +227,11 @@ func (r *Relay) fromCluster(e Event) {
 		return
 	}
 	ev.RelayedFrom = e.Origin
+	r.publishing.Lock()
+	defer r.publishing.Unlock()
+	if r.closed {
+		return
+	}
 	r.received.Add(1)
 	r.bus.Publish(ev)
 }

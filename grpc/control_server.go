@@ -7,6 +7,7 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,9 +20,11 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -31,10 +34,10 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
-	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -52,6 +55,14 @@ type EdgePayloadRouter interface {
 	RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error
 }
 
+// EdgePayloadForwarder takes an edge's plugin payloads to another replica
+// that hosts the plugins, for a replica without them (a headless control
+// plane): a whole batch at once, all or none. A nil error means they are
+// queued for that replica, not that a plugin has handled them.
+type EdgePayloadForwarder interface {
+	ForwardEdgePayloads(ctx context.Context, payloads []*pb.PluginControlPayload) error
+}
+
 // EdgeInstance represents an active edge instance connection
 type EdgeInstanceConnection struct {
 	EdgeID        string
@@ -61,6 +72,12 @@ type EdgeInstanceConnection struct {
 	SessionID     string
 	Stream        pb.ConfigurationSyncService_SubscribeToChangesServer
 	LastHeartbeat time.Time
+
+	// openedAt is when the stream registered; heartbeatSeen is set by its
+	// first heartbeat (under mu). Together they say whether the edge is
+	// ready for pushes (see pushReady).
+	openedAt      time.Time
+	heartbeatSeen bool
 
 	// Event bridge components for this connection
 	streamAdapter *eventbridge.StreamAdapter
@@ -106,9 +123,15 @@ type ControlServer struct {
 	// pushes delivers configuration pushes to the edges whose streams this
 	// replica holds (services/pushes; set after creation).
 	pushes PushDelivery
+	// pushReadyGrace: a stream gets pushes once it has sent a heartbeat, or
+	// once it has been open this long (see pushReady).
+	pushReadyGrace time.Duration
 
 	// Plugin manager for routing edge payloads to plugins
 	pluginManager EdgePayloadRouter
+	// edgePayloads takes the payloads to a replica with plugins when this
+	// one has none (a headless control plane).
+	edgePayloads EdgePayloadForwarder
 
 	// Event bridge: local event bus for control node
 	eventBus eventbridge.Bus
@@ -131,6 +154,10 @@ type Config struct {
 	TLSEnabled           bool
 	TLSCertPath          string
 	TLSKeyPath           string
+	// TLSConfig, when set, is used for TLS instead of TLSCertPath and
+	// TLSKeyPath (and whatever TLSEnabled says): an embedding host supplies
+	// its own certificates, cipher suites and minimum version.
+	TLSConfig            *tls.Config
 	AuthToken            string
 	NextAuthToken        string
 	MaxConcurrentStreams int // Maximum number of concurrent gRPC streams (default 1000)
@@ -144,6 +171,79 @@ type Config struct {
 	// BudgetSyncInterval is how often budget usage is synced to edges.
 	// Zero means BUDGET_SYNC_INTERVAL, or 30s.
 	BudgetSyncInterval time.Duration
+
+	// MaxMessageSize bounds a message in either direction, in bytes (zero:
+	// 16 MB, the edge's own GRPC_MAX_MESSAGE_SIZE default). Configuration
+	// snapshots and analytics pulses outgrow gRPC's 4 MB default.
+	MaxMessageSize int
+	// KeepaliveMinTime is the shortest interval between client pings the
+	// server accepts, with or without an open stream (zero: 10s; edges ping
+	// every 30s). A client pinging more often is disconnected.
+	KeepaliveMinTime time.Duration
+	// MaxConnectionAge, when set, closes each connection after about this
+	// long, so edges spread again over replicas behind a load balancer;
+	// streams get MaxConnectionAgeGrace to finish. Zero keeps connections
+	// open: an edge's stream is long-lived, and pushes in flight on a closed
+	// stream go back to pending.
+	MaxConnectionAge      time.Duration
+	MaxConnectionAgeGrace time.Duration
+}
+
+// Keepalive and size defaults for the control server.
+const (
+	defaultMaxMessageSize   = 16 * 1024 * 1024
+	defaultKeepaliveMinTime = 10 * time.Second
+	// The server pings a connection idle this long and drops it when the
+	// ping is not answered within the timeout (a half-open edge).
+	defaultKeepaliveTime    = 30 * time.Second
+	defaultKeepaliveTimeout = 5 * time.Second
+)
+
+// serverTuning is Config's transport settings with the defaults applied.
+type serverTuning struct {
+	maxMessageSize                          int
+	keepaliveMinTime                        time.Duration
+	keepaliveTime, keepaliveTimeout         time.Duration
+	maxConnectionAge, maxConnectionAgeGrace time.Duration
+}
+
+func (c *Config) serverTuning() serverTuning {
+	t := serverTuning{
+		maxMessageSize:        c.MaxMessageSize,
+		keepaliveMinTime:      c.KeepaliveMinTime,
+		keepaliveTime:         defaultKeepaliveTime,
+		keepaliveTimeout:      defaultKeepaliveTimeout,
+		maxConnectionAge:      c.MaxConnectionAge,
+		maxConnectionAgeGrace: c.MaxConnectionAgeGrace,
+	}
+	if t.maxMessageSize <= 0 {
+		t.maxMessageSize = defaultMaxMessageSize
+	}
+	if t.keepaliveMinTime <= 0 {
+		t.keepaliveMinTime = defaultKeepaliveMinTime
+	}
+	return t
+}
+
+// serverOptions are the transport options every control server listener
+// gets: keepalive that admits the edges' pings and message sizes that fit a
+// full snapshot. (MaxConcurrentStreams limits edge streams across all
+// connections, in SubscribeToChanges, not HTTP/2 streams per connection.)
+func (t serverTuning) serverOptions() []grpc.ServerOption {
+	params := keepalive.ServerParameters{Time: t.keepaliveTime, Timeout: t.keepaliveTimeout}
+	if t.maxConnectionAge > 0 {
+		params.MaxConnectionAge = t.maxConnectionAge
+		params.MaxConnectionAgeGrace = t.maxConnectionAgeGrace
+	}
+	return []grpc.ServerOption{
+		grpc.KeepaliveParams(params),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             t.keepaliveMinTime,
+			PermitWithoutStream: true,
+		}),
+		grpc.MaxRecvMsgSize(t.maxMessageSize),
+		grpc.MaxSendMsgSize(t.maxMessageSize),
+	}
 }
 
 // validateEncryptionKey checks the key edges use to decrypt the credentials
@@ -177,7 +277,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		return nil, err
 	}
 
-	log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
+	logger.Log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
 
 	server := &ControlServer{
 		config:                cfg,
@@ -189,17 +289,18 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		eventBus:              eventbridge.NewBus(),
 		encryptionKey:         encryptionKey,
 		nodeID:                cfg.NodeID,
+		pushReadyGrace:        defaultPushReadyGrace,
 	}
 	if server.nodeID == "" {
 		server.nodeID = "control"
 	}
 
-	// Initialize AI Studio's analytics system for processing edge pulse data
-	ctx := context.Background()
-	analytics.StartRecording(ctx, db)
-	log.Debug().Msg("AI Studio analytics system initialized for control server")
+	// Edge analytics pulses are recorded through the process-wide analytics
+	// handler, which the host starts (pkg/studio does, after its migrations,
+	// with a context it cancels on Stop). Starting it here used to create
+	// analytics tables outside the migration lock.
 
-	log.Debug().Msg("Event bridge bus initialized for control server")
+	logger.Log.Debug().Msg("Event bridge bus initialized for control server")
 
 	// Subscribe to config change events to trigger checksum recomputation
 	server.subscribeToConfigChanges()
@@ -210,7 +311,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		server.budgetSyncService.syncInterval = cfg.BudgetSyncInterval
 	}
 	server.budgetSyncService.Start()
-	log.Debug().Msg("Budget sync service initialized for control server")
+	logger.Log.Debug().Msg("Budget sync service initialized for control server")
 
 	// Start cleanup routine
 	server.startCleanupRoutine()
@@ -241,10 +342,12 @@ func (s *ControlServer) Start() error {
 // embedding host uses it to supply its own listener.
 func (s *ControlServer) Serve(listener net.Listener) error {
 	// Setup gRPC server options
-	var opts []grpc.ServerOption
+	opts := s.config.serverTuning().serverOptions()
 
-	// Add TLS if enabled
-	if s.config.TLSEnabled {
+	// Add TLS: the host's own configuration, or the configured files
+	if s.config.TLSConfig != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(s.config.TLSConfig)))
+	} else if s.config.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(
 			s.config.TLSCertPath,
 			s.config.TLSKeyPath,
@@ -256,21 +359,33 @@ func (s *ControlServer) Serve(listener net.Listener) error {
 		opts = append(opts, grpc.Creds(creds))
 	}
 
-	// Add authentication interceptor
-	opts = append(opts, grpc.UnaryInterceptor(s.authInterceptor))
-	opts = append(opts, grpc.StreamInterceptor(s.streamAuthInterceptor))
+	// Panic recovery, then authentication
+	opts = append(opts, s.interceptors()...)
 
 	// Create gRPC server
 	server := grpc.NewServer(opts...)
 	pb.RegisterConfigurationSyncServiceServer(server, s)
 	s.serverMu.Lock()
+	select {
+	case <-s.stopping:
+		// Stop ran before this server existed, so it had nothing to stop.
+		s.serverMu.Unlock()
+		listener.Close()
+		return nil
+	default:
+	}
 	s.grpcServer = server
 	s.serverMu.Unlock()
 
-	log.Info().Str("address", listener.Addr().String()).Msg("Starting AI Studio gRPC control server")
+	logger.Log.Info().Str("address", listener.Addr().String()).Msg("Starting AI Studio gRPC control server")
 
 	// Start serving
 	if err := server.Serve(listener); err != nil {
+		// Stop between building the server and serving it: the shutdown
+		// asked for, not a failure.
+		if errors.Is(err, grpc.ErrServerStopped) {
+			return nil
+		}
 		return fmt.Errorf("gRPC server failed: %w", err)
 	}
 
@@ -279,7 +394,7 @@ func (s *ControlServer) Serve(listener net.Listener) error {
 
 // Stop stops the gRPC server gracefully
 func (s *ControlServer) Stop() {
-	log.Info().Msg("Stopping AI Studio gRPC control server")
+	logger.Log.Info().Msg("Stopping AI Studio gRPC control server")
 
 	// Stop budget sync service
 	if s.budgetSyncService != nil {
@@ -310,7 +425,7 @@ func (s *ControlServer) Stop() {
 		select {
 		case <-done:
 		case <-time.After(stopGracePeriod):
-			log.Warn().Dur("grace", stopGracePeriod).Msg("gRPC control server did not stop gracefully in time; closing remaining connections")
+			logger.Log.Warn().Dur("grace", stopGracePeriod).Msg("gRPC control server did not stop gracefully in time; closing remaining connections")
 			server.Stop()
 			<-done
 		}
@@ -327,7 +442,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	// ENT: Returns requested namespace or "default" if empty
 	namespace := s.edgeManagementService.GetNamespaceForEdge(req.EdgeNamespace)
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("requested_namespace", req.EdgeNamespace).
 		Str("assigned_namespace", namespace).
@@ -393,7 +508,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	// Get initial configuration using normalized namespace
 	initialConfig, err := s.getConfigurationSnapshot(namespace)
 	if err != nil {
-		log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to get initial configuration")
+		logger.Log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to get initial configuration")
 		initialConfig = &pb.ConfigurationSnapshot{
 			Version: "0",
 			Llms:    []*pb.LLMConfig{},
@@ -410,9 +525,9 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		edgeInstance.LoadedVersion = initialConfig.Version
 		edgeInstance.LastSyncAck = &now
 		if err := edgeInstance.UpdateSyncStatus(s.db, initialConfig.Checksum, initialConfig.Version, models.EdgeSyncStatusInSync); err != nil {
-			log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to update edge sync status on registration")
+			logger.Log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to update edge sync status on registration")
 		} else {
-			log.Debug().
+			logger.Log.Debug().
 				Str("edge_id", req.EdgeId).
 				Str("checksum", initialConfig.Checksum).
 				Str("version", initialConfig.Version).
@@ -446,7 +561,7 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 		}
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("requested_namespace", req.EdgeNamespace).
 		Str("namespace", namespace).
@@ -475,14 +590,14 @@ func (s *ControlServer) markEdgeInSync(edgeID string, snapshot *pb.Configuration
 	}
 	var edgeInstance models.EdgeInstance
 	if err := edgeInstance.GetByEdgeID(s.db, edgeID); err != nil {
-		log.Debug().Err(err).Str("edge_id", edgeID).Msg("Edge not found; sync status not updated after config delivery")
+		logger.Log.Debug().Err(err).Str("edge_id", edgeID).Msg("Edge not found; sync status not updated after config delivery")
 		return
 	}
 	if err := edgeInstance.UpdateSyncStatus(s.db, snapshot.Checksum, snapshot.Version, models.EdgeSyncStatusInSync); err != nil {
-		log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to update edge sync status after config delivery")
+		logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to update edge sync status after config delivery")
 		return
 	}
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", edgeID).
 		Str("checksum", snapshot.Checksum).
 		Msg("Updated edge sync status to in_sync after config delivery")
@@ -496,7 +611,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	s.edgeMutex.RUnlock()
 
 	if currentConnections >= s.maxConcurrentStreams {
-		log.Warn().
+		logger.Log.Warn().
 			Int("current_connections", currentConnections).
 			Int("max_concurrent_streams", s.maxConcurrentStreams).
 			Msg("🚨 SECURITY: Maximum concurrent streams exceeded - rejecting new connection")
@@ -510,12 +625,16 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	var edgeID string
 	var edgeConnection *EdgeInstanceConnection
 
-	// Handle incoming messages from edge
+	// Handle incoming messages from edge. A panic handling one ends this
+	// edge's stream (the edge reconnects and its pushes are retried), not
+	// the process.
+	recvPanicked := make(chan struct{})
 	go func() {
+		defer safe.RecoverWith("edge stream receive", func() { close(recvPanicked) })
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				log.Debug().Err(err).Str("edge_id", edgeID).Msg("Edge stream receive error")
+				logger.Log.Debug().Err(err).Str("edge_id", edgeID).Msg("Edge stream receive error")
 				break
 			}
 
@@ -532,7 +651,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 					// Create stream adapter for event bridge
 					streamAdapter := eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
-						log.Debug().
+						logger.Log.Debug().
 							Str("edge_id", edgeID).
 							Str("event_id", frame.ID).
 							Str("topic", frame.Topic).
@@ -553,13 +672,13 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 							},
 						})
 						if err != nil {
-							log.Error().
+							logger.Log.Error().
 								Err(err).
 								Str("edge_id", edgeID).
 								Str("event_id", frame.ID).
 								Msg("Control failed to send event to edge")
 						} else {
-							log.Debug().
+							logger.Log.Debug().
 								Str("edge_id", edgeID).
 								Str("event_id", frame.ID).
 								Str("topic", frame.Topic).
@@ -588,6 +707,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						SessionID:     streamSession,
 						Stream:        stream,
 						LastHeartbeat: time.Now(),
+						openedAt:      time.Now(),
 						streamAdapter: streamAdapter,
 						eventBridge:   bridge,
 						bridgeCtx:     bridgeCtx,
@@ -597,12 +717,12 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					s.edgeMutex.Unlock()
 
 					if found, err := models.ClaimEdgeStream(s.db, edgeID, s.nodeID, streamSession); err != nil {
-						log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to record this replica as the edge's stream owner; pushes to it may not be routed here until its next heartbeat")
+						logger.Log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to record this replica as the edge's stream owner; pushes to it may not be routed here until its next heartbeat")
 					} else if !found {
-						log.Warn().Str("edge_id", edgeID).Msg("Edge opened a stream without being registered; it cannot receive pushes until it registers")
+						logger.Log.Warn().Str("edge_id", edgeID).Msg("Edge opened a stream without being registered; it cannot receive pushes until it registers")
 					}
 
-					log.Debug().Str("edge_id", edgeID).Str("stream_session", streamSession).Msg("Event bridge started for edge connection")
+					logger.Log.Debug().Str("edge_id", edgeID).Str("stream_session", streamSession).Msg("Event bridge started for edge connection")
 
 					// Deliver any push waiting for this edge.
 					if p := s.pushDelivery(); p != nil {
@@ -627,6 +747,8 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 				if edgeConnection != nil {
 					edgeConnection.mu.Lock()
 					edgeConnection.LastHeartbeat = time.Now()
+					firstHeartbeat := !edgeConnection.heartbeatSeen
+					edgeConnection.heartbeatSeen = true
 					edgeConnection.mu.Unlock()
 
 					// Get loaded config info from heartbeat
@@ -641,9 +763,9 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 					if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
 						if reclaimed, err := models.TouchEdgeStream(s.db, edgeID, s.nodeID, edgeConnection.SessionID); err != nil {
-							log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record edge heartbeat")
+							logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record edge heartbeat")
 						} else if reclaimed {
-							log.Info().Str("edge_id", edgeID).Msg("Edge stream ownership restored from its heartbeat")
+							logger.Log.Info().Str("edge_id", edgeID).Msg("Edge stream ownership restored from its heartbeat")
 						}
 
 						// Check sync status against namespace expected checksum
@@ -694,6 +816,13 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						},
 					}
 					stream.Send(response)
+
+					// The edge is ready for pushes now; deliver any waiting.
+					if firstHeartbeat {
+						if p := s.pushDelivery(); p != nil {
+							p.StreamOpened(edgeID)
+						}
+					}
 				}
 
 			case *pb.EdgeMessage_ConfigRequest:
@@ -701,7 +830,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 				if edgeConnection != nil {
 					snapshot, err := s.getConfigurationSnapshot(edgeConnection.Namespace)
 					if err != nil {
-						log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to get configuration snapshot")
+						logger.Log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to get configuration snapshot")
 					} else {
 						response := &pb.ControlMessage{
 							Message: &pb.ControlMessage_Configuration{
@@ -718,7 +847,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 			case *pb.EdgeMessage_ReloadResponse:
 				// Handle reload status response
 				if m.ReloadResponse != nil {
-					log.Info().
+					logger.Log.Info().
 						Str("operation_id", m.ReloadResponse.OperationId).
 						Str("edge_id", edgeID).
 						Str("phase", m.ReloadResponse.Phase.String()).
@@ -726,7 +855,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						Msg("Received reload status from edge")
 
 					if edgeConnection == nil {
-						log.Warn().Str("operation_id", m.ReloadResponse.OperationId).Msg("Reload status on a stream that has not registered; ignored")
+						logger.Log.Warn().Str("operation_id", m.ReloadResponse.OperationId).Msg("Reload status on a stream that has not registered; ignored")
 					} else if p := s.pushDelivery(); p != nil {
 						// The stream says which edge this is, not the message.
 						resp := proto.Clone(m.ReloadResponse).(*pb.ConfigurationReloadResponse)
@@ -738,7 +867,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 			case *pb.EdgeMessage_Event:
 				// Handle event bridge message from edge
 				if m.Event != nil && edgeConnection != nil && edgeConnection.streamAdapter != nil {
-					log.Trace().
+					logger.Log.Trace().
 						Str("event_id", m.Event.Id).
 						Str("topic", m.Event.Topic).
 						Str("origin", m.Event.Origin).
@@ -753,10 +882,14 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	}()
 
 	// Keep connection alive and handle outgoing messages
+	var streamErr error
 	select {
 	case <-stream.Context().Done():
 	case <-s.stopping:
-		log.Debug().Str("edge_id", edgeID).Msg("Control server stopping; ending edge stream")
+		logger.Log.Debug().Str("edge_id", edgeID).Msg("Control server stopping; ending edge stream")
+	case <-recvPanicked:
+		logger.Log.Error().Str("edge_id", edgeID).Msg("Ending the edge's stream after a panic handling its messages; the edge reconnects")
+		streamErr = errRecovered
 	}
 
 	// Cleanup when stream closes
@@ -782,9 +915,9 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 		// Mark the edge disconnected only if this is still its current
 		// stream: it may already have reconnected, here or to another replica.
 		if changed, err := models.ReleaseEdgeStream(s.db, edgeID, edgeConnection.SessionID); err != nil {
-			log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of the edge's stream")
+			logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of the edge's stream")
 		} else if !changed {
-			log.Debug().Str("edge_id", edgeID).Msg("Edge already on a newer stream; its state is left as is")
+			logger.Log.Debug().Str("edge_id", edgeID).Msg("Edge already on a newer stream; its state is left as is")
 		}
 
 		// Pushes sent on this stream and not yet answered are retried on
@@ -793,32 +926,38 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 			p.StreamClosed(edgeID, edgeConnection.SessionID)
 		}
 
-		log.Debug().Str("edge_id", edgeID).Msg("Event bridge stopped for edge connection")
+		logger.Log.Debug().Str("edge_id", edgeID).Msg("Event bridge stopped for edge connection")
 	}
 
-	log.Debug().Str("edge_id", edgeID).Msg("Edge stream closed")
-	return nil
+	logger.Log.Debug().Str("edge_id", edgeID).Msg("Edge stream closed")
+	return streamErr
 }
 
-// SendHeartbeat handles heartbeat requests
+// SendHeartbeat handles unary heartbeat requests, a deprecated RPC: edges
+// heartbeat on their stream (SubscribeToChanges), which also tracks stream
+// ownership. The unary call is answered from the
+// database, so it works on any replica, not only the one holding the edge's
+// stream; it records the heartbeat and leaves ownership alone.
 func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
+	var edgeInstance models.EdgeInstance
+	if err := edgeInstance.GetByEdgeID(s.db.WithContext(ctx), req.EdgeId); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Error(codes.NotFound, "edge instance not found")
+		}
+		return nil, status.Error(codes.Unavailable, "failed to look up edge instance")
+	}
+	if err := edgeInstance.UpdateHeartbeat(s.db.WithContext(ctx)); err != nil {
+		return nil, status.Error(codes.Unavailable, "failed to record heartbeat")
+	}
+
+	// This replica holds the edge's stream: keep its view current too.
 	s.edgeMutex.RLock()
 	edge, exists := s.edgeConnections[req.EdgeId]
 	s.edgeMutex.RUnlock()
-
-	if !exists {
-		return nil, status.Error(codes.NotFound, "edge instance not found")
-	}
-
-	// Update heartbeat with thread safety
-	edge.mu.Lock()
-	edge.LastHeartbeat = time.Now()
-	edge.mu.Unlock()
-
-	// Update database
-	var edgeInstance models.EdgeInstance
-	if err := edgeInstance.GetByEdgeID(s.db, req.EdgeId); err == nil {
-		edgeInstance.UpdateHeartbeat(s.db)
+	if exists {
+		edge.mu.Lock()
+		edge.LastHeartbeat = time.Now()
+		edge.mu.Unlock()
 	}
 
 	return &pb.HeartbeatResponse{
@@ -835,7 +974,7 @@ func (s *ControlServer) GetEventBus() eventbridge.Bus {
 
 // UnregisterEdge handles edge instance unregistration
 func (s *ControlServer) UnregisterEdge(ctx context.Context, req *pb.EdgeUnregistrationRequest) (*emptypb.Empty, error) {
-	log.Info().Str("edge_id", req.EdgeId).Str("reason", req.Reason).Msg("Edge unregistration request")
+	logger.Log.Info().Str("edge_id", req.EdgeId).Str("reason", req.Reason).Msg("Edge unregistration request")
 
 	s.edgeMutex.Lock()
 	delete(s.edgeConnections, req.EdgeId)
@@ -857,7 +996,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		tokenPrefix = req.Token[:8]
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("token_prefix", tokenPrefix).
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
@@ -869,7 +1008,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		First(&credential).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			log.Info().
+			logger.Log.Info().
 				Str("token_prefix", tokenPrefix).
 				Str("edge_namespace", req.EdgeNamespace).
 				Msg("AI Studio control server: credential not found")
@@ -880,7 +1019,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 			}, nil
 		}
 
-		log.Error().Err(err).Str("token_prefix", tokenPrefix).Msg("AI Studio control server: credential validation database error")
+		logger.Log.Error().Err(err).Str("token_prefix", tokenPrefix).Msg("AI Studio control server: credential validation database error")
 		return nil, status.Error(codes.Internal, "token validation failed")
 	}
 
@@ -893,10 +1032,10 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		// hub as unavailable (keeping its cache, and its stale grace if
 		// configured) instead of refusing a valid credential with 401.
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Error().Err(err).Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app lookup database error during token validation")
+			logger.Log.Error().Err(err).Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app lookup database error during token validation")
 			return nil, status.Error(codes.Internal, "token validation failed")
 		}
-		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
+		logger.Log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
 			ErrorMessage: "Associated app not found or inactive",
@@ -905,14 +1044,14 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	if !app.IsActive {
 		// Said in so many words: the edge answers 403 "app is inactive" for
 		// this, as the embedded gateway does, rather than 401 for a bad key.
-		log.Debug().Str("token_prefix", tokenPrefix).Uint("app_id", app.ID).Msg("AI Studio control server: app is inactive")
+		logger.Log.Debug().Str("token_prefix", tokenPrefix).Uint("app_id", app.ID).Msg("AI Studio control server: app is inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
 			ErrorMessage: services.AppInactiveMessage,
 		}, nil
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("token_prefix", tokenPrefix).
 		Uint("app_id", app.ID).
 		Str("app_name", app.Name).
@@ -931,7 +1070,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	if s.shouldIncludeAppInResponse(app.Namespace, req.EdgeNamespace) {
 		response.App = s.convertAppToProto(&app)
 
-		log.Debug().
+		logger.Log.Debug().
 			Uint("app_id", app.ID).
 			Str("app_namespace", app.Namespace).
 			Str("edge_namespace", req.EdgeNamespace).
@@ -947,7 +1086,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 	// Performance monitoring: track total processing time
 	startTime := time.Now()
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
 		Uint64("sequence_number", req.SequenceNumber).
@@ -1037,7 +1176,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				ToolCalls:              0,                       // Default for proxy
 			}
 
-			log.Debug().
+			logger.Log.Debug().
 				Str("edge_id", req.EdgeId).
 				Str("request_id", event.RequestId).
 				Str("model", modelName).
@@ -1053,7 +1192,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		analytics.RecordChatRecordsBatch(ctx, chatRecords)
 		processedRecords += uint64(len(req.AnalyticsEvents))
 
-		log.Debug().
+		logger.Log.Debug().
 			Str("edge_id", req.EdgeId).
 			Int("analytics_events", len(req.AnalyticsEvents)).
 			Msg("Analytics events processed via batch operations")
@@ -1081,7 +1220,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		analytics.RecordComplianceEvents(ctx, complianceEvents)
 		processedRecords += uint64(len(req.ComplianceEvents))
 
-		log.Debug().
+		logger.Log.Debug().
 			Str("edge_id", req.EdgeId).
 			Int("compliance_events", len(req.ComplianceEvents)).
 			Msg("Compliance events processed from edge pulse")
@@ -1100,7 +1239,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		processedRecords++
 	}
 	if len(req.ToolCalls) > 0 {
-		log.Debug().
+		logger.Log.Debug().
 			Str("edge_id", req.EdgeId).
 			Int("tool_calls", len(req.ToolCalls)).
 			Msg("Tool calls processed from edge pulse")
@@ -1108,7 +1247,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 
 	// Process budget events (for now just log - AI Studio budget integration would need budget service)
 	for _, budget := range req.BudgetEvents {
-		log.Debug().
+		logger.Log.Debug().
 			Str("edge_id", req.EdgeId).
 			Uint32("app_id", budget.AppId).
 			Uint32("llm_id", budget.LlmId).
@@ -1120,7 +1259,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 
 	// Process proxy summaries (for now just log - could be stored in separate summary table)
 	for _, proxy := range req.ProxySummaries {
-		log.Debug().
+		logger.Log.Debug().
 			Str("edge_id", req.EdgeId).
 			Uint32("app_id", proxy.AppId).
 			Str("vendor", proxy.Vendor).
@@ -1133,7 +1272,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 	// Performance monitoring: calculate total processing time
 	totalProcessingTime := time.Since(startTime)
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Uint64("sequence_number", req.SequenceNumber).
 		Uint64("processed_records", processedRecords).
@@ -1156,7 +1295,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.PluginControlBatch) (*pb.PluginControlBatchResponse, error) {
 	startTime := time.Now()
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
 		Uint64("sequence_number", req.SequenceNumber).
@@ -1164,32 +1303,50 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		Int("payloads_count", len(req.Payloads)).
 		Msg("AI Studio control server: received plugin control batch from edge")
 
-	var processedCount uint64
+	var processedCount, forwardedCount uint64
 	var errors []*pb.PluginPayloadError
 
-	// Process each payload - route to corresponding plugin
-	for _, payload := range req.Payloads {
-		err := s.routeEdgePayloadToPlugin(ctx, payload)
-		if err != nil {
-			log.Warn().
-				Err(err).
-				Uint32("plugin_id", payload.PluginId).
-				Str("correlation_id", payload.CorrelationId).
-				Msg("Failed to route edge payload to plugin")
-
-			errors = append(errors, &pb.PluginPayloadError{
-				PluginId:      payload.PluginId,
-				CorrelationId: payload.CorrelationId,
-				ErrorMessage:  err.Error(),
-			})
+	// A replica without plugins forwards the batch in one write.
+	if s.pluginManager == nil && s.edgePayloads != nil {
+		if err := s.edgePayloads.ForwardEdgePayloads(ctx, req.Payloads); err != nil {
+			logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("payloads", len(req.Payloads)).
+				Msg("Failed to queue edge payloads for the plugin host")
+			for _, payload := range req.Payloads {
+				errors = append(errors, &pb.PluginPayloadError{
+					PluginId:      payload.PluginId,
+					CorrelationId: payload.CorrelationId,
+					ErrorMessage:  fmt.Sprintf("could not queue the payload for the plugin host: %v", err),
+				})
+			}
 		} else {
-			processedCount++
+			processedCount = uint64(len(req.Payloads))
+			forwardedCount = processedCount
+		}
+	} else {
+		// Process each payload - route to corresponding plugin
+		for _, payload := range req.Payloads {
+			err := s.routeEdgePayloadToPlugin(ctx, payload)
+			if err != nil {
+				logger.Log.Warn().
+					Err(err).
+					Uint32("plugin_id", payload.PluginId).
+					Str("correlation_id", payload.CorrelationId).
+					Msg("Failed to route edge payload to plugin")
+
+				errors = append(errors, &pb.PluginPayloadError{
+					PluginId:      payload.PluginId,
+					CorrelationId: payload.CorrelationId,
+					ErrorMessage:  err.Error(),
+				})
+			} else {
+				processedCount++
+			}
 		}
 	}
 
 	totalProcessingTime := time.Since(startTime)
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Uint64("sequence_number", req.SequenceNumber).
 		Uint64("processed_count", processedCount).
@@ -1197,9 +1354,13 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		Int64("processing_time_ms", totalProcessingTime.Milliseconds()).
 		Msg("Plugin control batch processed")
 
+	message := fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads))
+	if forwardedCount > 0 {
+		message += fmt.Sprintf(" (%d queued for the plugin host)", forwardedCount)
+	}
 	return &pb.PluginControlBatchResponse{
 		Success:        len(errors) == 0,
-		Message:        fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads)),
+		Message:        message,
 		ProcessedCount: processedCount,
 		SequenceNumber: req.SequenceNumber,
 		ProcessedAt:    timestamppb.Now(),
@@ -1207,24 +1368,30 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 	}, nil
 }
 
-// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI Studio plugin
+// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI
+// Studio plugin (a replica without plugins forwards whole batches instead,
+// in SendPluginControlBatch).
 func (s *ControlServer) routeEdgePayloadToPlugin(ctx context.Context, payload *pb.PluginControlPayload) error {
-	// Check if plugin manager is available (set after server creation)
-	if s.pluginManager == nil {
-		return fmt.Errorf("plugin manager not available")
+	if s.pluginManager != nil {
+		// Route to plugin manager which will handle AcceptEdgePayload call
+		return s.pluginManager.RouteEdgePayload(ctx, payload)
 	}
+	return fmt.Errorf("plugin manager not available")
+}
 
-	// Route to plugin manager which will handle AcceptEdgePayload call
-	return s.pluginManager.RouteEdgePayload(ctx, payload)
+// SetEdgePayloadForwarder has a replica without plugins (no SetPluginManager)
+// forward edges' plugin payloads to one that has them. Set it before Serve.
+func (s *ControlServer) SetEdgePayloadForwarder(f EdgePayloadForwarder) {
+	s.edgePayloads = f
 }
 
 // SetPluginManager sets the plugin manager reference for routing edge payloads
 func (s *ControlServer) SetPluginManager(manager interface{}) {
 	if pm, ok := manager.(EdgePayloadRouter); ok {
 		s.pluginManager = pm
-		log.Debug().Msg("Plugin manager set for edge payload routing")
+		logger.Log.Debug().Msg("Plugin manager set for edge payload routing")
 	} else {
-		log.Warn().Msg("Plugin manager does not implement EdgePayloadRouter interface")
+		logger.Log.Warn().Msg("Plugin manager does not implement EdgePayloadRouter interface")
 	}
 }
 
@@ -1304,7 +1471,7 @@ func (s *ControlServer) streamAuthInterceptor(srv interface{}, stream grpc.Serve
 func (s *ControlServer) authenticate(ctx context.Context) error {
 	// SECURITY: Fail-closed design - reject connections if no auth tokens configured
 	if s.config.AuthToken == "" && s.config.NextAuthToken == "" {
-		log.Error().Msg("🔒 SECURITY: No authentication tokens configured - rejecting connection")
+		logger.Log.Error().Msg("🔒 SECURITY: No authentication tokens configured - rejecting connection")
 		return status.Error(codes.Unauthenticated, "authentication required but no tokens configured")
 	}
 
@@ -1327,11 +1494,11 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 
 	// Check next token (for rotation)
 	if s.config.NextAuthToken != "" && token == "Bearer "+s.config.NextAuthToken {
-		log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
+		logger.Log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
 		return nil
 	}
 
-	log.Warn().Msg("Authentication failed: invalid authorization token")
+	logger.Log.Warn().Msg("Authentication failed: invalid authorization token")
 	return status.Error(codes.Unauthenticated, "invalid authorization token")
 }
 
@@ -1410,8 +1577,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
 		if err != nil {
-			log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt API key for microgateway")
-			encryptedAPIKey = resolvedAPIKey // Fallback to plaintext
+			// Never send the key in plaintext: leave the LLM out, as for
+			// tools, datasources and tokens.
+			logger.Log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt LLM API key - excluding LLM from snapshot")
+			continue
 		}
 
 		// Resolve secret references in metadata and serialize to JSON string
@@ -1551,7 +1720,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				Select("COALESCE(SUM(cost), 0)").
 				Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", app.ID, periodStart, periodEnd).
 				Scan(&totalCostCents).Error; err != nil {
-				log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
+				logger.Log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
 			} else {
 				// Convert from cents*10000 to dollars
 				currentPeriodUsage = totalCostCents / 10000.0
@@ -1661,7 +1830,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	if err := llmFilterQuery.Order("llm_filters.llm_id ASC, llm_filters.filter_id ASC").Find(&llmFilterAssociations).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to query llm_filters associations for filters")
+		logger.Log.Warn().Err(err).Msg("Failed to query llm_filters associations for filters")
 	}
 
 	// Build map of filter_id -> []llm_id for efficient lookup
@@ -1708,14 +1877,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			// as the LLM API keys above are.
 			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef)
 			if err != nil {
-				log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
+				logger.Log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
 				continue
 			}
 			pbFilter.Config = configJSON
 		}
 		snapshot.Filters = append(snapshot.Filters, pbFilter)
 
-		log.Debug().
+		logger.Log.Debug().
 			Uint("filter_id", filter.ID).
 			Str("filter_name", filter.Name).
 			Int("llm_count", len(llmIDs)).
@@ -1749,17 +1918,17 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Get Plugins for namespace with preloaded LLM associations to avoid N+1 queries
-	log.Debug().Str("namespace", namespace).Msg("Starting plugin query for configuration snapshot")
+	logger.Log.Debug().Str("namespace", namespace).Msg("Starting plugin query for configuration snapshot")
 
 	var plugins []models.Plugin
 	var pluginQuery *gorm.DB
 
 	pluginQuery = s.db.Model(&models.Plugin{})
 	if namespace == "" {
-		log.Debug().Msg("Querying plugins for global namespace only")
+		logger.Log.Debug().Msg("Querying plugins for global namespace only")
 		pluginQuery = pluginQuery.Where("namespace = '' AND is_active = ?", true)
 	} else {
-		log.Debug().
+		logger.Log.Debug().
 			Str("target_namespace", namespace).
 			Msg("Querying plugins for specific namespace (global + tenant)")
 		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?) AND is_active = ?", namespace, true)
@@ -1780,7 +1949,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if err := s.db.Where("plugin_id IN ? AND is_active = ?", pluginIDs, true).
 			Order("plugin_id ASC, order_index ASC").
 			Find(&allLLMPlugins).Error; err != nil {
-			log.Warn().Err(err).Msg("Failed to preload LLM plugin associations")
+			logger.Log.Warn().Err(err).Msg("Failed to preload LLM plugin associations")
 		}
 	}
 
@@ -1790,7 +1959,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		llmPluginMap[lp.PluginID] = append(llmPluginMap[lp.PluginID], lp)
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("namespace", namespace).
 		Int("found_plugins", len(plugins)).
 		Msg("Plugin query completed")
@@ -1801,7 +1970,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		llmPlugins := llmPluginMap[plugin.ID]
 		// Data is already sorted by order_index from the query
 
-		log.Debug().
+		logger.Log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
 			Str("hook_type", plugin.HookType).
@@ -1815,7 +1984,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				// Merge base plugin config with LLM-specific override
 				merged, err := config.MergePluginConfigMaps(plugin.Config, llmPlugin.ConfigOverride)
 				if err != nil {
-					log.Error().Err(err).
+					logger.Log.Error().Err(err).
 						Uint("plugin_id", plugin.ID).
 						Uint("llm_id", llmPlugin.LLMID).
 						Msg("Failed to merge plugin config, using base config")
@@ -1830,7 +1999,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					}
 				}
 
-				log.Debug().
+				logger.Log.Debug().
 					Uint("plugin_id", plugin.ID).
 					Str("plugin_name", plugin.Name).
 					Uint("llm_id", llmPlugin.LLMID).
@@ -1860,7 +2029,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		} else {
 			// Plugin has no LLM associations, use base config only
-			log.Debug().
+			logger.Log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Str("hook_type", plugin.HookType).
@@ -1905,7 +2074,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	if err := routerQuery.Order("id ASC").Find(&modelRouters).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to get Model Routers (Enterprise feature may not be enabled)")
+		logger.Log.Warn().Err(err).Msg("Failed to get Model Routers (Enterprise feature may not be enabled)")
 		// Don't fail - model routers are optional Enterprise feature
 	}
 
@@ -1965,7 +2134,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 		snapshot.ModelRouters = append(snapshot.ModelRouters, pbRouter)
 
-		log.Debug().
+		logger.Log.Debug().
 			Uint("router_id", router.ID).
 			Str("router_slug", router.Slug).
 			Int("pool_count", len(router.Pools)).
@@ -1985,18 +2154,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		semanticQuery = semanticQuery.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
 	if err := semanticQuery.Order("id ASC").Find(&semanticRouters).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to get Semantic Routers")
+		logger.Log.Warn().Err(err).Msg("Failed to get Semantic Routers")
 	}
 	for _, router := range semanticRouters {
 		if router.Embedder != nil {
 			if err := router.Embedder.UsableInNamespace(router.Namespace); err != nil {
-				log.Error().Err(err).Uint("router_id", router.ID).Msg("Semantic Router embedder not available in its namespace; not synced")
+				logger.Log.Error().Err(err).Uint("router_id", router.ID).Msg("Semantic Router embedder not available in its namespace; not synced")
 				continue
 			}
 		}
 		cfg, err := router.EdgeConfigJSON(s.db, s.encryptForMicrogateway)
 		if err != nil {
-			log.Error().Err(err).Uint("router_id", router.ID).Msg("Failed to encode Semantic Router; not synced")
+			logger.Log.Error().Err(err).Uint("router_id", router.ID).Msg("Failed to encode Semantic Router; not synced")
 			continue
 		}
 		snapshot.SemanticRouters = append(snapshot.SemanticRouters, &pb.SemanticRouterConfig{
@@ -2038,7 +2207,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Select("tool_id, filter_id").
 			Where("tool_id IN ?", toolIDs).
 			Find(&toolFilterAssociations).Error; err != nil {
-			log.Warn().Err(err).Msg("Failed to query tool_filters associations")
+			logger.Log.Warn().Err(err).Msg("Failed to query tool_filters associations")
 		}
 	}
 
@@ -2062,7 +2231,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Select("tool_id, app_id").
 			Where("tool_id IN ?", toolIDs).
 			Find(&appToolAssociations).Error; err != nil {
-			log.Warn().Err(err).Msg("Failed to query app_tools associations")
+			logger.Log.Warn().Err(err).Msg("Failed to query app_tools associations")
 		}
 	}
 
@@ -2081,7 +2250,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
 			if err != nil {
-				log.Error().Err(err).Uint("tool_id", tool.ID).Msg("Failed to encrypt tool auth key - excluding tool from snapshot")
+				logger.Log.Error().Err(err).Uint("tool_id", tool.ID).Msg("Failed to encrypt tool auth key - excluding tool from snapshot")
 				continue
 			}
 			encryptedAuthKey = encrypted
@@ -2150,7 +2319,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Select("datasource_id, app_id").
 			Where("datasource_id IN ?", dsIDs).
 			Find(&appDsAssociations).Error; err != nil {
-			log.Warn().Err(err).Msg("Failed to query app_datasources associations")
+			logger.Log.Warn().Err(err).Msg("Failed to query app_datasources associations")
 		}
 	}
 
@@ -2169,7 +2338,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if resolvedConnString != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
 			if err != nil {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource connection string - excluding from snapshot")
+				logger.Log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource connection string - excluding from snapshot")
 				continue
 			}
 			encryptedConnString = encrypted
@@ -2180,7 +2349,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
 			if err != nil {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource API key - excluding from snapshot")
+				logger.Log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource API key - excluding from snapshot")
 				continue
 			}
 			encryptedConnAPIKey = encrypted
@@ -2192,7 +2361,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		embed := ds.EmbedFields(true)
 		if ds.Embedder != nil {
 			if err := ds.Embedder.UsableInNamespace(ds.Namespace); err != nil {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Datasource embedder not available in its namespace - syncing it without embedding settings")
+				logger.Log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Datasource embedder not available in its namespace - syncing it without embedding settings")
 				embed = models.LegacyEmbed{}
 			}
 		}
@@ -2201,7 +2370,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)
 			if err != nil {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt embedder API key - excluding from snapshot")
+				logger.Log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt embedder API key - excluding from snapshot")
 				continue
 			}
 			encryptedEmbedAPIKey = encrypted
@@ -2245,7 +2414,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Get OAuth Clients for MCP authentication on edges
 	var oauthClients []models.OAuthClient
 	if err := s.db.Order("id ASC").Find(&oauthClients).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to get OAuth clients for edge sync")
+		logger.Log.Warn().Err(err).Msg("Failed to get OAuth clients for edge sync")
 		// Don't fail - OAuth is optional
 	}
 
@@ -2271,7 +2440,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Get non-expired Access Tokens for MCP authentication on edges
 	var accessTokens []models.AccessToken
 	if err := s.db.Where("expires_at > ?", time.Now()).Order("id ASC").Find(&accessTokens).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to get access tokens for edge sync")
+		logger.Log.Warn().Err(err).Msg("Failed to get access tokens for edge sync")
 		// Don't fail - OAuth is optional
 	}
 
@@ -2282,7 +2451,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if token.Token != "" {
 			encrypted, err := s.encryptForMicrogateway(token.Token)
 			if err != nil {
-				log.Error().Err(err).Uint("token_id", token.ID).Msg("Failed to encrypt access token - excluding from snapshot")
+				logger.Log.Error().Err(err).Uint("token_id", token.ID).Msg("Failed to encrypt access token - excluding from snapshot")
 				continue
 			}
 			encryptedToken = encrypted
@@ -2313,7 +2482,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		snapshot.AccessTokens = append(snapshot.AccessTokens, pbToken)
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
 		Int("app_count", len(snapshot.Apps)).
@@ -2330,12 +2499,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Compute checksum for the snapshot
 	checksum, err := ComputeSnapshotChecksum(snapshot)
 	if err != nil {
-		log.Error().Err(err).Str("namespace", namespace).Msg("Failed to compute snapshot checksum")
+		logger.Log.Error().Err(err).Str("namespace", namespace).Msg("Failed to compute snapshot checksum")
 		// Don't fail the snapshot, just log the error - edge can still sync
 	} else {
 		snapshot.Checksum = checksum
 
-		log.Info().
+		logger.Log.Info().
 			Str("namespace", namespace).
 			Str("checksum", checksum).
 			Str("version", snapshot.Version).
@@ -2343,7 +2512,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 		// Update namespace sync status in database
 		if err := s.updateNamespaceSyncStatus(namespace, checksum, snapshot.Version); err != nil {
-			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to update namespace sync status")
+			logger.Log.Error().Err(err).Str("namespace", namespace).Msg("Failed to update namespace sync status")
 		}
 	}
 
@@ -2366,7 +2535,7 @@ func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version s
 	var previous models.NamespaceSyncStatus
 	previousErr := previous.GetByNamespace(s.db, namespace)
 	if previousErr == nil && previous.ExpectedChecksum == checksum {
-		log.Debug().
+		logger.Log.Debug().
 			Str("namespace", namespace).
 			Str("checksum", checksum).
 			Msg("Namespace snapshot unchanged; sync status left as is")
@@ -2386,7 +2555,7 @@ func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version s
 	}
 
 	if firstFill {
-		log.Debug().
+		logger.Log.Debug().
 			Str("namespace", namespace).
 			Str("checksum", checksum).
 			Msg("Recorded first namespace checksum on a row created by a push; edges left as is")
@@ -2402,16 +2571,16 @@ func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version s
 		Details:       fmt.Sprintf("Configuration snapshot generated with checksum %s", checksum),
 	}
 	if err := auditLog.Create(s.db); err != nil {
-		log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to create sync audit log")
+		logger.Log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to create sync audit log")
 	}
 
 	// Mark all active edges in this namespace as pending sync
 	edgeInstance := &models.EdgeInstance{}
 	if err := edgeInstance.MarkEdgesAsPendingInNamespace(s.db, namespace); err != nil {
-		log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending sync")
+		logger.Log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending sync")
 	}
 
-	log.Debug().
+	logger.Log.Debug().
 		Str("namespace", namespace).
 		Str("checksum", checksum).
 		Str("version", version).
@@ -2508,14 +2677,34 @@ func (s *ControlServer) pushDelivery() PushDelivery {
 	return s.pushes
 }
 
-// LocalStreams lists the edges with a live stream on this replica, with the
-// stream's session.
+// defaultPushReadyGrace is how long a stream that has not sent a heartbeat
+// waits before it is given pushes anyway.
+const defaultPushReadyGrace = 10 * time.Second
+
+// pushReady reports whether pushes may be sent on this stream. An edge
+// opens its stream while it is still starting up; up to v2.2 (and until
+// this check existed) the microgateway set its reload handler only after
+// its services were up, dropped a push that arrived before then, and the
+// push waited for control's answer timeout (a minute) before it was sent
+// again. So a stream gets pushes after its first heartbeat, which current
+// edges send as soon as the stream is open (and they hold a push that
+// arrives before the handler is set), or, for older edges whose first
+// heartbeat comes a full interval later, once it has been open for the
+// grace period. The caller holds s.edgeMutex.
+func (s *ControlServer) pushReady(edge *EdgeInstanceConnection) bool {
+	edge.mu.RLock()
+	defer edge.mu.RUnlock()
+	return edge.heartbeatSeen || time.Since(edge.openedAt) >= s.pushReadyGrace
+}
+
+// LocalStreams lists the edges with a live stream on this replica that are
+// ready for pushes (see pushReady), with the stream's session.
 func (s *ControlServer) LocalStreams() map[string]string {
 	s.edgeMutex.RLock()
 	defer s.edgeMutex.RUnlock()
 	out := make(map[string]string, len(s.edgeConnections))
 	for edgeID, edge := range s.edgeConnections {
-		if edge.Stream != nil && edge.Stream.Context().Err() == nil {
+		if edge.Stream != nil && edge.Stream.Context().Err() == nil && s.pushReady(edge) {
 			out[edgeID] = edge.SessionID
 		}
 	}
@@ -2546,7 +2735,7 @@ func (s *ControlServer) SendReload(edgeID, session string, req *pb.Configuration
 	if err := stream.Send(&pb.ControlMessage{Message: &pb.ControlMessage_ReloadRequest{ReloadRequest: req}}); err != nil {
 		return fmt.Errorf("send on edge %s stream: %w", edgeID, err)
 	}
-	log.Info().Str("edge_id", edgeID).Str("operation_id", req.OperationId).Str("stream_session", session).Msg("Configuration push sent to edge")
+	logger.Log.Info().Str("edge_id", edgeID).Str("operation_id", req.OperationId).Str("stream_session", session).Msg("Configuration push sent to edge")
 	return nil
 }
 
@@ -2581,7 +2770,7 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 	edge.mu.RUnlock()
 
 	if heartbeatAge > 10*time.Minute {
-		log.Warn().
+		logger.Log.Warn().
 			Str("edge_id", edge.EdgeID).
 			Dur("heartbeat_age", heartbeatAge).
 			Msg("Edge heartbeat is stale")
@@ -2594,12 +2783,19 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 // startCleanupRoutine starts the periodic cleanup of stale connections
 func (s *ControlServer) startCleanupRoutine() {
 	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
-	go func() {
-		for range s.cleanupTicker.C {
-			s.cleanupStaleConnections()
+	ticks := s.cleanupTicker.C
+	// Ends with Stop: a stopped ticker never closes its channel.
+	go safe.Loop("edge connection cleanup", s.stopping, func() {
+		for {
+			select {
+			case <-s.stopping:
+				return
+			case <-ticks:
+				s.cleanupStaleConnections()
+			}
 		}
-	}()
-	log.Debug().Msg("Started edge connection cleanup routine")
+	})
+	logger.Log.Debug().Msg("Started edge connection cleanup routine")
 }
 
 // cleanupStaleConnections removes disconnected and stale edge connections
@@ -2624,7 +2820,7 @@ func (s *ControlServer) cleanupStaleConnections() {
 			lastHeartbeat := edge.LastHeartbeat
 			edge.mu.RUnlock()
 
-			log.Info().
+			logger.Log.Info().
 				Str("edge_id", edgeID).
 				Str("status", edge.Status).
 				Time("last_heartbeat", lastHeartbeat).
@@ -2632,7 +2828,7 @@ func (s *ControlServer) cleanupStaleConnections() {
 
 			// Only if this stream is still the edge's current one.
 			if _, err := models.ReleaseEdgeStream(s.db, edgeID, edge.SessionID); err != nil {
-				log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of a stale edge stream")
+				logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record the end of a stale edge stream")
 			}
 
 			toRemove = append(toRemove, edgeID)
@@ -2645,7 +2841,7 @@ func (s *ControlServer) cleanupStaleConnections() {
 	}
 
 	if len(toRemove) > 0 {
-		log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
+		logger.Log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
 	}
 }
 
@@ -2695,7 +2891,7 @@ const (
 // When any relevant config change occurs, checksums are recomputed for all namespaces.
 func (s *ControlServer) subscribeToConfigChanges() {
 	if s.eventBus == nil {
-		log.Warn().Msg("Event bus not available, config change subscriptions not set up")
+		logger.Log.Warn().Msg("Event bus not available, config change subscriptions not set up")
 		return
 	}
 
@@ -2724,13 +2920,13 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		})
 	}
 
-	log.Info().Int("topic_count", len(configTopics)).Msg("Subscribed to configuration change events for sync status tracking")
+	logger.Log.Info().Int("topic_count", len(configTopics)).Msg("Subscribed to configuration change events for sync status tracking")
 }
 
 // onConfigurationChanged handles configuration change events by recomputing
 // checksums for all namespaces and marking affected edges as pending.
 func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.Event) {
-	log.Info().
+	logger.Log.Info().
 		Str("topic", topic).
 		Str("event_id", event.ID).
 		Msg("Configuration changed, recomputing namespace checksums")
@@ -2748,11 +2944,11 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 		// gateway-visible) never churn edges.
 		snapshot, err := s.getConfigurationSnapshot(namespace)
 		if err != nil {
-			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to recompute snapshot on config change")
+			logger.Log.Error().Err(err).Str("namespace", namespace).Msg("Failed to recompute snapshot on config change")
 			continue
 		}
 
-		log.Info().
+		logger.Log.Info().
 			Str("namespace", namespace).
 			Str("checksum", snapshot.Checksum).
 			Str("version", snapshot.Version).
@@ -2767,10 +2963,10 @@ func (s *ControlServer) namespacesToRecompute() []string {
 	set := map[string]bool{models.CanonicalNamespace("default"): true}
 	var fromEdges, fromStatus []string
 	if err := s.db.Model(&models.EdgeInstance{}).Distinct("namespace").Pluck("namespace", &fromEdges).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to list edge namespaces for checksum recompute")
+		logger.Log.Warn().Err(err).Msg("Failed to list edge namespaces for checksum recompute")
 	}
 	if err := s.db.Model(&models.NamespaceSyncStatus{}).Distinct("namespace").Pluck("namespace", &fromStatus).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to list namespace sync statuses for checksum recompute")
+		logger.Log.Warn().Err(err).Msg("Failed to list namespace sync statuses for checksum recompute")
 	}
 	for _, ns := range append(fromEdges, fromStatus...) {
 		set[models.CanonicalNamespace(ns)] = true
@@ -2896,7 +3092,7 @@ func (s *ControlServer) loadGovernedMetadata(objectType string) map[string]*mode
 	}
 	recs, err := s.governedMetadata.ListObjectMetadata(objectType, nil)
 	if err != nil {
-		log.Warn().Err(err).Str("object_type", objectType).Msg("Failed to load governed metadata for snapshot")
+		logger.Log.Warn().Err(err).Str("object_type", objectType).Msg("Failed to load governed metadata for snapshot")
 		return nil
 	}
 	return recs

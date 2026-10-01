@@ -5,11 +5,12 @@
 // imports Studio. That includes Studio's test-only requirements, and the go
 // directive, which sets the host's minimum Go version.
 //
-//	go run ./tools/hostcompat -host dashboard.go.mod -studio go.mod [-studio enterprise/go.mod] [-allow scripts/host-compat-allow.txt]
+//	go run ./tools/hostcompat -host dashboard.go.mod -studio go.mod [-studio enterprise/go.mod] [-allow scripts/host-compat-allow.tyk-analytics.txt]
 //
 // It exits 1 when Studio raises something the allowlist does not name. The
 // allowlist holds one module path per line, each with a reason after a '#'.
-// scripts/host-compat.sh runs it; see features/Embedding.md.
+// scripts/host-compat.sh runs it once per host (the Dashboard, MDCB), each
+// with its own allowlist; see features/Embedding.md.
 package main
 
 import (

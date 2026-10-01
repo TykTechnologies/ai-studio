@@ -8,6 +8,10 @@ on:  # yamllint disable-line rule:truthy
 
 jobs:
   s1_scanner:
+    # Needs the S1 secrets, which GitHub withholds from fork pull requests.
+    # Same guard as ci-test.yml and ui-tests.yml, so it stays correct if this
+    # workflow ever gains a push trigger.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: TykTechnologies/github-actions/.github/workflows/s1-cns-scan.yml@production
     permissions:
       contents: read
