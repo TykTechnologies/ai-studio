@@ -420,7 +420,12 @@ control plane does not run:
   keeps `RelayedByDefault`, since its own plugins already had its edges'
   events. On the receiving replicas the event is published with
   `RelayedFrom` set, which stops it being relayed again, and as `DirLocal`
-  it never goes down to their edges.
+  it never goes down to their edges. An edge's object change events
+  (`system.*`) never get that far: the control node's bridge drops them
+  (logged on the first and every 100th), since only Studio publishes those,
+  and on the bus they would reload the gateway, clear caches and reach
+  webhooks and plugins as if Studio had changed an object. The relay filters
+  refuse them too.
 - *Plugin payloads (`SendPluginControlBatch`).* A replica without a plugin
   manager forwards the edge's batch (`grpc.EdgePayloadForwarder`) as one log
   row per payload on topic `plugin.control`, its proto encoding (edges cap a

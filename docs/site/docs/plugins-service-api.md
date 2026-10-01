@@ -258,6 +258,8 @@ Events have a direction that controls routing:
 | Up | `plugin_sdk.DirUp` | Flows from edge (Microgateway) to control (AI Studio) |
 | Down | `plugin_sdk.DirDown` | Flows from control (AI Studio) to edge(s) |
 
+Topics starting with `system.` are reserved for AI Studio's object change events. A control plane drops `system.*` events that arrive from an edge, so gateway plugins should publish under their own topics.
+
 #### Publish Event
 
 Publish an event with a JSON-serializable payload:
