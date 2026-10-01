@@ -20,8 +20,13 @@ const RelayTopic = "bus.event"
 // RelayedByDefault reports whether a bus event must reach every replica:
 // events for edges (DirDown), which each replica forwards to the edges whose
 // streams it holds, and object change events (system.*), which keep every
-// replica's caches and plugins current.
+// replica's caches and plugins current. Nothing an edge sent (FromEdge) is
+// relayed by default: object changes come from Studio, and an edge's
+// system.* event must not make other replicas reload plugins or caches.
 func RelayedByDefault(ev eventbridge.Event) bool {
+	if ev.FromEdge {
+		return false
+	}
 	return ev.Dir == eventbridge.DirDown || strings.HasPrefix(ev.Topic, "system.")
 }
 

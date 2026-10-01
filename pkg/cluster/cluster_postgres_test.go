@@ -408,3 +408,26 @@ func nodeIDs(nodes []models.ClusterNode) []string {
 func TestNodePrunesLongStoppedNodes_Postgres(t *testing.T) {
 	pruneCase(t, newTestCluster(t).replicaDB("nodes"))
 }
+
+// A batch is one statement but arrives as one event per payload, in order,
+// once each; an empty batch appends nothing.
+func TestPublishBatch_Postgres(t *testing.T) {
+	c := newTestCluster(t)
+	a := c.startReplica("a", LogOptions{})
+	b := c.startReplica("b", LogOptions{})
+
+	require.NoError(t, a.log.PublishBatch(context.Background(), "batch", nil))
+	require.NoError(t, a.log.PublishBatch(context.Background(), "batch", [][]byte{[]byte("one"), nil, []byte("three")}))
+
+	got := b.waitFor(t, 3, 5*time.Second)
+	require.Len(t, got, 3)
+	assert.Equal(t, "one", string(got[0].Payload))
+	assert.Empty(t, got[1].Payload)
+	assert.Equal(t, "three", string(got[2].Payload))
+	for _, ev := range got {
+		assert.Equal(t, "batch", ev.Topic)
+		assert.Equal(t, "a", ev.Origin)
+	}
+	assert.Never(t, func() bool { return len(b.received()) > 3 }, 1500*time.Millisecond, 100*time.Millisecond)
+	b.assertNoDuplicates(t)
+}

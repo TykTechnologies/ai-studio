@@ -19,6 +19,10 @@ import (
 // (aggregations, alerts, syncs, cleanups) check Leadership.IsLeader first.
 const LeaderLease = "leader"
 
+// DefaultLeaseTTL is how long the leader lease lasts without renewal unless
+// LeadershipOptions.TTL says otherwise.
+const DefaultLeaseTTL = 30 * time.Second
+
 // LeadershipOptions tune a Leadership. The zero value gives the defaults.
 type LeadershipOptions struct {
 	// TTL is how long the lease lasts without renewal (default 30 s);
@@ -36,7 +40,7 @@ type LeadershipOptions struct {
 
 func (o LeadershipOptions) withDefaults() LeadershipOptions {
 	if o.TTL <= 0 {
-		o.TTL = 30 * time.Second
+		o.TTL = DefaultLeaseTTL
 	}
 	if o.Renew <= 0 || o.Renew >= o.TTL {
 		o.Renew = o.TTL / 3

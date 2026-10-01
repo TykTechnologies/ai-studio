@@ -55,6 +55,14 @@ type EdgePayloadRouter interface {
 	RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error
 }
 
+// EdgePayloadForwarder takes an edge's plugin payloads to another replica
+// that hosts the plugins, for a replica without them (a headless control
+// plane): a whole batch at once, all or none. A nil error means they are
+// queued for that replica, not that a plugin has handled them.
+type EdgePayloadForwarder interface {
+	ForwardEdgePayloads(ctx context.Context, payloads []*pb.PluginControlPayload) error
+}
+
 // EdgeInstance represents an active edge instance connection
 type EdgeInstanceConnection struct {
 	EdgeID        string
@@ -121,6 +129,9 @@ type ControlServer struct {
 
 	// Plugin manager for routing edge payloads to plugins
 	pluginManager EdgePayloadRouter
+	// edgePayloads takes the payloads to a replica with plugins when this
+	// one has none (a headless control plane).
+	edgePayloads EdgePayloadForwarder
 
 	// Event bridge: local event bus for control node
 	eventBus eventbridge.Bus
@@ -1292,26 +1303,44 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		Int("payloads_count", len(req.Payloads)).
 		Msg("AI Studio control server: received plugin control batch from edge")
 
-	var processedCount uint64
+	var processedCount, forwardedCount uint64
 	var errors []*pb.PluginPayloadError
 
-	// Process each payload - route to corresponding plugin
-	for _, payload := range req.Payloads {
-		err := s.routeEdgePayloadToPlugin(ctx, payload)
-		if err != nil {
-			logger.Log.Warn().
-				Err(err).
-				Uint32("plugin_id", payload.PluginId).
-				Str("correlation_id", payload.CorrelationId).
-				Msg("Failed to route edge payload to plugin")
-
-			errors = append(errors, &pb.PluginPayloadError{
-				PluginId:      payload.PluginId,
-				CorrelationId: payload.CorrelationId,
-				ErrorMessage:  err.Error(),
-			})
+	// A replica without plugins forwards the batch in one write.
+	if s.pluginManager == nil && s.edgePayloads != nil {
+		if err := s.edgePayloads.ForwardEdgePayloads(ctx, req.Payloads); err != nil {
+			logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("payloads", len(req.Payloads)).
+				Msg("Failed to queue edge payloads for the plugin host")
+			for _, payload := range req.Payloads {
+				errors = append(errors, &pb.PluginPayloadError{
+					PluginId:      payload.PluginId,
+					CorrelationId: payload.CorrelationId,
+					ErrorMessage:  fmt.Sprintf("could not queue the payload for the plugin host: %v", err),
+				})
+			}
 		} else {
-			processedCount++
+			processedCount = uint64(len(req.Payloads))
+			forwardedCount = processedCount
+		}
+	} else {
+		// Process each payload - route to corresponding plugin
+		for _, payload := range req.Payloads {
+			err := s.routeEdgePayloadToPlugin(ctx, payload)
+			if err != nil {
+				logger.Log.Warn().
+					Err(err).
+					Uint32("plugin_id", payload.PluginId).
+					Str("correlation_id", payload.CorrelationId).
+					Msg("Failed to route edge payload to plugin")
+
+				errors = append(errors, &pb.PluginPayloadError{
+					PluginId:      payload.PluginId,
+					CorrelationId: payload.CorrelationId,
+					ErrorMessage:  err.Error(),
+				})
+			} else {
+				processedCount++
+			}
 		}
 	}
 
@@ -1325,9 +1354,13 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		Int64("processing_time_ms", totalProcessingTime.Milliseconds()).
 		Msg("Plugin control batch processed")
 
+	message := fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads))
+	if forwardedCount > 0 {
+		message += fmt.Sprintf(" (%d queued for the plugin host)", forwardedCount)
+	}
 	return &pb.PluginControlBatchResponse{
 		Success:        len(errors) == 0,
-		Message:        fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads)),
+		Message:        message,
 		ProcessedCount: processedCount,
 		SequenceNumber: req.SequenceNumber,
 		ProcessedAt:    timestamppb.Now(),
@@ -1335,15 +1368,21 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 	}, nil
 }
 
-// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI Studio plugin
+// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI
+// Studio plugin (a replica without plugins forwards whole batches instead,
+// in SendPluginControlBatch).
 func (s *ControlServer) routeEdgePayloadToPlugin(ctx context.Context, payload *pb.PluginControlPayload) error {
-	// Check if plugin manager is available (set after server creation)
-	if s.pluginManager == nil {
-		return fmt.Errorf("plugin manager not available")
+	if s.pluginManager != nil {
+		// Route to plugin manager which will handle AcceptEdgePayload call
+		return s.pluginManager.RouteEdgePayload(ctx, payload)
 	}
+	return fmt.Errorf("plugin manager not available")
+}
 
-	// Route to plugin manager which will handle AcceptEdgePayload call
-	return s.pluginManager.RouteEdgePayload(ctx, payload)
+// SetEdgePayloadForwarder has a replica without plugins (no SetPluginManager)
+// forward edges' plugin payloads to one that has them. Set it before Serve.
+func (s *ControlServer) SetEdgePayloadForwarder(f EdgePayloadForwarder) {
+	s.edgePayloads = f
 }
 
 // SetPluginManager sets the plugin manager reference for routing edge payloads
