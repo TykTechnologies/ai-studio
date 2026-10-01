@@ -45,6 +45,8 @@ func setupPerformanceTestDB(t *testing.T) (*gorm.DB, *QueryCountLogger) {
 		&models.EdgeInstance{},
 	)
 	require.NoError(t, err)
+	// The analytics recorder no longer creates its tables itself.
+	require.NoError(t, analytics.Migrate(db))
 
 	return db, queryLogger
 }

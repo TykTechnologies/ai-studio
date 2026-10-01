@@ -3,7 +3,6 @@ package grpc
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"math"
 	"math/rand"
@@ -1213,22 +1212,12 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 
 	// Configure transport credentials (TLS or insecure)
 	if c.config.HubSpoke.ClientTLSEnabled {
-		var tlsConfig *tls.Config
-
-		if c.config.HubSpoke.SkipTLSVerify {
-			tlsConfig = &tls.Config{InsecureSkipVerify: true}
-			log.Warn().Msg("🔒 SECURITY: TLS certificate verification disabled - not recommended for production")
-		} else {
-			tlsConfig = &tls.Config{}
+		tlsConfig, err := clientTLSConfig(c.config.HubSpoke)
+		if err != nil {
+			return nil, err
 		}
-
-		// Load client certificates if provided
-		if c.config.HubSpoke.ClientTLSCertPath != "" && c.config.HubSpoke.ClientTLSKeyPath != "" {
-			cert, err := tls.LoadX509KeyPair(c.config.HubSpoke.ClientTLSCertPath, c.config.HubSpoke.ClientTLSKeyPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load client certificates: %w", err)
-			}
-			tlsConfig.Certificates = []tls.Certificate{cert}
+		if c.config.HubSpoke.SkipTLSVerify {
+			log.Warn().Msg("🔒 SECURITY: TLS certificate verification disabled - not recommended for production")
 		}
 
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))

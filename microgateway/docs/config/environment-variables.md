@@ -211,7 +211,8 @@ Complete reference for all microgateway environment variables organized by funct
 | `EDGE_TLS_ENABLED` | false | Enable TLS for control connection |
 | `EDGE_TLS_CERT_PATH` | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | - | Client key path |
-| `EDGE_TLS_CA_PATH` | - | CA certificate path |
+| `EDGE_TLS_CA_PATH` | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
+| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` |
 | `EDGE_SKIP_TLS_VERIFY` | false | Skip TLS certificate verification |
 
 ## Plugin Configuration

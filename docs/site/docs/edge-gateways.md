@@ -275,6 +275,31 @@ The paths and the response envelope are unchanged, and every attribute 2.2 retur
 - **Status codes.** A namespace with no edge to push to answers `409` (2.2: `404`); reload-all with no edge at all answers `409` (2.2: `202` with no operations); an edge that is offline answers `202` and the push waits for it (2.2: `500`).
 - **The listing** (`GET /edges/reload-operations`) returns the last day's pushes from the database, with `counts` per outcome instead of `target_edges`; the status endpoint lists each push's edges.
 
+## Connection Settings
+
+### TLS
+
+AI Studio serves the control connection with TLS unless `GRPC_TLS_INSECURE=true`, using `GRPC_TLS_CERT_PATH` and `GRPC_TLS_KEY_PATH`. The edge checks that certificate as follows:
+
+| Edge setting | Purpose |
+|---|---|
+| `EDGE_TLS_CA_PATH` | PEM file of the CA(s) that issued the control plane's certificate, for a private CA. Unset uses the system roots. |
+| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` (an IP address, or a load balancer's internal name). |
+| `EDGE_TLS_CERT_PATH`, `EDGE_TLS_KEY_PATH` | Client certificate for mutual TLS. |
+| `EDGE_SKIP_TLS_VERIFY` | Skips verification entirely. Development only. |
+
+The edge requires TLS 1.2 or later. An unreadable `EDGE_TLS_CA_PATH`, or one with no PEM certificates, stops the connection with an error naming the setting. Edges before 2026-10-01 checked that `EDGE_TLS_CA_PATH` existed but did not use it, so a certificate from a private CA only worked with `EDGE_SKIP_TLS_VERIFY`.
+
+### Keepalive and message sizes
+
+Edges ping the control plane every 30 seconds, also while no stream is open, and drop a connection whose ping is not answered within 5 seconds. AI Studio accepts pings as often as every 10 seconds and pings idle edges on the same schedule, so half-open connections behind a load balancer or NAT are noticed. Before 2026-10-01 AI Studio kept gRPC's default policy (one ping per 5 minutes, none without a stream) and could answer an edge's pings with `GOAWAY` (`too_many_pings`), which the edge sees as a disconnect.
+
+| AI Studio setting | Default | Purpose |
+|---|---|---|
+| `GRPC_MAX_MESSAGE_SIZE` | 16 MB | Largest message in either direction: configuration snapshots out, analytics pulses and plugin payloads in. Keep it equal to the edges' `GRPC_MAX_MESSAGE_SIZE`. It used to be gRPC's 4 MB for messages from edges. |
+| `GRPC_MAX_CONNECTION_AGE` | off | Closes each edge connection after about this long, so edges spread again over replicas behind a load balancer. Edges reconnect at once, and pushes in flight on a closed stream go back to pending. |
+| `GRPC_MAX_CONNECTION_AGE_GRACE` | none | How long a connection past its age gets to finish before it is closed. |
+
 ## Troubleshooting
 
 ### Edge Shows "Disconnected"

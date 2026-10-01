@@ -492,20 +492,27 @@ the highest version any `go.mod` in the build requires. So each Studio
 requirement above the host's own upgrades the host silently, and a host
 dependency newer than Studio's is what Studio actually runs with there.
 Studio's `go.mod` (and the enterprise module's) therefore follows the Tyk
-Dashboard's:
+Dashboard's, and is checked against Tyk MDCB's (`tyk-sink`) as well, which
+embeds Studio as a headless control plane:
 
 - Where both require a module, Studio uses the Dashboard's version, up or
   down (2026-09-30: TIB 1.8, libopenapi 0.36, gorilla/sessions 1.4,
   go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up;
   gosimple/slug and mergo down). The `go` directive matches the Dashboard's
   (`go 1.26.5`, `toolchain go1.26.6` for Studio's own builds).
-- Where a Studio dependency needs a newer version, the module is in
-  `scripts/host-compat-allow.txt` with the dependency that needs it (the
+- Where a Studio dependency needs a newer version, the module is in the
+  host's allowlist, `scripts/host-compat-allow.<repo>.txt`
+  (`tyk-analytics`, `tyk-sink`), with the dependency that needs it (the
   OpenTelemetry 1.46 exporters, the Prometheus client behind the otel
   Prometheus exporter, go-openapi v0.25+, weaviate). Each was checked by
   lowering it alone: every one drags others down with it. One raise is a
   choice rather than a need: pgx stays at 5.10 (v2.2.0's version, for its
   hardening against hostile servers) above the Dashboard's 5.9.2.
+- MDCB (checked 2026-10-01) lags on a subset of the same modules (the otel
+  exporters, the Prometheus client 1.21.1, pgx 5.9.2, go-openapi,
+  jsonparser), so its allowlist holds that subset with the same reasons.
+  Where MDCB is lower than the Dashboard and nothing in Studio's graph
+  needs more, Studio follows MDCB (`golang.org/x/exp`).
 - `mattn/go-sqlite3` is deliberately not aligned: the Dashboard carries the
   retracted `v2.0.3+incompatible`, and `pkg/studio` does not link SQLite.
 - The in-repo plugin modules (`examples/`, `enterprise/plugins/`, and the
@@ -515,20 +522,26 @@ Dashboard's:
   `make plugins-mod-check` checks them (CI covers `examples` and
   `enterprise/plugins`; the submodules are separate repositories).
 
-`make host-compat` (`scripts/host-compat.sh --build`, a CI job on this
-repository's branches) fetches the Dashboard's `go.mod` at run time (its
-repository is private; never commit a copy) and:
+`make host-compat` (`scripts/host-compat.sh --build`, a CI job per host on
+this repository's branches: "Host Compatibility (Dashboard)" and "(MDCB)")
+fetches the `go.mod` of each repository in `HOST_REPOS` (default
+`tyk-analytics tyk-sink`) at run time (they are private; never commit a
+copy), checks each in turn, fails if any fails, and for each host:
 
 1. fails if Studio or the enterprise module requires anything above the
-   Dashboard's version that the allowlist does not name
+   host's version that the host's allowlist does not name
    (`tools/hostcompat`, no network);
-2. builds `pkg/studio` for both editions inside the Dashboard's module
+2. builds `pkg/studio` for both editions inside the host's module
    graph, its requirements and replaces included, with `CGO_ENABLED=0`, and
-   lists every module that ends up above the Dashboard's `go.mod`. That list
+   lists every module that ends up above the host's `go.mod`. That list
    also shows raises from the `go.mod` files of Studio's dependencies, which
    the first check cannot see; most come from
    `github.com/weaviate/weaviate`, the server module, of which Studio only
    uses `entities/models`.
+
+`make host-compat HOST_REPOS=tyk-sink` checks one host;
+`scripts/host-compat.sh [--build] path/to/go.mod` checks a local copy
+against `HOST_ALLOW` (default the Dashboard's allowlist).
 
 A host that never builds the enterprise edition can build, tidy and verify
 Studio without access to the private enterprise module, but `go list -m
@@ -558,6 +571,13 @@ schemas do not wait for each other. On SQLite, or with a pool of one
 connection, it is a no-op. Tests: `pkg/studio/database_schema_postgres_test.go`,
 `models/migration_lock_postgres_test.go`.
 
+Nothing else migrates. The analytics recorder used to run
+`analytics.Migrate` when it started, outside the lock, and
+`grpc.NewControlServer` started a recorder of its own (on a context that was
+never cancelled); both are gone, so starting the recorder or the control
+server runs no DDL. A host that records analytics without `studio.New`
+calls `analytics.Migrate` itself, under its own lock.
+
 It started as a session-level lock. Behind PgBouncer in transaction mode
 that leaked: the lock stayed on whichever pooled server connection took it,
 the unlock ran on another one, and every later instance waited for ever.
@@ -572,6 +592,39 @@ boots of a fresh schema did not fail in tests (the seeds are protected by
 unique constraints), so the lock is a guard for upgrades, where replicas
 starting together would run the same ALTERs and backfills, rather than for
 an observed race.
+
+### Schema version and `studio.CheckSchema`
+
+The last step under the migration lock records the schema in `studio_schema`
+(one row, `models.RecordSchemaVersion`): `version` (`models.SchemaVersion`),
+`min_reader_version` (`models.MinReaderSchemaVersion`, the oldest schema
+version whose code can still read this one), the Studio version that wrote
+it and when. It never lowers the record: an older Studio started against a
+database a newer one migrated keeps the newer version (its own migrations
+only add), and logs a warning.
+
+An instance that must not migrate the database, such as a headless control
+plane sharing it with a full Studio, calls `studio.CheckSchema(ctx, db)`
+first. It only reads (no DDL) and fails with:
+
+- `studio.ErrSchemaMissing`: no record; no Studio of this generation has
+  migrated the database yet.
+- `studio.ErrSchemaTooOld`: the record's `version` is below this build's
+  `SchemaVersion`; upgrade the full Studio first.
+- `studio.ErrSchemaTooNew`: the record's `min_reader_version` is above this
+  build's `SchemaVersion`; a newer Studio made a change this build cannot
+  read, so upgrade it.
+
+A newer schema that still lists this build as a reader is accepted, so the
+headless instance may lag the full one across additive migrations. Every
+schema change bumps `SchemaVersion`; `MinReaderSchemaVersion` rises only for
+a change that breaks older readers (the rules are next to the constants in
+`models/schema_version.go`). `models/testdata/schema/VERSION` records the
+version and a hash of the schema goldens: `TestSchemaVersionMatchesGoldens`
+and `make schema-golden` fail when the goldens change without a bump. The
+goldens cover `models.InitModels` (with the profile and KV tables), which
+holds the Enterprise tables too; the analytics tables `analytics.Migrate`
+adds (`proxy_logs`, `compliance_events`, ...) are outside them.
 
 ## Several replicas
 

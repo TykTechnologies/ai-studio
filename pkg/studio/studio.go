@@ -352,6 +352,11 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := service.Authz().Seed(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: seed RBAC roles: %w", err)
 	}
+	// Last under the lock: the schema is now this build's (CheckSchema
+	// reads it back for instances that do not migrate).
+	if err := models.RecordSchemaVersion(s.db, schemaWriter(opts.Version)); err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
+	}
 	releaseMigrationLock()
 	releaseMigrationLock = nil
 
@@ -583,6 +588,10 @@ func (s *Studio) wireControlPlane(version string) error {
 		NodeID:        s.clusterNode.ID(),
 
 		BudgetSyncInterval: conf.BudgetSyncInterval,
+
+		MaxMessageSize:        conf.GRPCMaxMessageSize,
+		MaxConnectionAge:      conf.GRPCMaxConnectionAge,
+		MaxConnectionAgeGrace: conf.GRPCMaxConnectionAgeGrace,
 	}, s.db)
 	if err != nil {
 		return fmt.Errorf("studio: create gRPC control server: %w", err)

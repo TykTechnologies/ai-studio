@@ -516,8 +516,9 @@ vet: ## go vet the root, microgateway and enterprise modules in both editions, e
 	@scripts/vet.sh $(or $(VET_EDITION),all)
 
 .PHONY: host-compat
-host-compat: ## Check Studio against the Tyk Dashboard's go.mod: version floor, then build inside its module graph (needs GH_TOKEN + access)
-	@scripts/host-compat.sh --build
+HOST_REPOS ?= tyk-analytics tyk-sink
+host-compat: ## Check Studio against the Tyk Dashboard's and MDCB's go.mod (HOST_REPOS): version floor, then build inside each module graph (needs GH_TOKEN + access)
+	@HOST_REPOS="$(HOST_REPOS)" scripts/host-compat.sh --build
 
 .PHONY: module-check
 module-check: ## Check the Go proxy would accept HEAD as a module zip (commit first)

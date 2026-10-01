@@ -23,6 +23,8 @@ func migrateStudioSchema(t *testing.T, db *gorm.DB) {
 	require.NoError(t, InitModels(db))
 	require.NoError(t, MigrateProfiles(db))
 	require.NoError(t, db.AutoMigrate(&KVPair{}))
+	require.NoError(t, db.AutoMigrate(AnalyticsModels()...)) // analytics.Migrate
+
 }
 
 // The schema Studio's migrations produce is pinned by golden files, so a

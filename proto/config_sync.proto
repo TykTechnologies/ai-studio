@@ -19,7 +19,9 @@ service ConfigurationSyncService {
   // SubscribeToChanges establishes a bidirectional stream for real-time configuration updates
   rpc SubscribeToChanges(stream EdgeMessage) returns (stream ControlMessage);
   
-  // SendHeartbeat sends periodic health status updates
+  // SendHeartbeat sends periodic health status updates.
+  // Deprecated: edges heartbeat on the SubscribeToChanges stream. Studio
+  // still answers this call, from its database, on any replica.
   rpc SendHeartbeat(HeartbeatRequest) returns (HeartbeatResponse);
   
   // UnregisterEdge unregisters an edge instance

@@ -431,16 +431,24 @@ jobs:
         run: make module-check
 
   # ==========================================================================
-  # Host compatibility: the Tyk Dashboard embeds pkg/studio. Studio must not
-  # raise the Dashboard's dependency versions (outside the reasoned
+  # Host compatibility: the Tyk Dashboard and MDCB embed pkg/studio. Studio
+  # must not raise a host's dependency versions (outside that host's reasoned
   # allowlist) and must build inside its module graph with CGO_ENABLED=0.
-  # Reads the Dashboard's private go.mod at run time, so never on forks.
+  # Reads the hosts' private go.mod at run time, so never on forks.
   # ==========================================================================
   host-compat:
     needs: [dep-guard]
-    name: Host Compatibility (Dashboard)
+    name: Host Compatibility (${{ matrix.name }})
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: warp-ubuntu-latest-arm64-4x
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Dashboard
+            repo: tyk-analytics
+          - name: MDCB
+            repo: tyk-sink
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -457,11 +465,11 @@ jobs:
       - name: Credentials for private Tyk modules
         run: git config --global url."https://x-access-token:${{ secrets.CI_SUBMODULE_PAT }}@github.com/TykTechnologies/".insteadOf "https://github.com/TykTechnologies/"
 
-      - name: Check Studio against the Dashboard's go.mod
+      - name: Check Studio against the ${{ matrix.name }}'s go.mod
         env:
           GH_TOKEN: ${{ secrets.CI_SUBMODULE_PAT }}
           GOPRIVATE: github.com/TykTechnologies
-        run: make host-compat
+        run: make host-compat HOST_REPOS=${{ matrix.repo }}
 
   # ==========================================================================
   # Documentation Build
@@ -525,7 +533,7 @@ jobs:
           echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| gorm Copy Verification | ${{ needs.gorm-verify.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Module Zip Check | ${{ needs.module-check.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Host Compatibility (Dashboard) | ${{ needs.host-compat.result == 'success' && ':white_check_mark:' || (needs.host-compat.result == 'skipped' && ':fast_forward:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Host Compatibility (Dashboard, MDCB) | ${{ needs.host-compat.result == 'success' && ':white_check_mark:' || (needs.host-compat.result == 'skipped' && ':fast_forward:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "$FORK_PR" = true ]; then
