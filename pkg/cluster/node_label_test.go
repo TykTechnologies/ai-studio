@@ -59,11 +59,15 @@ func TestNodeDefaultsAndOlderRows(t *testing.T) {
 
 func TestNodeLabelValidation(t *testing.T) {
 	db := sqliteDB(t)
-	for _, bad := range []string{strings.Repeat("a", 65), "tab\there", "new\nline"} {
+	for _, bad := range []string{
+		strings.Repeat("a", 65), "tab\there", "new\nline",
+		// Characters that mean something to HTML, a shell or a query string.
+		"<script>", `quote"d`, "it's", "a&b", "back`tick", "semi;colon",
+	} {
 		_, err := StartNode(db, "n", "test", NodeOptions{Label: bad})
 		assert.Error(t, err, "%q", bad)
 	}
-	for _, good := range []string{"", "mdcb-eu-west-1", "Dashboard (primary)", "mdcb.host_2"} {
+	for _, good := range []string{"", "mdcb-eu-west-1", "Dashboard (primary)", "mdcb.host_2", "eu:west/1", "Zürich"} {
 		n, err := StartNode(db, "n-"+good, "test", NodeOptions{Label: good})
 		require.NoError(t, err, "%q", good)
 		n.Stop(context.Background())

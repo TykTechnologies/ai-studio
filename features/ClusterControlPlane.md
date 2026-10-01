@@ -121,7 +121,7 @@ node.
 
 Each row also carries a `label` for operators (`Options.NodeLabel`, default
 `studio`; `ControlPlaneOptions.NodeLabel`, default `control-plane`, e.g.
-`mdcb-eu-1`; at most 64 characters, no control characters) and
+`mdcb-eu-1`; at most 64 letters, digits, spaces and `. _ - : / ( )`) and
 `leader_eligible` (false for a headless control plane, which never takes the
 leader lease). Both are nullable: a row written before they existed counts
 as unlabelled and eligible. Eligibility is recorded for operators; a
