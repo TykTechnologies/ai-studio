@@ -33,6 +33,8 @@ type DatabaseHandler struct {
 	teams *teamStamper
 	ctx                 context.Context
 	cancel              context.CancelFunc
+	// workerDone is closed when the worker has returned.
+	workerDone chan struct{}
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
@@ -131,12 +133,23 @@ func (h *DatabaseHandler) start() {
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
 
 	// Start background workers
-	go h.startWorker()
+	h.workerDone = make(chan struct{})
+	go func() {
+		defer close(h.workerDone)
+		h.startWorker()
+	}()
 }
 
 // startWorker runs the main worker loop for handling database writes
 func (h *DatabaseHandler) startWorker() {
 	for {
+		// Stopping wins over buffered records: select picks among ready
+		// cases at random, so without this a stopped handler could go on
+		// writing its buffers out after Stop returned.
+		if h.ctx.Err() != nil {
+			h.shutdown()
+			return
+		}
 		select {
 		case record := <-h.chatRecordChan:
 			h.teams.stamp(record)
@@ -233,17 +246,22 @@ func (h *DatabaseHandler) startWorker() {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
 			}
 		case <-h.ctx.Done():
-			logger.Info("shutting down database analytics handler")
-			h.recMutex.Lock()
-			h.recStarted = false
-			h.recMutex.Unlock()
-			// The channels stay open: a recorder that checked recStarted
-			// before this point may still send, and a send on a closed
-			// channel panics. Nothing ranges over them, so leaving them
-			// open only leaves unread records in the buffers.
+			h.shutdown()
 			return
 		}
 	}
+}
+
+// shutdown marks the handler stopped as its worker returns.
+func (h *DatabaseHandler) shutdown() {
+	logger.Info("shutting down database analytics handler")
+	h.recMutex.Lock()
+	h.recStarted = false
+	h.recMutex.Unlock()
+	// The channels stay open: a recorder that checked recStarted
+	// before this point may still send, and a send on a closed
+	// channel panics. Nothing ranges over them, so leaving them
+	// open only leaves unread records in the buffers.
 }
 
 // createRecordWithRetry executes database operations with retry logic for lock errors
@@ -293,7 +311,19 @@ func (h *DatabaseHandler) Stop() {
 	if h.cancel != nil {
 		h.cancel()
 	}
+	// Wait for a write in progress (bounded: a write stuck on the database
+	// must not hold up shutdown), so nothing is written after Stop returns.
+	if h.workerDone != nil {
+		select {
+		case <-h.workerDone:
+		case <-time.After(stopWait):
+			logger.Warnf("Analytics worker still writing %s after Stop; not waiting longer", stopWait)
+		}
+	}
 }
+
+// stopWait bounds how long Stop waits for the worker.
+var stopWait = 5 * time.Second
 
 // Implement AnalyticsHandler interface methods
 func (h *DatabaseHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
