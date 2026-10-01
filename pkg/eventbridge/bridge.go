@@ -3,7 +3,9 @@ package eventbridge
 import (
 	"context"
 	"runtime/debug"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 	"github.com/simonfxr/pubsub"
@@ -42,6 +44,10 @@ type Bridge struct {
 	cancel  context.CancelFunc
 	sub     *pubsub.Subscription
 	wg      sync.WaitGroup // Tracks remoteToLocal goroutine for clean shutdown
+
+	// droppedSystem counts the system.* events an edge sent that this
+	// control node dropped (see remoteToLocal).
+	droppedSystem atomic.Uint64
 }
 
 // BridgeConfig configures the bridge behavior.
@@ -269,6 +275,22 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 			ev := frame.ToEvent()
 			// On a control node the peer is an edge.
 			ev.FromEdge = b.isControl
+
+			// Object change events (system.*) come from Studio, never from an
+			// edge: on the bus they would reload the gateway, clear caches
+			// and reach webhooks and plugins as if Studio had changed an
+			// object. Logged on the first and every 100th.
+			if b.isControl && strings.HasPrefix(ev.Topic, "system.") {
+				if n := b.droppedSystem.Add(1); n == 1 || n%100 == 0 {
+					log.Warn().
+						Str("node_id", b.nodeID).
+						Str("topic", ev.Topic).
+						Str("origin", ev.Origin).
+						Uint64("dropped", n).
+						Msg("Dropped an object change event (system.*) sent by an edge; only Studio publishes those")
+				}
+				continue
+			}
 
 			log.Debug().
 				Str("node_id", b.nodeID).
