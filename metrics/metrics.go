@@ -31,6 +31,7 @@ var (
 	complianceEventsTotal otelmetric.Int64Counter
 	failoverTotal         otelmetric.Int64Counter
 	guardrailErrorsTotal  otelmetric.Int64Counter
+	goroutinePanicsTotal  otelmetric.Int64Counter
 
 	// Histograms
 	requestDuration  otelmetric.Float64Histogram
@@ -143,6 +144,13 @@ func registerInstruments(meter otelmetric.Meter) {
 	)
 	if err != nil {
 		panic("failed to create guardrailErrorsTotal counter: " + err.Error())
+	}
+
+	goroutinePanicsTotal, err = meter.Int64Counter("aistudio_goroutine_panics_total",
+		otelmetric.WithDescription("Panics recovered in Studio's background work and gRPC handlers, by goroutine"),
+	)
+	if err != nil {
+		panic("failed to create goroutinePanicsTotal counter: " + err.Error())
 	}
 
 	guardrailLatency, err = meter.Float64Histogram("aistudio_guardrail_latency_seconds",
@@ -331,6 +339,17 @@ func RecordGuardrailError(ctx context.Context, provider, failMode string) {
 			attribute.String("provider", provider),
 			attribute.String("fail_mode", failMode),
 		),
+	)
+}
+
+// RecordGoroutinePanic counts a panic recovered in the named background
+// goroutine or gRPC handler (pkg/safe).
+func RecordGoroutinePanic(ctx context.Context, goroutine string) {
+	if !initialized.Load() {
+		return
+	}
+	goroutinePanicsTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(attribute.String("goroutine", goroutine)),
 	)
 }
 

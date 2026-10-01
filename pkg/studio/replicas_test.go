@@ -70,6 +70,23 @@ func TestCoalescer_ErrorsDoNotStopIt(t *testing.T) {
 	c.stop()
 }
 
+// A run that panics counts as a failed one: the coalescer runs again on the
+// next trigger (a dead goroutine would leave it marked running for good).
+func TestCoalescer_PanicsDoNotStopIt(t *testing.T) {
+	var runs atomic.Int32
+	c := newCoalescer("test", time.Millisecond, func() error {
+		if runs.Add(1) == 1 {
+			panic("reload bug")
+		}
+		return nil
+	})
+	c.trigger()
+	require.Eventually(t, func() bool { return runs.Load() == 1 }, time.Second, time.Millisecond)
+	c.trigger()
+	require.Eventually(t, func() bool { return runs.Load() == 2 }, time.Second, time.Millisecond)
+	c.stop()
+}
+
 type fakePublisher struct {
 	mu       sync.Mutex
 	sent     []string

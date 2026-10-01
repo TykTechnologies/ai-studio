@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -315,6 +316,10 @@ func (l *Log) poke() {
 
 func (l *Log) run() {
 	defer close(l.done)
+	safe.Loop("cluster event log", l.stop, l.loop)
+}
+
+func (l *Log) loop() {
 	poll := time.NewTicker(l.opts.PollInterval)
 	defer poll.Stop()
 	prune := time.NewTicker(l.opts.PruneInterval)

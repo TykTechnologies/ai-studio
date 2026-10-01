@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -132,11 +133,13 @@ func (h *DatabaseHandler) start() {
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
 
-	// Start background workers
+	// Start background workers. A panic writing one record loses that
+	// record, not the worker (nor the process); workerDone closes once the
+	// worker has stopped for good.
 	h.workerDone = make(chan struct{})
 	go func() {
 		defer close(h.workerDone)
-		h.startWorker()
+		safe.Loop("analytics writer", h.ctx.Done(), h.startWorker)
 	}()
 }
 

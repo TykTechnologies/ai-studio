@@ -104,6 +104,36 @@ func TestSubscribersShareAChannel_Postgres(t *testing.T) {
 	assert.Equal(t, "y", recv(t, b))
 }
 
+// A subscriber that panics loses that notification only: the others on the
+// channel still hear it, and the listener (and its connection) carry on.
+func TestPanickingHandlerDoesNotStopTheListener_Postgres(t *testing.T) {
+	dsn, _ := testDSN(t)
+	db := admin(t)
+	l := acquire(t, dsn)
+	defer l.Release()
+
+	var panicked atomic.Bool
+	_, err := l.Subscribe("pglisten_panic", func(p string) {
+		if panicked.CompareAndSwap(false, true) {
+			panic("subscriber bug")
+		}
+	}, 5*time.Second)
+	require.NoError(t, err)
+	got := make(chan string, 4)
+	_, err = l.Subscribe("pglisten_panic", func(p string) { got <- p }, 5*time.Second)
+	require.NoError(t, err)
+
+	notify(t, db, "pglisten_panic", "one")
+	notify(t, db, "pglisten_panic", "two")
+	assert.Equal(t, "one", recv(t, got))
+	assert.Equal(t, "two", recv(t, got))
+	assert.True(t, panicked.Load())
+
+	// The shared lock is free again: a new subscription still goes through.
+	_, err = l.Subscribe("pglisten_panic_after", func(string) {}, 5*time.Second)
+	require.NoError(t, err)
+}
+
 // Acquire shares one listener per DSN; the last Release closes it.
 func TestAcquireIsReferenceCounted_Postgres(t *testing.T) {
 	dsn, appName := testDSN(t)

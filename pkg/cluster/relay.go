@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/simonfxr/pubsub"
 )
 
@@ -146,6 +147,11 @@ func (r *Relay) fromBus(ev eventbridge.Event) {
 
 func (r *Relay) run() {
 	defer close(r.done)
+	// A panic loses the event being written, not the relay.
+	safe.Loop("cluster relay", r.stop, r.loop)
+}
+
+func (r *Relay) loop() {
 	for {
 		select {
 		case ev := <-r.queue:

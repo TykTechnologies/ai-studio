@@ -2,6 +2,7 @@ package eventbridge
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 
 	"github.com/rs/zerolog/log"
@@ -212,6 +213,13 @@ func (b *Bridge) localToRemote(ctx context.Context) {
 // All received events are marked as DirLocal to prevent re-forwarding.
 func (b *Bridge) remoteToLocal(ctx context.Context) {
 	defer b.wg.Done() // Signal completion for clean shutdown
+	// A panic ends this direction of the bridge, not the process.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error().Str("node_id", b.nodeID).Interface("panic", r).Str("stack", string(debug.Stack())).
+				Msg("Event bridge receive panicked; events from the peer stop until the stream is re-established")
+		}
+	}()
 
 	log.Debug().
 		Str("node_id", b.nodeID).

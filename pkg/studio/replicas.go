@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 )
 
 // signalTopic is the cluster log topic replica signals (pkg/replicas)
@@ -68,6 +70,10 @@ func (ss *signalSender) send(name string) {
 
 func (ss *signalSender) run() {
 	defer close(ss.done)
+	safe.Loop("replica signal sender", ss.stop, ss.loop)
+}
+
+func (ss *signalSender) loop() {
 	for {
 		select {
 		case <-ss.wake:
@@ -173,7 +179,13 @@ func (c *coalescer) loop() {
 		}
 		c.pending = false
 		c.mu.Unlock()
-		if err := c.fn(); err != nil {
+		// A panic counts as a failed run: the coalescer keeps running
+		// (a goroutine that died here would leave it "running" for good).
+		var err error
+		if safe.Call(c.name, func() { err = c.fn() }) {
+			err = errors.New("panicked")
+		}
+		if err != nil {
 			logger.Errorf("Applying a change from another replica (%s) failed; this replica may serve the old configuration until the next change: %v", c.name, err)
 		}
 	}
@@ -234,7 +246,10 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 	go func() {
 		defer close(rc.pluginsDone)
 		for ch := range rc.plugins {
-			service.ApplyPluginChangeFromReplica(ch.topic, ch.id)
+			// One plugin's failure must not stop the others' changes.
+			safe.Call("plugin change from another replica", func() {
+				service.ApplyPluginChangeFromReplica(ch.topic, ch.id)
+			})
 		}
 	}()
 	sub := bus.SubscribeAll(func(ev eventbridge.Event) {

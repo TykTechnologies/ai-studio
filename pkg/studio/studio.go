@@ -40,6 +40,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
@@ -444,14 +445,14 @@ func New(opts Options) (_ *Studio, err error) {
 	// Rows recorded before email framing was stripped at write time still
 	// read "Subject: ... Dear Administrator ..." in the bell. Rewrite them
 	// once, off the startup path; a second run finds nothing to change.
-	go func() {
+	safe.Go("notification body backfill", func() {
 		changed, err := notificationService.BackfillLegacyBodies()
 		if err != nil {
 			logger.Warnf("Notification body backfill stopped after %d rows: %v", changed, err)
 		} else if changed > 0 {
 			logger.Infof("Rewrote %d legacy notification bodies", changed)
 		}
-	}()
+	})
 
 	authConfig := &auth.Config{
 		DB:                     s.db,
