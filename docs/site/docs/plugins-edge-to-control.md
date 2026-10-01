@@ -51,6 +51,30 @@ The Edge-to-Control system provides a reliable, batched mechanism for this commu
 5. Control Server **routes** each payload to the target plugin
 6. Studio plugin's `AcceptEdgePayload()` is called with the data
 
+### With several control-plane replicas
+
+AI Studio can run as several replicas sharing one database, including
+headless control planes (for example inside Tyk MDCB) that hold edge
+connections but run no plugins. The edge sends to whichever replica holds
+its connection; what a plugin sees:
+
+- **Payloads are handled on one replica.** A replica without plugins passes
+  each payload to the leader replica, which hands it to its plugin; the edge
+  is told the payload is queued. On a replica with plugins, the payload is
+  handled there, as on a single Studio.
+- **At least once.** When the leader changes (a restart, a crash, an
+  upgrade), the new leader handles the payloads of the last 45 seconds
+  again, so a plugin can receive a payload twice. Use `CorrelationID` (or
+  your own ID in the payload) to recognise repeats, and make aggregation
+  idempotent.
+- **Loss.** A payload sent while no full Studio runs for longer than 45
+  seconds is lost, as is one your plugin fails on: a returned error is not
+  retried.
+- **Events published up (`DirUp`)** from an edge held by a headless replica
+  reach the plugins on every full Studio replica, once each (as on a single
+  Studio, where they reach its own plugins). They are never sent back down
+  to edges.
+
 ## Edge Plugin: Sending Data
 
 ### SDK Functions
@@ -495,7 +519,7 @@ func (p *MyPlugin) AcceptEdgePayload(ctx plugin_sdk.Context, payload *plugin_sdk
 2. **Validate payloads**: Don't trust edge data - validate before processing
 3. **Use KV for persistence**: Store aggregated data for dashboard/API access
 4. **Log with context**: Include edge ID and correlation ID in logs
-5. **Handle duplicates**: Network issues may cause duplicate deliveries
+5. **Handle duplicates**: Network issues and control-plane leader changes may cause duplicate deliveries (see [With several control-plane replicas](#with-several-control-plane-replicas))
 
 ### Performance
 

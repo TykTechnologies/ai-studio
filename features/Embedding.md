@@ -736,7 +736,8 @@ What it runs:
 - cluster membership: a `cluster_nodes` row, the event log, replica signals
   (budget and governed-metadata caches), and the bus relay, which carries the
   full Studio's edge-bound events (`budget.sync`, configuration changes) to
-  its edges;
+  its edges, and its edges' events and plugin payloads to the full Studio
+  (below);
 - licence validity checks (Enterprise), without telemetry.
 
 What it leaves out: migrations and seeds, the API and UI, the AI gateway,
@@ -760,12 +761,21 @@ own otherwise).
   touching zerolog's global logger.
 - **One instance per process**, shared with `New`: a Studio and a control
   plane cannot run in one process. After `Stop`, either may start again.
-- **Edge-to-control plugin traffic (phase 1 limit).** Plugin control
-  payloads (`SendPluginControlBatch`) and edge `DirUp` events need a plugin
-  host. A control plane has none: payloads are answered with a per-payload
-  error ("plugin manager not available") that the edge logs, and `DirUp`
-  events reach only its own bus. Relaying both to the full Studio is the
-  next step.
+- **Edge-to-control plugin traffic reaches the full Studio's plugins.** A
+  control plane runs no plugins, so what its edges send for them goes on:
+  - events edges publish `DirUp` are relayed through the cluster event log
+    to every full replica, whose plugins get each once (as `DirLocal`, like
+    their own edges' events; never sent down to any edge);
+  - plugin payloads (`SendPluginControlBatch`, `SendToControl` in the SDK)
+    are written to the log, one row per payload in one write per batch, and the edge is told they
+    are queued. The leader, which is always a full Studio, hands each to its
+    plugin. Delivery is at least once: when a replica becomes the leader it
+    takes the payloads of the last 45 s again (a crashed leader may not have
+    handled them, and none was handled while no replica led), so plugins see
+    those twice and should use the correlation ID. A payload that arrives
+    while no full Studio is up for longer than that is lost, and so is one a
+    plugin fails to handle (as on a single Studio). See
+    `docs/site/docs/plugins-edge-to-control.md`.
 
 ## langchaingo in tree
 

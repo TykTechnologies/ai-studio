@@ -223,7 +223,11 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 		return nil, fmt.Errorf("studio: start edge push delivery: %w", err)
 	}
 
-	c.startRelay(c.control.GetEventBus(), cluster.RelayOptions{})
+	// Edge-to-control traffic is for plugins, which run on the full
+	// replicas: what edges publish is relayed to them, and plugin payloads
+	// go to the leader through the log (edge_payloads.go).
+	c.control.SetEdgePayloadForwarder(edgePayloadForwarder{log: c.clusterLog})
+	c.startRelay(c.control.GetEventBus(), cluster.RelayOptions{Filter: headlessRelayFilter})
 	logger.Infof("Headless control plane ready as replica %s", nodeID)
 	return c, nil
 }

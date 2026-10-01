@@ -267,6 +267,8 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 
 			// Convert to local event - CRITICAL: mark as DirLocal to prevent loops
 			ev := frame.ToEvent()
+			// On a control node the peer is an edge.
+			ev.FromEdge = b.isControl
 
 			log.Debug().
 				Str("node_id", b.nodeID).

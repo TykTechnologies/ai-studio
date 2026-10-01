@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,6 +59,11 @@ type LogOptions struct {
 	ListenerDSN string
 }
 
+// DefaultLogRetention is how long the event log keeps rows unless
+// LogOptions.Retention says otherwise: the longest a reader can fall behind
+// and still read every event.
+const DefaultLogRetention = 15 * time.Minute
+
 func (o LogOptions) withDefaults() LogOptions {
 	if o.PollInterval <= 0 {
 		o.PollInterval = 5 * time.Second
@@ -66,7 +72,7 @@ func (o LogOptions) withDefaults() LogOptions {
 		o.Window = 30 * time.Second
 	}
 	if o.Retention < 2*o.Window {
-		o.Retention = 15 * time.Minute
+		o.Retention = DefaultLogRetention
 		if o.Retention < 2*o.Window {
 			o.Retention = 2 * o.Window
 		}
@@ -271,6 +277,53 @@ func (l *Log) Publish(ctx context.Context, topic string, payload []byte) error {
 	}
 	if id == 0 {
 		return fmt.Errorf("cluster: publish %s: no id returned", topic)
+	}
+	return nil
+}
+
+// PublishBatch appends one event per payload, all on topic, in one
+// statement with one notification: for a burst of events (an edge's batch of
+// plugin payloads) that would otherwise cost a round trip each. Either every
+// event is appended or none is.
+func (l *Log) PublishBatch(ctx context.Context, topic string, payloads [][]byte) error {
+	if !l.enabled || len(payloads) == 0 {
+		return nil
+	}
+	channel := l.channel
+	if channel == "" {
+		var schema string
+		if err := l.db.WithContext(ctx).Raw("SELECT current_schema()").Scan(&schema).Error; err != nil {
+			return fmt.Errorf("cluster: publish %s: %w", topic, err)
+		}
+		channel = "studio_cluster_events_" + schema
+	}
+	// One parameter per payload, all in one statement. The space in "( ?"
+	// matters: gorm expands a slice placed right after "(" into a list of
+	// its elements, and a []byte is a slice.
+	args := make([]interface{}, 0, len(payloads)+3)
+	args = append(args, topic, l.node)
+	values := make([]string, len(payloads))
+	for i, p := range payloads {
+		if p == nil {
+			p = []byte{}
+		}
+		values[i] = "( ?::bytea)"
+		args = append(args, p)
+	}
+	args = append(args, channel)
+	// The rows and the notification commit together.
+	var n int64
+	err := l.db.WithContext(ctx).Raw(
+		`WITH ins AS (INSERT INTO cluster_events (topic, origin, payload, created_at)
+		   SELECT ?, ?, v.p, now() FROM (VALUES `+strings.Join(values, ", ")+`) AS v(p) RETURNING id)
+		 SELECT c.n FROM (SELECT count(*) AS n, max(id) AS last FROM ins) c,
+		   LATERAL (SELECT pg_notify(?, c.last::text)) notified`,
+		args...).Scan(&n).Error
+	if err != nil {
+		return fmt.Errorf("cluster: publish %s: %w", topic, err)
+	}
+	if n != int64(len(payloads)) {
+		return fmt.Errorf("cluster: publish %s: %d of %d events appended", topic, n, len(payloads))
 	}
 	return nil
 }
