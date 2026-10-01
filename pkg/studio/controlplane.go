@@ -73,7 +73,8 @@ type ControlPlaneOptions struct {
 
 	// NodeLabel names this replica on the cluster status and the Edge
 	// Gateways page, where operators see which edges it holds (at most 64
-	// characters, e.g. "mdcb-eu-1"). Empty means DefaultControlPlaneLabel.
+	// letters, digits, spaces and . _ - : / ( ), e.g. "mdcb-eu-1"). Empty
+	// means DefaultControlPlaneLabel.
 	NodeLabel string
 
 	// TracerProvider, Propagator and MeterProvider are the host's; when nil

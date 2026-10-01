@@ -121,8 +121,8 @@ type Options struct {
 	NodeID string
 
 	// NodeLabel names this replica on the cluster status and the Edge
-	// Gateways page (at most 64 characters, e.g. "dashboard"). Empty means
-	// DefaultNodeLabel.
+	// Gateways page (at most 64 letters, digits, spaces and . _ - : / ( ),
+	// e.g. "dashboard"). Empty means DefaultNodeLabel.
 	NodeLabel string
 
 	// SkipLLMDefaults skips seeding the default LLM configurations and

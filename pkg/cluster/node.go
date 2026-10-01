@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
@@ -59,7 +60,8 @@ func NewNodeID() string {
 type NodeOptions struct {
 	// Label names the replica on the status page and the Edge Gateways
 	// page ("studio", "dashboard", "mdcb-eu-1"): at most MaxLabelLength
-	// characters, no control characters. Empty leaves it unlabelled.
+	// characters, letters, digits, spaces and . _ - : / ( ) only. Empty
+	// leaves it unlabelled.
 	Label string
 	// NeverLeads records that the replica never takes the leader lease (a
 	// headless control plane). It is recorded for operators; the replica's
@@ -74,9 +76,12 @@ func (o NodeOptions) validate() error {
 	if len([]rune(o.Label)) > MaxLabelLength {
 		return fmt.Errorf("node label is longer than %d characters", MaxLabelLength)
 	}
+	// Operators read labels in the UI, logs and API output: nothing that
+	// means something to HTML, a shell or a query string, whatever renders
+	// it.
 	for _, r := range o.Label {
-		if unicode.IsControl(r) {
-			return fmt.Errorf("node label %q contains a control character", o.Label)
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune(" ._-:/()", r) {
+			return fmt.Errorf("node label %q may contain only letters, digits, spaces and . _ - : / ( )", o.Label)
 		}
 	}
 	return nil
@@ -172,7 +177,7 @@ func (n *Node) heartbeat() {
 
 func (n *Node) beat() error {
 	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "node_id"}},
+		Columns: []clause.Column{{Name: "node_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version,
 			"label": n.label, "leader_eligible": n.canLead,
@@ -183,11 +188,11 @@ func (n *Node) beat() error {
 		"version":         n.version,
 		"label":           n.label,
 		"leader_eligible": n.canLead,
-		"started_at":    n.started,
-		"last_seen":     nowExpr(n.db),
-		"pid":           n.proc.PID,
-		"boot_id":       n.proc.BootID,
-		"pid_namespace": n.proc.PIDNamespace,
+		"started_at":      n.started,
+		"last_seen":       nowExpr(n.db),
+		"pid":             n.proc.PID,
+		"boot_id":         n.proc.BootID,
+		"pid_namespace":   n.proc.PIDNamespace,
 	}).Error
 }
 
