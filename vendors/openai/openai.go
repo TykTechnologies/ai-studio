@@ -125,6 +125,12 @@ func (v *OpenAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, stat
 			if tempResp.Usage != nil {
 				aggregate.PromptTokens = tempResp.Usage.PromptTokens
 				aggregate.CompletionTokens = tempResp.Usage.CompletionTokens
+				// Carry the prompt-cache breakdown too: prompt_tokens already
+				// includes these, and dropping them here would leave the streamed
+				// chat record with no cache tokens and the full prompt count, so
+				// the request would be mispriced and mislogged.
+				aggregate.CacheWritePromptTokens = tempResp.Usage.PromptTokensDetails.CacheWriteTokens
+				aggregate.CacheReadPromptTokens = tempResp.Usage.PromptTokensDetails.CachedTokens
 			}
 		}
 	}

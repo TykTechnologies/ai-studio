@@ -150,6 +150,16 @@ type ChatMessage struct { //nolint:musttag
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
+// PromptTokensDetails is the prompt-cache breakdown of a chat completion's
+// usage. OpenAI reports cache hits as `cached_tokens`, a subset of
+// `prompt_tokens`; OpenAI-compatible backends (for example Bedrock-hosted
+// models) additionally report `cache_write_tokens` for the tokens written into
+// the cache by this request.
+type PromptTokensDetails struct {
+	CachedTokens     int `json:"cached_tokens"`
+	CacheWriteTokens int `json:"cache_write_tokens"`
+}
+
 // ChatUsage is the usage of a chat completion request.
 type ChatUsage struct {
 	PromptTokens            int `json:"prompt_tokens"`
@@ -158,6 +168,7 @@ type ChatUsage struct {
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
+	PromptTokensDetails PromptTokensDetails `json:"prompt_tokens_details"`
 }
 
 type Usage struct {
@@ -167,6 +178,7 @@ type Usage struct {
 	CompletionTokensDetails struct {
 		ReasoningTokens int `json:"reasoning_tokens"`
 	} `json:"completion_tokens_details"`
+	PromptTokensDetails PromptTokensDetails `json:"prompt_tokens_details"`
 }
 
 func (o *OpenAIResponse) GetPromptTokens() int {
@@ -195,11 +207,11 @@ func (o *OpenAIResponse) GetModel() string {
 }
 
 func (o *OpenAIResponse) GetCacheWritePromptTokens() int {
-	return 0
+	return o.Usage.PromptTokensDetails.CacheWriteTokens
 }
 
 func (o *OpenAIResponse) GetCacheReadPromptTokens() int {
-	return 0
+	return o.Usage.PromptTokensDetails.CachedTokens
 }
 
 type OpenAIStreamingResponse struct {
@@ -218,9 +230,10 @@ type OpenAIStreamingResponse struct {
 }
 
 type OAIUsage struct {
-	CompletionTokens int `json:"completion_tokens"`
-	PromptTokens     int `json:"prompt_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	CompletionTokens    int                 `json:"completion_tokens"`
+	PromptTokens        int                 `json:"prompt_tokens"`
+	TotalTokens         int                 `json:"total_tokens"`
+	PromptTokensDetails PromptTokensDetails `json:"prompt_tokens_details"`
 }
 
 func (o *OpenAIStreamingResponse) GetPromptTokens() int {
@@ -254,9 +267,15 @@ func (o *OpenAIStreamingResponse) GetModel() string {
 }
 
 func (o *OpenAIStreamingResponse) GetCacheWritePromptTokens() int {
-	return 0
+	if o.Usage == nil {
+		return 0
+	}
+	return o.Usage.PromptTokensDetails.CacheWriteTokens
 }
 
 func (o *OpenAIStreamingResponse) GetCacheReadPromptTokens() int {
-	return 0
+	if o.Usage == nil {
+		return 0
+	}
+	return o.Usage.PromptTokensDetails.CachedTokens
 }

@@ -164,3 +164,27 @@ func TestAnalyzeResponse_InvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to unmarshal llm rest response")
 }
+
+// TestAnalyzeStreamingResponse_CacheTokens pins that the streaming aggregate
+// carries the prompt-cache breakdown the vendor reported. prompt_tokens already
+// contains the cached tokens, so if they are dropped here the resulting chat
+// record holds the full prompt count with zero cache tokens and the streamed
+// request is mispriced and mislogged (#678, copilot review finding on #679).
+func TestAnalyzeStreamingResponse_CacheTokens(t *testing.T) {
+	v := &OpenAI{}
+
+	contentChunk := `data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"openai.gpt-5.6-luna","choices":[{"delta":{"content":"hi"},"index":0}]}` + "\n\n"
+	usageChunk := `data: {"id":"chatcmpl-1","object":"chat.completion.chunk","model":"openai.gpt-5.6-luna","choices":[],"usage":{"prompt_tokens":6020,"completion_tokens":6,"total_tokens":6026,"prompt_tokens_details":{"cache_write_tokens":14,"cached_tokens":6004}}}` + "\n\n"
+	streamBody := []byte(contentChunk + usageChunk + "data: [DONE]\n\n")
+
+	req, _ := http.NewRequest("POST", "/llm/stream/test/v1/chat/completions", nil)
+
+	_, _, tokenResp, err := v.AnalyzeStreamingResponse(&models.LLM{Vendor: "openai"}, &models.App{}, 200, streamBody, req, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, tokenResp)
+	assert.Equal(t, 6020, tokenResp.GetPromptTokens())
+	assert.Equal(t, 6, tokenResp.GetResponseTokens())
+	assert.Equal(t, 6004, tokenResp.GetCacheReadPromptTokens())
+	assert.Equal(t, 14, tokenResp.GetCacheWritePromptTokens())
+}
