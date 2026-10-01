@@ -383,4 +383,12 @@ func TestBuildChatRecord_OpenAICacheTokens(t *testing.T) {
 	assert.Equal(t, 6004, rec.CacheReadPromptTokens)
 	assert.Equal(t, 14, rec.CacheWritePromptTokens)
 	assert.Equal(t, 6026, rec.TotalTokens, "total must match the vendor's own total_tokens")
+
+	// The point of the fix is the billed amount, not just the breakdown: each
+	// bucket must be priced at its own rate from the fixture. In the record's
+	// ×10000 units: completion 6×0.000006 + fresh prompt 2×0.000002 +
+	// cache write 14×0.0000025 + cache read 6004×0.0000002 = 12.758. A pricing
+	// regression that merged the cache rates would keep the token assertions
+	// above passing, so pin the cost too.
+	assert.InDelta(t, 12.758, rec.Cost, 1e-9, "cost must bill fresh, cache-write and cache-read tokens at their own rates")
 }
