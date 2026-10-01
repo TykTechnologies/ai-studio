@@ -465,11 +465,5 @@ func (h *DatabaseHandler) SetAsGlobalHandler() {
 // does not migrate: it may write to a database whose schema another instance
 // owns, so whoever owns the schema calls Migrate before recording starts.
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&models.LLMChatRecord{},
-		&models.LLMChatLogEntry{},
-		&models.ToolCallRecord{},
-		&models.ProxyLog{},
-		&models.ComplianceEvent{},
-	)
+	return db.AutoMigrate(models.AnalyticsModels()...)
 }

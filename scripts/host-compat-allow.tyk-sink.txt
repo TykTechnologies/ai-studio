@@ -1,0 +1,38 @@
+# Modules AI Studio may require at a higher version than Tyk MDCB (tyk-sink)
+# does. Go's version selection then raises them in MDCB's build. The reasons
+# are the Dashboard's (scripts/host-compat-allow.tyk-analytics.txt, checked
+# 2026-09-30 by lowering each on its own); this list holds the subset MDCB's
+# go.mod lags on, checked 2026-10-01. Remove an entry once MDCB catches up or
+# the requirer allows its version.
+
+# The OpenTelemetry 1.46 exporter family. MDCB's otel core is already 1.46;
+# its exporters lag (otlptracegrpc v1.40.0). weaviate v1.38.12 needs a newer
+# otlptracegrpc, and the exporters pull the rest.
+go.opentelemetry.io/otel/exporters/otlp/otlptrace                            # otel 1.46 exporters
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc              # weaviate v1.38.12
+go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp              # otel 1.46 exporters
+go.opentelemetry.io/proto/otlp                                               # otel 1.46 exporters
+go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  # grpc-gateway v2.30 (otel exporters)
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                # otel 1.46 family
+github.com/grpc-ecosystem/grpc-gateway/v2                                    # otel 1.46 exporters
+google.golang.org/genproto/googleapis/api                                    # otel 1.46 exporters
+google.golang.org/genproto/googleapis/rpc                                    # otel 1.46 exporters
+google.golang.org/protobuf                                                   # otel 1.46 exporters, genproto
+
+# Studio's metrics exporter, go.opentelemetry.io/otel/exporters/prometheus
+# v0.68 (otel 1.46 family), needs the newer Prometheus client (MDCB: 1.21.1).
+github.com/prometheus/client_golang  # otel/exporters/prometheus v0.68
+github.com/prometheus/common         # otel/exporters/prometheus v0.68
+github.com/prometheus/procfs         # prometheus/client_golang v1.24
+github.com/klauspost/compress        # prometheus/client_golang v1.24
+
+# go-openapi v0.25+ (runtime, analysis, loads, spec) and grpc-gateway v2.30.
+github.com/go-openapi/jsonpointer    # go-openapi analysis/loads/runtime v0.25+
+github.com/go-openapi/swag           # grpc-gateway v2.30
+
+github.com/buger/jsonparser          # weaviate v1.38.12
+
+# pgx 5.10 hardens the client against hostile servers (bounded decoders, a
+# SCRAM iteration cap, require_auth, TLS CancelRequest). v2.2.0 shipped it;
+# the standalone binaries keep it rather than drop to MDCB's 5.9.2.
+github.com/jackc/pgx/v5              # v2.2.0 parity: 5.10 server-hardening fixes

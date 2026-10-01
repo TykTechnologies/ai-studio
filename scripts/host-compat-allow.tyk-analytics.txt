@@ -1,5 +1,5 @@
 # Modules AI Studio may require at a higher version than the Tyk Dashboard
-# does. Go's version selection then raises them in the Dashboard's build.
+# (tyk-analytics) does; MDCB has its own list, host-compat-allow.tyk-sink.txt. Go's version selection then raises them in the Dashboard's build.
 # Each entry says what in Studio's graph needs the newer version; checked
 # 2026-09-30 by lowering each on its own (see features/Embedding.md, "Host
 # version floor"). Remove an entry once the Dashboard catches up or the

@@ -380,6 +380,19 @@ their edge counts and the leader, this replica's event log and relay
 counters, the push backlog (pending, in flight, held by stopped replicas),
 and warnings.
 
+### Schema version: instances that do not migrate
+
+Every full replica migrates under the migration lock and then records the
+schema version (`studio_schema`: `version`, `min_reader_version`, writer,
+time; never lowered). A replica that must not migrate a database it shares,
+such as a headless control plane embedded in another product, checks it
+first with `studio.CheckSchema`, which only reads: it refuses a schema that
+is missing or older than it needs, or one whose `min_reader_version` is
+newer than its own `models.SchemaVersion`. A newer schema that still lists
+it as a reader is accepted, so such a replica can be upgraded after the full
+ones. See `features/Embedding.md` ("Schema version and `studio.CheckSchema`")
+for the bump rules and the golden guard.
+
 ## User feedback
 
 - The push dialog tracks the operation to its end: per-edge state

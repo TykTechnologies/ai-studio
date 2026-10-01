@@ -327,6 +327,31 @@ TABLE cluster_nodes
   constraint PRIMARY KEY (`node_id`)
   autoindex origin=pk unique=1 (node_id)
   index CREATE INDEX `idx_cluster_nodes_last_seen` ON `cluster_nodes`(`last_seen`)
+TABLE compliance_events
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `app_id` integer
+  column `user_id` integer
+  column `llm_id` integer
+  column `filter_name` text
+  column `filter_scope` text
+  column `event_type` text
+  column `severity` text
+  column `description` text
+  column `metadata` text
+  column `vendor` text
+  column `model_name` text
+  column `time_stamp` datetime
+  index CREATE INDEX `idx_ce_app_time` ON `compliance_events`(`app_id`,`time_stamp`)
+  index CREATE INDEX `idx_ce_time` ON `compliance_events`(`time_stamp`)
+  index CREATE INDEX `idx_compliance_events_deleted_at` ON `compliance_events`(`deleted_at`)
+  index CREATE INDEX `idx_compliance_events_event_type` ON `compliance_events`(`event_type`)
+  index CREATE INDEX `idx_compliance_events_filter_name` ON `compliance_events`(`filter_name`)
+  index CREATE INDEX `idx_compliance_events_llm_id` ON `compliance_events`(`llm_id`)
+  index CREATE INDEX `idx_compliance_events_severity` ON `compliance_events`(`severity`)
+  index CREATE INDEX `idx_compliance_events_user_id` ON `compliance_events`(`user_id`)
 TABLE credentials
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -570,6 +595,21 @@ TABLE kv_pairs
   constraint PRIMARY KEY (`store_key`)
   autoindex origin=pk unique=1 (store_key)
   index CREATE INDEX `idx_kv_pairs_org_id` ON `kv_pairs`(`org_id`)
+TABLE llm_chat_log_entries
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `name` text
+  column `vendor` text
+  column `time_stamp` datetime
+  column `prompt` text
+  column `response` text
+  column `tokens` integer
+  column `user_id` integer
+  column `chat_id` text
+  column `session_id` text
+  index CREATE INDEX `idx_llm_chat_log_entries_deleted_at` ON `llm_chat_log_entries`(`deleted_at`)
 TABLE llm_chat_records
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1260,6 +1300,41 @@ TABLE proxy_log_exports
   index CREATE INDEX `idx_proxy_log_exports_deleted_at` ON `proxy_log_exports`(`deleted_at`)
   index CREATE INDEX `idx_proxy_log_exports_expires_at` ON `proxy_log_exports`(`expires_at`)
   index CREATE UNIQUE INDEX `idx_proxy_log_exports_export_id` ON `proxy_log_exports`(`export_id`)
+TABLE proxy_logs
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `app_id` integer
+  column `user_id` integer
+  column `time_stamp` datetime
+  column `llm_id` integer
+  column `vendor` text
+  column `model_name` text
+  column `request_body` text
+  column `response_body` text
+  column `response_code` integer
+  column `failover_from_llm_id` integer
+  column `failover_attempt` integer DEFAULT 0
+  column `router_kind` text
+  column `router_slug` text
+  column `router_pool` text
+  column `route` text
+  column `route_reason` text
+  column `route_source_model` text
+  column `route_target_model` text
+  column `route_selection` text
+  column `route_score` real
+  column `shadow_route` text
+  index CREATE INDEX `idx_proxy_logs_app_code_time` ON `proxy_logs`(`app_id`,`response_code`,`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_app_time` ON `proxy_logs`(`app_id`,`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_code` ON `proxy_logs`(`response_code`)
+  index CREATE INDEX `idx_proxy_logs_deleted_at` ON `proxy_logs`(`deleted_at`)
+  index CREATE INDEX `idx_proxy_logs_failover_from` ON `proxy_logs`(`failover_from_llm_id`)
+  index CREATE INDEX `idx_proxy_logs_llm_time` ON `proxy_logs`(`llm_id`,`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_router` ON `proxy_logs`(`router_slug`)
+  index CREATE INDEX `idx_proxy_logs_time` ON `proxy_logs`(`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_user_id` ON `proxy_logs`(`user_id`)
 TABLE push_operations
   column `operation_id` text
   column `scope` text NOT NULL
@@ -1374,6 +1449,13 @@ TABLE semantic_routers
   index CREATE INDEX `idx_semantic_routers_deleted_at` ON `semantic_routers`(`deleted_at`)
   index CREATE INDEX `idx_semantic_routers_embedder_id` ON `semantic_routers`(`embedder_id`)
   index CREATE UNIQUE INDEX `idx_semantic_router_slug_namespace` ON `semantic_routers`(`slug`,`namespace`)
+TABLE studio_schema
+  column `id` integer
+  column `version` integer NOT NULL
+  column `min_reader_version` integer NOT NULL
+  column `written_by` text
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`id`)
 TABLE submission_activities
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1486,6 +1568,16 @@ TABLE team_budgets
   column `created_at` datetime
   column `updated_at` datetime
   index CREATE UNIQUE INDEX `idx_team_budgets_group_id` ON `team_budgets`(`group_id`)
+TABLE tool_call_records
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `deleted_at` datetime
+  column `tool_id` integer
+  column `name` text
+  column `exec_time` integer
+  column `time_stamp` datetime
+  index CREATE INDEX `idx_tool_call_records_deleted_at` ON `tool_call_records`(`deleted_at`)
 TABLE tool_catalogue_mcp_servers
   column `mcp_server_id` integer
   column `tool_catalogue_id` integer

@@ -352,6 +352,11 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := service.Authz().Seed(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: seed RBAC roles: %w", err)
 	}
+	// Last under the lock: the schema is now this build's (CheckSchema
+	// reads it back for instances that do not migrate).
+	if err := models.RecordSchemaVersion(s.db, schemaWriter(opts.Version)); err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
+	}
 	releaseMigrationLock()
 	releaseMigrationLock = nil
 
