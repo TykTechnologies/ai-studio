@@ -353,6 +353,33 @@ TABLE cluster_nodes
   column pid bigint(int8) nullable=YES precision=64 scale=0
   column boot_id character varying(varchar) nullable=YES len=64
   column pid_namespace character varying(varchar) nullable=YES len=64
+TABLE compliance_events
+  constraint compliance_events_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX compliance_events_pkey ON compliance_events USING btree (id)
+  index CREATE INDEX idx_ce_app_time ON compliance_events USING btree (app_id, time_stamp)
+  index CREATE INDEX idx_ce_time ON compliance_events USING btree (time_stamp)
+  index CREATE INDEX idx_compliance_events_deleted_at ON compliance_events USING btree (deleted_at)
+  index CREATE INDEX idx_compliance_events_event_type ON compliance_events USING btree (event_type)
+  index CREATE INDEX idx_compliance_events_filter_name ON compliance_events USING btree (filter_name)
+  index CREATE INDEX idx_compliance_events_llm_id ON compliance_events USING btree (llm_id)
+  index CREATE INDEX idx_compliance_events_severity ON compliance_events USING btree (severity)
+  index CREATE INDEX idx_compliance_events_user_id ON compliance_events USING btree (user_id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('compliance_events_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column app_id bigint(int8) nullable=YES precision=64 scale=0
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column llm_id bigint(int8) nullable=YES precision=64 scale=0
+  column filter_name text(text) nullable=YES
+  column filter_scope text(text) nullable=YES
+  column event_type text(text) nullable=YES
+  column severity text(text) nullable=YES
+  column description text(text) nullable=YES
+  column metadata text(text) nullable=YES
+  column vendor text(text) nullable=YES
+  column model_name text(text) nullable=YES
+  column time_stamp timestamp with time zone(timestamptz) nullable=YES
 TABLE credentials
   constraint credentials_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX credentials_pkey ON credentials USING btree (id)
@@ -618,6 +645,23 @@ TABLE kv_pairs
   column store_key text(text) nullable=NO
   column org_id text(text) nullable=YES
   column store_value bytea(bytea) nullable=YES
+TABLE llm_chat_log_entries
+  constraint llm_chat_log_entries_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_llm_chat_log_entries_deleted_at ON llm_chat_log_entries USING btree (deleted_at)
+  index CREATE UNIQUE INDEX llm_chat_log_entries_pkey ON llm_chat_log_entries USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('llm_chat_log_entries_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column name text(text) nullable=YES
+  column vendor text(text) nullable=YES
+  column time_stamp timestamp with time zone(timestamptz) nullable=YES
+  column prompt text(text) nullable=YES
+  column response text(text) nullable=YES
+  column tokens bigint(int8) nullable=YES precision=64 scale=0
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column chat_id text(text) nullable=YES
+  column session_id text(text) nullable=YES
 TABLE llm_chat_records
   constraint llm_chat_records_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_llm_chat_records_app_time ON llm_chat_records USING btree (app_id, time_stamp)
@@ -1372,6 +1416,43 @@ TABLE proxy_log_exports
   column expires_at timestamp with time zone(timestamptz) nullable=NO
   column requested_by bigint(int8) nullable=NO precision=64 scale=0
   column error_message text(text) nullable=YES
+TABLE proxy_logs
+  constraint proxy_logs_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_proxy_logs_app_code_time ON proxy_logs USING btree (app_id, response_code, time_stamp)
+  index CREATE INDEX idx_proxy_logs_app_time ON proxy_logs USING btree (app_id, time_stamp)
+  index CREATE INDEX idx_proxy_logs_code ON proxy_logs USING btree (response_code)
+  index CREATE INDEX idx_proxy_logs_deleted_at ON proxy_logs USING btree (deleted_at)
+  index CREATE INDEX idx_proxy_logs_failover_from ON proxy_logs USING btree (failover_from_llm_id)
+  index CREATE INDEX idx_proxy_logs_llm_time ON proxy_logs USING btree (llm_id, time_stamp)
+  index CREATE INDEX idx_proxy_logs_router ON proxy_logs USING btree (router_slug)
+  index CREATE INDEX idx_proxy_logs_time ON proxy_logs USING btree (time_stamp)
+  index CREATE INDEX idx_proxy_logs_user_id ON proxy_logs USING btree (user_id)
+  index CREATE UNIQUE INDEX proxy_logs_pkey ON proxy_logs USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('proxy_logs_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column app_id bigint(int8) nullable=YES precision=64 scale=0
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column time_stamp timestamp with time zone(timestamptz) nullable=YES
+  column llm_id bigint(int8) nullable=YES precision=64 scale=0
+  column vendor text(text) nullable=YES
+  column model_name text(text) nullable=YES
+  column request_body text(text) nullable=YES
+  column response_body text(text) nullable=YES
+  column response_code bigint(int8) nullable=YES precision=64 scale=0
+  column failover_from_llm_id bigint(int8) nullable=YES precision=64 scale=0
+  column failover_attempt bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column router_kind character varying(varchar) nullable=YES len=32
+  column router_slug text(text) nullable=YES
+  column router_pool text(text) nullable=YES
+  column route text(text) nullable=YES
+  column route_reason character varying(varchar) nullable=YES len=64
+  column route_source_model text(text) nullable=YES
+  column route_target_model text(text) nullable=YES
+  column route_selection character varying(varchar) nullable=YES len=32
+  column route_score numeric(numeric) nullable=YES
+  column shadow_route text(text) nullable=YES
 TABLE push_operations
   constraint push_operations_pkey PRIMARY KEY (operation_id)
   index CREATE INDEX idx_push_operations_completed_at ON push_operations USING btree (completed_at)
@@ -1502,6 +1583,14 @@ TABLE semantic_routers
   column settings text(text) nullable=YES
   column routes text(text) nullable=YES
   column embedder_id bigint(int8) nullable=YES precision=64 scale=0
+TABLE studio_schema
+  constraint studio_schema_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX studio_schema_pkey ON studio_schema USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0
+  column version bigint(int8) nullable=NO precision=64 scale=0
+  column min_reader_version bigint(int8) nullable=NO precision=64 scale=0
+  column written_by text(text) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE submission_activities
   constraint submission_activities_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_submission_activities_deleted_at ON submission_activities USING btree (deleted_at)
@@ -1628,6 +1717,18 @@ TABLE team_budgets
   column enforcement character varying(varchar) nullable=NO len=16 default='alert_only'::character varying
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE tool_call_records
+  constraint tool_call_records_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_tool_call_records_deleted_at ON tool_call_records USING btree (deleted_at)
+  index CREATE UNIQUE INDEX tool_call_records_pkey ON tool_call_records USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('tool_call_records_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column tool_id bigint(int8) nullable=YES precision=64 scale=0
+  column name text(text) nullable=YES
+  column exec_time bigint(int8) nullable=YES precision=64 scale=0
+  column time_stamp timestamp with time zone(timestamptz) nullable=YES
 TABLE tool_catalogue_mcp_servers
   constraint fk_tool_catalogue_mcp_servers_mcp_server FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers(id)
   constraint fk_tool_catalogue_mcp_servers_tool_catalogue FOREIGN KEY (tool_catalogue_id) REFERENCES tool_catalogues(id)
