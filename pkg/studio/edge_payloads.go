@@ -66,33 +66,44 @@ func decodeEdgePayload(b []byte) (*pb.PluginControlPayload, error) {
 // cluster log for the leader (grpc.EdgePayloadForwarder).
 type edgePayloadForwarder struct{ log *cluster.Log }
 
-func (f edgePayloadForwarder) ForwardEdgePayload(ctx context.Context, p *pb.PluginControlPayload) error {
+func (f edgePayloadForwarder) ForwardEdgePayloads(ctx context.Context, payloads []*pb.PluginControlPayload) error {
 	if !f.log.Enabled() {
 		return errors.New("no cluster log to reach the plugin host")
 	}
-	b, err := encodeEdgePayload(p)
-	if err != nil {
-		return err
+	rows := make([][]byte, len(payloads))
+	for i, p := range payloads {
+		b, err := encodeEdgePayload(p)
+		if err != nil {
+			return err
+		}
+		rows[i] = b
 	}
-	return f.log.Publish(ctx, pluginControlTopic, b)
+	// One row per payload, one write for the batch.
+	return f.log.PublishBatch(ctx, pluginControlTopic, rows)
 }
 
 const (
 	// edgePayloadQueue bounds the payloads waiting for a plugin; more are
 	// dropped (and counted).
 	edgePayloadQueue = 1024
+	// edgePayloadCatchUpPage is how many rows catching up reads at a time.
+	edgePayloadCatchUpPage = 256
 	// edgePayloadTimeout bounds one plugin's handling of a payload.
 	edgePayloadTimeout = 30 * time.Second
 	// edgePayloadReplay is how far back a replica that has just become the
-	// leader reads the log for payloads: the leader lease's TTL and a
-	// margin, which covers what arrived while no replica led (after the
-	// previous leader crashed) and what the previous leader may not have
-	// handled. Payloads the previous leader did handle in that window are
-	// handed to plugins again.
-	edgePayloadReplay = 45 * time.Second
+	// leader reads the log for payloads: the leader lease's TTL (Studio uses
+	// the default) and a margin, which covers what arrived while no replica
+	// led (after the previous leader crashed) and what the previous leader
+	// may not have handled. Payloads the previous leader did handle in that
+	// window are handed to plugins again.
+	edgePayloadReplay = cluster.DefaultLeaseTTL + 15*time.Second
 	// edgePayloadSeen is how long a handled row's id is remembered: the
-	// log's retention, beyond which the log delivers nothing again.
-	edgePayloadSeen = 15 * time.Minute
+	// log's retention (Studio uses the default), beyond which the log
+	// delivers nothing again.
+	edgePayloadSeen = cluster.DefaultLogRetention
+	// edgePayloadPrune is how often ids older than edgePayloadSeen are
+	// forgotten.
+	edgePayloadPrune = time.Minute
 )
 
 type queuedEdgePayload struct {
@@ -180,15 +191,7 @@ func (h *edgePayloadHost) accept(id int64, raw []byte) {
 		h.mu.Unlock()
 		return
 	}
-	now := time.Now()
-	h.seen[id] = now
-	if len(h.seen)%1000 == 0 {
-		for k, at := range h.seen {
-			if now.Sub(at) > edgePayloadSeen {
-				delete(h.seen, k)
-			}
-		}
-	}
+	h.seen[id] = time.Now()
 	h.mu.Unlock()
 
 	p, err := decodeEdgePayload(raw)
@@ -221,33 +224,59 @@ func (h *edgePayloadHost) catchUp() {
 	h.mu.Unlock()
 	go func() {
 		defer h.wg.Done()
-		var rows []models.ClusterEvent
-		err := h.db.WithContext(h.ctx).
-			Where("topic = ? AND created_at > now() - (? * interval '1 second')", pluginControlTopic, int(edgePayloadReplay.Seconds())).
-			Order("id").Limit(edgePayloadQueue).Find(&rows).Error
-		if err != nil {
-			if h.ctx.Err() == nil {
-				logger.Errorf("Edge plugin payloads: could not read the recent ones on becoming the leader; payloads sent while no replica led are lost: %v", err)
-			}
-			return
-		}
-		for _, r := range rows {
-			if !replicas.IsLeader() {
+		// A page at a time: every row in the window is read (one the queue
+		// has no room for is dropped and counted in accept).
+		var after int64
+		for {
+			var rows []models.ClusterEvent
+			err := h.db.WithContext(h.ctx).
+				Where("topic = ? AND created_at > now() - (? * interval '1 second') AND id > ?",
+					pluginControlTopic, int(edgePayloadReplay.Seconds()), after).
+				Order("id").Limit(edgePayloadCatchUpPage).Find(&rows).Error
+			if err != nil {
+				if h.ctx.Err() == nil {
+					logger.Errorf("Edge plugin payloads: could not read the recent ones on becoming the leader; payloads sent while no replica led are lost: %v", err)
+				}
 				return
 			}
-			h.accept(r.ID, r.Payload)
+			for _, r := range rows {
+				if !replicas.IsLeader() {
+					return
+				}
+				h.accept(r.ID, r.Payload)
+				after = r.ID
+			}
+			if len(rows) < edgePayloadCatchUpPage {
+				return
+			}
 		}
 	}()
 }
 
 func (h *edgePayloadHost) run() {
 	defer h.wg.Done()
+	prune := time.NewTicker(edgePayloadPrune)
+	defer prune.Stop()
 	for {
 		select {
 		case <-h.ctx.Done():
 			return
 		case q := <-h.queue:
 			h.route(q)
+		case <-prune.C:
+			h.forgetOld(time.Now().Add(-edgePayloadSeen))
+		}
+	}
+}
+
+// forgetOld drops the ids of rows handled before cutoff: the log no longer
+// holds them, so they cannot arrive again.
+func (h *edgePayloadHost) forgetOld(cutoff time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, at := range h.seen {
+		if at.Before(cutoff) {
+			delete(h.seen, id)
 		}
 	}
 }

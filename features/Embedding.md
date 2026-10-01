@@ -764,7 +764,7 @@ own otherwise).
     to every full replica, whose plugins get each once (as `DirLocal`, like
     their own edges' events; never sent down to any edge);
   - plugin payloads (`SendPluginControlBatch`, `SendToControl` in the SDK)
-    are written to the log, one row per payload, and the edge is told they
+    are written to the log, one row per payload in one write per batch, and the edge is told they
     are queued. The leader, which is always a full Studio, hands each to its
     plugin. Delivery is at least once: when a replica becomes the leader it
     takes the payloads of the last 45 s again (a crashed leader may not have

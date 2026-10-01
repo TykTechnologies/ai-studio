@@ -104,3 +104,21 @@ func TestEdgePayloadForwarder_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, proto.Equal(sent, back))
 }
+
+// Handled ids are forgotten once the log can no longer deliver their rows,
+// by time, however few payloads arrive.
+func TestEdgePayloadHost_ForgetsOldIDs(t *testing.T) {
+	h := newEdgePayloadHost(nil, nil, &payloadSink{})
+	t.Cleanup(h.stop)
+	h.mu.Lock()
+	h.seen[1] = time.Now().Add(-2 * edgePayloadSeen)
+	h.seen[2] = time.Now()
+	h.mu.Unlock()
+
+	h.forgetOld(time.Now().Add(-edgePayloadSeen))
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	assert.NotContains(t, h.seen, int64(1))
+	assert.Contains(t, h.seen, int64(2))
+}

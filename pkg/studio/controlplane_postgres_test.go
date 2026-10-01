@@ -640,11 +640,13 @@ func TestControlPlanePayloadsGoToTheLeaderOnly_Postgres(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { stopControlPlane(t, c) })
 	fwd := edgePayloadForwarder{log: c.clusterLog}
+	var batch []*pb.PluginControlPayload
 	for i := 1; i <= 3; i++ {
-		require.NoError(t, fwd.ForwardEdgePayload(context.Background(), &pb.PluginControlPayload{
+		batch = append(batch, &pb.PluginControlPayload{
 			PluginId: 7, Payload: []byte("stats"), CorrelationId: fmt.Sprintf("corr-%d", i),
-		}))
+		})
 	}
+	require.NoError(t, fwd.ForwardEdgePayloads(context.Background(), batch))
 	for i := 1; i <= 3; i++ {
 		leader.expect(t, fmt.Sprintf("PEER PAYLOAD 7 corr-%d stats", i), 30*time.Second)
 	}
@@ -686,8 +688,32 @@ func TestEdgePayloadHost_CatchesUpOnBecomingLeader_Postgres(t *testing.T) {
 	// The log delivers the same row too, and a second catch-up reads it again.
 	h.deliver(cluster.Event{ID: recentID, Topic: pluginControlTopic, Payload: recent.Payload})
 	h.catchUp()
-	time.Sleep(500 * time.Millisecond)
+	assert.Never(t, func() bool { return len(sink.snapshot()) > 1 }, 500*time.Millisecond, 20*time.Millisecond)
 	got := sink.snapshot()
 	require.Len(t, got, 1, "each row once; nothing older than the replay window, nothing on other topics")
 	assert.Equal(t, "recent", got[0].CorrelationId)
+}
+
+// Catching up reads every row in the replay window, a page at a time, not
+// only the first page.
+func TestEdgePayloadHost_CatchUpReadsPastOnePage_Postgres(t *testing.T) {
+	db := migratedSchema(t)
+	n := edgePayloadCatchUpPage*2 + 7
+	for i := 0; i < n; i++ {
+		b, err := encodeEdgePayload(&pb.PluginControlPayload{PluginId: 7, CorrelationId: fmt.Sprintf("c%d", i)})
+		require.NoError(t, err)
+		require.NoError(t, db.Exec("INSERT INTO cluster_events (topic, origin, payload, created_at) VALUES (?, 'headless', ?, now())", pluginControlTopic, b).Error)
+	}
+
+	leading := &atomic.Bool{}
+	leading.Store(true)
+	replicas.SetBackend(fakeLeadership{leading: leading})
+	t.Cleanup(func() { replicas.SetBackend(nil) })
+	sink := &payloadSink{}
+	h := newEdgePayloadHost(db, nil, sink)
+	t.Cleanup(h.stop)
+
+	h.catchUp()
+	require.Eventually(t, func() bool { return len(sink.snapshot()) == n }, 10*time.Second, 20*time.Millisecond)
+	assert.Never(t, func() bool { return len(sink.snapshot()) > n }, 300*time.Millisecond, 20*time.Millisecond)
 }

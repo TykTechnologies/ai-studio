@@ -407,20 +407,22 @@ control plane does not run:
   `RelayedFrom` set, which stops it being relayed again, and as `DirLocal`
   it never goes down to their edges.
 - *Plugin payloads (`SendPluginControlBatch`).* A replica without a plugin
-  manager forwards each payload (`grpc.EdgePayloadForwarder`) as one log row
-  on topic `plugin.control`, its proto encoding (edges cap a payload at
-  1 MB; a row is `bytea` and `NOTIFY` carries only its id), and answers the
-  edge "queued for the plugin host". A failed write is a per-payload error,
-  not a gRPC error, as the edge would otherwise keep and resend the whole
-  batch. Every full replica with a plugin manager subscribes
+  manager forwards the edge's batch (`grpc.EdgePayloadForwarder`) as one log
+  row per payload on topic `plugin.control`, its proto encoding (edges cap a
+  payload at 1 MB; a row is `bytea`), written in one statement with one
+  `NOTIFY` (`cluster.Log.PublishBatch`), and answers the edge "queued for the
+  plugin host". A failed write fails every payload of the batch in the
+  response, not with a gRPC error, as the edge would otherwise keep and
+  resend the whole batch. Every full replica with a plugin manager subscribes
   (`edgePayloadHost`, `pkg/studio/edge_payloads.go`); only the one leading at
   delivery routes the payload to `RouteEdgePayload`, one row once (ids are
-  remembered for the log's retention).
+  remembered for the log's retention, and forgotten by a minutely sweep).
 
   The log gives a replica no history: rows it reads while it does not lead
   are gone for it. So a replica that becomes the leader reads the
-  `plugin.control` rows of the last 45 s (the lease TTL and a margin) from
-  the table and routes those it has not routed. That covers a leader that
+  `plugin.control` rows of the last 45 s (the default lease TTL and a
+  margin, `cluster.DefaultLeaseTTL`) from the table, a page at a time, and
+  routes those it has not routed. That covers a leader that
   crashed with payloads unhandled and the gap while no replica led, at the
   price of handing plugins again what the previous leader handled in that
   window (on any leader change, a clean handover included). Payloads that

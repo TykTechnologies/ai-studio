@@ -13,17 +13,28 @@ import (
 )
 
 type recordingPayloads struct {
-	mu  sync.Mutex
-	got []*pb.PluginControlPayload
-	err error
+	mu    sync.Mutex
+	got   []*pb.PluginControlPayload
+	err   error
+	calls int
 }
 
 func (r *recordingPayloads) RouteEdgePayload(_ context.Context, p *pb.PluginControlPayload) error {
 	return r.add(p)
 }
 
-func (r *recordingPayloads) ForwardEdgePayload(_ context.Context, p *pb.PluginControlPayload) error {
-	return r.add(p)
+// ForwardEdgePayloads records each call, so a test can see a batch went in
+// one call (one write) rather than one per payload.
+func (r *recordingPayloads) ForwardEdgePayloads(_ context.Context, ps []*pb.PluginControlPayload) error {
+	r.mu.Lock()
+	r.calls++
+	r.mu.Unlock()
+	for _, p := range ps {
+		if err := r.add(p); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *recordingPayloads) add(p *pb.PluginControlPayload) error {
@@ -69,6 +80,7 @@ func TestSendPluginControlBatch_ForwardsWithoutPluginManager(t *testing.T) {
 	assert.Empty(t, resp.Errors)
 	assert.Contains(t, resp.Message, "queued for the plugin host")
 	assert.Equal(t, 2, fwd.count())
+	assert.Equal(t, 1, fwd.calls, "the batch goes in one call, one write")
 }
 
 // A replica with plugins routes them itself, even with a forwarder set.
@@ -86,8 +98,8 @@ func TestSendPluginControlBatch_RoutesLocallyWhenItHasPlugins(t *testing.T) {
 	assert.Zero(t, fwd.count())
 }
 
-// A payload the forwarder cannot take fails on its own, in the response: a
-// gRPC error would make the edge keep and resend the whole batch.
+// A batch the forwarder cannot take fails payload by payload in the
+// response: a gRPC error would make the edge keep and resend it.
 func TestSendPluginControlBatch_ForwardFailureIsPerPayload(t *testing.T) {
 	server, _ := setupTestServer(t, nil)
 	t.Cleanup(server.Stop)
