@@ -103,9 +103,13 @@ func TestGetEdge_CommunityEdition(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response EdgeResponse
-		err := json.Unmarshal(w.Body.Bytes(), &response)
+		// Wrapped in "data", as in Enterprise and as the console reads it.
+		var body struct {
+			Data EdgeResponse `json:"data"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &body)
 		assert.NoError(t, err)
+		response := body.Data
 
 		assert.Equal(t, "edges", response.Type)
 		assert.Equal(t, edge.EdgeID, response.Attributes.EdgeID)
