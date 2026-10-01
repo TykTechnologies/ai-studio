@@ -380,6 +380,26 @@ their edge counts and the leader, this replica's event log and relay
 counters, the push backlog (pending, in flight, held by stopped replicas),
 and warnings.
 
+### Replicas that never lead
+
+A headless control plane (`studio.NewControlPlane`, embedded in MDCB) is a
+replica like the others (registry row, event log, relay, replica signals,
+edge streams and pushes) except that it never contends for the leader
+lease: it creates no `Leadership`, and its `pkg/replicas` backend answers
+`IsLeader` false for good. (With no backend at all, `pkg/replicas` treats
+the process as the only replica, which leads; a replica without a lease
+must say so.) So leader-only work, including the jobs only a full Studio
+has (marketplace sync, telemetry), always runs on a full Studio, and the
+relay carries its `budget.sync` to the edges a control plane holds. Its
+budget sync service still computes spend for its own snapshots, as on any
+non-leader. While no full Studio is up, nothing leads: its edges keep the
+last budget blocks they were sent.
+
+`Relay.Stop` stops taking the log's events and waits for one being
+published on the bus before it leaves the bus: the bus library's
+`Unsubscribe` is not synchronised with a `Publish` in flight on another
+goroutine (the log's reader).
+
 ### Schema version: instances that do not migrate
 
 Every full replica migrates under the migration lock and then records the

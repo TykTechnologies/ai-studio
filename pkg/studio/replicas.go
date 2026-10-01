@@ -21,11 +21,16 @@ const signalTopic = "replica.signal"
 
 // replicaBackend connects pkg/replicas to this Studio's cluster membership.
 type replicaBackend struct {
-	s       *Studio
+	c       *clusterParts
 	signals *signalSender
 }
 
-func (b replicaBackend) IsLeader() bool { return b.s.leadership.IsLeader() }
+// IsLeader: holding the leader lease. A replica without one (a headless
+// control plane) never leads; pkg/replicas would take no backend at all to
+// mean the only replica, which leads.
+func (b replicaBackend) IsLeader() bool {
+	return b.c.leadership != nil && b.c.leadership.IsLeader()
+}
 
 // Signal queues the signal; it never waits for the database (it is called
 // from API requests).
@@ -122,14 +127,15 @@ func (ss *signalSender) close() {
 	})
 }
 
-// connectReplicas makes pkg/replicas answer for this Studio: leadership
-// from the leader lease, signals over the cluster event log.
-func (s *Studio) connectReplicas() {
-	s.unsubscribeSignals = s.clusterLog.Subscribe(signalTopic, func(ev cluster.Event) {
+// connectReplicas makes pkg/replicas answer for this replica: leadership
+// from the leader lease (never, without one), signals over the cluster
+// event log.
+func (c *clusterParts) connectReplicas() {
+	c.unsubscribeSignals = c.clusterLog.Subscribe(signalTopic, func(ev cluster.Event) {
 		replicas.Deliver(string(ev.Payload))
 	})
-	s.signals = newSignalSender(s.clusterLog)
-	replicas.SetBackend(replicaBackend{s: s, signals: s.signals})
+	c.signals = newSignalSender(c.clusterLog)
+	replicas.SetBackend(replicaBackend{c: c, signals: c.signals})
 }
 
 // coalescer runs fn in the background after a trigger, once for any number

@@ -67,10 +67,18 @@ func GetHandler() AnalyticsHandler {
 	return globalHandler
 }
 
-// ResetHandler resets the global analytics handler (useful for testing)
+// ResetHandler resets the global analytics handler (useful for testing).
+// When the handler is a stopped database recorder, it waits (briefly) for
+// the recorder's worker to finish, so it does not outlive the Studio that
+// stopped it: a Studio started next in the process replaces the package
+// state (the logger) the worker still uses.
 func ResetHandler() {
 	handlerMu.Lock()
-	defer handlerMu.Unlock()
-
+	h := globalHandler
 	globalHandler = nil
+	handlerMu.Unlock()
+
+	if w, ok := h.(interface{ waitStopped(time.Duration) }); ok {
+		w.waitStopped(5 * time.Second)
+	}
 }

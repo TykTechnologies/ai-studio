@@ -83,6 +83,13 @@ type Relay struct {
 	done     chan struct{}
 	stopOnce sync.Once
 
+	// publishing is held while an event from the log is published on the
+	// bus, and by Stop before it unsubscribes from the bus: the bus
+	// library's Unsubscribe is not synchronised with a Publish in flight on
+	// another goroutine. closed (under it) turns later events away.
+	publishing sync.Mutex
+	closed     bool
+
 	sent, received, dropped atomic.Uint64
 }
 
@@ -114,11 +121,16 @@ func (r *Relay) Start() {
 // publish timeout each.
 func (r *Relay) Stop() {
 	r.stopOnce.Do(func() {
-		if r.sub != nil {
-			r.bus.Unsubscribe(r.sub)
-		}
+		// Stop taking the log's events, and wait for one being published,
+		// before leaving the bus.
 		if r.unsubLog != nil {
 			r.unsubLog()
+		}
+		r.publishing.Lock()
+		r.closed = true
+		r.publishing.Unlock()
+		if r.sub != nil {
+			r.bus.Unsubscribe(r.sub)
 		}
 		close(r.stop)
 		<-r.done
@@ -210,6 +222,11 @@ func (r *Relay) fromCluster(e Event) {
 		return
 	}
 	ev.RelayedFrom = e.Origin
+	r.publishing.Lock()
+	defer r.publishing.Unlock()
+	if r.closed {
+		return
+	}
 	r.received.Add(1)
 	r.bus.Publish(ev)
 }

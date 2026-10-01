@@ -83,6 +83,20 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   to its own listener.
 - `Stop` shuts everything down in dependency order, leaves the database
   open, and may be called more than once.
+- `Options.GRPCTLSConfig` serves edges with the host's `*tls.Config` instead
+  of the certificate and key files in `Config`.
+
+## Headless control plane
+
+`NewControlPlane(ControlPlaneOptions)` runs only the edge control plane (gRPC
+control server, push delivery, cluster membership and relay, analytics from
+edges) on a Postgres database a full Studio migrates, for a product that
+holds edge connections next to the full Studio (MDCB). It checks the schema
+with `CheckSchema` and never changes it, never takes the leader lease, and
+runs no API, UI, gateway, plugins, marketplace, scheduler or telemetry.
+`Serve(listener)` serves edges; `Stop(ctx)` shuts down in reverse order. It
+shares the one-instance-per-process rule with `New`. See
+`features/Embedding.md`, "Headless control plane".
 
 ## Constraints
 

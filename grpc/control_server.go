@@ -7,6 +7,7 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -142,6 +143,10 @@ type Config struct {
 	TLSEnabled           bool
 	TLSCertPath          string
 	TLSKeyPath           string
+	// TLSConfig, when set, is used for TLS instead of TLSCertPath and
+	// TLSKeyPath (and whatever TLSEnabled says): an embedding host supplies
+	// its own certificates, cipher suites and minimum version.
+	TLSConfig            *tls.Config
 	AuthToken            string
 	NextAuthToken        string
 	MaxConcurrentStreams int // Maximum number of concurrent gRPC streams (default 1000)
@@ -328,8 +333,10 @@ func (s *ControlServer) Serve(listener net.Listener) error {
 	// Setup gRPC server options
 	opts := s.config.serverTuning().serverOptions()
 
-	// Add TLS if enabled
-	if s.config.TLSEnabled {
+	// Add TLS: the host's own configuration, or the configured files
+	if s.config.TLSConfig != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(s.config.TLSConfig)))
+	} else if s.config.TLSEnabled {
 		creds, err := credentials.NewServerTLSFromFile(
 			s.config.TLSCertPath,
 			s.config.TLSKeyPath,
