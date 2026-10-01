@@ -125,7 +125,7 @@ func (a *API) listEdges(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param edge_id path string true "Edge ID"
-// @Success 200 {object} EdgeResponse
+// @Success 200 {object} object{data=EdgeResponse}
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/{edge_id} [get]

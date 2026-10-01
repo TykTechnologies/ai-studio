@@ -119,7 +119,7 @@ func (a *API) listEdges(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param edge_id path string true "Edge ID"
-// @Success 200 {object} EdgeResponse
+// @Success 200 {object} object{data=EdgeResponse}
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/{edge_id} [get]
@@ -146,7 +146,8 @@ func (a *API) getEdge(c *gin.Context) {
 	// Serialize WITHOUT namespace field
 	response := []EdgeResponse{serializeEdgeWithHealth(edge)}
 	a.withEdgeOwners(c.Request.Context(), response)
-	c.JSON(http.StatusOK, response[0])
+	// Wrapped in "data", as in Enterprise and as the console reads it.
+	c.JSON(http.StatusOK, gin.H{"data": response[0]})
 }
 
 // @Summary Reload edge configuration

@@ -55,10 +55,12 @@ func TestEdgesShowTheirOwningReplica(t *testing.T) {
 	w = apitest.PerformRequest(r, "GET", "/api/v1/edges/held-edge", nil)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var detail struct {
-		Attributes map[string]interface{} `json:"attributes"`
+		Data struct {
+			Attributes map[string]interface{} `json:"attributes"`
+		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &detail))
-	assert.Equal(t, "mdcb-eu-1", detail.Attributes["owner_label"], "the owner's fields sit with the edge's other attributes")
-	assert.Equal(t, "mdcb-node", detail.Attributes["owner_node_id"])
-	assert.Equal(t, true, detail.Attributes["owner_live"])
+	assert.Equal(t, "mdcb-eu-1", detail.Data.Attributes["owner_label"], "the owner's fields sit with the edge's other attributes")
+	assert.Equal(t, "mdcb-node", detail.Data.Attributes["owner_node_id"])
+	assert.Equal(t, true, detail.Data.Attributes["owner_live"])
 }
