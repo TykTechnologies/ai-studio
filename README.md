@@ -34,7 +34,7 @@ echo "TYK_AI_LICENSE=<your-license-key>" > required.env
 docker compose -f ./enterprise/compose.yaml up -d
 ```
 
-Once running, access the UI at http://localhost:8585
+Once running, access the UI at http://localhost:3000 (Community Edition) or http://localhost:8585 (Enterprise Edition).
 
 See the [quickstart README](quickstart/README.md) for more details.
 
@@ -232,7 +232,6 @@ docker compose up --build
 4. **Access the interface**
 - UI: http://localhost:3000
 - API: http://localhost:8080
-- Proxy: http://localhost:9090
 
 When you first register, your account will automatically become admin with a default user group created.
 
@@ -241,7 +240,6 @@ When you first register, your account will automatically become admin with a def
 **Prerequisites**
 - Go 1.26+
 - Node.js 20+
-- Clone the langchaingo fork: https://github.com/lonelycode/langchaingo
 
 **Start development servers**
 ```bash
@@ -262,12 +260,11 @@ docker compose up --build
 
 ### Kubernetes
 ```bash
-# Using Helm (if available)
+# Using the Helm chart in this repository
 helm install ai-studio ./helm
-
-# Using kubectl
-kubectl apply -f k8s/
 ```
+
+For values and production settings, see [Deploy on Kubernetes](https://tyk.io/docs/ai-management/ai-studio/deployment-k8s) and the [chart README](helm/README.md).
 
 ### Native Binary
 ```bash
@@ -387,7 +384,7 @@ func main() {
 **Developer Resources**
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
-- [Code of Conduct](CLA.md)
+- [Contributor License Agreement](CLA.md)
 
 ## Configuration
 
@@ -478,10 +475,9 @@ git push origin v2.1.0
 
 ### Additional Commands
 ```bash
-make start-frontend    # Frontend development server only
-make start-backend     # Backend development server only
-make stop-frontend     # Stop frontend server
-make stop-backend      # Stop backend server
+make dev          # Docker Compose development environment with hot reload (recommended)
+make dev-down     # Stop the development environment
+make dev-help     # List all development targets
 ```
 
 ### Testing
