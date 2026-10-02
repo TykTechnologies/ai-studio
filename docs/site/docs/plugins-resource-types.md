@@ -443,6 +443,7 @@ Manifest `resource_types` are registered at load time. When the set of types is 
 | `supports_submissions` | No | `false` | Whether community submissions are enabled |
 | `access_granted_via_app` | No | hooks-based | Whether an App credential grants access to instances. Omitted: `true` when the plugin declares both `resource_provider` and `custom_endpoint`, else `false`. Gates the App forms, the catalog's Build app action and the gateway snapshot. |
 | `portal_detail_path` | No | `""` | Same-origin path template to an instance's page in the portal; `{id}` is replaced with the escaped instance ID. When access is not granted via an App, catalog cards open this page instead of the built-in detail page; otherwise it is a secondary link on the built-in page. Portal plugin routes match the pathname exactly, so put the instance ID in the hash of a registered portal route. |
+| `default_access` | No | `"auto"` | `auto`: active instances are granted to the Default team, so every user sees them. `explicit` (Enterprise builds): instances reach only the teams they are granted to, on the Teams page or by the plugin (`SetResourceInstanceGroups`, scope `resource-access.manage`). Community Edition always behaves as `auto`. |
 | `form_component` | No | `null` | Custom Web Component for the App form (null = standard multi-select) |
 
 ## API Endpoints

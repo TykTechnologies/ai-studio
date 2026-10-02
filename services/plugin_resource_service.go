@@ -136,6 +136,7 @@ func (s *Service) RegisterPluginResourceTypesForPlugin(plugin *models.Plugin, re
 			reg.IsActive = true
 			reg.AccessGrantedViaApp = resolvedAccess
 			reg.PortalDetailPath = strings.TrimSpace(reg.PortalDetailPath)
+			reg.DefaultAccess = models.NormalizeDefaultAccess(reg.DefaultAccess)
 			if err := reg.Create(s.DB); err != nil {
 				return fmt.Errorf("failed to create resource type %s: %w", reg.Slug, err)
 			}
@@ -153,6 +154,7 @@ func (s *Service) RegisterPluginResourceTypesForPlugin(plugin *models.Plugin, re
 			existing.AccessGrantedViaAppDeclared = reg.AccessGrantedViaAppDeclared
 			existing.AccessGrantedViaApp = resolvedAccess
 			existing.PortalDetailPath = strings.TrimSpace(reg.PortalDetailPath)
+			existing.DefaultAccess = models.NormalizeDefaultAccess(reg.DefaultAccess)
 			existing.IsActive = true
 			if err := existing.Update(s.DB); err != nil {
 				return fmt.Errorf("failed to update resource type %s: %w", reg.Slug, err)
@@ -166,6 +168,9 @@ func (s *Service) RegisterPluginResourceTypesForPlugin(plugin *models.Plugin, re
 		for _, reg := range registrations {
 			prt := &models.PluginResourceType{}
 			if err := prt.GetByPluginAndSlug(s.DB, pluginID, reg.Slug); err != nil {
+				continue
+			}
+			if !autoGrantsDefaultGroup(prt) {
 				continue
 			}
 			instances, err := s.AIStudioPluginManager.ListResourceInstances(pluginID, reg.Slug)
@@ -459,8 +464,9 @@ func (s *Service) GetAllAccessiblePluginResources(userID uint) ([]models.GroupPl
 // built-in resource pattern where new LLMs/Datasources/Tools are added to the default
 // catalogue so they're immediately visible to all users.
 //
-// Called when listing instances (lazy reconciliation) to avoid requiring plugins
-// to explicitly manage group assignments.
+// Called at registration and when a plugin reports an instance changed, for
+// types that grant the Default group automatically (autoGrantsDefaultGroup),
+// so plugins need not manage group assignments themselves.
 func (s *Service) EnsureDefaultGroupAccess(resourceTypeID uint, instanceIDs []string) error {
 	// Find the default group
 	defaultGroup := &models.Group{}
@@ -535,29 +541,46 @@ func (s *Service) SubscribeResourceInstanceChanges(bus eventbridge.Bus) {
 }
 
 // refreshInstanceDetails fetches updated instance details from the plugin and
-// updates all AppPluginResource rows that reference the given instance.
+// updates all AppPluginResource rows that reference the given instance. A new
+// or re-activated instance of a type that grants the Default group
+// automatically joins it here, rather than at the next plugin load.
+//
+// The event names only the type slug, which two plugins may share, so every
+// active type with that slug is checked; only the plugin that owns the
+// instance reports it.
 func (s *Service) refreshInstanceDetails(resourceTypeSlug, instanceID string) {
-	// Find the resource type to get the plugin ID
-	var prt models.PluginResourceType
-	if err := s.DB.Where("slug = ? AND is_active = ?", resourceTypeSlug, true).First(&prt).Error; err != nil {
-		return // Unknown type, nothing to refresh
-	}
-
 	if s.AIStudioPluginManager == nil {
 		return
 	}
-
-	// Fetch updated instance data from the plugin
-	instances, err := s.AIStudioPluginManager.ListResourceInstances(prt.PluginID, resourceTypeSlug)
-	if err != nil {
-		log.Printf("Warning: failed to fetch instances for refresh (plugin %d, type %s): %v", prt.PluginID, resourceTypeSlug, err)
-		return
+	var types []models.PluginResourceType
+	if err := s.DB.Where("slug = ? AND is_active = ?", resourceTypeSlug, true).Find(&types).Error; err != nil || len(types) == 0 {
+		return // Unknown type, nothing to refresh
 	}
+	for i := range types {
+		if s.refreshInstanceOfType(&types[i], instanceID) {
+			return
+		}
+	}
+	log.Printf("Warning: instance %s not found in plugin response during refresh", instanceID)
+}
 
-	// Find the specific instance
+// refreshInstanceOfType is refreshInstanceDetails for one resource type. It
+// reports whether the type's plugin knows the instance.
+func (s *Service) refreshInstanceOfType(prt *models.PluginResourceType, instanceID string) bool {
+	instances, err := s.AIStudioPluginManager.ListResourceInstances(prt.PluginID, prt.Slug)
+	if err != nil {
+		log.Printf("Warning: failed to fetch instances for refresh (plugin %d, type %s): %v", prt.PluginID, prt.Slug, err)
+		return false
+	}
 	for _, inst := range instances {
 		if inst.Id != instanceID {
 			continue
+		}
+
+		if inst.IsActive && autoGrantsDefaultGroup(prt) {
+			if err := s.EnsureDefaultGroupAccess(prt.ID, []string{instanceID}); err != nil {
+				log.Printf("Warning: failed to ensure default group access for instance %s: %v", instanceID, err)
+			}
 		}
 
 		// Update all AppPluginResource rows that reference this instance
@@ -574,10 +597,9 @@ func (s *Service) refreshInstanceDetails(resourceTypeSlug, instanceID string) {
 		} else if result.RowsAffected > 0 {
 			log.Printf("Refreshed denormalized data for instance %s (%d rows updated)", instanceID, result.RowsAffected)
 		}
-		return
+		return true
 	}
-
-	log.Printf("Warning: instance %s not found in plugin response during refresh", instanceID)
+	return false
 }
 
 // AccessiblePluginResourceType is one plugin resource type with the active

@@ -1283,6 +1283,7 @@ TABLE plugin_resource_types
   column access_granted_via_app boolean(bool) nullable=YES default=false
   column access_granted_via_app_declared boolean(bool) nullable=YES
   column portal_detail_path character varying(varchar) nullable=YES len=500
+  column default_access character varying(varchar) nullable=YES len=16
 TABLE plugin_schedule_executions
   constraint fk_plugin_schedule_executions_schedule FOREIGN KEY (plugin_schedule_id) REFERENCES plugin_schedules(id) ON DELETE CASCADE
   constraint plugin_schedule_executions_pkey PRIMARY KEY (id)

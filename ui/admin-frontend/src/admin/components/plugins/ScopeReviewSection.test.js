@@ -19,6 +19,17 @@ describe('ScopeReviewSection group headings', () => {
     expect(screen.queryByText('Standard access permission')).not.toBeInTheDocument();
   });
 
+  it('names the governance read and resource access groups', () => {
+    const scopes = ['resource-access.manage', 'audit.read', 'mcp-servers.read', 'routers.read'];
+    render(<ScopeReviewSection scopes={scopes} />);
+    expect(screen.getByText('Team access to plugin resources')).toBeInTheDocument();
+    expect(screen.getByText('Audit trail')).toBeInTheDocument();
+    expect(screen.getByText('MCP servers')).toBeInTheDocument();
+    expect(screen.getByText('Routers')).toBeInTheDocument();
+    scopes.forEach((scope) => expect(screen.getByText(SCOPE_DESCRIPTIONS[scope])).toBeInTheDocument());
+    expect(screen.queryByText('Standard access permission')).not.toBeInTheDocument();
+  });
+
   it('title-cases an unknown category and replaces hyphens with spaces', () => {
     render(<ScopeReviewSection scopes={['foo-bar.x']} />);
     expect(screen.getByText('Foo Bar')).toBeInTheDocument();

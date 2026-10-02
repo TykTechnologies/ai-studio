@@ -22,6 +22,2062 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type SetAppGovernanceStateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	AppId         uint32                 `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	IsActive      *bool                  `protobuf:"varint,3,opt,name=is_active,json=isActive,proto3,oneof" json:"is_active,omitempty"`                                              // unset leaves the active state alone
+	Flags         map[string]string      `protobuf:"bytes,4,rep,name=flags,proto3" json:"flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // flag -> value; an empty value clears the flag
+	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`                                                                         // shown with the flags and in the audit trail
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAppGovernanceStateRequest) Reset() {
+	*x = SetAppGovernanceStateRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAppGovernanceStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAppGovernanceStateRequest) ProtoMessage() {}
+
+func (x *SetAppGovernanceStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAppGovernanceStateRequest.ProtoReflect.Descriptor instead.
+func (*SetAppGovernanceStateRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SetAppGovernanceStateRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *SetAppGovernanceStateRequest) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *SetAppGovernanceStateRequest) GetIsActive() bool {
+	if x != nil && x.IsActive != nil {
+		return *x.IsActive
+	}
+	return false
+}
+
+func (x *SetAppGovernanceStateRequest) GetFlags() map[string]string {
+	if x != nil {
+		return x.Flags
+	}
+	return nil
+}
+
+func (x *SetAppGovernanceStateRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SetAppGovernanceStateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	App           *AppInfo               `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Changed       bool                   `protobuf:"varint,2,opt,name=changed,proto3" json:"changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAppGovernanceStateResponse) Reset() {
+	*x = SetAppGovernanceStateResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAppGovernanceStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAppGovernanceStateResponse) ProtoMessage() {}
+
+func (x *SetAppGovernanceStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAppGovernanceStateResponse.ProtoReflect.Descriptor instead.
+func (*SetAppGovernanceStateResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SetAppGovernanceStateResponse) GetApp() *AppInfo {
+	if x != nil {
+		return x.App
+	}
+	return nil
+}
+
+func (x *SetAppGovernanceStateResponse) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+type ListObjectMetadataAuditRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ObjectType    string                 `protobuf:"bytes,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"` // as GetObjectMetadataRequest ("plugin_resource:self:<slug>" allowed)
+	ObjectId      string                 `protobuf:"bytes,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"` // 0 = 100, capped at 500
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListObjectMetadataAuditRequest) Reset() {
+	*x = ListObjectMetadataAuditRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListObjectMetadataAuditRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListObjectMetadataAuditRequest) ProtoMessage() {}
+
+func (x *ListObjectMetadataAuditRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListObjectMetadataAuditRequest.ProtoReflect.Descriptor instead.
+func (*ListObjectMetadataAuditRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListObjectMetadataAuditRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListObjectMetadataAuditRequest) GetObjectType() string {
+	if x != nil {
+		return x.ObjectType
+	}
+	return ""
+}
+
+func (x *ListObjectMetadataAuditRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
+	}
+	return ""
+}
+
+func (x *ListObjectMetadataAuditRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ObjectMetadataAuditEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Action        string                 `protobuf:"bytes,2,opt,name=action,proto3" json:"action,omitempty"` // set | merge | delete
+	UserId        uint32                 `protobuf:"varint,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Source        string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"` // e.g. "user", "plugin:<id>", "system"
+	BeforeJson    string                 `protobuf:"bytes,5,opt,name=before_json,json=beforeJson,proto3" json:"before_json,omitempty"`
+	AfterJson     string                 `protobuf:"bytes,6,opt,name=after_json,json=afterJson,proto3" json:"after_json,omitempty"`
+	HooksExecuted []string               `protobuf:"bytes,7,rep,name=hooks_executed,json=hooksExecuted,proto3" json:"hooks_executed,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectMetadataAuditEntry) Reset() {
+	*x = ObjectMetadataAuditEntry{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectMetadataAuditEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectMetadataAuditEntry) ProtoMessage() {}
+
+func (x *ObjectMetadataAuditEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectMetadataAuditEntry.ProtoReflect.Descriptor instead.
+func (*ObjectMetadataAuditEntry) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ObjectMetadataAuditEntry) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ObjectMetadataAuditEntry) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *ObjectMetadataAuditEntry) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *ObjectMetadataAuditEntry) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *ObjectMetadataAuditEntry) GetBeforeJson() string {
+	if x != nil {
+		return x.BeforeJson
+	}
+	return ""
+}
+
+func (x *ObjectMetadataAuditEntry) GetAfterJson() string {
+	if x != nil {
+		return x.AfterJson
+	}
+	return ""
+}
+
+func (x *ObjectMetadataAuditEntry) GetHooksExecuted() []string {
+	if x != nil {
+		return x.HooksExecuted
+	}
+	return nil
+}
+
+func (x *ObjectMetadataAuditEntry) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+type ListObjectMetadataAuditResponse struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Entries       []*ObjectMetadataAuditEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListObjectMetadataAuditResponse) Reset() {
+	*x = ListObjectMetadataAuditResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListObjectMetadataAuditResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListObjectMetadataAuditResponse) ProtoMessage() {}
+
+func (x *ListObjectMetadataAuditResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListObjectMetadataAuditResponse.ProtoReflect.Descriptor instead.
+func (*ListObjectMetadataAuditResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListObjectMetadataAuditResponse) GetEntries() []*ObjectMetadataAuditEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+type ListAuditRecordsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ResourceType  string                 `protobuf:"bytes,2,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"` // snake_case singular, e.g. "llm", "tool", "mcp_server", "app"
+	ResourceId    string                 `protobuf:"bytes,3,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`                                      // 0 = 50, capped at 200
+	MutationsOnly bool                   `protobuf:"varint,5,opt,name=mutations_only,json=mutationsOnly,proto3" json:"mutations_only,omitempty"` // only POST/PUT/PATCH/DELETE records
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAuditRecordsRequest) Reset() {
+	*x = ListAuditRecordsRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAuditRecordsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAuditRecordsRequest) ProtoMessage() {}
+
+func (x *ListAuditRecordsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAuditRecordsRequest.ProtoReflect.Descriptor instead.
+func (*ListAuditRecordsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListAuditRecordsRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListAuditRecordsRequest) GetResourceType() string {
+	if x != nil {
+		return x.ResourceType
+	}
+	return ""
+}
+
+func (x *ListAuditRecordsRequest) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *ListAuditRecordsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListAuditRecordsRequest) GetMutationsOnly() bool {
+	if x != nil {
+		return x.MutationsOnly
+	}
+	return false
+}
+
+type AuditRecordInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	UserId        uint32                 `protobuf:"varint,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserEmail     string                 `protobuf:"bytes,4,opt,name=user_email,json=userEmail,proto3" json:"user_email,omitempty"`
+	UserName      string                 `protobuf:"bytes,5,opt,name=user_name,json=userName,proto3" json:"user_name,omitempty"`
+	Action        string                 `protobuf:"bytes,6,opt,name=action,proto3" json:"action,omitempty"`
+	Method        string                 `protobuf:"bytes,7,opt,name=method,proto3" json:"method,omitempty"`
+	Route         string                 `protobuf:"bytes,8,opt,name=route,proto3" json:"route,omitempty"`
+	Status        int32                  `protobuf:"varint,9,opt,name=status,proto3" json:"status,omitempty"`
+	ResourceType  string                 `protobuf:"bytes,10,opt,name=resource_type,json=resourceType,proto3" json:"resource_type,omitempty"`
+	ResourceId    string                 `protobuf:"bytes,11,opt,name=resource_id,json=resourceId,proto3" json:"resource_id,omitempty"`
+	ResourceName  string                 `protobuf:"bytes,12,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	DiffJson      string                 `protobuf:"bytes,13,opt,name=diff_json,json=diffJson,proto3" json:"diff_json,omitempty"` // {"field": {"old":..,"new":..}}, sensitive columns already redacted
+	Error         string                 `protobuf:"bytes,14,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuditRecordInfo) Reset() {
+	*x = AuditRecordInfo{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuditRecordInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuditRecordInfo) ProtoMessage() {}
+
+func (x *AuditRecordInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuditRecordInfo.ProtoReflect.Descriptor instead.
+func (*AuditRecordInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *AuditRecordInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *AuditRecordInfo) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *AuditRecordInfo) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *AuditRecordInfo) GetUserEmail() string {
+	if x != nil {
+		return x.UserEmail
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetUserName() string {
+	if x != nil {
+		return x.UserName
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetRoute() string {
+	if x != nil {
+		return x.Route
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *AuditRecordInfo) GetResourceType() string {
+	if x != nil {
+		return x.ResourceType
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetResourceId() string {
+	if x != nil {
+		return x.ResourceId
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetResourceName() string {
+	if x != nil {
+		return x.ResourceName
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetDiffJson() string {
+	if x != nil {
+		return x.DiffJson
+	}
+	return ""
+}
+
+func (x *AuditRecordInfo) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ListAuditRecordsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Records       []*AuditRecordInfo     `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAuditRecordsResponse) Reset() {
+	*x = ListAuditRecordsResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAuditRecordsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAuditRecordsResponse) ProtoMessage() {}
+
+func (x *ListAuditRecordsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAuditRecordsResponse.ProtoReflect.Descriptor instead.
+func (*ListAuditRecordsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListAuditRecordsResponse) GetRecords() []*AuditRecordInfo {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+type MCPServerInfo struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug           string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Description    string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Kind           string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`                                            // remote | local | ...
+	PrivacyScore   *int32                 `protobuf:"varint,6,opt,name=privacy_score,json=privacyScore,proto3,oneof" json:"privacy_score,omitempty"` // unset until an administrator sets it
+	IsActive       bool                   `protobuf:"varint,7,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	DashboardState string                 `protobuf:"bytes,8,opt,name=dashboard_state,json=dashboardState,proto3" json:"dashboard_state,omitempty"`
+	Brokerable     bool                   `protobuf:"varint,9,opt,name=brokerable,proto3" json:"brokerable,omitempty"`
+	Tags           []string               `protobuf:"bytes,10,rep,name=tags,proto3" json:"tags,omitempty"`
+	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MCPServerInfo) Reset() {
+	*x = MCPServerInfo{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPServerInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPServerInfo) ProtoMessage() {}
+
+func (x *MCPServerInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPServerInfo.ProtoReflect.Descriptor instead.
+func (*MCPServerInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MCPServerInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *MCPServerInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetPrivacyScore() int32 {
+	if x != nil && x.PrivacyScore != nil {
+		return *x.PrivacyScore
+	}
+	return 0
+}
+
+func (x *MCPServerInfo) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *MCPServerInfo) GetDashboardState() string {
+	if x != nil {
+		return x.DashboardState
+	}
+	return ""
+}
+
+func (x *MCPServerInfo) GetBrokerable() bool {
+	if x != nil {
+		return x.Brokerable
+	}
+	return false
+}
+
+func (x *MCPServerInfo) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *MCPServerInfo) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type ListMCPServersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"` // 0 = 50, capped at 200
+	IsActive      *bool                  `protobuf:"varint,4,opt,name=is_active,json=isActive,proto3,oneof" json:"is_active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMCPServersRequest) Reset() {
+	*x = ListMCPServersRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMCPServersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMCPServersRequest) ProtoMessage() {}
+
+func (x *ListMCPServersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMCPServersRequest.ProtoReflect.Descriptor instead.
+func (*ListMCPServersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListMCPServersRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListMCPServersRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListMCPServersRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListMCPServersRequest) GetIsActive() bool {
+	if x != nil && x.IsActive != nil {
+		return *x.IsActive
+	}
+	return false
+}
+
+type ListMCPServersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Servers       []*MCPServerInfo       `protobuf:"bytes,1,rep,name=servers,proto3" json:"servers,omitempty"`
+	TotalCount    int64                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMCPServersResponse) Reset() {
+	*x = ListMCPServersResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMCPServersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMCPServersResponse) ProtoMessage() {}
+
+func (x *ListMCPServersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMCPServersResponse.ProtoReflect.Descriptor instead.
+func (*ListMCPServersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListMCPServersResponse) GetServers() []*MCPServerInfo {
+	if x != nil {
+		return x.Servers
+	}
+	return nil
+}
+
+func (x *ListMCPServersResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type GetMCPServerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ServerId      uint32                 `protobuf:"varint,2,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMCPServerRequest) Reset() {
+	*x = GetMCPServerRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMCPServerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMCPServerRequest) ProtoMessage() {}
+
+func (x *GetMCPServerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMCPServerRequest.ProtoReflect.Descriptor instead.
+func (*GetMCPServerRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetMCPServerRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetMCPServerRequest) GetServerId() uint32 {
+	if x != nil {
+		return x.ServerId
+	}
+	return 0
+}
+
+type GetMCPServerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Server        *MCPServerInfo         `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMCPServerResponse) Reset() {
+	*x = GetMCPServerResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMCPServerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMCPServerResponse) ProtoMessage() {}
+
+func (x *GetMCPServerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMCPServerResponse.ProtoReflect.Descriptor instead.
+func (*GetMCPServerResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetMCPServerResponse) GetServer() *MCPServerInfo {
+	if x != nil {
+		return x.Server
+	}
+	return nil
+}
+
+type ModelRouterInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Namespace     string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Description   string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	Active        bool                   `protobuf:"varint,6,opt,name=active,proto3" json:"active,omitempty"`
+	LlmIds        []uint32               `protobuf:"varint,7,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // every LLM a pool vendor can route to
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelRouterInfo) Reset() {
+	*x = ModelRouterInfo{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelRouterInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelRouterInfo) ProtoMessage() {}
+
+func (x *ModelRouterInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelRouterInfo.ProtoReflect.Descriptor instead.
+func (*ModelRouterInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ModelRouterInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ModelRouterInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelRouterInfo) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *ModelRouterInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *ModelRouterInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ModelRouterInfo) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+func (x *ModelRouterInfo) GetLlmIds() []uint32 {
+	if x != nil {
+		return x.LlmIds
+	}
+	return nil
+}
+
+func (x *ModelRouterInfo) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type SemanticRouterInfo struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug           string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Namespace      string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Description    string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	Active         bool                   `protobuf:"varint,6,opt,name=active,proto3" json:"active,omitempty"`
+	LlmIds         []uint32               `protobuf:"varint,7,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`                           // route targets and the judge model
+	ModelRouterIds []uint32               `protobuf:"varint,8,rep,packed,name=model_router_ids,json=modelRouterIds,proto3" json:"model_router_ids,omitempty"` // route targets that are model routers
+	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SemanticRouterInfo) Reset() {
+	*x = SemanticRouterInfo{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SemanticRouterInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SemanticRouterInfo) ProtoMessage() {}
+
+func (x *SemanticRouterInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SemanticRouterInfo.ProtoReflect.Descriptor instead.
+func (*SemanticRouterInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SemanticRouterInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *SemanticRouterInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *SemanticRouterInfo) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *SemanticRouterInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *SemanticRouterInfo) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *SemanticRouterInfo) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+func (x *SemanticRouterInfo) GetLlmIds() []uint32 {
+	if x != nil {
+		return x.LlmIds
+	}
+	return nil
+}
+
+func (x *SemanticRouterInfo) GetModelRouterIds() []uint32 {
+	if x != nil {
+		return x.ModelRouterIds
+	}
+	return nil
+}
+
+func (x *SemanticRouterInfo) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type ListModelRoutersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"` // 0 = 50, capped at 200
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListModelRoutersRequest) Reset() {
+	*x = ListModelRoutersRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListModelRoutersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListModelRoutersRequest) ProtoMessage() {}
+
+func (x *ListModelRoutersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListModelRoutersRequest.ProtoReflect.Descriptor instead.
+func (*ListModelRoutersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListModelRoutersRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListModelRoutersRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListModelRoutersRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListModelRoutersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Routers       []*ModelRouterInfo     `protobuf:"bytes,1,rep,name=routers,proto3" json:"routers,omitempty"`
+	TotalCount    int64                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListModelRoutersResponse) Reset() {
+	*x = ListModelRoutersResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListModelRoutersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListModelRoutersResponse) ProtoMessage() {}
+
+func (x *ListModelRoutersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListModelRoutersResponse.ProtoReflect.Descriptor instead.
+func (*ListModelRoutersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListModelRoutersResponse) GetRouters() []*ModelRouterInfo {
+	if x != nil {
+		return x.Routers
+	}
+	return nil
+}
+
+func (x *ListModelRoutersResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type GetModelRouterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	RouterId      uint32                 `protobuf:"varint,2,opt,name=router_id,json=routerId,proto3" json:"router_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModelRouterRequest) Reset() {
+	*x = GetModelRouterRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModelRouterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModelRouterRequest) ProtoMessage() {}
+
+func (x *GetModelRouterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModelRouterRequest.ProtoReflect.Descriptor instead.
+func (*GetModelRouterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetModelRouterRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetModelRouterRequest) GetRouterId() uint32 {
+	if x != nil {
+		return x.RouterId
+	}
+	return 0
+}
+
+type GetModelRouterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Router        *ModelRouterInfo       `protobuf:"bytes,1,opt,name=router,proto3" json:"router,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetModelRouterResponse) Reset() {
+	*x = GetModelRouterResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetModelRouterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetModelRouterResponse) ProtoMessage() {}
+
+func (x *GetModelRouterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetModelRouterResponse.ProtoReflect.Descriptor instead.
+func (*GetModelRouterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetModelRouterResponse) GetRouter() *ModelRouterInfo {
+	if x != nil {
+		return x.Router
+	}
+	return nil
+}
+
+type ListSemanticRoutersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"` // 0 = 50, capped at 200
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSemanticRoutersRequest) Reset() {
+	*x = ListSemanticRoutersRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSemanticRoutersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSemanticRoutersRequest) ProtoMessage() {}
+
+func (x *ListSemanticRoutersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSemanticRoutersRequest.ProtoReflect.Descriptor instead.
+func (*ListSemanticRoutersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListSemanticRoutersRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListSemanticRoutersRequest) GetPage() int32 {
+	if x != nil {
+		return x.Page
+	}
+	return 0
+}
+
+func (x *ListSemanticRoutersRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListSemanticRoutersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Routers       []*SemanticRouterInfo  `protobuf:"bytes,1,rep,name=routers,proto3" json:"routers,omitempty"`
+	TotalCount    int64                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSemanticRoutersResponse) Reset() {
+	*x = ListSemanticRoutersResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSemanticRoutersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSemanticRoutersResponse) ProtoMessage() {}
+
+func (x *ListSemanticRoutersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSemanticRoutersResponse.ProtoReflect.Descriptor instead.
+func (*ListSemanticRoutersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListSemanticRoutersResponse) GetRouters() []*SemanticRouterInfo {
+	if x != nil {
+		return x.Routers
+	}
+	return nil
+}
+
+func (x *ListSemanticRoutersResponse) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type GetSemanticRouterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	RouterId      uint32                 `protobuf:"varint,2,opt,name=router_id,json=routerId,proto3" json:"router_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSemanticRouterRequest) Reset() {
+	*x = GetSemanticRouterRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSemanticRouterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSemanticRouterRequest) ProtoMessage() {}
+
+func (x *GetSemanticRouterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSemanticRouterRequest.ProtoReflect.Descriptor instead.
+func (*GetSemanticRouterRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetSemanticRouterRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetSemanticRouterRequest) GetRouterId() uint32 {
+	if x != nil {
+		return x.RouterId
+	}
+	return 0
+}
+
+type GetSemanticRouterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Router        *SemanticRouterInfo    `protobuf:"bytes,1,opt,name=router,proto3" json:"router,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSemanticRouterResponse) Reset() {
+	*x = GetSemanticRouterResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSemanticRouterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSemanticRouterResponse) ProtoMessage() {}
+
+func (x *GetSemanticRouterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSemanticRouterResponse.ProtoReflect.Descriptor instead.
+func (*GetSemanticRouterResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetSemanticRouterResponse) GetRouter() *SemanticRouterInfo {
+	if x != nil {
+		return x.Router
+	}
+	return nil
+}
+
+type GroupInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	IsDefault     bool                   `protobuf:"varint,3,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"` // the Default team every user joins
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupInfo) Reset() {
+	*x = GroupInfo{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupInfo) ProtoMessage() {}
+
+func (x *GroupInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupInfo.ProtoReflect.Descriptor instead.
+func (*GroupInfo) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *GroupInfo) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *GroupInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GroupInfo) GetIsDefault() bool {
+	if x != nil {
+		return x.IsDefault
+	}
+	return false
+}
+
+type ListGroupsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListGroupsRequest) Reset() {
+	*x = ListGroupsRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListGroupsRequest) ProtoMessage() {}
+
+func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListGroupsRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type ListGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        []*GroupInfo           `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListGroupsResponse) Reset() {
+	*x = ListGroupsResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListGroupsResponse) ProtoMessage() {}
+
+func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListGroupsResponse.ProtoReflect.Descriptor instead.
+func (*ListGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ListGroupsResponse) GetGroups() []*GroupInfo {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+type GetResourceInstanceGroupsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Context          *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ResourceTypeSlug string                 `protobuf:"bytes,2,opt,name=resource_type_slug,json=resourceTypeSlug,proto3" json:"resource_type_slug,omitempty"` // one of the calling plugin's resource types
+	InstanceId       string                 `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GetResourceInstanceGroupsRequest) Reset() {
+	*x = GetResourceInstanceGroupsRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetResourceInstanceGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetResourceInstanceGroupsRequest) ProtoMessage() {}
+
+func (x *GetResourceInstanceGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetResourceInstanceGroupsRequest.ProtoReflect.Descriptor instead.
+func (*GetResourceInstanceGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GetResourceInstanceGroupsRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *GetResourceInstanceGroupsRequest) GetResourceTypeSlug() string {
+	if x != nil {
+		return x.ResourceTypeSlug
+	}
+	return ""
+}
+
+func (x *GetResourceInstanceGroupsRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+type GetResourceInstanceGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupIds      []uint32               `protobuf:"varint,1,rep,packed,name=group_ids,json=groupIds,proto3" json:"group_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetResourceInstanceGroupsResponse) Reset() {
+	*x = GetResourceInstanceGroupsResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetResourceInstanceGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetResourceInstanceGroupsResponse) ProtoMessage() {}
+
+func (x *GetResourceInstanceGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetResourceInstanceGroupsResponse.ProtoReflect.Descriptor instead.
+func (*GetResourceInstanceGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetResourceInstanceGroupsResponse) GetGroupIds() []uint32 {
+	if x != nil {
+		return x.GroupIds
+	}
+	return nil
+}
+
+type SetResourceInstanceGroupsRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Context          *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ResourceTypeSlug string                 `protobuf:"bytes,2,opt,name=resource_type_slug,json=resourceTypeSlug,proto3" json:"resource_type_slug,omitempty"`
+	InstanceId       string                 `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	GroupIds         []uint32               `protobuf:"varint,4,rep,packed,name=group_ids,json=groupIds,proto3" json:"group_ids,omitempty"`
+	Replace          bool                   `protobuf:"varint,5,opt,name=replace,proto3" json:"replace,omitempty"` // true: the instance is granted to exactly group_ids; false: add them
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SetResourceInstanceGroupsRequest) Reset() {
+	*x = SetResourceInstanceGroupsRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetResourceInstanceGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetResourceInstanceGroupsRequest) ProtoMessage() {}
+
+func (x *SetResourceInstanceGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetResourceInstanceGroupsRequest.ProtoReflect.Descriptor instead.
+func (*SetResourceInstanceGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SetResourceInstanceGroupsRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *SetResourceInstanceGroupsRequest) GetResourceTypeSlug() string {
+	if x != nil {
+		return x.ResourceTypeSlug
+	}
+	return ""
+}
+
+func (x *SetResourceInstanceGroupsRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *SetResourceInstanceGroupsRequest) GetGroupIds() []uint32 {
+	if x != nil {
+		return x.GroupIds
+	}
+	return nil
+}
+
+func (x *SetResourceInstanceGroupsRequest) GetReplace() bool {
+	if x != nil {
+		return x.Replace
+	}
+	return false
+}
+
+type SetResourceInstanceGroupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupIds      []uint32               `protobuf:"varint,1,rep,packed,name=group_ids,json=groupIds,proto3" json:"group_ids,omitempty"` // the grants after the change
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetResourceInstanceGroupsResponse) Reset() {
+	*x = SetResourceInstanceGroupsResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetResourceInstanceGroupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetResourceInstanceGroupsResponse) ProtoMessage() {}
+
+func (x *SetResourceInstanceGroupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetResourceInstanceGroupsResponse.ProtoReflect.Descriptor instead.
+func (*SetResourceInstanceGroupsResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SetResourceInstanceGroupsResponse) GetGroupIds() []uint32 {
+	if x != nil {
+		return x.GroupIds
+	}
+	return nil
+}
+
+type ListAccessibleResourceInstancesRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Context          *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ResourceTypeSlug string                 `protobuf:"bytes,2,opt,name=resource_type_slug,json=resourceTypeSlug,proto3" json:"resource_type_slug,omitempty"`
+	UserId           uint32                 `protobuf:"varint,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListAccessibleResourceInstancesRequest) Reset() {
+	*x = ListAccessibleResourceInstancesRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAccessibleResourceInstancesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAccessibleResourceInstancesRequest) ProtoMessage() {}
+
+func (x *ListAccessibleResourceInstancesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAccessibleResourceInstancesRequest.ProtoReflect.Descriptor instead.
+func (*ListAccessibleResourceInstancesRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ListAccessibleResourceInstancesRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ListAccessibleResourceInstancesRequest) GetResourceTypeSlug() string {
+	if x != nil {
+		return x.ResourceTypeSlug
+	}
+	return ""
+}
+
+func (x *ListAccessibleResourceInstancesRequest) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+type ListAccessibleResourceInstancesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SeeAll        bool                   `protobuf:"varint,1,opt,name=see_all,json=seeAll,proto3" json:"see_all,omitempty"`               // the user manages teams and sees every instance
+	InstanceIds   []string               `protobuf:"bytes,2,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"` // granted instances (empty when see_all)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAccessibleResourceInstancesResponse) Reset() {
+	*x = ListAccessibleResourceInstancesResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAccessibleResourceInstancesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAccessibleResourceInstancesResponse) ProtoMessage() {}
+
+func (x *ListAccessibleResourceInstancesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAccessibleResourceInstancesResponse.ProtoReflect.Descriptor instead.
+func (*ListAccessibleResourceInstancesResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListAccessibleResourceInstancesResponse) GetSeeAll() bool {
+	if x != nil {
+		return x.SeeAll
+	}
+	return false
+}
+
+func (x *ListAccessibleResourceInstancesResponse) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
 type CreateNotificationRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Context        *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -39,7 +2095,7 @@ type CreateNotificationRequest struct {
 
 func (x *CreateNotificationRequest) Reset() {
 	*x = CreateNotificationRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[0]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -51,7 +2107,7 @@ func (x *CreateNotificationRequest) String() string {
 func (*CreateNotificationRequest) ProtoMessage() {}
 
 func (x *CreateNotificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[0]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -64,7 +2120,7 @@ func (x *CreateNotificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNotificationRequest.ProtoReflect.Descriptor instead.
 func (*CreateNotificationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{0}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CreateNotificationRequest) GetContext() *PluginContext {
@@ -140,7 +2196,7 @@ type CreateNotificationResponse struct {
 
 func (x *CreateNotificationResponse) Reset() {
 	*x = CreateNotificationResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[1]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -152,7 +2208,7 @@ func (x *CreateNotificationResponse) String() string {
 func (*CreateNotificationResponse) ProtoMessage() {}
 
 func (x *CreateNotificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[1]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -165,7 +2221,7 @@ func (x *CreateNotificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNotificationResponse.ProtoReflect.Descriptor instead.
 func (*CreateNotificationResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{1}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *CreateNotificationResponse) GetSuccess() bool {
@@ -196,13 +2252,14 @@ type ResourceTypeSpec struct {
 	SupportsMetadata    bool                   `protobuf:"varint,10,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`                    // Instances can carry governed metadata (Enterprise)
 	AccessGrantedViaApp *bool                  `protobuf:"varint,11,opt,name=access_granted_via_app,json=accessGrantedViaApp,proto3,oneof" json:"access_granted_via_app,omitempty"` // An App credential grants access to instances; unset = platform default
 	PortalDetailPath    string                 `protobuf:"bytes,12,opt,name=portal_detail_path,json=portalDetailPath,proto3" json:"portal_detail_path,omitempty"`                   // Portal path template for an instance, "{id}" is replaced
+	DefaultAccess       string                 `protobuf:"bytes,13,opt,name=default_access,json=defaultAccess,proto3" json:"default_access,omitempty"`                              // "" | auto: active instances join the Default team | explicit: only granted teams (Enterprise)
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ResourceTypeSpec) Reset() {
 	*x = ResourceTypeSpec{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[2]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -214,7 +2271,7 @@ func (x *ResourceTypeSpec) String() string {
 func (*ResourceTypeSpec) ProtoMessage() {}
 
 func (x *ResourceTypeSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[2]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -227,7 +2284,7 @@ func (x *ResourceTypeSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceTypeSpec.ProtoReflect.Descriptor instead.
 func (*ResourceTypeSpec) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{2}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ResourceTypeSpec) GetSlug() string {
@@ -314,6 +2371,13 @@ func (x *ResourceTypeSpec) GetPortalDetailPath() string {
 	return ""
 }
 
+func (x *ResourceTypeSpec) GetDefaultAccess() string {
+	if x != nil {
+		return x.DefaultAccess
+	}
+	return ""
+}
+
 type RegisterResourceTypesRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Context           *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -325,7 +2389,7 @@ type RegisterResourceTypesRequest struct {
 
 func (x *RegisterResourceTypesRequest) Reset() {
 	*x = RegisterResourceTypesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[3]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -337,7 +2401,7 @@ func (x *RegisterResourceTypesRequest) String() string {
 func (*RegisterResourceTypesRequest) ProtoMessage() {}
 
 func (x *RegisterResourceTypesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[3]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -350,7 +2414,7 @@ func (x *RegisterResourceTypesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterResourceTypesRequest.ProtoReflect.Descriptor instead.
 func (*RegisterResourceTypesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{3}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *RegisterResourceTypesRequest) GetContext() *PluginContext {
@@ -386,7 +2450,7 @@ type RegisterResourceTypesResponse struct {
 
 func (x *RegisterResourceTypesResponse) Reset() {
 	*x = RegisterResourceTypesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[4]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +2462,7 @@ func (x *RegisterResourceTypesResponse) String() string {
 func (*RegisterResourceTypesResponse) ProtoMessage() {}
 
 func (x *RegisterResourceTypesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[4]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +2475,7 @@ func (x *RegisterResourceTypesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterResourceTypesResponse.ProtoReflect.Descriptor instead.
 func (*RegisterResourceTypesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{4}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RegisterResourceTypesResponse) GetSuccess() bool {
@@ -455,7 +2519,7 @@ type PermissionResourceSpec struct {
 
 func (x *PermissionResourceSpec) Reset() {
 	*x = PermissionResourceSpec{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[5]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -467,7 +2531,7 @@ func (x *PermissionResourceSpec) String() string {
 func (*PermissionResourceSpec) ProtoMessage() {}
 
 func (x *PermissionResourceSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[5]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -480,7 +2544,7 @@ func (x *PermissionResourceSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PermissionResourceSpec.ProtoReflect.Descriptor instead.
 func (*PermissionResourceSpec) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{5}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *PermissionResourceSpec) GetKey() string {
@@ -529,7 +2593,7 @@ type RegisterPermissionResourcesRequest struct {
 
 func (x *RegisterPermissionResourcesRequest) Reset() {
 	*x = RegisterPermissionResourcesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[6]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -541,7 +2605,7 @@ func (x *RegisterPermissionResourcesRequest) String() string {
 func (*RegisterPermissionResourcesRequest) ProtoMessage() {}
 
 func (x *RegisterPermissionResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[6]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -554,7 +2618,7 @@ func (x *RegisterPermissionResourcesRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use RegisterPermissionResourcesRequest.ProtoReflect.Descriptor instead.
 func (*RegisterPermissionResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{6}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RegisterPermissionResourcesRequest) GetContext() *PluginContext {
@@ -591,7 +2655,7 @@ type RegisterPermissionResourcesResponse struct {
 
 func (x *RegisterPermissionResourcesResponse) Reset() {
 	*x = RegisterPermissionResourcesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[7]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -603,7 +2667,7 @@ func (x *RegisterPermissionResourcesResponse) String() string {
 func (*RegisterPermissionResourcesResponse) ProtoMessage() {}
 
 func (x *RegisterPermissionResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[7]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -616,7 +2680,7 @@ func (x *RegisterPermissionResourcesResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use RegisterPermissionResourcesResponse.ProtoReflect.Descriptor instead.
 func (*RegisterPermissionResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{7}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RegisterPermissionResourcesResponse) GetSuccess() bool {
@@ -665,7 +2729,7 @@ type PluginContext struct {
 
 func (x *PluginContext) Reset() {
 	*x = PluginContext{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[8]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -677,7 +2741,7 @@ func (x *PluginContext) String() string {
 func (*PluginContext) ProtoMessage() {}
 
 func (x *PluginContext) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[8]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -690,7 +2754,7 @@ func (x *PluginContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginContext.ProtoReflect.Descriptor instead.
 func (*PluginContext) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{8}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *PluginContext) GetPluginId() uint32 {
@@ -723,7 +2787,7 @@ type ListPluginsRequest struct {
 
 func (x *ListPluginsRequest) Reset() {
 	*x = ListPluginsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[9]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -735,7 +2799,7 @@ func (x *ListPluginsRequest) String() string {
 func (*ListPluginsRequest) ProtoMessage() {}
 
 func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[9]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -748,7 +2812,7 @@ func (x *ListPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsRequest.ProtoReflect.Descriptor instead.
 func (*ListPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{9}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListPluginsRequest) GetContext() *PluginContext {
@@ -804,7 +2868,7 @@ type ListPluginsResponse struct {
 
 func (x *ListPluginsResponse) Reset() {
 	*x = ListPluginsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[10]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +2880,7 @@ func (x *ListPluginsResponse) String() string {
 func (*ListPluginsResponse) ProtoMessage() {}
 
 func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[10]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +2893,7 @@ func (x *ListPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPluginsResponse.ProtoReflect.Descriptor instead.
 func (*ListPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{10}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListPluginsResponse) GetPlugins() []*PluginInfo {
@@ -863,7 +2927,7 @@ type GetPluginRequest struct {
 
 func (x *GetPluginRequest) Reset() {
 	*x = GetPluginRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[11]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +2939,7 @@ func (x *GetPluginRequest) String() string {
 func (*GetPluginRequest) ProtoMessage() {}
 
 func (x *GetPluginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[11]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +2952,7 @@ func (x *GetPluginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPluginRequest.ProtoReflect.Descriptor instead.
 func (*GetPluginRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{11}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetPluginRequest) GetContext() *PluginContext {
@@ -914,7 +2978,7 @@ type GetPluginResponse struct {
 
 func (x *GetPluginResponse) Reset() {
 	*x = GetPluginResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[12]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -926,7 +2990,7 @@ func (x *GetPluginResponse) String() string {
 func (*GetPluginResponse) ProtoMessage() {}
 
 func (x *GetPluginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[12]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -939,7 +3003,7 @@ func (x *GetPluginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPluginResponse.ProtoReflect.Descriptor instead.
 func (*GetPluginResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{12}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *GetPluginResponse) GetPlugin() *PluginInfo {
@@ -960,7 +3024,7 @@ type UpdatePluginConfigRequest struct {
 
 func (x *UpdatePluginConfigRequest) Reset() {
 	*x = UpdatePluginConfigRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[13]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +3036,7 @@ func (x *UpdatePluginConfigRequest) String() string {
 func (*UpdatePluginConfigRequest) ProtoMessage() {}
 
 func (x *UpdatePluginConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[13]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -985,7 +3049,7 @@ func (x *UpdatePluginConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePluginConfigRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePluginConfigRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{13}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *UpdatePluginConfigRequest) GetContext() *PluginContext {
@@ -1019,7 +3083,7 @@ type UpdatePluginConfigResponse struct {
 
 func (x *UpdatePluginConfigResponse) Reset() {
 	*x = UpdatePluginConfigResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[14]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1031,7 +3095,7 @@ func (x *UpdatePluginConfigResponse) String() string {
 func (*UpdatePluginConfigResponse) ProtoMessage() {}
 
 func (x *UpdatePluginConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[14]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1044,7 +3108,7 @@ func (x *UpdatePluginConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePluginConfigResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePluginConfigResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{14}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *UpdatePluginConfigResponse) GetSuccess() bool {
@@ -1084,7 +3148,7 @@ type PluginInfo struct {
 
 func (x *PluginInfo) Reset() {
 	*x = PluginInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[15]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1096,7 +3160,7 @@ func (x *PluginInfo) String() string {
 func (*PluginInfo) ProtoMessage() {}
 
 func (x *PluginInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[15]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1109,7 +3173,7 @@ func (x *PluginInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginInfo.ProtoReflect.Descriptor instead.
 func (*PluginInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{15}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *PluginInfo) GetId() uint32 {
@@ -1233,7 +3297,7 @@ type ListLLMsRequest struct {
 
 func (x *ListLLMsRequest) Reset() {
 	*x = ListLLMsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[16]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1245,7 +3309,7 @@ func (x *ListLLMsRequest) String() string {
 func (*ListLLMsRequest) ProtoMessage() {}
 
 func (x *ListLLMsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[16]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1258,7 +3322,7 @@ func (x *ListLLMsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLLMsRequest.ProtoReflect.Descriptor instead.
 func (*ListLLMsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{16}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListLLMsRequest) GetContext() *PluginContext {
@@ -1313,7 +3377,7 @@ type ListLLMsResponse struct {
 
 func (x *ListLLMsResponse) Reset() {
 	*x = ListLLMsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[17]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1325,7 +3389,7 @@ func (x *ListLLMsResponse) String() string {
 func (*ListLLMsResponse) ProtoMessage() {}
 
 func (x *ListLLMsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[17]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1338,7 +3402,7 @@ func (x *ListLLMsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLLMsResponse.ProtoReflect.Descriptor instead.
 func (*ListLLMsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{17}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListLLMsResponse) GetLlms() []*LLMInfo {
@@ -1365,7 +3429,7 @@ type GetLLMRequest struct {
 
 func (x *GetLLMRequest) Reset() {
 	*x = GetLLMRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[18]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1377,7 +3441,7 @@ func (x *GetLLMRequest) String() string {
 func (*GetLLMRequest) ProtoMessage() {}
 
 func (x *GetLLMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[18]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1390,7 +3454,7 @@ func (x *GetLLMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLLMRequest.ProtoReflect.Descriptor instead.
 func (*GetLLMRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{18}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GetLLMRequest) GetContext() *PluginContext {
@@ -1416,7 +3480,7 @@ type GetLLMResponse struct {
 
 func (x *GetLLMResponse) Reset() {
 	*x = GetLLMResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[19]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1428,7 +3492,7 @@ func (x *GetLLMResponse) String() string {
 func (*GetLLMResponse) ProtoMessage() {}
 
 func (x *GetLLMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[19]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1441,7 +3505,7 @@ func (x *GetLLMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLLMResponse.ProtoReflect.Descriptor instead.
 func (*GetLLMResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{19}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GetLLMResponse) GetLlm() *LLMInfo {
@@ -1461,7 +3525,7 @@ type GetLLMPluginsRequest struct {
 
 func (x *GetLLMPluginsRequest) Reset() {
 	*x = GetLLMPluginsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[20]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1473,7 +3537,7 @@ func (x *GetLLMPluginsRequest) String() string {
 func (*GetLLMPluginsRequest) ProtoMessage() {}
 
 func (x *GetLLMPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[20]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1486,7 +3550,7 @@ func (x *GetLLMPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLLMPluginsRequest.ProtoReflect.Descriptor instead.
 func (*GetLLMPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{20}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GetLLMPluginsRequest) GetContext() *PluginContext {
@@ -1512,7 +3576,7 @@ type GetLLMPluginsResponse struct {
 
 func (x *GetLLMPluginsResponse) Reset() {
 	*x = GetLLMPluginsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[21]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1524,7 +3588,7 @@ func (x *GetLLMPluginsResponse) String() string {
 func (*GetLLMPluginsResponse) ProtoMessage() {}
 
 func (x *GetLLMPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[21]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1537,7 +3601,7 @@ func (x *GetLLMPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLLMPluginsResponse.ProtoReflect.Descriptor instead.
 func (*GetLLMPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{21}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *GetLLMPluginsResponse) GetPlugins() []*PluginInfo {
@@ -1570,7 +3634,7 @@ type LLMInfo struct {
 
 func (x *LLMInfo) Reset() {
 	*x = LLMInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[22]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1582,7 +3646,7 @@ func (x *LLMInfo) String() string {
 func (*LLMInfo) ProtoMessage() {}
 
 func (x *LLMInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[22]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1595,7 +3659,7 @@ func (x *LLMInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMInfo.ProtoReflect.Descriptor instead.
 func (*LLMInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{22}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *LLMInfo) GetId() uint32 {
@@ -1726,7 +3790,7 @@ type CreateLLMRequest struct {
 
 func (x *CreateLLMRequest) Reset() {
 	*x = CreateLLMRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[23]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1738,7 +3802,7 @@ func (x *CreateLLMRequest) String() string {
 func (*CreateLLMRequest) ProtoMessage() {}
 
 func (x *CreateLLMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[23]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1751,7 +3815,7 @@ func (x *CreateLLMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateLLMRequest.ProtoReflect.Descriptor instead.
 func (*CreateLLMRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{23}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CreateLLMRequest) GetContext() *PluginContext {
@@ -1868,7 +3932,7 @@ type CreateLLMResponse struct {
 
 func (x *CreateLLMResponse) Reset() {
 	*x = CreateLLMResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[24]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1880,7 +3944,7 @@ func (x *CreateLLMResponse) String() string {
 func (*CreateLLMResponse) ProtoMessage() {}
 
 func (x *CreateLLMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[24]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1893,7 +3957,7 @@ func (x *CreateLLMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateLLMResponse.ProtoReflect.Descriptor instead.
 func (*CreateLLMResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{24}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *CreateLLMResponse) GetLlm() *LLMInfo {
@@ -1926,7 +3990,7 @@ type UpdateLLMRequest struct {
 
 func (x *UpdateLLMRequest) Reset() {
 	*x = UpdateLLMRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[25]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1938,7 +4002,7 @@ func (x *UpdateLLMRequest) String() string {
 func (*UpdateLLMRequest) ProtoMessage() {}
 
 func (x *UpdateLLMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[25]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1951,7 +4015,7 @@ func (x *UpdateLLMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateLLMRequest.ProtoReflect.Descriptor instead.
 func (*UpdateLLMRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{25}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *UpdateLLMRequest) GetContext() *PluginContext {
@@ -2068,7 +4132,7 @@ type UpdateLLMResponse struct {
 
 func (x *UpdateLLMResponse) Reset() {
 	*x = UpdateLLMResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[26]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2080,7 +4144,7 @@ func (x *UpdateLLMResponse) String() string {
 func (*UpdateLLMResponse) ProtoMessage() {}
 
 func (x *UpdateLLMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[26]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2093,7 +4157,7 @@ func (x *UpdateLLMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateLLMResponse.ProtoReflect.Descriptor instead.
 func (*UpdateLLMResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{26}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *UpdateLLMResponse) GetLlm() *LLMInfo {
@@ -2113,7 +4177,7 @@ type DeleteLLMRequest struct {
 
 func (x *DeleteLLMRequest) Reset() {
 	*x = DeleteLLMRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[27]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2125,7 +4189,7 @@ func (x *DeleteLLMRequest) String() string {
 func (*DeleteLLMRequest) ProtoMessage() {}
 
 func (x *DeleteLLMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[27]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2138,7 +4202,7 @@ func (x *DeleteLLMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteLLMRequest.ProtoReflect.Descriptor instead.
 func (*DeleteLLMRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{27}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *DeleteLLMRequest) GetContext() *PluginContext {
@@ -2165,7 +4229,7 @@ type DeleteLLMResponse struct {
 
 func (x *DeleteLLMResponse) Reset() {
 	*x = DeleteLLMResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[28]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2177,7 +4241,7 @@ func (x *DeleteLLMResponse) String() string {
 func (*DeleteLLMResponse) ProtoMessage() {}
 
 func (x *DeleteLLMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[28]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2190,7 +4254,7 @@ func (x *DeleteLLMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteLLMResponse.ProtoReflect.Descriptor instead.
 func (*DeleteLLMResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{28}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *DeleteLLMResponse) GetSuccess() bool {
@@ -2220,7 +4284,7 @@ type UpdateLLMPluginsRequest struct {
 
 func (x *UpdateLLMPluginsRequest) Reset() {
 	*x = UpdateLLMPluginsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[29]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2232,7 +4296,7 @@ func (x *UpdateLLMPluginsRequest) String() string {
 func (*UpdateLLMPluginsRequest) ProtoMessage() {}
 
 func (x *UpdateLLMPluginsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[29]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2245,7 +4309,7 @@ func (x *UpdateLLMPluginsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateLLMPluginsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateLLMPluginsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{29}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *UpdateLLMPluginsRequest) GetContext() *PluginContext {
@@ -2287,7 +4351,7 @@ type UpdateLLMPluginsResponse struct {
 
 func (x *UpdateLLMPluginsResponse) Reset() {
 	*x = UpdateLLMPluginsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[30]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2299,7 +4363,7 @@ func (x *UpdateLLMPluginsResponse) String() string {
 func (*UpdateLLMPluginsResponse) ProtoMessage() {}
 
 func (x *UpdateLLMPluginsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[30]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2312,7 +4376,7 @@ func (x *UpdateLLMPluginsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateLLMPluginsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateLLMPluginsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{30}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *UpdateLLMPluginsResponse) GetSuccess() bool {
@@ -2347,7 +4411,7 @@ type GetAnalyticsSummaryRequest struct {
 
 func (x *GetAnalyticsSummaryRequest) Reset() {
 	*x = GetAnalyticsSummaryRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[31]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2359,7 +4423,7 @@ func (x *GetAnalyticsSummaryRequest) String() string {
 func (*GetAnalyticsSummaryRequest) ProtoMessage() {}
 
 func (x *GetAnalyticsSummaryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[31]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2372,7 +4436,7 @@ func (x *GetAnalyticsSummaryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAnalyticsSummaryRequest.ProtoReflect.Descriptor instead.
 func (*GetAnalyticsSummaryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{31}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *GetAnalyticsSummaryRequest) GetContext() *PluginContext {
@@ -2412,7 +4476,7 @@ type GetAnalyticsSummaryResponse struct {
 
 func (x *GetAnalyticsSummaryResponse) Reset() {
 	*x = GetAnalyticsSummaryResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[32]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2424,7 +4488,7 @@ func (x *GetAnalyticsSummaryResponse) String() string {
 func (*GetAnalyticsSummaryResponse) ProtoMessage() {}
 
 func (x *GetAnalyticsSummaryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[32]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2437,7 +4501,7 @@ func (x *GetAnalyticsSummaryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAnalyticsSummaryResponse.ProtoReflect.Descriptor instead.
 func (*GetAnalyticsSummaryResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{32}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *GetAnalyticsSummaryResponse) GetTotalRequests() int64 {
@@ -2507,7 +4571,7 @@ type GetUsageStatisticsRequest struct {
 
 func (x *GetUsageStatisticsRequest) Reset() {
 	*x = GetUsageStatisticsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[33]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +4583,7 @@ func (x *GetUsageStatisticsRequest) String() string {
 func (*GetUsageStatisticsRequest) ProtoMessage() {}
 
 func (x *GetUsageStatisticsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[33]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +4596,7 @@ func (x *GetUsageStatisticsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsageStatisticsRequest.ProtoReflect.Descriptor instead.
 func (*GetUsageStatisticsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{33}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *GetUsageStatisticsRequest) GetContext() *PluginContext {
@@ -2565,7 +4629,7 @@ type GetUsageStatisticsResponse struct {
 
 func (x *GetUsageStatisticsResponse) Reset() {
 	*x = GetUsageStatisticsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[34]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2577,7 +4641,7 @@ func (x *GetUsageStatisticsResponse) String() string {
 func (*GetUsageStatisticsResponse) ProtoMessage() {}
 
 func (x *GetUsageStatisticsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[34]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2590,7 +4654,7 @@ func (x *GetUsageStatisticsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsageStatisticsResponse.ProtoReflect.Descriptor instead.
 func (*GetUsageStatisticsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{34}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *GetUsageStatisticsResponse) GetStatistics() []*UsageStatistic {
@@ -2611,7 +4675,7 @@ type GetCostAnalysisRequest struct {
 
 func (x *GetCostAnalysisRequest) Reset() {
 	*x = GetCostAnalysisRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[35]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2623,7 +4687,7 @@ func (x *GetCostAnalysisRequest) String() string {
 func (*GetCostAnalysisRequest) ProtoMessage() {}
 
 func (x *GetCostAnalysisRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[35]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2636,7 +4700,7 @@ func (x *GetCostAnalysisRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCostAnalysisRequest.ProtoReflect.Descriptor instead.
 func (*GetCostAnalysisRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{35}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *GetCostAnalysisRequest) GetContext() *PluginContext {
@@ -2671,7 +4735,7 @@ type GetCostAnalysisResponse struct {
 
 func (x *GetCostAnalysisResponse) Reset() {
 	*x = GetCostAnalysisResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[36]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2683,7 +4747,7 @@ func (x *GetCostAnalysisResponse) String() string {
 func (*GetCostAnalysisResponse) ProtoMessage() {}
 
 func (x *GetCostAnalysisResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[36]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2696,7 +4760,7 @@ func (x *GetCostAnalysisResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCostAnalysisResponse.ProtoReflect.Descriptor instead.
 func (*GetCostAnalysisResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{36}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *GetCostAnalysisResponse) GetTotalCost() float64 {
@@ -2732,7 +4796,7 @@ type TopEndpoint struct {
 
 func (x *TopEndpoint) Reset() {
 	*x = TopEndpoint{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[37]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2744,7 +4808,7 @@ func (x *TopEndpoint) String() string {
 func (*TopEndpoint) ProtoMessage() {}
 
 func (x *TopEndpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[37]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2757,7 +4821,7 @@ func (x *TopEndpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopEndpoint.ProtoReflect.Descriptor instead.
 func (*TopEndpoint) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{37}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *TopEndpoint) GetPath() string {
@@ -2801,7 +4865,7 @@ type ModelUsage struct {
 
 func (x *ModelUsage) Reset() {
 	*x = ModelUsage{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[38]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2813,7 +4877,7 @@ func (x *ModelUsage) String() string {
 func (*ModelUsage) ProtoMessage() {}
 
 func (x *ModelUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[38]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2826,7 +4890,7 @@ func (x *ModelUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelUsage.ProtoReflect.Descriptor instead.
 func (*ModelUsage) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{38}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *ModelUsage) GetModelName() string {
@@ -2878,7 +4942,7 @@ type UsageStatistic struct {
 
 func (x *UsageStatistic) Reset() {
 	*x = UsageStatistic{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[39]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2890,7 +4954,7 @@ func (x *UsageStatistic) String() string {
 func (*UsageStatistic) ProtoMessage() {}
 
 func (x *UsageStatistic) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[39]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2903,7 +4967,7 @@ func (x *UsageStatistic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageStatistic.ProtoReflect.Descriptor instead.
 func (*UsageStatistic) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{39}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *UsageStatistic) GetKey() string {
@@ -2960,7 +5024,7 @@ type CostBreakdown struct {
 
 func (x *CostBreakdown) Reset() {
 	*x = CostBreakdown{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[40]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2972,7 +5036,7 @@ func (x *CostBreakdown) String() string {
 func (*CostBreakdown) ProtoMessage() {}
 
 func (x *CostBreakdown) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[40]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2985,7 +5049,7 @@ func (x *CostBreakdown) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CostBreakdown.ProtoReflect.Descriptor instead.
 func (*CostBreakdown) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{40}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *CostBreakdown) GetCategory() string {
@@ -3033,7 +5097,7 @@ type ListAppsRequest struct {
 
 func (x *ListAppsRequest) Reset() {
 	*x = ListAppsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[41]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3045,7 +5109,7 @@ func (x *ListAppsRequest) String() string {
 func (*ListAppsRequest) ProtoMessage() {}
 
 func (x *ListAppsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[41]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3058,7 +5122,7 @@ func (x *ListAppsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAppsRequest.ProtoReflect.Descriptor instead.
 func (*ListAppsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{41}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListAppsRequest) GetContext() *PluginContext {
@@ -3113,7 +5177,7 @@ type ListAppsResponse struct {
 
 func (x *ListAppsResponse) Reset() {
 	*x = ListAppsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[42]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3125,7 +5189,7 @@ func (x *ListAppsResponse) String() string {
 func (*ListAppsResponse) ProtoMessage() {}
 
 func (x *ListAppsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[42]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3138,7 +5202,7 @@ func (x *ListAppsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAppsResponse.ProtoReflect.Descriptor instead.
 func (*ListAppsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{42}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *ListAppsResponse) GetApps() []*AppInfo {
@@ -3165,7 +5229,7 @@ type GetAppRequest struct {
 
 func (x *GetAppRequest) Reset() {
 	*x = GetAppRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[43]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3177,7 +5241,7 @@ func (x *GetAppRequest) String() string {
 func (*GetAppRequest) ProtoMessage() {}
 
 func (x *GetAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[43]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3190,7 +5254,7 @@ func (x *GetAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAppRequest.ProtoReflect.Descriptor instead.
 func (*GetAppRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{43}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetAppRequest) GetContext() *PluginContext {
@@ -3216,7 +5280,7 @@ type GetAppResponse struct {
 
 func (x *GetAppResponse) Reset() {
 	*x = GetAppResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[44]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3228,7 +5292,7 @@ func (x *GetAppResponse) String() string {
 func (*GetAppResponse) ProtoMessage() {}
 
 func (x *GetAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[44]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3241,7 +5305,7 @@ func (x *GetAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAppResponse.ProtoReflect.Descriptor instead.
 func (*GetAppResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{44}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetAppResponse) GetApp() *AppInfo {
@@ -3252,28 +5316,32 @@ func (x *GetAppResponse) GetApp() *AppInfo {
 }
 
 type AppInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	IsActive      bool                   `protobuf:"varint,4,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	Namespace     string                 `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	MonthlyBudget *float64               `protobuf:"fixed64,6,opt,name=monthly_budget,json=monthlyBudget,proto3,oneof" json:"monthly_budget,omitempty"`
-	LlmIds        []uint32               `protobuf:"varint,7,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	OwnerEmail    string                 `protobuf:"bytes,10,opt,name=owner_email,json=ownerEmail,proto3" json:"owner_email,omitempty"`
-	Metadata      string                 `protobuf:"bytes,11,opt,name=metadata,proto3" json:"metadata,omitempty"` // JSON string
-	ToolIds       []uint32               `protobuf:"varint,12,rep,packed,name=tool_ids,json=toolIds,proto3" json:"tool_ids,omitempty"`
-	DatasourceIds []uint32               `protobuf:"varint,13,rep,packed,name=datasource_ids,json=datasourceIds,proto3" json:"datasource_ids,omitempty"`
-	UserId        uint32                 `protobuf:"varint,14,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState  `protogen:"open.v1"`
+	Id                uint32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name              string                  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description       string                  `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	IsActive          bool                    `protobuf:"varint,4,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Namespace         string                  `protobuf:"bytes,5,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	MonthlyBudget     *float64                `protobuf:"fixed64,6,opt,name=monthly_budget,json=monthlyBudget,proto3,oneof" json:"monthly_budget,omitempty"`
+	LlmIds            []uint32                `protobuf:"varint,7,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`
+	CreatedAt         *timestamppb.Timestamp  `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt         *timestamppb.Timestamp  `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	OwnerEmail        string                  `protobuf:"bytes,10,opt,name=owner_email,json=ownerEmail,proto3" json:"owner_email,omitempty"`
+	Metadata          string                  `protobuf:"bytes,11,opt,name=metadata,proto3" json:"metadata,omitempty"` // JSON string
+	ToolIds           []uint32                `protobuf:"varint,12,rep,packed,name=tool_ids,json=toolIds,proto3" json:"tool_ids,omitempty"`
+	DatasourceIds     []uint32                `protobuf:"varint,13,rep,packed,name=datasource_ids,json=datasourceIds,proto3" json:"datasource_ids,omitempty"`
+	UserId            uint32                  `protobuf:"varint,14,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	McpServerIds      []uint32                `protobuf:"varint,15,rep,packed,name=mcp_server_ids,json=mcpServerIds,proto3" json:"mcp_server_ids,omitempty"`
+	ModelRouterIds    []uint32                `protobuf:"varint,16,rep,packed,name=model_router_ids,json=modelRouterIds,proto3" json:"model_router_ids,omitempty"`
+	SemanticRouterIds []uint32                `protobuf:"varint,17,rep,packed,name=semantic_router_ids,json=semanticRouterIds,proto3" json:"semantic_router_ids,omitempty"`
+	PluginResources   []*AppPluginResourceRef `protobuf:"bytes,18,rep,name=plugin_resources,json=pluginResources,proto3" json:"plugin_resources,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AppInfo) Reset() {
 	*x = AppInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[45]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3285,7 +5353,7 @@ func (x *AppInfo) String() string {
 func (*AppInfo) ProtoMessage() {}
 
 func (x *AppInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[45]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3298,7 +5366,7 @@ func (x *AppInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppInfo.ProtoReflect.Descriptor instead.
 func (*AppInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{45}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *AppInfo) GetId() uint32 {
@@ -3399,6 +5467,94 @@ func (x *AppInfo) GetUserId() uint32 {
 	return 0
 }
 
+func (x *AppInfo) GetMcpServerIds() []uint32 {
+	if x != nil {
+		return x.McpServerIds
+	}
+	return nil
+}
+
+func (x *AppInfo) GetModelRouterIds() []uint32 {
+	if x != nil {
+		return x.ModelRouterIds
+	}
+	return nil
+}
+
+func (x *AppInfo) GetSemanticRouterIds() []uint32 {
+	if x != nil {
+		return x.SemanticRouterIds
+	}
+	return nil
+}
+
+func (x *AppInfo) GetPluginResources() []*AppPluginResourceRef {
+	if x != nil {
+		return x.PluginResources
+	}
+	return nil
+}
+
+type AppPluginResourceRef struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	PluginId         uint32                 `protobuf:"varint,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"`
+	ResourceTypeSlug string                 `protobuf:"bytes,2,opt,name=resource_type_slug,json=resourceTypeSlug,proto3" json:"resource_type_slug,omitempty"`
+	InstanceId       string                 `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AppPluginResourceRef) Reset() {
+	*x = AppPluginResourceRef{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppPluginResourceRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppPluginResourceRef) ProtoMessage() {}
+
+func (x *AppPluginResourceRef) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppPluginResourceRef.ProtoReflect.Descriptor instead.
+func (*AppPluginResourceRef) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *AppPluginResourceRef) GetPluginId() uint32 {
+	if x != nil {
+		return x.PluginId
+	}
+	return 0
+}
+
+func (x *AppPluginResourceRef) GetResourceTypeSlug() string {
+	if x != nil {
+		return x.ResourceTypeSlug
+	}
+	return ""
+}
+
+func (x *AppPluginResourceRef) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
 type CreateAppRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -3417,7 +5573,7 @@ type CreateAppRequest struct {
 
 func (x *CreateAppRequest) Reset() {
 	*x = CreateAppRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[46]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3429,7 +5585,7 @@ func (x *CreateAppRequest) String() string {
 func (*CreateAppRequest) ProtoMessage() {}
 
 func (x *CreateAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[46]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3442,7 +5598,7 @@ func (x *CreateAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAppRequest.ProtoReflect.Descriptor instead.
 func (*CreateAppRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{46}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *CreateAppRequest) GetContext() *PluginContext {
@@ -3524,7 +5680,7 @@ type CreateAppResponse struct {
 
 func (x *CreateAppResponse) Reset() {
 	*x = CreateAppResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[47]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3536,7 +5692,7 @@ func (x *CreateAppResponse) String() string {
 func (*CreateAppResponse) ProtoMessage() {}
 
 func (x *CreateAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[47]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3549,7 +5705,7 @@ func (x *CreateAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAppResponse.ProtoReflect.Descriptor instead.
 func (*CreateAppResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{47}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *CreateAppResponse) GetApp() *AppInfo {
@@ -3577,7 +5733,7 @@ type UpdateAppRequest struct {
 
 func (x *UpdateAppRequest) Reset() {
 	*x = UpdateAppRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[48]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3589,7 +5745,7 @@ func (x *UpdateAppRequest) String() string {
 func (*UpdateAppRequest) ProtoMessage() {}
 
 func (x *UpdateAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[48]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3602,7 +5758,7 @@ func (x *UpdateAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAppRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAppRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{48}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *UpdateAppRequest) GetContext() *PluginContext {
@@ -3684,7 +5840,7 @@ type UpdateAppResponse struct {
 
 func (x *UpdateAppResponse) Reset() {
 	*x = UpdateAppResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[49]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3696,7 +5852,7 @@ func (x *UpdateAppResponse) String() string {
 func (*UpdateAppResponse) ProtoMessage() {}
 
 func (x *UpdateAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[49]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3709,7 +5865,7 @@ func (x *UpdateAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAppResponse.ProtoReflect.Descriptor instead.
 func (*UpdateAppResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{49}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *UpdateAppResponse) GetApp() *AppInfo {
@@ -3729,7 +5885,7 @@ type DeleteAppRequest struct {
 
 func (x *DeleteAppRequest) Reset() {
 	*x = DeleteAppRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[50]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3741,7 +5897,7 @@ func (x *DeleteAppRequest) String() string {
 func (*DeleteAppRequest) ProtoMessage() {}
 
 func (x *DeleteAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[50]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3754,7 +5910,7 @@ func (x *DeleteAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAppRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAppRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{50}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *DeleteAppRequest) GetContext() *PluginContext {
@@ -3781,7 +5937,7 @@ type DeleteAppResponse struct {
 
 func (x *DeleteAppResponse) Reset() {
 	*x = DeleteAppResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[51]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3793,7 +5949,7 @@ func (x *DeleteAppResponse) String() string {
 func (*DeleteAppResponse) ProtoMessage() {}
 
 func (x *DeleteAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[51]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3806,7 +5962,7 @@ func (x *DeleteAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAppResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAppResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{51}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *DeleteAppResponse) GetSuccess() bool {
@@ -3837,7 +5993,7 @@ type PatchAppMetadataRequest struct {
 
 func (x *PatchAppMetadataRequest) Reset() {
 	*x = PatchAppMetadataRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[52]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3849,7 +6005,7 @@ func (x *PatchAppMetadataRequest) String() string {
 func (*PatchAppMetadataRequest) ProtoMessage() {}
 
 func (x *PatchAppMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[52]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3862,7 +6018,7 @@ func (x *PatchAppMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PatchAppMetadataRequest.ProtoReflect.Descriptor instead.
 func (*PatchAppMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{52}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *PatchAppMetadataRequest) GetContext() *PluginContext {
@@ -3911,7 +6067,7 @@ type PatchAppMetadataResponse struct {
 
 func (x *PatchAppMetadataResponse) Reset() {
 	*x = PatchAppMetadataResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[53]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3923,7 +6079,7 @@ func (x *PatchAppMetadataResponse) String() string {
 func (*PatchAppMetadataResponse) ProtoMessage() {}
 
 func (x *PatchAppMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[53]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3936,7 +6092,7 @@ func (x *PatchAppMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PatchAppMetadataResponse.ProtoReflect.Descriptor instead.
 func (*PatchAppMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{53}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *PatchAppMetadataResponse) GetSuccess() bool {
@@ -3973,7 +6129,7 @@ type GetObjectMetadataRequest struct {
 
 func (x *GetObjectMetadataRequest) Reset() {
 	*x = GetObjectMetadataRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[54]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3985,7 +6141,7 @@ func (x *GetObjectMetadataRequest) String() string {
 func (*GetObjectMetadataRequest) ProtoMessage() {}
 
 func (x *GetObjectMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[54]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3998,7 +6154,7 @@ func (x *GetObjectMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{54}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *GetObjectMetadataRequest) GetContext() *PluginContext {
@@ -4043,7 +6199,7 @@ type GetObjectMetadataResponse struct {
 
 func (x *GetObjectMetadataResponse) Reset() {
 	*x = GetObjectMetadataResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[55]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4055,7 +6211,7 @@ func (x *GetObjectMetadataResponse) String() string {
 func (*GetObjectMetadataResponse) ProtoMessage() {}
 
 func (x *GetObjectMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[55]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4068,7 +6224,7 @@ func (x *GetObjectMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetObjectMetadataResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{55}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *GetObjectMetadataResponse) GetFound() bool {
@@ -4124,7 +6280,7 @@ type DeleteObjectMetadataRequest struct {
 
 func (x *DeleteObjectMetadataRequest) Reset() {
 	*x = DeleteObjectMetadataRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[56]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4136,7 +6292,7 @@ func (x *DeleteObjectMetadataRequest) String() string {
 func (*DeleteObjectMetadataRequest) ProtoMessage() {}
 
 func (x *DeleteObjectMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[56]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4149,7 +6305,7 @@ func (x *DeleteObjectMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectMetadataRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{56}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *DeleteObjectMetadataRequest) GetContext() *PluginContext {
@@ -4183,7 +6339,7 @@ type DeleteObjectMetadataResponse struct {
 
 func (x *DeleteObjectMetadataResponse) Reset() {
 	*x = DeleteObjectMetadataResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[57]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4195,7 +6351,7 @@ func (x *DeleteObjectMetadataResponse) String() string {
 func (*DeleteObjectMetadataResponse) ProtoMessage() {}
 
 func (x *DeleteObjectMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[57]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4208,7 +6364,7 @@ func (x *DeleteObjectMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectMetadataResponse.ProtoReflect.Descriptor instead.
 func (*DeleteObjectMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{57}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *DeleteObjectMetadataResponse) GetSuccess() bool {
@@ -4238,7 +6394,7 @@ type SetObjectMetadataRequest struct {
 
 func (x *SetObjectMetadataRequest) Reset() {
 	*x = SetObjectMetadataRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[58]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4250,7 +6406,7 @@ func (x *SetObjectMetadataRequest) String() string {
 func (*SetObjectMetadataRequest) ProtoMessage() {}
 
 func (x *SetObjectMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[58]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4263,7 +6419,7 @@ func (x *SetObjectMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetObjectMetadataRequest.ProtoReflect.Descriptor instead.
 func (*SetObjectMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{58}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *SetObjectMetadataRequest) GetContext() *PluginContext {
@@ -4313,7 +6469,7 @@ type SetObjectMetadataResponse struct {
 
 func (x *SetObjectMetadataResponse) Reset() {
 	*x = SetObjectMetadataResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[59]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4325,7 +6481,7 @@ func (x *SetObjectMetadataResponse) String() string {
 func (*SetObjectMetadataResponse) ProtoMessage() {}
 
 func (x *SetObjectMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[59]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4338,7 +6494,7 @@ func (x *SetObjectMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetObjectMetadataResponse.ProtoReflect.Descriptor instead.
 func (*SetObjectMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{59}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *SetObjectMetadataResponse) GetSuccess() bool {
@@ -4379,7 +6535,7 @@ type GetResolvedMetadataSchemaRequest struct {
 
 func (x *GetResolvedMetadataSchemaRequest) Reset() {
 	*x = GetResolvedMetadataSchemaRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[60]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4391,7 +6547,7 @@ func (x *GetResolvedMetadataSchemaRequest) String() string {
 func (*GetResolvedMetadataSchemaRequest) ProtoMessage() {}
 
 func (x *GetResolvedMetadataSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[60]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4404,7 +6560,7 @@ func (x *GetResolvedMetadataSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResolvedMetadataSchemaRequest.ProtoReflect.Descriptor instead.
 func (*GetResolvedMetadataSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{60}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *GetResolvedMetadataSchemaRequest) GetContext() *PluginContext {
@@ -4434,7 +6590,7 @@ type GetResolvedMetadataSchemaResponse struct {
 
 func (x *GetResolvedMetadataSchemaResponse) Reset() {
 	*x = GetResolvedMetadataSchemaResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[61]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4446,7 +6602,7 @@ func (x *GetResolvedMetadataSchemaResponse) String() string {
 func (*GetResolvedMetadataSchemaResponse) ProtoMessage() {}
 
 func (x *GetResolvedMetadataSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[61]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4459,7 +6615,7 @@ func (x *GetResolvedMetadataSchemaResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetResolvedMetadataSchemaResponse.ProtoReflect.Descriptor instead.
 func (*GetResolvedMetadataSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{61}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *GetResolvedMetadataSchemaResponse) GetFieldsJson() string {
@@ -4513,7 +6669,7 @@ type ValidateObjectMetadataRequest struct {
 
 func (x *ValidateObjectMetadataRequest) Reset() {
 	*x = ValidateObjectMetadataRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[62]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4525,7 +6681,7 @@ func (x *ValidateObjectMetadataRequest) String() string {
 func (*ValidateObjectMetadataRequest) ProtoMessage() {}
 
 func (x *ValidateObjectMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[62]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4538,7 +6694,7 @@ func (x *ValidateObjectMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateObjectMetadataRequest.ProtoReflect.Descriptor instead.
 func (*ValidateObjectMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{62}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *ValidateObjectMetadataRequest) GetContext() *PluginContext {
@@ -4587,7 +6743,7 @@ type ValidateObjectMetadataResponse struct {
 
 func (x *ValidateObjectMetadataResponse) Reset() {
 	*x = ValidateObjectMetadataResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[63]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4599,7 +6755,7 @@ func (x *ValidateObjectMetadataResponse) String() string {
 func (*ValidateObjectMetadataResponse) ProtoMessage() {}
 
 func (x *ValidateObjectMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[63]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4612,7 +6768,7 @@ func (x *ValidateObjectMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateObjectMetadataResponse.ProtoReflect.Descriptor instead.
 func (*ValidateObjectMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{63}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *ValidateObjectMetadataResponse) GetValid() bool {
@@ -4652,7 +6808,7 @@ type ListToolsRequest struct {
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[64]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4664,7 +6820,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[64]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4677,7 +6833,7 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{64}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *ListToolsRequest) GetContext() *PluginContext {
@@ -4732,7 +6888,7 @@ type ListToolsResponse struct {
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[65]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4744,7 +6900,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[65]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4757,7 +6913,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{65}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *ListToolsResponse) GetTools() []*ToolInfo {
@@ -4784,7 +6940,7 @@ type GetToolRequest struct {
 
 func (x *GetToolRequest) Reset() {
 	*x = GetToolRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[66]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4796,7 +6952,7 @@ func (x *GetToolRequest) String() string {
 func (*GetToolRequest) ProtoMessage() {}
 
 func (x *GetToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[66]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4809,7 +6965,7 @@ func (x *GetToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetToolRequest.ProtoReflect.Descriptor instead.
 func (*GetToolRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{66}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *GetToolRequest) GetContext() *PluginContext {
@@ -4835,7 +6991,7 @@ type GetToolResponse struct {
 
 func (x *GetToolResponse) Reset() {
 	*x = GetToolResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[67]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4847,7 +7003,7 @@ func (x *GetToolResponse) String() string {
 func (*GetToolResponse) ProtoMessage() {}
 
 func (x *GetToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[67]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4860,7 +7016,7 @@ func (x *GetToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetToolResponse.ProtoReflect.Descriptor instead.
 func (*GetToolResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{67}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *GetToolResponse) GetTool() *ToolInfo {
@@ -4880,7 +7036,7 @@ type GetToolOperationsRequest struct {
 
 func (x *GetToolOperationsRequest) Reset() {
 	*x = GetToolOperationsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[68]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4892,7 +7048,7 @@ func (x *GetToolOperationsRequest) String() string {
 func (*GetToolOperationsRequest) ProtoMessage() {}
 
 func (x *GetToolOperationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[68]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4905,7 +7061,7 @@ func (x *GetToolOperationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetToolOperationsRequest.ProtoReflect.Descriptor instead.
 func (*GetToolOperationsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{68}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *GetToolOperationsRequest) GetContext() *PluginContext {
@@ -4931,7 +7087,7 @@ type GetToolOperationsResponse struct {
 
 func (x *GetToolOperationsResponse) Reset() {
 	*x = GetToolOperationsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[69]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4943,7 +7099,7 @@ func (x *GetToolOperationsResponse) String() string {
 func (*GetToolOperationsResponse) ProtoMessage() {}
 
 func (x *GetToolOperationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[69]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4956,7 +7112,7 @@ func (x *GetToolOperationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetToolOperationsResponse.ProtoReflect.Descriptor instead.
 func (*GetToolOperationsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{69}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *GetToolOperationsResponse) GetOperations() []*ToolOperation {
@@ -4980,7 +7136,7 @@ type CallToolOperationRequest struct {
 
 func (x *CallToolOperationRequest) Reset() {
 	*x = CallToolOperationRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[70]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4992,7 +7148,7 @@ func (x *CallToolOperationRequest) String() string {
 func (*CallToolOperationRequest) ProtoMessage() {}
 
 func (x *CallToolOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[70]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5005,7 +7161,7 @@ func (x *CallToolOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallToolOperationRequest.ProtoReflect.Descriptor instead.
 func (*CallToolOperationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{70}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *CallToolOperationRequest) GetContext() *PluginContext {
@@ -5061,7 +7217,7 @@ type CallToolOperationResponse struct {
 
 func (x *CallToolOperationResponse) Reset() {
 	*x = CallToolOperationResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[71]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5073,7 +7229,7 @@ func (x *CallToolOperationResponse) String() string {
 func (*CallToolOperationResponse) ProtoMessage() {}
 
 func (x *CallToolOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[71]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5086,7 +7242,7 @@ func (x *CallToolOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallToolOperationResponse.ProtoReflect.Descriptor instead.
 func (*CallToolOperationResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{71}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *CallToolOperationResponse) GetSuccess() bool {
@@ -5131,7 +7287,7 @@ type ToolInfo struct {
 
 func (x *ToolInfo) Reset() {
 	*x = ToolInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[72]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5143,7 +7299,7 @@ func (x *ToolInfo) String() string {
 func (*ToolInfo) ProtoMessage() {}
 
 func (x *ToolInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[72]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5156,7 +7312,7 @@ func (x *ToolInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolInfo.ProtoReflect.Descriptor instead.
 func (*ToolInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{72}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *ToolInfo) GetId() uint32 {
@@ -5265,7 +7421,7 @@ type ToolOperation struct {
 
 func (x *ToolOperation) Reset() {
 	*x = ToolOperation{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[73]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5277,7 +7433,7 @@ func (x *ToolOperation) String() string {
 func (*ToolOperation) ProtoMessage() {}
 
 func (x *ToolOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[73]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5290,7 +7446,7 @@ func (x *ToolOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolOperation.ProtoReflect.Descriptor instead.
 func (*ToolOperation) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{73}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *ToolOperation) GetOperationId() string {
@@ -5356,7 +7512,7 @@ type ToolParameter struct {
 
 func (x *ToolParameter) Reset() {
 	*x = ToolParameter{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[74]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5368,7 +7524,7 @@ func (x *ToolParameter) String() string {
 func (*ToolParameter) ProtoMessage() {}
 
 func (x *ToolParameter) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[74]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5381,7 +7537,7 @@ func (x *ToolParameter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolParameter.ProtoReflect.Descriptor instead.
 func (*ToolParameter) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{74}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *ToolParameter) GetName() string {
@@ -5438,7 +7594,7 @@ type ToolRequestBody struct {
 
 func (x *ToolRequestBody) Reset() {
 	*x = ToolRequestBody{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[75]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5450,7 +7606,7 @@ func (x *ToolRequestBody) String() string {
 func (*ToolRequestBody) ProtoMessage() {}
 
 func (x *ToolRequestBody) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[75]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5463,7 +7619,7 @@ func (x *ToolRequestBody) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolRequestBody.ProtoReflect.Descriptor instead.
 func (*ToolRequestBody) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{75}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *ToolRequestBody) GetDescription() string {
@@ -5510,7 +7666,7 @@ type CreateToolRequest struct {
 
 func (x *CreateToolRequest) Reset() {
 	*x = CreateToolRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[76]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5522,7 +7678,7 @@ func (x *CreateToolRequest) String() string {
 func (*CreateToolRequest) ProtoMessage() {}
 
 func (x *CreateToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[76]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5535,7 +7691,7 @@ func (x *CreateToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateToolRequest.ProtoReflect.Descriptor instead.
 func (*CreateToolRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{76}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *CreateToolRequest) GetContext() *PluginContext {
@@ -5603,7 +7759,7 @@ type CreateToolResponse struct {
 
 func (x *CreateToolResponse) Reset() {
 	*x = CreateToolResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[77]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5615,7 +7771,7 @@ func (x *CreateToolResponse) String() string {
 func (*CreateToolResponse) ProtoMessage() {}
 
 func (x *CreateToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[77]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5628,7 +7784,7 @@ func (x *CreateToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateToolResponse.ProtoReflect.Descriptor instead.
 func (*CreateToolResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{77}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *CreateToolResponse) GetTool() *ToolInfo {
@@ -5655,7 +7811,7 @@ type UpdateToolRequest struct {
 
 func (x *UpdateToolRequest) Reset() {
 	*x = UpdateToolRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[78]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5667,7 +7823,7 @@ func (x *UpdateToolRequest) String() string {
 func (*UpdateToolRequest) ProtoMessage() {}
 
 func (x *UpdateToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[78]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5680,7 +7836,7 @@ func (x *UpdateToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateToolRequest.ProtoReflect.Descriptor instead.
 func (*UpdateToolRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{78}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *UpdateToolRequest) GetContext() *PluginContext {
@@ -5755,7 +7911,7 @@ type UpdateToolResponse struct {
 
 func (x *UpdateToolResponse) Reset() {
 	*x = UpdateToolResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[79]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5767,7 +7923,7 @@ func (x *UpdateToolResponse) String() string {
 func (*UpdateToolResponse) ProtoMessage() {}
 
 func (x *UpdateToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[79]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5780,7 +7936,7 @@ func (x *UpdateToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateToolResponse.ProtoReflect.Descriptor instead.
 func (*UpdateToolResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{79}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *UpdateToolResponse) GetTool() *ToolInfo {
@@ -5800,7 +7956,7 @@ type DeleteToolRequest struct {
 
 func (x *DeleteToolRequest) Reset() {
 	*x = DeleteToolRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[80]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5812,7 +7968,7 @@ func (x *DeleteToolRequest) String() string {
 func (*DeleteToolRequest) ProtoMessage() {}
 
 func (x *DeleteToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[80]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5825,7 +7981,7 @@ func (x *DeleteToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteToolRequest.ProtoReflect.Descriptor instead.
 func (*DeleteToolRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{80}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *DeleteToolRequest) GetContext() *PluginContext {
@@ -5852,7 +8008,7 @@ type DeleteToolResponse struct {
 
 func (x *DeleteToolResponse) Reset() {
 	*x = DeleteToolResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[81]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5864,7 +8020,7 @@ func (x *DeleteToolResponse) String() string {
 func (*DeleteToolResponse) ProtoMessage() {}
 
 func (x *DeleteToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[81]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5877,7 +8033,7 @@ func (x *DeleteToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteToolResponse.ProtoReflect.Descriptor instead.
 func (*DeleteToolResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{81}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *DeleteToolResponse) GetSuccess() bool {
@@ -5907,7 +8063,7 @@ type ListDatasourcesRequest struct {
 
 func (x *ListDatasourcesRequest) Reset() {
 	*x = ListDatasourcesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[82]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5919,7 +8075,7 @@ func (x *ListDatasourcesRequest) String() string {
 func (*ListDatasourcesRequest) ProtoMessage() {}
 
 func (x *ListDatasourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[82]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5932,7 +8088,7 @@ func (x *ListDatasourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDatasourcesRequest.ProtoReflect.Descriptor instead.
 func (*ListDatasourcesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{82}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *ListDatasourcesRequest) GetContext() *PluginContext {
@@ -5980,7 +8136,7 @@ type ListDatasourcesResponse struct {
 
 func (x *ListDatasourcesResponse) Reset() {
 	*x = ListDatasourcesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[83]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5992,7 +8148,7 @@ func (x *ListDatasourcesResponse) String() string {
 func (*ListDatasourcesResponse) ProtoMessage() {}
 
 func (x *ListDatasourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[83]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6005,7 +8161,7 @@ func (x *ListDatasourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDatasourcesResponse.ProtoReflect.Descriptor instead.
 func (*ListDatasourcesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{83}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *ListDatasourcesResponse) GetDatasources() []*DatasourceInfo {
@@ -6032,7 +8188,7 @@ type GetDatasourceRequest struct {
 
 func (x *GetDatasourceRequest) Reset() {
 	*x = GetDatasourceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[84]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6044,7 +8200,7 @@ func (x *GetDatasourceRequest) String() string {
 func (*GetDatasourceRequest) ProtoMessage() {}
 
 func (x *GetDatasourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[84]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6057,7 +8213,7 @@ func (x *GetDatasourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDatasourceRequest.ProtoReflect.Descriptor instead.
 func (*GetDatasourceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{84}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *GetDatasourceRequest) GetContext() *PluginContext {
@@ -6083,7 +8239,7 @@ type GetDatasourceResponse struct {
 
 func (x *GetDatasourceResponse) Reset() {
 	*x = GetDatasourceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[85]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6095,7 +8251,7 @@ func (x *GetDatasourceResponse) String() string {
 func (*GetDatasourceResponse) ProtoMessage() {}
 
 func (x *GetDatasourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[85]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6108,7 +8264,7 @@ func (x *GetDatasourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDatasourceResponse.ProtoReflect.Descriptor instead.
 func (*GetDatasourceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{85}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *GetDatasourceResponse) GetDatasource() *DatasourceInfo {
@@ -6144,7 +8300,7 @@ type CreateDatasourceRequest struct {
 
 func (x *CreateDatasourceRequest) Reset() {
 	*x = CreateDatasourceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[86]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6156,7 +8312,7 @@ func (x *CreateDatasourceRequest) String() string {
 func (*CreateDatasourceRequest) ProtoMessage() {}
 
 func (x *CreateDatasourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[86]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6169,7 +8325,7 @@ func (x *CreateDatasourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDatasourceRequest.ProtoReflect.Descriptor instead.
 func (*CreateDatasourceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{86}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *CreateDatasourceRequest) GetContext() *PluginContext {
@@ -6307,7 +8463,7 @@ type CreateDatasourceResponse struct {
 
 func (x *CreateDatasourceResponse) Reset() {
 	*x = CreateDatasourceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[87]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6319,7 +8475,7 @@ func (x *CreateDatasourceResponse) String() string {
 func (*CreateDatasourceResponse) ProtoMessage() {}
 
 func (x *CreateDatasourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[87]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6332,7 +8488,7 @@ func (x *CreateDatasourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDatasourceResponse.ProtoReflect.Descriptor instead.
 func (*CreateDatasourceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{87}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *CreateDatasourceResponse) GetDatasource() *DatasourceInfo {
@@ -6370,7 +8526,7 @@ type UpdateDatasourceRequest struct {
 
 func (x *UpdateDatasourceRequest) Reset() {
 	*x = UpdateDatasourceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[88]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6382,7 +8538,7 @@ func (x *UpdateDatasourceRequest) String() string {
 func (*UpdateDatasourceRequest) ProtoMessage() {}
 
 func (x *UpdateDatasourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[88]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6395,7 +8551,7 @@ func (x *UpdateDatasourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDatasourceRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDatasourceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{88}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *UpdateDatasourceRequest) GetContext() *PluginContext {
@@ -6540,7 +8696,7 @@ type UpdateDatasourceResponse struct {
 
 func (x *UpdateDatasourceResponse) Reset() {
 	*x = UpdateDatasourceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[89]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6552,7 +8708,7 @@ func (x *UpdateDatasourceResponse) String() string {
 func (*UpdateDatasourceResponse) ProtoMessage() {}
 
 func (x *UpdateDatasourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[89]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6565,7 +8721,7 @@ func (x *UpdateDatasourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDatasourceResponse.ProtoReflect.Descriptor instead.
 func (*UpdateDatasourceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{89}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *UpdateDatasourceResponse) GetDatasource() *DatasourceInfo {
@@ -6585,7 +8741,7 @@ type DeleteDatasourceRequest struct {
 
 func (x *DeleteDatasourceRequest) Reset() {
 	*x = DeleteDatasourceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[90]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6597,7 +8753,7 @@ func (x *DeleteDatasourceRequest) String() string {
 func (*DeleteDatasourceRequest) ProtoMessage() {}
 
 func (x *DeleteDatasourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[90]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6610,7 +8766,7 @@ func (x *DeleteDatasourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDatasourceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDatasourceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{90}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *DeleteDatasourceRequest) GetContext() *PluginContext {
@@ -6637,7 +8793,7 @@ type DeleteDatasourceResponse struct {
 
 func (x *DeleteDatasourceResponse) Reset() {
 	*x = DeleteDatasourceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[91]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6649,7 +8805,7 @@ func (x *DeleteDatasourceResponse) String() string {
 func (*DeleteDatasourceResponse) ProtoMessage() {}
 
 func (x *DeleteDatasourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[91]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6662,7 +8818,7 @@ func (x *DeleteDatasourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDatasourceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDatasourceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{91}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *DeleteDatasourceResponse) GetSuccess() bool {
@@ -6689,7 +8845,7 @@ type CloneDatasourceRequest struct {
 
 func (x *CloneDatasourceRequest) Reset() {
 	*x = CloneDatasourceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[92]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6701,7 +8857,7 @@ func (x *CloneDatasourceRequest) String() string {
 func (*CloneDatasourceRequest) ProtoMessage() {}
 
 func (x *CloneDatasourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[92]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6714,7 +8870,7 @@ func (x *CloneDatasourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneDatasourceRequest.ProtoReflect.Descriptor instead.
 func (*CloneDatasourceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{92}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *CloneDatasourceRequest) GetContext() *PluginContext {
@@ -6740,7 +8896,7 @@ type CloneDatasourceResponse struct {
 
 func (x *CloneDatasourceResponse) Reset() {
 	*x = CloneDatasourceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[93]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6752,7 +8908,7 @@ func (x *CloneDatasourceResponse) String() string {
 func (*CloneDatasourceResponse) ProtoMessage() {}
 
 func (x *CloneDatasourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[93]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6765,7 +8921,7 @@ func (x *CloneDatasourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneDatasourceResponse.ProtoReflect.Descriptor instead.
 func (*CloneDatasourceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{93}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *CloneDatasourceResponse) GetDatasource() *DatasourceInfo {
@@ -6785,7 +8941,7 @@ type SearchDatasourcesRequest struct {
 
 func (x *SearchDatasourcesRequest) Reset() {
 	*x = SearchDatasourcesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[94]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6797,7 +8953,7 @@ func (x *SearchDatasourcesRequest) String() string {
 func (*SearchDatasourcesRequest) ProtoMessage() {}
 
 func (x *SearchDatasourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[94]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6810,7 +8966,7 @@ func (x *SearchDatasourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchDatasourcesRequest.ProtoReflect.Descriptor instead.
 func (*SearchDatasourcesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{94}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *SearchDatasourcesRequest) GetContext() *PluginContext {
@@ -6836,7 +8992,7 @@ type SearchDatasourcesResponse struct {
 
 func (x *SearchDatasourcesResponse) Reset() {
 	*x = SearchDatasourcesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[95]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6848,7 +9004,7 @@ func (x *SearchDatasourcesResponse) String() string {
 func (*SearchDatasourcesResponse) ProtoMessage() {}
 
 func (x *SearchDatasourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[95]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6861,7 +9017,7 @@ func (x *SearchDatasourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchDatasourcesResponse.ProtoReflect.Descriptor instead.
 func (*SearchDatasourcesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{95}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *SearchDatasourcesResponse) GetDatasources() []*DatasourceInfo {
@@ -6881,7 +9037,7 @@ type ProcessEmbeddingsRequest struct {
 
 func (x *ProcessEmbeddingsRequest) Reset() {
 	*x = ProcessEmbeddingsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[96]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6893,7 +9049,7 @@ func (x *ProcessEmbeddingsRequest) String() string {
 func (*ProcessEmbeddingsRequest) ProtoMessage() {}
 
 func (x *ProcessEmbeddingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[96]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6906,7 +9062,7 @@ func (x *ProcessEmbeddingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessEmbeddingsRequest.ProtoReflect.Descriptor instead.
 func (*ProcessEmbeddingsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{96}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *ProcessEmbeddingsRequest) GetContext() *PluginContext {
@@ -6934,7 +9090,7 @@ type ProcessEmbeddingsResponse struct {
 
 func (x *ProcessEmbeddingsResponse) Reset() {
 	*x = ProcessEmbeddingsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[97]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6946,7 +9102,7 @@ func (x *ProcessEmbeddingsResponse) String() string {
 func (*ProcessEmbeddingsResponse) ProtoMessage() {}
 
 func (x *ProcessEmbeddingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[97]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6959,7 +9115,7 @@ func (x *ProcessEmbeddingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessEmbeddingsResponse.ProtoReflect.Descriptor instead.
 func (*ProcessEmbeddingsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{97}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *ProcessEmbeddingsResponse) GetSuccess() bool {
@@ -6995,7 +9151,7 @@ type GenerateEmbeddingRequest struct {
 
 func (x *GenerateEmbeddingRequest) Reset() {
 	*x = GenerateEmbeddingRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[98]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7007,7 +9163,7 @@ func (x *GenerateEmbeddingRequest) String() string {
 func (*GenerateEmbeddingRequest) ProtoMessage() {}
 
 func (x *GenerateEmbeddingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[98]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7020,7 +9176,7 @@ func (x *GenerateEmbeddingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateEmbeddingRequest.ProtoReflect.Descriptor instead.
 func (*GenerateEmbeddingRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{98}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *GenerateEmbeddingRequest) GetContext() *PluginContext {
@@ -7055,7 +9211,7 @@ type GenerateEmbeddingResponse struct {
 
 func (x *GenerateEmbeddingResponse) Reset() {
 	*x = GenerateEmbeddingResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[99]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7067,7 +9223,7 @@ func (x *GenerateEmbeddingResponse) String() string {
 func (*GenerateEmbeddingResponse) ProtoMessage() {}
 
 func (x *GenerateEmbeddingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[99]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7080,7 +9236,7 @@ func (x *GenerateEmbeddingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateEmbeddingResponse.ProtoReflect.Descriptor instead.
 func (*GenerateEmbeddingResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{99}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *GenerateEmbeddingResponse) GetSuccess() bool {
@@ -7113,7 +9269,7 @@ type EmbeddingVector struct {
 
 func (x *EmbeddingVector) Reset() {
 	*x = EmbeddingVector{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[100]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7125,7 +9281,7 @@ func (x *EmbeddingVector) String() string {
 func (*EmbeddingVector) ProtoMessage() {}
 
 func (x *EmbeddingVector) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[100]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7138,7 +9294,7 @@ func (x *EmbeddingVector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmbeddingVector.ProtoReflect.Descriptor instead.
 func (*EmbeddingVector) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{100}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *EmbeddingVector) GetValues() []float32 {
@@ -7160,7 +9316,7 @@ type StoreDocumentsRequest struct {
 
 func (x *StoreDocumentsRequest) Reset() {
 	*x = StoreDocumentsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[101]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7172,7 +9328,7 @@ func (x *StoreDocumentsRequest) String() string {
 func (*StoreDocumentsRequest) ProtoMessage() {}
 
 func (x *StoreDocumentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[101]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7185,7 +9341,7 @@ func (x *StoreDocumentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreDocumentsRequest.ProtoReflect.Descriptor instead.
 func (*StoreDocumentsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{101}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *StoreDocumentsRequest) GetContext() *PluginContext {
@@ -7220,7 +9376,7 @@ type DocumentWithEmbedding struct {
 
 func (x *DocumentWithEmbedding) Reset() {
 	*x = DocumentWithEmbedding{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[102]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7232,7 +9388,7 @@ func (x *DocumentWithEmbedding) String() string {
 func (*DocumentWithEmbedding) ProtoMessage() {}
 
 func (x *DocumentWithEmbedding) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[102]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7245,7 +9401,7 @@ func (x *DocumentWithEmbedding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocumentWithEmbedding.ProtoReflect.Descriptor instead.
 func (*DocumentWithEmbedding) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{102}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *DocumentWithEmbedding) GetContent() string {
@@ -7280,7 +9436,7 @@ type StoreDocumentsResponse struct {
 
 func (x *StoreDocumentsResponse) Reset() {
 	*x = StoreDocumentsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[103]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7292,7 +9448,7 @@ func (x *StoreDocumentsResponse) String() string {
 func (*StoreDocumentsResponse) ProtoMessage() {}
 
 func (x *StoreDocumentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[103]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7305,7 +9461,7 @@ func (x *StoreDocumentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreDocumentsResponse.ProtoReflect.Descriptor instead.
 func (*StoreDocumentsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{103}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *StoreDocumentsResponse) GetSuccess() bool {
@@ -7341,7 +9497,7 @@ type ProcessAndStoreRequest struct {
 
 func (x *ProcessAndStoreRequest) Reset() {
 	*x = ProcessAndStoreRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[104]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7353,7 +9509,7 @@ func (x *ProcessAndStoreRequest) String() string {
 func (*ProcessAndStoreRequest) ProtoMessage() {}
 
 func (x *ProcessAndStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[104]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7366,7 +9522,7 @@ func (x *ProcessAndStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessAndStoreRequest.ProtoReflect.Descriptor instead.
 func (*ProcessAndStoreRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{104}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *ProcessAndStoreRequest) GetContext() *PluginContext {
@@ -7400,7 +9556,7 @@ type DocumentChunk struct {
 
 func (x *DocumentChunk) Reset() {
 	*x = DocumentChunk{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[105]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7412,7 +9568,7 @@ func (x *DocumentChunk) String() string {
 func (*DocumentChunk) ProtoMessage() {}
 
 func (x *DocumentChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[105]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7425,7 +9581,7 @@ func (x *DocumentChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocumentChunk.ProtoReflect.Descriptor instead.
 func (*DocumentChunk) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{105}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *DocumentChunk) GetContent() string {
@@ -7453,7 +9609,7 @@ type ProcessAndStoreResponse struct {
 
 func (x *ProcessAndStoreResponse) Reset() {
 	*x = ProcessAndStoreResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[106]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7465,7 +9621,7 @@ func (x *ProcessAndStoreResponse) String() string {
 func (*ProcessAndStoreResponse) ProtoMessage() {}
 
 func (x *ProcessAndStoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[106]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7478,7 +9634,7 @@ func (x *ProcessAndStoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessAndStoreResponse.ProtoReflect.Descriptor instead.
 func (*ProcessAndStoreResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{106}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *ProcessAndStoreResponse) GetSuccess() bool {
@@ -7516,7 +9672,7 @@ type DeleteDocumentsByMetadataRequest struct {
 
 func (x *DeleteDocumentsByMetadataRequest) Reset() {
 	*x = DeleteDocumentsByMetadataRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[107]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7528,7 +9684,7 @@ func (x *DeleteDocumentsByMetadataRequest) String() string {
 func (*DeleteDocumentsByMetadataRequest) ProtoMessage() {}
 
 func (x *DeleteDocumentsByMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[107]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7541,7 +9697,7 @@ func (x *DeleteDocumentsByMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDocumentsByMetadataRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDocumentsByMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{107}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *DeleteDocumentsByMetadataRequest) GetContext() *PluginContext {
@@ -7590,7 +9746,7 @@ type DeleteDocumentsByMetadataResponse struct {
 
 func (x *DeleteDocumentsByMetadataResponse) Reset() {
 	*x = DeleteDocumentsByMetadataResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[108]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7602,7 +9758,7 @@ func (x *DeleteDocumentsByMetadataResponse) String() string {
 func (*DeleteDocumentsByMetadataResponse) ProtoMessage() {}
 
 func (x *DeleteDocumentsByMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[108]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7615,7 +9771,7 @@ func (x *DeleteDocumentsByMetadataResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DeleteDocumentsByMetadataResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDocumentsByMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{108}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *DeleteDocumentsByMetadataResponse) GetSuccess() bool {
@@ -7654,7 +9810,7 @@ type QueryByMetadataOnlyRequest struct {
 
 func (x *QueryByMetadataOnlyRequest) Reset() {
 	*x = QueryByMetadataOnlyRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[109]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7666,7 +9822,7 @@ func (x *QueryByMetadataOnlyRequest) String() string {
 func (*QueryByMetadataOnlyRequest) ProtoMessage() {}
 
 func (x *QueryByMetadataOnlyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[109]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7679,7 +9835,7 @@ func (x *QueryByMetadataOnlyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryByMetadataOnlyRequest.ProtoReflect.Descriptor instead.
 func (*QueryByMetadataOnlyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{109}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *QueryByMetadataOnlyRequest) GetContext() *PluginContext {
@@ -7734,7 +9890,7 @@ type QueryByMetadataOnlyResponse struct {
 
 func (x *QueryByMetadataOnlyResponse) Reset() {
 	*x = QueryByMetadataOnlyResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[110]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7746,7 +9902,7 @@ func (x *QueryByMetadataOnlyResponse) String() string {
 func (*QueryByMetadataOnlyResponse) ProtoMessage() {}
 
 func (x *QueryByMetadataOnlyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[110]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7759,7 +9915,7 @@ func (x *QueryByMetadataOnlyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryByMetadataOnlyResponse.ProtoReflect.Descriptor instead.
 func (*QueryByMetadataOnlyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{110}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *QueryByMetadataOnlyResponse) GetResults() []*DatasourceResult {
@@ -7787,7 +9943,7 @@ type ListNamespacesRequest struct {
 
 func (x *ListNamespacesRequest) Reset() {
 	*x = ListNamespacesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[111]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7799,7 +9955,7 @@ func (x *ListNamespacesRequest) String() string {
 func (*ListNamespacesRequest) ProtoMessage() {}
 
 func (x *ListNamespacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[111]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7812,7 +9968,7 @@ func (x *ListNamespacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNamespacesRequest.ProtoReflect.Descriptor instead.
 func (*ListNamespacesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{111}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *ListNamespacesRequest) GetContext() *PluginContext {
@@ -7838,7 +9994,7 @@ type ListNamespacesResponse struct {
 
 func (x *ListNamespacesResponse) Reset() {
 	*x = ListNamespacesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[112]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7850,7 +10006,7 @@ func (x *ListNamespacesResponse) String() string {
 func (*ListNamespacesResponse) ProtoMessage() {}
 
 func (x *ListNamespacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[112]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7863,7 +10019,7 @@ func (x *ListNamespacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNamespacesResponse.ProtoReflect.Descriptor instead.
 func (*ListNamespacesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{112}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *ListNamespacesResponse) GetNamespaces() []*NamespaceInfo {
@@ -7883,7 +10039,7 @@ type NamespaceInfo struct {
 
 func (x *NamespaceInfo) Reset() {
 	*x = NamespaceInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[113]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7895,7 +10051,7 @@ func (x *NamespaceInfo) String() string {
 func (*NamespaceInfo) ProtoMessage() {}
 
 func (x *NamespaceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[113]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7908,7 +10064,7 @@ func (x *NamespaceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NamespaceInfo.ProtoReflect.Descriptor instead.
 func (*NamespaceInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{113}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *NamespaceInfo) GetName() string {
@@ -7938,7 +10094,7 @@ type DeleteNamespaceRequest struct {
 
 func (x *DeleteNamespaceRequest) Reset() {
 	*x = DeleteNamespaceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[114]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7950,7 +10106,7 @@ func (x *DeleteNamespaceRequest) String() string {
 func (*DeleteNamespaceRequest) ProtoMessage() {}
 
 func (x *DeleteNamespaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[114]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7963,7 +10119,7 @@ func (x *DeleteNamespaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNamespaceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteNamespaceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{114}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *DeleteNamespaceRequest) GetContext() *PluginContext {
@@ -8004,7 +10160,7 @@ type DeleteNamespaceResponse struct {
 
 func (x *DeleteNamespaceResponse) Reset() {
 	*x = DeleteNamespaceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[115]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8016,7 +10172,7 @@ func (x *DeleteNamespaceResponse) String() string {
 func (*DeleteNamespaceResponse) ProtoMessage() {}
 
 func (x *DeleteNamespaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[115]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8029,7 +10185,7 @@ func (x *DeleteNamespaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNamespaceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteNamespaceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{115}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *DeleteNamespaceResponse) GetSuccess() bool {
@@ -8060,7 +10216,7 @@ type QueryByVectorRequest struct {
 
 func (x *QueryByVectorRequest) Reset() {
 	*x = QueryByVectorRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[116]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8072,7 +10228,7 @@ func (x *QueryByVectorRequest) String() string {
 func (*QueryByVectorRequest) ProtoMessage() {}
 
 func (x *QueryByVectorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[116]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8085,7 +10241,7 @@ func (x *QueryByVectorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryByVectorRequest.ProtoReflect.Descriptor instead.
 func (*QueryByVectorRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{116}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *QueryByVectorRequest) GetContext() *PluginContext {
@@ -8150,7 +10306,7 @@ type DatasourceInfo struct {
 
 func (x *DatasourceInfo) Reset() {
 	*x = DatasourceInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[117]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8162,7 +10318,7 @@ func (x *DatasourceInfo) String() string {
 func (*DatasourceInfo) ProtoMessage() {}
 
 func (x *DatasourceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[117]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8175,7 +10331,7 @@ func (x *DatasourceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatasourceInfo.ProtoReflect.Descriptor instead.
 func (*DatasourceInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{117}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *DatasourceInfo) GetId() uint32 {
@@ -8322,7 +10478,7 @@ type ListDataCataloguesRequest struct {
 
 func (x *ListDataCataloguesRequest) Reset() {
 	*x = ListDataCataloguesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[118]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8334,7 +10490,7 @@ func (x *ListDataCataloguesRequest) String() string {
 func (*ListDataCataloguesRequest) ProtoMessage() {}
 
 func (x *ListDataCataloguesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[118]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8347,7 +10503,7 @@ func (x *ListDataCataloguesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDataCataloguesRequest.ProtoReflect.Descriptor instead.
 func (*ListDataCataloguesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{118}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *ListDataCataloguesRequest) GetContext() *PluginContext {
@@ -8381,7 +10537,7 @@ type ListDataCataloguesResponse struct {
 
 func (x *ListDataCataloguesResponse) Reset() {
 	*x = ListDataCataloguesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[119]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8393,7 +10549,7 @@ func (x *ListDataCataloguesResponse) String() string {
 func (*ListDataCataloguesResponse) ProtoMessage() {}
 
 func (x *ListDataCataloguesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[119]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8406,7 +10562,7 @@ func (x *ListDataCataloguesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDataCataloguesResponse.ProtoReflect.Descriptor instead.
 func (*ListDataCataloguesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{119}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ListDataCataloguesResponse) GetDataCatalogues() []*DataCatalogueInfo {
@@ -8433,7 +10589,7 @@ type GetDataCatalogueRequest struct {
 
 func (x *GetDataCatalogueRequest) Reset() {
 	*x = GetDataCatalogueRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[120]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8445,7 +10601,7 @@ func (x *GetDataCatalogueRequest) String() string {
 func (*GetDataCatalogueRequest) ProtoMessage() {}
 
 func (x *GetDataCatalogueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[120]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8458,7 +10614,7 @@ func (x *GetDataCatalogueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDataCatalogueRequest.ProtoReflect.Descriptor instead.
 func (*GetDataCatalogueRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{120}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *GetDataCatalogueRequest) GetContext() *PluginContext {
@@ -8484,7 +10640,7 @@ type GetDataCatalogueResponse struct {
 
 func (x *GetDataCatalogueResponse) Reset() {
 	*x = GetDataCatalogueResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[121]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8496,7 +10652,7 @@ func (x *GetDataCatalogueResponse) String() string {
 func (*GetDataCatalogueResponse) ProtoMessage() {}
 
 func (x *GetDataCatalogueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[121]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8509,7 +10665,7 @@ func (x *GetDataCatalogueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDataCatalogueResponse.ProtoReflect.Descriptor instead.
 func (*GetDataCatalogueResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{121}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *GetDataCatalogueResponse) GetDataCatalogue() *DataCatalogueInfo {
@@ -8532,7 +10688,7 @@ type CreateDataCatalogueRequest struct {
 
 func (x *CreateDataCatalogueRequest) Reset() {
 	*x = CreateDataCatalogueRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[122]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8544,7 +10700,7 @@ func (x *CreateDataCatalogueRequest) String() string {
 func (*CreateDataCatalogueRequest) ProtoMessage() {}
 
 func (x *CreateDataCatalogueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[122]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8557,7 +10713,7 @@ func (x *CreateDataCatalogueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDataCatalogueRequest.ProtoReflect.Descriptor instead.
 func (*CreateDataCatalogueRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{122}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *CreateDataCatalogueRequest) GetContext() *PluginContext {
@@ -8604,7 +10760,7 @@ type CreateDataCatalogueResponse struct {
 
 func (x *CreateDataCatalogueResponse) Reset() {
 	*x = CreateDataCatalogueResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[123]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8616,7 +10772,7 @@ func (x *CreateDataCatalogueResponse) String() string {
 func (*CreateDataCatalogueResponse) ProtoMessage() {}
 
 func (x *CreateDataCatalogueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[123]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8629,7 +10785,7 @@ func (x *CreateDataCatalogueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDataCatalogueResponse.ProtoReflect.Descriptor instead.
 func (*CreateDataCatalogueResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{123}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *CreateDataCatalogueResponse) GetDataCatalogue() *DataCatalogueInfo {
@@ -8653,7 +10809,7 @@ type UpdateDataCatalogueRequest struct {
 
 func (x *UpdateDataCatalogueRequest) Reset() {
 	*x = UpdateDataCatalogueRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[124]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8665,7 +10821,7 @@ func (x *UpdateDataCatalogueRequest) String() string {
 func (*UpdateDataCatalogueRequest) ProtoMessage() {}
 
 func (x *UpdateDataCatalogueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[124]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8678,7 +10834,7 @@ func (x *UpdateDataCatalogueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDataCatalogueRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDataCatalogueRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{124}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *UpdateDataCatalogueRequest) GetContext() *PluginContext {
@@ -8732,7 +10888,7 @@ type UpdateDataCatalogueResponse struct {
 
 func (x *UpdateDataCatalogueResponse) Reset() {
 	*x = UpdateDataCatalogueResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[125]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8744,7 +10900,7 @@ func (x *UpdateDataCatalogueResponse) String() string {
 func (*UpdateDataCatalogueResponse) ProtoMessage() {}
 
 func (x *UpdateDataCatalogueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[125]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8757,7 +10913,7 @@ func (x *UpdateDataCatalogueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDataCatalogueResponse.ProtoReflect.Descriptor instead.
 func (*UpdateDataCatalogueResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{125}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *UpdateDataCatalogueResponse) GetDataCatalogue() *DataCatalogueInfo {
@@ -8777,7 +10933,7 @@ type DeleteDataCatalogueRequest struct {
 
 func (x *DeleteDataCatalogueRequest) Reset() {
 	*x = DeleteDataCatalogueRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[126]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8789,7 +10945,7 @@ func (x *DeleteDataCatalogueRequest) String() string {
 func (*DeleteDataCatalogueRequest) ProtoMessage() {}
 
 func (x *DeleteDataCatalogueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[126]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8802,7 +10958,7 @@ func (x *DeleteDataCatalogueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDataCatalogueRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDataCatalogueRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{126}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *DeleteDataCatalogueRequest) GetContext() *PluginContext {
@@ -8829,7 +10985,7 @@ type DeleteDataCatalogueResponse struct {
 
 func (x *DeleteDataCatalogueResponse) Reset() {
 	*x = DeleteDataCatalogueResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[127]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8841,7 +10997,7 @@ func (x *DeleteDataCatalogueResponse) String() string {
 func (*DeleteDataCatalogueResponse) ProtoMessage() {}
 
 func (x *DeleteDataCatalogueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[127]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8854,7 +11010,7 @@ func (x *DeleteDataCatalogueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDataCatalogueResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDataCatalogueResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{127}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *DeleteDataCatalogueResponse) GetSuccess() bool {
@@ -8888,7 +11044,7 @@ type DataCatalogueInfo struct {
 
 func (x *DataCatalogueInfo) Reset() {
 	*x = DataCatalogueInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[128]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8900,7 +11056,7 @@ func (x *DataCatalogueInfo) String() string {
 func (*DataCatalogueInfo) ProtoMessage() {}
 
 func (x *DataCatalogueInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[128]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8913,7 +11069,7 @@ func (x *DataCatalogueInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DataCatalogueInfo.ProtoReflect.Descriptor instead.
 func (*DataCatalogueInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{128}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *DataCatalogueInfo) GetId() uint32 {
@@ -8990,7 +11146,7 @@ type ListTagsRequest struct {
 
 func (x *ListTagsRequest) Reset() {
 	*x = ListTagsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[129]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9002,7 +11158,7 @@ func (x *ListTagsRequest) String() string {
 func (*ListTagsRequest) ProtoMessage() {}
 
 func (x *ListTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[129]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9015,7 +11171,7 @@ func (x *ListTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagsRequest.ProtoReflect.Descriptor instead.
 func (*ListTagsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{129}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{162}
 }
 
 func (x *ListTagsRequest) GetContext() *PluginContext {
@@ -9049,7 +11205,7 @@ type ListTagsResponse struct {
 
 func (x *ListTagsResponse) Reset() {
 	*x = ListTagsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[130]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9061,7 +11217,7 @@ func (x *ListTagsResponse) String() string {
 func (*ListTagsResponse) ProtoMessage() {}
 
 func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[130]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9074,7 +11230,7 @@ func (x *ListTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTagsResponse.ProtoReflect.Descriptor instead.
 func (*ListTagsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{130}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *ListTagsResponse) GetTags() []*TagInfo {
@@ -9101,7 +11257,7 @@ type GetTagRequest struct {
 
 func (x *GetTagRequest) Reset() {
 	*x = GetTagRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[131]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9113,7 +11269,7 @@ func (x *GetTagRequest) String() string {
 func (*GetTagRequest) ProtoMessage() {}
 
 func (x *GetTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[131]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9126,7 +11282,7 @@ func (x *GetTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTagRequest.ProtoReflect.Descriptor instead.
 func (*GetTagRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{131}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *GetTagRequest) GetContext() *PluginContext {
@@ -9152,7 +11308,7 @@ type GetTagResponse struct {
 
 func (x *GetTagResponse) Reset() {
 	*x = GetTagResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[132]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9164,7 +11320,7 @@ func (x *GetTagResponse) String() string {
 func (*GetTagResponse) ProtoMessage() {}
 
 func (x *GetTagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[132]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9177,7 +11333,7 @@ func (x *GetTagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTagResponse.ProtoReflect.Descriptor instead.
 func (*GetTagResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{132}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *GetTagResponse) GetTag() *TagInfo {
@@ -9197,7 +11353,7 @@ type CreateTagRequest struct {
 
 func (x *CreateTagRequest) Reset() {
 	*x = CreateTagRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[133]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9209,7 +11365,7 @@ func (x *CreateTagRequest) String() string {
 func (*CreateTagRequest) ProtoMessage() {}
 
 func (x *CreateTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[133]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9222,7 +11378,7 @@ func (x *CreateTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTagRequest.ProtoReflect.Descriptor instead.
 func (*CreateTagRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{133}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *CreateTagRequest) GetContext() *PluginContext {
@@ -9248,7 +11404,7 @@ type CreateTagResponse struct {
 
 func (x *CreateTagResponse) Reset() {
 	*x = CreateTagResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[134]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9260,7 +11416,7 @@ func (x *CreateTagResponse) String() string {
 func (*CreateTagResponse) ProtoMessage() {}
 
 func (x *CreateTagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[134]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9273,7 +11429,7 @@ func (x *CreateTagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTagResponse.ProtoReflect.Descriptor instead.
 func (*CreateTagResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{134}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *CreateTagResponse) GetTag() *TagInfo {
@@ -9294,7 +11450,7 @@ type UpdateTagRequest struct {
 
 func (x *UpdateTagRequest) Reset() {
 	*x = UpdateTagRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[135]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9306,7 +11462,7 @@ func (x *UpdateTagRequest) String() string {
 func (*UpdateTagRequest) ProtoMessage() {}
 
 func (x *UpdateTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[135]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9319,7 +11475,7 @@ func (x *UpdateTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTagRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTagRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{135}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{168}
 }
 
 func (x *UpdateTagRequest) GetContext() *PluginContext {
@@ -9352,7 +11508,7 @@ type UpdateTagResponse struct {
 
 func (x *UpdateTagResponse) Reset() {
 	*x = UpdateTagResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[136]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9364,7 +11520,7 @@ func (x *UpdateTagResponse) String() string {
 func (*UpdateTagResponse) ProtoMessage() {}
 
 func (x *UpdateTagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[136]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9377,7 +11533,7 @@ func (x *UpdateTagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTagResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTagResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{136}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *UpdateTagResponse) GetTag() *TagInfo {
@@ -9397,7 +11553,7 @@ type DeleteTagRequest struct {
 
 func (x *DeleteTagRequest) Reset() {
 	*x = DeleteTagRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[137]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9409,7 +11565,7 @@ func (x *DeleteTagRequest) String() string {
 func (*DeleteTagRequest) ProtoMessage() {}
 
 func (x *DeleteTagRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[137]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9422,7 +11578,7 @@ func (x *DeleteTagRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTagRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTagRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{137}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{170}
 }
 
 func (x *DeleteTagRequest) GetContext() *PluginContext {
@@ -9449,7 +11605,7 @@ type DeleteTagResponse struct {
 
 func (x *DeleteTagResponse) Reset() {
 	*x = DeleteTagResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[138]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9461,7 +11617,7 @@ func (x *DeleteTagResponse) String() string {
 func (*DeleteTagResponse) ProtoMessage() {}
 
 func (x *DeleteTagResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[138]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9474,7 +11630,7 @@ func (x *DeleteTagResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTagResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTagResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{138}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *DeleteTagResponse) GetSuccess() bool {
@@ -9501,7 +11657,7 @@ type SearchTagsRequest struct {
 
 func (x *SearchTagsRequest) Reset() {
 	*x = SearchTagsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[139]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9513,7 +11669,7 @@ func (x *SearchTagsRequest) String() string {
 func (*SearchTagsRequest) ProtoMessage() {}
 
 func (x *SearchTagsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[139]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9526,7 +11682,7 @@ func (x *SearchTagsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchTagsRequest.ProtoReflect.Descriptor instead.
 func (*SearchTagsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{139}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{172}
 }
 
 func (x *SearchTagsRequest) GetContext() *PluginContext {
@@ -9552,7 +11708,7 @@ type SearchTagsResponse struct {
 
 func (x *SearchTagsResponse) Reset() {
 	*x = SearchTagsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[140]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9564,7 +11720,7 @@ func (x *SearchTagsResponse) String() string {
 func (*SearchTagsResponse) ProtoMessage() {}
 
 func (x *SearchTagsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[140]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9577,7 +11733,7 @@ func (x *SearchTagsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchTagsResponse.ProtoReflect.Descriptor instead.
 func (*SearchTagsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{140}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{173}
 }
 
 func (x *SearchTagsResponse) GetTags() []*TagInfo {
@@ -9600,7 +11756,7 @@ type TagInfo struct {
 
 func (x *TagInfo) Reset() {
 	*x = TagInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[141]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9612,7 +11768,7 @@ func (x *TagInfo) String() string {
 func (*TagInfo) ProtoMessage() {}
 
 func (x *TagInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[141]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9625,7 +11781,7 @@ func (x *TagInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagInfo.ProtoReflect.Descriptor instead.
 func (*TagInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{141}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *TagInfo) GetId() uint32 {
@@ -9668,7 +11824,7 @@ type GetChatRecordsPerDayRequest struct {
 
 func (x *GetChatRecordsPerDayRequest) Reset() {
 	*x = GetChatRecordsPerDayRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[142]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9680,7 +11836,7 @@ func (x *GetChatRecordsPerDayRequest) String() string {
 func (*GetChatRecordsPerDayRequest) ProtoMessage() {}
 
 func (x *GetChatRecordsPerDayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[142]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9693,7 +11849,7 @@ func (x *GetChatRecordsPerDayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatRecordsPerDayRequest.ProtoReflect.Descriptor instead.
 func (*GetChatRecordsPerDayRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{142}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *GetChatRecordsPerDayRequest) GetContext() *PluginContext {
@@ -9733,7 +11889,7 @@ type GetChatRecordsPerDayResponse struct {
 
 func (x *GetChatRecordsPerDayResponse) Reset() {
 	*x = GetChatRecordsPerDayResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[143]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9745,7 +11901,7 @@ func (x *GetChatRecordsPerDayResponse) String() string {
 func (*GetChatRecordsPerDayResponse) ProtoMessage() {}
 
 func (x *GetChatRecordsPerDayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[143]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9758,7 +11914,7 @@ func (x *GetChatRecordsPerDayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChatRecordsPerDayResponse.ProtoReflect.Descriptor instead.
 func (*GetChatRecordsPerDayResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{143}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{176}
 }
 
 func (x *GetChatRecordsPerDayResponse) GetRecords() []*DayRecord {
@@ -9780,7 +11936,7 @@ type GetModelUsageRequest struct {
 
 func (x *GetModelUsageRequest) Reset() {
 	*x = GetModelUsageRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[144]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9792,7 +11948,7 @@ func (x *GetModelUsageRequest) String() string {
 func (*GetModelUsageRequest) ProtoMessage() {}
 
 func (x *GetModelUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[144]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9805,7 +11961,7 @@ func (x *GetModelUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelUsageRequest.ProtoReflect.Descriptor instead.
 func (*GetModelUsageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{144}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *GetModelUsageRequest) GetContext() *PluginContext {
@@ -9845,7 +12001,7 @@ type GetModelUsageResponse struct {
 
 func (x *GetModelUsageResponse) Reset() {
 	*x = GetModelUsageResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[145]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9857,7 +12013,7 @@ func (x *GetModelUsageResponse) String() string {
 func (*GetModelUsageResponse) ProtoMessage() {}
 
 func (x *GetModelUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[145]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9870,7 +12026,7 @@ func (x *GetModelUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelUsageResponse.ProtoReflect.Descriptor instead.
 func (*GetModelUsageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{145}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{178}
 }
 
 func (x *GetModelUsageResponse) GetUsage() []*ModelUsageRecord {
@@ -9893,7 +12049,7 @@ type GetVendorUsageRequest struct {
 
 func (x *GetVendorUsageRequest) Reset() {
 	*x = GetVendorUsageRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[146]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9905,7 +12061,7 @@ func (x *GetVendorUsageRequest) String() string {
 func (*GetVendorUsageRequest) ProtoMessage() {}
 
 func (x *GetVendorUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[146]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9918,7 +12074,7 @@ func (x *GetVendorUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVendorUsageRequest.ProtoReflect.Descriptor instead.
 func (*GetVendorUsageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{146}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{179}
 }
 
 func (x *GetVendorUsageRequest) GetContext() *PluginContext {
@@ -9965,7 +12121,7 @@ type GetVendorUsageResponse struct {
 
 func (x *GetVendorUsageResponse) Reset() {
 	*x = GetVendorUsageResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[147]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9977,7 +12133,7 @@ func (x *GetVendorUsageResponse) String() string {
 func (*GetVendorUsageResponse) ProtoMessage() {}
 
 func (x *GetVendorUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[147]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9990,7 +12146,7 @@ func (x *GetVendorUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVendorUsageResponse.ProtoReflect.Descriptor instead.
 func (*GetVendorUsageResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{147}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{180}
 }
 
 func (x *GetVendorUsageResponse) GetUsage() []*VendorUsageRecord {
@@ -10011,7 +12167,7 @@ type GetTokenUsagePerAppRequest struct {
 
 func (x *GetTokenUsagePerAppRequest) Reset() {
 	*x = GetTokenUsagePerAppRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[148]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10023,7 +12179,7 @@ func (x *GetTokenUsagePerAppRequest) String() string {
 func (*GetTokenUsagePerAppRequest) ProtoMessage() {}
 
 func (x *GetTokenUsagePerAppRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[148]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10036,7 +12192,7 @@ func (x *GetTokenUsagePerAppRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTokenUsagePerAppRequest.ProtoReflect.Descriptor instead.
 func (*GetTokenUsagePerAppRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{148}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *GetTokenUsagePerAppRequest) GetContext() *PluginContext {
@@ -10069,7 +12225,7 @@ type GetTokenUsagePerAppResponse struct {
 
 func (x *GetTokenUsagePerAppResponse) Reset() {
 	*x = GetTokenUsagePerAppResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[149]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10081,7 +12237,7 @@ func (x *GetTokenUsagePerAppResponse) String() string {
 func (*GetTokenUsagePerAppResponse) ProtoMessage() {}
 
 func (x *GetTokenUsagePerAppResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[149]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10094,7 +12250,7 @@ func (x *GetTokenUsagePerAppResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTokenUsagePerAppResponse.ProtoReflect.Descriptor instead.
 func (*GetTokenUsagePerAppResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{149}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *GetTokenUsagePerAppResponse) GetUsage() []*AppTokenUsage {
@@ -10115,7 +12271,7 @@ type GetToolUsageStatisticsRequest struct {
 
 func (x *GetToolUsageStatisticsRequest) Reset() {
 	*x = GetToolUsageStatisticsRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[150]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10127,7 +12283,7 @@ func (x *GetToolUsageStatisticsRequest) String() string {
 func (*GetToolUsageStatisticsRequest) ProtoMessage() {}
 
 func (x *GetToolUsageStatisticsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[150]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10140,7 +12296,7 @@ func (x *GetToolUsageStatisticsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetToolUsageStatisticsRequest.ProtoReflect.Descriptor instead.
 func (*GetToolUsageStatisticsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{150}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *GetToolUsageStatisticsRequest) GetContext() *PluginContext {
@@ -10173,7 +12329,7 @@ type GetToolUsageStatisticsResponse struct {
 
 func (x *GetToolUsageStatisticsResponse) Reset() {
 	*x = GetToolUsageStatisticsResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[151]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10185,7 +12341,7 @@ func (x *GetToolUsageStatisticsResponse) String() string {
 func (*GetToolUsageStatisticsResponse) ProtoMessage() {}
 
 func (x *GetToolUsageStatisticsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[151]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10198,7 +12354,7 @@ func (x *GetToolUsageStatisticsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetToolUsageStatisticsResponse.ProtoReflect.Descriptor instead.
 func (*GetToolUsageStatisticsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{151}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{184}
 }
 
 func (x *GetToolUsageStatisticsResponse) GetUsage() []*ToolUsageRecord {
@@ -10220,7 +12376,7 @@ type DayRecord struct {
 
 func (x *DayRecord) Reset() {
 	*x = DayRecord{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[152]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10232,7 +12388,7 @@ func (x *DayRecord) String() string {
 func (*DayRecord) ProtoMessage() {}
 
 func (x *DayRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[152]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10245,7 +12401,7 @@ func (x *DayRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DayRecord.ProtoReflect.Descriptor instead.
 func (*DayRecord) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{152}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *DayRecord) GetDate() string {
@@ -10290,7 +12446,7 @@ type ModelUsageRecord struct {
 
 func (x *ModelUsageRecord) Reset() {
 	*x = ModelUsageRecord{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[153]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10302,7 +12458,7 @@ func (x *ModelUsageRecord) String() string {
 func (*ModelUsageRecord) ProtoMessage() {}
 
 func (x *ModelUsageRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[153]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10315,7 +12471,7 @@ func (x *ModelUsageRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelUsageRecord.ProtoReflect.Descriptor instead.
 func (*ModelUsageRecord) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{153}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{186}
 }
 
 func (x *ModelUsageRecord) GetModelName() string {
@@ -10372,7 +12528,7 @@ type VendorUsageRecord struct {
 
 func (x *VendorUsageRecord) Reset() {
 	*x = VendorUsageRecord{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[154]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[187]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10384,7 +12540,7 @@ func (x *VendorUsageRecord) String() string {
 func (*VendorUsageRecord) ProtoMessage() {}
 
 func (x *VendorUsageRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[154]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[187]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10397,7 +12553,7 @@ func (x *VendorUsageRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VendorUsageRecord.ProtoReflect.Descriptor instead.
 func (*VendorUsageRecord) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{154}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{187}
 }
 
 func (x *VendorUsageRecord) GetDate() string {
@@ -10441,7 +12597,7 @@ type AppTokenUsage struct {
 
 func (x *AppTokenUsage) Reset() {
 	*x = AppTokenUsage{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[155]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[188]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10453,7 +12609,7 @@ func (x *AppTokenUsage) String() string {
 func (*AppTokenUsage) ProtoMessage() {}
 
 func (x *AppTokenUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[155]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[188]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10466,7 +12622,7 @@ func (x *AppTokenUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppTokenUsage.ProtoReflect.Descriptor instead.
 func (*AppTokenUsage) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{155}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{188}
 }
 
 func (x *AppTokenUsage) GetAppId() uint32 {
@@ -10518,7 +12674,7 @@ type ToolUsageRecord struct {
 
 func (x *ToolUsageRecord) Reset() {
 	*x = ToolUsageRecord{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[156]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[189]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10530,7 +12686,7 @@ func (x *ToolUsageRecord) String() string {
 func (*ToolUsageRecord) ProtoMessage() {}
 
 func (x *ToolUsageRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[156]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[189]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10543,7 +12699,7 @@ func (x *ToolUsageRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolUsageRecord.ProtoReflect.Descriptor instead.
 func (*ToolUsageRecord) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{156}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{189}
 }
 
 func (x *ToolUsageRecord) GetToolId() uint32 {
@@ -10600,7 +12756,7 @@ type ListModelPricesRequest struct {
 
 func (x *ListModelPricesRequest) Reset() {
 	*x = ListModelPricesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[157]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[190]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10612,7 +12768,7 @@ func (x *ListModelPricesRequest) String() string {
 func (*ListModelPricesRequest) ProtoMessage() {}
 
 func (x *ListModelPricesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[157]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[190]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10625,7 +12781,7 @@ func (x *ListModelPricesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelPricesRequest.ProtoReflect.Descriptor instead.
 func (*ListModelPricesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{157}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{190}
 }
 
 func (x *ListModelPricesRequest) GetContext() *PluginContext {
@@ -10666,7 +12822,7 @@ type ListModelPricesResponse struct {
 
 func (x *ListModelPricesResponse) Reset() {
 	*x = ListModelPricesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[158]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[191]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10678,7 +12834,7 @@ func (x *ListModelPricesResponse) String() string {
 func (*ListModelPricesResponse) ProtoMessage() {}
 
 func (x *ListModelPricesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[158]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[191]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10691,7 +12847,7 @@ func (x *ListModelPricesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListModelPricesResponse.ProtoReflect.Descriptor instead.
 func (*ListModelPricesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{158}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{191}
 }
 
 func (x *ListModelPricesResponse) GetModelPrices() []*ModelPriceInfo {
@@ -10718,7 +12874,7 @@ type GetModelPriceRequest struct {
 
 func (x *GetModelPriceRequest) Reset() {
 	*x = GetModelPriceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[159]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[192]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10730,7 +12886,7 @@ func (x *GetModelPriceRequest) String() string {
 func (*GetModelPriceRequest) ProtoMessage() {}
 
 func (x *GetModelPriceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[159]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[192]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10743,7 +12899,7 @@ func (x *GetModelPriceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelPriceRequest.ProtoReflect.Descriptor instead.
 func (*GetModelPriceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{159}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{192}
 }
 
 func (x *GetModelPriceRequest) GetContext() *PluginContext {
@@ -10769,7 +12925,7 @@ type GetModelPriceResponse struct {
 
 func (x *GetModelPriceResponse) Reset() {
 	*x = GetModelPriceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[160]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[193]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10781,7 +12937,7 @@ func (x *GetModelPriceResponse) String() string {
 func (*GetModelPriceResponse) ProtoMessage() {}
 
 func (x *GetModelPriceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[160]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[193]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10794,7 +12950,7 @@ func (x *GetModelPriceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelPriceResponse.ProtoReflect.Descriptor instead.
 func (*GetModelPriceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{160}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{193}
 }
 
 func (x *GetModelPriceResponse) GetModelPrice() *ModelPriceInfo {
@@ -10820,7 +12976,7 @@ type CreateModelPriceRequest struct {
 
 func (x *CreateModelPriceRequest) Reset() {
 	*x = CreateModelPriceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[161]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[194]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10832,7 +12988,7 @@ func (x *CreateModelPriceRequest) String() string {
 func (*CreateModelPriceRequest) ProtoMessage() {}
 
 func (x *CreateModelPriceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[161]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[194]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10845,7 +13001,7 @@ func (x *CreateModelPriceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateModelPriceRequest.ProtoReflect.Descriptor instead.
 func (*CreateModelPriceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{161}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{194}
 }
 
 func (x *CreateModelPriceRequest) GetContext() *PluginContext {
@@ -10913,7 +13069,7 @@ type CreateModelPriceResponse struct {
 
 func (x *CreateModelPriceResponse) Reset() {
 	*x = CreateModelPriceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[162]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[195]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10925,7 +13081,7 @@ func (x *CreateModelPriceResponse) String() string {
 func (*CreateModelPriceResponse) ProtoMessage() {}
 
 func (x *CreateModelPriceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[162]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[195]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10938,7 +13094,7 @@ func (x *CreateModelPriceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateModelPriceResponse.ProtoReflect.Descriptor instead.
 func (*CreateModelPriceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{162}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{195}
 }
 
 func (x *CreateModelPriceResponse) GetModelPrice() *ModelPriceInfo {
@@ -10965,7 +13121,7 @@ type UpdateModelPriceRequest struct {
 
 func (x *UpdateModelPriceRequest) Reset() {
 	*x = UpdateModelPriceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[163]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[196]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10977,7 +13133,7 @@ func (x *UpdateModelPriceRequest) String() string {
 func (*UpdateModelPriceRequest) ProtoMessage() {}
 
 func (x *UpdateModelPriceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[163]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[196]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10990,7 +13146,7 @@ func (x *UpdateModelPriceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateModelPriceRequest.ProtoReflect.Descriptor instead.
 func (*UpdateModelPriceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{163}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{196}
 }
 
 func (x *UpdateModelPriceRequest) GetContext() *PluginContext {
@@ -11065,7 +13221,7 @@ type UpdateModelPriceResponse struct {
 
 func (x *UpdateModelPriceResponse) Reset() {
 	*x = UpdateModelPriceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[164]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[197]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11077,7 +13233,7 @@ func (x *UpdateModelPriceResponse) String() string {
 func (*UpdateModelPriceResponse) ProtoMessage() {}
 
 func (x *UpdateModelPriceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[164]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[197]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11090,7 +13246,7 @@ func (x *UpdateModelPriceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateModelPriceResponse.ProtoReflect.Descriptor instead.
 func (*UpdateModelPriceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{164}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{197}
 }
 
 func (x *UpdateModelPriceResponse) GetModelPrice() *ModelPriceInfo {
@@ -11110,7 +13266,7 @@ type DeleteModelPriceRequest struct {
 
 func (x *DeleteModelPriceRequest) Reset() {
 	*x = DeleteModelPriceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[165]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[198]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11122,7 +13278,7 @@ func (x *DeleteModelPriceRequest) String() string {
 func (*DeleteModelPriceRequest) ProtoMessage() {}
 
 func (x *DeleteModelPriceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[165]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[198]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11135,7 +13291,7 @@ func (x *DeleteModelPriceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteModelPriceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteModelPriceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{165}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{198}
 }
 
 func (x *DeleteModelPriceRequest) GetContext() *PluginContext {
@@ -11162,7 +13318,7 @@ type DeleteModelPriceResponse struct {
 
 func (x *DeleteModelPriceResponse) Reset() {
 	*x = DeleteModelPriceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[166]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[199]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11174,7 +13330,7 @@ func (x *DeleteModelPriceResponse) String() string {
 func (*DeleteModelPriceResponse) ProtoMessage() {}
 
 func (x *DeleteModelPriceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[166]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[199]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11187,7 +13343,7 @@ func (x *DeleteModelPriceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteModelPriceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteModelPriceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{166}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{199}
 }
 
 func (x *DeleteModelPriceResponse) GetSuccess() bool {
@@ -11214,7 +13370,7 @@ type GetModelPricesByVendorRequest struct {
 
 func (x *GetModelPricesByVendorRequest) Reset() {
 	*x = GetModelPricesByVendorRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[167]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[200]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11226,7 +13382,7 @@ func (x *GetModelPricesByVendorRequest) String() string {
 func (*GetModelPricesByVendorRequest) ProtoMessage() {}
 
 func (x *GetModelPricesByVendorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[167]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[200]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11239,7 +13395,7 @@ func (x *GetModelPricesByVendorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelPricesByVendorRequest.ProtoReflect.Descriptor instead.
 func (*GetModelPricesByVendorRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{167}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{200}
 }
 
 func (x *GetModelPricesByVendorRequest) GetContext() *PluginContext {
@@ -11265,7 +13421,7 @@ type GetModelPricesByVendorResponse struct {
 
 func (x *GetModelPricesByVendorResponse) Reset() {
 	*x = GetModelPricesByVendorResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[168]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[201]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11277,7 +13433,7 @@ func (x *GetModelPricesByVendorResponse) String() string {
 func (*GetModelPricesByVendorResponse) ProtoMessage() {}
 
 func (x *GetModelPricesByVendorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[168]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[201]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11290,7 +13446,7 @@ func (x *GetModelPricesByVendorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelPricesByVendorResponse.ProtoReflect.Descriptor instead.
 func (*GetModelPricesByVendorResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{168}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{201}
 }
 
 func (x *GetModelPricesByVendorResponse) GetModelPrices() []*ModelPriceInfo {
@@ -11318,7 +13474,7 @@ type ModelPriceInfo struct {
 
 func (x *ModelPriceInfo) Reset() {
 	*x = ModelPriceInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[169]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[202]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11330,7 +13486,7 @@ func (x *ModelPriceInfo) String() string {
 func (*ModelPriceInfo) ProtoMessage() {}
 
 func (x *ModelPriceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[169]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[202]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11343,7 +13499,7 @@ func (x *ModelPriceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelPriceInfo.ProtoReflect.Descriptor instead.
 func (*ModelPriceInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{169}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{202}
 }
 
 func (x *ModelPriceInfo) GetId() uint32 {
@@ -11428,7 +13584,7 @@ type ListFiltersRequest struct {
 
 func (x *ListFiltersRequest) Reset() {
 	*x = ListFiltersRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[170]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[203]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11440,7 +13596,7 @@ func (x *ListFiltersRequest) String() string {
 func (*ListFiltersRequest) ProtoMessage() {}
 
 func (x *ListFiltersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[170]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[203]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11453,7 +13609,7 @@ func (x *ListFiltersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFiltersRequest.ProtoReflect.Descriptor instead.
 func (*ListFiltersRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{170}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{203}
 }
 
 func (x *ListFiltersRequest) GetContext() *PluginContext {
@@ -11494,7 +13650,7 @@ type ListFiltersResponse struct {
 
 func (x *ListFiltersResponse) Reset() {
 	*x = ListFiltersResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[171]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[204]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11506,7 +13662,7 @@ func (x *ListFiltersResponse) String() string {
 func (*ListFiltersResponse) ProtoMessage() {}
 
 func (x *ListFiltersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[171]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[204]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11519,7 +13675,7 @@ func (x *ListFiltersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFiltersResponse.ProtoReflect.Descriptor instead.
 func (*ListFiltersResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{171}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{204}
 }
 
 func (x *ListFiltersResponse) GetFilters() []*FilterInfo {
@@ -11546,7 +13702,7 @@ type GetFilterRequest struct {
 
 func (x *GetFilterRequest) Reset() {
 	*x = GetFilterRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[172]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[205]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11558,7 +13714,7 @@ func (x *GetFilterRequest) String() string {
 func (*GetFilterRequest) ProtoMessage() {}
 
 func (x *GetFilterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[172]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[205]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11571,7 +13727,7 @@ func (x *GetFilterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFilterRequest.ProtoReflect.Descriptor instead.
 func (*GetFilterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{172}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{205}
 }
 
 func (x *GetFilterRequest) GetContext() *PluginContext {
@@ -11597,7 +13753,7 @@ type GetFilterResponse struct {
 
 func (x *GetFilterResponse) Reset() {
 	*x = GetFilterResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[173]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[206]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11609,7 +13765,7 @@ func (x *GetFilterResponse) String() string {
 func (*GetFilterResponse) ProtoMessage() {}
 
 func (x *GetFilterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[173]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[206]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11622,7 +13778,7 @@ func (x *GetFilterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFilterResponse.ProtoReflect.Descriptor instead.
 func (*GetFilterResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{173}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{206}
 }
 
 func (x *GetFilterResponse) GetFilter() *FilterInfo {
@@ -11646,7 +13802,7 @@ type CreateFilterRequest struct {
 
 func (x *CreateFilterRequest) Reset() {
 	*x = CreateFilterRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[174]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[207]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11658,7 +13814,7 @@ func (x *CreateFilterRequest) String() string {
 func (*CreateFilterRequest) ProtoMessage() {}
 
 func (x *CreateFilterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[174]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[207]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11671,7 +13827,7 @@ func (x *CreateFilterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFilterRequest.ProtoReflect.Descriptor instead.
 func (*CreateFilterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{174}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{207}
 }
 
 func (x *CreateFilterRequest) GetContext() *PluginContext {
@@ -11725,7 +13881,7 @@ type CreateFilterResponse struct {
 
 func (x *CreateFilterResponse) Reset() {
 	*x = CreateFilterResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[175]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[208]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11737,7 +13893,7 @@ func (x *CreateFilterResponse) String() string {
 func (*CreateFilterResponse) ProtoMessage() {}
 
 func (x *CreateFilterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[175]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[208]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11750,7 +13906,7 @@ func (x *CreateFilterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFilterResponse.ProtoReflect.Descriptor instead.
 func (*CreateFilterResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{175}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{208}
 }
 
 func (x *CreateFilterResponse) GetFilter() *FilterInfo {
@@ -11775,7 +13931,7 @@ type UpdateFilterRequest struct {
 
 func (x *UpdateFilterRequest) Reset() {
 	*x = UpdateFilterRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[176]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[209]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11787,7 +13943,7 @@ func (x *UpdateFilterRequest) String() string {
 func (*UpdateFilterRequest) ProtoMessage() {}
 
 func (x *UpdateFilterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[176]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[209]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11800,7 +13956,7 @@ func (x *UpdateFilterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFilterRequest.ProtoReflect.Descriptor instead.
 func (*UpdateFilterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{176}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{209}
 }
 
 func (x *UpdateFilterRequest) GetContext() *PluginContext {
@@ -11861,7 +14017,7 @@ type UpdateFilterResponse struct {
 
 func (x *UpdateFilterResponse) Reset() {
 	*x = UpdateFilterResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[177]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[210]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11873,7 +14029,7 @@ func (x *UpdateFilterResponse) String() string {
 func (*UpdateFilterResponse) ProtoMessage() {}
 
 func (x *UpdateFilterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[177]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[210]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11886,7 +14042,7 @@ func (x *UpdateFilterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFilterResponse.ProtoReflect.Descriptor instead.
 func (*UpdateFilterResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{177}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{210}
 }
 
 func (x *UpdateFilterResponse) GetFilter() *FilterInfo {
@@ -11906,7 +14062,7 @@ type DeleteFilterRequest struct {
 
 func (x *DeleteFilterRequest) Reset() {
 	*x = DeleteFilterRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[178]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[211]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11918,7 +14074,7 @@ func (x *DeleteFilterRequest) String() string {
 func (*DeleteFilterRequest) ProtoMessage() {}
 
 func (x *DeleteFilterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[178]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[211]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11931,7 +14087,7 @@ func (x *DeleteFilterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFilterRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFilterRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{178}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{211}
 }
 
 func (x *DeleteFilterRequest) GetContext() *PluginContext {
@@ -11958,7 +14114,7 @@ type DeleteFilterResponse struct {
 
 func (x *DeleteFilterResponse) Reset() {
 	*x = DeleteFilterResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[179]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[212]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11970,7 +14126,7 @@ func (x *DeleteFilterResponse) String() string {
 func (*DeleteFilterResponse) ProtoMessage() {}
 
 func (x *DeleteFilterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[179]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[212]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11983,7 +14139,7 @@ func (x *DeleteFilterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFilterResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFilterResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{179}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{212}
 }
 
 func (x *DeleteFilterResponse) GetSuccess() bool {
@@ -12019,7 +14175,7 @@ type FilterInfo struct {
 
 func (x *FilterInfo) Reset() {
 	*x = FilterInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[180]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[213]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12031,7 +14187,7 @@ func (x *FilterInfo) String() string {
 func (*FilterInfo) ProtoMessage() {}
 
 func (x *FilterInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[180]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[213]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12044,7 +14200,7 @@ func (x *FilterInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FilterInfo.ProtoReflect.Descriptor instead.
 func (*FilterInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{180}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{213}
 }
 
 func (x *FilterInfo) GetId() uint32 {
@@ -12133,7 +14289,7 @@ type GetAvailableLLMDriversRequest struct {
 
 func (x *GetAvailableLLMDriversRequest) Reset() {
 	*x = GetAvailableLLMDriversRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[181]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[214]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12145,7 +14301,7 @@ func (x *GetAvailableLLMDriversRequest) String() string {
 func (*GetAvailableLLMDriversRequest) ProtoMessage() {}
 
 func (x *GetAvailableLLMDriversRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[181]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[214]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12158,7 +14314,7 @@ func (x *GetAvailableLLMDriversRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAvailableLLMDriversRequest.ProtoReflect.Descriptor instead.
 func (*GetAvailableLLMDriversRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{181}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{214}
 }
 
 func (x *GetAvailableLLMDriversRequest) GetContext() *PluginContext {
@@ -12177,7 +14333,7 @@ type GetAvailableLLMDriversResponse struct {
 
 func (x *GetAvailableLLMDriversResponse) Reset() {
 	*x = GetAvailableLLMDriversResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[182]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[215]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12189,7 +14345,7 @@ func (x *GetAvailableLLMDriversResponse) String() string {
 func (*GetAvailableLLMDriversResponse) ProtoMessage() {}
 
 func (x *GetAvailableLLMDriversResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[182]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[215]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12202,7 +14358,7 @@ func (x *GetAvailableLLMDriversResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAvailableLLMDriversResponse.ProtoReflect.Descriptor instead.
 func (*GetAvailableLLMDriversResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{182}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{215}
 }
 
 func (x *GetAvailableLLMDriversResponse) GetDrivers() []*VendorDriverInfo {
@@ -12221,7 +14377,7 @@ type GetAvailableEmbeddersRequest struct {
 
 func (x *GetAvailableEmbeddersRequest) Reset() {
 	*x = GetAvailableEmbeddersRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[183]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[216]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12233,7 +14389,7 @@ func (x *GetAvailableEmbeddersRequest) String() string {
 func (*GetAvailableEmbeddersRequest) ProtoMessage() {}
 
 func (x *GetAvailableEmbeddersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[183]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[216]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12246,7 +14402,7 @@ func (x *GetAvailableEmbeddersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAvailableEmbeddersRequest.ProtoReflect.Descriptor instead.
 func (*GetAvailableEmbeddersRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{183}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{216}
 }
 
 func (x *GetAvailableEmbeddersRequest) GetContext() *PluginContext {
@@ -12265,7 +14421,7 @@ type GetAvailableEmbeddersResponse struct {
 
 func (x *GetAvailableEmbeddersResponse) Reset() {
 	*x = GetAvailableEmbeddersResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[184]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[217]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12277,7 +14433,7 @@ func (x *GetAvailableEmbeddersResponse) String() string {
 func (*GetAvailableEmbeddersResponse) ProtoMessage() {}
 
 func (x *GetAvailableEmbeddersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[184]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[217]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12290,7 +14446,7 @@ func (x *GetAvailableEmbeddersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAvailableEmbeddersResponse.ProtoReflect.Descriptor instead.
 func (*GetAvailableEmbeddersResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{184}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{217}
 }
 
 func (x *GetAvailableEmbeddersResponse) GetEmbedders() []*VendorDriverInfo {
@@ -12309,7 +14465,7 @@ type GetAvailableVectorStoresRequest struct {
 
 func (x *GetAvailableVectorStoresRequest) Reset() {
 	*x = GetAvailableVectorStoresRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[185]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[218]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12321,7 +14477,7 @@ func (x *GetAvailableVectorStoresRequest) String() string {
 func (*GetAvailableVectorStoresRequest) ProtoMessage() {}
 
 func (x *GetAvailableVectorStoresRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[185]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[218]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12334,7 +14490,7 @@ func (x *GetAvailableVectorStoresRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAvailableVectorStoresRequest.ProtoReflect.Descriptor instead.
 func (*GetAvailableVectorStoresRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{185}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{218}
 }
 
 func (x *GetAvailableVectorStoresRequest) GetContext() *PluginContext {
@@ -12353,7 +14509,7 @@ type GetAvailableVectorStoresResponse struct {
 
 func (x *GetAvailableVectorStoresResponse) Reset() {
 	*x = GetAvailableVectorStoresResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[186]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[219]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12365,7 +14521,7 @@ func (x *GetAvailableVectorStoresResponse) String() string {
 func (*GetAvailableVectorStoresResponse) ProtoMessage() {}
 
 func (x *GetAvailableVectorStoresResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[186]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[219]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12378,7 +14534,7 @@ func (x *GetAvailableVectorStoresResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAvailableVectorStoresResponse.ProtoReflect.Descriptor instead.
 func (*GetAvailableVectorStoresResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{186}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{219}
 }
 
 func (x *GetAvailableVectorStoresResponse) GetVectorStores() []*VendorDriverInfo {
@@ -12401,7 +14557,7 @@ type VendorDriverInfo struct {
 
 func (x *VendorDriverInfo) Reset() {
 	*x = VendorDriverInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[187]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[220]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12413,7 +14569,7 @@ func (x *VendorDriverInfo) String() string {
 func (*VendorDriverInfo) ProtoMessage() {}
 
 func (x *VendorDriverInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[187]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[220]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12426,7 +14582,7 @@ func (x *VendorDriverInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VendorDriverInfo.ProtoReflect.Descriptor instead.
 func (*VendorDriverInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{187}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{220}
 }
 
 func (x *VendorDriverInfo) GetName() string {
@@ -12476,7 +14632,7 @@ type WritePluginKVRequest struct {
 
 func (x *WritePluginKVRequest) Reset() {
 	*x = WritePluginKVRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[188]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[221]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12488,7 +14644,7 @@ func (x *WritePluginKVRequest) String() string {
 func (*WritePluginKVRequest) ProtoMessage() {}
 
 func (x *WritePluginKVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[188]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[221]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12501,7 +14657,7 @@ func (x *WritePluginKVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WritePluginKVRequest.ProtoReflect.Descriptor instead.
 func (*WritePluginKVRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{188}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{221}
 }
 
 func (x *WritePluginKVRequest) GetContext() *PluginContext {
@@ -12542,7 +14698,7 @@ type WritePluginKVResponse struct {
 
 func (x *WritePluginKVResponse) Reset() {
 	*x = WritePluginKVResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[189]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[222]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12554,7 +14710,7 @@ func (x *WritePluginKVResponse) String() string {
 func (*WritePluginKVResponse) ProtoMessage() {}
 
 func (x *WritePluginKVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[189]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[222]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12567,7 +14723,7 @@ func (x *WritePluginKVResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WritePluginKVResponse.ProtoReflect.Descriptor instead.
 func (*WritePluginKVResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{189}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{222}
 }
 
 func (x *WritePluginKVResponse) GetCreated() bool {
@@ -12594,7 +14750,7 @@ type ReadPluginKVRequest struct {
 
 func (x *ReadPluginKVRequest) Reset() {
 	*x = ReadPluginKVRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[190]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[223]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12606,7 +14762,7 @@ func (x *ReadPluginKVRequest) String() string {
 func (*ReadPluginKVRequest) ProtoMessage() {}
 
 func (x *ReadPluginKVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[190]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[223]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12619,7 +14775,7 @@ func (x *ReadPluginKVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadPluginKVRequest.ProtoReflect.Descriptor instead.
 func (*ReadPluginKVRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{190}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{223}
 }
 
 func (x *ReadPluginKVRequest) GetContext() *PluginContext {
@@ -12646,7 +14802,7 @@ type ReadPluginKVResponse struct {
 
 func (x *ReadPluginKVResponse) Reset() {
 	*x = ReadPluginKVResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[191]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[224]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12658,7 +14814,7 @@ func (x *ReadPluginKVResponse) String() string {
 func (*ReadPluginKVResponse) ProtoMessage() {}
 
 func (x *ReadPluginKVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[191]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[224]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12671,7 +14827,7 @@ func (x *ReadPluginKVResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadPluginKVResponse.ProtoReflect.Descriptor instead.
 func (*ReadPluginKVResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{191}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{224}
 }
 
 func (x *ReadPluginKVResponse) GetValue() []byte {
@@ -12698,7 +14854,7 @@ type DeletePluginKVRequest struct {
 
 func (x *DeletePluginKVRequest) Reset() {
 	*x = DeletePluginKVRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[192]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[225]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12710,7 +14866,7 @@ func (x *DeletePluginKVRequest) String() string {
 func (*DeletePluginKVRequest) ProtoMessage() {}
 
 func (x *DeletePluginKVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[192]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[225]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12723,7 +14879,7 @@ func (x *DeletePluginKVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePluginKVRequest.ProtoReflect.Descriptor instead.
 func (*DeletePluginKVRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{192}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{225}
 }
 
 func (x *DeletePluginKVRequest) GetContext() *PluginContext {
@@ -12750,7 +14906,7 @@ type DeletePluginKVResponse struct {
 
 func (x *DeletePluginKVResponse) Reset() {
 	*x = DeletePluginKVResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[193]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[226]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12762,7 +14918,7 @@ func (x *DeletePluginKVResponse) String() string {
 func (*DeletePluginKVResponse) ProtoMessage() {}
 
 func (x *DeletePluginKVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[193]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[226]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12775,7 +14931,7 @@ func (x *DeletePluginKVResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePluginKVResponse.ProtoReflect.Descriptor instead.
 func (*DeletePluginKVResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{193}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{226}
 }
 
 func (x *DeletePluginKVResponse) GetDeleted() bool {
@@ -12806,7 +14962,7 @@ type ExecuteToolRequest struct {
 
 func (x *ExecuteToolRequest) Reset() {
 	*x = ExecuteToolRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[194]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[227]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12818,7 +14974,7 @@ func (x *ExecuteToolRequest) String() string {
 func (*ExecuteToolRequest) ProtoMessage() {}
 
 func (x *ExecuteToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[194]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[227]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12831,7 +14987,7 @@ func (x *ExecuteToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteToolRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteToolRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{194}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{227}
 }
 
 func (x *ExecuteToolRequest) GetContext() *PluginContext {
@@ -12888,7 +15044,7 @@ type ExecuteToolResponse struct {
 
 func (x *ExecuteToolResponse) Reset() {
 	*x = ExecuteToolResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[195]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[228]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12900,7 +15056,7 @@ func (x *ExecuteToolResponse) String() string {
 func (*ExecuteToolResponse) ProtoMessage() {}
 
 func (x *ExecuteToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[195]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[228]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12913,7 +15069,7 @@ func (x *ExecuteToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteToolResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteToolResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{195}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{228}
 }
 
 func (x *ExecuteToolResponse) GetSuccess() bool {
@@ -12957,7 +15113,7 @@ type QueryDatasourceRequest struct {
 
 func (x *QueryDatasourceRequest) Reset() {
 	*x = QueryDatasourceRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[196]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[229]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12969,7 +15125,7 @@ func (x *QueryDatasourceRequest) String() string {
 func (*QueryDatasourceRequest) ProtoMessage() {}
 
 func (x *QueryDatasourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[196]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[229]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12982,7 +15138,7 @@ func (x *QueryDatasourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryDatasourceRequest.ProtoReflect.Descriptor instead.
 func (*QueryDatasourceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{196}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{229}
 }
 
 func (x *QueryDatasourceRequest) GetContext() *PluginContext {
@@ -13031,7 +15187,7 @@ type QueryDatasourceResponse struct {
 
 func (x *QueryDatasourceResponse) Reset() {
 	*x = QueryDatasourceResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[197]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[230]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13043,7 +15199,7 @@ func (x *QueryDatasourceResponse) String() string {
 func (*QueryDatasourceResponse) ProtoMessage() {}
 
 func (x *QueryDatasourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[197]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[230]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13056,7 +15212,7 @@ func (x *QueryDatasourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryDatasourceResponse.ProtoReflect.Descriptor instead.
 func (*QueryDatasourceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{197}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{230}
 }
 
 func (x *QueryDatasourceResponse) GetSuccess() bool {
@@ -13091,7 +15247,7 @@ type DatasourceResult struct {
 
 func (x *DatasourceResult) Reset() {
 	*x = DatasourceResult{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[198]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[231]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13103,7 +15259,7 @@ func (x *DatasourceResult) String() string {
 func (*DatasourceResult) ProtoMessage() {}
 
 func (x *DatasourceResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[198]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[231]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13116,7 +15272,7 @@ func (x *DatasourceResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DatasourceResult.ProtoReflect.Descriptor instead.
 func (*DatasourceResult) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{198}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{231}
 }
 
 func (x *DatasourceResult) GetContent() string {
@@ -13156,7 +15312,7 @@ type CallLLMRequest struct {
 
 func (x *CallLLMRequest) Reset() {
 	*x = CallLLMRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[199]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[232]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13168,7 +15324,7 @@ func (x *CallLLMRequest) String() string {
 func (*CallLLMRequest) ProtoMessage() {}
 
 func (x *CallLLMRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[199]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[232]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13181,7 +15337,7 @@ func (x *CallLLMRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallLLMRequest.ProtoReflect.Descriptor instead.
 func (*CallLLMRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{199}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{232}
 }
 
 func (x *CallLLMRequest) GetContext() *PluginContext {
@@ -13254,7 +15410,7 @@ type CallLLMResponse struct {
 
 func (x *CallLLMResponse) Reset() {
 	*x = CallLLMResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[200]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[233]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13266,7 +15422,7 @@ func (x *CallLLMResponse) String() string {
 func (*CallLLMResponse) ProtoMessage() {}
 
 func (x *CallLLMResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[200]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[233]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13279,7 +15435,7 @@ func (x *CallLLMResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallLLMResponse.ProtoReflect.Descriptor instead.
 func (*CallLLMResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{200}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{233}
 }
 
 func (x *CallLLMResponse) GetSuccess() bool {
@@ -13336,7 +15492,7 @@ type LLMMessage struct {
 
 func (x *LLMMessage) Reset() {
 	*x = LLMMessage{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[201]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[234]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13348,7 +15504,7 @@ func (x *LLMMessage) String() string {
 func (*LLMMessage) ProtoMessage() {}
 
 func (x *LLMMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[201]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[234]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13361,7 +15517,7 @@ func (x *LLMMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMMessage.ProtoReflect.Descriptor instead.
 func (*LLMMessage) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{201}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{234}
 }
 
 func (x *LLMMessage) GetRole() string {
@@ -13402,7 +15558,7 @@ type LLMTool struct {
 
 func (x *LLMTool) Reset() {
 	*x = LLMTool{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[202]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[235]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13414,7 +15570,7 @@ func (x *LLMTool) String() string {
 func (*LLMTool) ProtoMessage() {}
 
 func (x *LLMTool) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[202]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[235]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13427,7 +15583,7 @@ func (x *LLMTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMTool.ProtoReflect.Descriptor instead.
 func (*LLMTool) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{202}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{235}
 }
 
 func (x *LLMTool) GetType() string {
@@ -13455,7 +15611,7 @@ type LLMFunction struct {
 
 func (x *LLMFunction) Reset() {
 	*x = LLMFunction{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[203]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[236]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13467,7 +15623,7 @@ func (x *LLMFunction) String() string {
 func (*LLMFunction) ProtoMessage() {}
 
 func (x *LLMFunction) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[203]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[236]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13480,7 +15636,7 @@ func (x *LLMFunction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMFunction.ProtoReflect.Descriptor instead.
 func (*LLMFunction) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{203}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{236}
 }
 
 func (x *LLMFunction) GetName() string {
@@ -13515,7 +15671,7 @@ type LLMToolCall struct {
 
 func (x *LLMToolCall) Reset() {
 	*x = LLMToolCall{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[204]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[237]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13527,7 +15683,7 @@ func (x *LLMToolCall) String() string {
 func (*LLMToolCall) ProtoMessage() {}
 
 func (x *LLMToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[204]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[237]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13540,7 +15696,7 @@ func (x *LLMToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMToolCall.ProtoReflect.Descriptor instead.
 func (*LLMToolCall) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{204}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{237}
 }
 
 func (x *LLMToolCall) GetId() string {
@@ -13574,7 +15730,7 @@ type LLMFunctionCall struct {
 
 func (x *LLMFunctionCall) Reset() {
 	*x = LLMFunctionCall{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[205]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[238]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13586,7 +15742,7 @@ func (x *LLMFunctionCall) String() string {
 func (*LLMFunctionCall) ProtoMessage() {}
 
 func (x *LLMFunctionCall) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[205]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[238]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13599,7 +15755,7 @@ func (x *LLMFunctionCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMFunctionCall.ProtoReflect.Descriptor instead.
 func (*LLMFunctionCall) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{205}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{238}
 }
 
 func (x *LLMFunctionCall) GetName() string {
@@ -13629,7 +15785,7 @@ type LLMUsage struct {
 
 func (x *LLMUsage) Reset() {
 	*x = LLMUsage{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[206]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[239]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13641,7 +15797,7 @@ func (x *LLMUsage) String() string {
 func (*LLMUsage) ProtoMessage() {}
 
 func (x *LLMUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[206]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[239]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13654,7 +15810,7 @@ func (x *LLMUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMUsage.ProtoReflect.Descriptor instead.
 func (*LLMUsage) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{206}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{239}
 }
 
 func (x *LLMUsage) GetPromptTokens() int32 {
@@ -13708,7 +15864,7 @@ type CreateScheduleRequest struct {
 
 func (x *CreateScheduleRequest) Reset() {
 	*x = CreateScheduleRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[207]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[240]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13720,7 +15876,7 @@ func (x *CreateScheduleRequest) String() string {
 func (*CreateScheduleRequest) ProtoMessage() {}
 
 func (x *CreateScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[207]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[240]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13733,7 +15889,7 @@ func (x *CreateScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*CreateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{207}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{240}
 }
 
 func (x *CreateScheduleRequest) GetContext() *PluginContext {
@@ -13801,7 +15957,7 @@ type CreateScheduleResponse struct {
 
 func (x *CreateScheduleResponse) Reset() {
 	*x = CreateScheduleResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[208]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[241]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13813,7 +15969,7 @@ func (x *CreateScheduleResponse) String() string {
 func (*CreateScheduleResponse) ProtoMessage() {}
 
 func (x *CreateScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[208]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[241]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13826,7 +15982,7 @@ func (x *CreateScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateScheduleResponse.ProtoReflect.Descriptor instead.
 func (*CreateScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{208}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{241}
 }
 
 func (x *CreateScheduleResponse) GetSchedule() *ScheduleInfo {
@@ -13846,7 +16002,7 @@ type GetScheduleRequest struct {
 
 func (x *GetScheduleRequest) Reset() {
 	*x = GetScheduleRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[209]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[242]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13858,7 +16014,7 @@ func (x *GetScheduleRequest) String() string {
 func (*GetScheduleRequest) ProtoMessage() {}
 
 func (x *GetScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[209]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[242]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13871,7 +16027,7 @@ func (x *GetScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleRequest.ProtoReflect.Descriptor instead.
 func (*GetScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{209}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{242}
 }
 
 func (x *GetScheduleRequest) GetContext() *PluginContext {
@@ -13897,7 +16053,7 @@ type GetScheduleResponse struct {
 
 func (x *GetScheduleResponse) Reset() {
 	*x = GetScheduleResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[210]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[243]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13909,7 +16065,7 @@ func (x *GetScheduleResponse) String() string {
 func (*GetScheduleResponse) ProtoMessage() {}
 
 func (x *GetScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[210]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[243]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13922,7 +16078,7 @@ func (x *GetScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleResponse.ProtoReflect.Descriptor instead.
 func (*GetScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{210}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{243}
 }
 
 func (x *GetScheduleResponse) GetSchedule() *ScheduleInfo {
@@ -13941,7 +16097,7 @@ type ListSchedulesRequest struct {
 
 func (x *ListSchedulesRequest) Reset() {
 	*x = ListSchedulesRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[211]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[244]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13953,7 +16109,7 @@ func (x *ListSchedulesRequest) String() string {
 func (*ListSchedulesRequest) ProtoMessage() {}
 
 func (x *ListSchedulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[211]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[244]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13966,7 +16122,7 @@ func (x *ListSchedulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchedulesRequest.ProtoReflect.Descriptor instead.
 func (*ListSchedulesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{211}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{244}
 }
 
 func (x *ListSchedulesRequest) GetContext() *PluginContext {
@@ -13986,7 +16142,7 @@ type ListSchedulesResponse struct {
 
 func (x *ListSchedulesResponse) Reset() {
 	*x = ListSchedulesResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[212]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[245]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13998,7 +16154,7 @@ func (x *ListSchedulesResponse) String() string {
 func (*ListSchedulesResponse) ProtoMessage() {}
 
 func (x *ListSchedulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[212]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[245]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14011,7 +16167,7 @@ func (x *ListSchedulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSchedulesResponse.ProtoReflect.Descriptor instead.
 func (*ListSchedulesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{212}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{245}
 }
 
 func (x *ListSchedulesResponse) GetSchedules() []*ScheduleInfo {
@@ -14045,7 +16201,7 @@ type UpdateScheduleRequest struct {
 
 func (x *UpdateScheduleRequest) Reset() {
 	*x = UpdateScheduleRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[213]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[246]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14057,7 +16213,7 @@ func (x *UpdateScheduleRequest) String() string {
 func (*UpdateScheduleRequest) ProtoMessage() {}
 
 func (x *UpdateScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[213]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[246]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14070,7 +16226,7 @@ func (x *UpdateScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*UpdateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{213}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{246}
 }
 
 func (x *UpdateScheduleRequest) GetContext() *PluginContext {
@@ -14138,7 +16294,7 @@ type UpdateScheduleResponse struct {
 
 func (x *UpdateScheduleResponse) Reset() {
 	*x = UpdateScheduleResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[214]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[247]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14150,7 +16306,7 @@ func (x *UpdateScheduleResponse) String() string {
 func (*UpdateScheduleResponse) ProtoMessage() {}
 
 func (x *UpdateScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[214]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[247]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14163,7 +16319,7 @@ func (x *UpdateScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateScheduleResponse.ProtoReflect.Descriptor instead.
 func (*UpdateScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{214}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{247}
 }
 
 func (x *UpdateScheduleResponse) GetSchedule() *ScheduleInfo {
@@ -14183,7 +16339,7 @@ type DeleteScheduleRequest struct {
 
 func (x *DeleteScheduleRequest) Reset() {
 	*x = DeleteScheduleRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[215]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[248]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14195,7 +16351,7 @@ func (x *DeleteScheduleRequest) String() string {
 func (*DeleteScheduleRequest) ProtoMessage() {}
 
 func (x *DeleteScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[215]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[248]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14208,7 +16364,7 @@ func (x *DeleteScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteScheduleRequest.ProtoReflect.Descriptor instead.
 func (*DeleteScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{215}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{248}
 }
 
 func (x *DeleteScheduleRequest) GetContext() *PluginContext {
@@ -14235,7 +16391,7 @@ type DeleteScheduleResponse struct {
 
 func (x *DeleteScheduleResponse) Reset() {
 	*x = DeleteScheduleResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[216]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[249]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14247,7 +16403,7 @@ func (x *DeleteScheduleResponse) String() string {
 func (*DeleteScheduleResponse) ProtoMessage() {}
 
 func (x *DeleteScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[216]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[249]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14260,7 +16416,7 @@ func (x *DeleteScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteScheduleResponse.ProtoReflect.Descriptor instead.
 func (*DeleteScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{216}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{249}
 }
 
 func (x *DeleteScheduleResponse) GetSuccess() bool {
@@ -14298,7 +16454,7 @@ type ScheduleInfo struct {
 
 func (x *ScheduleInfo) Reset() {
 	*x = ScheduleInfo{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[217]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[250]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14310,7 +16466,7 @@ func (x *ScheduleInfo) String() string {
 func (*ScheduleInfo) ProtoMessage() {}
 
 func (x *ScheduleInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[217]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[250]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14323,7 +16479,7 @@ func (x *ScheduleInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleInfo.ProtoReflect.Descriptor instead.
 func (*ScheduleInfo) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{217}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{250}
 }
 
 func (x *ScheduleInfo) GetId() uint32 {
@@ -14426,7 +16582,7 @@ type GetLicenseInfoRequest struct {
 
 func (x *GetLicenseInfoRequest) Reset() {
 	*x = GetLicenseInfoRequest{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[218]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[251]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14438,7 +16594,7 @@ func (x *GetLicenseInfoRequest) String() string {
 func (*GetLicenseInfoRequest) ProtoMessage() {}
 
 func (x *GetLicenseInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[218]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[251]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14451,7 +16607,7 @@ func (x *GetLicenseInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLicenseInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetLicenseInfoRequest) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{218}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{251}
 }
 
 func (x *GetLicenseInfoRequest) GetContext() *PluginContext {
@@ -14475,7 +16631,7 @@ type GetLicenseInfoResponse struct {
 
 func (x *GetLicenseInfoResponse) Reset() {
 	*x = GetLicenseInfoResponse{}
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[219]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[252]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14487,7 +16643,7 @@ func (x *GetLicenseInfoResponse) String() string {
 func (*GetLicenseInfoResponse) ProtoMessage() {}
 
 func (x *GetLicenseInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[219]
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[252]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14500,7 +16656,7 @@ func (x *GetLicenseInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLicenseInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetLicenseInfoResponse) Descriptor() ([]byte, []int) {
-	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{219}
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{252}
 }
 
 func (x *GetLicenseInfoResponse) GetLicenseValid() bool {
@@ -14549,7 +16705,181 @@ var File_proto_ai_studio_management_ai_studio_management_proto protoreflect.File
 
 const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\n" +
-	"5proto/ai_studio_management/ai_studio_management.proto\x12\x14ai_studio_management\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa5\x03\n" +
+	"5proto/ai_studio_management/ai_studio_management.proto\x12\x14ai_studio_management\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x02\n" +
+	"\x1cSetAppGovernanceStateRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12 \n" +
+	"\tis_active\x18\x03 \x01(\bH\x00R\bisActive\x88\x01\x01\x12S\n" +
+	"\x05flags\x18\x04 \x03(\v2=.ai_studio_management.SetAppGovernanceStateRequest.FlagsEntryR\x05flags\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x1a8\n" +
+	"\n" +
+	"FlagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\f\n" +
+	"\n" +
+	"_is_active\"j\n" +
+	"\x1dSetAppGovernanceStateResponse\x12/\n" +
+	"\x03app\x18\x01 \x01(\v2\x1d.ai_studio_management.AppInfoR\x03app\x12\x18\n" +
+	"\achanged\x18\x02 \x01(\bR\achanged\"\xb3\x01\n" +
+	"\x1eListObjectMetadataAuditRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1f\n" +
+	"\vobject_type\x18\x02 \x01(\tR\n" +
+	"objectType\x12\x1b\n" +
+	"\tobject_id\x18\x03 \x01(\tR\bobjectId\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"\x95\x02\n" +
+	"\x18ObjectMetadataAuditEntry\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x16\n" +
+	"\x06action\x18\x02 \x01(\tR\x06action\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\rR\x06userId\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\x12\x1f\n" +
+	"\vbefore_json\x18\x05 \x01(\tR\n" +
+	"beforeJson\x12\x1d\n" +
+	"\n" +
+	"after_json\x18\x06 \x01(\tR\tafterJson\x12%\n" +
+	"\x0ehooks_executed\x18\a \x03(\tR\rhooksExecuted\x129\n" +
+	"\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"k\n" +
+	"\x1fListObjectMetadataAuditResponse\x12H\n" +
+	"\aentries\x18\x01 \x03(\v2..ai_studio_management.ObjectMetadataAuditEntryR\aentries\"\xdb\x01\n" +
+	"\x17ListAuditRecordsRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12#\n" +
+	"\rresource_type\x18\x02 \x01(\tR\fresourceType\x12\x1f\n" +
+	"\vresource_id\x18\x03 \x01(\tR\n" +
+	"resourceId\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12%\n" +
+	"\x0emutations_only\x18\x05 \x01(\bR\rmutationsOnly\"\xac\x03\n" +
+	"\x0fAuditRecordInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x128\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\rR\x06userId\x12\x1d\n" +
+	"\n" +
+	"user_email\x18\x04 \x01(\tR\tuserEmail\x12\x1b\n" +
+	"\tuser_name\x18\x05 \x01(\tR\buserName\x12\x16\n" +
+	"\x06action\x18\x06 \x01(\tR\x06action\x12\x16\n" +
+	"\x06method\x18\a \x01(\tR\x06method\x12\x14\n" +
+	"\x05route\x18\b \x01(\tR\x05route\x12\x16\n" +
+	"\x06status\x18\t \x01(\x05R\x06status\x12#\n" +
+	"\rresource_type\x18\n" +
+	" \x01(\tR\fresourceType\x12\x1f\n" +
+	"\vresource_id\x18\v \x01(\tR\n" +
+	"resourceId\x12#\n" +
+	"\rresource_name\x18\f \x01(\tR\fresourceName\x12\x1b\n" +
+	"\tdiff_json\x18\r \x01(\tR\bdiffJson\x12\x14\n" +
+	"\x05error\x18\x0e \x01(\tR\x05error\"[\n" +
+	"\x18ListAuditRecordsResponse\x12?\n" +
+	"\arecords\x18\x01 \x03(\v2%.ai_studio_management.AuditRecordInfoR\arecords\"\xee\x02\n" +
+	"\rMCPServerInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04kind\x18\x05 \x01(\tR\x04kind\x12(\n" +
+	"\rprivacy_score\x18\x06 \x01(\x05H\x00R\fprivacyScore\x88\x01\x01\x12\x1b\n" +
+	"\tis_active\x18\a \x01(\bR\bisActive\x12'\n" +
+	"\x0fdashboard_state\x18\b \x01(\tR\x0edashboardState\x12\x1e\n" +
+	"\n" +
+	"brokerable\x18\t \x01(\bR\n" +
+	"brokerable\x12\x12\n" +
+	"\x04tags\x18\n" +
+	" \x03(\tR\x04tags\x129\n" +
+	"\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x10\n" +
+	"\x0e_privacy_score\"\xb0\x01\n" +
+	"\x15ListMCPServersRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12 \n" +
+	"\tis_active\x18\x04 \x01(\bH\x00R\bisActive\x88\x01\x01B\f\n" +
+	"\n" +
+	"_is_active\"x\n" +
+	"\x16ListMCPServersResponse\x12=\n" +
+	"\aservers\x18\x01 \x03(\v2#.ai_studio_management.MCPServerInfoR\aservers\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"q\n" +
+	"\x13GetMCPServerRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\tserver_id\x18\x02 \x01(\rR\bserverId\"S\n" +
+	"\x14GetMCPServerResponse\x12;\n" +
+	"\x06server\x18\x01 \x01(\v2#.ai_studio_management.MCPServerInfoR\x06server\"\xf5\x01\n" +
+	"\x0fModelRouterInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06active\x18\x06 \x01(\bR\x06active\x12\x17\n" +
+	"\allm_ids\x18\a \x03(\rR\x06llmIds\x129\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa2\x02\n" +
+	"\x12SemanticRouterInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06active\x18\x06 \x01(\bR\x06active\x12\x17\n" +
+	"\allm_ids\x18\a \x03(\rR\x06llmIds\x12(\n" +
+	"\x10model_router_ids\x18\b \x03(\rR\x0emodelRouterIds\x129\n" +
+	"\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x82\x01\n" +
+	"\x17ListModelRoutersRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"|\n" +
+	"\x18ListModelRoutersResponse\x12?\n" +
+	"\arouters\x18\x01 \x03(\v2%.ai_studio_management.ModelRouterInfoR\arouters\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"s\n" +
+	"\x15GetModelRouterRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\trouter_id\x18\x02 \x01(\rR\brouterId\"W\n" +
+	"\x16GetModelRouterResponse\x12=\n" +
+	"\x06router\x18\x01 \x01(\v2%.ai_studio_management.ModelRouterInfoR\x06router\"\x85\x01\n" +
+	"\x1aListSemanticRoutersRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"\x82\x01\n" +
+	"\x1bListSemanticRoutersResponse\x12B\n" +
+	"\arouters\x18\x01 \x03(\v2(.ai_studio_management.SemanticRouterInfoR\arouters\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x03R\n" +
+	"totalCount\"v\n" +
+	"\x18GetSemanticRouterRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
+	"\trouter_id\x18\x02 \x01(\rR\brouterId\"]\n" +
+	"\x19GetSemanticRouterResponse\x12@\n" +
+	"\x06router\x18\x01 \x01(\v2(.ai_studio_management.SemanticRouterInfoR\x06router\"N\n" +
+	"\tGroupInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"is_default\x18\x03 \x01(\bR\tisDefault\"R\n" +
+	"\x11ListGroupsRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\"M\n" +
+	"\x12ListGroupsResponse\x127\n" +
+	"\x06groups\x18\x01 \x03(\v2\x1f.ai_studio_management.GroupInfoR\x06groups\"\xb0\x01\n" +
+	" GetResourceInstanceGroupsRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12,\n" +
+	"\x12resource_type_slug\x18\x02 \x01(\tR\x10resourceTypeSlug\x12\x1f\n" +
+	"\vinstance_id\x18\x03 \x01(\tR\n" +
+	"instanceId\"@\n" +
+	"!GetResourceInstanceGroupsResponse\x12\x1b\n" +
+	"\tgroup_ids\x18\x01 \x03(\rR\bgroupIds\"\xe7\x01\n" +
+	" SetResourceInstanceGroupsRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12,\n" +
+	"\x12resource_type_slug\x18\x02 \x01(\tR\x10resourceTypeSlug\x12\x1f\n" +
+	"\vinstance_id\x18\x03 \x01(\tR\n" +
+	"instanceId\x12\x1b\n" +
+	"\tgroup_ids\x18\x04 \x03(\rR\bgroupIds\x12\x18\n" +
+	"\areplace\x18\x05 \x01(\bR\areplace\"@\n" +
+	"!SetResourceInstanceGroupsResponse\x12\x1b\n" +
+	"\tgroup_ids\x18\x01 \x03(\rR\bgroupIds\"\xae\x01\n" +
+	"&ListAccessibleResourceInstancesRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12,\n" +
+	"\x12resource_type_slug\x18\x02 \x01(\tR\x10resourceTypeSlug\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\rR\x06userId\"e\n" +
+	"'ListAccessibleResourceInstancesResponse\x12\x17\n" +
+	"\asee_all\x18\x01 \x01(\bR\x06seeAll\x12!\n" +
+	"\finstance_ids\x18\x02 \x03(\tR\vinstanceIds\"\xa5\x03\n" +
 	"\x19CreateNotificationRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12'\n" +
 	"\x0fnotification_id\x18\x02 \x01(\tR\x0enotificationId\x12\x12\n" +
@@ -14566,7 +16896,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"P\n" +
 	"\x1aCreateNotificationResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x8c\x04\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xb3\x04\n" +
 	"\x10ResourceTypeSpec\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -14580,7 +16910,8 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\x11supports_metadata\x18\n" +
 	" \x01(\bR\x10supportsMetadata\x128\n" +
 	"\x16access_granted_via_app\x18\v \x01(\bH\x00R\x13accessGrantedViaApp\x88\x01\x01\x12,\n" +
-	"\x12portal_detail_path\x18\f \x01(\tR\x10portalDetailPathB\x19\n" +
+	"\x12portal_detail_path\x18\f \x01(\tR\x10portalDetailPath\x12%\n" +
+	"\x0edefault_access\x18\r \x01(\tR\rdefaultAccessB\x19\n" +
 	"\x17_access_granted_via_app\"\xca\x01\n" +
 	"\x1cRegisterResourceTypesRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12<\n" +
@@ -14852,7 +17183,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\"A\n" +
 	"\x0eGetAppResponse\x12/\n" +
-	"\x03app\x18\x01 \x01(\v2\x1d.ai_studio_management.AppInfoR\x03app\"\xf0\x03\n" +
+	"\x03app\x18\x01 \x01(\v2\x1d.ai_studio_management.AppInfoR\x03app\"\xc7\x05\n" +
 	"\aAppInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -14871,8 +17202,17 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\bmetadata\x18\v \x01(\tR\bmetadata\x12\x19\n" +
 	"\btool_ids\x18\f \x03(\rR\atoolIds\x12%\n" +
 	"\x0edatasource_ids\x18\r \x03(\rR\rdatasourceIds\x12\x17\n" +
-	"\auser_id\x18\x0e \x01(\rR\x06userIdB\x11\n" +
-	"\x0f_monthly_budget\"\xf4\x02\n" +
+	"\auser_id\x18\x0e \x01(\rR\x06userId\x12$\n" +
+	"\x0emcp_server_ids\x18\x0f \x03(\rR\fmcpServerIds\x12(\n" +
+	"\x10model_router_ids\x18\x10 \x03(\rR\x0emodelRouterIds\x12.\n" +
+	"\x13semantic_router_ids\x18\x11 \x03(\rR\x11semanticRouterIds\x12U\n" +
+	"\x10plugin_resources\x18\x12 \x03(\v2*.ai_studio_management.AppPluginResourceRefR\x0fpluginResourcesB\x11\n" +
+	"\x0f_monthly_budget\"\x82\x01\n" +
+	"\x14AppPluginResourceRef\x12\x1b\n" +
+	"\tplugin_id\x18\x01 \x01(\rR\bpluginId\x12,\n" +
+	"\x12resource_type_slug\x18\x02 \x01(\tR\x10resourceTypeSlug\x12\x1f\n" +
+	"\vinstance_id\x18\x03 \x01(\tR\n" +
+	"instanceId\"\xf4\x02\n" +
 	"\x10CreateAppRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -15801,7 +18141,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\fentitlements\x18\x04 \x03(\tR\fentitlements\x12\"\n" +
 	"\forganization\x18\x05 \x01(\tR\forganization\x129\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xdeO\n" +
+	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xa3\\\n" +
 	"\x19AIStudioManagementService\x12b\n" +
 	"\vListPlugins\x12(.ai_studio_management.ListPluginsRequest\x1a).ai_studio_management.ListPluginsResponse\x12\\\n" +
 	"\tGetPlugin\x12&.ai_studio_management.GetPluginRequest\x1a'.ai_studio_management.GetPluginResponse\x12w\n" +
@@ -15898,7 +18238,21 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\x0eGetLicenseInfo\x12+.ai_studio_management.GetLicenseInfoRequest\x1a,.ai_studio_management.GetLicenseInfoResponse\x12w\n" +
 	"\x12CreateNotification\x12/.ai_studio_management.CreateNotificationRequest\x1a0.ai_studio_management.CreateNotificationResponse\x12\x80\x01\n" +
 	"\x15RegisterResourceTypes\x122.ai_studio_management.RegisterResourceTypesRequest\x1a3.ai_studio_management.RegisterResourceTypesResponse\x12\x92\x01\n" +
-	"\x1bRegisterPermissionResources\x128.ai_studio_management.RegisterPermissionResourcesRequest\x1a9.ai_studio_management.RegisterPermissionResourcesResponseBDZBgithub.com/TykTechnologies/midsommar/v2/proto/ai_studio_managementb\x06proto3"
+	"\x1bRegisterPermissionResources\x128.ai_studio_management.RegisterPermissionResourcesRequest\x1a9.ai_studio_management.RegisterPermissionResourcesResponse\x12\x86\x01\n" +
+	"\x17ListObjectMetadataAudit\x124.ai_studio_management.ListObjectMetadataAuditRequest\x1a5.ai_studio_management.ListObjectMetadataAuditResponse\x12q\n" +
+	"\x10ListAuditRecords\x12-.ai_studio_management.ListAuditRecordsRequest\x1a..ai_studio_management.ListAuditRecordsResponse\x12k\n" +
+	"\x0eListMCPServers\x12+.ai_studio_management.ListMCPServersRequest\x1a,.ai_studio_management.ListMCPServersResponse\x12e\n" +
+	"\fGetMCPServer\x12).ai_studio_management.GetMCPServerRequest\x1a*.ai_studio_management.GetMCPServerResponse\x12q\n" +
+	"\x10ListModelRouters\x12-.ai_studio_management.ListModelRoutersRequest\x1a..ai_studio_management.ListModelRoutersResponse\x12k\n" +
+	"\x0eGetModelRouter\x12+.ai_studio_management.GetModelRouterRequest\x1a,.ai_studio_management.GetModelRouterResponse\x12z\n" +
+	"\x13ListSemanticRouters\x120.ai_studio_management.ListSemanticRoutersRequest\x1a1.ai_studio_management.ListSemanticRoutersResponse\x12t\n" +
+	"\x11GetSemanticRouter\x12..ai_studio_management.GetSemanticRouterRequest\x1a/.ai_studio_management.GetSemanticRouterResponse\x12_\n" +
+	"\n" +
+	"ListGroups\x12'.ai_studio_management.ListGroupsRequest\x1a(.ai_studio_management.ListGroupsResponse\x12\x8c\x01\n" +
+	"\x19GetResourceInstanceGroups\x126.ai_studio_management.GetResourceInstanceGroupsRequest\x1a7.ai_studio_management.GetResourceInstanceGroupsResponse\x12\x8c\x01\n" +
+	"\x19SetResourceInstanceGroups\x126.ai_studio_management.SetResourceInstanceGroupsRequest\x1a7.ai_studio_management.SetResourceInstanceGroupsResponse\x12\x9e\x01\n" +
+	"\x1fListAccessibleResourceInstances\x12<.ai_studio_management.ListAccessibleResourceInstancesRequest\x1a=.ai_studio_management.ListAccessibleResourceInstancesResponse\x12\x80\x01\n" +
+	"\x15SetAppGovernanceState\x122.ai_studio_management.SetAppGovernanceStateRequest\x1a3.ai_studio_management.SetAppGovernanceStateResponseBDZBgithub.com/TykTechnologies/midsommar/v2/proto/ai_studio_managementb\x06proto3"
 
 var (
 	file_proto_ai_studio_management_ai_studio_management_proto_rawDescOnce sync.Once
@@ -15912,631 +18266,721 @@ func file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP() []
 	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescData
 }
 
-var file_proto_ai_studio_management_ai_studio_management_proto_msgTypes = make([]protoimpl.MessageInfo, 229)
+var file_proto_ai_studio_management_ai_studio_management_proto_msgTypes = make([]protoimpl.MessageInfo, 263)
 var file_proto_ai_studio_management_ai_studio_management_proto_goTypes = []any{
-	(*CreateNotificationRequest)(nil),           // 0: ai_studio_management.CreateNotificationRequest
-	(*CreateNotificationResponse)(nil),          // 1: ai_studio_management.CreateNotificationResponse
-	(*ResourceTypeSpec)(nil),                    // 2: ai_studio_management.ResourceTypeSpec
-	(*RegisterResourceTypesRequest)(nil),        // 3: ai_studio_management.RegisterResourceTypesRequest
-	(*RegisterResourceTypesResponse)(nil),       // 4: ai_studio_management.RegisterResourceTypesResponse
-	(*PermissionResourceSpec)(nil),              // 5: ai_studio_management.PermissionResourceSpec
-	(*RegisterPermissionResourcesRequest)(nil),  // 6: ai_studio_management.RegisterPermissionResourcesRequest
-	(*RegisterPermissionResourcesResponse)(nil), // 7: ai_studio_management.RegisterPermissionResourcesResponse
-	(*PluginContext)(nil),                       // 8: ai_studio_management.PluginContext
-	(*ListPluginsRequest)(nil),                  // 9: ai_studio_management.ListPluginsRequest
-	(*ListPluginsResponse)(nil),                 // 10: ai_studio_management.ListPluginsResponse
-	(*GetPluginRequest)(nil),                    // 11: ai_studio_management.GetPluginRequest
-	(*GetPluginResponse)(nil),                   // 12: ai_studio_management.GetPluginResponse
-	(*UpdatePluginConfigRequest)(nil),           // 13: ai_studio_management.UpdatePluginConfigRequest
-	(*UpdatePluginConfigResponse)(nil),          // 14: ai_studio_management.UpdatePluginConfigResponse
-	(*PluginInfo)(nil),                          // 15: ai_studio_management.PluginInfo
-	(*ListLLMsRequest)(nil),                     // 16: ai_studio_management.ListLLMsRequest
-	(*ListLLMsResponse)(nil),                    // 17: ai_studio_management.ListLLMsResponse
-	(*GetLLMRequest)(nil),                       // 18: ai_studio_management.GetLLMRequest
-	(*GetLLMResponse)(nil),                      // 19: ai_studio_management.GetLLMResponse
-	(*GetLLMPluginsRequest)(nil),                // 20: ai_studio_management.GetLLMPluginsRequest
-	(*GetLLMPluginsResponse)(nil),               // 21: ai_studio_management.GetLLMPluginsResponse
-	(*LLMInfo)(nil),                             // 22: ai_studio_management.LLMInfo
-	(*CreateLLMRequest)(nil),                    // 23: ai_studio_management.CreateLLMRequest
-	(*CreateLLMResponse)(nil),                   // 24: ai_studio_management.CreateLLMResponse
-	(*UpdateLLMRequest)(nil),                    // 25: ai_studio_management.UpdateLLMRequest
-	(*UpdateLLMResponse)(nil),                   // 26: ai_studio_management.UpdateLLMResponse
-	(*DeleteLLMRequest)(nil),                    // 27: ai_studio_management.DeleteLLMRequest
-	(*DeleteLLMResponse)(nil),                   // 28: ai_studio_management.DeleteLLMResponse
-	(*UpdateLLMPluginsRequest)(nil),             // 29: ai_studio_management.UpdateLLMPluginsRequest
-	(*UpdateLLMPluginsResponse)(nil),            // 30: ai_studio_management.UpdateLLMPluginsResponse
-	(*GetAnalyticsSummaryRequest)(nil),          // 31: ai_studio_management.GetAnalyticsSummaryRequest
-	(*GetAnalyticsSummaryResponse)(nil),         // 32: ai_studio_management.GetAnalyticsSummaryResponse
-	(*GetUsageStatisticsRequest)(nil),           // 33: ai_studio_management.GetUsageStatisticsRequest
-	(*GetUsageStatisticsResponse)(nil),          // 34: ai_studio_management.GetUsageStatisticsResponse
-	(*GetCostAnalysisRequest)(nil),              // 35: ai_studio_management.GetCostAnalysisRequest
-	(*GetCostAnalysisResponse)(nil),             // 36: ai_studio_management.GetCostAnalysisResponse
-	(*TopEndpoint)(nil),                         // 37: ai_studio_management.TopEndpoint
-	(*ModelUsage)(nil),                          // 38: ai_studio_management.ModelUsage
-	(*UsageStatistic)(nil),                      // 39: ai_studio_management.UsageStatistic
-	(*CostBreakdown)(nil),                       // 40: ai_studio_management.CostBreakdown
-	(*ListAppsRequest)(nil),                     // 41: ai_studio_management.ListAppsRequest
-	(*ListAppsResponse)(nil),                    // 42: ai_studio_management.ListAppsResponse
-	(*GetAppRequest)(nil),                       // 43: ai_studio_management.GetAppRequest
-	(*GetAppResponse)(nil),                      // 44: ai_studio_management.GetAppResponse
-	(*AppInfo)(nil),                             // 45: ai_studio_management.AppInfo
-	(*CreateAppRequest)(nil),                    // 46: ai_studio_management.CreateAppRequest
-	(*CreateAppResponse)(nil),                   // 47: ai_studio_management.CreateAppResponse
-	(*UpdateAppRequest)(nil),                    // 48: ai_studio_management.UpdateAppRequest
-	(*UpdateAppResponse)(nil),                   // 49: ai_studio_management.UpdateAppResponse
-	(*DeleteAppRequest)(nil),                    // 50: ai_studio_management.DeleteAppRequest
-	(*DeleteAppResponse)(nil),                   // 51: ai_studio_management.DeleteAppResponse
-	(*PatchAppMetadataRequest)(nil),             // 52: ai_studio_management.PatchAppMetadataRequest
-	(*PatchAppMetadataResponse)(nil),            // 53: ai_studio_management.PatchAppMetadataResponse
-	(*GetObjectMetadataRequest)(nil),            // 54: ai_studio_management.GetObjectMetadataRequest
-	(*GetObjectMetadataResponse)(nil),           // 55: ai_studio_management.GetObjectMetadataResponse
-	(*DeleteObjectMetadataRequest)(nil),         // 56: ai_studio_management.DeleteObjectMetadataRequest
-	(*DeleteObjectMetadataResponse)(nil),        // 57: ai_studio_management.DeleteObjectMetadataResponse
-	(*SetObjectMetadataRequest)(nil),            // 58: ai_studio_management.SetObjectMetadataRequest
-	(*SetObjectMetadataResponse)(nil),           // 59: ai_studio_management.SetObjectMetadataResponse
-	(*GetResolvedMetadataSchemaRequest)(nil),    // 60: ai_studio_management.GetResolvedMetadataSchemaRequest
-	(*GetResolvedMetadataSchemaResponse)(nil),   // 61: ai_studio_management.GetResolvedMetadataSchemaResponse
-	(*ValidateObjectMetadataRequest)(nil),       // 62: ai_studio_management.ValidateObjectMetadataRequest
-	(*ValidateObjectMetadataResponse)(nil),      // 63: ai_studio_management.ValidateObjectMetadataResponse
-	(*ListToolsRequest)(nil),                    // 64: ai_studio_management.ListToolsRequest
-	(*ListToolsResponse)(nil),                   // 65: ai_studio_management.ListToolsResponse
-	(*GetToolRequest)(nil),                      // 66: ai_studio_management.GetToolRequest
-	(*GetToolResponse)(nil),                     // 67: ai_studio_management.GetToolResponse
-	(*GetToolOperationsRequest)(nil),            // 68: ai_studio_management.GetToolOperationsRequest
-	(*GetToolOperationsResponse)(nil),           // 69: ai_studio_management.GetToolOperationsResponse
-	(*CallToolOperationRequest)(nil),            // 70: ai_studio_management.CallToolOperationRequest
-	(*CallToolOperationResponse)(nil),           // 71: ai_studio_management.CallToolOperationResponse
-	(*ToolInfo)(nil),                            // 72: ai_studio_management.ToolInfo
-	(*ToolOperation)(nil),                       // 73: ai_studio_management.ToolOperation
-	(*ToolParameter)(nil),                       // 74: ai_studio_management.ToolParameter
-	(*ToolRequestBody)(nil),                     // 75: ai_studio_management.ToolRequestBody
-	(*CreateToolRequest)(nil),                   // 76: ai_studio_management.CreateToolRequest
-	(*CreateToolResponse)(nil),                  // 77: ai_studio_management.CreateToolResponse
-	(*UpdateToolRequest)(nil),                   // 78: ai_studio_management.UpdateToolRequest
-	(*UpdateToolResponse)(nil),                  // 79: ai_studio_management.UpdateToolResponse
-	(*DeleteToolRequest)(nil),                   // 80: ai_studio_management.DeleteToolRequest
-	(*DeleteToolResponse)(nil),                  // 81: ai_studio_management.DeleteToolResponse
-	(*ListDatasourcesRequest)(nil),              // 82: ai_studio_management.ListDatasourcesRequest
-	(*ListDatasourcesResponse)(nil),             // 83: ai_studio_management.ListDatasourcesResponse
-	(*GetDatasourceRequest)(nil),                // 84: ai_studio_management.GetDatasourceRequest
-	(*GetDatasourceResponse)(nil),               // 85: ai_studio_management.GetDatasourceResponse
-	(*CreateDatasourceRequest)(nil),             // 86: ai_studio_management.CreateDatasourceRequest
-	(*CreateDatasourceResponse)(nil),            // 87: ai_studio_management.CreateDatasourceResponse
-	(*UpdateDatasourceRequest)(nil),             // 88: ai_studio_management.UpdateDatasourceRequest
-	(*UpdateDatasourceResponse)(nil),            // 89: ai_studio_management.UpdateDatasourceResponse
-	(*DeleteDatasourceRequest)(nil),             // 90: ai_studio_management.DeleteDatasourceRequest
-	(*DeleteDatasourceResponse)(nil),            // 91: ai_studio_management.DeleteDatasourceResponse
-	(*CloneDatasourceRequest)(nil),              // 92: ai_studio_management.CloneDatasourceRequest
-	(*CloneDatasourceResponse)(nil),             // 93: ai_studio_management.CloneDatasourceResponse
-	(*SearchDatasourcesRequest)(nil),            // 94: ai_studio_management.SearchDatasourcesRequest
-	(*SearchDatasourcesResponse)(nil),           // 95: ai_studio_management.SearchDatasourcesResponse
-	(*ProcessEmbeddingsRequest)(nil),            // 96: ai_studio_management.ProcessEmbeddingsRequest
-	(*ProcessEmbeddingsResponse)(nil),           // 97: ai_studio_management.ProcessEmbeddingsResponse
-	(*GenerateEmbeddingRequest)(nil),            // 98: ai_studio_management.GenerateEmbeddingRequest
-	(*GenerateEmbeddingResponse)(nil),           // 99: ai_studio_management.GenerateEmbeddingResponse
-	(*EmbeddingVector)(nil),                     // 100: ai_studio_management.EmbeddingVector
-	(*StoreDocumentsRequest)(nil),               // 101: ai_studio_management.StoreDocumentsRequest
-	(*DocumentWithEmbedding)(nil),               // 102: ai_studio_management.DocumentWithEmbedding
-	(*StoreDocumentsResponse)(nil),              // 103: ai_studio_management.StoreDocumentsResponse
-	(*ProcessAndStoreRequest)(nil),              // 104: ai_studio_management.ProcessAndStoreRequest
-	(*DocumentChunk)(nil),                       // 105: ai_studio_management.DocumentChunk
-	(*ProcessAndStoreResponse)(nil),             // 106: ai_studio_management.ProcessAndStoreResponse
-	(*DeleteDocumentsByMetadataRequest)(nil),    // 107: ai_studio_management.DeleteDocumentsByMetadataRequest
-	(*DeleteDocumentsByMetadataResponse)(nil),   // 108: ai_studio_management.DeleteDocumentsByMetadataResponse
-	(*QueryByMetadataOnlyRequest)(nil),          // 109: ai_studio_management.QueryByMetadataOnlyRequest
-	(*QueryByMetadataOnlyResponse)(nil),         // 110: ai_studio_management.QueryByMetadataOnlyResponse
-	(*ListNamespacesRequest)(nil),               // 111: ai_studio_management.ListNamespacesRequest
-	(*ListNamespacesResponse)(nil),              // 112: ai_studio_management.ListNamespacesResponse
-	(*NamespaceInfo)(nil),                       // 113: ai_studio_management.NamespaceInfo
-	(*DeleteNamespaceRequest)(nil),              // 114: ai_studio_management.DeleteNamespaceRequest
-	(*DeleteNamespaceResponse)(nil),             // 115: ai_studio_management.DeleteNamespaceResponse
-	(*QueryByVectorRequest)(nil),                // 116: ai_studio_management.QueryByVectorRequest
-	(*DatasourceInfo)(nil),                      // 117: ai_studio_management.DatasourceInfo
-	(*ListDataCataloguesRequest)(nil),           // 118: ai_studio_management.ListDataCataloguesRequest
-	(*ListDataCataloguesResponse)(nil),          // 119: ai_studio_management.ListDataCataloguesResponse
-	(*GetDataCatalogueRequest)(nil),             // 120: ai_studio_management.GetDataCatalogueRequest
-	(*GetDataCatalogueResponse)(nil),            // 121: ai_studio_management.GetDataCatalogueResponse
-	(*CreateDataCatalogueRequest)(nil),          // 122: ai_studio_management.CreateDataCatalogueRequest
-	(*CreateDataCatalogueResponse)(nil),         // 123: ai_studio_management.CreateDataCatalogueResponse
-	(*UpdateDataCatalogueRequest)(nil),          // 124: ai_studio_management.UpdateDataCatalogueRequest
-	(*UpdateDataCatalogueResponse)(nil),         // 125: ai_studio_management.UpdateDataCatalogueResponse
-	(*DeleteDataCatalogueRequest)(nil),          // 126: ai_studio_management.DeleteDataCatalogueRequest
-	(*DeleteDataCatalogueResponse)(nil),         // 127: ai_studio_management.DeleteDataCatalogueResponse
-	(*DataCatalogueInfo)(nil),                   // 128: ai_studio_management.DataCatalogueInfo
-	(*ListTagsRequest)(nil),                     // 129: ai_studio_management.ListTagsRequest
-	(*ListTagsResponse)(nil),                    // 130: ai_studio_management.ListTagsResponse
-	(*GetTagRequest)(nil),                       // 131: ai_studio_management.GetTagRequest
-	(*GetTagResponse)(nil),                      // 132: ai_studio_management.GetTagResponse
-	(*CreateTagRequest)(nil),                    // 133: ai_studio_management.CreateTagRequest
-	(*CreateTagResponse)(nil),                   // 134: ai_studio_management.CreateTagResponse
-	(*UpdateTagRequest)(nil),                    // 135: ai_studio_management.UpdateTagRequest
-	(*UpdateTagResponse)(nil),                   // 136: ai_studio_management.UpdateTagResponse
-	(*DeleteTagRequest)(nil),                    // 137: ai_studio_management.DeleteTagRequest
-	(*DeleteTagResponse)(nil),                   // 138: ai_studio_management.DeleteTagResponse
-	(*SearchTagsRequest)(nil),                   // 139: ai_studio_management.SearchTagsRequest
-	(*SearchTagsResponse)(nil),                  // 140: ai_studio_management.SearchTagsResponse
-	(*TagInfo)(nil),                             // 141: ai_studio_management.TagInfo
-	(*GetChatRecordsPerDayRequest)(nil),         // 142: ai_studio_management.GetChatRecordsPerDayRequest
-	(*GetChatRecordsPerDayResponse)(nil),        // 143: ai_studio_management.GetChatRecordsPerDayResponse
-	(*GetModelUsageRequest)(nil),                // 144: ai_studio_management.GetModelUsageRequest
-	(*GetModelUsageResponse)(nil),               // 145: ai_studio_management.GetModelUsageResponse
-	(*GetVendorUsageRequest)(nil),               // 146: ai_studio_management.GetVendorUsageRequest
-	(*GetVendorUsageResponse)(nil),              // 147: ai_studio_management.GetVendorUsageResponse
-	(*GetTokenUsagePerAppRequest)(nil),          // 148: ai_studio_management.GetTokenUsagePerAppRequest
-	(*GetTokenUsagePerAppResponse)(nil),         // 149: ai_studio_management.GetTokenUsagePerAppResponse
-	(*GetToolUsageStatisticsRequest)(nil),       // 150: ai_studio_management.GetToolUsageStatisticsRequest
-	(*GetToolUsageStatisticsResponse)(nil),      // 151: ai_studio_management.GetToolUsageStatisticsResponse
-	(*DayRecord)(nil),                           // 152: ai_studio_management.DayRecord
-	(*ModelUsageRecord)(nil),                    // 153: ai_studio_management.ModelUsageRecord
-	(*VendorUsageRecord)(nil),                   // 154: ai_studio_management.VendorUsageRecord
-	(*AppTokenUsage)(nil),                       // 155: ai_studio_management.AppTokenUsage
-	(*ToolUsageRecord)(nil),                     // 156: ai_studio_management.ToolUsageRecord
-	(*ListModelPricesRequest)(nil),              // 157: ai_studio_management.ListModelPricesRequest
-	(*ListModelPricesResponse)(nil),             // 158: ai_studio_management.ListModelPricesResponse
-	(*GetModelPriceRequest)(nil),                // 159: ai_studio_management.GetModelPriceRequest
-	(*GetModelPriceResponse)(nil),               // 160: ai_studio_management.GetModelPriceResponse
-	(*CreateModelPriceRequest)(nil),             // 161: ai_studio_management.CreateModelPriceRequest
-	(*CreateModelPriceResponse)(nil),            // 162: ai_studio_management.CreateModelPriceResponse
-	(*UpdateModelPriceRequest)(nil),             // 163: ai_studio_management.UpdateModelPriceRequest
-	(*UpdateModelPriceResponse)(nil),            // 164: ai_studio_management.UpdateModelPriceResponse
-	(*DeleteModelPriceRequest)(nil),             // 165: ai_studio_management.DeleteModelPriceRequest
-	(*DeleteModelPriceResponse)(nil),            // 166: ai_studio_management.DeleteModelPriceResponse
-	(*GetModelPricesByVendorRequest)(nil),       // 167: ai_studio_management.GetModelPricesByVendorRequest
-	(*GetModelPricesByVendorResponse)(nil),      // 168: ai_studio_management.GetModelPricesByVendorResponse
-	(*ModelPriceInfo)(nil),                      // 169: ai_studio_management.ModelPriceInfo
-	(*ListFiltersRequest)(nil),                  // 170: ai_studio_management.ListFiltersRequest
-	(*ListFiltersResponse)(nil),                 // 171: ai_studio_management.ListFiltersResponse
-	(*GetFilterRequest)(nil),                    // 172: ai_studio_management.GetFilterRequest
-	(*GetFilterResponse)(nil),                   // 173: ai_studio_management.GetFilterResponse
-	(*CreateFilterRequest)(nil),                 // 174: ai_studio_management.CreateFilterRequest
-	(*CreateFilterResponse)(nil),                // 175: ai_studio_management.CreateFilterResponse
-	(*UpdateFilterRequest)(nil),                 // 176: ai_studio_management.UpdateFilterRequest
-	(*UpdateFilterResponse)(nil),                // 177: ai_studio_management.UpdateFilterResponse
-	(*DeleteFilterRequest)(nil),                 // 178: ai_studio_management.DeleteFilterRequest
-	(*DeleteFilterResponse)(nil),                // 179: ai_studio_management.DeleteFilterResponse
-	(*FilterInfo)(nil),                          // 180: ai_studio_management.FilterInfo
-	(*GetAvailableLLMDriversRequest)(nil),       // 181: ai_studio_management.GetAvailableLLMDriversRequest
-	(*GetAvailableLLMDriversResponse)(nil),      // 182: ai_studio_management.GetAvailableLLMDriversResponse
-	(*GetAvailableEmbeddersRequest)(nil),        // 183: ai_studio_management.GetAvailableEmbeddersRequest
-	(*GetAvailableEmbeddersResponse)(nil),       // 184: ai_studio_management.GetAvailableEmbeddersResponse
-	(*GetAvailableVectorStoresRequest)(nil),     // 185: ai_studio_management.GetAvailableVectorStoresRequest
-	(*GetAvailableVectorStoresResponse)(nil),    // 186: ai_studio_management.GetAvailableVectorStoresResponse
-	(*VendorDriverInfo)(nil),                    // 187: ai_studio_management.VendorDriverInfo
-	(*WritePluginKVRequest)(nil),                // 188: ai_studio_management.WritePluginKVRequest
-	(*WritePluginKVResponse)(nil),               // 189: ai_studio_management.WritePluginKVResponse
-	(*ReadPluginKVRequest)(nil),                 // 190: ai_studio_management.ReadPluginKVRequest
-	(*ReadPluginKVResponse)(nil),                // 191: ai_studio_management.ReadPluginKVResponse
-	(*DeletePluginKVRequest)(nil),               // 192: ai_studio_management.DeletePluginKVRequest
-	(*DeletePluginKVResponse)(nil),              // 193: ai_studio_management.DeletePluginKVResponse
-	(*ExecuteToolRequest)(nil),                  // 194: ai_studio_management.ExecuteToolRequest
-	(*ExecuteToolResponse)(nil),                 // 195: ai_studio_management.ExecuteToolResponse
-	(*QueryDatasourceRequest)(nil),              // 196: ai_studio_management.QueryDatasourceRequest
-	(*QueryDatasourceResponse)(nil),             // 197: ai_studio_management.QueryDatasourceResponse
-	(*DatasourceResult)(nil),                    // 198: ai_studio_management.DatasourceResult
-	(*CallLLMRequest)(nil),                      // 199: ai_studio_management.CallLLMRequest
-	(*CallLLMResponse)(nil),                     // 200: ai_studio_management.CallLLMResponse
-	(*LLMMessage)(nil),                          // 201: ai_studio_management.LLMMessage
-	(*LLMTool)(nil),                             // 202: ai_studio_management.LLMTool
-	(*LLMFunction)(nil),                         // 203: ai_studio_management.LLMFunction
-	(*LLMToolCall)(nil),                         // 204: ai_studio_management.LLMToolCall
-	(*LLMFunctionCall)(nil),                     // 205: ai_studio_management.LLMFunctionCall
-	(*LLMUsage)(nil),                            // 206: ai_studio_management.LLMUsage
-	(*CreateScheduleRequest)(nil),               // 207: ai_studio_management.CreateScheduleRequest
-	(*CreateScheduleResponse)(nil),              // 208: ai_studio_management.CreateScheduleResponse
-	(*GetScheduleRequest)(nil),                  // 209: ai_studio_management.GetScheduleRequest
-	(*GetScheduleResponse)(nil),                 // 210: ai_studio_management.GetScheduleResponse
-	(*ListSchedulesRequest)(nil),                // 211: ai_studio_management.ListSchedulesRequest
-	(*ListSchedulesResponse)(nil),               // 212: ai_studio_management.ListSchedulesResponse
-	(*UpdateScheduleRequest)(nil),               // 213: ai_studio_management.UpdateScheduleRequest
-	(*UpdateScheduleResponse)(nil),              // 214: ai_studio_management.UpdateScheduleResponse
-	(*DeleteScheduleRequest)(nil),               // 215: ai_studio_management.DeleteScheduleRequest
-	(*DeleteScheduleResponse)(nil),              // 216: ai_studio_management.DeleteScheduleResponse
-	(*ScheduleInfo)(nil),                        // 217: ai_studio_management.ScheduleInfo
-	(*GetLicenseInfoRequest)(nil),               // 218: ai_studio_management.GetLicenseInfoRequest
-	(*GetLicenseInfoResponse)(nil),              // 219: ai_studio_management.GetLicenseInfoResponse
-	nil,                                         // 220: ai_studio_management.CreateNotificationRequest.LinksEntry
-	nil,                                         // 221: ai_studio_management.LLMInfo.MetadataEntry
-	nil,                                         // 222: ai_studio_management.ToolInfo.MetadataEntry
-	nil,                                         // 223: ai_studio_management.DocumentWithEmbedding.MetadataEntry
-	nil,                                         // 224: ai_studio_management.DocumentChunk.MetadataEntry
-	nil,                                         // 225: ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
-	nil,                                         // 226: ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
-	nil,                                         // 227: ai_studio_management.DatasourceInfo.MetadataEntry
-	nil,                                         // 228: ai_studio_management.DatasourceResult.MetadataEntry
-	(*timestamppb.Timestamp)(nil),               // 229: google.protobuf.Timestamp
+	(*SetAppGovernanceStateRequest)(nil),            // 0: ai_studio_management.SetAppGovernanceStateRequest
+	(*SetAppGovernanceStateResponse)(nil),           // 1: ai_studio_management.SetAppGovernanceStateResponse
+	(*ListObjectMetadataAuditRequest)(nil),          // 2: ai_studio_management.ListObjectMetadataAuditRequest
+	(*ObjectMetadataAuditEntry)(nil),                // 3: ai_studio_management.ObjectMetadataAuditEntry
+	(*ListObjectMetadataAuditResponse)(nil),         // 4: ai_studio_management.ListObjectMetadataAuditResponse
+	(*ListAuditRecordsRequest)(nil),                 // 5: ai_studio_management.ListAuditRecordsRequest
+	(*AuditRecordInfo)(nil),                         // 6: ai_studio_management.AuditRecordInfo
+	(*ListAuditRecordsResponse)(nil),                // 7: ai_studio_management.ListAuditRecordsResponse
+	(*MCPServerInfo)(nil),                           // 8: ai_studio_management.MCPServerInfo
+	(*ListMCPServersRequest)(nil),                   // 9: ai_studio_management.ListMCPServersRequest
+	(*ListMCPServersResponse)(nil),                  // 10: ai_studio_management.ListMCPServersResponse
+	(*GetMCPServerRequest)(nil),                     // 11: ai_studio_management.GetMCPServerRequest
+	(*GetMCPServerResponse)(nil),                    // 12: ai_studio_management.GetMCPServerResponse
+	(*ModelRouterInfo)(nil),                         // 13: ai_studio_management.ModelRouterInfo
+	(*SemanticRouterInfo)(nil),                      // 14: ai_studio_management.SemanticRouterInfo
+	(*ListModelRoutersRequest)(nil),                 // 15: ai_studio_management.ListModelRoutersRequest
+	(*ListModelRoutersResponse)(nil),                // 16: ai_studio_management.ListModelRoutersResponse
+	(*GetModelRouterRequest)(nil),                   // 17: ai_studio_management.GetModelRouterRequest
+	(*GetModelRouterResponse)(nil),                  // 18: ai_studio_management.GetModelRouterResponse
+	(*ListSemanticRoutersRequest)(nil),              // 19: ai_studio_management.ListSemanticRoutersRequest
+	(*ListSemanticRoutersResponse)(nil),             // 20: ai_studio_management.ListSemanticRoutersResponse
+	(*GetSemanticRouterRequest)(nil),                // 21: ai_studio_management.GetSemanticRouterRequest
+	(*GetSemanticRouterResponse)(nil),               // 22: ai_studio_management.GetSemanticRouterResponse
+	(*GroupInfo)(nil),                               // 23: ai_studio_management.GroupInfo
+	(*ListGroupsRequest)(nil),                       // 24: ai_studio_management.ListGroupsRequest
+	(*ListGroupsResponse)(nil),                      // 25: ai_studio_management.ListGroupsResponse
+	(*GetResourceInstanceGroupsRequest)(nil),        // 26: ai_studio_management.GetResourceInstanceGroupsRequest
+	(*GetResourceInstanceGroupsResponse)(nil),       // 27: ai_studio_management.GetResourceInstanceGroupsResponse
+	(*SetResourceInstanceGroupsRequest)(nil),        // 28: ai_studio_management.SetResourceInstanceGroupsRequest
+	(*SetResourceInstanceGroupsResponse)(nil),       // 29: ai_studio_management.SetResourceInstanceGroupsResponse
+	(*ListAccessibleResourceInstancesRequest)(nil),  // 30: ai_studio_management.ListAccessibleResourceInstancesRequest
+	(*ListAccessibleResourceInstancesResponse)(nil), // 31: ai_studio_management.ListAccessibleResourceInstancesResponse
+	(*CreateNotificationRequest)(nil),               // 32: ai_studio_management.CreateNotificationRequest
+	(*CreateNotificationResponse)(nil),              // 33: ai_studio_management.CreateNotificationResponse
+	(*ResourceTypeSpec)(nil),                        // 34: ai_studio_management.ResourceTypeSpec
+	(*RegisterResourceTypesRequest)(nil),            // 35: ai_studio_management.RegisterResourceTypesRequest
+	(*RegisterResourceTypesResponse)(nil),           // 36: ai_studio_management.RegisterResourceTypesResponse
+	(*PermissionResourceSpec)(nil),                  // 37: ai_studio_management.PermissionResourceSpec
+	(*RegisterPermissionResourcesRequest)(nil),      // 38: ai_studio_management.RegisterPermissionResourcesRequest
+	(*RegisterPermissionResourcesResponse)(nil),     // 39: ai_studio_management.RegisterPermissionResourcesResponse
+	(*PluginContext)(nil),                           // 40: ai_studio_management.PluginContext
+	(*ListPluginsRequest)(nil),                      // 41: ai_studio_management.ListPluginsRequest
+	(*ListPluginsResponse)(nil),                     // 42: ai_studio_management.ListPluginsResponse
+	(*GetPluginRequest)(nil),                        // 43: ai_studio_management.GetPluginRequest
+	(*GetPluginResponse)(nil),                       // 44: ai_studio_management.GetPluginResponse
+	(*UpdatePluginConfigRequest)(nil),               // 45: ai_studio_management.UpdatePluginConfigRequest
+	(*UpdatePluginConfigResponse)(nil),              // 46: ai_studio_management.UpdatePluginConfigResponse
+	(*PluginInfo)(nil),                              // 47: ai_studio_management.PluginInfo
+	(*ListLLMsRequest)(nil),                         // 48: ai_studio_management.ListLLMsRequest
+	(*ListLLMsResponse)(nil),                        // 49: ai_studio_management.ListLLMsResponse
+	(*GetLLMRequest)(nil),                           // 50: ai_studio_management.GetLLMRequest
+	(*GetLLMResponse)(nil),                          // 51: ai_studio_management.GetLLMResponse
+	(*GetLLMPluginsRequest)(nil),                    // 52: ai_studio_management.GetLLMPluginsRequest
+	(*GetLLMPluginsResponse)(nil),                   // 53: ai_studio_management.GetLLMPluginsResponse
+	(*LLMInfo)(nil),                                 // 54: ai_studio_management.LLMInfo
+	(*CreateLLMRequest)(nil),                        // 55: ai_studio_management.CreateLLMRequest
+	(*CreateLLMResponse)(nil),                       // 56: ai_studio_management.CreateLLMResponse
+	(*UpdateLLMRequest)(nil),                        // 57: ai_studio_management.UpdateLLMRequest
+	(*UpdateLLMResponse)(nil),                       // 58: ai_studio_management.UpdateLLMResponse
+	(*DeleteLLMRequest)(nil),                        // 59: ai_studio_management.DeleteLLMRequest
+	(*DeleteLLMResponse)(nil),                       // 60: ai_studio_management.DeleteLLMResponse
+	(*UpdateLLMPluginsRequest)(nil),                 // 61: ai_studio_management.UpdateLLMPluginsRequest
+	(*UpdateLLMPluginsResponse)(nil),                // 62: ai_studio_management.UpdateLLMPluginsResponse
+	(*GetAnalyticsSummaryRequest)(nil),              // 63: ai_studio_management.GetAnalyticsSummaryRequest
+	(*GetAnalyticsSummaryResponse)(nil),             // 64: ai_studio_management.GetAnalyticsSummaryResponse
+	(*GetUsageStatisticsRequest)(nil),               // 65: ai_studio_management.GetUsageStatisticsRequest
+	(*GetUsageStatisticsResponse)(nil),              // 66: ai_studio_management.GetUsageStatisticsResponse
+	(*GetCostAnalysisRequest)(nil),                  // 67: ai_studio_management.GetCostAnalysisRequest
+	(*GetCostAnalysisResponse)(nil),                 // 68: ai_studio_management.GetCostAnalysisResponse
+	(*TopEndpoint)(nil),                             // 69: ai_studio_management.TopEndpoint
+	(*ModelUsage)(nil),                              // 70: ai_studio_management.ModelUsage
+	(*UsageStatistic)(nil),                          // 71: ai_studio_management.UsageStatistic
+	(*CostBreakdown)(nil),                           // 72: ai_studio_management.CostBreakdown
+	(*ListAppsRequest)(nil),                         // 73: ai_studio_management.ListAppsRequest
+	(*ListAppsResponse)(nil),                        // 74: ai_studio_management.ListAppsResponse
+	(*GetAppRequest)(nil),                           // 75: ai_studio_management.GetAppRequest
+	(*GetAppResponse)(nil),                          // 76: ai_studio_management.GetAppResponse
+	(*AppInfo)(nil),                                 // 77: ai_studio_management.AppInfo
+	(*AppPluginResourceRef)(nil),                    // 78: ai_studio_management.AppPluginResourceRef
+	(*CreateAppRequest)(nil),                        // 79: ai_studio_management.CreateAppRequest
+	(*CreateAppResponse)(nil),                       // 80: ai_studio_management.CreateAppResponse
+	(*UpdateAppRequest)(nil),                        // 81: ai_studio_management.UpdateAppRequest
+	(*UpdateAppResponse)(nil),                       // 82: ai_studio_management.UpdateAppResponse
+	(*DeleteAppRequest)(nil),                        // 83: ai_studio_management.DeleteAppRequest
+	(*DeleteAppResponse)(nil),                       // 84: ai_studio_management.DeleteAppResponse
+	(*PatchAppMetadataRequest)(nil),                 // 85: ai_studio_management.PatchAppMetadataRequest
+	(*PatchAppMetadataResponse)(nil),                // 86: ai_studio_management.PatchAppMetadataResponse
+	(*GetObjectMetadataRequest)(nil),                // 87: ai_studio_management.GetObjectMetadataRequest
+	(*GetObjectMetadataResponse)(nil),               // 88: ai_studio_management.GetObjectMetadataResponse
+	(*DeleteObjectMetadataRequest)(nil),             // 89: ai_studio_management.DeleteObjectMetadataRequest
+	(*DeleteObjectMetadataResponse)(nil),            // 90: ai_studio_management.DeleteObjectMetadataResponse
+	(*SetObjectMetadataRequest)(nil),                // 91: ai_studio_management.SetObjectMetadataRequest
+	(*SetObjectMetadataResponse)(nil),               // 92: ai_studio_management.SetObjectMetadataResponse
+	(*GetResolvedMetadataSchemaRequest)(nil),        // 93: ai_studio_management.GetResolvedMetadataSchemaRequest
+	(*GetResolvedMetadataSchemaResponse)(nil),       // 94: ai_studio_management.GetResolvedMetadataSchemaResponse
+	(*ValidateObjectMetadataRequest)(nil),           // 95: ai_studio_management.ValidateObjectMetadataRequest
+	(*ValidateObjectMetadataResponse)(nil),          // 96: ai_studio_management.ValidateObjectMetadataResponse
+	(*ListToolsRequest)(nil),                        // 97: ai_studio_management.ListToolsRequest
+	(*ListToolsResponse)(nil),                       // 98: ai_studio_management.ListToolsResponse
+	(*GetToolRequest)(nil),                          // 99: ai_studio_management.GetToolRequest
+	(*GetToolResponse)(nil),                         // 100: ai_studio_management.GetToolResponse
+	(*GetToolOperationsRequest)(nil),                // 101: ai_studio_management.GetToolOperationsRequest
+	(*GetToolOperationsResponse)(nil),               // 102: ai_studio_management.GetToolOperationsResponse
+	(*CallToolOperationRequest)(nil),                // 103: ai_studio_management.CallToolOperationRequest
+	(*CallToolOperationResponse)(nil),               // 104: ai_studio_management.CallToolOperationResponse
+	(*ToolInfo)(nil),                                // 105: ai_studio_management.ToolInfo
+	(*ToolOperation)(nil),                           // 106: ai_studio_management.ToolOperation
+	(*ToolParameter)(nil),                           // 107: ai_studio_management.ToolParameter
+	(*ToolRequestBody)(nil),                         // 108: ai_studio_management.ToolRequestBody
+	(*CreateToolRequest)(nil),                       // 109: ai_studio_management.CreateToolRequest
+	(*CreateToolResponse)(nil),                      // 110: ai_studio_management.CreateToolResponse
+	(*UpdateToolRequest)(nil),                       // 111: ai_studio_management.UpdateToolRequest
+	(*UpdateToolResponse)(nil),                      // 112: ai_studio_management.UpdateToolResponse
+	(*DeleteToolRequest)(nil),                       // 113: ai_studio_management.DeleteToolRequest
+	(*DeleteToolResponse)(nil),                      // 114: ai_studio_management.DeleteToolResponse
+	(*ListDatasourcesRequest)(nil),                  // 115: ai_studio_management.ListDatasourcesRequest
+	(*ListDatasourcesResponse)(nil),                 // 116: ai_studio_management.ListDatasourcesResponse
+	(*GetDatasourceRequest)(nil),                    // 117: ai_studio_management.GetDatasourceRequest
+	(*GetDatasourceResponse)(nil),                   // 118: ai_studio_management.GetDatasourceResponse
+	(*CreateDatasourceRequest)(nil),                 // 119: ai_studio_management.CreateDatasourceRequest
+	(*CreateDatasourceResponse)(nil),                // 120: ai_studio_management.CreateDatasourceResponse
+	(*UpdateDatasourceRequest)(nil),                 // 121: ai_studio_management.UpdateDatasourceRequest
+	(*UpdateDatasourceResponse)(nil),                // 122: ai_studio_management.UpdateDatasourceResponse
+	(*DeleteDatasourceRequest)(nil),                 // 123: ai_studio_management.DeleteDatasourceRequest
+	(*DeleteDatasourceResponse)(nil),                // 124: ai_studio_management.DeleteDatasourceResponse
+	(*CloneDatasourceRequest)(nil),                  // 125: ai_studio_management.CloneDatasourceRequest
+	(*CloneDatasourceResponse)(nil),                 // 126: ai_studio_management.CloneDatasourceResponse
+	(*SearchDatasourcesRequest)(nil),                // 127: ai_studio_management.SearchDatasourcesRequest
+	(*SearchDatasourcesResponse)(nil),               // 128: ai_studio_management.SearchDatasourcesResponse
+	(*ProcessEmbeddingsRequest)(nil),                // 129: ai_studio_management.ProcessEmbeddingsRequest
+	(*ProcessEmbeddingsResponse)(nil),               // 130: ai_studio_management.ProcessEmbeddingsResponse
+	(*GenerateEmbeddingRequest)(nil),                // 131: ai_studio_management.GenerateEmbeddingRequest
+	(*GenerateEmbeddingResponse)(nil),               // 132: ai_studio_management.GenerateEmbeddingResponse
+	(*EmbeddingVector)(nil),                         // 133: ai_studio_management.EmbeddingVector
+	(*StoreDocumentsRequest)(nil),                   // 134: ai_studio_management.StoreDocumentsRequest
+	(*DocumentWithEmbedding)(nil),                   // 135: ai_studio_management.DocumentWithEmbedding
+	(*StoreDocumentsResponse)(nil),                  // 136: ai_studio_management.StoreDocumentsResponse
+	(*ProcessAndStoreRequest)(nil),                  // 137: ai_studio_management.ProcessAndStoreRequest
+	(*DocumentChunk)(nil),                           // 138: ai_studio_management.DocumentChunk
+	(*ProcessAndStoreResponse)(nil),                 // 139: ai_studio_management.ProcessAndStoreResponse
+	(*DeleteDocumentsByMetadataRequest)(nil),        // 140: ai_studio_management.DeleteDocumentsByMetadataRequest
+	(*DeleteDocumentsByMetadataResponse)(nil),       // 141: ai_studio_management.DeleteDocumentsByMetadataResponse
+	(*QueryByMetadataOnlyRequest)(nil),              // 142: ai_studio_management.QueryByMetadataOnlyRequest
+	(*QueryByMetadataOnlyResponse)(nil),             // 143: ai_studio_management.QueryByMetadataOnlyResponse
+	(*ListNamespacesRequest)(nil),                   // 144: ai_studio_management.ListNamespacesRequest
+	(*ListNamespacesResponse)(nil),                  // 145: ai_studio_management.ListNamespacesResponse
+	(*NamespaceInfo)(nil),                           // 146: ai_studio_management.NamespaceInfo
+	(*DeleteNamespaceRequest)(nil),                  // 147: ai_studio_management.DeleteNamespaceRequest
+	(*DeleteNamespaceResponse)(nil),                 // 148: ai_studio_management.DeleteNamespaceResponse
+	(*QueryByVectorRequest)(nil),                    // 149: ai_studio_management.QueryByVectorRequest
+	(*DatasourceInfo)(nil),                          // 150: ai_studio_management.DatasourceInfo
+	(*ListDataCataloguesRequest)(nil),               // 151: ai_studio_management.ListDataCataloguesRequest
+	(*ListDataCataloguesResponse)(nil),              // 152: ai_studio_management.ListDataCataloguesResponse
+	(*GetDataCatalogueRequest)(nil),                 // 153: ai_studio_management.GetDataCatalogueRequest
+	(*GetDataCatalogueResponse)(nil),                // 154: ai_studio_management.GetDataCatalogueResponse
+	(*CreateDataCatalogueRequest)(nil),              // 155: ai_studio_management.CreateDataCatalogueRequest
+	(*CreateDataCatalogueResponse)(nil),             // 156: ai_studio_management.CreateDataCatalogueResponse
+	(*UpdateDataCatalogueRequest)(nil),              // 157: ai_studio_management.UpdateDataCatalogueRequest
+	(*UpdateDataCatalogueResponse)(nil),             // 158: ai_studio_management.UpdateDataCatalogueResponse
+	(*DeleteDataCatalogueRequest)(nil),              // 159: ai_studio_management.DeleteDataCatalogueRequest
+	(*DeleteDataCatalogueResponse)(nil),             // 160: ai_studio_management.DeleteDataCatalogueResponse
+	(*DataCatalogueInfo)(nil),                       // 161: ai_studio_management.DataCatalogueInfo
+	(*ListTagsRequest)(nil),                         // 162: ai_studio_management.ListTagsRequest
+	(*ListTagsResponse)(nil),                        // 163: ai_studio_management.ListTagsResponse
+	(*GetTagRequest)(nil),                           // 164: ai_studio_management.GetTagRequest
+	(*GetTagResponse)(nil),                          // 165: ai_studio_management.GetTagResponse
+	(*CreateTagRequest)(nil),                        // 166: ai_studio_management.CreateTagRequest
+	(*CreateTagResponse)(nil),                       // 167: ai_studio_management.CreateTagResponse
+	(*UpdateTagRequest)(nil),                        // 168: ai_studio_management.UpdateTagRequest
+	(*UpdateTagResponse)(nil),                       // 169: ai_studio_management.UpdateTagResponse
+	(*DeleteTagRequest)(nil),                        // 170: ai_studio_management.DeleteTagRequest
+	(*DeleteTagResponse)(nil),                       // 171: ai_studio_management.DeleteTagResponse
+	(*SearchTagsRequest)(nil),                       // 172: ai_studio_management.SearchTagsRequest
+	(*SearchTagsResponse)(nil),                      // 173: ai_studio_management.SearchTagsResponse
+	(*TagInfo)(nil),                                 // 174: ai_studio_management.TagInfo
+	(*GetChatRecordsPerDayRequest)(nil),             // 175: ai_studio_management.GetChatRecordsPerDayRequest
+	(*GetChatRecordsPerDayResponse)(nil),            // 176: ai_studio_management.GetChatRecordsPerDayResponse
+	(*GetModelUsageRequest)(nil),                    // 177: ai_studio_management.GetModelUsageRequest
+	(*GetModelUsageResponse)(nil),                   // 178: ai_studio_management.GetModelUsageResponse
+	(*GetVendorUsageRequest)(nil),                   // 179: ai_studio_management.GetVendorUsageRequest
+	(*GetVendorUsageResponse)(nil),                  // 180: ai_studio_management.GetVendorUsageResponse
+	(*GetTokenUsagePerAppRequest)(nil),              // 181: ai_studio_management.GetTokenUsagePerAppRequest
+	(*GetTokenUsagePerAppResponse)(nil),             // 182: ai_studio_management.GetTokenUsagePerAppResponse
+	(*GetToolUsageStatisticsRequest)(nil),           // 183: ai_studio_management.GetToolUsageStatisticsRequest
+	(*GetToolUsageStatisticsResponse)(nil),          // 184: ai_studio_management.GetToolUsageStatisticsResponse
+	(*DayRecord)(nil),                               // 185: ai_studio_management.DayRecord
+	(*ModelUsageRecord)(nil),                        // 186: ai_studio_management.ModelUsageRecord
+	(*VendorUsageRecord)(nil),                       // 187: ai_studio_management.VendorUsageRecord
+	(*AppTokenUsage)(nil),                           // 188: ai_studio_management.AppTokenUsage
+	(*ToolUsageRecord)(nil),                         // 189: ai_studio_management.ToolUsageRecord
+	(*ListModelPricesRequest)(nil),                  // 190: ai_studio_management.ListModelPricesRequest
+	(*ListModelPricesResponse)(nil),                 // 191: ai_studio_management.ListModelPricesResponse
+	(*GetModelPriceRequest)(nil),                    // 192: ai_studio_management.GetModelPriceRequest
+	(*GetModelPriceResponse)(nil),                   // 193: ai_studio_management.GetModelPriceResponse
+	(*CreateModelPriceRequest)(nil),                 // 194: ai_studio_management.CreateModelPriceRequest
+	(*CreateModelPriceResponse)(nil),                // 195: ai_studio_management.CreateModelPriceResponse
+	(*UpdateModelPriceRequest)(nil),                 // 196: ai_studio_management.UpdateModelPriceRequest
+	(*UpdateModelPriceResponse)(nil),                // 197: ai_studio_management.UpdateModelPriceResponse
+	(*DeleteModelPriceRequest)(nil),                 // 198: ai_studio_management.DeleteModelPriceRequest
+	(*DeleteModelPriceResponse)(nil),                // 199: ai_studio_management.DeleteModelPriceResponse
+	(*GetModelPricesByVendorRequest)(nil),           // 200: ai_studio_management.GetModelPricesByVendorRequest
+	(*GetModelPricesByVendorResponse)(nil),          // 201: ai_studio_management.GetModelPricesByVendorResponse
+	(*ModelPriceInfo)(nil),                          // 202: ai_studio_management.ModelPriceInfo
+	(*ListFiltersRequest)(nil),                      // 203: ai_studio_management.ListFiltersRequest
+	(*ListFiltersResponse)(nil),                     // 204: ai_studio_management.ListFiltersResponse
+	(*GetFilterRequest)(nil),                        // 205: ai_studio_management.GetFilterRequest
+	(*GetFilterResponse)(nil),                       // 206: ai_studio_management.GetFilterResponse
+	(*CreateFilterRequest)(nil),                     // 207: ai_studio_management.CreateFilterRequest
+	(*CreateFilterResponse)(nil),                    // 208: ai_studio_management.CreateFilterResponse
+	(*UpdateFilterRequest)(nil),                     // 209: ai_studio_management.UpdateFilterRequest
+	(*UpdateFilterResponse)(nil),                    // 210: ai_studio_management.UpdateFilterResponse
+	(*DeleteFilterRequest)(nil),                     // 211: ai_studio_management.DeleteFilterRequest
+	(*DeleteFilterResponse)(nil),                    // 212: ai_studio_management.DeleteFilterResponse
+	(*FilterInfo)(nil),                              // 213: ai_studio_management.FilterInfo
+	(*GetAvailableLLMDriversRequest)(nil),           // 214: ai_studio_management.GetAvailableLLMDriversRequest
+	(*GetAvailableLLMDriversResponse)(nil),          // 215: ai_studio_management.GetAvailableLLMDriversResponse
+	(*GetAvailableEmbeddersRequest)(nil),            // 216: ai_studio_management.GetAvailableEmbeddersRequest
+	(*GetAvailableEmbeddersResponse)(nil),           // 217: ai_studio_management.GetAvailableEmbeddersResponse
+	(*GetAvailableVectorStoresRequest)(nil),         // 218: ai_studio_management.GetAvailableVectorStoresRequest
+	(*GetAvailableVectorStoresResponse)(nil),        // 219: ai_studio_management.GetAvailableVectorStoresResponse
+	(*VendorDriverInfo)(nil),                        // 220: ai_studio_management.VendorDriverInfo
+	(*WritePluginKVRequest)(nil),                    // 221: ai_studio_management.WritePluginKVRequest
+	(*WritePluginKVResponse)(nil),                   // 222: ai_studio_management.WritePluginKVResponse
+	(*ReadPluginKVRequest)(nil),                     // 223: ai_studio_management.ReadPluginKVRequest
+	(*ReadPluginKVResponse)(nil),                    // 224: ai_studio_management.ReadPluginKVResponse
+	(*DeletePluginKVRequest)(nil),                   // 225: ai_studio_management.DeletePluginKVRequest
+	(*DeletePluginKVResponse)(nil),                  // 226: ai_studio_management.DeletePluginKVResponse
+	(*ExecuteToolRequest)(nil),                      // 227: ai_studio_management.ExecuteToolRequest
+	(*ExecuteToolResponse)(nil),                     // 228: ai_studio_management.ExecuteToolResponse
+	(*QueryDatasourceRequest)(nil),                  // 229: ai_studio_management.QueryDatasourceRequest
+	(*QueryDatasourceResponse)(nil),                 // 230: ai_studio_management.QueryDatasourceResponse
+	(*DatasourceResult)(nil),                        // 231: ai_studio_management.DatasourceResult
+	(*CallLLMRequest)(nil),                          // 232: ai_studio_management.CallLLMRequest
+	(*CallLLMResponse)(nil),                         // 233: ai_studio_management.CallLLMResponse
+	(*LLMMessage)(nil),                              // 234: ai_studio_management.LLMMessage
+	(*LLMTool)(nil),                                 // 235: ai_studio_management.LLMTool
+	(*LLMFunction)(nil),                             // 236: ai_studio_management.LLMFunction
+	(*LLMToolCall)(nil),                             // 237: ai_studio_management.LLMToolCall
+	(*LLMFunctionCall)(nil),                         // 238: ai_studio_management.LLMFunctionCall
+	(*LLMUsage)(nil),                                // 239: ai_studio_management.LLMUsage
+	(*CreateScheduleRequest)(nil),                   // 240: ai_studio_management.CreateScheduleRequest
+	(*CreateScheduleResponse)(nil),                  // 241: ai_studio_management.CreateScheduleResponse
+	(*GetScheduleRequest)(nil),                      // 242: ai_studio_management.GetScheduleRequest
+	(*GetScheduleResponse)(nil),                     // 243: ai_studio_management.GetScheduleResponse
+	(*ListSchedulesRequest)(nil),                    // 244: ai_studio_management.ListSchedulesRequest
+	(*ListSchedulesResponse)(nil),                   // 245: ai_studio_management.ListSchedulesResponse
+	(*UpdateScheduleRequest)(nil),                   // 246: ai_studio_management.UpdateScheduleRequest
+	(*UpdateScheduleResponse)(nil),                  // 247: ai_studio_management.UpdateScheduleResponse
+	(*DeleteScheduleRequest)(nil),                   // 248: ai_studio_management.DeleteScheduleRequest
+	(*DeleteScheduleResponse)(nil),                  // 249: ai_studio_management.DeleteScheduleResponse
+	(*ScheduleInfo)(nil),                            // 250: ai_studio_management.ScheduleInfo
+	(*GetLicenseInfoRequest)(nil),                   // 251: ai_studio_management.GetLicenseInfoRequest
+	(*GetLicenseInfoResponse)(nil),                  // 252: ai_studio_management.GetLicenseInfoResponse
+	nil,                                             // 253: ai_studio_management.SetAppGovernanceStateRequest.FlagsEntry
+	nil,                                             // 254: ai_studio_management.CreateNotificationRequest.LinksEntry
+	nil,                                             // 255: ai_studio_management.LLMInfo.MetadataEntry
+	nil,                                             // 256: ai_studio_management.ToolInfo.MetadataEntry
+	nil,                                             // 257: ai_studio_management.DocumentWithEmbedding.MetadataEntry
+	nil,                                             // 258: ai_studio_management.DocumentChunk.MetadataEntry
+	nil,                                             // 259: ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
+	nil,                                             // 260: ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
+	nil,                                             // 261: ai_studio_management.DatasourceInfo.MetadataEntry
+	nil,                                             // 262: ai_studio_management.DatasourceResult.MetadataEntry
+	(*timestamppb.Timestamp)(nil),                   // 263: google.protobuf.Timestamp
 }
 var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32{
-	8,   // 0: ai_studio_management.CreateNotificationRequest.context:type_name -> ai_studio_management.PluginContext
-	220, // 1: ai_studio_management.CreateNotificationRequest.links:type_name -> ai_studio_management.CreateNotificationRequest.LinksEntry
-	8,   // 2: ai_studio_management.RegisterResourceTypesRequest.context:type_name -> ai_studio_management.PluginContext
-	2,   // 3: ai_studio_management.RegisterResourceTypesRequest.types:type_name -> ai_studio_management.ResourceTypeSpec
-	8,   // 4: ai_studio_management.RegisterPermissionResourcesRequest.context:type_name -> ai_studio_management.PluginContext
-	5,   // 5: ai_studio_management.RegisterPermissionResourcesRequest.resources:type_name -> ai_studio_management.PermissionResourceSpec
-	8,   // 6: ai_studio_management.ListPluginsRequest.context:type_name -> ai_studio_management.PluginContext
-	15,  // 7: ai_studio_management.ListPluginsResponse.plugins:type_name -> ai_studio_management.PluginInfo
-	8,   // 8: ai_studio_management.GetPluginRequest.context:type_name -> ai_studio_management.PluginContext
-	15,  // 9: ai_studio_management.GetPluginResponse.plugin:type_name -> ai_studio_management.PluginInfo
-	8,   // 10: ai_studio_management.UpdatePluginConfigRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 11: ai_studio_management.PluginInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 12: ai_studio_management.PluginInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 13: ai_studio_management.ListLLMsRequest.context:type_name -> ai_studio_management.PluginContext
-	22,  // 14: ai_studio_management.ListLLMsResponse.llms:type_name -> ai_studio_management.LLMInfo
-	8,   // 15: ai_studio_management.GetLLMRequest.context:type_name -> ai_studio_management.PluginContext
-	22,  // 16: ai_studio_management.GetLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
-	8,   // 17: ai_studio_management.GetLLMPluginsRequest.context:type_name -> ai_studio_management.PluginContext
-	15,  // 18: ai_studio_management.GetLLMPluginsResponse.plugins:type_name -> ai_studio_management.PluginInfo
-	229, // 19: ai_studio_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 20: ai_studio_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
-	221, // 21: ai_studio_management.LLMInfo.metadata:type_name -> ai_studio_management.LLMInfo.MetadataEntry
-	8,   // 22: ai_studio_management.CreateLLMRequest.context:type_name -> ai_studio_management.PluginContext
-	22,  // 23: ai_studio_management.CreateLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
-	8,   // 24: ai_studio_management.UpdateLLMRequest.context:type_name -> ai_studio_management.PluginContext
-	22,  // 25: ai_studio_management.UpdateLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
-	8,   // 26: ai_studio_management.DeleteLLMRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 27: ai_studio_management.UpdateLLMPluginsRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 28: ai_studio_management.GetAnalyticsSummaryRequest.context:type_name -> ai_studio_management.PluginContext
-	37,  // 29: ai_studio_management.GetAnalyticsSummaryResponse.top_endpoints:type_name -> ai_studio_management.TopEndpoint
-	38,  // 30: ai_studio_management.GetAnalyticsSummaryResponse.model_usage:type_name -> ai_studio_management.ModelUsage
-	8,   // 31: ai_studio_management.GetUsageStatisticsRequest.context:type_name -> ai_studio_management.PluginContext
-	39,  // 32: ai_studio_management.GetUsageStatisticsResponse.statistics:type_name -> ai_studio_management.UsageStatistic
-	8,   // 33: ai_studio_management.GetCostAnalysisRequest.context:type_name -> ai_studio_management.PluginContext
-	40,  // 34: ai_studio_management.GetCostAnalysisResponse.breakdown:type_name -> ai_studio_management.CostBreakdown
-	229, // 35: ai_studio_management.UsageStatistic.timestamp:type_name -> google.protobuf.Timestamp
-	8,   // 36: ai_studio_management.ListAppsRequest.context:type_name -> ai_studio_management.PluginContext
-	45,  // 37: ai_studio_management.ListAppsResponse.apps:type_name -> ai_studio_management.AppInfo
-	8,   // 38: ai_studio_management.GetAppRequest.context:type_name -> ai_studio_management.PluginContext
-	45,  // 39: ai_studio_management.GetAppResponse.app:type_name -> ai_studio_management.AppInfo
-	229, // 40: ai_studio_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 41: ai_studio_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 42: ai_studio_management.CreateAppRequest.context:type_name -> ai_studio_management.PluginContext
-	45,  // 43: ai_studio_management.CreateAppResponse.app:type_name -> ai_studio_management.AppInfo
-	8,   // 44: ai_studio_management.UpdateAppRequest.context:type_name -> ai_studio_management.PluginContext
-	45,  // 45: ai_studio_management.UpdateAppResponse.app:type_name -> ai_studio_management.AppInfo
-	8,   // 46: ai_studio_management.DeleteAppRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 47: ai_studio_management.PatchAppMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 48: ai_studio_management.GetObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 49: ai_studio_management.GetObjectMetadataResponse.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 50: ai_studio_management.DeleteObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 51: ai_studio_management.SetObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 52: ai_studio_management.GetResolvedMetadataSchemaRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 53: ai_studio_management.ValidateObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 54: ai_studio_management.ListToolsRequest.context:type_name -> ai_studio_management.PluginContext
-	72,  // 55: ai_studio_management.ListToolsResponse.tools:type_name -> ai_studio_management.ToolInfo
-	8,   // 56: ai_studio_management.GetToolRequest.context:type_name -> ai_studio_management.PluginContext
-	72,  // 57: ai_studio_management.GetToolResponse.tool:type_name -> ai_studio_management.ToolInfo
-	8,   // 58: ai_studio_management.GetToolOperationsRequest.context:type_name -> ai_studio_management.PluginContext
-	73,  // 59: ai_studio_management.GetToolOperationsResponse.operations:type_name -> ai_studio_management.ToolOperation
-	8,   // 60: ai_studio_management.CallToolOperationRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 61: ai_studio_management.ToolInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 62: ai_studio_management.ToolInfo.updated_at:type_name -> google.protobuf.Timestamp
-	222, // 63: ai_studio_management.ToolInfo.metadata:type_name -> ai_studio_management.ToolInfo.MetadataEntry
-	74,  // 64: ai_studio_management.ToolOperation.parameters:type_name -> ai_studio_management.ToolParameter
-	75,  // 65: ai_studio_management.ToolOperation.request_body:type_name -> ai_studio_management.ToolRequestBody
-	8,   // 66: ai_studio_management.CreateToolRequest.context:type_name -> ai_studio_management.PluginContext
-	72,  // 67: ai_studio_management.CreateToolResponse.tool:type_name -> ai_studio_management.ToolInfo
-	8,   // 68: ai_studio_management.UpdateToolRequest.context:type_name -> ai_studio_management.PluginContext
-	72,  // 69: ai_studio_management.UpdateToolResponse.tool:type_name -> ai_studio_management.ToolInfo
-	8,   // 70: ai_studio_management.DeleteToolRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 71: ai_studio_management.ListDatasourcesRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 72: ai_studio_management.ListDatasourcesResponse.datasources:type_name -> ai_studio_management.DatasourceInfo
-	8,   // 73: ai_studio_management.GetDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 74: ai_studio_management.GetDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
-	8,   // 75: ai_studio_management.CreateDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 76: ai_studio_management.CreateDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
-	8,   // 77: ai_studio_management.UpdateDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 78: ai_studio_management.UpdateDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
-	8,   // 79: ai_studio_management.DeleteDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 80: ai_studio_management.CloneDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 81: ai_studio_management.CloneDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
-	8,   // 82: ai_studio_management.SearchDatasourcesRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 83: ai_studio_management.SearchDatasourcesResponse.datasources:type_name -> ai_studio_management.DatasourceInfo
-	8,   // 84: ai_studio_management.ProcessEmbeddingsRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 85: ai_studio_management.GenerateEmbeddingRequest.context:type_name -> ai_studio_management.PluginContext
-	100, // 86: ai_studio_management.GenerateEmbeddingResponse.vectors:type_name -> ai_studio_management.EmbeddingVector
-	8,   // 87: ai_studio_management.StoreDocumentsRequest.context:type_name -> ai_studio_management.PluginContext
-	102, // 88: ai_studio_management.StoreDocumentsRequest.documents:type_name -> ai_studio_management.DocumentWithEmbedding
-	223, // 89: ai_studio_management.DocumentWithEmbedding.metadata:type_name -> ai_studio_management.DocumentWithEmbedding.MetadataEntry
-	8,   // 90: ai_studio_management.ProcessAndStoreRequest.context:type_name -> ai_studio_management.PluginContext
-	105, // 91: ai_studio_management.ProcessAndStoreRequest.chunks:type_name -> ai_studio_management.DocumentChunk
-	224, // 92: ai_studio_management.DocumentChunk.metadata:type_name -> ai_studio_management.DocumentChunk.MetadataEntry
-	8,   // 93: ai_studio_management.DeleteDocumentsByMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	225, // 94: ai_studio_management.DeleteDocumentsByMetadataRequest.metadata_filter:type_name -> ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
-	8,   // 95: ai_studio_management.QueryByMetadataOnlyRequest.context:type_name -> ai_studio_management.PluginContext
-	226, // 96: ai_studio_management.QueryByMetadataOnlyRequest.metadata_filter:type_name -> ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
-	198, // 97: ai_studio_management.QueryByMetadataOnlyResponse.results:type_name -> ai_studio_management.DatasourceResult
-	8,   // 98: ai_studio_management.ListNamespacesRequest.context:type_name -> ai_studio_management.PluginContext
-	113, // 99: ai_studio_management.ListNamespacesResponse.namespaces:type_name -> ai_studio_management.NamespaceInfo
-	8,   // 100: ai_studio_management.DeleteNamespaceRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 101: ai_studio_management.QueryByVectorRequest.context:type_name -> ai_studio_management.PluginContext
-	141, // 102: ai_studio_management.DatasourceInfo.tags:type_name -> ai_studio_management.TagInfo
-	229, // 103: ai_studio_management.DatasourceInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 104: ai_studio_management.DatasourceInfo.updated_at:type_name -> google.protobuf.Timestamp
-	227, // 105: ai_studio_management.DatasourceInfo.metadata:type_name -> ai_studio_management.DatasourceInfo.MetadataEntry
-	8,   // 106: ai_studio_management.ListDataCataloguesRequest.context:type_name -> ai_studio_management.PluginContext
-	128, // 107: ai_studio_management.ListDataCataloguesResponse.data_catalogues:type_name -> ai_studio_management.DataCatalogueInfo
-	8,   // 108: ai_studio_management.GetDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
-	128, // 109: ai_studio_management.GetDataCatalogueResponse.data_catalogue:type_name -> ai_studio_management.DataCatalogueInfo
-	8,   // 110: ai_studio_management.CreateDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
-	128, // 111: ai_studio_management.CreateDataCatalogueResponse.data_catalogue:type_name -> ai_studio_management.DataCatalogueInfo
-	8,   // 112: ai_studio_management.UpdateDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
-	128, // 113: ai_studio_management.UpdateDataCatalogueResponse.data_catalogue:type_name -> ai_studio_management.DataCatalogueInfo
-	8,   // 114: ai_studio_management.DeleteDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
-	117, // 115: ai_studio_management.DataCatalogueInfo.datasources:type_name -> ai_studio_management.DatasourceInfo
-	141, // 116: ai_studio_management.DataCatalogueInfo.tags:type_name -> ai_studio_management.TagInfo
-	229, // 117: ai_studio_management.DataCatalogueInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 118: ai_studio_management.DataCatalogueInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 119: ai_studio_management.ListTagsRequest.context:type_name -> ai_studio_management.PluginContext
-	141, // 120: ai_studio_management.ListTagsResponse.tags:type_name -> ai_studio_management.TagInfo
-	8,   // 121: ai_studio_management.GetTagRequest.context:type_name -> ai_studio_management.PluginContext
-	141, // 122: ai_studio_management.GetTagResponse.tag:type_name -> ai_studio_management.TagInfo
-	8,   // 123: ai_studio_management.CreateTagRequest.context:type_name -> ai_studio_management.PluginContext
-	141, // 124: ai_studio_management.CreateTagResponse.tag:type_name -> ai_studio_management.TagInfo
-	8,   // 125: ai_studio_management.UpdateTagRequest.context:type_name -> ai_studio_management.PluginContext
-	141, // 126: ai_studio_management.UpdateTagResponse.tag:type_name -> ai_studio_management.TagInfo
-	8,   // 127: ai_studio_management.DeleteTagRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 128: ai_studio_management.SearchTagsRequest.context:type_name -> ai_studio_management.PluginContext
-	141, // 129: ai_studio_management.SearchTagsResponse.tags:type_name -> ai_studio_management.TagInfo
-	229, // 130: ai_studio_management.TagInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 131: ai_studio_management.TagInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 132: ai_studio_management.GetChatRecordsPerDayRequest.context:type_name -> ai_studio_management.PluginContext
-	152, // 133: ai_studio_management.GetChatRecordsPerDayResponse.records:type_name -> ai_studio_management.DayRecord
-	8,   // 134: ai_studio_management.GetModelUsageRequest.context:type_name -> ai_studio_management.PluginContext
-	153, // 135: ai_studio_management.GetModelUsageResponse.usage:type_name -> ai_studio_management.ModelUsageRecord
-	8,   // 136: ai_studio_management.GetVendorUsageRequest.context:type_name -> ai_studio_management.PluginContext
-	154, // 137: ai_studio_management.GetVendorUsageResponse.usage:type_name -> ai_studio_management.VendorUsageRecord
-	8,   // 138: ai_studio_management.GetTokenUsagePerAppRequest.context:type_name -> ai_studio_management.PluginContext
-	155, // 139: ai_studio_management.GetTokenUsagePerAppResponse.usage:type_name -> ai_studio_management.AppTokenUsage
-	8,   // 140: ai_studio_management.GetToolUsageStatisticsRequest.context:type_name -> ai_studio_management.PluginContext
-	156, // 141: ai_studio_management.GetToolUsageStatisticsResponse.usage:type_name -> ai_studio_management.ToolUsageRecord
-	8,   // 142: ai_studio_management.ListModelPricesRequest.context:type_name -> ai_studio_management.PluginContext
-	169, // 143: ai_studio_management.ListModelPricesResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
-	8,   // 144: ai_studio_management.GetModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
-	169, // 145: ai_studio_management.GetModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
-	8,   // 146: ai_studio_management.CreateModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
-	169, // 147: ai_studio_management.CreateModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
-	8,   // 148: ai_studio_management.UpdateModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
-	169, // 149: ai_studio_management.UpdateModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
-	8,   // 150: ai_studio_management.DeleteModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 151: ai_studio_management.GetModelPricesByVendorRequest.context:type_name -> ai_studio_management.PluginContext
-	169, // 152: ai_studio_management.GetModelPricesByVendorResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
-	229, // 153: ai_studio_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 154: ai_studio_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 155: ai_studio_management.ListFiltersRequest.context:type_name -> ai_studio_management.PluginContext
-	180, // 156: ai_studio_management.ListFiltersResponse.filters:type_name -> ai_studio_management.FilterInfo
-	8,   // 157: ai_studio_management.GetFilterRequest.context:type_name -> ai_studio_management.PluginContext
-	180, // 158: ai_studio_management.GetFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
-	8,   // 159: ai_studio_management.CreateFilterRequest.context:type_name -> ai_studio_management.PluginContext
-	180, // 160: ai_studio_management.CreateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
-	8,   // 161: ai_studio_management.UpdateFilterRequest.context:type_name -> ai_studio_management.PluginContext
-	180, // 162: ai_studio_management.UpdateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
-	8,   // 163: ai_studio_management.DeleteFilterRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 164: ai_studio_management.FilterInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 165: ai_studio_management.FilterInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 166: ai_studio_management.GetAvailableLLMDriversRequest.context:type_name -> ai_studio_management.PluginContext
-	187, // 167: ai_studio_management.GetAvailableLLMDriversResponse.drivers:type_name -> ai_studio_management.VendorDriverInfo
-	8,   // 168: ai_studio_management.GetAvailableEmbeddersRequest.context:type_name -> ai_studio_management.PluginContext
-	187, // 169: ai_studio_management.GetAvailableEmbeddersResponse.embedders:type_name -> ai_studio_management.VendorDriverInfo
-	8,   // 170: ai_studio_management.GetAvailableVectorStoresRequest.context:type_name -> ai_studio_management.PluginContext
-	187, // 171: ai_studio_management.GetAvailableVectorStoresResponse.vector_stores:type_name -> ai_studio_management.VendorDriverInfo
-	8,   // 172: ai_studio_management.WritePluginKVRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 173: ai_studio_management.WritePluginKVRequest.expire_at:type_name -> google.protobuf.Timestamp
-	8,   // 174: ai_studio_management.ReadPluginKVRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 175: ai_studio_management.DeletePluginKVRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 176: ai_studio_management.ExecuteToolRequest.context:type_name -> ai_studio_management.PluginContext
-	8,   // 177: ai_studio_management.QueryDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
-	198, // 178: ai_studio_management.QueryDatasourceResponse.results:type_name -> ai_studio_management.DatasourceResult
-	228, // 179: ai_studio_management.DatasourceResult.metadata:type_name -> ai_studio_management.DatasourceResult.MetadataEntry
-	8,   // 180: ai_studio_management.CallLLMRequest.context:type_name -> ai_studio_management.PluginContext
-	201, // 181: ai_studio_management.CallLLMRequest.messages:type_name -> ai_studio_management.LLMMessage
-	202, // 182: ai_studio_management.CallLLMRequest.tools:type_name -> ai_studio_management.LLMTool
-	206, // 183: ai_studio_management.CallLLMResponse.usage:type_name -> ai_studio_management.LLMUsage
-	204, // 184: ai_studio_management.CallLLMResponse.tool_calls:type_name -> ai_studio_management.LLMToolCall
-	203, // 185: ai_studio_management.LLMTool.function:type_name -> ai_studio_management.LLMFunction
-	205, // 186: ai_studio_management.LLMToolCall.function:type_name -> ai_studio_management.LLMFunctionCall
-	8,   // 187: ai_studio_management.CreateScheduleRequest.context:type_name -> ai_studio_management.PluginContext
-	217, // 188: ai_studio_management.CreateScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
-	8,   // 189: ai_studio_management.GetScheduleRequest.context:type_name -> ai_studio_management.PluginContext
-	217, // 190: ai_studio_management.GetScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
-	8,   // 191: ai_studio_management.ListSchedulesRequest.context:type_name -> ai_studio_management.PluginContext
-	217, // 192: ai_studio_management.ListSchedulesResponse.schedules:type_name -> ai_studio_management.ScheduleInfo
-	8,   // 193: ai_studio_management.UpdateScheduleRequest.context:type_name -> ai_studio_management.PluginContext
-	217, // 194: ai_studio_management.UpdateScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
-	8,   // 195: ai_studio_management.DeleteScheduleRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 196: ai_studio_management.ScheduleInfo.last_run:type_name -> google.protobuf.Timestamp
-	229, // 197: ai_studio_management.ScheduleInfo.next_run:type_name -> google.protobuf.Timestamp
-	229, // 198: ai_studio_management.ScheduleInfo.created_at:type_name -> google.protobuf.Timestamp
-	229, // 199: ai_studio_management.ScheduleInfo.updated_at:type_name -> google.protobuf.Timestamp
-	8,   // 200: ai_studio_management.GetLicenseInfoRequest.context:type_name -> ai_studio_management.PluginContext
-	229, // 201: ai_studio_management.GetLicenseInfoResponse.expires_at:type_name -> google.protobuf.Timestamp
-	9,   // 202: ai_studio_management.AIStudioManagementService.ListPlugins:input_type -> ai_studio_management.ListPluginsRequest
-	11,  // 203: ai_studio_management.AIStudioManagementService.GetPlugin:input_type -> ai_studio_management.GetPluginRequest
-	13,  // 204: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:input_type -> ai_studio_management.UpdatePluginConfigRequest
-	16,  // 205: ai_studio_management.AIStudioManagementService.ListLLMs:input_type -> ai_studio_management.ListLLMsRequest
-	18,  // 206: ai_studio_management.AIStudioManagementService.GetLLM:input_type -> ai_studio_management.GetLLMRequest
-	20,  // 207: ai_studio_management.AIStudioManagementService.GetLLMPlugins:input_type -> ai_studio_management.GetLLMPluginsRequest
-	23,  // 208: ai_studio_management.AIStudioManagementService.CreateLLM:input_type -> ai_studio_management.CreateLLMRequest
-	25,  // 209: ai_studio_management.AIStudioManagementService.UpdateLLM:input_type -> ai_studio_management.UpdateLLMRequest
-	27,  // 210: ai_studio_management.AIStudioManagementService.DeleteLLM:input_type -> ai_studio_management.DeleteLLMRequest
-	29,  // 211: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:input_type -> ai_studio_management.UpdateLLMPluginsRequest
-	31,  // 212: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:input_type -> ai_studio_management.GetAnalyticsSummaryRequest
-	33,  // 213: ai_studio_management.AIStudioManagementService.GetUsageStatistics:input_type -> ai_studio_management.GetUsageStatisticsRequest
-	35,  // 214: ai_studio_management.AIStudioManagementService.GetCostAnalysis:input_type -> ai_studio_management.GetCostAnalysisRequest
-	142, // 215: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:input_type -> ai_studio_management.GetChatRecordsPerDayRequest
-	144, // 216: ai_studio_management.AIStudioManagementService.GetModelUsage:input_type -> ai_studio_management.GetModelUsageRequest
-	146, // 217: ai_studio_management.AIStudioManagementService.GetVendorUsage:input_type -> ai_studio_management.GetVendorUsageRequest
-	148, // 218: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:input_type -> ai_studio_management.GetTokenUsagePerAppRequest
-	150, // 219: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:input_type -> ai_studio_management.GetToolUsageStatisticsRequest
-	41,  // 220: ai_studio_management.AIStudioManagementService.ListApps:input_type -> ai_studio_management.ListAppsRequest
-	43,  // 221: ai_studio_management.AIStudioManagementService.GetApp:input_type -> ai_studio_management.GetAppRequest
-	46,  // 222: ai_studio_management.AIStudioManagementService.CreateApp:input_type -> ai_studio_management.CreateAppRequest
-	48,  // 223: ai_studio_management.AIStudioManagementService.UpdateApp:input_type -> ai_studio_management.UpdateAppRequest
-	50,  // 224: ai_studio_management.AIStudioManagementService.DeleteApp:input_type -> ai_studio_management.DeleteAppRequest
-	52,  // 225: ai_studio_management.AIStudioManagementService.PatchAppMetadata:input_type -> ai_studio_management.PatchAppMetadataRequest
-	54,  // 226: ai_studio_management.AIStudioManagementService.GetObjectMetadata:input_type -> ai_studio_management.GetObjectMetadataRequest
-	58,  // 227: ai_studio_management.AIStudioManagementService.SetObjectMetadata:input_type -> ai_studio_management.SetObjectMetadataRequest
-	60,  // 228: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:input_type -> ai_studio_management.GetResolvedMetadataSchemaRequest
-	62,  // 229: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:input_type -> ai_studio_management.ValidateObjectMetadataRequest
-	56,  // 230: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:input_type -> ai_studio_management.DeleteObjectMetadataRequest
-	64,  // 231: ai_studio_management.AIStudioManagementService.ListTools:input_type -> ai_studio_management.ListToolsRequest
-	66,  // 232: ai_studio_management.AIStudioManagementService.GetTool:input_type -> ai_studio_management.GetToolRequest
-	68,  // 233: ai_studio_management.AIStudioManagementService.GetToolOperations:input_type -> ai_studio_management.GetToolOperationsRequest
-	70,  // 234: ai_studio_management.AIStudioManagementService.CallToolOperation:input_type -> ai_studio_management.CallToolOperationRequest
-	76,  // 235: ai_studio_management.AIStudioManagementService.CreateTool:input_type -> ai_studio_management.CreateToolRequest
-	78,  // 236: ai_studio_management.AIStudioManagementService.UpdateTool:input_type -> ai_studio_management.UpdateToolRequest
-	80,  // 237: ai_studio_management.AIStudioManagementService.DeleteTool:input_type -> ai_studio_management.DeleteToolRequest
-	82,  // 238: ai_studio_management.AIStudioManagementService.ListDatasources:input_type -> ai_studio_management.ListDatasourcesRequest
-	84,  // 239: ai_studio_management.AIStudioManagementService.GetDatasource:input_type -> ai_studio_management.GetDatasourceRequest
-	86,  // 240: ai_studio_management.AIStudioManagementService.CreateDatasource:input_type -> ai_studio_management.CreateDatasourceRequest
-	88,  // 241: ai_studio_management.AIStudioManagementService.UpdateDatasource:input_type -> ai_studio_management.UpdateDatasourceRequest
-	90,  // 242: ai_studio_management.AIStudioManagementService.DeleteDatasource:input_type -> ai_studio_management.DeleteDatasourceRequest
-	92,  // 243: ai_studio_management.AIStudioManagementService.CloneDatasource:input_type -> ai_studio_management.CloneDatasourceRequest
-	94,  // 244: ai_studio_management.AIStudioManagementService.SearchDatasources:input_type -> ai_studio_management.SearchDatasourcesRequest
-	96,  // 245: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:input_type -> ai_studio_management.ProcessEmbeddingsRequest
-	98,  // 246: ai_studio_management.AIStudioManagementService.GenerateEmbedding:input_type -> ai_studio_management.GenerateEmbeddingRequest
-	101, // 247: ai_studio_management.AIStudioManagementService.StoreDocuments:input_type -> ai_studio_management.StoreDocumentsRequest
-	104, // 248: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:input_type -> ai_studio_management.ProcessAndStoreRequest
-	116, // 249: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:input_type -> ai_studio_management.QueryByVectorRequest
-	107, // 250: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:input_type -> ai_studio_management.DeleteDocumentsByMetadataRequest
-	109, // 251: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:input_type -> ai_studio_management.QueryByMetadataOnlyRequest
-	111, // 252: ai_studio_management.AIStudioManagementService.ListNamespaces:input_type -> ai_studio_management.ListNamespacesRequest
-	114, // 253: ai_studio_management.AIStudioManagementService.DeleteNamespace:input_type -> ai_studio_management.DeleteNamespaceRequest
-	118, // 254: ai_studio_management.AIStudioManagementService.ListDataCatalogues:input_type -> ai_studio_management.ListDataCataloguesRequest
-	120, // 255: ai_studio_management.AIStudioManagementService.GetDataCatalogue:input_type -> ai_studio_management.GetDataCatalogueRequest
-	122, // 256: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:input_type -> ai_studio_management.CreateDataCatalogueRequest
-	124, // 257: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:input_type -> ai_studio_management.UpdateDataCatalogueRequest
-	126, // 258: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:input_type -> ai_studio_management.DeleteDataCatalogueRequest
-	129, // 259: ai_studio_management.AIStudioManagementService.ListTags:input_type -> ai_studio_management.ListTagsRequest
-	131, // 260: ai_studio_management.AIStudioManagementService.GetTag:input_type -> ai_studio_management.GetTagRequest
-	133, // 261: ai_studio_management.AIStudioManagementService.CreateTag:input_type -> ai_studio_management.CreateTagRequest
-	135, // 262: ai_studio_management.AIStudioManagementService.UpdateTag:input_type -> ai_studio_management.UpdateTagRequest
-	137, // 263: ai_studio_management.AIStudioManagementService.DeleteTag:input_type -> ai_studio_management.DeleteTagRequest
-	139, // 264: ai_studio_management.AIStudioManagementService.SearchTags:input_type -> ai_studio_management.SearchTagsRequest
-	157, // 265: ai_studio_management.AIStudioManagementService.ListModelPrices:input_type -> ai_studio_management.ListModelPricesRequest
-	159, // 266: ai_studio_management.AIStudioManagementService.GetModelPrice:input_type -> ai_studio_management.GetModelPriceRequest
-	161, // 267: ai_studio_management.AIStudioManagementService.CreateModelPrice:input_type -> ai_studio_management.CreateModelPriceRequest
-	163, // 268: ai_studio_management.AIStudioManagementService.UpdateModelPrice:input_type -> ai_studio_management.UpdateModelPriceRequest
-	165, // 269: ai_studio_management.AIStudioManagementService.DeleteModelPrice:input_type -> ai_studio_management.DeleteModelPriceRequest
-	167, // 270: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:input_type -> ai_studio_management.GetModelPricesByVendorRequest
-	170, // 271: ai_studio_management.AIStudioManagementService.ListFilters:input_type -> ai_studio_management.ListFiltersRequest
-	172, // 272: ai_studio_management.AIStudioManagementService.GetFilter:input_type -> ai_studio_management.GetFilterRequest
-	174, // 273: ai_studio_management.AIStudioManagementService.CreateFilter:input_type -> ai_studio_management.CreateFilterRequest
-	176, // 274: ai_studio_management.AIStudioManagementService.UpdateFilter:input_type -> ai_studio_management.UpdateFilterRequest
-	178, // 275: ai_studio_management.AIStudioManagementService.DeleteFilter:input_type -> ai_studio_management.DeleteFilterRequest
-	181, // 276: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:input_type -> ai_studio_management.GetAvailableLLMDriversRequest
-	183, // 277: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:input_type -> ai_studio_management.GetAvailableEmbeddersRequest
-	185, // 278: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:input_type -> ai_studio_management.GetAvailableVectorStoresRequest
-	188, // 279: ai_studio_management.AIStudioManagementService.WritePluginKV:input_type -> ai_studio_management.WritePluginKVRequest
-	190, // 280: ai_studio_management.AIStudioManagementService.ReadPluginKV:input_type -> ai_studio_management.ReadPluginKVRequest
-	192, // 281: ai_studio_management.AIStudioManagementService.DeletePluginKV:input_type -> ai_studio_management.DeletePluginKVRequest
-	194, // 282: ai_studio_management.AIStudioManagementService.ExecuteTool:input_type -> ai_studio_management.ExecuteToolRequest
-	196, // 283: ai_studio_management.AIStudioManagementService.QueryDatasource:input_type -> ai_studio_management.QueryDatasourceRequest
-	199, // 284: ai_studio_management.AIStudioManagementService.CallLLM:input_type -> ai_studio_management.CallLLMRequest
-	207, // 285: ai_studio_management.AIStudioManagementService.CreateSchedule:input_type -> ai_studio_management.CreateScheduleRequest
-	209, // 286: ai_studio_management.AIStudioManagementService.GetSchedule:input_type -> ai_studio_management.GetScheduleRequest
-	211, // 287: ai_studio_management.AIStudioManagementService.ListSchedules:input_type -> ai_studio_management.ListSchedulesRequest
-	213, // 288: ai_studio_management.AIStudioManagementService.UpdateSchedule:input_type -> ai_studio_management.UpdateScheduleRequest
-	215, // 289: ai_studio_management.AIStudioManagementService.DeleteSchedule:input_type -> ai_studio_management.DeleteScheduleRequest
-	218, // 290: ai_studio_management.AIStudioManagementService.GetLicenseInfo:input_type -> ai_studio_management.GetLicenseInfoRequest
-	0,   // 291: ai_studio_management.AIStudioManagementService.CreateNotification:input_type -> ai_studio_management.CreateNotificationRequest
-	3,   // 292: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:input_type -> ai_studio_management.RegisterResourceTypesRequest
-	6,   // 293: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:input_type -> ai_studio_management.RegisterPermissionResourcesRequest
-	10,  // 294: ai_studio_management.AIStudioManagementService.ListPlugins:output_type -> ai_studio_management.ListPluginsResponse
-	12,  // 295: ai_studio_management.AIStudioManagementService.GetPlugin:output_type -> ai_studio_management.GetPluginResponse
-	14,  // 296: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:output_type -> ai_studio_management.UpdatePluginConfigResponse
-	17,  // 297: ai_studio_management.AIStudioManagementService.ListLLMs:output_type -> ai_studio_management.ListLLMsResponse
-	19,  // 298: ai_studio_management.AIStudioManagementService.GetLLM:output_type -> ai_studio_management.GetLLMResponse
-	21,  // 299: ai_studio_management.AIStudioManagementService.GetLLMPlugins:output_type -> ai_studio_management.GetLLMPluginsResponse
-	24,  // 300: ai_studio_management.AIStudioManagementService.CreateLLM:output_type -> ai_studio_management.CreateLLMResponse
-	26,  // 301: ai_studio_management.AIStudioManagementService.UpdateLLM:output_type -> ai_studio_management.UpdateLLMResponse
-	28,  // 302: ai_studio_management.AIStudioManagementService.DeleteLLM:output_type -> ai_studio_management.DeleteLLMResponse
-	30,  // 303: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:output_type -> ai_studio_management.UpdateLLMPluginsResponse
-	32,  // 304: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:output_type -> ai_studio_management.GetAnalyticsSummaryResponse
-	34,  // 305: ai_studio_management.AIStudioManagementService.GetUsageStatistics:output_type -> ai_studio_management.GetUsageStatisticsResponse
-	36,  // 306: ai_studio_management.AIStudioManagementService.GetCostAnalysis:output_type -> ai_studio_management.GetCostAnalysisResponse
-	143, // 307: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:output_type -> ai_studio_management.GetChatRecordsPerDayResponse
-	145, // 308: ai_studio_management.AIStudioManagementService.GetModelUsage:output_type -> ai_studio_management.GetModelUsageResponse
-	147, // 309: ai_studio_management.AIStudioManagementService.GetVendorUsage:output_type -> ai_studio_management.GetVendorUsageResponse
-	149, // 310: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:output_type -> ai_studio_management.GetTokenUsagePerAppResponse
-	151, // 311: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:output_type -> ai_studio_management.GetToolUsageStatisticsResponse
-	42,  // 312: ai_studio_management.AIStudioManagementService.ListApps:output_type -> ai_studio_management.ListAppsResponse
-	44,  // 313: ai_studio_management.AIStudioManagementService.GetApp:output_type -> ai_studio_management.GetAppResponse
-	47,  // 314: ai_studio_management.AIStudioManagementService.CreateApp:output_type -> ai_studio_management.CreateAppResponse
-	49,  // 315: ai_studio_management.AIStudioManagementService.UpdateApp:output_type -> ai_studio_management.UpdateAppResponse
-	51,  // 316: ai_studio_management.AIStudioManagementService.DeleteApp:output_type -> ai_studio_management.DeleteAppResponse
-	53,  // 317: ai_studio_management.AIStudioManagementService.PatchAppMetadata:output_type -> ai_studio_management.PatchAppMetadataResponse
-	55,  // 318: ai_studio_management.AIStudioManagementService.GetObjectMetadata:output_type -> ai_studio_management.GetObjectMetadataResponse
-	59,  // 319: ai_studio_management.AIStudioManagementService.SetObjectMetadata:output_type -> ai_studio_management.SetObjectMetadataResponse
-	61,  // 320: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:output_type -> ai_studio_management.GetResolvedMetadataSchemaResponse
-	63,  // 321: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:output_type -> ai_studio_management.ValidateObjectMetadataResponse
-	57,  // 322: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:output_type -> ai_studio_management.DeleteObjectMetadataResponse
-	65,  // 323: ai_studio_management.AIStudioManagementService.ListTools:output_type -> ai_studio_management.ListToolsResponse
-	67,  // 324: ai_studio_management.AIStudioManagementService.GetTool:output_type -> ai_studio_management.GetToolResponse
-	69,  // 325: ai_studio_management.AIStudioManagementService.GetToolOperations:output_type -> ai_studio_management.GetToolOperationsResponse
-	71,  // 326: ai_studio_management.AIStudioManagementService.CallToolOperation:output_type -> ai_studio_management.CallToolOperationResponse
-	77,  // 327: ai_studio_management.AIStudioManagementService.CreateTool:output_type -> ai_studio_management.CreateToolResponse
-	79,  // 328: ai_studio_management.AIStudioManagementService.UpdateTool:output_type -> ai_studio_management.UpdateToolResponse
-	81,  // 329: ai_studio_management.AIStudioManagementService.DeleteTool:output_type -> ai_studio_management.DeleteToolResponse
-	83,  // 330: ai_studio_management.AIStudioManagementService.ListDatasources:output_type -> ai_studio_management.ListDatasourcesResponse
-	85,  // 331: ai_studio_management.AIStudioManagementService.GetDatasource:output_type -> ai_studio_management.GetDatasourceResponse
-	87,  // 332: ai_studio_management.AIStudioManagementService.CreateDatasource:output_type -> ai_studio_management.CreateDatasourceResponse
-	89,  // 333: ai_studio_management.AIStudioManagementService.UpdateDatasource:output_type -> ai_studio_management.UpdateDatasourceResponse
-	91,  // 334: ai_studio_management.AIStudioManagementService.DeleteDatasource:output_type -> ai_studio_management.DeleteDatasourceResponse
-	93,  // 335: ai_studio_management.AIStudioManagementService.CloneDatasource:output_type -> ai_studio_management.CloneDatasourceResponse
-	95,  // 336: ai_studio_management.AIStudioManagementService.SearchDatasources:output_type -> ai_studio_management.SearchDatasourcesResponse
-	97,  // 337: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:output_type -> ai_studio_management.ProcessEmbeddingsResponse
-	99,  // 338: ai_studio_management.AIStudioManagementService.GenerateEmbedding:output_type -> ai_studio_management.GenerateEmbeddingResponse
-	103, // 339: ai_studio_management.AIStudioManagementService.StoreDocuments:output_type -> ai_studio_management.StoreDocumentsResponse
-	106, // 340: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:output_type -> ai_studio_management.ProcessAndStoreResponse
-	197, // 341: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:output_type -> ai_studio_management.QueryDatasourceResponse
-	108, // 342: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:output_type -> ai_studio_management.DeleteDocumentsByMetadataResponse
-	110, // 343: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:output_type -> ai_studio_management.QueryByMetadataOnlyResponse
-	112, // 344: ai_studio_management.AIStudioManagementService.ListNamespaces:output_type -> ai_studio_management.ListNamespacesResponse
-	115, // 345: ai_studio_management.AIStudioManagementService.DeleteNamespace:output_type -> ai_studio_management.DeleteNamespaceResponse
-	119, // 346: ai_studio_management.AIStudioManagementService.ListDataCatalogues:output_type -> ai_studio_management.ListDataCataloguesResponse
-	121, // 347: ai_studio_management.AIStudioManagementService.GetDataCatalogue:output_type -> ai_studio_management.GetDataCatalogueResponse
-	123, // 348: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:output_type -> ai_studio_management.CreateDataCatalogueResponse
-	125, // 349: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:output_type -> ai_studio_management.UpdateDataCatalogueResponse
-	127, // 350: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:output_type -> ai_studio_management.DeleteDataCatalogueResponse
-	130, // 351: ai_studio_management.AIStudioManagementService.ListTags:output_type -> ai_studio_management.ListTagsResponse
-	132, // 352: ai_studio_management.AIStudioManagementService.GetTag:output_type -> ai_studio_management.GetTagResponse
-	134, // 353: ai_studio_management.AIStudioManagementService.CreateTag:output_type -> ai_studio_management.CreateTagResponse
-	136, // 354: ai_studio_management.AIStudioManagementService.UpdateTag:output_type -> ai_studio_management.UpdateTagResponse
-	138, // 355: ai_studio_management.AIStudioManagementService.DeleteTag:output_type -> ai_studio_management.DeleteTagResponse
-	140, // 356: ai_studio_management.AIStudioManagementService.SearchTags:output_type -> ai_studio_management.SearchTagsResponse
-	158, // 357: ai_studio_management.AIStudioManagementService.ListModelPrices:output_type -> ai_studio_management.ListModelPricesResponse
-	160, // 358: ai_studio_management.AIStudioManagementService.GetModelPrice:output_type -> ai_studio_management.GetModelPriceResponse
-	162, // 359: ai_studio_management.AIStudioManagementService.CreateModelPrice:output_type -> ai_studio_management.CreateModelPriceResponse
-	164, // 360: ai_studio_management.AIStudioManagementService.UpdateModelPrice:output_type -> ai_studio_management.UpdateModelPriceResponse
-	166, // 361: ai_studio_management.AIStudioManagementService.DeleteModelPrice:output_type -> ai_studio_management.DeleteModelPriceResponse
-	168, // 362: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:output_type -> ai_studio_management.GetModelPricesByVendorResponse
-	171, // 363: ai_studio_management.AIStudioManagementService.ListFilters:output_type -> ai_studio_management.ListFiltersResponse
-	173, // 364: ai_studio_management.AIStudioManagementService.GetFilter:output_type -> ai_studio_management.GetFilterResponse
-	175, // 365: ai_studio_management.AIStudioManagementService.CreateFilter:output_type -> ai_studio_management.CreateFilterResponse
-	177, // 366: ai_studio_management.AIStudioManagementService.UpdateFilter:output_type -> ai_studio_management.UpdateFilterResponse
-	179, // 367: ai_studio_management.AIStudioManagementService.DeleteFilter:output_type -> ai_studio_management.DeleteFilterResponse
-	182, // 368: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:output_type -> ai_studio_management.GetAvailableLLMDriversResponse
-	184, // 369: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:output_type -> ai_studio_management.GetAvailableEmbeddersResponse
-	186, // 370: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:output_type -> ai_studio_management.GetAvailableVectorStoresResponse
-	189, // 371: ai_studio_management.AIStudioManagementService.WritePluginKV:output_type -> ai_studio_management.WritePluginKVResponse
-	191, // 372: ai_studio_management.AIStudioManagementService.ReadPluginKV:output_type -> ai_studio_management.ReadPluginKVResponse
-	193, // 373: ai_studio_management.AIStudioManagementService.DeletePluginKV:output_type -> ai_studio_management.DeletePluginKVResponse
-	195, // 374: ai_studio_management.AIStudioManagementService.ExecuteTool:output_type -> ai_studio_management.ExecuteToolResponse
-	197, // 375: ai_studio_management.AIStudioManagementService.QueryDatasource:output_type -> ai_studio_management.QueryDatasourceResponse
-	200, // 376: ai_studio_management.AIStudioManagementService.CallLLM:output_type -> ai_studio_management.CallLLMResponse
-	208, // 377: ai_studio_management.AIStudioManagementService.CreateSchedule:output_type -> ai_studio_management.CreateScheduleResponse
-	210, // 378: ai_studio_management.AIStudioManagementService.GetSchedule:output_type -> ai_studio_management.GetScheduleResponse
-	212, // 379: ai_studio_management.AIStudioManagementService.ListSchedules:output_type -> ai_studio_management.ListSchedulesResponse
-	214, // 380: ai_studio_management.AIStudioManagementService.UpdateSchedule:output_type -> ai_studio_management.UpdateScheduleResponse
-	216, // 381: ai_studio_management.AIStudioManagementService.DeleteSchedule:output_type -> ai_studio_management.DeleteScheduleResponse
-	219, // 382: ai_studio_management.AIStudioManagementService.GetLicenseInfo:output_type -> ai_studio_management.GetLicenseInfoResponse
-	1,   // 383: ai_studio_management.AIStudioManagementService.CreateNotification:output_type -> ai_studio_management.CreateNotificationResponse
-	4,   // 384: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:output_type -> ai_studio_management.RegisterResourceTypesResponse
-	7,   // 385: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:output_type -> ai_studio_management.RegisterPermissionResourcesResponse
-	294, // [294:386] is the sub-list for method output_type
-	202, // [202:294] is the sub-list for method input_type
-	202, // [202:202] is the sub-list for extension type_name
-	202, // [202:202] is the sub-list for extension extendee
-	0,   // [0:202] is the sub-list for field type_name
+	40,  // 0: ai_studio_management.SetAppGovernanceStateRequest.context:type_name -> ai_studio_management.PluginContext
+	253, // 1: ai_studio_management.SetAppGovernanceStateRequest.flags:type_name -> ai_studio_management.SetAppGovernanceStateRequest.FlagsEntry
+	77,  // 2: ai_studio_management.SetAppGovernanceStateResponse.app:type_name -> ai_studio_management.AppInfo
+	40,  // 3: ai_studio_management.ListObjectMetadataAuditRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 4: ai_studio_management.ObjectMetadataAuditEntry.created_at:type_name -> google.protobuf.Timestamp
+	3,   // 5: ai_studio_management.ListObjectMetadataAuditResponse.entries:type_name -> ai_studio_management.ObjectMetadataAuditEntry
+	40,  // 6: ai_studio_management.ListAuditRecordsRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 7: ai_studio_management.AuditRecordInfo.timestamp:type_name -> google.protobuf.Timestamp
+	6,   // 8: ai_studio_management.ListAuditRecordsResponse.records:type_name -> ai_studio_management.AuditRecordInfo
+	263, // 9: ai_studio_management.MCPServerInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 10: ai_studio_management.ListMCPServersRequest.context:type_name -> ai_studio_management.PluginContext
+	8,   // 11: ai_studio_management.ListMCPServersResponse.servers:type_name -> ai_studio_management.MCPServerInfo
+	40,  // 12: ai_studio_management.GetMCPServerRequest.context:type_name -> ai_studio_management.PluginContext
+	8,   // 13: ai_studio_management.GetMCPServerResponse.server:type_name -> ai_studio_management.MCPServerInfo
+	263, // 14: ai_studio_management.ModelRouterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	263, // 15: ai_studio_management.SemanticRouterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 16: ai_studio_management.ListModelRoutersRequest.context:type_name -> ai_studio_management.PluginContext
+	13,  // 17: ai_studio_management.ListModelRoutersResponse.routers:type_name -> ai_studio_management.ModelRouterInfo
+	40,  // 18: ai_studio_management.GetModelRouterRequest.context:type_name -> ai_studio_management.PluginContext
+	13,  // 19: ai_studio_management.GetModelRouterResponse.router:type_name -> ai_studio_management.ModelRouterInfo
+	40,  // 20: ai_studio_management.ListSemanticRoutersRequest.context:type_name -> ai_studio_management.PluginContext
+	14,  // 21: ai_studio_management.ListSemanticRoutersResponse.routers:type_name -> ai_studio_management.SemanticRouterInfo
+	40,  // 22: ai_studio_management.GetSemanticRouterRequest.context:type_name -> ai_studio_management.PluginContext
+	14,  // 23: ai_studio_management.GetSemanticRouterResponse.router:type_name -> ai_studio_management.SemanticRouterInfo
+	40,  // 24: ai_studio_management.ListGroupsRequest.context:type_name -> ai_studio_management.PluginContext
+	23,  // 25: ai_studio_management.ListGroupsResponse.groups:type_name -> ai_studio_management.GroupInfo
+	40,  // 26: ai_studio_management.GetResourceInstanceGroupsRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 27: ai_studio_management.SetResourceInstanceGroupsRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 28: ai_studio_management.ListAccessibleResourceInstancesRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 29: ai_studio_management.CreateNotificationRequest.context:type_name -> ai_studio_management.PluginContext
+	254, // 30: ai_studio_management.CreateNotificationRequest.links:type_name -> ai_studio_management.CreateNotificationRequest.LinksEntry
+	40,  // 31: ai_studio_management.RegisterResourceTypesRequest.context:type_name -> ai_studio_management.PluginContext
+	34,  // 32: ai_studio_management.RegisterResourceTypesRequest.types:type_name -> ai_studio_management.ResourceTypeSpec
+	40,  // 33: ai_studio_management.RegisterPermissionResourcesRequest.context:type_name -> ai_studio_management.PluginContext
+	37,  // 34: ai_studio_management.RegisterPermissionResourcesRequest.resources:type_name -> ai_studio_management.PermissionResourceSpec
+	40,  // 35: ai_studio_management.ListPluginsRequest.context:type_name -> ai_studio_management.PluginContext
+	47,  // 36: ai_studio_management.ListPluginsResponse.plugins:type_name -> ai_studio_management.PluginInfo
+	40,  // 37: ai_studio_management.GetPluginRequest.context:type_name -> ai_studio_management.PluginContext
+	47,  // 38: ai_studio_management.GetPluginResponse.plugin:type_name -> ai_studio_management.PluginInfo
+	40,  // 39: ai_studio_management.UpdatePluginConfigRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 40: ai_studio_management.PluginInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 41: ai_studio_management.PluginInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 42: ai_studio_management.ListLLMsRequest.context:type_name -> ai_studio_management.PluginContext
+	54,  // 43: ai_studio_management.ListLLMsResponse.llms:type_name -> ai_studio_management.LLMInfo
+	40,  // 44: ai_studio_management.GetLLMRequest.context:type_name -> ai_studio_management.PluginContext
+	54,  // 45: ai_studio_management.GetLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
+	40,  // 46: ai_studio_management.GetLLMPluginsRequest.context:type_name -> ai_studio_management.PluginContext
+	47,  // 47: ai_studio_management.GetLLMPluginsResponse.plugins:type_name -> ai_studio_management.PluginInfo
+	263, // 48: ai_studio_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 49: ai_studio_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
+	255, // 50: ai_studio_management.LLMInfo.metadata:type_name -> ai_studio_management.LLMInfo.MetadataEntry
+	40,  // 51: ai_studio_management.CreateLLMRequest.context:type_name -> ai_studio_management.PluginContext
+	54,  // 52: ai_studio_management.CreateLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
+	40,  // 53: ai_studio_management.UpdateLLMRequest.context:type_name -> ai_studio_management.PluginContext
+	54,  // 54: ai_studio_management.UpdateLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
+	40,  // 55: ai_studio_management.DeleteLLMRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 56: ai_studio_management.UpdateLLMPluginsRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 57: ai_studio_management.GetAnalyticsSummaryRequest.context:type_name -> ai_studio_management.PluginContext
+	69,  // 58: ai_studio_management.GetAnalyticsSummaryResponse.top_endpoints:type_name -> ai_studio_management.TopEndpoint
+	70,  // 59: ai_studio_management.GetAnalyticsSummaryResponse.model_usage:type_name -> ai_studio_management.ModelUsage
+	40,  // 60: ai_studio_management.GetUsageStatisticsRequest.context:type_name -> ai_studio_management.PluginContext
+	71,  // 61: ai_studio_management.GetUsageStatisticsResponse.statistics:type_name -> ai_studio_management.UsageStatistic
+	40,  // 62: ai_studio_management.GetCostAnalysisRequest.context:type_name -> ai_studio_management.PluginContext
+	72,  // 63: ai_studio_management.GetCostAnalysisResponse.breakdown:type_name -> ai_studio_management.CostBreakdown
+	263, // 64: ai_studio_management.UsageStatistic.timestamp:type_name -> google.protobuf.Timestamp
+	40,  // 65: ai_studio_management.ListAppsRequest.context:type_name -> ai_studio_management.PluginContext
+	77,  // 66: ai_studio_management.ListAppsResponse.apps:type_name -> ai_studio_management.AppInfo
+	40,  // 67: ai_studio_management.GetAppRequest.context:type_name -> ai_studio_management.PluginContext
+	77,  // 68: ai_studio_management.GetAppResponse.app:type_name -> ai_studio_management.AppInfo
+	263, // 69: ai_studio_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 70: ai_studio_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
+	78,  // 71: ai_studio_management.AppInfo.plugin_resources:type_name -> ai_studio_management.AppPluginResourceRef
+	40,  // 72: ai_studio_management.CreateAppRequest.context:type_name -> ai_studio_management.PluginContext
+	77,  // 73: ai_studio_management.CreateAppResponse.app:type_name -> ai_studio_management.AppInfo
+	40,  // 74: ai_studio_management.UpdateAppRequest.context:type_name -> ai_studio_management.PluginContext
+	77,  // 75: ai_studio_management.UpdateAppResponse.app:type_name -> ai_studio_management.AppInfo
+	40,  // 76: ai_studio_management.DeleteAppRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 77: ai_studio_management.PatchAppMetadataRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 78: ai_studio_management.GetObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 79: ai_studio_management.GetObjectMetadataResponse.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 80: ai_studio_management.DeleteObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 81: ai_studio_management.SetObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 82: ai_studio_management.GetResolvedMetadataSchemaRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 83: ai_studio_management.ValidateObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 84: ai_studio_management.ListToolsRequest.context:type_name -> ai_studio_management.PluginContext
+	105, // 85: ai_studio_management.ListToolsResponse.tools:type_name -> ai_studio_management.ToolInfo
+	40,  // 86: ai_studio_management.GetToolRequest.context:type_name -> ai_studio_management.PluginContext
+	105, // 87: ai_studio_management.GetToolResponse.tool:type_name -> ai_studio_management.ToolInfo
+	40,  // 88: ai_studio_management.GetToolOperationsRequest.context:type_name -> ai_studio_management.PluginContext
+	106, // 89: ai_studio_management.GetToolOperationsResponse.operations:type_name -> ai_studio_management.ToolOperation
+	40,  // 90: ai_studio_management.CallToolOperationRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 91: ai_studio_management.ToolInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 92: ai_studio_management.ToolInfo.updated_at:type_name -> google.protobuf.Timestamp
+	256, // 93: ai_studio_management.ToolInfo.metadata:type_name -> ai_studio_management.ToolInfo.MetadataEntry
+	107, // 94: ai_studio_management.ToolOperation.parameters:type_name -> ai_studio_management.ToolParameter
+	108, // 95: ai_studio_management.ToolOperation.request_body:type_name -> ai_studio_management.ToolRequestBody
+	40,  // 96: ai_studio_management.CreateToolRequest.context:type_name -> ai_studio_management.PluginContext
+	105, // 97: ai_studio_management.CreateToolResponse.tool:type_name -> ai_studio_management.ToolInfo
+	40,  // 98: ai_studio_management.UpdateToolRequest.context:type_name -> ai_studio_management.PluginContext
+	105, // 99: ai_studio_management.UpdateToolResponse.tool:type_name -> ai_studio_management.ToolInfo
+	40,  // 100: ai_studio_management.DeleteToolRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 101: ai_studio_management.ListDatasourcesRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 102: ai_studio_management.ListDatasourcesResponse.datasources:type_name -> ai_studio_management.DatasourceInfo
+	40,  // 103: ai_studio_management.GetDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 104: ai_studio_management.GetDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
+	40,  // 105: ai_studio_management.CreateDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 106: ai_studio_management.CreateDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
+	40,  // 107: ai_studio_management.UpdateDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 108: ai_studio_management.UpdateDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
+	40,  // 109: ai_studio_management.DeleteDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 110: ai_studio_management.CloneDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 111: ai_studio_management.CloneDatasourceResponse.datasource:type_name -> ai_studio_management.DatasourceInfo
+	40,  // 112: ai_studio_management.SearchDatasourcesRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 113: ai_studio_management.SearchDatasourcesResponse.datasources:type_name -> ai_studio_management.DatasourceInfo
+	40,  // 114: ai_studio_management.ProcessEmbeddingsRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 115: ai_studio_management.GenerateEmbeddingRequest.context:type_name -> ai_studio_management.PluginContext
+	133, // 116: ai_studio_management.GenerateEmbeddingResponse.vectors:type_name -> ai_studio_management.EmbeddingVector
+	40,  // 117: ai_studio_management.StoreDocumentsRequest.context:type_name -> ai_studio_management.PluginContext
+	135, // 118: ai_studio_management.StoreDocumentsRequest.documents:type_name -> ai_studio_management.DocumentWithEmbedding
+	257, // 119: ai_studio_management.DocumentWithEmbedding.metadata:type_name -> ai_studio_management.DocumentWithEmbedding.MetadataEntry
+	40,  // 120: ai_studio_management.ProcessAndStoreRequest.context:type_name -> ai_studio_management.PluginContext
+	138, // 121: ai_studio_management.ProcessAndStoreRequest.chunks:type_name -> ai_studio_management.DocumentChunk
+	258, // 122: ai_studio_management.DocumentChunk.metadata:type_name -> ai_studio_management.DocumentChunk.MetadataEntry
+	40,  // 123: ai_studio_management.DeleteDocumentsByMetadataRequest.context:type_name -> ai_studio_management.PluginContext
+	259, // 124: ai_studio_management.DeleteDocumentsByMetadataRequest.metadata_filter:type_name -> ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
+	40,  // 125: ai_studio_management.QueryByMetadataOnlyRequest.context:type_name -> ai_studio_management.PluginContext
+	260, // 126: ai_studio_management.QueryByMetadataOnlyRequest.metadata_filter:type_name -> ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
+	231, // 127: ai_studio_management.QueryByMetadataOnlyResponse.results:type_name -> ai_studio_management.DatasourceResult
+	40,  // 128: ai_studio_management.ListNamespacesRequest.context:type_name -> ai_studio_management.PluginContext
+	146, // 129: ai_studio_management.ListNamespacesResponse.namespaces:type_name -> ai_studio_management.NamespaceInfo
+	40,  // 130: ai_studio_management.DeleteNamespaceRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 131: ai_studio_management.QueryByVectorRequest.context:type_name -> ai_studio_management.PluginContext
+	174, // 132: ai_studio_management.DatasourceInfo.tags:type_name -> ai_studio_management.TagInfo
+	263, // 133: ai_studio_management.DatasourceInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 134: ai_studio_management.DatasourceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	261, // 135: ai_studio_management.DatasourceInfo.metadata:type_name -> ai_studio_management.DatasourceInfo.MetadataEntry
+	40,  // 136: ai_studio_management.ListDataCataloguesRequest.context:type_name -> ai_studio_management.PluginContext
+	161, // 137: ai_studio_management.ListDataCataloguesResponse.data_catalogues:type_name -> ai_studio_management.DataCatalogueInfo
+	40,  // 138: ai_studio_management.GetDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
+	161, // 139: ai_studio_management.GetDataCatalogueResponse.data_catalogue:type_name -> ai_studio_management.DataCatalogueInfo
+	40,  // 140: ai_studio_management.CreateDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
+	161, // 141: ai_studio_management.CreateDataCatalogueResponse.data_catalogue:type_name -> ai_studio_management.DataCatalogueInfo
+	40,  // 142: ai_studio_management.UpdateDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
+	161, // 143: ai_studio_management.UpdateDataCatalogueResponse.data_catalogue:type_name -> ai_studio_management.DataCatalogueInfo
+	40,  // 144: ai_studio_management.DeleteDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
+	150, // 145: ai_studio_management.DataCatalogueInfo.datasources:type_name -> ai_studio_management.DatasourceInfo
+	174, // 146: ai_studio_management.DataCatalogueInfo.tags:type_name -> ai_studio_management.TagInfo
+	263, // 147: ai_studio_management.DataCatalogueInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 148: ai_studio_management.DataCatalogueInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 149: ai_studio_management.ListTagsRequest.context:type_name -> ai_studio_management.PluginContext
+	174, // 150: ai_studio_management.ListTagsResponse.tags:type_name -> ai_studio_management.TagInfo
+	40,  // 151: ai_studio_management.GetTagRequest.context:type_name -> ai_studio_management.PluginContext
+	174, // 152: ai_studio_management.GetTagResponse.tag:type_name -> ai_studio_management.TagInfo
+	40,  // 153: ai_studio_management.CreateTagRequest.context:type_name -> ai_studio_management.PluginContext
+	174, // 154: ai_studio_management.CreateTagResponse.tag:type_name -> ai_studio_management.TagInfo
+	40,  // 155: ai_studio_management.UpdateTagRequest.context:type_name -> ai_studio_management.PluginContext
+	174, // 156: ai_studio_management.UpdateTagResponse.tag:type_name -> ai_studio_management.TagInfo
+	40,  // 157: ai_studio_management.DeleteTagRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 158: ai_studio_management.SearchTagsRequest.context:type_name -> ai_studio_management.PluginContext
+	174, // 159: ai_studio_management.SearchTagsResponse.tags:type_name -> ai_studio_management.TagInfo
+	263, // 160: ai_studio_management.TagInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 161: ai_studio_management.TagInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 162: ai_studio_management.GetChatRecordsPerDayRequest.context:type_name -> ai_studio_management.PluginContext
+	185, // 163: ai_studio_management.GetChatRecordsPerDayResponse.records:type_name -> ai_studio_management.DayRecord
+	40,  // 164: ai_studio_management.GetModelUsageRequest.context:type_name -> ai_studio_management.PluginContext
+	186, // 165: ai_studio_management.GetModelUsageResponse.usage:type_name -> ai_studio_management.ModelUsageRecord
+	40,  // 166: ai_studio_management.GetVendorUsageRequest.context:type_name -> ai_studio_management.PluginContext
+	187, // 167: ai_studio_management.GetVendorUsageResponse.usage:type_name -> ai_studio_management.VendorUsageRecord
+	40,  // 168: ai_studio_management.GetTokenUsagePerAppRequest.context:type_name -> ai_studio_management.PluginContext
+	188, // 169: ai_studio_management.GetTokenUsagePerAppResponse.usage:type_name -> ai_studio_management.AppTokenUsage
+	40,  // 170: ai_studio_management.GetToolUsageStatisticsRequest.context:type_name -> ai_studio_management.PluginContext
+	189, // 171: ai_studio_management.GetToolUsageStatisticsResponse.usage:type_name -> ai_studio_management.ToolUsageRecord
+	40,  // 172: ai_studio_management.ListModelPricesRequest.context:type_name -> ai_studio_management.PluginContext
+	202, // 173: ai_studio_management.ListModelPricesResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
+	40,  // 174: ai_studio_management.GetModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	202, // 175: ai_studio_management.GetModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
+	40,  // 176: ai_studio_management.CreateModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	202, // 177: ai_studio_management.CreateModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
+	40,  // 178: ai_studio_management.UpdateModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	202, // 179: ai_studio_management.UpdateModelPriceResponse.model_price:type_name -> ai_studio_management.ModelPriceInfo
+	40,  // 180: ai_studio_management.DeleteModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 181: ai_studio_management.GetModelPricesByVendorRequest.context:type_name -> ai_studio_management.PluginContext
+	202, // 182: ai_studio_management.GetModelPricesByVendorResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
+	263, // 183: ai_studio_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 184: ai_studio_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 185: ai_studio_management.ListFiltersRequest.context:type_name -> ai_studio_management.PluginContext
+	213, // 186: ai_studio_management.ListFiltersResponse.filters:type_name -> ai_studio_management.FilterInfo
+	40,  // 187: ai_studio_management.GetFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	213, // 188: ai_studio_management.GetFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
+	40,  // 189: ai_studio_management.CreateFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	213, // 190: ai_studio_management.CreateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
+	40,  // 191: ai_studio_management.UpdateFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	213, // 192: ai_studio_management.UpdateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
+	40,  // 193: ai_studio_management.DeleteFilterRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 194: ai_studio_management.FilterInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 195: ai_studio_management.FilterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 196: ai_studio_management.GetAvailableLLMDriversRequest.context:type_name -> ai_studio_management.PluginContext
+	220, // 197: ai_studio_management.GetAvailableLLMDriversResponse.drivers:type_name -> ai_studio_management.VendorDriverInfo
+	40,  // 198: ai_studio_management.GetAvailableEmbeddersRequest.context:type_name -> ai_studio_management.PluginContext
+	220, // 199: ai_studio_management.GetAvailableEmbeddersResponse.embedders:type_name -> ai_studio_management.VendorDriverInfo
+	40,  // 200: ai_studio_management.GetAvailableVectorStoresRequest.context:type_name -> ai_studio_management.PluginContext
+	220, // 201: ai_studio_management.GetAvailableVectorStoresResponse.vector_stores:type_name -> ai_studio_management.VendorDriverInfo
+	40,  // 202: ai_studio_management.WritePluginKVRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 203: ai_studio_management.WritePluginKVRequest.expire_at:type_name -> google.protobuf.Timestamp
+	40,  // 204: ai_studio_management.ReadPluginKVRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 205: ai_studio_management.DeletePluginKVRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 206: ai_studio_management.ExecuteToolRequest.context:type_name -> ai_studio_management.PluginContext
+	40,  // 207: ai_studio_management.QueryDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
+	231, // 208: ai_studio_management.QueryDatasourceResponse.results:type_name -> ai_studio_management.DatasourceResult
+	262, // 209: ai_studio_management.DatasourceResult.metadata:type_name -> ai_studio_management.DatasourceResult.MetadataEntry
+	40,  // 210: ai_studio_management.CallLLMRequest.context:type_name -> ai_studio_management.PluginContext
+	234, // 211: ai_studio_management.CallLLMRequest.messages:type_name -> ai_studio_management.LLMMessage
+	235, // 212: ai_studio_management.CallLLMRequest.tools:type_name -> ai_studio_management.LLMTool
+	239, // 213: ai_studio_management.CallLLMResponse.usage:type_name -> ai_studio_management.LLMUsage
+	237, // 214: ai_studio_management.CallLLMResponse.tool_calls:type_name -> ai_studio_management.LLMToolCall
+	236, // 215: ai_studio_management.LLMTool.function:type_name -> ai_studio_management.LLMFunction
+	238, // 216: ai_studio_management.LLMToolCall.function:type_name -> ai_studio_management.LLMFunctionCall
+	40,  // 217: ai_studio_management.CreateScheduleRequest.context:type_name -> ai_studio_management.PluginContext
+	250, // 218: ai_studio_management.CreateScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
+	40,  // 219: ai_studio_management.GetScheduleRequest.context:type_name -> ai_studio_management.PluginContext
+	250, // 220: ai_studio_management.GetScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
+	40,  // 221: ai_studio_management.ListSchedulesRequest.context:type_name -> ai_studio_management.PluginContext
+	250, // 222: ai_studio_management.ListSchedulesResponse.schedules:type_name -> ai_studio_management.ScheduleInfo
+	40,  // 223: ai_studio_management.UpdateScheduleRequest.context:type_name -> ai_studio_management.PluginContext
+	250, // 224: ai_studio_management.UpdateScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
+	40,  // 225: ai_studio_management.DeleteScheduleRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 226: ai_studio_management.ScheduleInfo.last_run:type_name -> google.protobuf.Timestamp
+	263, // 227: ai_studio_management.ScheduleInfo.next_run:type_name -> google.protobuf.Timestamp
+	263, // 228: ai_studio_management.ScheduleInfo.created_at:type_name -> google.protobuf.Timestamp
+	263, // 229: ai_studio_management.ScheduleInfo.updated_at:type_name -> google.protobuf.Timestamp
+	40,  // 230: ai_studio_management.GetLicenseInfoRequest.context:type_name -> ai_studio_management.PluginContext
+	263, // 231: ai_studio_management.GetLicenseInfoResponse.expires_at:type_name -> google.protobuf.Timestamp
+	41,  // 232: ai_studio_management.AIStudioManagementService.ListPlugins:input_type -> ai_studio_management.ListPluginsRequest
+	43,  // 233: ai_studio_management.AIStudioManagementService.GetPlugin:input_type -> ai_studio_management.GetPluginRequest
+	45,  // 234: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:input_type -> ai_studio_management.UpdatePluginConfigRequest
+	48,  // 235: ai_studio_management.AIStudioManagementService.ListLLMs:input_type -> ai_studio_management.ListLLMsRequest
+	50,  // 236: ai_studio_management.AIStudioManagementService.GetLLM:input_type -> ai_studio_management.GetLLMRequest
+	52,  // 237: ai_studio_management.AIStudioManagementService.GetLLMPlugins:input_type -> ai_studio_management.GetLLMPluginsRequest
+	55,  // 238: ai_studio_management.AIStudioManagementService.CreateLLM:input_type -> ai_studio_management.CreateLLMRequest
+	57,  // 239: ai_studio_management.AIStudioManagementService.UpdateLLM:input_type -> ai_studio_management.UpdateLLMRequest
+	59,  // 240: ai_studio_management.AIStudioManagementService.DeleteLLM:input_type -> ai_studio_management.DeleteLLMRequest
+	61,  // 241: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:input_type -> ai_studio_management.UpdateLLMPluginsRequest
+	63,  // 242: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:input_type -> ai_studio_management.GetAnalyticsSummaryRequest
+	65,  // 243: ai_studio_management.AIStudioManagementService.GetUsageStatistics:input_type -> ai_studio_management.GetUsageStatisticsRequest
+	67,  // 244: ai_studio_management.AIStudioManagementService.GetCostAnalysis:input_type -> ai_studio_management.GetCostAnalysisRequest
+	175, // 245: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:input_type -> ai_studio_management.GetChatRecordsPerDayRequest
+	177, // 246: ai_studio_management.AIStudioManagementService.GetModelUsage:input_type -> ai_studio_management.GetModelUsageRequest
+	179, // 247: ai_studio_management.AIStudioManagementService.GetVendorUsage:input_type -> ai_studio_management.GetVendorUsageRequest
+	181, // 248: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:input_type -> ai_studio_management.GetTokenUsagePerAppRequest
+	183, // 249: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:input_type -> ai_studio_management.GetToolUsageStatisticsRequest
+	73,  // 250: ai_studio_management.AIStudioManagementService.ListApps:input_type -> ai_studio_management.ListAppsRequest
+	75,  // 251: ai_studio_management.AIStudioManagementService.GetApp:input_type -> ai_studio_management.GetAppRequest
+	79,  // 252: ai_studio_management.AIStudioManagementService.CreateApp:input_type -> ai_studio_management.CreateAppRequest
+	81,  // 253: ai_studio_management.AIStudioManagementService.UpdateApp:input_type -> ai_studio_management.UpdateAppRequest
+	83,  // 254: ai_studio_management.AIStudioManagementService.DeleteApp:input_type -> ai_studio_management.DeleteAppRequest
+	85,  // 255: ai_studio_management.AIStudioManagementService.PatchAppMetadata:input_type -> ai_studio_management.PatchAppMetadataRequest
+	87,  // 256: ai_studio_management.AIStudioManagementService.GetObjectMetadata:input_type -> ai_studio_management.GetObjectMetadataRequest
+	91,  // 257: ai_studio_management.AIStudioManagementService.SetObjectMetadata:input_type -> ai_studio_management.SetObjectMetadataRequest
+	93,  // 258: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:input_type -> ai_studio_management.GetResolvedMetadataSchemaRequest
+	95,  // 259: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:input_type -> ai_studio_management.ValidateObjectMetadataRequest
+	89,  // 260: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:input_type -> ai_studio_management.DeleteObjectMetadataRequest
+	97,  // 261: ai_studio_management.AIStudioManagementService.ListTools:input_type -> ai_studio_management.ListToolsRequest
+	99,  // 262: ai_studio_management.AIStudioManagementService.GetTool:input_type -> ai_studio_management.GetToolRequest
+	101, // 263: ai_studio_management.AIStudioManagementService.GetToolOperations:input_type -> ai_studio_management.GetToolOperationsRequest
+	103, // 264: ai_studio_management.AIStudioManagementService.CallToolOperation:input_type -> ai_studio_management.CallToolOperationRequest
+	109, // 265: ai_studio_management.AIStudioManagementService.CreateTool:input_type -> ai_studio_management.CreateToolRequest
+	111, // 266: ai_studio_management.AIStudioManagementService.UpdateTool:input_type -> ai_studio_management.UpdateToolRequest
+	113, // 267: ai_studio_management.AIStudioManagementService.DeleteTool:input_type -> ai_studio_management.DeleteToolRequest
+	115, // 268: ai_studio_management.AIStudioManagementService.ListDatasources:input_type -> ai_studio_management.ListDatasourcesRequest
+	117, // 269: ai_studio_management.AIStudioManagementService.GetDatasource:input_type -> ai_studio_management.GetDatasourceRequest
+	119, // 270: ai_studio_management.AIStudioManagementService.CreateDatasource:input_type -> ai_studio_management.CreateDatasourceRequest
+	121, // 271: ai_studio_management.AIStudioManagementService.UpdateDatasource:input_type -> ai_studio_management.UpdateDatasourceRequest
+	123, // 272: ai_studio_management.AIStudioManagementService.DeleteDatasource:input_type -> ai_studio_management.DeleteDatasourceRequest
+	125, // 273: ai_studio_management.AIStudioManagementService.CloneDatasource:input_type -> ai_studio_management.CloneDatasourceRequest
+	127, // 274: ai_studio_management.AIStudioManagementService.SearchDatasources:input_type -> ai_studio_management.SearchDatasourcesRequest
+	129, // 275: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:input_type -> ai_studio_management.ProcessEmbeddingsRequest
+	131, // 276: ai_studio_management.AIStudioManagementService.GenerateEmbedding:input_type -> ai_studio_management.GenerateEmbeddingRequest
+	134, // 277: ai_studio_management.AIStudioManagementService.StoreDocuments:input_type -> ai_studio_management.StoreDocumentsRequest
+	137, // 278: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:input_type -> ai_studio_management.ProcessAndStoreRequest
+	149, // 279: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:input_type -> ai_studio_management.QueryByVectorRequest
+	140, // 280: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:input_type -> ai_studio_management.DeleteDocumentsByMetadataRequest
+	142, // 281: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:input_type -> ai_studio_management.QueryByMetadataOnlyRequest
+	144, // 282: ai_studio_management.AIStudioManagementService.ListNamespaces:input_type -> ai_studio_management.ListNamespacesRequest
+	147, // 283: ai_studio_management.AIStudioManagementService.DeleteNamespace:input_type -> ai_studio_management.DeleteNamespaceRequest
+	151, // 284: ai_studio_management.AIStudioManagementService.ListDataCatalogues:input_type -> ai_studio_management.ListDataCataloguesRequest
+	153, // 285: ai_studio_management.AIStudioManagementService.GetDataCatalogue:input_type -> ai_studio_management.GetDataCatalogueRequest
+	155, // 286: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:input_type -> ai_studio_management.CreateDataCatalogueRequest
+	157, // 287: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:input_type -> ai_studio_management.UpdateDataCatalogueRequest
+	159, // 288: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:input_type -> ai_studio_management.DeleteDataCatalogueRequest
+	162, // 289: ai_studio_management.AIStudioManagementService.ListTags:input_type -> ai_studio_management.ListTagsRequest
+	164, // 290: ai_studio_management.AIStudioManagementService.GetTag:input_type -> ai_studio_management.GetTagRequest
+	166, // 291: ai_studio_management.AIStudioManagementService.CreateTag:input_type -> ai_studio_management.CreateTagRequest
+	168, // 292: ai_studio_management.AIStudioManagementService.UpdateTag:input_type -> ai_studio_management.UpdateTagRequest
+	170, // 293: ai_studio_management.AIStudioManagementService.DeleteTag:input_type -> ai_studio_management.DeleteTagRequest
+	172, // 294: ai_studio_management.AIStudioManagementService.SearchTags:input_type -> ai_studio_management.SearchTagsRequest
+	190, // 295: ai_studio_management.AIStudioManagementService.ListModelPrices:input_type -> ai_studio_management.ListModelPricesRequest
+	192, // 296: ai_studio_management.AIStudioManagementService.GetModelPrice:input_type -> ai_studio_management.GetModelPriceRequest
+	194, // 297: ai_studio_management.AIStudioManagementService.CreateModelPrice:input_type -> ai_studio_management.CreateModelPriceRequest
+	196, // 298: ai_studio_management.AIStudioManagementService.UpdateModelPrice:input_type -> ai_studio_management.UpdateModelPriceRequest
+	198, // 299: ai_studio_management.AIStudioManagementService.DeleteModelPrice:input_type -> ai_studio_management.DeleteModelPriceRequest
+	200, // 300: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:input_type -> ai_studio_management.GetModelPricesByVendorRequest
+	203, // 301: ai_studio_management.AIStudioManagementService.ListFilters:input_type -> ai_studio_management.ListFiltersRequest
+	205, // 302: ai_studio_management.AIStudioManagementService.GetFilter:input_type -> ai_studio_management.GetFilterRequest
+	207, // 303: ai_studio_management.AIStudioManagementService.CreateFilter:input_type -> ai_studio_management.CreateFilterRequest
+	209, // 304: ai_studio_management.AIStudioManagementService.UpdateFilter:input_type -> ai_studio_management.UpdateFilterRequest
+	211, // 305: ai_studio_management.AIStudioManagementService.DeleteFilter:input_type -> ai_studio_management.DeleteFilterRequest
+	214, // 306: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:input_type -> ai_studio_management.GetAvailableLLMDriversRequest
+	216, // 307: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:input_type -> ai_studio_management.GetAvailableEmbeddersRequest
+	218, // 308: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:input_type -> ai_studio_management.GetAvailableVectorStoresRequest
+	221, // 309: ai_studio_management.AIStudioManagementService.WritePluginKV:input_type -> ai_studio_management.WritePluginKVRequest
+	223, // 310: ai_studio_management.AIStudioManagementService.ReadPluginKV:input_type -> ai_studio_management.ReadPluginKVRequest
+	225, // 311: ai_studio_management.AIStudioManagementService.DeletePluginKV:input_type -> ai_studio_management.DeletePluginKVRequest
+	227, // 312: ai_studio_management.AIStudioManagementService.ExecuteTool:input_type -> ai_studio_management.ExecuteToolRequest
+	229, // 313: ai_studio_management.AIStudioManagementService.QueryDatasource:input_type -> ai_studio_management.QueryDatasourceRequest
+	232, // 314: ai_studio_management.AIStudioManagementService.CallLLM:input_type -> ai_studio_management.CallLLMRequest
+	240, // 315: ai_studio_management.AIStudioManagementService.CreateSchedule:input_type -> ai_studio_management.CreateScheduleRequest
+	242, // 316: ai_studio_management.AIStudioManagementService.GetSchedule:input_type -> ai_studio_management.GetScheduleRequest
+	244, // 317: ai_studio_management.AIStudioManagementService.ListSchedules:input_type -> ai_studio_management.ListSchedulesRequest
+	246, // 318: ai_studio_management.AIStudioManagementService.UpdateSchedule:input_type -> ai_studio_management.UpdateScheduleRequest
+	248, // 319: ai_studio_management.AIStudioManagementService.DeleteSchedule:input_type -> ai_studio_management.DeleteScheduleRequest
+	251, // 320: ai_studio_management.AIStudioManagementService.GetLicenseInfo:input_type -> ai_studio_management.GetLicenseInfoRequest
+	32,  // 321: ai_studio_management.AIStudioManagementService.CreateNotification:input_type -> ai_studio_management.CreateNotificationRequest
+	35,  // 322: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:input_type -> ai_studio_management.RegisterResourceTypesRequest
+	38,  // 323: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:input_type -> ai_studio_management.RegisterPermissionResourcesRequest
+	2,   // 324: ai_studio_management.AIStudioManagementService.ListObjectMetadataAudit:input_type -> ai_studio_management.ListObjectMetadataAuditRequest
+	5,   // 325: ai_studio_management.AIStudioManagementService.ListAuditRecords:input_type -> ai_studio_management.ListAuditRecordsRequest
+	9,   // 326: ai_studio_management.AIStudioManagementService.ListMCPServers:input_type -> ai_studio_management.ListMCPServersRequest
+	11,  // 327: ai_studio_management.AIStudioManagementService.GetMCPServer:input_type -> ai_studio_management.GetMCPServerRequest
+	15,  // 328: ai_studio_management.AIStudioManagementService.ListModelRouters:input_type -> ai_studio_management.ListModelRoutersRequest
+	17,  // 329: ai_studio_management.AIStudioManagementService.GetModelRouter:input_type -> ai_studio_management.GetModelRouterRequest
+	19,  // 330: ai_studio_management.AIStudioManagementService.ListSemanticRouters:input_type -> ai_studio_management.ListSemanticRoutersRequest
+	21,  // 331: ai_studio_management.AIStudioManagementService.GetSemanticRouter:input_type -> ai_studio_management.GetSemanticRouterRequest
+	24,  // 332: ai_studio_management.AIStudioManagementService.ListGroups:input_type -> ai_studio_management.ListGroupsRequest
+	26,  // 333: ai_studio_management.AIStudioManagementService.GetResourceInstanceGroups:input_type -> ai_studio_management.GetResourceInstanceGroupsRequest
+	28,  // 334: ai_studio_management.AIStudioManagementService.SetResourceInstanceGroups:input_type -> ai_studio_management.SetResourceInstanceGroupsRequest
+	30,  // 335: ai_studio_management.AIStudioManagementService.ListAccessibleResourceInstances:input_type -> ai_studio_management.ListAccessibleResourceInstancesRequest
+	0,   // 336: ai_studio_management.AIStudioManagementService.SetAppGovernanceState:input_type -> ai_studio_management.SetAppGovernanceStateRequest
+	42,  // 337: ai_studio_management.AIStudioManagementService.ListPlugins:output_type -> ai_studio_management.ListPluginsResponse
+	44,  // 338: ai_studio_management.AIStudioManagementService.GetPlugin:output_type -> ai_studio_management.GetPluginResponse
+	46,  // 339: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:output_type -> ai_studio_management.UpdatePluginConfigResponse
+	49,  // 340: ai_studio_management.AIStudioManagementService.ListLLMs:output_type -> ai_studio_management.ListLLMsResponse
+	51,  // 341: ai_studio_management.AIStudioManagementService.GetLLM:output_type -> ai_studio_management.GetLLMResponse
+	53,  // 342: ai_studio_management.AIStudioManagementService.GetLLMPlugins:output_type -> ai_studio_management.GetLLMPluginsResponse
+	56,  // 343: ai_studio_management.AIStudioManagementService.CreateLLM:output_type -> ai_studio_management.CreateLLMResponse
+	58,  // 344: ai_studio_management.AIStudioManagementService.UpdateLLM:output_type -> ai_studio_management.UpdateLLMResponse
+	60,  // 345: ai_studio_management.AIStudioManagementService.DeleteLLM:output_type -> ai_studio_management.DeleteLLMResponse
+	62,  // 346: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:output_type -> ai_studio_management.UpdateLLMPluginsResponse
+	64,  // 347: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:output_type -> ai_studio_management.GetAnalyticsSummaryResponse
+	66,  // 348: ai_studio_management.AIStudioManagementService.GetUsageStatistics:output_type -> ai_studio_management.GetUsageStatisticsResponse
+	68,  // 349: ai_studio_management.AIStudioManagementService.GetCostAnalysis:output_type -> ai_studio_management.GetCostAnalysisResponse
+	176, // 350: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:output_type -> ai_studio_management.GetChatRecordsPerDayResponse
+	178, // 351: ai_studio_management.AIStudioManagementService.GetModelUsage:output_type -> ai_studio_management.GetModelUsageResponse
+	180, // 352: ai_studio_management.AIStudioManagementService.GetVendorUsage:output_type -> ai_studio_management.GetVendorUsageResponse
+	182, // 353: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:output_type -> ai_studio_management.GetTokenUsagePerAppResponse
+	184, // 354: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:output_type -> ai_studio_management.GetToolUsageStatisticsResponse
+	74,  // 355: ai_studio_management.AIStudioManagementService.ListApps:output_type -> ai_studio_management.ListAppsResponse
+	76,  // 356: ai_studio_management.AIStudioManagementService.GetApp:output_type -> ai_studio_management.GetAppResponse
+	80,  // 357: ai_studio_management.AIStudioManagementService.CreateApp:output_type -> ai_studio_management.CreateAppResponse
+	82,  // 358: ai_studio_management.AIStudioManagementService.UpdateApp:output_type -> ai_studio_management.UpdateAppResponse
+	84,  // 359: ai_studio_management.AIStudioManagementService.DeleteApp:output_type -> ai_studio_management.DeleteAppResponse
+	86,  // 360: ai_studio_management.AIStudioManagementService.PatchAppMetadata:output_type -> ai_studio_management.PatchAppMetadataResponse
+	88,  // 361: ai_studio_management.AIStudioManagementService.GetObjectMetadata:output_type -> ai_studio_management.GetObjectMetadataResponse
+	92,  // 362: ai_studio_management.AIStudioManagementService.SetObjectMetadata:output_type -> ai_studio_management.SetObjectMetadataResponse
+	94,  // 363: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:output_type -> ai_studio_management.GetResolvedMetadataSchemaResponse
+	96,  // 364: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:output_type -> ai_studio_management.ValidateObjectMetadataResponse
+	90,  // 365: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:output_type -> ai_studio_management.DeleteObjectMetadataResponse
+	98,  // 366: ai_studio_management.AIStudioManagementService.ListTools:output_type -> ai_studio_management.ListToolsResponse
+	100, // 367: ai_studio_management.AIStudioManagementService.GetTool:output_type -> ai_studio_management.GetToolResponse
+	102, // 368: ai_studio_management.AIStudioManagementService.GetToolOperations:output_type -> ai_studio_management.GetToolOperationsResponse
+	104, // 369: ai_studio_management.AIStudioManagementService.CallToolOperation:output_type -> ai_studio_management.CallToolOperationResponse
+	110, // 370: ai_studio_management.AIStudioManagementService.CreateTool:output_type -> ai_studio_management.CreateToolResponse
+	112, // 371: ai_studio_management.AIStudioManagementService.UpdateTool:output_type -> ai_studio_management.UpdateToolResponse
+	114, // 372: ai_studio_management.AIStudioManagementService.DeleteTool:output_type -> ai_studio_management.DeleteToolResponse
+	116, // 373: ai_studio_management.AIStudioManagementService.ListDatasources:output_type -> ai_studio_management.ListDatasourcesResponse
+	118, // 374: ai_studio_management.AIStudioManagementService.GetDatasource:output_type -> ai_studio_management.GetDatasourceResponse
+	120, // 375: ai_studio_management.AIStudioManagementService.CreateDatasource:output_type -> ai_studio_management.CreateDatasourceResponse
+	122, // 376: ai_studio_management.AIStudioManagementService.UpdateDatasource:output_type -> ai_studio_management.UpdateDatasourceResponse
+	124, // 377: ai_studio_management.AIStudioManagementService.DeleteDatasource:output_type -> ai_studio_management.DeleteDatasourceResponse
+	126, // 378: ai_studio_management.AIStudioManagementService.CloneDatasource:output_type -> ai_studio_management.CloneDatasourceResponse
+	128, // 379: ai_studio_management.AIStudioManagementService.SearchDatasources:output_type -> ai_studio_management.SearchDatasourcesResponse
+	130, // 380: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:output_type -> ai_studio_management.ProcessEmbeddingsResponse
+	132, // 381: ai_studio_management.AIStudioManagementService.GenerateEmbedding:output_type -> ai_studio_management.GenerateEmbeddingResponse
+	136, // 382: ai_studio_management.AIStudioManagementService.StoreDocuments:output_type -> ai_studio_management.StoreDocumentsResponse
+	139, // 383: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:output_type -> ai_studio_management.ProcessAndStoreResponse
+	230, // 384: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:output_type -> ai_studio_management.QueryDatasourceResponse
+	141, // 385: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:output_type -> ai_studio_management.DeleteDocumentsByMetadataResponse
+	143, // 386: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:output_type -> ai_studio_management.QueryByMetadataOnlyResponse
+	145, // 387: ai_studio_management.AIStudioManagementService.ListNamespaces:output_type -> ai_studio_management.ListNamespacesResponse
+	148, // 388: ai_studio_management.AIStudioManagementService.DeleteNamespace:output_type -> ai_studio_management.DeleteNamespaceResponse
+	152, // 389: ai_studio_management.AIStudioManagementService.ListDataCatalogues:output_type -> ai_studio_management.ListDataCataloguesResponse
+	154, // 390: ai_studio_management.AIStudioManagementService.GetDataCatalogue:output_type -> ai_studio_management.GetDataCatalogueResponse
+	156, // 391: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:output_type -> ai_studio_management.CreateDataCatalogueResponse
+	158, // 392: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:output_type -> ai_studio_management.UpdateDataCatalogueResponse
+	160, // 393: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:output_type -> ai_studio_management.DeleteDataCatalogueResponse
+	163, // 394: ai_studio_management.AIStudioManagementService.ListTags:output_type -> ai_studio_management.ListTagsResponse
+	165, // 395: ai_studio_management.AIStudioManagementService.GetTag:output_type -> ai_studio_management.GetTagResponse
+	167, // 396: ai_studio_management.AIStudioManagementService.CreateTag:output_type -> ai_studio_management.CreateTagResponse
+	169, // 397: ai_studio_management.AIStudioManagementService.UpdateTag:output_type -> ai_studio_management.UpdateTagResponse
+	171, // 398: ai_studio_management.AIStudioManagementService.DeleteTag:output_type -> ai_studio_management.DeleteTagResponse
+	173, // 399: ai_studio_management.AIStudioManagementService.SearchTags:output_type -> ai_studio_management.SearchTagsResponse
+	191, // 400: ai_studio_management.AIStudioManagementService.ListModelPrices:output_type -> ai_studio_management.ListModelPricesResponse
+	193, // 401: ai_studio_management.AIStudioManagementService.GetModelPrice:output_type -> ai_studio_management.GetModelPriceResponse
+	195, // 402: ai_studio_management.AIStudioManagementService.CreateModelPrice:output_type -> ai_studio_management.CreateModelPriceResponse
+	197, // 403: ai_studio_management.AIStudioManagementService.UpdateModelPrice:output_type -> ai_studio_management.UpdateModelPriceResponse
+	199, // 404: ai_studio_management.AIStudioManagementService.DeleteModelPrice:output_type -> ai_studio_management.DeleteModelPriceResponse
+	201, // 405: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:output_type -> ai_studio_management.GetModelPricesByVendorResponse
+	204, // 406: ai_studio_management.AIStudioManagementService.ListFilters:output_type -> ai_studio_management.ListFiltersResponse
+	206, // 407: ai_studio_management.AIStudioManagementService.GetFilter:output_type -> ai_studio_management.GetFilterResponse
+	208, // 408: ai_studio_management.AIStudioManagementService.CreateFilter:output_type -> ai_studio_management.CreateFilterResponse
+	210, // 409: ai_studio_management.AIStudioManagementService.UpdateFilter:output_type -> ai_studio_management.UpdateFilterResponse
+	212, // 410: ai_studio_management.AIStudioManagementService.DeleteFilter:output_type -> ai_studio_management.DeleteFilterResponse
+	215, // 411: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:output_type -> ai_studio_management.GetAvailableLLMDriversResponse
+	217, // 412: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:output_type -> ai_studio_management.GetAvailableEmbeddersResponse
+	219, // 413: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:output_type -> ai_studio_management.GetAvailableVectorStoresResponse
+	222, // 414: ai_studio_management.AIStudioManagementService.WritePluginKV:output_type -> ai_studio_management.WritePluginKVResponse
+	224, // 415: ai_studio_management.AIStudioManagementService.ReadPluginKV:output_type -> ai_studio_management.ReadPluginKVResponse
+	226, // 416: ai_studio_management.AIStudioManagementService.DeletePluginKV:output_type -> ai_studio_management.DeletePluginKVResponse
+	228, // 417: ai_studio_management.AIStudioManagementService.ExecuteTool:output_type -> ai_studio_management.ExecuteToolResponse
+	230, // 418: ai_studio_management.AIStudioManagementService.QueryDatasource:output_type -> ai_studio_management.QueryDatasourceResponse
+	233, // 419: ai_studio_management.AIStudioManagementService.CallLLM:output_type -> ai_studio_management.CallLLMResponse
+	241, // 420: ai_studio_management.AIStudioManagementService.CreateSchedule:output_type -> ai_studio_management.CreateScheduleResponse
+	243, // 421: ai_studio_management.AIStudioManagementService.GetSchedule:output_type -> ai_studio_management.GetScheduleResponse
+	245, // 422: ai_studio_management.AIStudioManagementService.ListSchedules:output_type -> ai_studio_management.ListSchedulesResponse
+	247, // 423: ai_studio_management.AIStudioManagementService.UpdateSchedule:output_type -> ai_studio_management.UpdateScheduleResponse
+	249, // 424: ai_studio_management.AIStudioManagementService.DeleteSchedule:output_type -> ai_studio_management.DeleteScheduleResponse
+	252, // 425: ai_studio_management.AIStudioManagementService.GetLicenseInfo:output_type -> ai_studio_management.GetLicenseInfoResponse
+	33,  // 426: ai_studio_management.AIStudioManagementService.CreateNotification:output_type -> ai_studio_management.CreateNotificationResponse
+	36,  // 427: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:output_type -> ai_studio_management.RegisterResourceTypesResponse
+	39,  // 428: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:output_type -> ai_studio_management.RegisterPermissionResourcesResponse
+	4,   // 429: ai_studio_management.AIStudioManagementService.ListObjectMetadataAudit:output_type -> ai_studio_management.ListObjectMetadataAuditResponse
+	7,   // 430: ai_studio_management.AIStudioManagementService.ListAuditRecords:output_type -> ai_studio_management.ListAuditRecordsResponse
+	10,  // 431: ai_studio_management.AIStudioManagementService.ListMCPServers:output_type -> ai_studio_management.ListMCPServersResponse
+	12,  // 432: ai_studio_management.AIStudioManagementService.GetMCPServer:output_type -> ai_studio_management.GetMCPServerResponse
+	16,  // 433: ai_studio_management.AIStudioManagementService.ListModelRouters:output_type -> ai_studio_management.ListModelRoutersResponse
+	18,  // 434: ai_studio_management.AIStudioManagementService.GetModelRouter:output_type -> ai_studio_management.GetModelRouterResponse
+	20,  // 435: ai_studio_management.AIStudioManagementService.ListSemanticRouters:output_type -> ai_studio_management.ListSemanticRoutersResponse
+	22,  // 436: ai_studio_management.AIStudioManagementService.GetSemanticRouter:output_type -> ai_studio_management.GetSemanticRouterResponse
+	25,  // 437: ai_studio_management.AIStudioManagementService.ListGroups:output_type -> ai_studio_management.ListGroupsResponse
+	27,  // 438: ai_studio_management.AIStudioManagementService.GetResourceInstanceGroups:output_type -> ai_studio_management.GetResourceInstanceGroupsResponse
+	29,  // 439: ai_studio_management.AIStudioManagementService.SetResourceInstanceGroups:output_type -> ai_studio_management.SetResourceInstanceGroupsResponse
+	31,  // 440: ai_studio_management.AIStudioManagementService.ListAccessibleResourceInstances:output_type -> ai_studio_management.ListAccessibleResourceInstancesResponse
+	1,   // 441: ai_studio_management.AIStudioManagementService.SetAppGovernanceState:output_type -> ai_studio_management.SetAppGovernanceStateResponse
+	337, // [337:442] is the sub-list for method output_type
+	232, // [232:337] is the sub-list for method input_type
+	232, // [232:232] is the sub-list for extension type_name
+	232, // [232:232] is the sub-list for extension extendee
+	0,   // [0:232] is the sub-list for field type_name
 }
 
 func init() { file_proto_ai_studio_management_ai_studio_management_proto_init() }
@@ -16544,32 +18988,35 @@ func file_proto_ai_studio_management_ai_studio_management_proto_init() {
 	if File_proto_ai_studio_management_ai_studio_management_proto != nil {
 		return
 	}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[2].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[0].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[8].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[9].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[16].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[22].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[23].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[25].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[31].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[35].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[34].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[41].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[45].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[46].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[48].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[64].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[54].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[55].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[57].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[63].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[67].OneofWrappers = []any{}
 	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[73].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[82].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[142].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[144].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[146].OneofWrappers = []any{}
-	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[213].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[77].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[79].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[81].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[97].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[106].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[115].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[175].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[177].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[179].OneofWrappers = []any{}
+	file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[246].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_ai_studio_management_ai_studio_management_proto_rawDesc), len(file_proto_ai_studio_management_ai_studio_management_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   229,
+			NumMessages:   263,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

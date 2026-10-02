@@ -249,6 +249,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 							"label":  slot.Label,
 							"icon":   slot.Icon,
 							"required_permission": item.Mount.RequiredPermission,
+							"hidden": item.Hidden,
 						},
 						IsActive:     true,
 						LoadPriority: 0,
@@ -308,6 +309,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 							"label":  slot.Label,
 							"icon":   slot.Icon,
 							"required_permission": item.Mount.RequiredPermission,
+							"hidden": item.Hidden,
 						},
 						IsActive:      true,
 						LoadPriority:  0,
@@ -478,7 +480,7 @@ func (s *PluginManifestService) GetPortalSidebarMenuItemsForUser(userGroups []st
 	// Group entries by plugin to create collapsible sections
 	pluginGroups := make(map[uint][]models.UIRegistry)
 	for _, entry := range filteredEntries {
-		if entry.Plugin == nil {
+		if entry.Plugin == nil || isHiddenRoute(entry) {
 			continue
 		}
 		pluginGroups[entry.PluginID] = append(pluginGroups[entry.PluginID], entry)
@@ -522,6 +524,13 @@ func (s *PluginManifestService) GetPortalSidebarMenuItemsForUser(userGroups []st
 	return menuItems, nil
 }
 
+// isHiddenRoute reports whether a registered route asked to stay out of the
+// sidebar (manifest item "hidden": true); the route itself still works.
+func isHiddenRoute(entry models.UIRegistry) bool {
+	hidden, _ := entry.MountConfig["hidden"].(bool)
+	return hidden
+}
+
 // groupsOverlap checks if any element in a exists in b
 func groupsOverlap(a, b []string) bool {
 	bSet := make(map[string]struct{}, len(b))
@@ -551,7 +560,7 @@ func (s *PluginManifestService) GetSidebarMenuItems() ([]SidebarMenuItem, error)
 	// Group entries by plugin to create collapsible sections
 	pluginGroups := make(map[uint][]models.UIRegistry)
 	for _, entry := range entries {
-		if entry.Plugin == nil {
+		if entry.Plugin == nil || isHiddenRoute(entry) {
 			continue
 		}
 		pluginGroups[entry.PluginID] = append(pluginGroups[entry.PluginID], entry)

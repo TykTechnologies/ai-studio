@@ -12,6 +12,7 @@ import FailoverCell from "../common/FailoverCell";
 import OnBehalfOfCaption from "../common/OnBehalfOfCaption";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
+import AppGovernanceFlags from "./AppGovernanceFlags";
 import {
   Alert,
   Typography,
@@ -711,6 +712,17 @@ const AppDetails = () => {
                 )}
               </FieldValue>
             </Grid>
+            {app.attributes.metadata?.governance_flags &&
+              Object.keys(app.attributes.metadata.governance_flags).length > 0 && (
+                <>
+                  <Grid item xs={3}>
+                    <FieldLabel>Governance flags:</FieldLabel>
+                  </Grid>
+                  <Grid item xs={9}>
+                    <AppGovernanceFlags metadata={app.attributes.metadata} />
+                  </Grid>
+                </>
+              )}
             <Grid item xs={3}>
               <FieldLabel>LLM providers:</FieldLabel>
             </Grid>

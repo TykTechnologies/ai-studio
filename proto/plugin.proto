@@ -705,6 +705,7 @@ message ResourceTypeRegistrationProto {
     string submission_schema = 9;        // JSON Schema (object) describing the submission payload
     optional bool access_granted_via_app = 10;  // An App credential grants access to instances; unset = platform default
     string portal_detail_path = 11;      // Portal path template for an instance, e.g. "/portal/plugins/x#/items/{id}"
+    string default_access = 12;          // "" | auto: active instances join the Default team | explicit: only granted teams (Enterprise)
 }
 
 message ResourceFormComponentProto {

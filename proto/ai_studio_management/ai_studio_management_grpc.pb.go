@@ -19,98 +19,111 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AIStudioManagementService_ListPlugins_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ListPlugins"
-	AIStudioManagementService_GetPlugin_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetPlugin"
-	AIStudioManagementService_UpdatePluginConfig_FullMethodName          = "/ai_studio_management.AIStudioManagementService/UpdatePluginConfig"
-	AIStudioManagementService_ListLLMs_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListLLMs"
-	AIStudioManagementService_GetLLM_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetLLM"
-	AIStudioManagementService_GetLLMPlugins_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetLLMPlugins"
-	AIStudioManagementService_CreateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateLLM"
-	AIStudioManagementService_UpdateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateLLM"
-	AIStudioManagementService_DeleteLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteLLM"
-	AIStudioManagementService_UpdateLLMPlugins_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateLLMPlugins"
-	AIStudioManagementService_GetAnalyticsSummary_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
-	AIStudioManagementService_GetUsageStatistics_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
-	AIStudioManagementService_GetCostAnalysis_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
-	AIStudioManagementService_GetChatRecordsPerDay_FullMethodName        = "/ai_studio_management.AIStudioManagementService/GetChatRecordsPerDay"
-	AIStudioManagementService_GetModelUsage_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetModelUsage"
-	AIStudioManagementService_GetVendorUsage_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetVendorUsage"
-	AIStudioManagementService_GetTokenUsagePerApp_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetTokenUsagePerApp"
-	AIStudioManagementService_GetToolUsageStatistics_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetToolUsageStatistics"
-	AIStudioManagementService_ListApps_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListApps"
-	AIStudioManagementService_GetApp_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetApp"
-	AIStudioManagementService_CreateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateApp"
-	AIStudioManagementService_UpdateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateApp"
-	AIStudioManagementService_DeleteApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteApp"
-	AIStudioManagementService_PatchAppMetadata_FullMethodName            = "/ai_studio_management.AIStudioManagementService/PatchAppMetadata"
-	AIStudioManagementService_GetObjectMetadata_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetObjectMetadata"
-	AIStudioManagementService_SetObjectMetadata_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SetObjectMetadata"
-	AIStudioManagementService_GetResolvedMetadataSchema_FullMethodName   = "/ai_studio_management.AIStudioManagementService/GetResolvedMetadataSchema"
-	AIStudioManagementService_ValidateObjectMetadata_FullMethodName      = "/ai_studio_management.AIStudioManagementService/ValidateObjectMetadata"
-	AIStudioManagementService_DeleteObjectMetadata_FullMethodName        = "/ai_studio_management.AIStudioManagementService/DeleteObjectMetadata"
-	AIStudioManagementService_ListTools_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/ListTools"
-	AIStudioManagementService_GetTool_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/GetTool"
-	AIStudioManagementService_GetToolOperations_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetToolOperations"
-	AIStudioManagementService_CallToolOperation_FullMethodName           = "/ai_studio_management.AIStudioManagementService/CallToolOperation"
-	AIStudioManagementService_CreateTool_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/CreateTool"
-	AIStudioManagementService_UpdateTool_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/UpdateTool"
-	AIStudioManagementService_DeleteTool_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/DeleteTool"
-	AIStudioManagementService_ListDatasources_FullMethodName             = "/ai_studio_management.AIStudioManagementService/ListDatasources"
-	AIStudioManagementService_GetDatasource_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetDatasource"
-	AIStudioManagementService_CreateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateDatasource"
-	AIStudioManagementService_UpdateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateDatasource"
-	AIStudioManagementService_DeleteDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteDatasource"
-	AIStudioManagementService_CloneDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/CloneDatasource"
-	AIStudioManagementService_SearchDatasources_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SearchDatasources"
-	AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName = "/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings"
-	AIStudioManagementService_GenerateEmbedding_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GenerateEmbedding"
-	AIStudioManagementService_StoreDocuments_FullMethodName              = "/ai_studio_management.AIStudioManagementService/StoreDocuments"
-	AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName    = "/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments"
-	AIStudioManagementService_QueryDatasourceByVector_FullMethodName     = "/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector"
-	AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName   = "/ai_studio_management.AIStudioManagementService/DeleteDocumentsByMetadata"
-	AIStudioManagementService_QueryByMetadataOnly_FullMethodName         = "/ai_studio_management.AIStudioManagementService/QueryByMetadataOnly"
-	AIStudioManagementService_ListNamespaces_FullMethodName              = "/ai_studio_management.AIStudioManagementService/ListNamespaces"
-	AIStudioManagementService_DeleteNamespace_FullMethodName             = "/ai_studio_management.AIStudioManagementService/DeleteNamespace"
-	AIStudioManagementService_ListDataCatalogues_FullMethodName          = "/ai_studio_management.AIStudioManagementService/ListDataCatalogues"
-	AIStudioManagementService_GetDataCatalogue_FullMethodName            = "/ai_studio_management.AIStudioManagementService/GetDataCatalogue"
-	AIStudioManagementService_CreateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/CreateDataCatalogue"
-	AIStudioManagementService_UpdateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/UpdateDataCatalogue"
-	AIStudioManagementService_DeleteDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/DeleteDataCatalogue"
-	AIStudioManagementService_ListTags_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ListTags"
-	AIStudioManagementService_GetTag_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/GetTag"
-	AIStudioManagementService_CreateTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateTag"
-	AIStudioManagementService_UpdateTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateTag"
-	AIStudioManagementService_DeleteTag_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteTag"
-	AIStudioManagementService_SearchTags_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/SearchTags"
-	AIStudioManagementService_ListModelPrices_FullMethodName             = "/ai_studio_management.AIStudioManagementService/ListModelPrices"
-	AIStudioManagementService_GetModelPrice_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetModelPrice"
-	AIStudioManagementService_CreateModelPrice_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateModelPrice"
-	AIStudioManagementService_UpdateModelPrice_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateModelPrice"
-	AIStudioManagementService_DeleteModelPrice_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteModelPrice"
-	AIStudioManagementService_GetModelPricesByVendor_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetModelPricesByVendor"
-	AIStudioManagementService_ListFilters_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ListFilters"
-	AIStudioManagementService_GetFilter_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetFilter"
-	AIStudioManagementService_CreateFilter_FullMethodName                = "/ai_studio_management.AIStudioManagementService/CreateFilter"
-	AIStudioManagementService_UpdateFilter_FullMethodName                = "/ai_studio_management.AIStudioManagementService/UpdateFilter"
-	AIStudioManagementService_DeleteFilter_FullMethodName                = "/ai_studio_management.AIStudioManagementService/DeleteFilter"
-	AIStudioManagementService_GetAvailableLLMDrivers_FullMethodName      = "/ai_studio_management.AIStudioManagementService/GetAvailableLLMDrivers"
-	AIStudioManagementService_GetAvailableEmbedders_FullMethodName       = "/ai_studio_management.AIStudioManagementService/GetAvailableEmbedders"
-	AIStudioManagementService_GetAvailableVectorStores_FullMethodName    = "/ai_studio_management.AIStudioManagementService/GetAvailableVectorStores"
-	AIStudioManagementService_WritePluginKV_FullMethodName               = "/ai_studio_management.AIStudioManagementService/WritePluginKV"
-	AIStudioManagementService_ReadPluginKV_FullMethodName                = "/ai_studio_management.AIStudioManagementService/ReadPluginKV"
-	AIStudioManagementService_DeletePluginKV_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeletePluginKV"
-	AIStudioManagementService_ExecuteTool_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ExecuteTool"
-	AIStudioManagementService_QueryDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/QueryDatasource"
-	AIStudioManagementService_CallLLM_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/CallLLM"
-	AIStudioManagementService_CreateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/CreateSchedule"
-	AIStudioManagementService_GetSchedule_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/GetSchedule"
-	AIStudioManagementService_ListSchedules_FullMethodName               = "/ai_studio_management.AIStudioManagementService/ListSchedules"
-	AIStudioManagementService_UpdateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/UpdateSchedule"
-	AIStudioManagementService_DeleteSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeleteSchedule"
-	AIStudioManagementService_GetLicenseInfo_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetLicenseInfo"
-	AIStudioManagementService_CreateNotification_FullMethodName          = "/ai_studio_management.AIStudioManagementService/CreateNotification"
-	AIStudioManagementService_RegisterResourceTypes_FullMethodName       = "/ai_studio_management.AIStudioManagementService/RegisterResourceTypes"
-	AIStudioManagementService_RegisterPermissionResources_FullMethodName = "/ai_studio_management.AIStudioManagementService/RegisterPermissionResources"
+	AIStudioManagementService_ListPlugins_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/ListPlugins"
+	AIStudioManagementService_GetPlugin_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/GetPlugin"
+	AIStudioManagementService_UpdatePluginConfig_FullMethodName              = "/ai_studio_management.AIStudioManagementService/UpdatePluginConfig"
+	AIStudioManagementService_ListLLMs_FullMethodName                        = "/ai_studio_management.AIStudioManagementService/ListLLMs"
+	AIStudioManagementService_GetLLM_FullMethodName                          = "/ai_studio_management.AIStudioManagementService/GetLLM"
+	AIStudioManagementService_GetLLMPlugins_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetLLMPlugins"
+	AIStudioManagementService_CreateLLM_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/CreateLLM"
+	AIStudioManagementService_UpdateLLM_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/UpdateLLM"
+	AIStudioManagementService_DeleteLLM_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/DeleteLLM"
+	AIStudioManagementService_UpdateLLMPlugins_FullMethodName                = "/ai_studio_management.AIStudioManagementService/UpdateLLMPlugins"
+	AIStudioManagementService_GetAnalyticsSummary_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
+	AIStudioManagementService_GetUsageStatistics_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
+	AIStudioManagementService_GetCostAnalysis_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
+	AIStudioManagementService_GetChatRecordsPerDay_FullMethodName            = "/ai_studio_management.AIStudioManagementService/GetChatRecordsPerDay"
+	AIStudioManagementService_GetModelUsage_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetModelUsage"
+	AIStudioManagementService_GetVendorUsage_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/GetVendorUsage"
+	AIStudioManagementService_GetTokenUsagePerApp_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetTokenUsagePerApp"
+	AIStudioManagementService_GetToolUsageStatistics_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetToolUsageStatistics"
+	AIStudioManagementService_ListApps_FullMethodName                        = "/ai_studio_management.AIStudioManagementService/ListApps"
+	AIStudioManagementService_GetApp_FullMethodName                          = "/ai_studio_management.AIStudioManagementService/GetApp"
+	AIStudioManagementService_CreateApp_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/CreateApp"
+	AIStudioManagementService_UpdateApp_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/UpdateApp"
+	AIStudioManagementService_DeleteApp_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/DeleteApp"
+	AIStudioManagementService_PatchAppMetadata_FullMethodName                = "/ai_studio_management.AIStudioManagementService/PatchAppMetadata"
+	AIStudioManagementService_GetObjectMetadata_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetObjectMetadata"
+	AIStudioManagementService_SetObjectMetadata_FullMethodName               = "/ai_studio_management.AIStudioManagementService/SetObjectMetadata"
+	AIStudioManagementService_GetResolvedMetadataSchema_FullMethodName       = "/ai_studio_management.AIStudioManagementService/GetResolvedMetadataSchema"
+	AIStudioManagementService_ValidateObjectMetadata_FullMethodName          = "/ai_studio_management.AIStudioManagementService/ValidateObjectMetadata"
+	AIStudioManagementService_DeleteObjectMetadata_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteObjectMetadata"
+	AIStudioManagementService_ListTools_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/ListTools"
+	AIStudioManagementService_GetTool_FullMethodName                         = "/ai_studio_management.AIStudioManagementService/GetTool"
+	AIStudioManagementService_GetToolOperations_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetToolOperations"
+	AIStudioManagementService_CallToolOperation_FullMethodName               = "/ai_studio_management.AIStudioManagementService/CallToolOperation"
+	AIStudioManagementService_CreateTool_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/CreateTool"
+	AIStudioManagementService_UpdateTool_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/UpdateTool"
+	AIStudioManagementService_DeleteTool_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/DeleteTool"
+	AIStudioManagementService_ListDatasources_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ListDatasources"
+	AIStudioManagementService_GetDatasource_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetDatasource"
+	AIStudioManagementService_CreateDatasource_FullMethodName                = "/ai_studio_management.AIStudioManagementService/CreateDatasource"
+	AIStudioManagementService_UpdateDatasource_FullMethodName                = "/ai_studio_management.AIStudioManagementService/UpdateDatasource"
+	AIStudioManagementService_DeleteDatasource_FullMethodName                = "/ai_studio_management.AIStudioManagementService/DeleteDatasource"
+	AIStudioManagementService_CloneDatasource_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/CloneDatasource"
+	AIStudioManagementService_SearchDatasources_FullMethodName               = "/ai_studio_management.AIStudioManagementService/SearchDatasources"
+	AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName     = "/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings"
+	AIStudioManagementService_GenerateEmbedding_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GenerateEmbedding"
+	AIStudioManagementService_StoreDocuments_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/StoreDocuments"
+	AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName        = "/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments"
+	AIStudioManagementService_QueryDatasourceByVector_FullMethodName         = "/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector"
+	AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName       = "/ai_studio_management.AIStudioManagementService/DeleteDocumentsByMetadata"
+	AIStudioManagementService_QueryByMetadataOnly_FullMethodName             = "/ai_studio_management.AIStudioManagementService/QueryByMetadataOnly"
+	AIStudioManagementService_ListNamespaces_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/ListNamespaces"
+	AIStudioManagementService_DeleteNamespace_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/DeleteNamespace"
+	AIStudioManagementService_ListDataCatalogues_FullMethodName              = "/ai_studio_management.AIStudioManagementService/ListDataCatalogues"
+	AIStudioManagementService_GetDataCatalogue_FullMethodName                = "/ai_studio_management.AIStudioManagementService/GetDataCatalogue"
+	AIStudioManagementService_CreateDataCatalogue_FullMethodName             = "/ai_studio_management.AIStudioManagementService/CreateDataCatalogue"
+	AIStudioManagementService_UpdateDataCatalogue_FullMethodName             = "/ai_studio_management.AIStudioManagementService/UpdateDataCatalogue"
+	AIStudioManagementService_DeleteDataCatalogue_FullMethodName             = "/ai_studio_management.AIStudioManagementService/DeleteDataCatalogue"
+	AIStudioManagementService_ListTags_FullMethodName                        = "/ai_studio_management.AIStudioManagementService/ListTags"
+	AIStudioManagementService_GetTag_FullMethodName                          = "/ai_studio_management.AIStudioManagementService/GetTag"
+	AIStudioManagementService_CreateTag_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/CreateTag"
+	AIStudioManagementService_UpdateTag_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/UpdateTag"
+	AIStudioManagementService_DeleteTag_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/DeleteTag"
+	AIStudioManagementService_SearchTags_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/SearchTags"
+	AIStudioManagementService_ListModelPrices_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ListModelPrices"
+	AIStudioManagementService_GetModelPrice_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/GetModelPrice"
+	AIStudioManagementService_CreateModelPrice_FullMethodName                = "/ai_studio_management.AIStudioManagementService/CreateModelPrice"
+	AIStudioManagementService_UpdateModelPrice_FullMethodName                = "/ai_studio_management.AIStudioManagementService/UpdateModelPrice"
+	AIStudioManagementService_DeleteModelPrice_FullMethodName                = "/ai_studio_management.AIStudioManagementService/DeleteModelPrice"
+	AIStudioManagementService_GetModelPricesByVendor_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetModelPricesByVendor"
+	AIStudioManagementService_ListFilters_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/ListFilters"
+	AIStudioManagementService_GetFilter_FullMethodName                       = "/ai_studio_management.AIStudioManagementService/GetFilter"
+	AIStudioManagementService_CreateFilter_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/CreateFilter"
+	AIStudioManagementService_UpdateFilter_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/UpdateFilter"
+	AIStudioManagementService_DeleteFilter_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/DeleteFilter"
+	AIStudioManagementService_GetAvailableLLMDrivers_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetAvailableLLMDrivers"
+	AIStudioManagementService_GetAvailableEmbedders_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetAvailableEmbedders"
+	AIStudioManagementService_GetAvailableVectorStores_FullMethodName        = "/ai_studio_management.AIStudioManagementService/GetAvailableVectorStores"
+	AIStudioManagementService_WritePluginKV_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/WritePluginKV"
+	AIStudioManagementService_ReadPluginKV_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/ReadPluginKV"
+	AIStudioManagementService_DeletePluginKV_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/DeletePluginKV"
+	AIStudioManagementService_ExecuteTool_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/ExecuteTool"
+	AIStudioManagementService_QueryDatasource_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/QueryDatasource"
+	AIStudioManagementService_CallLLM_FullMethodName                         = "/ai_studio_management.AIStudioManagementService/CallLLM"
+	AIStudioManagementService_CreateSchedule_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/CreateSchedule"
+	AIStudioManagementService_GetSchedule_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/GetSchedule"
+	AIStudioManagementService_ListSchedules_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/ListSchedules"
+	AIStudioManagementService_UpdateSchedule_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/UpdateSchedule"
+	AIStudioManagementService_DeleteSchedule_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/DeleteSchedule"
+	AIStudioManagementService_GetLicenseInfo_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/GetLicenseInfo"
+	AIStudioManagementService_CreateNotification_FullMethodName              = "/ai_studio_management.AIStudioManagementService/CreateNotification"
+	AIStudioManagementService_RegisterResourceTypes_FullMethodName           = "/ai_studio_management.AIStudioManagementService/RegisterResourceTypes"
+	AIStudioManagementService_RegisterPermissionResources_FullMethodName     = "/ai_studio_management.AIStudioManagementService/RegisterPermissionResources"
+	AIStudioManagementService_ListObjectMetadataAudit_FullMethodName         = "/ai_studio_management.AIStudioManagementService/ListObjectMetadataAudit"
+	AIStudioManagementService_ListAuditRecords_FullMethodName                = "/ai_studio_management.AIStudioManagementService/ListAuditRecords"
+	AIStudioManagementService_ListMCPServers_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/ListMCPServers"
+	AIStudioManagementService_GetMCPServer_FullMethodName                    = "/ai_studio_management.AIStudioManagementService/GetMCPServer"
+	AIStudioManagementService_ListModelRouters_FullMethodName                = "/ai_studio_management.AIStudioManagementService/ListModelRouters"
+	AIStudioManagementService_GetModelRouter_FullMethodName                  = "/ai_studio_management.AIStudioManagementService/GetModelRouter"
+	AIStudioManagementService_ListSemanticRouters_FullMethodName             = "/ai_studio_management.AIStudioManagementService/ListSemanticRouters"
+	AIStudioManagementService_GetSemanticRouter_FullMethodName               = "/ai_studio_management.AIStudioManagementService/GetSemanticRouter"
+	AIStudioManagementService_ListGroups_FullMethodName                      = "/ai_studio_management.AIStudioManagementService/ListGroups"
+	AIStudioManagementService_GetResourceInstanceGroups_FullMethodName       = "/ai_studio_management.AIStudioManagementService/GetResourceInstanceGroups"
+	AIStudioManagementService_SetResourceInstanceGroups_FullMethodName       = "/ai_studio_management.AIStudioManagementService/SetResourceInstanceGroups"
+	AIStudioManagementService_ListAccessibleResourceInstances_FullMethodName = "/ai_studio_management.AIStudioManagementService/ListAccessibleResourceInstances"
+	AIStudioManagementService_SetAppGovernanceState_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SetAppGovernanceState"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -242,6 +255,33 @@ type AIStudioManagementServiceClient interface {
 	// the role editor (sub-resources of "plugin:<manifest id>"). Requires the
 	// rbac.register scope.
 	RegisterPermissionResources(ctx context.Context, in *RegisterPermissionResourcesRequest, opts ...grpc.CallOption) (*RegisterPermissionResourcesResponse, error)
+	// Governed metadata history (Enterprise): the audit trail of one object's
+	// governed metadata, newest first. Requires metadata.read.
+	ListObjectMetadataAudit(ctx context.Context, in *ListObjectMetadataAuditRequest, opts ...grpc.CallOption) (*ListObjectMetadataAuditResponse, error)
+	// Platform audit trail (Enterprise), read-only and filtered to one
+	// resource. Never carries request or response bodies. Requires audit.read.
+	ListAuditRecords(ctx context.Context, in *ListAuditRecordsRequest, opts ...grpc.CallOption) (*ListAuditRecordsResponse, error)
+	// MCP servers (Enterprise). Never carries upstream URLs, auth details or
+	// definitions. Requires mcp-servers.read.
+	ListMCPServers(ctx context.Context, in *ListMCPServersRequest, opts ...grpc.CallOption) (*ListMCPServersResponse, error)
+	GetMCPServer(ctx context.Context, in *GetMCPServerRequest, opts ...grpc.CallOption) (*GetMCPServerResponse, error)
+	// Model and semantic routers (Enterprise), with the LLMs they can route
+	// to. Requires routers.read.
+	ListModelRouters(ctx context.Context, in *ListModelRoutersRequest, opts ...grpc.CallOption) (*ListModelRoutersResponse, error)
+	GetModelRouter(ctx context.Context, in *GetModelRouterRequest, opts ...grpc.CallOption) (*GetModelRouterResponse, error)
+	ListSemanticRouters(ctx context.Context, in *ListSemanticRoutersRequest, opts ...grpc.CallOption) (*ListSemanticRoutersResponse, error)
+	GetSemanticRouter(ctx context.Context, in *GetSemanticRouterRequest, opts ...grpc.CallOption) (*GetSemanticRouterResponse, error)
+	// Team access to the calling plugin's own resource instances: the same
+	// grants the Teams page edits. A plugin can only read or change grants on
+	// resource types it registered. Requires resource-access.manage.
+	ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*ListGroupsResponse, error)
+	GetResourceInstanceGroups(ctx context.Context, in *GetResourceInstanceGroupsRequest, opts ...grpc.CallOption) (*GetResourceInstanceGroupsResponse, error)
+	SetResourceInstanceGroups(ctx context.Context, in *SetResourceInstanceGroupsRequest, opts ...grpc.CallOption) (*SetResourceInstanceGroupsResponse, error)
+	ListAccessibleResourceInstances(ctx context.Context, in *ListAccessibleResourceInstancesRequest, opts ...grpc.CallOption) (*ListAccessibleResourceInstancesResponse, error)
+	// App governance state: suspend or reactivate an App and raise or clear
+	// governance flags on it (e.g. "ownerless", "review_lapsed"), recorded in
+	// the audit trail. Cannot change an App's bindings. Requires apps.lifecycle.
+	SetAppGovernanceState(ctx context.Context, in *SetAppGovernanceStateRequest, opts ...grpc.CallOption) (*SetAppGovernanceStateResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -1181,6 +1221,136 @@ func (c *aIStudioManagementServiceClient) RegisterPermissionResources(ctx contex
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) ListObjectMetadataAudit(ctx context.Context, in *ListObjectMetadataAuditRequest, opts ...grpc.CallOption) (*ListObjectMetadataAuditResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListObjectMetadataAuditResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListObjectMetadataAudit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListAuditRecords(ctx context.Context, in *ListAuditRecordsRequest, opts ...grpc.CallOption) (*ListAuditRecordsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAuditRecordsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListAuditRecords_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListMCPServers(ctx context.Context, in *ListMCPServersRequest, opts ...grpc.CallOption) (*ListMCPServersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMCPServersResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListMCPServers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetMCPServer(ctx context.Context, in *GetMCPServerRequest, opts ...grpc.CallOption) (*GetMCPServerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetMCPServerResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetMCPServer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListModelRouters(ctx context.Context, in *ListModelRoutersRequest, opts ...grpc.CallOption) (*ListModelRoutersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListModelRoutersResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListModelRouters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetModelRouter(ctx context.Context, in *GetModelRouterRequest, opts ...grpc.CallOption) (*GetModelRouterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetModelRouterResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetModelRouter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListSemanticRouters(ctx context.Context, in *ListSemanticRoutersRequest, opts ...grpc.CallOption) (*ListSemanticRoutersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSemanticRoutersResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListSemanticRouters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetSemanticRouter(ctx context.Context, in *GetSemanticRouterRequest, opts ...grpc.CallOption) (*GetSemanticRouterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSemanticRouterResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetSemanticRouter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*ListGroupsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListGroupsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetResourceInstanceGroups(ctx context.Context, in *GetResourceInstanceGroupsRequest, opts ...grpc.CallOption) (*GetResourceInstanceGroupsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetResourceInstanceGroupsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetResourceInstanceGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) SetResourceInstanceGroups(ctx context.Context, in *SetResourceInstanceGroupsRequest, opts ...grpc.CallOption) (*SetResourceInstanceGroupsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetResourceInstanceGroupsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_SetResourceInstanceGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListAccessibleResourceInstances(ctx context.Context, in *ListAccessibleResourceInstancesRequest, opts ...grpc.CallOption) (*ListAccessibleResourceInstancesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAccessibleResourceInstancesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListAccessibleResourceInstances_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) SetAppGovernanceState(ctx context.Context, in *SetAppGovernanceStateRequest, opts ...grpc.CallOption) (*SetAppGovernanceStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAppGovernanceStateResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_SetAppGovernanceState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -1310,6 +1480,33 @@ type AIStudioManagementServiceServer interface {
 	// the role editor (sub-resources of "plugin:<manifest id>"). Requires the
 	// rbac.register scope.
 	RegisterPermissionResources(context.Context, *RegisterPermissionResourcesRequest) (*RegisterPermissionResourcesResponse, error)
+	// Governed metadata history (Enterprise): the audit trail of one object's
+	// governed metadata, newest first. Requires metadata.read.
+	ListObjectMetadataAudit(context.Context, *ListObjectMetadataAuditRequest) (*ListObjectMetadataAuditResponse, error)
+	// Platform audit trail (Enterprise), read-only and filtered to one
+	// resource. Never carries request or response bodies. Requires audit.read.
+	ListAuditRecords(context.Context, *ListAuditRecordsRequest) (*ListAuditRecordsResponse, error)
+	// MCP servers (Enterprise). Never carries upstream URLs, auth details or
+	// definitions. Requires mcp-servers.read.
+	ListMCPServers(context.Context, *ListMCPServersRequest) (*ListMCPServersResponse, error)
+	GetMCPServer(context.Context, *GetMCPServerRequest) (*GetMCPServerResponse, error)
+	// Model and semantic routers (Enterprise), with the LLMs they can route
+	// to. Requires routers.read.
+	ListModelRouters(context.Context, *ListModelRoutersRequest) (*ListModelRoutersResponse, error)
+	GetModelRouter(context.Context, *GetModelRouterRequest) (*GetModelRouterResponse, error)
+	ListSemanticRouters(context.Context, *ListSemanticRoutersRequest) (*ListSemanticRoutersResponse, error)
+	GetSemanticRouter(context.Context, *GetSemanticRouterRequest) (*GetSemanticRouterResponse, error)
+	// Team access to the calling plugin's own resource instances: the same
+	// grants the Teams page edits. A plugin can only read or change grants on
+	// resource types it registered. Requires resource-access.manage.
+	ListGroups(context.Context, *ListGroupsRequest) (*ListGroupsResponse, error)
+	GetResourceInstanceGroups(context.Context, *GetResourceInstanceGroupsRequest) (*GetResourceInstanceGroupsResponse, error)
+	SetResourceInstanceGroups(context.Context, *SetResourceInstanceGroupsRequest) (*SetResourceInstanceGroupsResponse, error)
+	ListAccessibleResourceInstances(context.Context, *ListAccessibleResourceInstancesRequest) (*ListAccessibleResourceInstancesResponse, error)
+	// App governance state: suspend or reactivate an App and raise or clear
+	// governance flags on it (e.g. "ownerless", "review_lapsed"), recorded in
+	// the audit trail. Cannot change an App's bindings. Requires apps.lifecycle.
+	SetAppGovernanceState(context.Context, *SetAppGovernanceStateRequest) (*SetAppGovernanceStateResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -1595,6 +1792,45 @@ func (UnimplementedAIStudioManagementServiceServer) RegisterResourceTypes(contex
 }
 func (UnimplementedAIStudioManagementServiceServer) RegisterPermissionResources(context.Context, *RegisterPermissionResourcesRequest) (*RegisterPermissionResourcesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterPermissionResources not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListObjectMetadataAudit(context.Context, *ListObjectMetadataAuditRequest) (*ListObjectMetadataAuditResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListObjectMetadataAudit not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListAuditRecords(context.Context, *ListAuditRecordsRequest) (*ListAuditRecordsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAuditRecords not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListMCPServers(context.Context, *ListMCPServersRequest) (*ListMCPServersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMCPServers not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetMCPServer(context.Context, *GetMCPServerRequest) (*GetMCPServerResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetMCPServer not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListModelRouters(context.Context, *ListModelRoutersRequest) (*ListModelRoutersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListModelRouters not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetModelRouter(context.Context, *GetModelRouterRequest) (*GetModelRouterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetModelRouter not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListSemanticRouters(context.Context, *ListSemanticRoutersRequest) (*ListSemanticRoutersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSemanticRouters not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetSemanticRouter(context.Context, *GetSemanticRouterRequest) (*GetSemanticRouterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSemanticRouter not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListGroups(context.Context, *ListGroupsRequest) (*ListGroupsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListGroups not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetResourceInstanceGroups(context.Context, *GetResourceInstanceGroupsRequest) (*GetResourceInstanceGroupsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResourceInstanceGroups not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) SetResourceInstanceGroups(context.Context, *SetResourceInstanceGroupsRequest) (*SetResourceInstanceGroupsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetResourceInstanceGroups not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListAccessibleResourceInstances(context.Context, *ListAccessibleResourceInstancesRequest) (*ListAccessibleResourceInstancesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAccessibleResourceInstances not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) SetAppGovernanceState(context.Context, *SetAppGovernanceStateRequest) (*SetAppGovernanceStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetAppGovernanceState not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -3267,6 +3503,240 @@ func _AIStudioManagementService_RegisterPermissionResources_Handler(srv interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_ListObjectMetadataAudit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListObjectMetadataAuditRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListObjectMetadataAudit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListObjectMetadataAudit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListObjectMetadataAudit(ctx, req.(*ListObjectMetadataAuditRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListAuditRecords_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAuditRecordsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListAuditRecords(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListAuditRecords_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListAuditRecords(ctx, req.(*ListAuditRecordsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListMCPServers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMCPServersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListMCPServers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListMCPServers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListMCPServers(ctx, req.(*ListMCPServersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetMCPServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetMCPServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetMCPServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetMCPServer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetMCPServer(ctx, req.(*GetMCPServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListModelRouters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListModelRoutersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListModelRouters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListModelRouters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListModelRouters(ctx, req.(*ListModelRoutersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetModelRouter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModelRouterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetModelRouter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetModelRouter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetModelRouter(ctx, req.(*GetModelRouterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListSemanticRouters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSemanticRoutersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListSemanticRouters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListSemanticRouters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListSemanticRouters(ctx, req.(*ListSemanticRoutersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetSemanticRouter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSemanticRouterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetSemanticRouter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetSemanticRouter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetSemanticRouter(ctx, req.(*GetSemanticRouterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGroupsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListGroups(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListGroups_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListGroups(ctx, req.(*ListGroupsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetResourceInstanceGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResourceInstanceGroupsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetResourceInstanceGroups(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetResourceInstanceGroups_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetResourceInstanceGroups(ctx, req.(*GetResourceInstanceGroupsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_SetResourceInstanceGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetResourceInstanceGroupsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).SetResourceInstanceGroups(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_SetResourceInstanceGroups_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).SetResourceInstanceGroups(ctx, req.(*SetResourceInstanceGroupsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListAccessibleResourceInstances_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAccessibleResourceInstancesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListAccessibleResourceInstances(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListAccessibleResourceInstances_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListAccessibleResourceInstances(ctx, req.(*ListAccessibleResourceInstancesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_SetAppGovernanceState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAppGovernanceStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).SetAppGovernanceState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_SetAppGovernanceState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).SetAppGovernanceState(ctx, req.(*SetAppGovernanceStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3637,6 +4107,58 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterPermissionResources",
 			Handler:    _AIStudioManagementService_RegisterPermissionResources_Handler,
+		},
+		{
+			MethodName: "ListObjectMetadataAudit",
+			Handler:    _AIStudioManagementService_ListObjectMetadataAudit_Handler,
+		},
+		{
+			MethodName: "ListAuditRecords",
+			Handler:    _AIStudioManagementService_ListAuditRecords_Handler,
+		},
+		{
+			MethodName: "ListMCPServers",
+			Handler:    _AIStudioManagementService_ListMCPServers_Handler,
+		},
+		{
+			MethodName: "GetMCPServer",
+			Handler:    _AIStudioManagementService_GetMCPServer_Handler,
+		},
+		{
+			MethodName: "ListModelRouters",
+			Handler:    _AIStudioManagementService_ListModelRouters_Handler,
+		},
+		{
+			MethodName: "GetModelRouter",
+			Handler:    _AIStudioManagementService_GetModelRouter_Handler,
+		},
+		{
+			MethodName: "ListSemanticRouters",
+			Handler:    _AIStudioManagementService_ListSemanticRouters_Handler,
+		},
+		{
+			MethodName: "GetSemanticRouter",
+			Handler:    _AIStudioManagementService_GetSemanticRouter_Handler,
+		},
+		{
+			MethodName: "ListGroups",
+			Handler:    _AIStudioManagementService_ListGroups_Handler,
+		},
+		{
+			MethodName: "GetResourceInstanceGroups",
+			Handler:    _AIStudioManagementService_GetResourceInstanceGroups_Handler,
+		},
+		{
+			MethodName: "SetResourceInstanceGroups",
+			Handler:    _AIStudioManagementService_SetResourceInstanceGroups_Handler,
+		},
+		{
+			MethodName: "ListAccessibleResourceInstances",
+			Handler:    _AIStudioManagementService_ListAccessibleResourceInstances_Handler,
+		},
+		{
+			MethodName: "SetAppGovernanceState",
+			Handler:    _AIStudioManagementService_SetAppGovernanceState_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

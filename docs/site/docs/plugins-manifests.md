@@ -423,10 +423,19 @@ Add a collapsible section to the sidebar with nested items:
       "path": "/admin/my-plugin/settings",
       "title": "Settings",
       "mount": { }
+    },
+    {
+      "type": "route",
+      "path": "/admin/my-plugin/item",
+      "title": "Item",
+      "hidden": true,
+      "mount": { }
     }
   ]
 }
 ```
+
+A route item with `"hidden": true` is mounted and reachable by URL, but not listed in the sidebar. Use it for pages reached from another page, such as a detail or editor view (`/admin/my-plugin/item#/items/42`). Hidden routes follow the same permission rules as listed ones. Portal routes match the path exactly, so put the item's ID in the hash, not in the path.
 
 #### sidebar.link
 

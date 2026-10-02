@@ -58,6 +58,26 @@ const SCOPE_CATEGORIES = {
     description: 'Registering custom resource types that Apps can be given access to (ResourceProvider plugins)',
     color: 'secondary',
   },
+  'resource-access': {
+    label: 'Team access to plugin resources',
+    description: "Deciding which teams can see the plugin's own resource instances",
+    color: 'warning',
+  },
+  'audit': {
+    label: 'Audit trail',
+    description: 'Reading the change history of individual resources',
+    color: 'info',
+  },
+  'mcp-servers': {
+    label: 'MCP servers',
+    description: 'Reading MCP server details (without upstream URLs or credentials)',
+    color: 'primary',
+  },
+  'routers': {
+    label: 'Routers',
+    description: 'Reading model and semantic routers',
+    color: 'primary',
+  },
   // Object hook categories
   'llm': {
     label: 'LLM Object Hooks',
@@ -113,6 +133,17 @@ export const SCOPE_DESCRIPTIONS = {
 
   // RBAC
   'rbac.register': "Register the plugin's own permission resources with the role system",
+
+  // Team access to the plugin's own resource instances
+  'resource-access.manage': "List teams and grant or revoke team access to the plugin's own resource instances",
+
+  // Governance reads
+  'audit.read': 'Read the audit trail of individual resources (never request or response bodies)',
+  'mcp-servers.read': 'View MCP servers (never upstream URLs or credentials)',
+  'routers.read': 'View model and semantic routers and the LLMs they route to',
+  'apps.lifecycle': 'Suspend or reactivate applications and flag them for governance (cannot change what an application can access)',
+  'metadata.read': 'Read governed metadata and its change history',
+  'datasources.read': 'View data source configurations',
 
   // LLM object hooks
   'llm.before_create': 'Hook called before creating a new LLM configuration',

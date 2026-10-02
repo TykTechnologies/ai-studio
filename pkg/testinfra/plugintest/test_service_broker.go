@@ -37,6 +37,9 @@ type TestManagementServer struct {
 	// Governed metadata schemas and records (see test_service_broker_metadata.go)
 	metadataState *metadataState
 
+	// Core objects, audit records and team grants (see test_service_broker_governance.go)
+	governanceState *governanceState
+
 	// Call tracking
 	calls []ServiceCall
 
@@ -333,7 +336,11 @@ type TestEventService struct {
 
 	publishedEvents []Event
 	subscriptions   map[string][]EventCallback
-	injectedEvents  chan *eventpb.EventMessage
+	// streams holds one channel per open Subscribe stream; InjectEvent fans
+	// each event out to all of them (a single shared channel would let a
+	// stream for another topic swallow it).
+	streams map[int]chan *eventpb.EventMessage
+	nextID  int
 
 	mu sync.RWMutex
 }
@@ -346,7 +353,7 @@ func NewTestEventService() *TestEventService {
 	return &TestEventService{
 		publishedEvents: []Event{},
 		subscriptions:   make(map[string][]EventCallback),
-		injectedEvents:  make(chan *eventpb.EventMessage, 100),
+		streams:         make(map[int]chan *eventpb.EventMessage),
 	}
 }
 
@@ -371,9 +378,20 @@ func (s *TestEventService) Publish(ctx context.Context, req *eventpb.PublishRequ
 // Subscribe implements the Subscribe streaming RPC.
 func (s *TestEventService) Subscribe(req *eventpb.SubscribeRequest, stream eventpb.PluginEventService_SubscribeServer) error {
 	// For testing, just keep the stream open and send injected events
+	ch := make(chan *eventpb.EventMessage, 100)
+	s.mu.Lock()
+	id := s.nextID
+	s.nextID++
+	s.streams[id] = ch
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.streams, id)
+		s.mu.Unlock()
+	}()
 	for {
 		select {
-		case event := <-s.injectedEvents:
+		case event := <-ch:
 			// Check if this event matches the subscription
 			topicMatches := false
 			if req.SubscribeAll {
@@ -419,11 +437,19 @@ func (s *TestEventService) GetPublishedEventsByTopic(topic string) []Event {
 
 // InjectEvent simulates receiving an event from the event bus.
 func (s *TestEventService) InjectEvent(topic string, payload []byte) {
-	s.injectedEvents <- &eventpb.EventMessage{
+	event := &eventpb.EventMessage{
 		Id:      generateEventID(),
 		Topic:   topic,
 		Payload: payload,
 		Origin:  "test-harness",
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, ch := range s.streams {
+		select {
+		case ch <- event:
+		default: // a stream that stopped reading must not block the test
+		}
 	}
 }
 

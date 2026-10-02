@@ -46,7 +46,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		MonthlyBudget:   monthlyBudget,
 		BudgetStartDate: budgetStartDate,
 		Namespace:       "", // Default to global namespace
-		Metadata:        metadata,
+		Metadata:        keepGovernanceFlags(metadata, nil),
 	}
 
 	// Attribute the App to its team; a managed team pool supplies (or
@@ -188,7 +188,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		MonthlyBudget:   monthlyBudget,
 		BudgetStartDate: budgetStartDate,
 		Namespace:       namespace,
-		Metadata:        metadata,
+		Metadata:        keepGovernanceFlags(metadata, nil),
 	}
 
 	// Attribute the App to its team; a managed team pool supplies (or
@@ -309,7 +309,7 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	app.UserID = userID
 	app.MonthlyBudget = monthlyBudget
 	app.BudgetStartDate = budgetStartDate
-	app.Metadata = metadata
+	app.Metadata = keepGovernanceFlags(metadata, app.Metadata)
 
 	// Update datasources
 	if err := s.updateAppDatasources(app, datasourceIDs); err != nil {
@@ -353,6 +353,9 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 // Uses a database transaction for safe concurrent access. PostgreSQL uses FOR UPDATE
 // row locking; SQLite serializes transactions implicitly.
 func (s *Service) PatchAppMetadata(appID uint, key, value string, deleteKey bool) (map[string]interface{}, error) {
+	if key == AppGovernanceFlagsKey {
+		return nil, ErrReservedAppMetadataKey
+	}
 	var resultMetadata map[string]interface{}
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {

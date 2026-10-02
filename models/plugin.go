@@ -585,4 +585,15 @@ const (
 
 	// RBAC scopes
 	ServiceScopeRBACRegister = "rbac.register" // Register the plugin's own permission resources at runtime
+
+	// Plugin resource access scopes (ResourceProvider plugins)
+	ServiceScopeResourceAccessManage = "resource-access.manage" // Read and set team grants on the plugin's own resource instances
+
+	// Read-only scopes for governance plugins
+	ServiceScopeAuditRead      = "audit.read"       // Read the platform audit trail for one resource (no request/response bodies)
+	ServiceScopeMCPServersRead = "mcp-servers.read" // View MCP servers (never upstream URLs, auth details or definitions)
+	ServiceScopeRoutersRead    = "routers.read"     // View model and semantic routers and the LLMs they route to
+
+	// App governance scope: suspend/reactivate Apps and flag them, never edit them
+	ServiceScopeAppsLifecycle = "apps.lifecycle"
 )

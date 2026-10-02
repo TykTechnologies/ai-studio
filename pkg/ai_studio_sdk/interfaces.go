@@ -137,6 +137,17 @@ type ServiceAPIScope struct {
 
 	// RBAC scopes: register the plugin's own permission resources
 	RBACRegister string
+
+	// Team grants on the plugin's own resource instances
+	ResourceAccessManage string
+
+	// Read-only governance scopes
+	AuditRead      string
+	MCPServersRead string
+	RoutersRead    string
+
+	// App governance: suspend/reactivate and flag Apps
+	AppsLifecycle string
 }
 
 // AvailableScopes provides constants for common service API scopes
@@ -171,6 +182,11 @@ var AvailableScopes = ServiceAPIScope{
 	NotificationsWrite:    "notifications.write",
 	ResourceTypesManage:   "resource-types.manage",
 	RBACRegister:          "rbac.register",
+	ResourceAccessManage:  "resource-access.manage",
+	AuditRead:             "audit.read",
+	MCPServersRead:        "mcp-servers.read",
+	RoutersRead:           "routers.read",
+	AppsLifecycle:         "apps.lifecycle",
 }
 
 // PluginContext provides context information for service API calls

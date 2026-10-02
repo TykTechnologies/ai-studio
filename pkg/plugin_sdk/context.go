@@ -287,6 +287,58 @@ type StudioServices interface {
 	// ValidateObjectMetadata validates values without storing them.
 	// Requires the metadata.read scope.
 	ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (valid bool, enforced bool, resultJSON string, err error)
+
+	// ListObjectMetadataAudit returns the governed metadata history of an
+	// object, newest first (limit 0 = 100, capped at 500). Community Edition
+	// returns an empty list. Requires the metadata.read scope.
+	ListObjectMetadataAudit(ctx context.Context, objectType, objectID string, limit int) ([]MetadataAuditEntry, error)
+
+	// ===== Governance reads =====
+
+	// ListAuditRecords returns the platform audit records for one resource
+	// ("llm", "tool", "datasource", "mcp_server", "model_router",
+	// "semantic_router", "app"), newest first, without request or response
+	// bodies; mutationsOnly drops reads. Enterprise only: Community Edition
+	// answers codes.Unimplemented. Requires the audit.read scope.
+	ListAuditRecords(ctx context.Context, resourceType, resourceID string, limit int, mutationsOnly bool) ([]AuditRecord, error)
+
+	// ListMCPServers / GetMCPServer read MCP servers without upstream URLs,
+	// auth details or definitions. Requires the mcp-servers.read scope.
+	ListMCPServers(ctx context.Context, page, limit int32) ([]MCPServerSummary, int64, error)
+	GetMCPServer(ctx context.Context, serverID uint32) (*MCPServerSummary, error)
+
+	// ListModelRouters, GetModelRouter, ListSemanticRouters and
+	// GetSemanticRouter read routers with the LLMs (and, for semantic
+	// routers, the model routers) they can send requests to. Enterprise
+	// only. Requires the routers.read scope.
+	ListModelRouters(ctx context.Context, page, limit int32) ([]RouterSummary, int64, error)
+	GetModelRouter(ctx context.Context, routerID uint32) (*RouterSummary, error)
+	ListSemanticRouters(ctx context.Context, page, limit int32) ([]RouterSummary, int64, error)
+	GetSemanticRouter(ctx context.Context, routerID uint32) (*RouterSummary, error)
+
+	// ===== Team access to the plugin's own resource instances =====
+	// For types registered with DefaultAccessExplicit. Each call is limited
+	// to resource types this plugin registered. Requires the
+	// resource-access.manage scope.
+
+	// ListGroups lists every team, with the Default team flagged.
+	ListGroups(ctx context.Context) ([]GroupSummary, error)
+	// GetResourceInstanceGroups returns the IDs of the teams granted an instance.
+	GetResourceInstanceGroups(ctx context.Context, resourceTypeSlug, instanceID string) ([]uint32, error)
+	// SetResourceInstanceGroups adds groupIDs to an instance's grants, or with
+	// replace sets them to exactly groupIDs. Returns the grants afterwards.
+	SetResourceInstanceGroups(ctx context.Context, resourceTypeSlug, instanceID string, groupIDs []uint32, replace bool) ([]uint32, error)
+	// ListAccessibleResourceInstances returns which instances of a type a user
+	// can reach: seeAll when the user manages teams, otherwise the instance
+	// IDs granted to the user's teams.
+	ListAccessibleResourceInstances(ctx context.Context, resourceTypeSlug string, userID uint32) (seeAll bool, instanceIDs []string, err error)
+
+	// SetAppGovernanceState suspends or reactivates an App (isActive nil
+	// leaves it alone) and raises or clears governance flags on it (an empty
+	// value clears a flag); the change is audited with the reason. It cannot
+	// change what the App may access. Returns whether anything changed.
+	// Requires the apps.lifecycle scope.
+	SetAppGovernanceState(ctx context.Context, appID uint32, isActive *bool, flags map[string]string, reason string) (changed bool, err error)
 }
 
 // Governed metadata audiences for StudioServices.GetObjectMetadataForAudience.

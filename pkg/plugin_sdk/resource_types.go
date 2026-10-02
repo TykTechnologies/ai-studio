@@ -71,7 +71,23 @@ type ResourceTypeRegistration struct {
 	// path starting with "/"; portal plugin routes match the pathname
 	// exactly, so carry the ID in the hash of a registered portal route.
 	PortalDetailPath string
+
+	// DefaultAccess decides whether active instances are granted to the
+	// Default team (which every user joins). DefaultAccessAuto (or empty,
+	// the default) grants them, so every user sees them. DefaultAccessExplicit
+	// leaves access to team grants: an administrator's on the Teams page, or
+	// the plugin's own through StudioServices.SetResourceInstanceGroups. Use
+	// it for instances that are an internal record until someone decides to
+	// share them. Community Edition has no team segmentation and always
+	// behaves as DefaultAccessAuto.
+	DefaultAccess string
 }
+
+// Default-team access modes for ResourceTypeRegistration.DefaultAccess.
+const (
+	DefaultAccessAuto     = "auto"
+	DefaultAccessExplicit = "explicit"
+)
 
 // ResourceFormComponent declares a Web Component that the platform will render
 // inside the App Create/Edit form for resource selection.

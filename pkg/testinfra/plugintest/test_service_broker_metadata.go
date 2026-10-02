@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"sort"
 	"strings"
 	"sync"
@@ -65,6 +66,8 @@ type metadataState struct {
 	pluginID   uint32 // resolves plugin_resource:self:<slug> when the request context carries no plugin ID
 	schemas    map[string]*MetadataSchema
 	records    map[string]*MetadataRecord
+	audit      []*mgmtpb.ObjectMetadataAuditEntry // every set/merge/delete, oldest first, keyed in auditKeys
+	auditKeys  []string
 }
 
 func (s *TestManagementServer) metadata() *metadataState {
@@ -387,6 +390,15 @@ func (s *TestManagementServer) SetObjectMetadata(ctx context.Context, req *mgmtp
 	case m.pluginID != 0:
 		source = fmt.Sprintf("plugin:%d", m.pluginID)
 	}
+	before := map[string]interface{}{}
+	if existing, ok := m.records[key]; ok {
+		before = existing.Values
+	}
+	action := "set"
+	if req.Merge {
+		action = "merge"
+	}
+	m.appendAudit(key, action, source, before, merged)
 	m.records[key] = &MetadataRecord{ObjectType: objectType, ObjectID: req.ObjectId, Values: merged, Source: source, UpdatedAt: time.Now()}
 	return &mgmtpb.SetObjectMetadataResponse{Success: true, ValuesJson: mustJSON(merged), ValidationResultJson: mustJSON(res)}, nil
 }
@@ -401,8 +413,54 @@ func (s *TestManagementServer) DeleteObjectMetadata(ctx context.Context, req *mg
 	if err != nil {
 		return nil, err
 	}
-	delete(m.records, objectType+"|"+req.ObjectId)
+	key := objectType + "|" + req.ObjectId
+	if existing, ok := m.records[key]; ok {
+		m.appendAudit(key, "delete", existing.Source, existing.Values, nil)
+	}
+	delete(m.records, key)
 	return &mgmtpb.DeleteObjectMetadataResponse{Success: true}, nil
+}
+
+func (m *metadataState) appendAudit(key, action, source string, before, after map[string]interface{}) {
+	entry := &mgmtpb.ObjectMetadataAuditEntry{
+		Id:        uint32(len(m.audit) + 1),
+		Action:    action,
+		Source:    source,
+		CreatedAt: timestamppb.Now(),
+	}
+	if before != nil {
+		entry.BeforeJson = mustJSON(before)
+	}
+	if after != nil {
+		entry.AfterJson = mustJSON(after)
+	}
+	m.audit = append(m.audit, entry)
+	m.auditKeys = append(m.auditKeys, key)
+}
+
+// ListObjectMetadataAudit implements the ListObjectMetadataAudit RPC from the
+// history SetObjectMetadata and DeleteObjectMetadata recorded, newest first.
+func (s *TestManagementServer) ListObjectMetadataAudit(ctx context.Context, req *mgmtpb.ListObjectMetadataAuditRequest) (*mgmtpb.ListObjectMetadataAuditResponse, error) {
+	s.recordMetadataCall("ListObjectMetadataAudit", req)
+	m := s.metadata()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	objectType, err := m.resolveObjectType(req.Context, req.ObjectType)
+	if err != nil {
+		return nil, err
+	}
+	key := objectType + "|" + req.ObjectId
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 100
+	}
+	out := []*mgmtpb.ObjectMetadataAuditEntry{}
+	for i := len(m.audit) - 1; i >= 0 && len(out) < limit; i-- {
+		if m.auditKeys[i] == key {
+			out = append(out, m.audit[i])
+		}
+	}
+	return &mgmtpb.ListObjectMetadataAuditResponse{Entries: out}, nil
 }
 
 // GetResolvedMetadataSchema implements the GetResolvedMetadataSchema RPC.

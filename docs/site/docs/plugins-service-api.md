@@ -726,6 +726,27 @@ func (p *MyPlugin) HandleRPCWithUser(method string, payload []byte, user *plugin
 
 `Can` also accepts platform permissions unchanged (`user.Can("llms:read")`). The platform hands the plugin the caller's permissions with the plugin's own grants spelled out, so `plugins:execute` holders and full administrators pass without the plugin knowing the umbrella rule; on a host older than per-plugin permissions `Can` falls back to `IsAdmin`. Admin RPC methods listed in the manifest's `rbac.rpc_methods` are enforced by the platform before the call reaches the plugin; methods not listed need the plugin's base `write`.
 
+### Team Access to Resource Instances (runtime)
+
+By default every active instance of a plugin resource type is granted to the **Default** team, which every user joins, so every user sees it in the portal. A type whose instances should only reach the teams they are shared with (an internal governance record, say) registers with `DefaultAccess: plugin_sdk.DefaultAccessExplicit` (manifest: `"default_access": "explicit"`) and manages the grants itself:
+
+Requires: `resource-access.manage` scope. Studio-only. Each call is limited to resource types this plugin registered (`PermissionDenied` otherwise).
+
+```go
+studio := ctx.Services.Studio()
+
+teams, err := studio.ListGroups(ctx)                           // [{ID, Name, IsDefault}]
+granted, err := studio.GetResourceInstanceGroups(ctx, "agent", "ast_1")
+// Add teams (replace=false) or set exactly these teams (replace=true; empty revokes all)
+granted, err = studio.SetResourceInstanceGroups(ctx, "agent", "ast_1", []uint32{defaultTeamID}, false)
+
+// Which instances may this portal user see? The platform's own rule: team
+// managers (groups:write) see everything, everyone else what their teams hold.
+seeAll, ids, err := studio.ListAccessibleResourceInstances(ctx, "agent", userID)
+```
+
+The grants are the same rows the Teams page edits, so an administrator's changes there are what these calls read. Instances still have to be active (`ResourceInstance.IsActive`) to appear anywhere. Community Edition has no team segmentation: there `explicit` is ignored and instances always join the Default team, so they never vanish. Active instances of `auto` types (the default) join the Default team at registration and when the plugin reports a change with `NotifyResourceInstanceChanged`.
+
 ### LLM Operations
 
 Requires: `llms.read`, `llms.write`, or `llms.proxy` scope
@@ -891,11 +912,62 @@ if err == nil && !ok {
 err = studio.DeleteObjectMetadata(ctx, objectType, "ast_1")
 ```
 
+The change history of an object's governed metadata (newest first, `limit` 0 means 100, capped at 500) is readable too, with `metadata.read`:
+
+```go
+entries, err := studio.ListObjectMetadataAudit(ctx, objectType, "ast_1", 50)
+// [{Action: "set"|"merge"|"delete", UserID, Source: "plugin:12", BeforeJSON, AfterJSON, CreatedAt}]
+```
+
+Community Edition returns an empty list.
+
 A rejection by another plugin's `governed_metadata` object hook returns `PermissionDenied`. Every successful write or delete is audited with source `plugin:<id>` and emits `system.governed_metadata.updated` / `.deleted`. Using `plugin_resource:self:` without a plugin context is `InvalidArgument`.
 
 Lower level: `ai_studio_sdk.GetObjectMetadata`, `GetObjectMetadataWithVisibility`, `SetObjectMetadata`, `DeleteObjectMetadata`, `GetResolvedMetadataSchema`, `ValidateObjectMetadata` return the raw protobuf responses.
 
 See [Governing objects a plugin owns](governed-metadata.md#governing-objects-a-plugin-owns-resource-providers) for the end-to-end recipe, including the `<governed-metadata-fields>` and `<governed-metadata-badges>` Web Components plugin UIs can embed.
+
+## Governance Reads (Enterprise)
+
+Read-only views for governance plugins (an asset catalog mapping which agents depend on which LLMs, tools and MCP servers). Studio-only.
+
+```go
+studio := ctx.Services.Studio()
+
+// Audit trail of one resource (audit.read): newest first, never request or
+// response bodies; diffs are redacted at storage. mutationsOnly drops reads.
+records, err := studio.ListAuditRecords(ctx, "llm", "42", 50, true)
+
+// MCP servers (mcp-servers.read): never upstream URLs, auth details or definitions
+servers, total, err := studio.ListMCPServers(ctx, 1, 50)
+server, err := studio.GetMCPServer(ctx, 7)
+
+// Routers (routers.read), with what they can route to
+routers, total, err := studio.ListModelRouters(ctx, 1, 50)      // RouterSummary.LLMIDs
+semantic, total, err := studio.ListSemanticRouters(ctx, 1, 50)  // LLMIDs (targets + judge), ModelRouterIDs
+```
+
+Resource types for `ListAuditRecords` are the audit trail's own names: `llm`, `tool`, `datasource`, `mcp_server`, `model_router`, `semantic_router`, `app`. Community Edition answers `Unimplemented` for the audit trail and routers; a node that does not store audit records in the database answers `FailedPrecondition`.
+
+`GetApp` / `ListApps` (`apps.read`) carry every binding: `LlmIds`, `ToolIds`, `DatasourceIds`, `McpServerIds`, `ModelRouterIds`, `SemanticRouterIds` and `PluginResources` (`{PluginId, ResourceTypeSlug, InstanceId}`).
+
+Lower level: the `ai_studio_sdk` functions of the same names return the raw protobuf responses.
+
+### App lifecycle control (`apps.lifecycle`)
+
+A governance plugin that owns the record of an App (an asset catalog linking an agent asset to the App it runs as) can suspend or reactivate the App and raise flags on it. It cannot change what the App may access: bindings, credentials and budgets stay with `apps.write`, which a governance plugin should not ask for.
+
+```go
+inactive := false
+changed, err := studio.SetAppGovernanceState(ctx, appID, &inactive,
+    map[string]string{"review_lapsed": "2026-09-01"}, // "" clears a flag
+    "review of asset \"Claims agent\" lapsed")
+```
+
+- `isActive` nil leaves the App's state alone; flags-only calls are fine.
+- Flags are stored on the App under `metadata.governance_flags.<name>` as `{value, reason, set_by: "plugin:<id>", at}`, so admins see who raised them (the App details page lists them). Up to 16 flags per call; names up to 64 characters without whitespace, values up to 256. The key is reserved: App edits keep the stored flags whatever they send, creating an App drops a supplied `governance_flags`, and `PatchAppMetadata` refuses the key (`InvalidArgument`).
+- Each change is written to the audit trail as `Plugin Update App Governance State` (method `RPC`, user `plugin: <name>`), with the reason. `ListAuditRecords(..., mutationsOnly=true)` includes these records.
+- Changing state emits `system.app.updated`. A plugin that subscribes to that topic receives its own changes too, so its handler must be idempotent.
 
 ## Gateway Services
 
@@ -1553,6 +1625,13 @@ llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
 | GenerateEmbedding, StoreDocuments, ProcessAndStoreDocuments | `datasources.embeddings` |
 | QueryDatasource, QueryDatasourceByVector | `datasources.query` |
 | CreateSchedule, GetSchedule, ListSchedules, UpdateSchedule, DeleteSchedule | `scheduler.manage` |
+| GetObjectMetadata, GetResolvedMetadataSchema, ValidateObjectMetadata, ListObjectMetadataAudit | `metadata.read` |
+| SetObjectMetadata, DeleteObjectMetadata | `metadata.write` |
+| ListAuditRecords | `audit.read` |
+| ListMCPServers, GetMCPServer | `mcp-servers.read` |
+| ListModelRouters, GetModelRouter, ListSemanticRouters, GetSemanticRouter | `routers.read` |
+| ListGroups, GetResourceInstanceGroups, SetResourceInstanceGroups, ListAccessibleResourceInstances | `resource-access.manage` |
+| SetAppGovernanceState | `apps.lifecycle` |
 
 ## RAG & Embedding Services
 

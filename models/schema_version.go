@@ -29,7 +29,8 @@ const (
 	// 3: tyk_connections.host_key and its unique index (nullable, additive).
 	// 4: endpoint_auth_plugins (new table, additive).
 	// 5: proxy_logs and llm_chat_records on_behalf_of, acting_agent (nullable, additive).
-	SchemaVersion          = 5
+	// 6: plugin_resource_types.default_access (nullable, additive).
+	SchemaVersion          = 6
 	MinReaderSchemaVersion = 1
 )
 
