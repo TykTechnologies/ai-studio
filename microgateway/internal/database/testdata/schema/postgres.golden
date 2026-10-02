@@ -243,6 +243,16 @@ TABLE edge_instances
   column session_id character varying(varchar) nullable=YES len=255
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE endpoint_auth_plugins
+  constraint endpoint_auth_plugins_pkey PRIMARY KEY (object_type, object_id, plugin_id)
+  index CREATE UNIQUE INDEX endpoint_auth_plugins_pkey ON endpoint_auth_plugins USING btree (object_type, object_id, plugin_id)
+  index CREATE INDEX idx_endpoint_auth_plugins_order ON endpoint_auth_plugins USING btree (object_type, object_id, order_index)
+  index CREATE INDEX idx_endpoint_auth_plugins_plugin ON endpoint_auth_plugins USING btree (plugin_id)
+  column object_type character varying(varchar) nullable=NO len=32
+  column object_id bigint(int8) nullable=NO precision=64 scale=0
+  column plugin_id bigint(int8) nullable=NO precision=64 scale=0
+  column order_index bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE filters
   constraint filters_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX filters_pkey ON filters USING btree (id)

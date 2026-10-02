@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import Section from "../common/Section";
+import AuthPluginsSection from "../common/AuthPluginsSection";
 import UsedBySection from "../common/UsedBySection";
 import {
   Box,
@@ -270,6 +271,16 @@ const ModelRouterDetails = () => {
           {/* Used by */}
           <Grid item xs={12}>
             <UsedBySection resourcePath="model-routers" id={id} objectLabel="model router" sx={{ mb: 0 }} />
+          </Grid>
+
+          {/* Gateway authentication */}
+          <Grid item xs={12}>
+            <AuthPluginsSection
+              endpointPath="model-routers"
+              endpointId={id}
+              noun="router"
+              writePermission={P.MODEL_ROUTERS_WRITE}
+            />
           </Grid>
 
           {/* Pools */}

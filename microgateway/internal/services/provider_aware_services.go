@@ -348,6 +348,16 @@ func (s *ProviderAwarePluginService) GetAllLLMAssociatedPlugins() ([]database.Pl
 	return s.provider.GetAllLLMAssociatedPlugins()
 }
 
+// The configuration providers carry no endpoint auth plugin lists, so an edge
+// on this service authenticates those endpoints with app keys only.
+func (s *ProviderAwarePluginService) GetAuthPluginsForEndpoint(objectType string, objectID uint) ([]database.Plugin, error) {
+	return []database.Plugin{}, nil
+}
+
+func (s *ProviderAwarePluginService) GetAllEndpointAuthPlugins() ([]database.Plugin, error) {
+	return []database.Plugin{}, nil
+}
+
 func (s *ProviderAwarePluginService) UpdateLLMPlugins(llmID uint, pluginIDs []uint) error {
 	return fmt.Errorf("LLM plugin updates not supported on edge instances")
 }

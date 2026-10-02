@@ -505,6 +505,16 @@ TABLE embedders
   index CREATE INDEX `idx_embedders_deleted_at` ON `embedders`(`deleted_at`)
   index CREATE INDEX `idx_embedders_llm_id` ON `embedders`(`llm_id`)
   index CREATE UNIQUE INDEX `idx_embedder_name` ON `embedders`(`name`)
+TABLE endpoint_auth_plugins
+  column `object_type` text
+  column `object_id` integer
+  column `plugin_id` integer
+  column `order_index` integer DEFAULT 0
+  column `created_at` datetime
+  constraint PRIMARY KEY (`object_type`,`object_id`,`plugin_id`)
+  autoindex origin=pk unique=1 (object_type, object_id, plugin_id)
+  index CREATE INDEX `idx_endpoint_auth_plugins_order` ON `endpoint_auth_plugins`(`object_type`,`object_id`,`order_index`)
+  index CREATE INDEX `idx_endpoint_auth_plugins_plugin` ON `endpoint_auth_plugins`(`plugin_id`)
 TABLE file_stores
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

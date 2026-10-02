@@ -1,5 +1,7 @@
 import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import Section from "../common/Section";
+import AuthPluginsSection from "../common/AuthPluginsSection";
+import { P } from "../../rbac/permissions";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import React, { useState, useEffect } from "react";
@@ -348,6 +350,13 @@ const DatasourceDetails = () => {
             </Grid>
           </AccordionDetails>
         </StyledAccordion>
+
+        <AuthPluginsSection
+          endpointPath="datasources"
+          endpointId={id}
+          noun="data source"
+          writePermission={P.DATASOURCES_WRITE}
+        />
 
         <GovernedMetadataSummary
           objectType="datasource"

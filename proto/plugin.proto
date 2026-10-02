@@ -651,6 +651,10 @@ message EndpointRequest {
     bool authenticated = 12;             // Whether request was authenticated
     App app = 13;                        // Full App object (ID, name, metadata, etc.)
     repeated string scopes = 14;         // Token scopes
+    // Set when an auth plugin authenticated the request: who the call is for
+    // (the auth response's user id) and the claims it returned. Audit only.
+    string subject = 15;
+    map<string, string> claims = 16;
 }
 
 // EndpointResponse — unary response for non-streaming endpoints

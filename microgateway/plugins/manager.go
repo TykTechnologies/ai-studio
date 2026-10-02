@@ -36,6 +36,9 @@ type PluginServiceInterface interface {
 	GetAllPlugins() ([]PluginData, error)
 	GetAllLLMIDs() ([]uint, error)                  // Get all LLM IDs for pre-warming plugins
 	GetAllActiveGatewayPlugins() ([]PluginData, error) // Get all plugins that should run on a gateway (LLM-associated + standalone endpoint)
+	// GetAuthPluginsForEndpoint returns the auth plugins attached to a
+	// datasource, tool, router or custom-endpoint plugin, in execution order.
+	GetAuthPluginsForEndpoint(endpointType string, endpointID uint) ([]PluginData, error)
 }
 
 // PluginData represents plugin data from database (minimal interface)
@@ -670,20 +673,10 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			}
 
 		case interfaces.HookTypeAuth:
-			authReq, ok := result.(*interfaces.AuthRequest)
-			if !ok {
-				return nil, fmt.Errorf("invalid input type for auth hook")
-			}
-
-			pbCtx := convertPluginContext(pluginCtx)
-			pbReq := convertAuthRequest(authReq, pbCtx)
-
-			resp, err := plugin.GRPCClient.Authenticate(ctx, pbReq)
-			if err != nil {
-				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
-			}
-
-			result = convertAuthResponse(resp)
+			// Auth plugins are tried one by one until one authenticates
+			// (GetAuthPlugins and CallAuth), not chained: a chain fed the
+			// first plugin's response to the second as its request.
+			return nil, fmt.Errorf("auth plugins are not run as a chain; use GetAuthPlugins")
 
 		case interfaces.HookTypePostAuth:
 			enrichedReq, ok := result.(*interfaces.EnrichedRequest)

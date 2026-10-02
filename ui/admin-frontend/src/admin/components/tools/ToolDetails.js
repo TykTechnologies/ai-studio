@@ -1,5 +1,7 @@
 import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import Section from "../common/Section";
+import AuthPluginsSection from "../common/AuthPluginsSection";
+import { P } from "../../rbac/permissions";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import ToolAccessMethods from "./ToolAccessMethods";
@@ -356,6 +358,13 @@ const ToolDetails = () => {
             </Grid>
           </Grid>
         </Section>
+
+        <AuthPluginsSection
+          endpointPath="tools"
+          endpointId={id}
+          noun="tool (REST and MCP)"
+          writePermission={P.TOOLS_WRITE}
+        />
 
         <GovernedMetadataSummary
           objectType="tool"

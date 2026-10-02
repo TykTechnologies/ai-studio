@@ -36,6 +36,7 @@ import PluginSchedules from './PluginSchedules';
 import PluginUpgradeDialog from './PluginUpgradeDialog';
 import { usePermissions } from '../../context/PermissionsContext';
 import { P } from '../../rbac/permissions';
+import AuthPluginsSection from '../common/AuthPluginsSection';
 import {
   TitleBox,
   ContentBox,
@@ -626,6 +627,18 @@ const PluginDetail = () => {
                   {renderAgentAssociations()}
                 </CardContent>
               </Card>
+            </Grid>
+          )}
+
+          {/* Auth plugins for the plugin's own /plugins/{slug}/ endpoints */}
+          {getAllHookTypes(plugin).includes('custom_endpoint') && (
+            <Grid item xs={12}>
+              <AuthPluginsSection
+                endpointPath="plugins"
+                endpointId={plugin.id}
+                noun="plugin's endpoints (those that require auth)"
+                writePermission={P.PLUGINS_WRITE}
+              />
             </Grid>
           )}
 

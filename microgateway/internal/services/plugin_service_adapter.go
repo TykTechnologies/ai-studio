@@ -176,9 +176,23 @@ func (a *PluginServiceAdapter) GetPluginsForLLM(llmID uint) ([]plugins.PluginDat
 	return result, nil
 }
 
+// GetAuthPluginsForEndpoint implements plugins.PluginServiceInterface.
+func (a *PluginServiceAdapter) GetAuthPluginsForEndpoint(endpointType string, endpointID uint) ([]plugins.PluginData, error) {
+	dbPlugins, err := a.pluginService.GetAuthPluginsForEndpoint(endpointType, endpointID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]plugins.PluginData, len(dbPlugins))
+	for i, p := range dbPlugins {
+		result[i] = a.convertDBPlugin(p)
+	}
+	return result, nil
+}
+
 // GetAllActiveGatewayPlugins implements plugins.PluginServiceInterface.
-// Returns all active plugins that should run on a gateway: LLM-associated plugins
-// plus standalone custom_endpoint plugins, deduplicated by ID.
+// Returns all active plugins that should run on a gateway: LLM-associated plugins,
+// plugins on an endpoint's auth list, and standalone custom_endpoint plugins,
+// deduplicated by ID.
 func (a *PluginServiceAdapter) GetAllActiveGatewayPlugins() ([]plugins.PluginData, error) {
 	seen := make(map[uint]bool)
 	var result []plugins.PluginData
@@ -197,7 +211,22 @@ func (a *PluginServiceAdapter) GetAllActiveGatewayPlugins() ([]plugins.PluginDat
 		result = append(result, pd)
 	}
 
-	// Step 2: add standalone custom_endpoint plugins
+	// Step 2: plugins on the auth list of a datasource, tool, router or
+	// custom-endpoint plugin
+	authPlugins, err := a.pluginService.GetAllEndpointAuthPlugins()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get endpoint auth plugins: %w", err)
+	}
+	for _, dbPlugin := range authPlugins {
+		pd := a.convertDBPlugin(dbPlugin)
+		if seen[pd.ID] || !pd.HasAnySupportedGatewayHook() {
+			continue
+		}
+		seen[pd.ID] = true
+		result = append(result, pd)
+	}
+
+	// Step 3: add standalone custom_endpoint plugins
 	allPlugins, err := a.GetAllPlugins()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all plugins: %w", err)

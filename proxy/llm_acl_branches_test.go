@@ -1,8 +1,6 @@
 package proxy
 
 import (
-	"bytes"
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -62,7 +60,11 @@ func llmACLRoutes() []llmACLRoute {
 // granted primary, the ungranted fallback and an unknown slug. The /ai/ and /v1
 // cases cover both hops of the bridge: the granted one is only served if the
 // loopback's inner /llm/call/ hop passes the check too.
-func assertLLMACL(t *testing.T, h *failoverHarness, authorization string) {
+//
+// An unknown slug is a 403 for an app key, the same as an ungranted one. A
+// plugin credential gets a 401 there instead: an endpoint that does not exist
+// has no auth plugins, so nothing could have authenticated it.
+func assertLLMACL(t *testing.T, h *failoverHarness, authorization string, unknownStatus int) {
 	t.Helper()
 
 	for _, route := range llmACLRoutes() {
@@ -80,7 +82,7 @@ func assertLLMACL(t *testing.T, h *failoverHarness, authorization string) {
 
 		t.Run(route.name+"/unknown LLM is refused", func(t *testing.T) {
 			resp, body := h.post(route.path("no-such-llm"), route.body("no-such-llm"), "Authorization", authorization)
-			require.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
+			require.Equal(t, unknownStatus, resp.StatusCode, "body: %s", body)
 		})
 	}
 
@@ -91,7 +93,7 @@ func assertLLMACL(t *testing.T, h *failoverHarness, authorization string) {
 // "primary" got 200 from "fallback" by naming it.
 func TestLLMACL_BearerAppSecretBranch(t *testing.T) {
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
-	assertLLMACL(t, h, "Bearer "+h.apiKey)
+	assertLLMACL(t, h, "Bearer "+h.apiKey, http.StatusForbidden)
 
 	t.Run("/llm/stream/ungranted LLM is refused", func(t *testing.T) {
 		resp, body := h.post("/llm/stream/fallback/v1/chat/completions", failoverStreamBody)
@@ -138,15 +140,10 @@ func TestLLMACL_FailoverStillReachesUngrantedFallback(t *testing.T) {
 func TestLLMACL_BearerCustomAuthBranch(t *testing.T) {
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
-		CustomAuth: func(credential string, r *http.Request) (uint, bool, error) {
-			if credential == "plugin-credential" {
-				return h.app.ID, true, nil
-			}
-			return 0, false, nil
-		},
+		CustomAuth: acceptCredential("plugin-credential", h.app.ID),
 	})
 
-	assertLLMACL(t, h, "Bearer plugin-credential")
+	assertLLMACL(t, h, "Bearer plugin-credential", http.StatusUnauthorized)
 }
 
 // TestLLMACL_APIKeyCustomAuthBranch is the same plugin on the API-key path,
@@ -156,12 +153,7 @@ func TestLLMACL_BearerCustomAuthBranch(t *testing.T) {
 func TestLLMACL_APIKeyCustomAuthBranch(t *testing.T) {
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
-		CustomAuth: func(credential string, r *http.Request) (uint, bool, error) {
-			if credential == "plugin-api-key" {
-				return h.app.ID, true, nil
-			}
-			return 0, false, nil
-		},
+		CustomAuth: acceptCredential("plugin-api-key", h.app.ID),
 	})
 
 	resp, body := h.post("/ai/fallback/v1/chat/completions", failoverChatBody, "Authorization", "plugin-api-key")
@@ -191,63 +183,6 @@ func TestLLMACL_APIKeyBranch(t *testing.T) {
 	require.NotEqual(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
 }
 
-// TestLLMACL_PluginAuthenticatedBranch covers requests a microgateway auth
-// plugin already authenticated. They used to pass straight through on every
-// non-tool path. The context values cannot be sent over the wire, so this
-// drives the handler in-process.
-func TestLLMACL_PluginAuthenticatedBranch(t *testing.T) {
-	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
-	handler := h.proxy.createHandler()
-
-	preAuthenticated := func(path string, appID interface{}) *http.Request {
-		req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(failoverChatBody))
-		req.Header.Set("Content-Type", "application/json")
-		ctx := context.WithValue(req.Context(), "plugin_authenticated", true)
-		if appID != nil {
-			ctx = context.WithValue(ctx, "app_id", appID)
-		}
-		return req.WithContext(ctx)
-	}
-	serve := func(req *http.Request) *httptest.ResponseRecorder {
-		rr := httptest.NewRecorder()
-		handler.ServeHTTP(rr, req)
-		return rr
-	}
-
-	t.Run("granted LLM is served", func(t *testing.T) {
-		rr := serve(preAuthenticated("/llm/call/primary/v1/chat/completions", h.app.ID))
-		require.Equal(t, http.StatusOK, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	for _, path := range []string{
-		"/llm/call/fallback/v1/chat/completions",
-		"/llm/rest/fallback/v1/chat/completions",
-		"/ai/fallback/v1/chat/completions",
-		"/llm/call/no-such-llm/v1/chat/completions",
-	} {
-		t.Run(path+" is refused", func(t *testing.T) {
-			rr := serve(preAuthenticated(path, h.app.ID))
-			require.Equal(t, http.StatusForbidden, rr.Code, "body: %s", rr.Body.String())
-		})
-	}
-
-	t.Run("no app id is refused", func(t *testing.T) {
-		rr := serve(preAuthenticated("/llm/call/primary/v1/chat/completions", nil))
-		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	t.Run("an inactive app is refused", func(t *testing.T) {
-		require.NoError(t, h.db.Model(&models.App{}).Where("id = ?", h.app.ID).Update("is_active", false).Error)
-		t.Cleanup(func() {
-			require.NoError(t, h.db.Model(&models.App{}).Where("id = ?", h.app.ID).Update("is_active", true).Error)
-		})
-		rr := serve(preAuthenticated("/llm/call/primary/v1/chat/completions", h.app.ID))
-		require.Equal(t, http.StatusForbidden, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	assert.Empty(t, h.fallbackVendor.calls())
-}
-
 // TestLLMACL_Datasources: the same hole existed for /datasource/{slug}. A
 // granted datasource gets as far as the handler (which rejects the non-JSON
 // body with 400); an ungranted or unknown one is refused before it.
@@ -262,17 +197,15 @@ func TestLLMACL_Datasources(t *testing.T) {
 	require.NoError(t, h.proxy.loadResources())
 
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
-		CustomAuth: func(credential string, r *http.Request) (uint, bool, error) {
-			if credential == "plugin-credential" {
-				return h.app.ID, true, nil
-			}
-			return 0, false, nil
-		},
+		CustomAuth: acceptCredential("plugin-credential", h.app.ID),
 	})
 
-	for _, auth := range []struct{ name, header string }{
-		{"app secret", "Bearer " + h.apiKey},
-		{"custom auth", "Bearer plugin-credential"},
+	for _, auth := range []struct {
+		name, header  string
+		unknownStatus int
+	}{
+		{"app secret", "Bearer " + h.apiKey, http.StatusForbidden},
+		{"custom auth", "Bearer plugin-credential", http.StatusUnauthorized},
 	} {
 		t.Run(auth.name+"/granted", func(t *testing.T) {
 			resp, body := h.post("/datasource/granted-ds", "not json", "Authorization", auth.header)
@@ -284,18 +217,10 @@ func TestLLMACL_Datasources(t *testing.T) {
 		})
 		t.Run(auth.name+"/unknown", func(t *testing.T) {
 			resp, body := h.post("/datasource/no-such-ds", "not json", "Authorization", auth.header)
-			require.Equal(t, http.StatusForbidden, resp.StatusCode, "body: %s", body)
+			require.Equal(t, auth.unknownStatus, resp.StatusCode, "body: %s", body)
 		})
 	}
 
-	t.Run("plugin authenticated/ungranted", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/datasource/foreign-ds", bytes.NewBufferString("not json"))
-		ctx := context.WithValue(req.Context(), "plugin_authenticated", true)
-		ctx = context.WithValue(ctx, "app_id", h.app.ID)
-		rr := httptest.NewRecorder()
-		h.proxy.createHandler().ServeHTTP(rr, req.WithContext(ctx))
-		require.Equal(t, http.StatusForbidden, rr.Code, "body: %s", rr.Body.String())
-	})
 }
 
 // TestLLMACL_BedrockOuterHop: Bedrock is served from the /ai/ hop itself, with

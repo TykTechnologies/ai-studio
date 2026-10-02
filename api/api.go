@@ -17,6 +17,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
@@ -967,6 +968,18 @@ func (a *API) setupRoutes() error {
 	// LLM-Plugin association routes (extend existing LLM routes)
 	v1.GET("/llms/:id/plugins", authz.Read("llms"), a.getLLMPlugins)
 	v1.PUT("/llms/:id/plugins", authz.Write("llms"), a.updateLLMPlugins)
+
+	// Auth plugins on the other gateway endpoints (models.EndpointType*)
+	v1.GET("/datasources/:id/auth-plugins", authz.Read("datasources"), a.getEndpointAuthPlugins(models.EndpointTypeDatasource))
+	v1.PUT("/datasources/:id/auth-plugins", authz.Write("datasources"), a.updateEndpointAuthPlugins(models.EndpointTypeDatasource))
+	v1.GET("/tools/:id/auth-plugins", authz.Read("tools"), a.getEndpointAuthPlugins(models.EndpointTypeTool))
+	v1.PUT("/tools/:id/auth-plugins", authz.Write("tools"), a.updateEndpointAuthPlugins(models.EndpointTypeTool))
+	v1.GET("/model-routers/:id/auth-plugins", authz.Read("model-routers"), a.getEndpointAuthPlugins(models.EndpointTypeModelRouter))
+	v1.PUT("/model-routers/:id/auth-plugins", authz.Write("model-routers"), a.updateEndpointAuthPlugins(models.EndpointTypeModelRouter))
+	v1.GET("/semantic-routers/:id/auth-plugins", authz.Read("semantic-routers"), a.getEndpointAuthPlugins(models.EndpointTypeSemanticRouter))
+	v1.PUT("/semantic-routers/:id/auth-plugins", authz.Write("semantic-routers"), a.updateEndpointAuthPlugins(models.EndpointTypeSemanticRouter))
+	v1.GET("/plugins/:id/auth-plugins", authz.Read("plugins"), a.getEndpointAuthPlugins(models.EndpointTypePlugin))
+	v1.PUT("/plugins/:id/auth-plugins", authz.Write("plugins"), a.updateEndpointAuthPlugins(models.EndpointTypePlugin))
 
 	// LLM-Plugin configuration routes
 	v1.GET("/llms/:id/plugins/:pluginId/config", authz.Read("llms"), a.getLLMPluginConfig)

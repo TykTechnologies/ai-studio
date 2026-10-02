@@ -157,6 +157,11 @@ type PluginServiceInterface interface {
 	GetAllLLMAssociatedPlugins() ([]database.Plugin, error) // All active plugins linked to any LLM (single query)
 	UpdateLLMPlugins(llmID uint, pluginIDs []uint) error
 	GetLLMPluginConfig(llmID, pluginID uint) (map[string]interface{}, error)
+
+	// Auth plugin lists of datasources, tools, routers and custom-endpoint
+	// plugins (objectType is one of database.EndpointType*)
+	GetAuthPluginsForEndpoint(objectType string, objectID uint) ([]database.Plugin, error)
+	GetAllEndpointAuthPlugins() ([]database.Plugin, error)
 	
 	// Validation
 	ValidatePluginChecksum(pluginID uint, filePath string) error

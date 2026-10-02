@@ -545,6 +545,16 @@ TABLE embedders
   column model text(text) nullable=NO
   column privacy_score bigint(int8) nullable=YES precision=64 scale=0
   column user_id bigint(int8) nullable=YES precision=64 scale=0
+TABLE endpoint_auth_plugins
+  constraint endpoint_auth_plugins_pkey PRIMARY KEY (object_type, object_id, plugin_id)
+  index CREATE UNIQUE INDEX endpoint_auth_plugins_pkey ON endpoint_auth_plugins USING btree (object_type, object_id, plugin_id)
+  index CREATE INDEX idx_endpoint_auth_plugins_order ON endpoint_auth_plugins USING btree (object_type, object_id, order_index)
+  index CREATE INDEX idx_endpoint_auth_plugins_plugin ON endpoint_auth_plugins USING btree (plugin_id)
+  column object_type character varying(varchar) nullable=NO len=32
+  column object_id bigint(int8) nullable=NO precision=64 scale=0
+  column plugin_id bigint(int8) nullable=NO precision=64 scale=0
+  column order_index bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE file_stores
   constraint file_stores_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX file_stores_pkey ON file_stores USING btree (id)

@@ -26,6 +26,20 @@ type PluginService struct {
 	// several times per proxied request, almost always to learn that the LLM
 	// has no plugins; it is invalidated by any configuration write.
 	llmPlugins *database.GenCache[uint, []database.Plugin]
+
+	// endpointAuthPlugins caches GetAuthPluginsForEndpoint the same way: the
+	// auth hook asks on every request to a datasource, tool, router or plugin
+	// endpoint, and the answer is almost always "none". Like llmPlugins it is
+	// a GenCache, so any write to a configuration table (the config sync
+	// rewriting endpoint_auth_plugins included) invalidates it; entries also
+	// expire after database.GenCacheTTL.
+	endpointAuthPlugins *database.GenCache[endpointRef, []database.Plugin]
+}
+
+// endpointRef names an endpoint carrying an auth plugin list.
+type endpointRef struct {
+	objectType string
+	objectID   uint
 }
 
 // NewPluginService creates a new plugin service
@@ -37,6 +51,8 @@ func NewPluginService(db *gorm.DB, repo *database.Repository) PluginServiceInter
 		db:         db,
 		repo:       repo,
 		llmPlugins: database.NewGenCache[uint, []database.Plugin](),
+
+		endpointAuthPlugins: database.NewGenCache[endpointRef, []database.Plugin](),
 	}
 }
 
@@ -276,6 +292,67 @@ func (s *PluginService) loadPluginsForLLM(llmID uint) ([]database.Plugin, error)
 	}
 
 	return result, nil
+}
+
+// GetAuthPluginsForEndpoint returns the auth plugins attached to a
+// datasource, tool, router or custom-endpoint plugin (objectType is one of
+// database.EndpointType*), in execution order. The hub sends only active
+// plugins, so a plugin deactivated in Studio drops off the list, as it drops
+// off an LLM's.
+func (s *PluginService) GetAuthPluginsForEndpoint(objectType string, objectID uint) ([]database.Plugin, error) {
+	plugins, err := s.endpointAuthPlugins.Load(endpointRef{objectType, objectID}, func() ([]database.Plugin, error) {
+		return s.loadAuthPluginsForEndpoint(objectType, objectID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(plugins) == 0 {
+		return []database.Plugin{}, nil
+	}
+	return database.DeepCopy(plugins), nil
+}
+
+func (s *PluginService) loadAuthPluginsForEndpoint(objectType string, objectID uint) ([]database.Plugin, error) {
+	var ids []uint
+	if err := s.db.Model(&database.EndpointAuthPlugin{}).
+		Where("object_type = ? AND object_id = ?", objectType, objectID).
+		Order("order_index ASC").
+		Pluck("plugin_id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("failed to get endpoint auth plugins: %w", err)
+	}
+	if len(ids) == 0 {
+		return []database.Plugin{}, nil
+	}
+	var found []database.Plugin
+	if err := s.db.Where("id IN ? AND is_active = ?", ids, true).Find(&found).Error; err != nil {
+		return nil, fmt.Errorf("failed to get plugins: %w", err)
+	}
+	byID := make(map[uint]database.Plugin, len(found))
+	for _, p := range found {
+		byID[p.ID] = p
+	}
+	result := make([]database.Plugin, 0, len(ids))
+	for _, id := range ids {
+		if p, ok := byID[id]; ok {
+			result = append(result, p)
+		}
+	}
+	return result, nil
+}
+
+// GetAllEndpointAuthPlugins returns every active plugin attached to at least
+// one endpoint's auth list. The edge loads them as it loads LLM plugins.
+func (s *PluginService) GetAllEndpointAuthPlugins() ([]database.Plugin, error) {
+	var plugins []database.Plugin
+	err := s.db.
+		Distinct("plugins.*").
+		Joins("JOIN endpoint_auth_plugins ON endpoint_auth_plugins.plugin_id = plugins.id").
+		Where("plugins.is_active = ? AND plugins.deleted_at IS NULL", true).
+		Find(&plugins).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get endpoint auth plugins: %w", err)
+	}
+	return plugins, nil
 }
 
 // GetAllLLMAssociatedPlugins returns all active plugins that are linked to at least

@@ -1511,6 +1511,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Taken before any row is read: an edge keeps Apps created after it,
 	// which it learnt of from token validation (see EdgeSyncService).
 	takenAt := time.Now()
+	llmPluginOrder, endpointAuthPlugins := s.snapshotPluginAttachments(namespace)
 	snapshot := &pb.ConfigurationSnapshot{
 		Version:      fmt.Sprintf("%d", takenAt.Unix()),
 		SnapshotTime: timestamppb.New(takenAt),
@@ -1637,6 +1638,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:        llm.Namespace,
 			DontLogBodies:    llm.DontLogBodies,
 			FilterIds:        filterIDs,
+			PluginIds:        llmPluginOrder[llm.ID],
 			CreatedAt:        timestamppb.New(llm.CreatedAt),
 			UpdatedAt:        timestamppb.New(llm.UpdatedAt),
 		}
@@ -1964,104 +1966,74 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("found_plugins", len(plugins)).
 		Msg("Plugin query completed")
 
-	// Convert Plugins to protobuf with merged configurations for each LLM
+	// One PluginConfig per plugin, listing every LLM it is attached to. This
+	// used to send one per attachment, each with the same id, and an edge
+	// could not store the second: the whole sync failed for any plugin on two
+	// LLMs. The edge keeps a single config per plugin, so per-LLM overrides
+	// survive only when the plugin is on one LLM (as before); with several,
+	// the base config goes out and differing overrides are logged.
 	for _, plugin := range plugins {
-		// Use preloaded LLM associations to avoid N+1 queries
-		llmPlugins := llmPluginMap[plugin.ID]
-		// Data is already sorted by order_index from the query
+		llmPlugins := llmPluginMap[plugin.ID] // ordered by order_index
+
+		cfg := plugin.Config
+		llmIDs := make([]uint32, 0, len(llmPlugins))
+		overrides := 0
+		for _, lp := range llmPlugins {
+			llmIDs = append(llmIDs, uint32(lp.LLMID))
+			if len(lp.ConfigOverride) > 0 {
+				overrides++
+			}
+		}
+		if len(llmPlugins) == 1 && overrides == 1 {
+			merged, err := config.MergePluginConfigMaps(plugin.Config, llmPlugins[0].ConfigOverride)
+			if err != nil {
+				logger.Log.Error().Err(err).
+					Uint("plugin_id", plugin.ID).
+					Uint("llm_id", llmPlugins[0].LLMID).
+					Msg("Failed to merge plugin config, using base config")
+			} else {
+				cfg = merged
+			}
+		} else if overrides > 0 {
+			logger.Log.Warn().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Int("llm_count", len(llmPlugins)).
+				Msg("Plugin has per-LLM config overrides on several LLMs; edges run it with its base config")
+		}
+
+		var configJSON string
+		if cfg != nil {
+			if configBytes, err := json.Marshal(cfg); err == nil {
+				configJSON = string(configBytes)
+			}
+		}
 
 		logger.Log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
 			Str("hook_type", plugin.HookType).
-			Int("llm_count", len(llmPlugins)).
-			Msg("Plugin relationships embedded in sync")
+			Strs("hook_types", plugin.HookTypes).
+			Int("llm_count", len(llmIDs)).
+			Msg("Syncing plugin to edge")
 
-		// If plugin has LLM-specific configurations, create one PluginConfig per LLM association
-		// with merged configuration (base + override)
-		if len(llmPlugins) > 0 {
-			for _, llmPlugin := range llmPlugins {
-				// Merge base plugin config with LLM-specific override
-				merged, err := config.MergePluginConfigMaps(plugin.Config, llmPlugin.ConfigOverride)
-				if err != nil {
-					logger.Log.Error().Err(err).
-						Uint("plugin_id", plugin.ID).
-						Uint("llm_id", llmPlugin.LLMID).
-						Msg("Failed to merge plugin config, using base config")
-					merged = plugin.Config
-				}
-
-				// Convert merged config to JSON string
-				var mergedConfigJSON string
-				if merged != nil {
-					if configBytes, err := json.Marshal(merged); err == nil {
-						mergedConfigJSON = string(configBytes)
-					}
-				}
-
-				logger.Log.Debug().
-					Uint("plugin_id", plugin.ID).
-					Str("plugin_name", plugin.Name).
-					Uint("llm_id", llmPlugin.LLMID).
-					Bool("has_override", len(llmPlugin.ConfigOverride) > 0).
-					Str("hook_type", plugin.HookType).
-					Strs("hook_types", plugin.HookTypes).
-					Int("hook_types_count", len(plugin.HookTypes)).
-					Msg("Syncing plugin to edge with hook types")
-
-				pbPlugin := &pb.PluginConfig{
-					Id:            uint32(plugin.ID),
-					Name:          plugin.Name,
-					Description:   plugin.Description,
-					Command:       plugin.Command,
-					Checksum:      plugin.Checksum,
-					Config:        mergedConfigJSON, // Merged configuration for this LLM
-					HookType:      plugin.HookType,
-					HookTypes:     plugin.HookTypes, // NEW: All hook types for hybrid plugins
-					IsActive:      plugin.IsActive,
-					Namespace:     plugin.Namespace,
-					LlmIds:        []uint32{uint32(llmPlugin.LLMID)}, // Only for this specific LLM
-					ServiceScopes: plugin.ServiceScopes,              // Service API scopes
-					CreatedAt:     timestamppb.New(plugin.CreatedAt),
-					UpdatedAt:     timestamppb.New(plugin.UpdatedAt),
-				}
-				snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
-			}
-		} else {
-			// Plugin has no LLM associations, use base config only
-			logger.Log.Debug().
-				Uint("plugin_id", plugin.ID).
-				Str("plugin_name", plugin.Name).
-				Str("hook_type", plugin.HookType).
-				Strs("hook_types", plugin.HookTypes).
-				Int("hook_types_count", len(plugin.HookTypes)).
-				Msg("Syncing plugin to edge (no LLM associations)")
-
-			var configJSON string
-			if plugin.Config != nil {
-				if configBytes, err := json.Marshal(plugin.Config); err == nil {
-					configJSON = string(configBytes)
-				}
-			}
-
-			pbPlugin := &pb.PluginConfig{
-				Id:            uint32(plugin.ID),
-				Name:          plugin.Name,
-				Description:   plugin.Description,
-				Command:       plugin.Command,
-				Checksum:      plugin.Checksum,
-				Config:        configJSON,
-				HookType:      plugin.HookType,
-				HookTypes:     plugin.HookTypes, // NEW: All hook types for hybrid plugins
-				IsActive:      plugin.IsActive,
-				Namespace:     plugin.Namespace,
-				LlmIds:        []uint32{},           // No LLM associations
-				ServiceScopes: plugin.ServiceScopes, // Service API scopes
-				CreatedAt:     timestamppb.New(plugin.CreatedAt),
-				UpdatedAt:     timestamppb.New(plugin.UpdatedAt),
-			}
-			snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
-		}
+		snapshot.Plugins = append(snapshot.Plugins, &pb.PluginConfig{
+			Id:            uint32(plugin.ID),
+			Name:          plugin.Name,
+			Description:   plugin.Description,
+			Command:       plugin.Command,
+			Checksum:      plugin.Checksum,
+			Config:        configJSON,
+			HookType:      plugin.HookType,
+			HookTypes:     plugin.HookTypes, // All hook types for hybrid plugins
+			IsActive:      plugin.IsActive,
+			Namespace:     plugin.Namespace,
+			LlmIds:        llmIDs,
+			ServiceScopes: plugin.ServiceScopes, // Service API scopes
+			AuthPluginIds: endpointAuthPlugins[endpointKey{models.EndpointTypePlugin, plugin.ID}],
+			CreatedAt:     timestamppb.New(plugin.CreatedAt),
+			UpdatedAt:     timestamppb.New(plugin.UpdatedAt),
+		})
 	}
 
 	// Get Model Routers for namespace (Enterprise feature)
@@ -2090,6 +2062,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:   router.Namespace,
 			CreatedAt:   timestamppb.New(router.CreatedAt),
 			UpdatedAt:   timestamppb.New(router.UpdatedAt),
+			AuthPluginIds: endpointAuthPlugins[endpointKey{models.EndpointTypeModelRouter, router.ID}],
 		}
 
 		// Convert pools
@@ -2177,6 +2150,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ConfigJson: cfg,
 			CreatedAt:  timestamppb.New(router.CreatedAt),
 			UpdatedAt:  timestamppb.New(router.UpdatedAt),
+			AuthPluginIds: endpointAuthPlugins[endpointKey{models.EndpointTypeSemanticRouter, router.ID}],
 		})
 	}
 
@@ -2283,6 +2257,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			GovernedMetadata:    s.governedMetadataJSON(models.GovernedObjectTypeTool, governedTools[models.BuiltinObjectID(tool.ID)]),
 			FilterIds:           toolFilterMap[tool.ID],
 			AppIds:              toolAppMap[tool.ID],
+			AuthPluginIds:       endpointAuthPlugins[endpointKey{models.EndpointTypeTool, tool.ID}],
 			CreatedAt:           timestamppb.New(tool.CreatedAt),
 			UpdatedAt:           timestamppb.New(tool.UpdatedAt),
 		}
@@ -2405,6 +2380,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Metadata:              metadataJSON,
 			GovernedMetadata:      s.governedMetadataJSON(models.GovernedObjectTypeDatasource, governedDatasources[models.BuiltinObjectID(ds.ID)]),
 			AppIds:                dsAppMap[ds.ID],
+			AuthPluginIds:         endpointAuthPlugins[endpointKey{models.EndpointTypeDatasource, ds.ID}],
 			CreatedAt:             timestamppb.New(ds.CreatedAt),
 			UpdatedAt:             timestamppb.New(ds.UpdatedAt),
 		}

@@ -167,7 +167,7 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync Filters: %w", err)
 	}
 	
-	if err := s.syncPlugins(tx, config.Plugins); err != nil {
+	if err := s.syncPlugins(tx, config.Plugins, llmPluginOrder(config.Llms)); err != nil {
 		return fmt.Errorf("failed to sync Plugins: %w", err)
 	}
 
@@ -193,6 +193,11 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 	// 7. Sync Datasources with app associations
 	if err := s.syncDatasources(tx, config.Datasources); err != nil {
 		return fmt.Errorf("failed to sync Datasources: %w", err)
+	}
+
+	// 7b. Auth plugin lists of datasources, tools, routers and plugin endpoints
+	if err := s.syncEndpointAuthPlugins(tx, config); err != nil {
+		return fmt.Errorf("failed to sync endpoint auth plugins: %w", err)
 	}
 
 	// 8. Sync OAuth Clients (for MCP authentication on edge)
@@ -257,6 +262,19 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 
 	if err := tx.Exec("DELETE FROM llm_filters WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear llm_filters: %w", err)
+	}
+
+	// Auth plugin lists of the endpoints about to be re-created.
+	for objectType, table := range map[string]string{
+		database.EndpointTypeDatasource:     "datasources",
+		database.EndpointTypeTool:           "tools",
+		database.EndpointTypeModelRouter:    "model_routers",
+		database.EndpointTypeSemanticRouter: "semantic_routers",
+		database.EndpointTypePlugin:         "plugins",
+	} {
+		if err := tx.Exec("DELETE FROM endpoint_auth_plugins WHERE object_type = ? AND object_id IN (SELECT id FROM "+table+" WHERE namespace = ? OR namespace = '')", objectType, s.namespace).Error; err != nil {
+			return fmt.Errorf("failed to clear %s auth plugins: %w", objectType, err)
+		}
 	}
 
 	if err := tx.Exec("DELETE FROM app_model_routers WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
@@ -795,11 +813,41 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 	return nil
 }
 
-// syncPlugins syncs Plugin entities
-func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) error {
+// llmPluginOrder maps each LLM to the position of each of its plugins, from
+// LLMConfig.plugin_ids. A hub that predates the field sends none.
+func llmPluginOrder(llms []*pb.LLMConfig) map[uint32]map[uint32]int {
+	order := make(map[uint32]map[uint32]int, len(llms))
+	for _, llm := range llms {
+		if len(llm.PluginIds) == 0 {
+			continue
+		}
+		positions := make(map[uint32]int, len(llm.PluginIds))
+		for i, id := range llm.PluginIds {
+			positions[id] = i
+		}
+		order[llm.Id] = positions
+	}
+	return order
+}
+
+// syncPlugins syncs Plugin entities. A plugin may arrive more than once: hubs
+// before the one-row-per-plugin snapshot sent a row per LLM attachment, all
+// with the same id. The first row is stored and the others only add their
+// LLM attachments.
+func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig, llmOrder map[uint32]map[uint32]int) error {
 	log.Debug().Int("count", len(plugins)).Msg("Syncing Plugins to local SQLite")
 
+	stored := make(map[uint32]bool, len(plugins))
+	attached := make(map[[2]uint32]bool)
 	for _, pbPlugin := range plugins {
+		if stored[pbPlugin.Id] {
+			if err := s.attachPluginToLLMs(tx, pbPlugin, llmOrder, attached); err != nil {
+				return err
+			}
+			continue
+		}
+		stored[pbPlugin.Id] = true
+
 		plugin := &database.Plugin{
 			ID:          uint(pbPlugin.Id),
 			Name:        pbPlugin.Name,
@@ -838,23 +886,82 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 			return fmt.Errorf("failed to insert Plugin %d: %w", pbPlugin.Id, err)
 		}
 
-		// Recreate llm_plugins join table relationships with order preservation
-		for index, llmID := range pbPlugin.LlmIds {
-			llmPlugin := &database.LLMPlugin{
-				LLMID:      uint(llmID),
-				PluginID:   uint(pbPlugin.Id),
-				IsActive:   true,
-				OrderIndex: index, // Use position in slice as order index
-				CreatedAt:  time.Now(),
-			}
-
-			if err := tx.Create(llmPlugin).Error; err != nil {
-				return fmt.Errorf("failed to create llm_plugin relationship (llm=%d, plugin=%d): %w", llmID, pbPlugin.Id, err)
-			}
+		if err := s.attachPluginToLLMs(tx, pbPlugin, llmOrder, attached); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// attachPluginToLLMs recreates a plugin's llm_plugins rows. The order index
+// is the plugin's position in the LLM's plugin_ids; a hub that does not send
+// them leaves the position in the plugin's llm_ids, as before.
+func (s *EdgeSyncService) attachPluginToLLMs(tx *gorm.DB, pbPlugin *pb.PluginConfig, llmOrder map[uint32]map[uint32]int, attached map[[2]uint32]bool) error {
+	for index, llmID := range pbPlugin.LlmIds {
+		key := [2]uint32{llmID, pbPlugin.Id}
+		if attached[key] {
+			continue
+		}
+		attached[key] = true
+
+		orderIndex := index
+		if pos, ok := llmOrder[llmID][pbPlugin.Id]; ok {
+			orderIndex = pos
+		}
+		llmPlugin := &database.LLMPlugin{
+			LLMID:      uint(llmID),
+			PluginID:   uint(pbPlugin.Id),
+			IsActive:   true,
+			OrderIndex: orderIndex,
+			CreatedAt:  time.Now(),
+		}
+		if err := tx.Create(llmPlugin).Error; err != nil {
+			return fmt.Errorf("failed to create llm_plugin relationship (llm=%d, plugin=%d): %w", llmID, pbPlugin.Id, err)
+		}
+	}
+	return nil
+}
+
+// syncEndpointAuthPlugins stores the auth plugin lists the snapshot carries
+// on datasources, tools, routers and custom-endpoint plugins.
+func (s *EdgeSyncService) syncEndpointAuthPlugins(tx *gorm.DB, config *pb.ConfigurationSnapshot) error {
+	var rows []database.EndpointAuthPlugin
+	add := func(objectType string, objectID uint32, pluginIDs []uint32) {
+		for i, pluginID := range pluginIDs {
+			rows = append(rows, database.EndpointAuthPlugin{
+				ObjectType: objectType,
+				ObjectID:   uint(objectID),
+				PluginID:   uint(pluginID),
+				OrderIndex: i,
+				CreatedAt:  time.Now(),
+			})
+		}
+	}
+	for _, ds := range config.Datasources {
+		add(database.EndpointTypeDatasource, ds.Id, ds.AuthPluginIds)
+	}
+	for _, tool := range config.Tools {
+		add(database.EndpointTypeTool, tool.Id, tool.AuthPluginIds)
+	}
+	for _, router := range config.ModelRouters {
+		add(database.EndpointTypeModelRouter, router.Id, router.AuthPluginIds)
+	}
+	for _, router := range config.SemanticRouters {
+		add(database.EndpointTypeSemanticRouter, router.Id, router.AuthPluginIds)
+	}
+	seenPlugin := make(map[uint32]bool, len(config.Plugins))
+	for _, plugin := range config.Plugins {
+		if seenPlugin[plugin.Id] {
+			continue
+		}
+		seenPlugin[plugin.Id] = true
+		add(database.EndpointTypePlugin, plugin.Id, plugin.AuthPluginIds)
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return tx.CreateInBatches(rows, 100).Error
 }
 
 // syncModelPrices syncs ModelPrice entities

@@ -298,96 +298,8 @@ func respondCredentialLookupError(w http.ResponseWriter, err error) bool {
 	return false
 }
 
-// appFromPluginAuthContext loads the app a microgateway auth plugin authenticated
-// as. The plugin middleware puts the id on the context under "app_id" (it cannot
-// put a *models.App there without importing models), so the app is resolved here.
-//
-// The key is a bare string rather than microgateway/internal/auth.AppIDKey because
-// that package is internal to the microgateway module and this one is not.
-func (cv *CredentialValidator) appFromPluginAuthContext(r *http.Request) (*models.App, error) {
-	raw := r.Context().Value("app_id")
-	if raw == nil {
-		return nil, errors.New("no app_id on a plugin-authenticated request")
-	}
-
-	var appID uint
-	switch v := raw.(type) {
-	case uint:
-		appID = v
-	case uint32:
-		appID = uint(v)
-	case int:
-		if v <= 0 {
-			return nil, fmt.Errorf("non-positive app_id %d on a plugin-authenticated request", v)
-		}
-		appID = uint(v)
-	case int64:
-		if v <= 0 {
-			return nil, fmt.Errorf("non-positive app_id %d on a plugin-authenticated request", v)
-		}
-		appID = uint(v)
-	default:
-		return nil, fmt.Errorf("unexpected app_id type %T on a plugin-authenticated request", raw)
-	}
-
-	if appID == 0 {
-		return nil, errors.New("zero app_id on a plugin-authenticated request")
-	}
-
-	return cv.service.GetAppByID(appID)
-}
-
 func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check if authentication was already done by a microgateway plugin
-		if pluginAuth := r.Context().Value("plugin_authenticated"); pluginAuth != nil {
-			if authenticated, ok := pluginAuth.(bool); ok && authenticated {
-				// Request already authenticated by microgateway plugin - skip credential validation.
-				// The plugin has already set the app context with correct AppID, but it does not
-				// resolve tools: a tool request still has to clear the tool ACL here, or the
-				// plugin auth path would be a way around it.
-				if toolSlug := toolSlugFromPath(r.URL.Path); toolSlug != "" {
-					app, err := cv.appFromPluginAuthContext(r)
-					if err != nil {
-						log.Debug().Err(err).Msg("Plugin-authenticated tool request without a resolvable app")
-						respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
-						return
-					}
-					if !app.IsActive {
-						respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
-						return
-					}
-					ctx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
-					if !ok {
-						return
-					}
-					ctx = context.WithValue(ctx, "app", app)
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
-				}
-				// Likewise an LLM, datasource or route: the plugin said who the caller
-				// is, not what that app may use.
-				if targetFromPath(r.URL.Path).kind != "" {
-					app, err := cv.appFromPluginAuthContext(r)
-					if err != nil {
-						log.Debug().Err(err).Msg("Plugin-authenticated request without a resolvable app")
-						respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
-						return
-					}
-					if !app.IsActive {
-						respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
-						return
-					}
-					if !cv.authorizeTarget(w, r, app) {
-						return
-					}
-					r = r.WithContext(context.WithValue(r.Context(), "app", app))
-				}
-				next.ServeHTTP(w, r)
-				return
-			}
-		}
-
 		pathParts := strings.Split(r.URL.Path, "/")
 		if len(pathParts) < 2 {
 			respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
@@ -409,6 +321,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			if blocked := cv.authHooks.PreAuth(w, r); blocked {
 				return // Pre-auth hook blocked the request
 			}
+		}
+
+		// The inner hop of the /ai/ loopback, for a caller an auth plugin
+		// authenticated on the outer hop.
+		if cv.handoffAuth(w, r, next) {
+			return
 		}
 
 		// --- Bearer Token Authentication (includes OAuth for MCP servers) ---
@@ -513,6 +431,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, "scope", accessToken.Scope)
 				// The app is what budget, analytics, filters and the plugin hooks read.
 				ctx = context.WithValue(ctx, "app", app)
+				ctx = WithAuthIdentity(ctx, &AuthIdentity{AppID: app.ID, Method: AuthMethodOAuth, OAuthUserID: user.ID})
 
 				// Tool requests do not fire the post-auth hook, matching the app-secret
 				// branch below, which returns before reaching it.
@@ -527,59 +446,9 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-			// Check if custom auth (auth plugin) should handle validation
-			if cv.authHooks != nil && cv.authHooks.CustomAuth != nil {
-				appID, authenticated, authErr := cv.authHooks.CustomAuth(tokenString, r)
-				if authErr != nil {
-					respondWithError(w, http.StatusInternalServerError, "Authentication error", authErr, false)
-					return
-				}
-
-				if authenticated {
-					// Auth plugin successfully validated
-					app, err := cv.service.GetAppByID(appID)
-					if err != nil {
-						respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
-						return
-					}
-					if !app.IsActive {
-						respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
-						return
-					}
-
-					// An auth plugin authenticates; it does not authorise a tool. Tool
-					// requests still clear the tool ACL, so custom auth cannot be a way
-					// around it.
-					if toolSlug := toolSlugFromPath(r.URL.Path); toolSlug != "" {
-						ctx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
-						if !ok {
-							return
-						}
-						ctx = context.WithValue(ctx, "app", app)
-						next.ServeHTTP(w, r.WithContext(ctx))
-						return
-					}
-
-					// Nor does it authorise an LLM, datasource or route.
-					if !cv.authorizeTarget(w, r, app) {
-						return
-					}
-
-					ctx := context.WithValue(r.Context(), "app", app)
-					// Update request with context BEFORE calling hook so hook modifications persist
-					r = r.WithContext(ctx)
-
-					// === HOOK POINT: POST-AUTH (Custom Auth Plugin) ===
-					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
-						if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
-							return // Post-auth hook blocked the request
-						}
-					}
-
-					next.ServeHTTP(w, r)
-					return
-				}
-				// Auth plugin said not authenticated, fall through to standard validation
+			// An endpoint with auth plugins is authenticated by them alone.
+			if cv.pluginAuth(w, r, next, tokenString, CredTypeBearer) {
+				return
 			}
 
 			// Standard Bearer token validation (app secret)
@@ -593,6 +462,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				if err == nil {
 					// Valid app secret - add app to context like API key flow
 					ctx := context.WithValue(r.Context(), "app", app)
+					ctx = WithAuthIdentity(ctx, &AuthIdentity{AppID: app.ID, Method: AuthMethodAppKey})
 
 					// For tool requests, validate the app has access to the tool
 					if toolSlug := toolSlugFromPath(r.URL.Path); toolSlug != "" {
@@ -754,58 +624,9 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			r = r.WithContext(ctx)
 		}
 
-		// === TRY CUSTOM AUTH (Auth Plugin) for API Key ===
-		if cv.authHooks != nil && cv.authHooks.CustomAuth != nil {
-			appID, authenticated, authErr := cv.authHooks.CustomAuth(apiKey, r)
-			if authErr != nil {
-				// Auth plugin error
-				respondWithError(w, http.StatusUnauthorized, "Authentication failed", authErr, true)
-				return
-			}
-
-			if authenticated {
-				// Auth plugin successfully validated
-				app, err := cv.service.GetAppByID(appID)
-				if err != nil {
-					respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
-					return
-				}
-				if !app.IsActive {
-					respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
-					return
-				}
-
-				// As with the bearer custom-auth branch: authentication by a plugin does
-				// not authorise a tool.
-				if toolSlug != "" {
-					toolCtx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
-					if !ok {
-						return
-					}
-					next.ServeHTTP(w, r.WithContext(context.WithValue(toolCtx, "app", app)))
-					return
-				}
-
-				if !cv.authorizeTarget(w, r, app) {
-					return
-				}
-
-				ctx := r.Context()
-				ctx = context.WithValue(ctx, "app", app)
-				r = r.WithContext(ctx)
-
-				// === HOOK POINT: POST-AUTH (Custom Auth Plugin via API Key) ===
-				if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
-					if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
-						return // Post-auth hook blocked the request
-					}
-				}
-
-				next.ServeHTTP(w, r)
-				return
-			}
-			// Auth plugin returned false - this means authentication failed (no fallback)
-			// The error should have been returned above
+		// === AUTH PLUGINS: an endpoint with any is authenticated by them alone ===
+		if cv.pluginAuth(w, r, next, apiKey, CredTypeAPIKey) {
+			return
 		}
 
 		// === STANDARD API KEY VALIDATION (only if no auth plugin) ===
@@ -929,6 +750,7 @@ func (cv *CredentialValidator) checkAPICredential(apiKey, dsSlug, llmSlug, route
 		Msg("CheckAPICredential: Retrieved app for credential")
 
 	ctx := context.WithValue(r.Context(), "app", app)
+	ctx = WithAuthIdentity(ctx, &AuthIdentity{AppID: app.ID, Method: AuthMethodAppKey})
 	// Note: toolSlug might be already in r.Context() if set before calling this func
 	// but setting it again here from param ensures it's the one CheckAPICredential is using.
 	if toolSlug != "" {

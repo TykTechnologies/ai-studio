@@ -372,13 +372,14 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 	return false
 }
 
-// stripFailoverHeaders removes the loopback markers (failover and router)
-// before a request leaves for the vendor.
+// stripFailoverHeaders removes the loopback markers (failover, router and
+// auth hand-off) before a request leaves for the vendor.
 func stripFailoverHeaders(h http.Header) {
 	h.Del(hdrFailoverOrigin)
 	h.Del(hdrFailoverAttempt)
 	h.Del(hdrFailoverToken)
 	stripRouterHeaders(h)
+	stripAuthHandoffHeaders(h)
 }
 
 // applyFailoverMarker stamps a ProxyLog with the markers from ctx, if any:
