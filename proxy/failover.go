@@ -16,6 +16,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
@@ -188,6 +189,14 @@ var errDriverSetup = errors.New("driver setup failed")
 // classifyDriverError normalises a driver error. attemptCtx is the attempt's
 // context as it stood when the driver returned, before it is cancelled.
 func classifyDriverError(err error, attemptCtx context.Context) attemptFailure {
+	// The LLM's vendor cannot be served on /ai and /v1 at all. Say so as a
+	// client error that is not worth retrying; a failover rung of another
+	// vendor is still tried, as for any rung whose driver cannot be built.
+	var unsupported *switches.UnsupportedOnUnifiedAPIError
+	if errors.As(err, &unsupported) {
+		return attemptFailure{err: err, status: http.StatusBadRequest, driverError: true,
+			inner: &APIError{Message: unsupported.Error(), Type: "invalid_request_error", Code: "unsupported_vendor"}}
+	}
 	if errors.Is(err, errDriverSetup) {
 		return attemptFailure{err: err, status: http.StatusInternalServerError, driverError: true}
 	}

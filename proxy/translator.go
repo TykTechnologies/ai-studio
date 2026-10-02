@@ -116,7 +116,7 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	// Create LLM driver with internal routing HTTP client
 	llm, err := switches.FetchDriver(&internalConf, nil, nil, streamingFunc, switches.WithHTTPClient(internalClient))
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create LLM client: %v", errDriverSetup, err)
+		return nil, fmt.Errorf("%w: failed to create LLM client: %w", errDriverSetup, err)
 	}
 
 	attemptReq := *req // shallow copy: only Model differs per rung

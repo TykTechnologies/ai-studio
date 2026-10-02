@@ -416,7 +416,9 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 			},
 		},
 		{
-			name:   "Vertex with custom HTTP client",
+			// Vertex has no client that can route through /llm/; the old one
+			// sent the caller's credential to generativelanguage.googleapis.com.
+			name:   "Vertex is not supported",
 			vendor: models.VERTEX,
 			llmConfig: &models.LLM{
 				Vendor: models.VERTEX,
@@ -425,6 +427,16 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 			settings: &models.LLMSettings{
 				ModelName: "gemini-pro",
 			},
+			wantErr: true,
+		},
+		{
+			name:   "HuggingFace is not supported",
+			vendor: models.HUGGINGFACE,
+			llmConfig: &models.LLM{
+				Vendor: models.HUGGINGFACE,
+				APIKey: "test-key",
+			},
+			wantErr: true,
 		},
 		{
 			name:   "Unsupported LLM",
@@ -452,7 +464,9 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 				WithHTTPClient(httpClient),
 			)
 			if tt.wantErr {
-				assert.Error(t, err, "FetchDriver() succeeded unexpectedly")
+				var unsupported *UnsupportedOnUnifiedAPIError
+				assert.ErrorAs(t, err, &unsupported, "FetchDriver() must say the vendor is unsupported on /ai and /v1")
+				assert.Empty(t, mockTransport.capturedRequests, "no request may leave for an unsupported vendor")
 				return
 			}
 

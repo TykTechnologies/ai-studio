@@ -122,6 +122,7 @@ A single OpenAI-compatible endpoint at the root of the gateway, fronting every L
 *   **Purpose:** accepts OpenAI-format requests and translates them to the target vendor's API, translating the response back. Unlike the Main Ingress it is pinned to one LLM by its URL, so the `model` field takes a plain vendor model name — or can be omitted, falling back to the default model configured on that LLM.
 *   **Use it when** a client should only ever reach a single LLM, or when a tool cannot be made to send a namespaced `{llmSlug}/{model}` model string.
 *   **Tradeoff:** vendor-specific features not expressible in the OpenAI schema are unavailable.
+*   **Vendors:** **Vertex and Hugging Face LLMs are not supported** here or on the unified `/v1` endpoint: a request returns **400** with code `unsupported_vendor`, and no request reaches the vendor. Call them through the vendor-native endpoint (`/llm/rest/{llmSlug}` or `/llm/stream/{llmSlug}`). In a failover waterfall, such a rung is skipped and the next one is tried.
 
     ```python
     # Example using OpenAI Python SDK, pinned to one LLM
