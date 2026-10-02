@@ -102,6 +102,17 @@ func FetchDriver(LLMConfig *models.LLM, settings *models.LLMSettings, mem schema
 	return v().GetDriver(LLMConfig, settings, mem, streamingFunc)
 }
 
+// UnsupportedOnUnifiedAPIError is returned when a vendor's driver cannot be
+// built for internal routing, so the OpenAI-compatible /ai/{slug} and /v1
+// endpoints cannot serve its LLMs. The vendor's own /llm/ routes still can.
+type UnsupportedOnUnifiedAPIError struct {
+	Vendor models.Vendor
+}
+
+func (e *UnsupportedOnUnifiedAPIError) Error() string {
+	return fmt.Sprintf("LLMs of vendor %q are not supported on the /ai and /v1 endpoints; call the LLM through /llm/rest/{slug} or /llm/stream/{slug} instead", e.Vendor)
+}
+
 // fetchDriverWithHTTPClient creates a vendor driver with a custom HTTP client.
 // This is used for internal routing where the /ai/ endpoint routes through /llm/.
 func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettings, mem schema.Memory, streamingFunc func(ctx context.Context, chunk []byte) error, httpClient *http.Client) (llms.Model, error) {
@@ -170,23 +181,18 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		return googleai.New(context.Background(), opts...)
 
 	case models.VERTEX:
-		// Vertex uses the same GoogleAI SDK
-		opts := []googleai.Option{
-			googleai.WithHTTPClient(httpClient),
-		}
-		if LLMConfig.APIKey != "" {
-			opts = append(opts, googleai.WithAPIKey(LLMConfig.APIKey))
-		}
-		if settings != nil && settings.ModelName != "" {
-			opts = append(opts, googleai.WithDefaultModel(settings.ModelName))
-		}
-		return googleai.New(context.Background(), opts...)
+		// Not supported. The only client here speaks the Gemini Developer API,
+		// not Vertex's, and it cannot be pointed at the internal /llm/ route:
+		// it went to generativelanguage.googleapis.com carrying the caller's
+		// App credential, and failed there.
+		return nil, &UnsupportedOnUnifiedAPIError{Vendor: LLMConfig.Vendor}
 
 	case models.BEDROCK:
 		return nil, fmt.Errorf("vendor bedrock uses direct AWS SDK calls, not langchaingo HTTP clients")
 
 	default:
-		return nil, fmt.Errorf("vendor %s does not support custom HTTP client", LLMConfig.Vendor)
+		// HuggingFace, the mock vendor and any vendor without a case above.
+		return nil, &UnsupportedOnUnifiedAPIError{Vendor: LLMConfig.Vendor}
 	}
 }
 
