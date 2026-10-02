@@ -442,6 +442,52 @@ console's routes (`admin/routes.js`, `routes/PortalRoutes.js`,
 need the same permission.
 - `examples/embed-host -chromeless` shows it.
 
+## The host's Tyk Dashboard connection
+
+A host that is (or fronts) a Tyk Dashboard sets
+`Options.HostTykConnection` (`studio.HostTykConnection`, an alias of
+`services/tykmcp.HostConnection`): `URL`, `OrgID`, `Mode`, `GatewayURL`,
+an optional `Name`, and `Token func() string`. It follows the host-managed
+roles pattern (Phase 4):
+
+- **One connection under a stable key.** `tyk_connections.host_key`
+  (nullable, unique; `models.TykHostConnectionKey` = `"host"`) marks it.
+  Every replica upserts it at start (`enterprise/features/tykmcp/host.go`):
+  the first creates it, the others lose the unique-key race and load it, and
+  a changed URL, organisation, mode or gateway URL is written back (a
+  changed URL or mode is re-probed). An administrator's name for it
+  survives restarts.
+- **Activated by the host, not an administrator.** The normal capability
+  probe runs, and the connection becomes active at the lower of `Mode` and
+  what the probe verifies. The host usually starts serving its Dashboard
+  API after `studio.New` returns, so the upsert and activation run in the
+  background, retrying from 5s up to every 5 minutes until the Dashboard
+  answers. `TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR` does not apply.
+  `AllowInternalHost` is set: the host vouches for its Dashboard's address.
+  A connection an administrator disables stays disabled; they may activate
+  it again.
+- **The host's fields are read-only.** `UpdateConnection` refuses a change
+  to `dashboard_url`, `org_id`, `declared_mode`, `gateway_base_url`,
+  `allow_internal_host` or the token with `tykmcp.ErrHostManaged` (409);
+  unchanged values pass, so the edit form still saves Studio's fields.
+  Deleting it is refused while the host provides it; a node without the
+  option may delete it, and the deleted row gives up the key. The response
+  carries `host_managed`, and the console disables those fields, hides the
+  token field and the delete action, and marks the row "Managed by host".
+- **The key is the host's.** Nothing is stored in `dashboard_access_token`
+  for it: `dashboardToken` calls `Token` for every Dashboard client and
+  probe, so a key the Dashboard rotates takes effect on the next request.
+  On a node without the option the connection's requests fail with
+  `ErrDashboard` rather than going out unauthenticated. `Token` runs on
+  Studio's goroutines, so a panic in it is recovered (`safe.Call`, logged
+  with its stack) and costs that request its key, not the host its
+  process; an empty key leaves the connection pending.
+
+`studio.New` validates the option (`HostConnection.Validate`) before
+anything starts. Without the Enterprise implementation it is logged and
+ignored; with `TYK_MCP_ENABLED=false` the service logs that the host's
+connection is not set up.
+
 ## Module layout
 
 A host imports the root module only. The root module does not require the

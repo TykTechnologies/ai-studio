@@ -60,6 +60,8 @@ func tykMCPErrorResponse(c *gin.Context, err error, fallback string) {
 		webhookError(c, http.StatusConflict, "Conflict", err.Error())
 	case errors.Is(err, tykmcp.ErrInvalidState), errors.Is(err, tykmcp.ErrInUse):
 		webhookError(c, http.StatusConflict, "Invalid State", err.Error())
+	case errors.Is(err, tykmcp.ErrHostManaged):
+		webhookError(c, http.StatusConflict, "Host Managed", err.Error())
 	case errors.Is(err, tykmcp.ErrSameActivator):
 		webhookError(c, http.StatusForbidden, "Forbidden", err.Error())
 	case errors.Is(err, tykmcp.ErrCapabilityUnavailable):

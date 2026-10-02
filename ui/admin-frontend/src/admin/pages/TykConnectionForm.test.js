@@ -190,4 +190,30 @@ describe("TykConnectionForm", () => {
     expect(await screen.findByTestId("form-error")).toHaveTextContent(/Enter the access token/);
     expect(apiClient.post).not.toHaveBeenCalled();
   });
+
+  it("shows the host's fields read-only on a host-managed connection and still saves Studio's", async () => {
+    apiClient.get.mockImplementation((path) => {
+      if (path === "/tyk-mcp/status") return Promise.resolve(enabled);
+      if (path === "/tyk-connections/7") return Promise.resolve({ data: { ...existing, host_managed: true, org_id: "org-1" } });
+      return Promise.reject(new Error("unexpected " + path));
+    });
+    renderForm("/admin/tyk-connections/edit/7");
+    expect(await screen.findByTestId("host-managed-alert")).toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-url-input")).toBeDisabled();
+    expect(screen.getByLabelText(/Organisation ID/)).toBeDisabled();
+    expect(screen.getByLabelText(/Public gateway base URL/)).toBeDisabled();
+    expect(screen.queryByTestId("token-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("probe-button")).toBeDisabled();
+    expect(screen.getByTestId("name-input")).not.toBeDisabled();
+
+    fireEvent.change(screen.getByTestId("name-input"), { target: { value: "Our Dashboard" } });
+    fireEvent.click(screen.getByTestId("save-button"));
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(
+        "/tyk-connections/7",
+        expect.objectContaining({ name: "Our Dashboard", dashboard_url: "https://dash.example.com", org_id: "org-1", lock_version: 3 }),
+      ),
+    );
+    expect(apiClient.patch.mock.calls[0][1]).not.toHaveProperty("dashboard_access_token");
+  });
 });

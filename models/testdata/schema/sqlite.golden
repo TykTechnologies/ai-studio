@@ -1703,9 +1703,11 @@ TABLE tyk_connections
   column `activated_by_email` text
   column `activated_at` datetime
   column `lock_version` integer NOT NULL DEFAULT 0
+  column `host_key` text
   index CREATE INDEX `idx_tyk_connections_deleted_at` ON `tyk_connections`(`deleted_at`)
   index CREATE INDEX `idx_tyk_connections_next_sync_at` ON `tyk_connections`(`next_sync_at`)
   index CREATE INDEX `idx_tyk_connections_status` ON `tyk_connections`(`status`)
+  index CREATE UNIQUE INDEX `idx_tyk_connections_host_key` ON `tyk_connections`(`host_key`)
 TABLE tyk_policies
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

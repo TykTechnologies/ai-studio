@@ -1817,6 +1817,7 @@ TABLE tools
 TABLE tyk_connections
   constraint tyk_connections_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_tyk_connections_deleted_at ON tyk_connections USING btree (deleted_at)
+  index CREATE UNIQUE INDEX idx_tyk_connections_host_key ON tyk_connections USING btree (host_key)
   index CREATE INDEX idx_tyk_connections_next_sync_at ON tyk_connections USING btree (next_sync_at)
   index CREATE INDEX idx_tyk_connections_status ON tyk_connections USING btree (status)
   index CREATE UNIQUE INDEX tyk_connections_pkey ON tyk_connections USING btree (id)
@@ -1863,6 +1864,7 @@ TABLE tyk_connections
   column activated_by_email character varying(varchar) nullable=YES len=255
   column activated_at timestamp with time zone(timestamptz) nullable=YES
   column lock_version bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column host_key character varying(varchar) nullable=YES len=64
 TABLE tyk_policies
   constraint tyk_policies_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX idx_tyk_policies_conn_pol ON tyk_policies USING btree (connection_id, tyk_policy_id)

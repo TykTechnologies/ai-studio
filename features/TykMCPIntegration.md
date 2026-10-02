@@ -109,6 +109,8 @@ A **Tyk connection** is one Dashboard URL + one Dashboard user access key + one 
 
 The effective mode is the lower of the declared mode and the probed capabilities; `unverified` capabilities let the mode stand but are shown as such in the UI, and the first 401/403 on a real call flips the connection to `degraded` with the failing capability named, notifies admins (`NotificationService.NotifyDirect`), and the Studio action returns `ErrCapabilityUnavailable` (typed, not a 500).
 
+**Host-managed connection** (added 2026-10-02): an embedding host that is a Tyk Dashboard passes `studio.Options.HostTykConnection`; Studio keeps one connection for it under `host_key = "host"`, activates it itself after the normal probe, keeps the host's URL, org, mode and gateway URL read-only (`ErrHostManaged`), and asks the host's `Token` func for the key on every request instead of storing one. See `features/Embedding.md` ("The host's Tyk Dashboard connection").
+
 **Connection lifecycle**: `pending → active → disabled`, plus `degraded` as an overlay flag. Creating or editing URL/token/mode needs `tyk-connections:write`; activating needs `tyk-connections:execute` (the outward-data precedent from webhooks approve). `TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR=true` enforces four-eyes like `WEBHOOKS_REQUIRE_DIFFERENT_APPROVER`.
 
 ### 4a. Gateway segmentation and MDCB (optional per connection)
@@ -155,6 +157,7 @@ All new tables use `gorm.Model` unless noted; timestamps in UTC; JSON columns as
 | `data_planes` (text JSON) | MDCB snapshot: `[{group_id, tags[], node_count, node_versions[], healthy, last_seen}]`; never the raw response (it carries each node's `api_key`) |
 | `last_sync_at`, `last_sync_status`, `last_sync_error`, `last_probe_at`, `last_mdcb_probe_at` | |
 | `created_by_user_id`, `activated_by_user_id`, `activated_at`, `lock_version` | |
+| `host_key` (nullable, unique, `json:"-"`) | set on the connection an embedding host provides (`"host"`); the DTO carries `host_managed`. Its token column stays empty: the key comes from the host on each use |
 
 ### `mcp_servers` (the asset)
 | Column | Notes |

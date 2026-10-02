@@ -68,6 +68,19 @@ func TestNewRequiresConfigAndDB(t *testing.T) {
 	stopStudio(t, s)
 }
 
+func TestNewRejectsAnInvalidHostTykConnection(t *testing.T) {
+	opts := newTestOptions(t)
+	opts.HostTykConnection = &HostTykConnection{URL: "dashboard:3000"}
+	_, err := New(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HostTykConnection")
+
+	// A failed New must not leave the process marked as running.
+	s, err := New(newTestOptions(t))
+	require.NoError(t, err)
+	stopStudio(t, s)
+}
+
 func TestStartGRPCRequiresControlMode(t *testing.T) {
 	s, err := New(newTestOptions(t))
 	require.NoError(t, err)

@@ -30,6 +30,9 @@ type Deps struct {
 	NodeID string
 	// Version is reported in the User-Agent of outbound requests.
 	Version string
+	// Host is the Dashboard connection the host application provides, or
+	// nil. Studio upserts and activates it in the background.
+	Host *HostConnection
 }
 
 // FactoryFunc builds a tykmcp service. The enterprise submodule registers one

@@ -111,6 +111,11 @@ const TykConnections = () => {
           <Box>
             <Typography variant="body2">
               {conn.name}
+              {conn.host_managed && (
+                <Tooltip title="Provided by the application AI Studio is embedded in">
+                  <Chip size="small" label="Managed by host" variant="outlined" sx={{ ml: 1 }} data-testid="host-managed-chip" />
+                </Tooltip>
+              )}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {conn.dashboard_url}
@@ -197,7 +202,13 @@ const TykConnections = () => {
       );
     }
     if (canDelete) {
-      actions.push({ key: "delete", label: "Delete connection", onClick: (conn) => setDeleteTarget(conn), "data-testid": "menu-delete" });
+      actions.push({
+        key: "delete",
+        label: "Delete connection",
+        hidden: (conn) => conn.host_managed,
+        onClick: (conn) => setDeleteTarget(conn),
+        "data-testid": "menu-delete",
+      });
     }
     return actions;
   }, [canWrite, canExecute, canDelete, navigate, run]);
