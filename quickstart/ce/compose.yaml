@@ -5,11 +5,11 @@ services:
   midsommar:
     networks:
       - tyk-network
-    image: tykio/tyk-ai-studio:v2.1.0
+    image: tykio/tyk-ai-studio:v2.2.1
     volumes:
-      - ../confs/midsommar-ce.env:/app/.env
-      - ./data/cache/plugins:/app/data/cache/plugins
-      - ./data/midsommar/:/app/data/db
+      - ../confs/midsommar-ce.env:/opt/tyk-ai-studio/.env
+      - ./data/midsommar:/opt/tyk-ai-studio/data
+      - ./data/cache/plugins:/opt/tyk-ai-studio/data/cache/plugins
     env_file:
       - ../confs/midsommar-ce.env
     ports:
@@ -19,10 +19,10 @@ services:
   mgw:
     networks:
       - tyk-network
-    image: tykio/tyk-microgateway:v2.1.0
+    image: tykio/tyk-microgateway:v2.2.1
     volumes:
-      - ../confs/mgw-ce.env:/app/.env
-      - ../confs/mgw-analytics.yaml:/app/mgw-analytics.yaml
+      - ../confs/mgw-ce.env:/opt/tyk-microgateway/.env
+      - ../confs/mgw-analytics.yaml:/opt/tyk-microgateway/mgw-analytics.yaml
       - ./data/mgw:/app/data
       - ./data/cache/plugins:/data/cache/plugins
     env_file:

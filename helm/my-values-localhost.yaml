@@ -63,7 +63,7 @@ microgateway:
   enabled: true
   image:
     repository: tykio/tyk-microgateway
-    tag: v2.2.0
+    tag: v2.2.1
   service:
     type: NodePort
     port: 8080
