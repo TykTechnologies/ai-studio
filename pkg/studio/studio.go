@@ -54,6 +54,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
+	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/ui"
 )
 
@@ -161,7 +162,23 @@ type Options struct {
 	// drawers, because the host draws its own. Sticky page headers then sit
 	// at the top of the page instead of below Studio's 64px bar.
 	Chromeless bool
+
+	// HostTykConnection, when set, is the Tyk Dashboard the host is (or
+	// fronts), for the Tyk Dashboard MCP integration (Enterprise). Studio
+	// keeps one host-managed connection for it under a stable key, so
+	// replicas sharing the database upsert the same one; it probes the
+	// Dashboard and activates the connection itself, since the host is
+	// trusted, retrying in the background until the Dashboard answers. The
+	// host's fields are read-only in Studio's administration, and Studio
+	// asks Token for the Dashboard key on every request, so rotating it is
+	// the host's business. An administrator may still disable the
+	// connection; Studio then leaves it disabled.
+	HostTykConnection *HostTykConnection
 }
+
+// HostTykConnection is the Tyk Dashboard connection the host provides (see
+// Options.HostTykConnection).
+type HostTykConnection = tykmcp.HostConnection
 
 // Identity is a user as the host has authenticated them. Subject and Email
 // are required; Studio keeps the user's name, email, administrator status
@@ -229,6 +246,11 @@ type Studio struct {
 func New(opts Options) (_ *Studio, err error) {
 	if opts.Config == nil || opts.DB == nil {
 		return nil, errors.New("studio: Options.Config and Options.DB are required")
+	}
+	if opts.HostTykConnection != nil {
+		if err := opts.HostTykConnection.Validate(); err != nil {
+			return nil, fmt.Errorf("studio: Options.HostTykConnection: %w", err)
+		}
 	}
 	if !running.CompareAndSwap(false, true) {
 		return nil, ErrAlreadyRunning
@@ -332,6 +354,13 @@ func New(opts Options) (_ *Studio, err error) {
 	service := services.NewServiceWithOCI(s.db, ociConfig)
 	s.service = service
 	service.SetLicensingService(s.licensing)
+	if opts.HostTykConnection != nil {
+		if tykmcp.IsEnterpriseAvailable() {
+			service.SetTykMCPHost(opts.HostTykConnection)
+		} else {
+			logger.Warn("Options.HostTykConnection is ignored: the Tyk Dashboard MCP integration is an Enterprise feature")
+		}
+	}
 
 	// Register the per-plugin permission resources of every installed plugin
 	// before the system roles are seeded, so Viewer/Editor/Auditor are

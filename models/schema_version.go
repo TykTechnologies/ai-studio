@@ -26,7 +26,8 @@ import (
 //     indexes leave it alone, so older readers keep working.
 const (
 	// 2: cluster_nodes.label and leader_eligible (nullable, additive).
-	SchemaVersion          = 2
+	// 3: tyk_connections.host_key and its unique index (nullable, additive).
+	SchemaVersion          = 3
 	MinReaderSchemaVersion = 1
 )
 

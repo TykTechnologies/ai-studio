@@ -114,7 +114,21 @@ type TykConnection struct {
 	ActivatedAt       *time.Time `json:"activated_at"`
 
 	LockVersion int `gorm:"not null;default:0" json:"lock_version"`
+
+	// HostKey marks the connection the host application AI Studio is
+	// embedded in provides (pkg/studio Options.HostTykConnection). Every
+	// replica upserts it under this key; its Dashboard URL, organisation,
+	// mode and gateway URL are the host's, and its Dashboard key is asked of
+	// the host on each use, never stored. Nil for the connections
+	// administrators create.
+	HostKey *string `gorm:"size:64;uniqueIndex" json:"-"`
 }
+
+// TykHostConnectionKey is the HostKey of the host-managed connection.
+const TykHostConnectionKey = "host"
+
+// HostManaged reports whether the host application provides the connection.
+func (t *TykConnection) HostManaged() bool { return t.HostKey != nil }
 
 func (TykConnection) TableName() string { return "tyk_connections" }
 
@@ -405,6 +419,7 @@ type TykConnectionResponse struct {
 	ActivatedByEmail    string                   `json:"activated_by_email"`
 	ActivatedAt         *time.Time               `json:"activated_at,omitempty"`
 	LockVersion         int                      `json:"lock_version"`
+	HostManaged         bool                     `json:"host_managed"`
 	CreatedAt           time.Time                `json:"created_at"`
 	UpdatedAt           time.Time                `json:"updated_at"`
 }
@@ -418,7 +433,7 @@ func (t *TykConnection) ToResponse() TykConnectionResponse {
 	return TykConnectionResponse{
 		ID: t.ID, Name: t.Name, Description: t.Description,
 		DashboardURL: t.DashboardURL, GatewayBaseURL: t.GatewayBaseURL, TemplateID: t.TemplateID,
-		HasToken: t.DashboardAccessToken != "", TokenHint: tokenHint(t.DashboardAccessToken),
+		HasToken: t.DashboardAccessToken != "" || t.HostManaged(), TokenHint: tokenHint(t.DashboardAccessToken),
 		OrgID: t.OrgID, DeclaredMode: t.DeclaredMode, EffectiveMode: t.EffectiveMode,
 		Capabilities: t.Capabilities(), Status: t.Status, Degraded: t.Degraded, DegradedReason: t.DegradedReason,
 		SyncIntervalSeconds: t.SyncIntervalSeconds, NextSyncAt: t.NextSyncAt,
@@ -431,6 +446,6 @@ func (t *TykConnection) ToResponse() TykConnectionResponse {
 		LastProbeAt: t.LastProbeAt, LastMDCBProbeAt: t.LastMDCBProbeAt,
 		CreatedByUserID: t.CreatedByUserID, CreatedByEmail: t.CreatedByEmail,
 		ActivatedByUserID: t.ActivatedByUserID, ActivatedByEmail: t.ActivatedByEmail, ActivatedAt: t.ActivatedAt,
-		LockVersion: t.LockVersion, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		LockVersion: t.LockVersion, HostManaged: t.HostManaged(), CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }

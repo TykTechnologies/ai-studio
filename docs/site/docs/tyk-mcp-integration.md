@@ -66,6 +66,13 @@ Activating a connection is an `execute` action on the `tyk-connections`
 resource. Set `TYK_MCP_REQUIRE_DIFFERENT_ACTIVATOR=true` to require that the
 activator is not the person who created or last edited the connection.
 
+When AI Studio runs inside the Tyk Dashboard, the Dashboard provides one
+connection itself. It is marked **Managed by host**: AI Studio activates it
+on its own, the Dashboard URL, organisation, trust mode, gateway URL and
+access key are set by the Dashboard and read-only here, and it cannot be
+deleted. Its name, sync interval and governance settings are yours to edit,
+and you can disable it.
+
 Connections serve more than MCP: the Tools list's **Import OpenAPI** wizard
 imports a Tyk OAS API as a tool through the same connection (see
 [Tools](./tools.md#importing-from-a-tyk-dashboard-enterprise)), and can add a

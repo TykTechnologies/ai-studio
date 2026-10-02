@@ -85,6 +85,15 @@ go s.StartGRPC(edgeListener)           // edge control plane, when GatewayMode i
   open, and may be called more than once.
 - `Options.GRPCTLSConfig` serves edges with the host's `*tls.Config` instead
   of the certificate and key files in `Config`.
+- `Options.HostTykConnection` (Enterprise) gives Studio the host's Tyk
+  Dashboard for the Tyk Dashboard MCP integration: `URL`, `OrgID`, `Mode`,
+  `GatewayURL` and `Token func() string`. Studio keeps one host-managed
+  connection for it (every replica upserts the same one), probes the
+  Dashboard and activates it without an administrator, retrying in the
+  background until the Dashboard answers. Those fields are read-only in
+  Studio's UI, and `Token` is called for every Dashboard request and never
+  stored, so key rotation stays with the host. New rejects an invalid one;
+  a Community Edition build logs that it is ignored.
 
 ## Headless control plane
 

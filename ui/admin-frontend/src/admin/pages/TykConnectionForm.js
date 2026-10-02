@@ -170,6 +170,9 @@ const TykConnectionForm = () => {
   if (status && !status.enabled) return <TykDisabledNotice status={status} />;
 
   const canSave = form.name && form.dashboard_url && (editing || form.dashboard_access_token);
+  // The application AI Studio is embedded in provides this connection: its
+  // Dashboard, organisation, mode, gateway URL and key are set there.
+  const hostManaged = Boolean(connection?.host_managed);
 
   return (
     <>
@@ -189,6 +192,12 @@ const TykConnectionForm = () => {
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)} data-testid="form-error">
             {error}
+          </Alert>
+        )}
+        {hostManaged && (
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="host-managed-alert">
+            This connection is provided by the application AI Studio is embedded in. Its Dashboard URL, organisation,
+            trust mode, gateway URL and access key are managed there.
           </Alert>
         )}
         {connection?.degraded && (
@@ -239,6 +248,7 @@ const TykConnectionForm = () => {
                   value={form.declared_mode}
                   onChange={set("declared_mode")}
                   helperText={MODE_HELP[form.declared_mode]}
+                  disabled={hostManaged}
                   inputProps={{ "data-testid": "mode-input" }}
                 >
                   {CONNECTION_MODES.map((m) => (
@@ -260,26 +270,36 @@ const TykConnectionForm = () => {
                   value={form.dashboard_url}
                   onChange={set("dashboard_url")}
                   required
+                  disabled={hostManaged}
                   inputProps={{ "data-testid": "dashboard-url-input" }}
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
-                <TextField fullWidth label="Organisation ID (optional)" name="org_id" value={form.org_id} onChange={set("org_id")} />
-              </Grid>
-              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  type="password"
-                  label={editing ? "Dashboard access token (leave empty to keep)" : "Dashboard access token"}
-                  name="dashboard_access_token"
-                  helperText="The API access key of a dedicated Dashboard user. Stored encrypted, never shown again."
-                  value={form.dashboard_access_token}
-                  onChange={set("dashboard_access_token")}
-                  required={!editing}
-                  autoComplete="new-password"
-                  inputProps={{ "data-testid": "token-input" }}
+                  label="Organisation ID (optional)"
+                  name="org_id"
+                  value={form.org_id}
+                  onChange={set("org_id")}
+                  disabled={hostManaged}
                 />
               </Grid>
+              {!hostManaged && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    type="password"
+                    label={editing ? "Dashboard access token (leave empty to keep)" : "Dashboard access token"}
+                    name="dashboard_access_token"
+                    helperText="The API access key of a dedicated Dashboard user. Stored encrypted, never shown again."
+                    value={form.dashboard_access_token}
+                    onChange={set("dashboard_access_token")}
+                    required={!editing}
+                    autoComplete="new-password"
+                    inputProps={{ "data-testid": "token-input" }}
+                  />
+                </Grid>
+              )}
               <Grid item xs={12} sm={8}>
                 <TextField
                   fullWidth
@@ -289,6 +309,7 @@ const TykConnectionForm = () => {
                   helperText="The URL clients use to reach MCP proxies; shown in connection instructions."
                   value={form.gateway_base_url}
                   onChange={set("gateway_base_url")}
+                  disabled={hostManaged}
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
@@ -304,7 +325,7 @@ const TykConnectionForm = () => {
               {canExecute && (
                 <Grid item xs={12}>
                   <FormControlLabel
-                    control={<Checkbox checked={form.allow_internal_host} onChange={setBool("allow_internal_host")} />}
+                    control={<Checkbox checked={form.allow_internal_host} onChange={setBool("allow_internal_host")} disabled={hostManaged} />}
                     label="Allow this Dashboard host to be on an internal network address"
                   />
                 </Grid>
@@ -434,7 +455,7 @@ const TykConnectionForm = () => {
             <SecondaryOutlineButton onClick={backToList} disabled={saving}>
               Cancel
             </SecondaryOutlineButton>
-            <SecondaryOutlineButton onClick={runProbe} disabled={probing || !form.dashboard_url} data-testid="probe-button">
+            <SecondaryOutlineButton onClick={runProbe} disabled={probing || !form.dashboard_url || hostManaged} data-testid="probe-button">
               {probing ? "Testing…" : "Test connection"}
             </SecondaryOutlineButton>
             <PrimaryButton type="submit" variant="contained" color="primary" disabled={saving || !canSave} data-testid="save-button">

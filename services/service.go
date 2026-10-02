@@ -77,6 +77,9 @@ type Service struct {
 	// TykMCP is the Tyk Dashboard MCP integration (Enterprise; set by
 	// InitTykMCP once the event bus is wired)
 	TykMCP tykmcp.Service
+	// tykMCPHost is the host application's Dashboard connection, passed to
+	// the TykMCP service InitTykMCP builds.
+	tykMCPHost *tykmcp.HostConnection
 
 	// auditService is the audit trail owned by the API and attached through
 	// SetAuditService so background services (webhooks) can record non-HTTP
@@ -162,10 +165,17 @@ func (s *Service) InitTykMCP(cfg config.TykMCPConfig, version string) {
 		Config:   cfg,
 		NodeID:   fmt.Sprintf("%s-%d", hostname, os.Getpid()),
 		Version:  version,
+		Host:     s.tykMCPHost,
 	})
 	if tykmcp.IsEnterpriseAvailable() {
 		logger.Info("Tyk MCP integration service initialized")
 	}
+}
+
+// SetTykMCPHost sets the Dashboard connection the host application
+// provides; InitTykMCP hands it to the service it builds.
+func (s *Service) SetTykMCPHost(h *tykmcp.HostConnection) {
+	s.tykMCPHost = h
 }
 
 func NewService(db *gorm.DB) *Service {

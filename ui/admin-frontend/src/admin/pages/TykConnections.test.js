@@ -152,4 +152,17 @@ describe("TykConnections", () => {
     await waitFor(() => expect(apiClient.delete).toHaveBeenCalledWith("/tyk-connections/1"));
     expect(await screen.findByText("Prod Dashboard deleted")).toBeInTheDocument();
   });
+
+  it("marks the host-managed connection and offers no delete for it", async () => {
+    apiClient.get.mockImplementation((path) => {
+      if (path === "/tyk-mcp/status") return Promise.resolve(enabled);
+      if (path === "/tyk-connections") return Promise.resolve({ data: [{ ...connections[0], host_managed: true }] });
+      return Promise.reject(new Error("unexpected " + path));
+    });
+    renderPage();
+    expect(await screen.findByTestId("host-managed-chip")).toHaveTextContent("Managed by host");
+    fireEvent.click(screen.getByLabelText("Actions for Prod Dashboard"));
+    expect(await screen.findByRole("menuitem", { name: "Edit connection" })).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-delete")).not.toBeInTheDocument();
+  });
 });
