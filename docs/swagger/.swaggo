@@ -1,0 +1,4 @@
+// Type overrides for swag (make swagger). json.RawMessage has no swagger
+// equivalent of its own; document it as a free-form object.
+replace encoding/json.RawMessage object
+replace json.RawMessage object

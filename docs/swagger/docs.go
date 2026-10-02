@@ -744,6 +744,51 @@ const docTemplate = `{
                 }
             }
         },
+        "/analytics/team-costs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cost, tokens and requests per team over a window of at most 366 days; defaults to the last 30 days (Enterprise)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "analytics"
+                ],
+                "summary": "Spend per team",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/team_budget.TeamCosts"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/analytics/token-usage-and-cost-for-app": {
             "get": {
                 "description": "Get the token usage and total cost for a specific app over time",
@@ -2134,6 +2179,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/cluster/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Live Studio replicas, the edges each holds, the leader, the cluster event log and relay on this replica, the push backlog, and warnings",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "edges"
+                ],
+                "summary": "Control plane status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/data-catalogues": {
             "get": {
                 "security": [
@@ -2631,6 +2708,105 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/datasources/{id}/auth-plugins": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Auth plugins that authenticate gateway requests to the datasource, in execution order",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "List a datasource's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Datasource ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.PluginResponse"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replace the auth plugins (in execution order) that authenticate gateway requests to the datasource. When any are set, app keys are refused on it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Set a datasource's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Datasource ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Plugin IDs in execution order",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EndpointAuthPluginsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/edges": {
             "get": {
                 "security": [
@@ -2700,7 +2876,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Trigger a configuration reload for all edge gateways across all namespaces",
+                "description": "Push the current configuration to every edge gateway in every namespace, as one operation. The response carries the operation under data.attributes and, for clients written against v2.2, data.message, data.operations (one entry per namespace, all with the same operation_id) and data.operations_count. 409 when there is no edge to push to (up to v2.2: 202 with no operations).",
                 "consumes": [
                     "application/json"
                 ],
@@ -2717,6 +2893,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
@@ -2788,7 +2970,12 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.EdgeResponse"
+                            "type": "object",
+                            "properties": {
+                                "data": {
+                                    "$ref": "#/definitions/api.EdgeResponse"
+                                }
+                            }
                         }
                     },
                     "404": {
@@ -2881,7 +3068,8 @@ const docTemplate = `{
                     "202": {
                         "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/api.SuccessResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "404": {
@@ -2892,6 +3080,12 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -4373,6 +4567,60 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/metadata/schemas/{id}/activate": {
+            "post": {
+                "description": "Requires metadata:publish.",
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Activate a governed metadata schema",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schema ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/schemas/{id}/deactivate": {
+            "post": {
+                "description": "Requires metadata:publish.",
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Deactivate a governed metadata schema",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schema ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/metadata/validate": {
             "post": {
                 "tags": [
@@ -4523,6 +4771,103 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/model-routers/{id}/auth-plugins": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "model-routers"
+                ],
+                "summary": "List a model router's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Model router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.PluginResponse"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "model-routers"
+                ],
+                "summary": "Set a model router's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Model router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Plugin IDs in execution order",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EndpointAuthPluginsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -5305,6 +5650,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/plugins/{id}/auth-plugins": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plugins"
+                ],
+                "summary": "List a custom-endpoint plugin's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.PluginResponse"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replace the auth plugins that authenticate requests to the plugin's /plugins/{slug}/ endpoints that require auth. When any are set, app keys are refused on them.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plugins"
+                ],
+                "summary": "Set a custom-endpoint plugin's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Plugin IDs in execution order",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EndpointAuthPluginsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/plugins/{id}/data": {
             "delete": {
                 "security": [
@@ -5350,6 +5793,92 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plugins/{id}/disable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the plugin inactive and unloads it. Requires plugins:publish.",
+                "tags": [
+                    "plugins"
+                ],
+                "summary": "Disable a plugin",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.PluginResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plugins/{id}/enable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the plugin active and, for Studio plugins, loads it. Requires plugins:publish.",
+                "tags": [
+                    "plugins"
+                ],
+                "summary": "Enable a plugin",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.PluginResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -5811,6 +6340,153 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/plugins/{id}/upgrade": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Move an installed marketplace plugin to another published version in place. Configuration and plugin data are kept. Scopes the new version adds must be listed in approved_scopes. If the new version does not start, the previous version is restored.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plugins",
+                    "marketplace"
+                ],
+                "summary": "Upgrade a plugin from the marketplace",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target version and approved scopes",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/services.PluginUpgradeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.PluginUpgradeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/plugins/{id}/upgrade/preview": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Resolve a marketplace version for an installed plugin, pull and probe its artifact, and report what would change: scopes, hooks, config schema fit, changelog. Nothing is written.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "plugins",
+                    "marketplace"
+                ],
+                "summary": "Preview a plugin upgrade",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Target version (defaults to the latest)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.PluginUpgradePreviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/services.PluginUpgradePreview"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/plugins/{id}/validate-and-load": {
             "post": {
                 "security": [
@@ -5974,6 +6650,103 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/semantic-routers/{id}/auth-plugins": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "List a semantic router's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.PluginResponse"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Set a semantic router's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Plugin IDs in execution order",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EndpointAuthPluginsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -6351,6 +7124,42 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/sync/pending-changes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use \"global\" (or omit) for the global namespace.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync"
+                ],
+                "summary": "Preview what a push would change",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace (default: global)",
+                        "name": "namespace",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/services.PendingChanges"
+                            }
                         }
                     }
                 }
@@ -7056,6 +7865,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/tools/{id}/auth-plugins": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "List a tool's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.PluginResponse"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replace the auth plugins that authenticate gateway requests to the tool (REST and MCP). When any are set, app keys are refused on it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Set a tool's auth plugins",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Plugin IDs in execution order",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EndpointAuthPluginsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/{userId}/groups": {
             "get": {
                 "security": [
@@ -7199,6 +8106,57 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Apply one action to up to 100 apps. Each id is processed independently; the response lists every id with ok or an error. Requires apps:publish for activate/deactivate and apps:delete for delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Bulk activate, deactivate or delete apps",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -7505,6 +8463,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{id}/activate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the app active so its credential is accepted by the gateway. Requires apps:publish.",
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Activate an app",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{id}/activate-credential": {
             "post": {
                 "security": [
@@ -7551,6 +8552,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{id}/deactivate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the app inactive. Requires apps:publish.",
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Deactivate an app",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{id}/deactivate-credential": {
             "post": {
                 "security": [
@@ -7590,6 +8634,52 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the agents that reference an app (agent_configs.app_id); the other arrays are always present and empty",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Get app dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -8627,6 +9717,20 @@ const docTemplate = `{
                     "catalogues"
                 ],
                 "summary": "List all catalogues",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -8948,6 +10052,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/catalogues/{id}/groups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the teams that have been granted the catalogue, with their member counts, ordered by name",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "catalogues"
+                ],
+                "summary": "Teams using an LLM catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogueGroupsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/catalogues/{id}/llms": {
             "get": {
                 "security": [
@@ -9099,6 +10249,116 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/catalogues/{id}/routers": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Model Routers and Semantic Routers in the catalogue (Enterprise)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "catalogues"
+                ],
+                "summary": "List the routers published in an LLM catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replaces the catalogue's Model Routers and/or Semantic Routers (Enterprise). Teams holding the catalogue see them in the portal and may add them to their Apps.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "catalogues"
+                ],
+                "summary": "Set the routers published in an LLM catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Router ids",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogueRoutersInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -9390,6 +10650,14 @@ const docTemplate = `{
                     "common"
                 ],
                 "summary": "Get accessible tools for the authenticated user",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "Only tools an App can reach (REST or MCP access on); omits chat-only tools",
+                        "name": "app_grantable",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -9513,6 +10781,38 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/apps/usage-summary": {
+            "get": {
+                "description": "Spend against budget, last gateway access and 30-day request count for every app the authenticated user owns, in one call.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "Budget and activity summary for the user's apps",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppUsageSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -9776,6 +11076,501 @@ const docTemplate = `{
                 }
             }
         },
+        "/common/apps/{id}/mcp": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "The MCP servers an App reaches and their grant state",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.AppMCPSummary"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/apps/{id}/mcp/credentials": {
+            "post": {
+                "description": "Mints a key for the App on the given connection. The key is shown once.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "Request a Tyk access key for one of my apps",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Connection",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.portalMintInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.MintedCredential"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/apps/{id}/mcp/credentials/{cid}/revoke": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "Revoke the Tyk access key of one of my apps",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "cid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPCredentialResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/apps/{id}/mcp/credentials/{cid}/rotate": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "Rotate the Tyk access key of one of my apps",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "cid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.MintedCredential"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog": {
+            "get": {
+                "description": "One page of the LLM providers, data sources, tools and plugin resources the authenticated user can build an app with, in one item shape, with the catalogs each is available through. Search (q), filters (type, kind, privacy, catalog, community), sort and paging (page, page_size) are applied on the server; meta carries the facets for the filter controls. Visibility follows the user's teams and their catalogs.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "The portal's unified catalog",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search terms (all must match)",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "llm | datasource | tool | plugin_resource",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Vendor code, store type, protocol or \u003cplugin id\u003e:\u003cslug\u003e",
+                        "name": "kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "public | internal | confidential | restricted",
+                        "name": "privacy",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "\u003ctype\u003e:\u003ccatalog id\u003e",
+                        "name": "catalog",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Community submissions only",
+                        "name": "community",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "newest (default) | name | privacy_asc | privacy_desc",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 25, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/datasources/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One data source from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Data source ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/llms/{id}": {
+            "get": {
+                "description": "The catalog entry for an LLM provider the user can see, with the models it serves and its metadata.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One LLM provider from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "LLM ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/mcp-servers/{id}": {
+            "get": {
+                "description": "The catalog entry for a Tyk-managed MCP server the user can see: endpoint, auth mode, primitives.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One MCP server from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/model-routers/{id}": {
+            "get": {
+                "description": "The catalog entry for a Model Router the user can see: the model strings to call it with and the LLMs it can route to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One Model Router from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Model Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/resources/{plugin_id}/{slug}/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One plugin resource from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Plugin ID",
+                        "name": "plugin_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Resource type slug",
+                        "name": "slug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Instance ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/semantic-routers/{id}": {
+            "get": {
+                "description": "The catalog entry for a Semantic Router the user can see: the model strings to call it with, its routes, and the LLMs it can route to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One Semantic Router from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/catalog/tools/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "One tool from the portal catalog",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogItemResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/common/catalogues/{id}/llms": {
             "get": {
                 "description": "Get the list of LLMs in a catalogue by catalogue ID, excluding sensitive information",
@@ -10016,6 +11811,214 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/mcp/connections": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "Tyk connections a portal user may submit an MCP server to",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.SubmissionConnection"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/common/me/api-key": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Clear the signed-in user's API key. The key stops working immediately; the browser session is unaffected.",
+                "tags": [
+                    "me"
+                ],
+                "summary": "Revoke my API key",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/me/api-key/roll": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Issue a new API key for the signed-in user, replacing any existing one. The key is returned once and never shown again. Refused for SSO-provisioned users unless ALLOW_SSO_USER_API_KEYS is set. The browser session is unaffected.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Roll my API key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/me/preferences": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Notification preferences of the signed-in user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Get my notification preferences",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.PreferencesResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Change one or both notification preferences of the signed-in user. notifications_enabled can only be switched on by administrators (the same rule as the admin user form).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Update my notification preferences",
+                "parameters": [
+                    {
+                        "description": "Preferences to change",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.PreferencesUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.PreferencesResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/nav": {
+            "get": {
+                "description": "The surfaces and the admin, portal and chat menu entries the signed-in user may open, for a host that draws Studio's navigation itself",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get the navigation manifest",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.NavManifest"
                         }
                     }
                 }
@@ -11298,6 +13301,20 @@ const docTemplate = `{
                     "data-catalogues"
                 ],
                 "summary": "List all data catalogues",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -11779,6 +13796,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/data-catalogues/{id}/groups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the teams that have been granted the data catalogue, with their member counts, ordered by name",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "data-catalogues"
+                ],
+                "summary": "Teams using a data catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Data Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogueGroupsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/data-catalogues/{id}/tags": {
             "post": {
                 "security": [
@@ -11905,6 +13968,20 @@ const docTemplate = `{
                     "datasources"
                 ],
                 "summary": "List all datasources",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, privacy_score, active",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -11966,6 +14043,57 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/datasources/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Apply one action to up to 100 datasources. Each id is processed independently; the response lists every id with ok or an error. Requires datasources:publish for activate/deactivate and datasources:delete for delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Bulk activate, deactivate or delete datasources",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -12226,6 +14354,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/datasources/{id}/activate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the datasource active so it is served. Requires datasources:publish.",
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Activate a datasource",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Datasource ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DatasourceResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/datasources/{id}/clone": {
             "post": {
                 "security": [
@@ -12274,6 +14445,95 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/datasources/{id}/deactivate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the datasource inactive. Requires datasources:publish.",
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Deactivate a datasource",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Datasource ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DatasourceResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/datasources/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the apps, data catalogues, agents and chats that reference a datasource",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "datasources"
+                ],
+                "summary": "Get datasource dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Datasource ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -12451,6 +14711,343 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/embedders": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "List embedders",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of items per page",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return all items without pagination",
+                        "name": "all",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name, description and model",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, model, created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Unsupported sort field",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a reusable embedding configuration, either linked to an LLM (its connection and privacy score come from the LLM) or standalone.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "Create an embedder",
+                "parameters": [
+                    {
+                        "description": "Embedder",
+                        "name": "embedder",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EmbedderInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/embedders/vendors": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The API compatibilities an embedder can use: the vendors whose drivers serve embeddings.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "List embedding vendors",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.VendorListResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/embedders/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "Get an embedder",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Embedder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes an embedder that no datasource or Semantic Router uses (409 otherwise, listing them).",
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "Delete an embedder",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Embedder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replaces the embedder's settings. The model and API compatibility (vendor, or the linked LLM) cannot change while datasources use it (409): their vectors came from the current model.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "Update an embedder",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Embedder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Embedder",
+                        "name": "embedder",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.EmbedderInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/embedders/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the datasources and Semantic Routers that embed with the embedder.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "embedders"
+                ],
+                "summary": "Get embedder dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Embedder ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -12968,6 +15565,20 @@ const docTemplate = `{
                     "filters"
                 ],
                 "summary": "List all filters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -13026,6 +15637,80 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/filters/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete up to 100 filters. Filters have no active flag, so activate and deactivate are rejected. Each id is processed independently; the response lists every id with ok or an error. Requires filters:delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filters"
+                ],
+                "summary": "Bulk delete filters",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/filters/guardrail-providers": {
+            "get": {
+                "description": "Describe every guardrail provider this build knows about: detectors, connection fields, and whether it is available in this edition",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filters"
+                ],
+                "summary": "List guardrail providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/guardrails.Spec"
+                            }
                         }
                     }
                 }
@@ -13198,6 +15883,52 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/filters/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the LLMs, tools and chats a filter is attached to",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filters"
+                ],
+                "summary": "Get filter dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -13433,6 +16164,168 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{id}/budget": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Budget, spend, allocations and flags for the team's current period (Enterprise)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "team-budgets"
+                ],
+                "summary": "Get a team's budget report",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/team_budget.Report"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "A null monthly_budget leaves the team unmanaged; 0 is an empty pool (Enterprise)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "team-budgets"
+                ],
+                "summary": "Set a team's budget",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Budget",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/team_budget.BudgetInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/team_budget.Report"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The team becomes unmanaged; its Apps keep their budgets (Enterprise)",
+                "tags": [
+                    "team-budgets"
+                ],
+                "summary": "Remove a team's budget",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/groups/{id}/budget/reset": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Starts a new budget period now (Enterprise)",
+                "tags": [
+                    "team-budgets"
+                ],
+                "summary": "Reset a team's budget period",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -14489,6 +17382,20 @@ const docTemplate = `{
                     "llms"
                 ],
                 "summary": "List all LLMs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, privacy_score, active, vendor",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -14550,6 +17457,57 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/llms/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Apply one action to up to 100 LLMs. Each id is processed independently through the same path as the single-object route; the response lists every id with ok or an error. Requires llms:publish for activate/deactivate and llms:delete for delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "llms"
+                ],
+                "summary": "Bulk activate, deactivate or delete LLMs",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -14921,6 +17879,138 @@ const docTemplate = `{
                 }
             }
         },
+        "/llms/{id}/activate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the provider active so the gateway serves it. Requires llms:publish.",
+                "tags": [
+                    "llms"
+                ],
+                "summary": "Activate an LLM provider",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "LLM ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.LLMResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/llms/{id}/deactivate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the provider inactive. Requires llms:publish.",
+                "tags": [
+                    "llms"
+                ],
+                "summary": "Deactivate an LLM provider",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "LLM ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.LLMResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/llms/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the apps, catalogues, agents, failover primaries and model routers that reference an LLM",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "llms"
+                ],
+                "summary": "Get LLM dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "LLM ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/login-sso-profile": {
             "get": {
                 "description": "Get a sanitized view (name, provider type, login URL) of the profile that has UseInLoginPage set to true",
@@ -14956,6 +18046,800 @@ const docTemplate = `{
                 }
             }
         },
+        "/mcp-access-report": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Who has access to which MCP server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection",
+                        "name": "connection",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "MCP server",
+                        "name": "server",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "User",
+                        "name": "user",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "App",
+                        "name": "app",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "include closed grants",
+                        "name": "include_revoked",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.AccessReportRow"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List Tyk keys minted for Apps",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App",
+                        "name": "app_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Connection",
+                        "name": "connection_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Apps bound to this MCP server",
+                        "name": "server_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "drift",
+                        "name": "drift",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.CredentialList"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "The key is returned exactly once in this response and never stored.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Mint a Tyk key for an App on a connection (administrator)",
+                "parameters": [
+                    {
+                        "description": "App and connection",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.MintInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.MintedCredential"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Get one minted credential (never the key)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPCredentialResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials/{id}/apply-drift": {
+            "post": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Apply a pending widening policy change to a key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPCredentialResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials/{id}/resume": {
+            "post": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Switch a suspended key back on",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPCredentialResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials/{id}/revoke": {
+            "post": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Revoke a minted key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPCredentialResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials/{id}/rotate": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Rotate a minted credential: mint a new key, revoke the old one",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.MintedCredential"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-credentials/{id}/suspend": {
+            "post": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Switch a minted key off on the Dashboard",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPCredentialResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers": {
+            "get": {
+                "description": "MCP proxies catalogued from Tyk Dashboards, with filters and paging",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List MCP servers",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection",
+                        "name": "connection_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "dashboard_state",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "origin",
+                        "name": "origin",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "kind",
+                        "name": "kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "published in the portal",
+                        "name": "published",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "search",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page size",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ServerList"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/discover-tools": {
+            "post": {
+                "description": "Studio calls the upstream's tools/list (at the upstream base URL plus /mcp, as the Tyk Gateway will) so the registration wizard can offer the tools for the allow-list. The auth value is used for this call only and never stored. Subject to the Tyk MCP outbound URL policy.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List the tools a remote MCP server offers",
+                "parameters": [
+                    {
+                        "description": "Upstream to introspect",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.DiscoverToolsInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.DiscoverToolsResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/register": {
+            "post": {
+                "description": "With ?dry_run=1 the Dashboard validates the rendered definition and a masked preview is returned; otherwise the proxy is created and catalogued.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Create an MCP proxy on the Tyk Dashboard (full-mode connections)",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "validate only",
+                        "name": "dry_run",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Proxy to create",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.RegisterInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "dry run",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.RegisterPreview"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Get an MCP server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Delete a missing or pending MCP server record",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            },
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Update an MCP server's presentation and governance fields",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ServerPatch"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/activate": {
+            "post": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Publish an MCP server to the portal",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/bundle": {
+            "put": {
+                "description": "One access policy (ACL) plus optional consumption policies (rate limit / quota partitions), validated against Tyk's partition rules",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Pin the policy bundle of an MCP server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/catalogues": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Set the tool catalogues an MCP server belongs to",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tool catalogue ids",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.mcpServerCataloguesInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/deactivate": {
+            "post": {
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Unpublish an MCP server from the portal",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/handoff": {
+            "get": {
+                "description": "?include_secrets=true adds the upstream credential and needs the execute permission; the download is audited.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Handoff package for a server awaiting the platform team",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "include the upstream credential",
+                        "name": "include_secrets",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.HandoffPackage"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/link": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Link a pending server to the proxy the platform team created",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Pending server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Imported proxy",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.linkMCPServerInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/push": {
+            "post": {
+                "description": "Checks the live hash, restores masked secrets from the live document, then updates. ?dry_run=1 validates only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Replace a server's definition on the Tyk Dashboard",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "validate only",
+                        "name": "dry_run",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Edited definition",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.PushInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/model-prices": {
             "get": {
                 "security": [
@@ -14974,6 +18858,20 @@ const docTemplate = `{
                     "model-prices"
                 ],
                 "summary": "Get all model prices",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name (model_name), vendor, created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -15366,6 +19264,12 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (legacy alias of page)",
                         "name": "page_number",
                         "in": "query"
                     },
@@ -15373,6 +19277,18 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Return all items without pagination",
                         "name": "all",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, active",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -15382,6 +19298,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Unsupported sort field",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "402": {
@@ -15448,6 +19370,63 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/model-routers/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Apply one action to up to 100 model routers (Enterprise only). Each id is processed independently; the response lists every id with ok or an error. Requires model-routers:publish for activate/deactivate and model-routers:delete for delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "model-routers"
+                ],
+                "summary": "Bulk activate, deactivate or delete model routers",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -15617,6 +19596,111 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/model-routers/{id}/catalogues": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replaces the LLM catalogues the router is published in (Enterprise). Teams granted one of them see the router in the portal and may add it to their Apps.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "model-routers"
+                ],
+                "summary": "Publish a model router in LLM catalogues",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Model Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Catalogue ids",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.modelRouterCataloguesInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/model-routers/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List what references a model router (nothing in the data model does today, so the arrays are empty)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "model-routers"
+                ],
+                "summary": "Get model router dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Model Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -16048,196 +20132,6 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/providers": {
-            "get": {
-                "description": "Get a list of all registered OpenAPI specification providers",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "providers"
-                ],
-                "summary": "List available OpenAPI providers",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/providers.ImportMethod"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/providers/direct/import": {
-            "post": {
-                "description": "Import an OpenAPI specification using the specified method",
-                "consumes": [
-                    "multipart/form-data",
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "providers"
-                ],
-                "summary": "Import OpenAPI spec",
-                "parameters": [
-                    {
-                        "description": "Import request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.ImportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.SuccessResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/providers/{id}/configure": {
-            "post": {
-                "description": "Set up credentials for a specific OpenAPI provider",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "providers"
-                ],
-                "summary": "Configure provider credentials",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Provider configuration",
-                        "name": "config",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.ConfigureProviderRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.SuccessResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/providers/{id}/import-steps": {
-            "get": {
-                "description": "Get the steps required for importing an OpenAPI specification",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "providers"
-                ],
-                "summary": "Get import steps",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/providers.ImportStep"
-                        }
-                    }
-                }
-            }
-        },
-        "/providers/{id}/specs": {
-            "get": {
-                "description": "Retrieve available API specifications from a specific provider",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "providers"
-                ],
-                "summary": "Get API specifications from provider",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Provider ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/providers.APISpec"
-                            }
                         }
                     },
                     "404": {
@@ -16716,6 +20610,18 @@ const docTemplate = `{
                         "description": "Return all records without pagination",
                         "name": "all",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name (var_name), created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -16782,6 +20688,63 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "When TYK_AI_SECRET_KEY is not set",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/secrets/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete up to 100 secrets. Secrets have no active flag, so activate and deactivate are rejected. Each id is processed independently; the response lists every id with ok or an error. Requires secrets:delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "secrets"
+                ],
+                "summary": "Bulk delete secrets",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -16961,6 +20924,646 @@ const docTemplate = `{
                     },
                     "503": {
                         "description": "When TYK_AI_SECRET_KEY is not set",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/secrets/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the LLMs, tools and datasources that read a secret through a $SECRET/name reference",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "secrets"
+                ],
+                "summary": "Get secret dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Secret ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "When TYK_AI_SECRET_KEY is not set",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "List semantic routers",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of items per page",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return all items without pagination",
+                        "name": "all",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, active",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Unsupported sort field",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a router that picks a route (an LLM and model, or a Model Router alias) from what the prompt says (Enterprise only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Create a semantic router",
+                "parameters": [
+                    {
+                        "description": "Semantic router",
+                        "name": "router",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SemanticRouterInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Classifies a conversation with an unsaved router configuration (the editor's test panel).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Test a draft semantic router",
+                "parameters": [
+                    {
+                        "description": "Draft router and conversation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SemanticRouterTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "More than 30 test runs a minute",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Get a semantic router",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes the router and withdraws it from every App and catalogue.",
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Delete a semantic router",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replaces the router's configuration and presentation. Its catalogues are set with PUT /semantic-routers/{id}/catalogues.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Update a semantic router",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Semantic router",
+                        "name": "router",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SemanticRouterInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers/{id}/catalogues": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Replaces the LLM catalogues the router is published in (Enterprise). Teams granted one of them see the router in the portal and may add it to their Apps.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Publish a semantic router in LLM catalogues",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Catalogue ids",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.modelRouterCataloguesInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the apps granted the router and the LLM catalogues it is published in",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Get semantic router dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers/{id}/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Classifies a conversation with the router's saved configuration, as the gateway would, and returns the decision with a per-stage trace. Embedding and judge calls go to the configured LLMs. The router need not be active.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Test a saved semantic router",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Conversation to classify",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SemanticRouterTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "More than 30 test runs a minute",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/semantic-routers/{id}/toggle": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "semantic-routers"
+                ],
+                "summary": "Publish or withdraw a semantic router",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Semantic Router ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Active status",
+                        "name": "active",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Enterprise feature required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -17299,6 +21902,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/team-budgets/settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Whether team budgets allocate and enforce (Enterprise)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "team-budgets"
+                ],
+                "summary": "Get the team budget switch",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.TeamBudgetSettingsBody"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Switching on gives the Default team an empty pool (budget 0) unless it has a budget (Enterprise)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "team-budgets"
+                ],
+                "summary": "Set the team budget switch",
+                "parameters": [
+                    {
+                        "description": "Switch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.TeamBudgetSettingsBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.TeamBudgetSettingsBody"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tool-catalogues": {
             "get": {
                 "description": "Get a list of all tool catalogues",
@@ -17309,6 +21980,20 @@ const docTemplate = `{
                     "tool-catalogues"
                 ],
                 "summary": "List all tool catalogues",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -17543,6 +22228,52 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tool-catalogues/{id}/groups": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the teams that have been granted the tool catalogue, with their member counts, ordered by name",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool-catalogues"
+                ],
+                "summary": "Teams using a tool catalogue",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool Catalogue ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CatalogueGroupsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -17884,6 +22615,20 @@ const docTemplate = `{
                     "tools"
                 ],
                 "summary": "Get all tools",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Case-insensitive substring match on name and description fields",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, privacy_score, active",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -17952,6 +22697,57 @@ const docTemplate = `{
                 }
             }
         },
+        "/tools/bulk": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Apply one action to up to 100 tools. Each id is processed independently; the response lists every id with ok or an error. Requires tools:publish for activate/deactivate and tools:delete for delete.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Bulk activate, deactivate or delete tools",
+                "parameters": [
+                    {
+                        "description": "Action and ids",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BulkActionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tools/by-type": {
             "get": {
                 "security": [
@@ -17999,6 +22795,107 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/import/tyk/connections": {
+            "get": {
+                "description": "Slim projection of every non-disabled Tyk connection, for the Tools import wizard.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tools"
+                ],
+                "summary": "Tyk connections the Tools import can read APIs from",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.ToolImportConnection"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Enterprise feature",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/import/tyk/connections/{id}/apis": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tools"
+                ],
+                "summary": "Tyk OAS APIs on a connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "search",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.SourceAPI"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/import/tyk/connections/{id}/apis/{api_id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Tools"
+                ],
+                "summary": "One Tyk OAS API definition, credentials masked",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tyk API id",
+                        "name": "api_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.SourceAPIDocument"
                         }
                     }
                 }
@@ -18205,6 +23102,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/tools/{id}/activate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the tool active so it is served. Requires tools:publish.",
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Activate a tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tools/{id}/call-operation": {
             "post": {
                 "security": [
@@ -18263,6 +23203,49 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/{id}/deactivate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the tool inactive. Requires tools:publish.",
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Deactivate a tool",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ToolResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -18505,6 +23488,52 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tools/{id}/dependents": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "List the apps, tool catalogues, dependent tools, agents and chats that reference a tool",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tools"
+                ],
+                "summary": "Get tool dependents",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Tool ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DependentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -19323,6 +24352,645 @@ const docTemplate = `{
                 }
             }
         },
+        "/tyk-connections": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List Tyk Dashboard connections",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.TykConnectionResponse"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Stores a pending connection. The access token is encrypted at rest and never returned.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Create a Tyk Dashboard connection",
+                "parameters": [
+                    {
+                        "description": "Connection",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ConnectionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykConnectionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/probe": {
+            "post": {
+                "description": "Runs the capability probe against form values without persisting anything.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Test unsaved connection settings",
+                "parameters": [
+                    {
+                        "description": "Connection",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ConnectionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ProbeResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Get a Tyk Dashboard connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykConnectionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Refuses while live credentials exist unless force=true, which revokes them first.",
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Delete a Tyk Dashboard connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Revoke live credentials first",
+                        "name": "force",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Applies a patch under optimistic locking (lock_version). Changing the URL, token or mode of an active connection re-probes it immediately.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Update a Tyk Dashboard connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ConnectionPatch"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykConnectionResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/activate": {
+            "post": {
+                "description": "Probes the Dashboard and makes the connection usable. Recorded in the audit trail.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Activate a Tyk Dashboard connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykConnectionResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/apis": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Tyk OAS APIs that can back a REST-to-MCP proxy",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "search",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.SourceAPI"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/apis/{api_id}/operations": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Operations of a Tyk OAS API",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tyk API id",
+                        "name": "api_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.SourceOperation"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/disable": {
+            "post": {
+                "description": "Stops syncing and suspends every key minted on the connection.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Disable a Tyk Dashboard connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykConnectionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/gateway-tags": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Deployment targets known for a connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.GatewayTagOption"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/policies": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List cached Tyk policies of a connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "only policies granting an MCP proxy",
+                        "name": "mcp_only",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "only policies granting this api id",
+                        "name": "api_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "search",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.TykPolicyResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Create a Studio-managed Tyk policy (minimal creator)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Policy",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.PolicyInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykPolicyResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/policies/{pid}": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Edit a Studio-managed Tyk policy",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tyk policy id",
+                        "name": "pid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Name and limits",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.PolicyInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.TykPolicyResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/probe": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Re-run the capability probe on a connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.ProbeResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/sync": {
+            "post": {
+                "description": "Schedules the next sync for now; with wait=true the sync runs on this node and the run record is returned",
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Request an immediate sync of a connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "run inline",
+                        "name": "wait",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted"
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/sync-runs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List recent sync runs of a connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "max rows",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.MCPSyncRun"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-mcp/status": {
+            "get": {
+                "description": "Reports whether the Tyk Dashboard MCP integration is available (Enterprise), enabled and how many connections exist",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Tyk MCP integration availability",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.Status"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "security": [
@@ -19566,6 +25234,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/{id}/api-key": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Clear a user's API key. The key stops working immediately; the user shows as having none issued.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Revoke API Key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.UserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/budget-team": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The team (one the user belongs to) their new Apps and chat spend are attributed to; null clears it",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Set a user's budget team",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Team",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.UserBudgetTeamBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users/{id}/catalogues": {
             "get": {
                 "security": [
@@ -19615,6 +25381,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/{id}/disable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Switch a user account off. Every authentication path (session, API key, password, SSO, OAuth) refuses the user until re-enabled; the live session is dropped and the credentials of apps the user owns are deactivated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Disable user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.UserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/enable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Switch a disabled user account back on. App credentials deactivated by the disable are not re-activated.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Enable user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.UserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users/{id}/roll-api-key": {
             "post": {
                 "security": [
@@ -19622,7 +25486,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Generate a new API key for a user",
+                "description": "Issue a new API key for a user, replacing any existing one. Refused for SSO-provisioned users unless ALLOW_SSO_USER_API_KEYS is set.",
                 "consumes": [
                     "application/json"
                 ],
@@ -19651,6 +25515,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -21138,6 +27008,10 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "budget_source": {
+                            "description": "BudgetSource tells the portal where the budget came from: \"team\"\nwhen the App's team hands out budgets from a pool, else empty.",
+                            "type": "string"
+                        },
                         "budget_start_date": {
                             "type": "string"
                         },
@@ -21156,6 +27030,9 @@ const docTemplate = `{
                         "description": {
                             "type": "string"
                         },
+                        "is_active": {
+                            "type": "boolean"
+                        },
                         "is_orphaned": {
                             "type": "boolean"
                         },
@@ -21165,11 +27042,53 @@ const docTemplate = `{
                                 "type": "integer"
                             }
                         },
+                        "mcp_server_ids": {
+                            "description": "MCPServerIDs / MCPServers mirror the list endpoint (serializeApp):\nthe portal app page mounts its \"MCP access\" section from them.",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "mcp_servers": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppMCPServerOutput"
+                            }
+                        },
+                        "model_router_ids": {
+                            "description": "Model Routers the app is granted (Enterprise); the portal app page\nshows their unified-ingress model strings.",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "model_routers": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppModelRouterOutput"
+                            }
+                        },
                         "monthly_budget": {
                             "type": "number"
                         },
                         "name": {
                             "type": "string"
+                        },
+                        "semantic_router_ids": {
+                            "description": "Semantic Routers the app is granted (Enterprise).",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "semantic_routers": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppSemanticRouterOutput"
+                            }
+                        },
+                        "team_id": {
+                            "type": "integer"
                         },
                         "tool_ids": {
                             "type": "array",
@@ -21212,7 +27131,18 @@ const docTemplate = `{
                                 "description": {
                                     "type": "string"
                                 },
+                                "is_active": {
+                                    "description": "IsActive is the live switch. Omitted = unchanged on update, live\non create (unless the caller lacks apps:publish, in which case\nthe app is created inactive). Setting it needs apps:publish.",
+                                    "type": "boolean"
+                                },
                                 "llm_ids": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    }
+                                },
+                                "mcp_server_ids": {
+                                    "description": "MCPServerIDs binds Tyk-managed MCP servers (Enterprise). Omitted\nleaves the bindings unchanged on update; an empty list clears them.",
                                     "type": "array",
                                     "items": {
                                         "type": "integer"
@@ -21221,6 +27151,13 @@ const docTemplate = `{
                                 "metadata": {
                                     "type": "object",
                                     "additionalProperties": true
+                                },
+                                "model_router_ids": {
+                                    "description": "ModelRouterIDs grants Model Routers (Enterprise). Omitted leaves\nthe grants unchanged on update; an empty list clears them.",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    }
                                 },
                                 "monthly_budget": {
                                     "type": "number"
@@ -21236,6 +27173,17 @@ const docTemplate = `{
                                     "items": {
                                         "$ref": "#/definitions/api.PluginResourceInput"
                                     }
+                                },
+                                "semantic_router_ids": {
+                                    "description": "SemanticRouterIDs grants Semantic Routers (Enterprise), with\nthe same omitted/empty rules.",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "integer"
+                                    }
+                                },
+                                "team_id": {
+                                    "description": "TeamID attributes the App to a team (Enterprise team budgets).\nOmitted = the owner's budget team on create, unchanged on update.",
+                                    "type": "integer"
                                 },
                                 "tool_ids": {
                                     "type": "array",
@@ -21284,6 +27232,46 @@ const docTemplate = `{
                 }
             }
         },
+        "api.AppMCPServerOutput": {
+            "type": "object",
+            "properties": {
+                "auth_mode": {
+                    "type": "string"
+                },
+                "brokerable": {
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "endpoint_url": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.AppModelRouterOutput": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
         "api.AppResponse": {
             "description": "App response model",
             "type": "object",
@@ -21293,6 +27281,10 @@ const docTemplate = `{
                     "properties": {
                         "budget_start_date": {
                             "type": "string"
+                        },
+                        "credential_active": {
+                            "description": "CredentialActive is the state of the app's credential, null when the\napp has none, so the apps list can show it without a credentials fetch.",
+                            "type": "boolean"
                         },
                         "credential_id": {
                             "type": "integer"
@@ -21306,6 +27298,10 @@ const docTemplate = `{
                         "description": {
                             "type": "string"
                         },
+                        "is_active": {
+                            "description": "live switch (apps:publish)",
+                            "type": "boolean"
+                        },
                         "is_orphaned": {
                             "type": "boolean"
                         },
@@ -21315,9 +27311,35 @@ const docTemplate = `{
                                 "type": "integer"
                             }
                         },
+                        "mcp_server_ids": {
+                            "description": "Tyk-managed MCP servers bound to the app (Enterprise).",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "mcp_servers": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppMCPServerOutput"
+                            }
+                        },
                         "metadata": {
                             "type": "object",
                             "additionalProperties": true
+                        },
+                        "model_router_ids": {
+                            "description": "Model Routers the app is granted (Enterprise).",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "model_routers": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppModelRouterOutput"
+                            }
                         },
                         "monthly_budget": {
                             "type": "number"
@@ -21333,6 +27355,22 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/api.PluginResourceOutput"
                             }
+                        },
+                        "semantic_router_ids": {
+                            "description": "Semantic Routers the app is granted (Enterprise).",
+                            "type": "array",
+                            "items": {
+                                "type": "integer"
+                            }
+                        },
+                        "semantic_routers": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppSemanticRouterOutput"
+                            }
+                        },
+                        "team_id": {
+                            "type": "integer"
                         },
                         "tool_ids": {
                             "type": "array",
@@ -21350,6 +27388,67 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.AppSemanticRouterOutput": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.AppUsageSummary": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "string"
+                },
+                "budget_start_date": {
+                    "type": "string"
+                },
+                "current_spend": {
+                    "type": "number"
+                },
+                "last_access_at": {
+                    "type": "string"
+                },
+                "monthly_budget": {
+                    "type": "number"
+                },
+                "percentage": {
+                    "type": "number"
+                },
+                "requests_30d": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.AppUsageSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/api.AppUsageSummary"
+                    }
+                },
+                "spend_tracked": {
+                    "description": "SpendTracked is false in Community Edition, where spending is not\nrecorded and current_spend is always zero.",
+                    "type": "boolean"
                 }
             }
         },
@@ -21421,6 +27520,63 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.BulkActionInput": {
+            "description": "Bulk action request",
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "example": "deactivate"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "api.BulkActionResponse": {
+            "description": "Bulk action response",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string"
+                        },
+                        "failed": {
+                            "type": "integer"
+                        },
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.BulkActionResult"
+                            }
+                        },
+                        "succeeded": {
+                            "type": "integer"
+                        }
+                    }
+                }
+            }
+        },
+        "api.BulkActionResult": {
+            "description": "One object's outcome in a bulk action",
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ok": {
+                    "type": "boolean"
                 }
             }
         },
@@ -21505,6 +27661,376 @@ const docTemplate = `{
                 }
             }
         },
+        "api.CatalogFilterOption": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogItem": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/api.CatalogItemAttributes"
+                },
+                "governed_metadata": {
+                    "description": "Portal-visible governed metadata (Enterprise), display-ready."
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogItemAttributes": {
+            "type": "object",
+            "properties": {
+                "access_granted_via_app": {
+                    "description": "AccessGrantedViaApp says whether building an App is how a developer\ngets to use this item. Always true for LLM providers, data sources and\ntools; for plugin resources it is the type's resolved value with any\nper-instance override applied. When false the portal shows no\n\"Build app\" action.\n\nPortalDetailURL is the providing plugin's own page for the item, set\nwhenever the type declared portal_detail_path. When access is not\ngranted through an App it replaces the built-in detail page as the\nitem's detail view; otherwise it is a secondary link next to\n\"Build app\".",
+                    "type": "boolean"
+                },
+                "allowed_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "auth_header": {
+                    "type": "string"
+                },
+                "auth_mode": {
+                    "description": "MCP servers (Tyk-managed): how a client reaches the proxy and what it\noffers. Brokerable says whether an App credential can be minted for it.",
+                    "type": "string"
+                },
+                "brokerable": {
+                    "type": "boolean"
+                },
+                "catalogs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogRef"
+                    }
+                },
+                "community_submitted": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "default_model": {
+                    "description": "LLM providers",
+                    "type": "string"
+                },
+                "embed_model": {
+                    "type": "string"
+                },
+                "embed_vendor": {
+                    "description": "Data sources",
+                    "type": "string"
+                },
+                "endpoint_url": {
+                    "type": "string"
+                },
+                "endpoint_urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kind": {
+                    "description": "Kind is the type-specific sub-classification: the vendor code of an LLM\nprovider, the store type of a data source, the protocol of a tool and\n\"\u003cplugin id\u003e:\u003cslug\u003e\" for a plugin resource. KindLabel is set when the\nbackend knows a display name (plugin resource types); the UI maps the\nbuilt-in codes itself.",
+                    "type": "string"
+                },
+                "kind_label": {
+                    "type": "string"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "long_description": {
+                    "type": "string"
+                },
+                "mcp_access_enabled": {
+                    "type": "boolean"
+                },
+                "mcp_endpoint_url": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "models": {
+                    "description": "Detail responses only: the known models and the provider's metadata\n(secrets redacted, as on the admin API).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogModelInfo"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "oauth": {
+                    "$ref": "#/definitions/models.MCPProtectedResourceMetadata"
+                },
+                "operations": {
+                    "description": "Tools. A tool is served by the AI Studio gateway; the access methods say\nhow an App may reach it, and each URL is present only when its method is\nswitched on. A tool with neither method on is chat only and is not in\nthe catalog at all.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "portal_detail_url": {
+                    "type": "string"
+                },
+                "primitives": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPPrimitive"
+                    }
+                },
+                "privacy_score": {
+                    "type": "integer"
+                },
+                "resource_type": {
+                    "description": "Plugin resources",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.CatalogResourceType"
+                        }
+                    ]
+                },
+                "rest_access_enabled": {
+                    "type": "boolean"
+                },
+                "rest_endpoint_url": {
+                    "type": "string"
+                },
+                "router_llms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogRouterLLM"
+                    }
+                },
+                "router_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "router_routes": {
+                    "description": "RouterRoutes are a Semantic Router's routes (name and description; the\nexamples and keywords that pick them are configuration and stay out).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogRouterRoute"
+                    }
+                },
+                "router_slug": {
+                    "description": "Model Routers: the slug, the \"{slug}/{model}\" strings a client sends\nto the unified ingress, and (detail only) the LLMs it can route to.",
+                    "type": "string"
+                },
+                "short_description": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogItemResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/api.CatalogItem"
+                }
+            }
+        },
+        "api.CatalogKindFacet": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogListMeta": {
+            "type": "object",
+            "properties": {
+                "catalogs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogFilterOption"
+                    }
+                },
+                "counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "kinds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogKindFacet"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "resource_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogResourceType"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.CatalogListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogItem"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/api.CatalogListMeta"
+                }
+            }
+        },
+        "api.CatalogModelInfo": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string"
+                },
+                "input_price_per_million": {
+                    "type": "number"
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "output_price_per_million": {
+                    "type": "number"
+                }
+            }
+        },
+        "api.CatalogRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogResourceType": {
+            "type": "object",
+            "properties": {
+                "access_granted_via_app": {
+                    "description": "AccessGrantedViaApp is the type-level answer to \"does an App credential\ngrant access to these?\"; the item carries the per-instance value.",
+                    "type": "boolean"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plugin_id": {
+                    "type": "integer"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogRouterLLM": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogRouterRoute": {
+            "type": "object",
+            "properties": {
+                "default": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.CatalogueGroupsResponse": {
+            "description": "Teams using a catalogue",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.CatalogueGroup"
+                    }
+                }
+            }
+        },
         "api.CatalogueInput": {
             "description": "Catalogue input model",
             "type": "object",
@@ -21567,6 +28093,23 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.CatalogueRoutersInput": {
+            "type": "object",
+            "properties": {
+                "model_router_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "semantic_router_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -21759,14 +28302,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.ConfigureProviderRequest": {
-            "type": "object",
-            "properties": {
-                "config": {
-                    "$ref": "#/definitions/providers.ProviderConfig"
-                }
-            }
-        },
         "api.ConsentDetailsResponse": {
             "type": "object",
             "properties": {
@@ -21821,6 +28356,20 @@ const docTemplate = `{
                         "type": "integer"
                     }
                 },
+                "mcp_server_ids": {
+                    "description": "MCPServerIDs binds Tyk-managed MCP servers the user's teams can see.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "model_router_ids": {
+                    "description": "ModelRouterIDs grants Model Routers published in the user's LLM\ncatalogues (Enterprise).",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "monthly_budget": {
                     "type": "number"
                 },
@@ -21831,6 +28380,13 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.PluginResourceInput"
+                    }
+                },
+                "semantic_router_ids": {
+                    "description": "SemanticRouterIDs grants Semantic Routers published in the user's LLM\ncatalogues (Enterprise).",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
                     }
                 },
                 "tool_ids": {
@@ -22053,6 +28609,10 @@ const docTemplate = `{
                                 "embed_vendor": {
                                     "type": "string"
                                 },
+                                "embedder_id": {
+                                    "description": "EmbedderID links an embedder and takes precedence over the\nembed_* fields (0 unlinks). Without it, the embed_* fields are\nresolved to a matching embedder.",
+                                    "type": "integer"
+                                },
                                 "governed_metadata": {
                                     "description": "Governed metadata (Enterprise). nil = untouched; {} = clear.",
                                     "type": "object",
@@ -22131,6 +28691,12 @@ const docTemplate = `{
                         "embed_vendor": {
                             "type": "string"
                         },
+                        "embedder_id": {
+                            "type": "integer"
+                        },
+                        "embedder_name": {
+                            "type": "string"
+                        },
                         "files": {
                             "type": "array",
                             "items": {
@@ -22201,6 +28767,26 @@ const docTemplate = `{
                 }
             }
         },
+        "api.DependentsResponse": {
+            "description": "Dependents response model",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/services.Dependents"
+                        },
+                        "id": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "api.EdgeListResponse": {
             "type": "object",
             "properties": {
@@ -22264,15 +28850,14 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "owner_label": {
-                            "description": "Label of the Studio replica holding the edge's stream (empty when none)",
+                            "description": "OwnerLabel is the replica's label (cluster.NodeOptions.Label), empty\nwhen it has none or is no longer registered.",
                             "type": "string"
                         },
                         "owner_live": {
-                            "description": "The owning replica's registration is fresh",
+                            "description": "OwnerLive: the replica's registration is fresh.",
                             "type": "boolean"
                         },
                         "owner_node_id": {
-                            "description": "Node ID of the Studio replica holding the edge's stream (empty when not connected)",
                             "type": "string"
                         },
                         "session_id": {
@@ -22326,8 +28911,75 @@ const docTemplate = `{
                         "$ref": "#/definitions/rbac.RoleSummary"
                     }
                 },
+                "sources": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/rbac.PermissionSource"
+                        }
+                    }
+                },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.EmbedderAttributes": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "description": "APIKey: \"[redacted]\" on update keeps the stored key.",
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "llm_id": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "privacy_score": {
+                    "type": "integer"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.EmbedderInput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/api.EmbedderAttributes"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.EndpointAuthPluginsRequest": {
+            "type": "object",
+            "properties": {
+                "plugin_ids": {
+                    "description": "PluginIDs in execution order; empty detaches every auth plugin.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },
@@ -22442,6 +29094,37 @@ const docTemplate = `{
                 }
             }
         },
+        "api.FilterAttributes": {
+            "description": "Filter attributes",
+            "type": "object",
+            "properties": {
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "response_filter": {
+                    "type": "boolean"
+                },
+                "script": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
         "api.FilterInput": {
             "description": "Filter input model",
             "type": "object",
@@ -22450,31 +29133,44 @@ const docTemplate = `{
                     "type": "object",
                     "properties": {
                         "attributes": {
-                            "type": "object",
-                            "properties": {
-                                "description": {
-                                    "type": "string"
-                                },
-                                "name": {
-                                    "type": "string"
-                                },
-                                "namespace": {
-                                    "type": "string"
-                                },
-                                "response_filter": {
-                                    "type": "boolean"
-                                },
-                                "script": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "integer"
-                                    }
-                                }
-                            }
+                            "$ref": "#/definitions/api.FilterInputAttributes"
                         },
                         "type": {
                             "type": "string"
                         }
+                    }
+                }
+            }
+        },
+        "api.FilterInputAttributes": {
+            "description": "Filter input attributes",
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "Config is the guardrail configuration (provider, detectors,\naction, ...) for a guardrail filter.",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "Kind is \"script\" (default) or \"guardrail\".",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "response_filter": {
+                    "type": "boolean"
+                },
+                "script": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
                     }
                 }
             }
@@ -22484,27 +29180,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "type": "object",
-                    "properties": {
-                        "description": {
-                            "type": "string"
-                        },
-                        "name": {
-                            "type": "string"
-                        },
-                        "namespace": {
-                            "type": "string"
-                        },
-                        "response_filter": {
-                            "type": "boolean"
-                        },
-                        "script": {
-                            "type": "array",
-                            "items": {
-                                "type": "integer"
-                            }
-                        }
-                    }
+                    "$ref": "#/definitions/api.FilterAttributes"
                 },
                 "id": {
                     "type": "string"
@@ -22518,13 +29194,26 @@ const docTemplate = `{
             "description": "Filter test input model",
             "type": "object",
             "required": [
-                "input",
-                "script"
+                "input"
             ],
             "properties": {
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "filter_id": {
+                    "description": "FilterID names the saved filter this test belongs to. A guardrail config\nwhose connection holds $SECRET/ or $ENV/ references is only run when\nits connection block matches that saved filter's, so the test endpoint\ncannot be used to send a resolved secret to a caller-chosen endpoint.",
+                    "type": "integer"
+                },
                 "input": {
                     "type": "object",
                     "additionalProperties": true
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "response_filter": {
+                    "type": "boolean"
                 },
                 "script": {
                     "type": "string"
@@ -22785,26 +29474,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.ImportRequest": {
-            "type": "object",
-            "required": [
-                "method",
-                "name"
-            ],
-            "properties": {
-                "method": {
-                    "description": "\"url\" or \"file\"",
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "url": {
-                    "description": "Required if method is \"url\"",
-                    "type": "string"
-                }
-            }
-        },
         "api.LLMInput": {
             "description": "LLM input model",
             "type": "object",
@@ -22838,6 +29507,14 @@ const docTemplate = `{
                                 },
                                 "dont_log_bodies": {
                                     "type": "boolean"
+                                },
+                                "failover": {
+                                    "description": "Failover waterfall. On PATCH an absent key keeps the stored\nvalue and an explicit null clears it.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/definitions/models.LLMFailover"
+                                        }
+                                    ]
                                 },
                                 "filters": {
                                     "type": "array",
@@ -22923,6 +29600,9 @@ const docTemplate = `{
                         },
                         "dont_log_bodies": {
                             "type": "boolean"
+                        },
+                        "failover": {
+                            "$ref": "#/definitions/models.LLMFailover"
                         },
                         "filters": {
                             "type": "array",
@@ -23436,12 +30116,19 @@ const docTemplate = `{
                             "type": "object",
                             "properties": {
                                 "active": {
+                                    "description": "Active is the live switch. Omitted = inactive on create (the\nmodel default), unchanged on update. Setting it needs\nmodel-routers:publish.",
                                     "type": "boolean"
                                 },
                                 "api_compat": {
                                     "type": "string"
                                 },
                                 "description": {
+                                    "type": "string"
+                                },
+                                "logo_url": {
+                                    "type": "string"
+                                },
+                                "long_description": {
                                     "type": "string"
                                 },
                                 "name": {
@@ -23455,6 +30142,10 @@ const docTemplate = `{
                                     "items": {
                                         "$ref": "#/definitions/api.ModelPoolInput"
                                     }
+                                },
+                                "short_description": {
+                                    "description": "Portal presentation (the router is published in LLM catalogues).",
+                                    "type": "string"
                                 },
                                 "slug": {
                                     "type": "string"
@@ -23507,6 +30198,70 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.NavItem": {
+            "type": "object",
+            "properties": {
+                "exact": {
+                    "type": "boolean"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.NavItem"
+                    }
+                },
+                "path": {
+                    "type": "string"
+                },
+                "permission": {
+                    "type": "string"
+                },
+                "pluginId": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.NavManifest": {
+            "type": "object",
+            "properties": {
+                "admin": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.NavItem"
+                    }
+                },
+                "chat": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.NavItem"
+                    }
+                },
+                "portal": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.NavItem"
+                    }
+                },
+                "surfaces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.NavItem"
+                    }
                 }
             }
         },
@@ -23687,6 +30442,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/authz.Resource"
                     }
+                },
+                "version": {
+                    "description": "Version changes whenever a plugin registers or removes permission\nresources, so clients can tell a cached catalogue is stale.",
+                    "type": "integer"
                 }
             }
         },
@@ -23715,6 +30474,27 @@ const docTemplate = `{
                             "type": "integer"
                         }
                     }
+                },
+                "updates_available": {
+                    "description": "UpdatesAvailable counts installed plugins (across all pages) with a newer marketplace version.",
+                    "type": "integer"
+                }
+            }
+        },
+        "api.PluginMarketplaceInfo": {
+            "type": "object",
+            "properties": {
+                "available_version": {
+                    "type": "string"
+                },
+                "installed_version": {
+                    "type": "string"
+                },
+                "marketplace_id": {
+                    "type": "string"
+                },
+                "update_available": {
+                    "type": "boolean"
                 }
             }
         },
@@ -23810,6 +30590,13 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "marketplace": {
+                    "$ref": "#/definitions/api.PluginMarketplaceInfo"
+                },
+                "permission_key": {
+                    "description": "PermissionKey is the RBAC resource that stands for this plugin\n(\"plugin:\u003cmanifest id\u003e\"); omitted for plugins with no admin surface.\nTop level rather than inside Attributes so the many hand-written\nAttributes literals in this package stay untouched.",
+                    "type": "string"
+                },
                 "relationships": {
                     "type": "object",
                     "properties": {
@@ -23850,6 +30637,30 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                },
+                "version": {
+                    "description": "Version and Marketplace are top level for the same reason.",
+                    "type": "string"
+                }
+            }
+        },
+        "api.PluginUpgradePreviewRequest": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "description": "empty = latest upgrade candidate",
+                    "type": "string"
+                }
+            }
+        },
+        "api.PluginUpgradeResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/api.PluginResponse"
+                },
+                "upgrade": {
+                    "$ref": "#/definitions/services.PluginUpgradeResult"
                 }
             }
         },
@@ -23870,6 +30681,32 @@ const docTemplate = `{
                 },
                 "weight": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.PreferencesResponse": {
+            "description": "Notification preferences of the signed-in user",
+            "type": "object",
+            "properties": {
+                "email_notifications_enabled": {
+                    "description": "EmailNotificationsEnabled controls whether notifications are also\nemailed; the bell receives them either way.",
+                    "type": "boolean"
+                },
+                "notifications_enabled": {
+                    "description": "NotificationsEnabled is the in-app admin fan-out consent (new users,\napp requests). It can only be on for administrators.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.PreferencesUpdateRequest": {
+            "description": "Notification preferences to change",
+            "type": "object",
+            "properties": {
+                "email_notifications_enabled": {
+                    "type": "boolean"
+                },
+                "notifications_enabled": {
+                    "type": "boolean"
                 }
             }
         },
@@ -24428,6 +31265,13 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "orphaned_permissions": {
+                    "description": "OrphanedPermissions are held permissions whose resource is not in the\ncatalogue right now: grants on a plugin that is uninstalled or not\nloaded. They stay on the role and take effect again when the plugin\nreturns; the role editor lists them separately.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "permissions": {
                     "type": "array",
                     "items": {
@@ -24462,6 +31306,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "scope_type": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source is \"host\" for a binding the host application manages\n(read-only here), empty otherwise.",
                     "type": "string"
                 },
                 "subject_id": {
@@ -24589,6 +31437,21 @@ const docTemplate = `{
                 }
             }
         },
+        "api.SecretReferenceResponse": {
+            "description": "Secret reference model",
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "api.SecretResponse": {
             "description": "Secret response model",
             "type": "object",
@@ -24596,6 +31459,17 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "has_value": {
+                            "description": "HasValue says whether the secret holds a non-empty value without\nexposing it, so the list can flag a placeholder that was never\nfilled in.",
+                            "type": "boolean"
+                        },
+                        "referenced_by": {
+                            "description": "ReferencedBy lists the objects that read this secret through a\n$SECRET/\u003cname\u003e reference. Always present, empty when nothing does.",
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.SecretReferenceResponse"
+                            }
+                        },
                         "value": {
                             "type": "string"
                         },
@@ -24608,6 +31482,102 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.SemanticRouterAttributes": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "description": "Active is the live switch. Omitted = inactive on create, unchanged on\nupdate. Setting it needs semantic-routers:publish.",
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "embedder_id": {
+                    "description": "EmbedderID is the embedder of the embedding stage (0 or omitted: none).\nA settings.embedding naming an LLM ({llm_id, model}) is still accepted\nand saved as the embedder linked to that LLM with that model.",
+                    "type": "integer"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "long_description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "routes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/semanticrouting.Route"
+                    }
+                },
+                "settings": {
+                    "$ref": "#/definitions/semanticrouting.Settings"
+                },
+                "short_description": {
+                    "description": "Portal presentation (the router is published in LLM catalogues).",
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.SemanticRouterInput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "$ref": "#/definitions/api.SemanticRouterAttributes"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.SemanticRouterTestInput": {
+            "type": "object",
+            "required": [
+                "messages"
+            ],
+            "properties": {
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.SemanticRouterTestMessage"
+                    }
+                },
+                "model": {
+                    "type": "string"
+                },
+                "router": {
+                    "description": "Router is the draft to test (POST /semantic-routers/test only).",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.SemanticRouterAttributes"
+                        }
+                    ]
+                }
+            }
+        },
+        "api.SemanticRouterTestMessage": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string"
+                },
+                "role": {
                     "type": "string"
                 }
             }
@@ -24699,6 +31669,14 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.TeamBudgetSettingsBody": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
                 }
             }
         },
@@ -24808,6 +31786,36 @@ const docTemplate = `{
                 }
             }
         },
+        "api.ToolImportConnection": {
+            "type": "object",
+            "properties": {
+                "apis_read": {
+                    "description": "APIsRead is the probed state of the apis_read capability\n(ok | denied | unverified | no), empty when never probed.",
+                    "type": "string"
+                },
+                "dashboard_url": {
+                    "type": "string"
+                },
+                "degraded": {
+                    "type": "boolean"
+                },
+                "degraded_reason": {
+                    "type": "string"
+                },
+                "effective_mode": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.ToolInput": {
             "description": "Tool input model",
             "type": "object",
@@ -24818,6 +31826,10 @@ const docTemplate = `{
                         "attributes": {
                             "type": "object",
                             "properties": {
+                                "active": {
+                                    "description": "Active is the live switch. Omitted = unchanged on update, live on\ncreate (unless the caller lacks tools:publish, in which case the\ntool is created inactive). Setting it needs tools:publish.",
+                                    "type": "boolean"
+                                },
                                 "auth_key": {
                                     "type": "string"
                                 },
@@ -24831,6 +31843,9 @@ const docTemplate = `{
                                     "description": "Governed metadata (Enterprise). nil = untouched; {} = clear.",
                                     "type": "object",
                                     "additionalProperties": true
+                                },
+                                "mcp_access_enabled": {
+                                    "type": "boolean"
                                 },
                                 "name": {
                                     "type": "string"
@@ -24851,6 +31866,10 @@ const docTemplate = `{
                                 "privacy_score": {
                                     "type": "integer"
                                 },
+                                "rest_access_enabled": {
+                                    "description": "Access methods. Omitted = unchanged on update; on create a new\ntool is chat only (both off). Not accepted on client tools.",
+                                    "type": "boolean"
+                                },
                                 "tool_type": {
                                     "type": "string"
                                 }
@@ -24868,63 +31887,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "type": "object",
-                    "properties": {
-                        "active": {
-                            "type": "boolean"
-                        },
-                        "auth_key": {
-                            "type": "string"
-                        },
-                        "auth_schema_name": {
-                            "type": "string"
-                        },
-                        "dependencies": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.ToolResponse"
-                            }
-                        },
-                        "description": {
-                            "type": "string"
-                        },
-                        "file_stores": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.FileStoreResponse"
-                            }
-                        },
-                        "filters": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.FilterResponse"
-                            }
-                        },
-                        "has_auth_key": {
-                            "type": "boolean"
-                        },
-                        "name": {
-                            "type": "string"
-                        },
-                        "namespace": {
-                            "type": "string"
-                        },
-                        "oas_spec": {
-                            "type": "string"
-                        },
-                        "operations": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        },
-                        "privacy_score": {
-                            "type": "integer"
-                        },
-                        "tool_type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/api.ToolResponseAttributes"
                 },
                 "governed_metadata": {
                     "description": "Governed metadata (Enterprise); see LLMResponse."
@@ -24936,6 +31899,86 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ToolResponseAttributes": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "app_grantable": {
+                    "type": "boolean"
+                },
+                "auth_key": {
+                    "type": "string"
+                },
+                "auth_schema_name": {
+                    "type": "string"
+                },
+                "dependencies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ToolResponse"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "file_stores": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.FileStoreResponse"
+                    }
+                },
+                "filters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.FilterResponse"
+                    }
+                },
+                "has_auth_key": {
+                    "type": "boolean"
+                },
+                "mcp_access_enabled": {
+                    "type": "boolean"
+                },
+                "mcp_endpoint_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "oas_spec": {
+                    "type": "string"
+                },
+                "operations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "privacy_score": {
+                    "type": "integer"
+                },
+                "rest_access_enabled": {
+                    "description": "Access methods. Chat is always available and is not listed.\nAppGrantable is false for a chat-only tool, which cannot be bound to an\nApp.",
+                    "type": "boolean"
+                },
+                "rest_endpoint_url": {
+                    "description": "Gateway URLs of the two access methods, built from TOOL_DISPLAY_URL (or\nPROXY_URL) and the slug. Empty for client tools and when no base URL is\nconfigured. They say where a method is served, not whether it is on.",
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Slug is the path segment the gateway serves the tool under. It is\ncomputed server-side (with transliteration), so clients must not derive\nit from the name.",
+                    "type": "string"
+                },
+                "tool_type": {
                     "type": "string"
                 }
             }
@@ -24996,6 +32039,24 @@ const docTemplate = `{
                 "api_key_hint": {
                     "type": "string"
                 },
+                "api_key_last_used_at": {
+                    "type": "string"
+                },
+                "auth_source": {
+                    "description": "Provenance and activity. auth_source is local | admin | sso | host;\nsso_profile_id names the identity provider profile that provisioned\n(or last signed in) the user.",
+                    "type": "string"
+                },
+                "budget_team_id": {
+                    "description": "BudgetTeamID is the team the user's new Apps and chat spend are\nattributed to (Enterprise team budgets); null = resolved automatically.",
+                    "type": "integer"
+                },
+                "disabled": {
+                    "description": "Account switch. A disabled user cannot authenticate by any means.",
+                    "type": "boolean"
+                },
+                "disabled_at": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -25013,6 +32074,12 @@ const docTemplate = `{
                 },
                 "is_admin": {
                     "type": "boolean"
+                },
+                "last_login_at": {
+                    "type": "string"
+                },
+                "last_login_method": {
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"
@@ -25034,6 +32101,17 @@ const docTemplate = `{
                 },
                 "show_portal": {
                     "type": "boolean"
+                },
+                "sso_profile_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.UserBudgetTeamBody": {
+            "type": "object",
+            "properties": {
+                "team_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -25129,8 +32207,21 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "account_type": {
+                            "description": "Profile fields for the signed-in user's own menu. AccountType is\nthe legacy role label the users list shows as \"role\"; the key\nitself is never included here (see POST /common/me/api-key/roll).",
+                            "type": "string"
+                        },
+                        "api_key_last_used_at": {
+                            "type": "string"
+                        },
+                        "auth_source": {
+                            "type": "string"
+                        },
                         "email": {
                             "type": "string"
+                        },
+                        "email_notifications_enabled": {
+                            "type": "boolean"
                         },
                         "entitlements": {
                             "type": "object",
@@ -25165,6 +32256,9 @@ const docTemplate = `{
                             "description": "HasAdminAccess is true when the user holds at least one permission\nand may therefore open the administration surface.",
                             "type": "boolean"
                         },
+                        "has_api_key": {
+                            "type": "boolean"
+                        },
                         "is_admin": {
                             "type": "boolean"
                         },
@@ -25173,6 +32267,9 @@ const docTemplate = `{
                         },
                         "name": {
                             "type": "string"
+                        },
+                        "notifications_enabled": {
+                            "type": "boolean"
                         },
                         "permissions": {
                             "description": "Permissions is the effective permission set; [\"*\"] for full admins.",
@@ -25191,6 +32288,10 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/rbac.RoleSummary"
                             }
+                        },
+                        "sso_api_keys_allowed": {
+                            "description": "SSOAPIKeysAllowed is whether this user may hold an API key under\nthe ALLOW_SSO_USER_API_KEYS policy (always true for non-SSO users).",
+                            "type": "boolean"
                         },
                         "ui_options": {
                             "type": "object",
@@ -25355,6 +32456,44 @@ const docTemplate = `{
                 },
                 "target": {
                     "$ref": "#/definitions/models.WebhookTargetResponse"
+                }
+            }
+        },
+        "api.linkMCPServerInput": {
+            "type": "object",
+            "properties": {
+                "tyk_api_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.mcpServerCataloguesInput": {
+            "type": "object",
+            "properties": {
+                "tool_catalogue_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "api.modelRouterCataloguesInput": {
+            "type": "object",
+            "properties": {
+                "catalogue_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "api.portalMintInput": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -25556,13 +32695,15 @@ const docTemplate = `{
                 "read",
                 "write",
                 "delete",
-                "execute"
+                "execute",
+                "publish"
             ],
             "x-enum-varnames": [
                 "ActionRead",
                 "ActionWrite",
                 "ActionDelete",
-                "ActionExecute"
+                "ActionExecute",
+                "ActionPublish"
             ]
         },
         "authz.Resource": {
@@ -25579,6 +32720,10 @@ const docTemplate = `{
                     "description": "Description is optional help text for the role editor.",
                     "type": "string"
                 },
+                "dynamic": {
+                    "description": "Dynamic marks a resource registered at runtime (plugins) rather than\nin init(); dynamic resources can be replaced and unregistered.",
+                    "type": "boolean"
+                },
                 "group": {
                     "description": "Group is the navigation group the resource belongs to; see Groups.",
                     "type": "string"
@@ -25589,6 +32734,14 @@ const docTemplate = `{
                 },
                 "label": {
                     "description": "Label is the human name, matching the admin navigation where one exists.",
+                    "type": "string"
+                },
+                "plugin": {
+                    "description": "Plugin is the permission key of the plugin that contributed this\nresource (\"plugin:\u003cmanifest id\u003e\"), or \"\" for built-in resources. The\nrole editor groups plugin resources under their plugin.",
+                    "type": "string"
+                },
+                "plugin_label": {
+                    "description": "PluginLabel is the display name of the contributing plugin.",
                     "type": "string"
                 },
                 "privileged": {
@@ -26191,6 +33344,10 @@ const docTemplate = `{
         "governed_metadata.ComplianceEntry": {
             "type": "object",
             "properties": {
+                "detail_path": {
+                    "description": "DetailPath is where the object can be opened when the UI has no route\nof its own for it: plugin resource instances resolve their resource\ntype's PortalDetailPath template here. Empty for built-in objects.",
+                    "type": "string"
+                },
                 "issues": {
                     "type": "array",
                     "items": {
@@ -26324,6 +33481,119 @@ const docTemplate = `{
                 }
             }
         },
+        "guardrails.ConnectionField": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "example": {
+                    "description": "Example is placeholder text for the UI.",
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "secret": {
+                    "description": "Secret marks a field that holds a credential. The UI offers the secret\npicker and the value is expected to be a $SECRET/ or $ENV/ reference.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "guardrails.DetectorSpec": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "has_threshold": {
+                    "description": "HasThreshold reports whether DetectorConfig.Threshold applies, and\nThresholdHint what it means (\"0..1 score\", \"0..6 severity\").",
+                    "type": "boolean"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "threshold_hint": {
+                    "type": "string"
+                }
+            }
+        },
+        "guardrails.Spec": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "description": "Available reports whether an implementation is registered in this\nbuild. False in the Community Edition.",
+                    "type": "boolean"
+                },
+                "connection_fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/guardrails.ConnectionField"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "detectors": {
+                    "description": "Detectors is the fixed catalogue. When OpenDetectors is true the\nprovider also accepts names outside it (the generic HTTP provider,\nwhose server defines its own).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/guardrails.DetectorSpec"
+                    }
+                },
+                "display_name": {
+                    "type": "string"
+                },
+                "docs_url": {
+                    "description": "DocsURL points at the provider's page in the documentation.",
+                    "type": "string"
+                },
+                "local": {
+                    "description": "Local reports an in-process provider (no network call).",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "open_detectors": {
+                    "type": "boolean"
+                },
+                "redacts": {
+                    "description": "Redacts reports whether ActionRedact is available.",
+                    "type": "boolean"
+                },
+                "require_any_connection": {
+                    "description": "RequireAnyConnection demands at least one connection field even though\nnone is individually required (Lakera: an API key for the SaaS or an\nendpoint for a self-hosted Guard).",
+                    "type": "boolean"
+                }
+            }
+        },
+        "mcpintrospect.Tool": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "models.AppBudgetUsageResponse": {
             "type": "object",
             "properties": {
@@ -26346,6 +33616,10 @@ const docTemplate = `{
             "properties": {
                 "action": {
                     "description": "What happened",
+                    "type": "string"
+                },
+                "auth_method": {
+                    "description": "AuthMethod is how the actor authenticated: \"session\" (browser\ncookie) or \"api_key\" (user API key); empty for unauthenticated\nrequests such as failed logins.",
                     "type": "string"
                 },
                 "diff": {
@@ -26524,6 +33798,518 @@ const docTemplate = `{
                 "ExportStatusExpired"
             ]
         },
+        "models.LLMFailover": {
+            "type": "object",
+            "properties": {
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.LLMFailoverTarget"
+                    }
+                },
+                "triggers": {
+                    "$ref": "#/definitions/models.LLMFailoverTriggers"
+                }
+            }
+        },
+        "models.LLMFailoverTarget": {
+            "type": "object",
+            "properties": {
+                "llm_id": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.LLMFailoverTriggers": {
+            "type": "object",
+            "properties": {
+                "attempt_timeout_seconds": {
+                    "type": "integer"
+                },
+                "on_connection_error": {
+                    "type": "boolean"
+                },
+                "on_timeout": {
+                    "type": "boolean"
+                },
+                "status_codes": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "models.MCPAuthDetails": {
+            "type": "object",
+            "properties": {
+                "cookie_name": {
+                    "type": "string"
+                },
+                "header_name": {
+                    "description": "Header, Query or Cookie name the token scheme reads (auth_token, basic, jwt).",
+                    "type": "string"
+                },
+                "prm": {
+                    "description": "PRM is the OAuth 2.1 protected resource metadata when advertised.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.MCPProtectedResourceMetadata"
+                        }
+                    ]
+                },
+                "query_name": {
+                    "type": "string"
+                },
+                "schemes": {
+                    "description": "Schemes lists every enabled scheme name with its resolved type.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPAuthScheme"
+                    }
+                }
+            }
+        },
+        "models.MCPAuthScheme": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "an MCPAuth* value",
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPCredentialResponse": {
+            "type": "object",
+            "properties": {
+                "alias": {
+                    "type": "string"
+                },
+                "app_id": {
+                    "type": "integer"
+                },
+                "app_name": {
+                    "type": "string"
+                },
+                "applied_policy_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "desired_policy_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "drift": {
+                    "type": "string"
+                },
+                "drift_detail": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "external_policy_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "key_hint": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "minted_at": {
+                    "type": "string"
+                },
+                "minted_by_user_id": {
+                    "type": "integer"
+                },
+                "purpose": {
+                    "type": "string"
+                },
+                "revealed_at": {
+                    "type": "string"
+                },
+                "revealed_to_user_id": {
+                    "type": "integer"
+                },
+                "revoke_mode": {
+                    "type": "string"
+                },
+                "revoke_reason": {
+                    "type": "string"
+                },
+                "revoked_at": {
+                    "type": "string"
+                },
+                "revoked_by_user_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tyk_key_hash": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPGatewayTags": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.MCPPrimitive": {
+            "type": "object",
+            "properties": {
+                "annotations": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "auth": {
+                    "description": "Auth records per-primitive overrides from the definition.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.MCPPrimitiveAuth"
+                        }
+                    ]
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source names the REST operation behind a REST-to-MCP tool.",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "tool | resource | prompt",
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPPrimitiveAuth": {
+            "type": "object",
+            "properties": {
+                "ignore_authentication": {
+                    "type": "boolean"
+                },
+                "scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.MCPProtectedResourceMetadata": {
+            "type": "object",
+            "properties": {
+                "authorization_servers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "auto_derive_scopes": {
+                    "type": "boolean"
+                },
+                "resource": {
+                    "type": "string"
+                },
+                "scopes_supported": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "url": {
+                    "description": "URL is the absolute metadata URL when the endpoint URL is known.",
+                    "type": "string"
+                },
+                "well_known_path": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPServerCatalogueView": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPServerPolicyPinView": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "invalid_reason": {
+                    "type": "string"
+                },
+                "policy": {
+                    "$ref": "#/definitions/models.TykPolicyResponse"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPServerResponse": {
+            "type": "object",
+            "properties": {
+                "auth_details": {
+                    "$ref": "#/definitions/models.MCPAuthDetails"
+                },
+                "auth_mode": {
+                    "type": "string"
+                },
+                "brokerable": {
+                    "type": "boolean"
+                },
+                "bundle": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPServerPolicyPinView"
+                    }
+                },
+                "community_submitted": {
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "dashboard_state": {
+                    "type": "string"
+                },
+                "definition": {
+                    "description": "Detail-only fields.",
+                    "type": "string"
+                },
+                "definition_hash": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "endpoint_url": {
+                    "type": "string"
+                },
+                "endpoint_urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "gateway_tags": {
+                    "$ref": "#/definitions/models.MCPGatewayTags"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
+                "listen_path": {
+                    "type": "string"
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "long_description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "name_overridden": {
+                    "type": "boolean"
+                },
+                "origin": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "type": "integer"
+                },
+                "primitives": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPPrimitive"
+                    }
+                },
+                "privacy_score": {
+                    "type": "integer"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "source_api_id": {
+                    "type": "string"
+                },
+                "submission_id": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tool_catalogue_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "tool_catalogues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPServerCatalogueView"
+                    }
+                },
+                "transport_path": {
+                    "type": "string"
+                },
+                "tyk_api_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "upstream_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.MCPSyncRun": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "integer"
+                },
+                "credentials_checked": {
+                    "type": "integer"
+                },
+                "credentials_drifted": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "policies_missing": {
+                    "type": "integer"
+                },
+                "policies_seen": {
+                    "type": "integer"
+                },
+                "policies_updated": {
+                    "type": "integer"
+                },
+                "proxies_added": {
+                    "type": "integer"
+                },
+                "proxies_missing": {
+                    "type": "integer"
+                },
+                "proxies_resumed": {
+                    "type": "integer"
+                },
+                "proxies_seen": {
+                    "type": "integer"
+                },
+                "proxies_updated": {
+                    "type": "integer"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "trigger": {
+                    "description": "schedule | manual",
+                    "type": "string"
+                }
+            }
+        },
         "models.MetadataFieldDef": {
             "type": "object",
             "properties": {
@@ -26558,6 +34344,10 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "required": {
+                    "type": "boolean"
+                },
+                "required_on_publish": {
+                    "description": "RequiredOnPublish makes the field mandatory only when the object goes\nlive (activate / enable): a submitter can save a draft without it, but\nthe publish is refused until it is filled. Independent of Required.",
                     "type": "boolean"
                 },
                 "severity": {
@@ -26618,6 +34408,80 @@ const docTemplate = `{
                             "type": "integer"
                         }
                     }
+                }
+            }
+        },
+        "models.ProxyLogAttributes": {
+            "type": "object",
+            "properties": {
+                "acting_agent": {
+                    "type": "string"
+                },
+                "app_id": {
+                    "type": "integer"
+                },
+                "failover_attempt": {
+                    "type": "integer"
+                },
+                "failover_from_llm_id": {
+                    "type": "integer"
+                },
+                "llm_id": {
+                    "type": "integer"
+                },
+                "model_name": {
+                    "type": "string"
+                },
+                "on_behalf_of": {
+                    "type": "string"
+                },
+                "request_body": {
+                    "type": "string"
+                },
+                "response_body": {
+                    "type": "string"
+                },
+                "response_code": {
+                    "type": "integer"
+                },
+                "route": {
+                    "type": "string"
+                },
+                "route_reason": {
+                    "type": "string"
+                },
+                "route_score": {
+                    "type": "number"
+                },
+                "route_selection": {
+                    "type": "string"
+                },
+                "route_source_model": {
+                    "type": "string"
+                },
+                "route_target_model": {
+                    "type": "string"
+                },
+                "router_kind": {
+                    "type": "string"
+                },
+                "router_pool": {
+                    "type": "string"
+                },
+                "router_slug": {
+                    "type": "string"
+                },
+                "shadow_route": {
+                    "type": "string"
+                },
+                "time_stamp": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "vendor": {
+                    "type": "string"
                 }
             }
         },
@@ -26686,35 +34550,338 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "type": "object",
-                    "properties": {
-                        "app_id": {
-                            "type": "integer"
-                        },
-                        "request_body": {
-                            "type": "string"
-                        },
-                        "response_body": {
-                            "type": "string"
-                        },
-                        "response_code": {
-                            "type": "integer"
-                        },
-                        "time_stamp": {
-                            "type": "string"
-                        },
-                        "user_id": {
-                            "type": "integer"
-                        },
-                        "vendor": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/models.ProxyLogAttributes"
                 },
                 "id": {
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TeamCostRow": {
+            "type": "object",
+            "properties": {
+                "cost": {
+                    "type": "number"
+                },
+                "deleted": {
+                    "description": "Deleted marks a team deleted since it spent: its name may since have\nbeen reused, and it has no page to link to.",
+                    "type": "boolean"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "team_id": {
+                    "type": "integer"
+                },
+                "team_name": {
+                    "type": "string"
+                },
+                "tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.TykCapability": {
+            "type": "object",
+            "properties": {
+                "checked_at": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TykConnectionResponse": {
+            "type": "object",
+            "properties": {
+                "accept_handoffs": {
+                    "type": "boolean"
+                },
+                "activated_at": {
+                    "type": "string"
+                },
+                "activated_by_email": {
+                    "type": "string"
+                },
+                "activated_by_user_id": {
+                    "type": "integer"
+                },
+                "allow_internal_host": {
+                    "type": "boolean"
+                },
+                "auto_publish": {
+                    "type": "boolean"
+                },
+                "capabilities": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/models.TykCapability"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by_email": {
+                    "type": "string"
+                },
+                "created_by_user_id": {
+                    "type": "integer"
+                },
+                "dashboard_url": {
+                    "type": "string"
+                },
+                "data_planes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TykDataPlane"
+                    }
+                },
+                "declared_mode": {
+                    "type": "string"
+                },
+                "default_privacy_score": {
+                    "type": "integer"
+                },
+                "degraded": {
+                    "type": "boolean"
+                },
+                "degraded_reason": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "effective_mode": {
+                    "type": "string"
+                },
+                "gateway_base_url": {
+                    "type": "string"
+                },
+                "gateway_base_urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "has_mdcb_token": {
+                    "type": "boolean"
+                },
+                "has_token": {
+                    "type": "boolean"
+                },
+                "host_managed": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "key_defaults": {
+                    "$ref": "#/definitions/models.TykKeyDefaults"
+                },
+                "known_gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TykGatewayTag"
+                    }
+                },
+                "last_mdcb_probe_at": {
+                    "type": "string"
+                },
+                "last_probe_at": {
+                    "type": "string"
+                },
+                "last_sync_at": {
+                    "type": "string"
+                },
+                "last_sync_error": {
+                    "type": "string"
+                },
+                "last_sync_status": {
+                    "type": "string"
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "mdcb_allow_internal_host": {
+                    "type": "boolean"
+                },
+                "mdcb_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "next_sync_at": {
+                    "type": "string"
+                },
+                "org_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "sync_interval_seconds": {
+                    "type": "integer"
+                },
+                "template_id": {
+                    "type": "string"
+                },
+                "token_hint": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TykDataPlane": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "type": "string"
+                },
+                "healthy": {
+                    "type": "boolean"
+                },
+                "last_seen": {
+                    "type": "string"
+                },
+                "node_count": {
+                    "type": "integer"
+                },
+                "node_versions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "models.TykGatewayTag": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.TykKeyDefaults": {
+            "type": "object",
+            "properties": {
+                "alias_prefix": {
+                    "type": "string"
+                },
+                "detailed_recording": {
+                    "type": "boolean"
+                },
+                "expires_in_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.TykPolicyPartitions": {
+            "type": "object",
+            "properties": {
+                "acl": {
+                    "type": "boolean"
+                },
+                "complexity": {
+                    "type": "boolean"
+                },
+                "per_api": {
+                    "type": "boolean"
+                },
+                "quota": {
+                    "type": "boolean"
+                },
+                "rate_limit": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.TykPolicyResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "api_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "dashboard_state": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_inactive": {
+                    "type": "boolean"
+                },
+                "is_partitioned": {
+                    "type": "boolean"
+                },
+                "key_expires_in": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "mcp_api_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "partitions": {
+                    "$ref": "#/definitions/models.TykPolicyPartitions"
+                },
+                "raw": {
+                    "type": "object"
+                },
+                "studio_managed": {
+                    "type": "boolean"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tyk_policy_id": {
                     "type": "string"
                 }
             }
@@ -26998,112 +35165,25 @@ const docTemplate = `{
                 }
             }
         },
-        "providers.APISpec": {
+        "rbac.PermissionSource": {
             "type": "object",
             "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "operations": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "security_details": {
-                    "$ref": "#/definitions/providers.SecurityDetails"
-                },
-                "source": {
-                    "type": "string"
-                },
-                "spec": {
-                    "type": "string"
-                }
-            }
-        },
-        "providers.ImportMethod": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "description": "Description of the import method",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "Display name for the method",
-                    "type": "string"
-                },
-                "needs_config": {
-                    "description": "Whether this method needs configuration",
-                    "type": "boolean"
-                },
-                "provider": {
-                    "description": "Provider ID (\"tyk\", \"direct\", etc.)",
-                    "type": "string"
-                },
-                "type": {
-                    "description": "\"provider\", \"url\", or \"file\"",
-                    "type": "string"
-                }
-            }
-        },
-        "providers.ImportStep": {
-            "type": "object",
-            "properties": {
-                "current_step": {
-                    "description": "Current step number",
+                "group_id": {
+                    "description": "when Via == \"group\"",
                     "type": "integer"
                 },
-                "methods": {
-                    "description": "Available import methods for this step",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/providers.ImportMethod"
-                    }
-                },
-                "provider": {
-                    "description": "Provider ID",
+                "group_name": {
+                    "description": "when Via == \"group\"",
                     "type": "string"
                 },
-                "total_steps": {
-                    "description": "Total number of steps",
+                "role_id": {
                     "type": "integer"
                 },
-                "type": {
-                    "description": "\"config\", \"select_api\", \"import_method\"",
-                    "type": "string"
-                }
-            }
-        },
-        "providers.ProviderConfig": {
-            "type": "object",
-            "properties": {
-                "selected_api_id": {
+                "role_name": {
                     "type": "string"
                 },
-                "token": {
-                    "type": "string"
-                },
-                "url": {
-                    "type": "string"
-                }
-            }
-        },
-        "providers.SecurityDetails": {
-            "type": "object",
-            "properties": {
-                "in": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "type": {
+                "via": {
+                    "description": "\"direct\" | \"group\"",
                     "type": "string"
                 }
             }
@@ -27114,6 +35194,10 @@ const docTemplate = `{
                 "group_id": {
                     "description": "when Via == \"group\"",
                     "type": "integer"
+                },
+                "group_name": {
+                    "description": "when Via == \"group\"",
+                    "type": "string"
                 },
                 "id": {
                     "type": "integer"
@@ -27128,7 +35212,214 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "via": {
-                    "description": "\"direct\" | \"group\"",
+                    "description": "\"direct\" | \"group\" | \"host\" (direct, assigned by the host application)| \"group\"",
+                    "type": "string"
+                }
+            }
+        },
+        "semanticrouting.AffinitySettings": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "header": {
+                    "type": "string"
+                },
+                "ttl_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "semanticrouting.InputScope": {
+            "type": "string",
+            "enum": [
+                "last_user",
+                "all_user"
+            ],
+            "x-enum-varnames": [
+                "ScopeLastUser",
+                "ScopeAllUser"
+            ]
+        },
+        "semanticrouting.JudgeSettings": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "model_ref": {
+                    "$ref": "#/definitions/semanticrouting.ModelRef"
+                },
+                "when": {
+                    "$ref": "#/definitions/semanticrouting.JudgeWhen"
+                }
+            }
+        },
+        "semanticrouting.JudgeWhen": {
+            "type": "string",
+            "enum": [
+                "always",
+                "low_confidence"
+            ],
+            "x-enum-varnames": [
+                "JudgeAlways",
+                "JudgeLowConfidence"
+            ]
+        },
+        "semanticrouting.Keyword": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string"
+                },
+                "regex": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "semanticrouting.Mode": {
+            "type": "string",
+            "enum": [
+                "enforce",
+                "shadow"
+            ],
+            "x-enum-varnames": [
+                "ModeEnforce",
+                "ModeShadow"
+            ]
+        },
+        "semanticrouting.ModelRef": {
+            "type": "object",
+            "properties": {
+                "api_key_encrypted": {
+                    "type": "string"
+                },
+                "embedder_id": {
+                    "type": "integer"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "llm_id": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "timeout_ms": {
+                    "type": "integer"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "semanticrouting.Route": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "description": "Description says what belongs on this route. The judge reads it, and\nthe portal shows it.",
+                    "type": "string"
+                },
+                "keywords": {
+                    "description": "Keywords decide the route outright when one matches.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/semanticrouting.Keyword"
+                    }
+                },
+                "name": {
+                    "description": "Name is the route's identifier (\"complex\", \"code\"): what the judge\nanswers with and what \"{router}/{route}\" names.",
+                    "type": "string"
+                },
+                "priority": {
+                    "description": "Priority breaks ties between routes (higher first).",
+                    "type": "integer"
+                },
+                "target": {
+                    "$ref": "#/definitions/semanticrouting.Target"
+                },
+                "threshold": {
+                    "description": "Threshold is the similarity (0..1] the best example must reach for the\nroute to be picked by the embedding stage. 0 means DefaultThreshold.",
+                    "type": "number"
+                },
+                "utterances": {
+                    "description": "Utterances are example requests. The input is compared with each and\nthe route scores its best match (cosine similarity).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "semanticrouting.Settings": {
+            "type": "object",
+            "properties": {
+                "affinity": {
+                    "$ref": "#/definitions/semanticrouting.AffinitySettings"
+                },
+                "allow_explicit_route": {
+                    "type": "boolean"
+                },
+                "default_route": {
+                    "type": "string"
+                },
+                "embedding": {
+                    "$ref": "#/definitions/semanticrouting.ModelRef"
+                },
+                "input_scope": {
+                    "$ref": "#/definitions/semanticrouting.InputScope"
+                },
+                "judge": {
+                    "$ref": "#/definitions/semanticrouting.JudgeSettings"
+                },
+                "max_input_chars": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "$ref": "#/definitions/semanticrouting.Mode"
+                }
+            }
+        },
+        "semanticrouting.Target": {
+            "type": "object",
+            "properties": {
+                "llm_id": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "model_router_id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "$ref": "#/definitions/semanticrouting.TargetType"
+                }
+            }
+        },
+        "semanticrouting.TargetType": {
+            "type": "string",
+            "enum": [
+                "llm",
+                "model_router"
+            ],
+            "x-enum-varnames": [
+                "TargetLLM",
+                "TargetModelRouter"
+            ]
+        },
+        "services.CatalogueGroup": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "member_count": {
+                    "type": "integer"
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -27161,6 +35452,309 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "oci_reference": {
+                    "type": "string"
+                }
+            }
+        },
+        "services.DependentRef": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "services.Dependents": {
+            "type": "object",
+            "properties": {
+                "agents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "apps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "catalogues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "chats": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "datasources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "embedders": {
+                    "description": "Embedders linked to the object (an LLM).",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "llms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "model_routers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "semantic_routers": {
+                    "description": "SemanticRouters that route to, hand off to, or classify with the object.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.DependentRef"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "services.PendingChange": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "description": "when that change happened",
+                    "type": "string"
+                },
+                "change": {
+                    "description": "created | updated | deleted",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "object id",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "display name at the time of the query",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token",
+                    "type": "string"
+                }
+            }
+        },
+        "services.PendingChanges": {
+            "type": "object",
+            "properties": {
+                "baseline": {
+                    "description": "push | edge_ack | none",
+                    "type": "string"
+                },
+                "changes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.PendingChange"
+                    }
+                },
+                "last_push_at": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "Namespace is the canonical spelling (models.CanonicalNamespace).",
+                    "type": "string"
+                },
+                "since": {
+                    "description": "Since is the reference point: the namespace's last push, or -- when\nno push was ever recorded but an edge is in sync with the namespace\nchecksum -- that edge's ack. Nil when there is neither, in which case\nevery object is \"created\". Baseline says which.",
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "services.PluginUpgradePreview": {
+            "type": "object",
+            "properties": {
+                "affects_edges": {
+                    "type": "boolean"
+                },
+                "changelog": {
+                    "type": "string"
+                },
+                "config_issues": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "config_schema": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "deprecated_message": {
+                    "type": "string"
+                },
+                "hooks": {
+                    "$ref": "#/definitions/services.UpgradeDiff"
+                },
+                "installed_version": {
+                    "type": "string"
+                },
+                "is_downgrade": {
+                    "type": "boolean"
+                },
+                "latest_version": {
+                    "type": "string"
+                },
+                "marketplace_id": {
+                    "type": "string"
+                },
+                "min_studio_version": {
+                    "type": "string"
+                },
+                "plugin_id": {
+                    "type": "integer"
+                },
+                "plugin_name": {
+                    "type": "string"
+                },
+                "same_version": {
+                    "description": "already on the target; nothing to apply",
+                    "type": "boolean"
+                },
+                "scopes": {
+                    "$ref": "#/definitions/services.UpgradeDiff"
+                },
+                "target_command": {
+                    "type": "string"
+                },
+                "target_version": {
+                    "type": "string"
+                },
+                "versions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.UpgradeVersionOption"
+                    }
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "services.PluginUpgradeRequest": {
+            "type": "object",
+            "properties": {
+                "allow_downgrade": {
+                    "description": "required to move to an older version",
+                    "type": "boolean"
+                },
+                "approved_scopes": {
+                    "description": "must cover every scope the target adds",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "description": "empty = latest upgrade candidate",
+                    "type": "string"
+                }
+            }
+        },
+        "services.PluginUpgradeResult": {
+            "type": "object",
+            "properties": {
+                "affects_edges": {
+                    "type": "boolean"
+                },
+                "from_version": {
+                    "type": "string"
+                },
+                "reloaded": {
+                    "type": "boolean"
+                },
+                "to_version": {
+                    "type": "string"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "services.UpgradeDiff": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "current": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "removed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "target": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "services.UpgradeVersionOption": {
+            "type": "object",
+            "properties": {
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "enterprise_only": {
+                    "type": "boolean"
+                },
+                "installed": {
+                    "type": "boolean"
+                },
+                "released_at": {
+                    "type": "string"
+                },
+                "version": {
                     "type": "string"
                 }
             }
@@ -27212,6 +35806,1045 @@ const docTemplate = `{
                 },
                 "Status": {
                     "type": "string"
+                }
+            }
+        },
+        "team_budget.AppAllocation": {
+            "type": "object",
+            "properties": {
+                "allocation": {
+                    "type": "number"
+                },
+                "app_id": {
+                    "type": "integer"
+                },
+                "blocked": {
+                    "description": "Blocked is a live App with a budget of zero.",
+                    "type": "boolean"
+                },
+                "deleted": {
+                    "description": "Deleted Apps keep their spend in the period they made it, but no\nlonger hold an allocation.",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_email": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "spent": {
+                    "type": "number"
+                },
+                "uncapped": {
+                    "description": "Uncapped is a live App with no limit of its own; its spend counts\ntowards the team ceiling but it holds no allocation.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "team_budget.BudgetInput": {
+            "type": "object",
+            "properties": {
+                "budget_start_date": {
+                    "type": "string"
+                },
+                "default_app_allocation": {
+                    "type": "number"
+                },
+                "enforcement": {
+                    "type": "string"
+                },
+                "monthly_budget": {
+                    "type": "number"
+                }
+            }
+        },
+        "team_budget.Report": {
+            "type": "object",
+            "properties": {
+                "allocated": {
+                    "type": "number"
+                },
+                "apps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/team_budget.AppAllocation"
+                    }
+                },
+                "blocking": {
+                    "description": "Blocking: the team hard-blocks and its Apps are being refused.",
+                    "type": "boolean"
+                },
+                "budget_start_date": {
+                    "type": "string"
+                },
+                "chat_spent": {
+                    "type": "number"
+                },
+                "default_app_allocation": {
+                    "type": "number"
+                },
+                "enabled": {
+                    "description": "global switch",
+                    "type": "boolean"
+                },
+                "enforcement": {
+                    "type": "string"
+                },
+                "managed": {
+                    "type": "boolean"
+                },
+                "monthly_budget": {
+                    "type": "number"
+                },
+                "over_allocated": {
+                    "type": "boolean"
+                },
+                "over_budget": {
+                    "description": "OverBudget: spend has reached the budget. OverAllocated: App\nallocations add up to more than the budget.",
+                    "type": "boolean"
+                },
+                "period_end": {
+                    "type": "string"
+                },
+                "period_start": {
+                    "type": "string"
+                },
+                "spent": {
+                    "description": "Spent is all spend attributed to the team this period: its Apps\n(including deleted ones) and its members' chat.",
+                    "type": "number"
+                },
+                "team_id": {
+                    "type": "integer"
+                },
+                "team_name": {
+                    "type": "string"
+                },
+                "unallocated": {
+                    "description": "negative when over-allocated",
+                    "type": "number"
+                },
+                "usage": {
+                    "description": "percent of MonthlyBudget",
+                    "type": "number"
+                }
+            }
+        },
+        "team_budget.TeamCosts": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "string"
+                },
+                "teams": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TeamCostRow"
+                    }
+                },
+                "unattributed": {
+                    "description": "Unattributed is spend no team could be resolved for.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TeamCostRow"
+                        }
+                    ]
+                }
+            }
+        },
+        "tykmcp.AccessReportRow": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "integer"
+                },
+                "app_name": {
+                    "type": "string"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "credential_hash": {
+                    "type": "string"
+                },
+                "credential_id": {
+                    "type": "string"
+                },
+                "credential_status": {
+                    "type": "string"
+                },
+                "grant_id": {
+                    "type": "integer"
+                },
+                "grant_kind": {
+                    "type": "string"
+                },
+                "granted_at": {
+                    "type": "string"
+                },
+                "revoke_reason": {
+                    "type": "string"
+                },
+                "revoked_at": {
+                    "type": "string"
+                },
+                "server_id": {
+                    "type": "integer"
+                },
+                "server_name": {
+                    "type": "string"
+                },
+                "user_email": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.AppMCPConnectionState": {
+            "type": "object",
+            "properties": {
+                "can_mint": {
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "credential_id": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.AppMCPServerView": {
+            "type": "object",
+            "properties": {
+                "auth_mode": {
+                    "type": "string"
+                },
+                "brokerable": {
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "connection_name": {
+                    "type": "string"
+                },
+                "endpoint_url": {
+                    "type": "string"
+                },
+                "endpoint_urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "grant_kind": {
+                    "type": "string"
+                },
+                "grant_open": {
+                    "type": "boolean"
+                },
+                "header_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "prm": {
+                    "$ref": "#/definitions/models.MCPProtectedResourceMetadata"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.AppMCPSummary": {
+            "type": "object",
+            "properties": {
+                "connections": {
+                    "description": "Connections lists, per connection the App touches, whether a key can\nbe minted now and why not otherwise.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tykmcp.AppMCPConnectionState"
+                    }
+                },
+                "credentials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPCredentialResponse"
+                    }
+                },
+                "servers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tykmcp.AppMCPServerView"
+                    }
+                }
+            }
+        },
+        "tykmcp.ConnectionInput": {
+            "type": "object",
+            "properties": {
+                "accept_handoffs": {
+                    "type": "boolean"
+                },
+                "allow_internal_host": {
+                    "type": "boolean"
+                },
+                "auto_publish": {
+                    "type": "boolean"
+                },
+                "dashboard_access_token": {
+                    "type": "string"
+                },
+                "dashboard_url": {
+                    "type": "string"
+                },
+                "declared_mode": {
+                    "type": "string"
+                },
+                "default_privacy_score": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "gateway_base_url": {
+                    "type": "string"
+                },
+                "gateway_base_urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "key_defaults": {
+                    "$ref": "#/definitions/models.TykKeyDefaults"
+                },
+                "known_gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TykGatewayTag"
+                    }
+                },
+                "mdcb_access_token": {
+                    "type": "string"
+                },
+                "mdcb_allow_internal_host": {
+                    "type": "boolean"
+                },
+                "mdcb_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "org_id": {
+                    "type": "string"
+                },
+                "sync_interval_seconds": {
+                    "type": "integer"
+                },
+                "template_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.ConnectionPatch": {
+            "type": "object",
+            "properties": {
+                "accept_handoffs": {
+                    "type": "boolean"
+                },
+                "allow_internal_host": {
+                    "type": "boolean"
+                },
+                "auto_publish": {
+                    "type": "boolean"
+                },
+                "clear_default_privacy_score": {
+                    "type": "boolean"
+                },
+                "dashboard_access_token": {
+                    "type": "string"
+                },
+                "dashboard_url": {
+                    "type": "string"
+                },
+                "declared_mode": {
+                    "type": "string"
+                },
+                "default_privacy_score": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "gateway_base_url": {
+                    "type": "string"
+                },
+                "gateway_base_urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "key_defaults": {
+                    "$ref": "#/definitions/models.TykKeyDefaults"
+                },
+                "known_gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TykGatewayTag"
+                    }
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "mdcb_access_token": {
+                    "type": "string"
+                },
+                "mdcb_allow_internal_host": {
+                    "type": "boolean"
+                },
+                "mdcb_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "org_id": {
+                    "type": "string"
+                },
+                "sync_interval_seconds": {
+                    "type": "integer"
+                },
+                "template_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.CredentialList": {
+            "type": "object",
+            "properties": {
+                "credentials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPCredentialResponse"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.DiscoverToolsInput": {
+            "type": "object",
+            "properties": {
+                "upstream_auth_header_name": {
+                    "type": "string"
+                },
+                "upstream_auth_token": {
+                    "type": "string"
+                },
+                "upstream_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.DiscoverToolsResult": {
+            "type": "object",
+            "properties": {
+                "endpoint": {
+                    "description": "Endpoint is the URL Studio called: the upstream base plus /mcp, the\nsame path the Tyk Gateway will call.",
+                    "type": "string"
+                },
+                "server_name": {
+                    "type": "string"
+                },
+                "server_version": {
+                    "type": "string"
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/mcpintrospect.Tool"
+                    }
+                },
+                "truncated": {
+                    "description": "Truncated is set when the server offered more tools than MaxTools.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "tykmcp.GatewayTagOption": {
+            "type": "object",
+            "properties": {
+                "data_planes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TykDataPlane"
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "sources": {
+                    "description": "mdcb | known | proxies",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "verified": {
+                    "description": "Verified is true when MDCB currently reports a data plane with this tag.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "tykmcp.HandoffContact": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "primary_contact": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.HandoffPackage": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPServerResponse"
+                    }
+                },
+                "definition": {
+                    "type": "object"
+                },
+                "instructions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "policy_shape": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "requested_gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "secrets_included": {
+                    "type": "boolean"
+                },
+                "server": {
+                    "$ref": "#/definitions/models.MCPServerResponse"
+                },
+                "submission_id": {
+                    "type": "integer"
+                },
+                "submitter": {
+                    "$ref": "#/definitions/tykmcp.HandoffContact"
+                },
+                "template_id": {
+                    "type": "string"
+                },
+                "transport_notes": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.MintInput": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "integer"
+                },
+                "connection_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.MintedCredential": {
+            "type": "object",
+            "properties": {
+                "credential": {
+                    "$ref": "#/definitions/models.MCPCredentialResponse"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "servers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tykmcp.AppMCPServerView"
+                    }
+                },
+                "skipped": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tykmcp.SkippedServer"
+                    }
+                }
+            }
+        },
+        "tykmcp.PolicyInput": {
+            "type": "object",
+            "properties": {
+                "key_expires_in": {
+                    "type": "integer"
+                },
+                "kind": {
+                    "description": "access | consumption",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "per": {
+                    "type": "integer"
+                },
+                "pin": {
+                    "description": "Pin adds the new policy to ServerID's bundle straight away.",
+                    "type": "boolean"
+                },
+                "quota_max": {
+                    "type": "integer"
+                },
+                "quota_renewal_rate": {
+                    "type": "integer"
+                },
+                "rate": {
+                    "type": "integer"
+                },
+                "server_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.ProbeResult": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/models.TykCapability"
+                    }
+                },
+                "data_planes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.TykDataPlane"
+                    }
+                },
+                "declared_mode": {
+                    "type": "string"
+                },
+                "effective_mode": {
+                    "type": "string"
+                },
+                "org_id": {
+                    "type": "string"
+                },
+                "probed_at": {
+                    "type": "string"
+                },
+                "reachable": {
+                    "type": "boolean"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "tykmcp.PushInput": {
+            "type": "object",
+            "properties": {
+                "confirm_dashboard_origin": {
+                    "type": "boolean"
+                },
+                "definition": {
+                    "type": "object"
+                },
+                "expected_hash": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.RegisterInput": {
+            "type": "object",
+            "properties": {
+                "allowed_tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authorization_servers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "confirm_keyless": {
+                    "type": "boolean"
+                },
+                "confirm_no_gateway_tags": {
+                    "type": "boolean"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "consumer_auth": {
+                    "description": "Consumer authentication",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Studio presentation and governance",
+                    "type": "string"
+                },
+                "gateway_tags": {
+                    "description": "Deployment target (segmented gateways)",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kind": {
+                    "description": "remote | rest_to_mcp",
+                    "type": "string"
+                },
+                "listen_path": {
+                    "type": "string"
+                },
+                "long_description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "primitives": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tykmcp.RegisterPrimitive"
+                    }
+                },
+                "privacy_score": {
+                    "type": "integer"
+                },
+                "publish": {
+                    "type": "boolean"
+                },
+                "scopes_supported": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_api_id": {
+                    "description": "REST API to MCP",
+                    "type": "string"
+                },
+                "strip_listen_path": {
+                    "description": "default true",
+                    "type": "boolean"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tool_catalogue_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "upstream_auth_header_name": {
+                    "type": "string"
+                },
+                "upstream_auth_token": {
+                    "type": "string"
+                },
+                "upstream_url": {
+                    "description": "Remote MCP server",
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.RegisterPreview": {
+            "type": "object",
+            "properties": {
+                "dashboard_validated": {
+                    "description": "DashboardValidated is always false today: Dashboard 5.14 persists dry\nruns instead of validating them, so previews are Studio's own render\nand checks and the Dashboard validates on create or push.",
+                    "type": "boolean"
+                },
+                "definition": {
+                    "type": "object"
+                },
+                "endpoint_url": {
+                    "type": "string"
+                },
+                "rendered": {
+                    "type": "object"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "tykmcp.RegisterPrimitive": {
+            "type": "object",
+            "properties": {
+                "annotations": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "operation_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.ServerList": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "servers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MCPServerResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.ServerPatch": {
+            "type": "object",
+            "properties": {
+                "clear_privacy_score": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "long_description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "name_overridden": {
+                    "type": "boolean"
+                },
+                "privacy_score": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "tykmcp.SkippedServer": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.SourceAPI": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "api_id": {
+                    "type": "string"
+                },
+                "listen_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.SourceAPIDocument": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "api_id": {
+                    "type": "string"
+                },
+                "definition": {
+                    "type": "object"
+                },
+                "listen_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.SourceOperation": {
+            "type": "object",
+            "properties": {
+                "method": {
+                    "type": "string"
+                },
+                "operation_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.Status": {
+            "type": "object",
+            "properties": {
+                "active_connections": {
+                    "type": "integer"
+                },
+                "available": {
+                    "type": "boolean"
+                },
+                "connections": {
+                    "type": "integer"
+                },
+                "degraded_connections": {
+                    "type": "integer"
+                },
+                "disabled_reason": {
+                    "description": "DisabledReason explains why Enabled is false when the operator did not\nswitch the feature off (e.g. the secrets encryption key is missing).",
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "node_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.SubmissionConnection": {
+            "type": "object",
+            "properties": {
+                "accepts_handoffs": {
+                    "type": "boolean"
+                },
+                "direct_create": {
+                    "description": "full mode: approval creates the proxy",
+                    "type": "boolean"
+                },
+                "effective_mode": {
+                    "type": "string"
+                },
+                "gateway_tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tykmcp.GatewayTagOption"
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "rest_to_mcp_supported": {
+                    "type": "boolean"
                 }
             }
         },
