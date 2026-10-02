@@ -3,13 +3,14 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
+	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
@@ -40,8 +41,11 @@ func TestGovernanceRPCs_RequireScopes(t *testing.T) {
 		"ListModelRouters":    func() error { _, err := server.ListModelRouters(ctx, &pb.ListModelRoutersRequest{}); return err },
 		"GetModelRouter":      func() error { _, err := server.GetModelRouter(ctx, &pb.GetModelRouterRequest{RouterId: 1}); return err },
 		"ListSemanticRouters": func() error { _, err := server.ListSemanticRouters(ctx, &pb.ListSemanticRoutersRequest{}); return err },
-		"GetSemanticRouter":   func() error { _, err := server.GetSemanticRouter(ctx, &pb.GetSemanticRouterRequest{RouterId: 1}); return err },
-		"ListGroups":          func() error { _, err := server.ListGroups(ctx, &pb.ListGroupsRequest{}); return err },
+		"GetSemanticRouter": func() error {
+			_, err := server.GetSemanticRouter(ctx, &pb.GetSemanticRouterRequest{RouterId: 1})
+			return err
+		},
+		"ListGroups": func() error { _, err := server.ListGroups(ctx, &pb.ListGroupsRequest{}); return err },
 		"GetResourceInstanceGroups": func() error {
 			_, err := server.GetResourceInstanceGroups(ctx, &pb.GetResourceInstanceGroupsRequest{ResourceTypeSlug: "agent", InstanceId: "x"})
 			return err
@@ -359,6 +363,16 @@ func TestSetAppGovernanceState(t *testing.T) {
 	assert.Equal(t, codes.NotFound, status.Code(err))
 	_, err = server.SetAppGovernanceState(ctx, &pb.SetAppGovernanceStateRequest{AppId: uint32(app.ID), Flags: map[string]string{"bad name": "x"}})
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	tooMany := map[string]string{}
+	for i := 0; i <= maxAppGovernanceFlags; i++ {
+		tooMany[fmt.Sprintf("flag_%d", i)] = "x"
+	}
+	_, err = server.SetAppGovernanceState(ctx, &pb.SetAppGovernanceStateRequest{AppId: uint32(app.ID), Flags: tooMany})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "at most 16 flags per call")
+	_, err = server.SetAppGovernanceState(ctx, &pb.SetAppGovernanceStateRequest{AppId: uint32(app.ID), Flags: map[string]string{strings.Repeat("n", 65): "x"}})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "flag names are capped at 64 characters")
+	_, err = server.SetAppGovernanceState(ctx, &pb.SetAppGovernanceStateRequest{AppId: uint32(app.ID), Flags: map[string]string{"long": strings.Repeat("v", 257)}})
+	assert.Equal(t, codes.InvalidArgument, status.Code(err), "flag values are capped at 256 characters")
 
 	if audit.IsEnterpriseAvailable() {
 		require.Eventually(t, func() bool {
