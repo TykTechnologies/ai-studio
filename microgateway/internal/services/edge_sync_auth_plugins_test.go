@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -145,6 +146,45 @@ func TestEndpointAuthPlugins_LoadedAndListed(t *testing.T) {
 	none, err := adapter.GetAuthPluginsForEndpoint(database.EndpointTypeTool, 3)
 	require.NoError(t, err)
 	assert.Empty(t, none)
+}
+
+// The cached list follows a configuration sync at once: the cache is
+// generation-checked (database.GenCache), and the sync's writes and commit
+// bump the generation, as they do for the LLM plugin cache.
+func TestEndpointAuthPlugins_CacheFollowsSync(t *testing.T) {
+	now := time.Now()
+	db := setupEdgeSyncTestDB(t)
+	sync := NewEdgeSyncService(db, "")
+	pluginService := NewPluginService(db, database.NewRepository(db))
+
+	snapshot := func(authPluginIDs ...uint32) *pb.ConfigurationSnapshot {
+		return &pb.ConfigurationSnapshot{
+			Version:      fmt.Sprint(len(authPluginIDs)),
+			SnapshotTime: timestamppb.Now(),
+			Plugins:      []*pb.PluginConfig{authPluginTestPlugin(8, nil, now), authPluginTestPlugin(9, nil, now)},
+			Datasources: []*pb.DatasourceConfig{{Id: 3, Name: "docs", IsActive: true, AuthPluginIds: authPluginIDs,
+				CreatedAt: timestamppb.New(now), UpdatedAt: timestamppb.New(now)}},
+		}
+	}
+	ids := func() []uint {
+		list, err := pluginService.GetAuthPluginsForEndpoint(database.EndpointTypeDatasource, 3)
+		require.NoError(t, err)
+		var out []uint
+		for _, p := range list {
+			out = append(out, p.ID)
+		}
+		return out
+	}
+
+	require.NoError(t, sync.SyncConfiguration(snapshot(8)))
+	assert.Equal(t, []uint{8}, ids())
+	assert.Equal(t, []uint{8}, ids(), "served from the cache")
+
+	require.NoError(t, sync.SyncConfiguration(snapshot(9, 8)))
+	assert.Equal(t, []uint{9, 8}, ids(), "a changed list is read straight after the sync")
+
+	require.NoError(t, sync.SyncConfiguration(snapshot()))
+	assert.Empty(t, ids(), "a detached list is read straight after the sync")
 }
 
 // LLMConfig.plugin_ids carries the order Studio runs an LLM's plugins in.

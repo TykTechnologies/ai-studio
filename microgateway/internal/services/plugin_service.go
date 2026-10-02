@@ -29,7 +29,10 @@ type PluginService struct {
 
 	// endpointAuthPlugins caches GetAuthPluginsForEndpoint the same way: the
 	// auth hook asks on every request to a datasource, tool, router or plugin
-	// endpoint, and the answer is almost always "none".
+	// endpoint, and the answer is almost always "none". Like llmPlugins it is
+	// a GenCache, so any write to a configuration table (the config sync
+	// rewriting endpoint_auth_plugins included) invalidates it; entries also
+	// expire after database.GenCacheTTL.
 	endpointAuthPlugins *database.GenCache[endpointRef, []database.Plugin]
 }
 

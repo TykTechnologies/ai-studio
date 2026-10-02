@@ -45,8 +45,14 @@ func TestEndpointAuthPluginRoutes(t *testing.T) {
 		})
 	}
 
+	// A missing endpoint is a 404 on both verbs (and so is a plugin that
+	// serves no custom endpoints).
 	w := performRequest(api.router, http.MethodGet, "/api/v1/datasources/9999/auth-plugins", nil)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+	w = performRequest(api.router, http.MethodPut, "/api/v1/datasources/9999/auth-plugins", EndpointAuthPluginsRequest{PluginIDs: []uint{idp.ID}})
+	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
+	w = performRequest(api.router, http.MethodPut, fmt.Sprintf("/api/v1/plugins/%d/auth-plugins", logger.ID), EndpointAuthPluginsRequest{PluginIDs: []uint{idp.ID}})
+	assert.Equal(t, http.StatusNotFound, w.Code, w.Body.String())
 	w = performRequest(api.router, http.MethodPut, "/api/v1/datasources/abc/auth-plugins", EndpointAuthPluginsRequest{})
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
