@@ -1,10 +1,10 @@
 # Tyk AI Studio 2.2.1
 
-**Status:** Unreleased — to be tagged `v2.2.1`
-**Release date:** —
+**Status:** Released — `v2.2.1`
+**Release date:** 2026-10-02
 **Diff:** [`v2.2.0...v2.2.1`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.0...v2.2.1)
 
-82 commits, 1,528 files, +161,958 / −70,833. Most of that is generated or vendored: without the regenerated Swagger, the in-repo copies of gorm and langchaingo, protobuf output and schema goldens, it is 1,136 files, +41,741 / −41,522.
+83 commits, 1,529 files, +162,172 / −70,833. Most of that is generated or vendored: without the regenerated Swagger, the in-repo copies of gorm and langchaingo, protobuf output and schema goldens, it is 1,137 files, +41,955 / −41,522.
 
 2.2.1 is a patch release with three purposes.
 
