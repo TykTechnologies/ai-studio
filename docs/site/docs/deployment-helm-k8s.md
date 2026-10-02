@@ -20,8 +20,8 @@ Tyk AI Studio is available in two editions:
 
 | Component | Community Edition | Enterprise Edition |
 |-----------|------------------|-------------------|
-| AI Studio | `tykio/tyk-ai-studio:v2.2.0` | `tykio/tyk-ai-studio-ent:v2.2.0` |
-| Microgateway | `tykio/tyk-microgateway:v2.2.0` | `tykio/tyk-microgateway-ent:v2.2.0` |
+| AI Studio | `tykio/tyk-ai-studio:v2.2.1` | `tykio/tyk-ai-studio-ent:v2.2.1` |
+| Microgateway | `tykio/tyk-microgateway:v2.2.1` | `tykio/tyk-microgateway-ent:v2.2.1` |
 
 Images are tagged with semver versions (e.g. `v2.0.0`). There is no `latest` tag — always specify a version. Enterprise Edition includes SSO, edge gateways, model router, and plugin marketplace features. Enterprise Edition configuration variables (e.g. `tykAiLicense`) are safely ignored by Community Edition images, so you can use the same values file for both.
 
@@ -66,7 +66,7 @@ Replace the placeholder secrets with your generated values. The `grpcAuthToken` 
 midsommar:
   image:
     repository: tykio/tyk-ai-studio  # Enterprise: tykio/tyk-ai-studio-ent
-    tag: v2.2.0
+    tag: v2.2.1
   service:
     type: NodePort
     ports:
@@ -115,7 +115,7 @@ microgateway:
   enabled: true
   image:
     repository: tykio/tyk-microgateway  # Enterprise: tykio/tyk-microgateway-ent
-    tag: v2.2.0
+    tag: v2.2.1
   service:
     type: NodePort
     port: 8080
@@ -188,7 +188,7 @@ Replace all placeholder values with your actual configuration.
 midsommar:
   image:
     repository: tykio/tyk-ai-studio  # Enterprise: tykio/tyk-ai-studio-ent
-    tag: v2.2.0
+    tag: v2.2.1
   ingress:
     enabled: true
     certificateEnabled: true
@@ -243,7 +243,7 @@ microgateway:
   enabled: true
   image:
     repository: tykio/tyk-microgateway  # Enterprise: tykio/tyk-microgateway-ent
-    tag: v2.2.0
+    tag: v2.2.1
   ingress:
     enabled: true
     certificateEnabled: true
