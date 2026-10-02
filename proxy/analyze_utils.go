@@ -166,6 +166,8 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 	if llm.Vendor == models.GOOGLEAI || llm.Vendor == models.OPENAI {
 		pt = pt - cacheReadTokens - cacheWriteTokens
 	}
+	// An unset (zero) cache price bills those tokens at the input price.
+	cacheWritePT, cacheReadPT = models.CachePricesFor(string(llm.Vendor), cpit, cacheWritePT, cacheReadPT)
 
 	// Use actual timestamp for the record, not budget start dates
 	return &models.LLMChatRecord{

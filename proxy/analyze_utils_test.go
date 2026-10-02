@@ -403,3 +403,71 @@ func TestBuildChatRecord_OpenAICacheTokens(t *testing.T) {
 	// above passing, so pin the cost too.
 	assert.InDelta(t, 12.758, rec.Cost, 1e-9, "cost must bill fresh, cache-write and cache-read tokens at their own rates")
 }
+
+// TestBuildChatRecord_UnsetCachePriceBillsAtInputPrice pins that a price row
+// without cache prices, which is most of them, never makes cached tokens free.
+// OpenAI and Google count cache tokens inside the prompt, so with no cache
+// price they are billed at the input price, the same total 2.2.0 billed for
+// OpenAI. Anthropic reports cache tokens apart from the prompt and keeps its
+// cache prices as set.
+func TestBuildChatRecord_UnsetCachePriceBillsAtInputPrice(t *testing.T) {
+	t.Run("openai", func(t *testing.T) {
+		const model = "openai.gpt-5.6-luna"
+		mockService := new(MockService)
+		mockService.On("GetModelPriceByModelNameAndVendor", model, string(models.OPENAI)).
+			Return(&models.ModelPrice{ModelName: model, Vendor: string(models.OPENAI), CPT: 0.000006, CPIT: 0.000002, Currency: "USD"}, nil)
+
+		resp := &responses.OpenAIResponse{}
+		require.NoError(t, json.Unmarshal([]byte(`{
+			"model": "`+model+`",
+			"choices": [{"index": 0, "message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}],
+			"usage": {
+				"prompt_tokens": 6020,
+				"completion_tokens": 6,
+				"total_tokens": 6026,
+				"prompt_tokens_details": {"cache_write_tokens": 14, "cached_tokens": 6004}
+			}
+		}`), resp))
+		req, err := http.NewRequest(http.MethodPost, "/", nil)
+		require.NoError(t, err)
+
+		rec := buildChatRecord(mockService, &models.LLM{Vendor: models.OPENAI}, &models.App{}, resp, req, time.Now())
+
+		assert.Equal(t, 2, rec.PromptTokens)
+		assert.Equal(t, 6004, rec.CacheReadPromptTokens)
+		// completion 6×0.000006 + all 6020 prompt tokens ×0.000002 = 0.012076, ×10000.
+		assert.InDelta(t, 120.76, rec.Cost, 1e-9, "unpriced cache tokens must be billed at the input price")
+	})
+
+	t.Run("google", func(t *testing.T) {
+		const model = "gemini-luna"
+		mockService := new(MockService)
+		mockService.On("GetModelPriceByModelNameAndVendor", model, string(models.GOOGLEAI)).
+			Return(&models.ModelPrice{ModelName: model, Vendor: string(models.GOOGLEAI), CPT: 0.000002, CPIT: 0.000001, Currency: "USD"}, nil)
+		resp := &MockTokenResponse{model: model, promptTokens: 1000, responseTokens: 10, cacheReadTokens: 900}
+		req, err := http.NewRequest(http.MethodPost, "/", nil)
+		require.NoError(t, err)
+
+		rec := buildChatRecord(mockService, &models.LLM{Vendor: models.GOOGLEAI}, &models.App{}, resp, req, time.Now())
+
+		assert.Equal(t, 100, rec.PromptTokens)
+		// completion 10×0.000002 + all 1000 prompt tokens ×0.000001 = 0.00102, ×10000.
+		assert.InDelta(t, 10.2, rec.Cost, 1e-9)
+	})
+
+	t.Run("anthropic keeps its cache prices", func(t *testing.T) {
+		const model = "claude-luna"
+		mockService := new(MockService)
+		mockService.On("GetModelPriceByModelNameAndVendor", model, string(models.ANTHROPIC)).
+			Return(&models.ModelPrice{ModelName: model, Vendor: string(models.ANTHROPIC), CPT: 0.000015, CPIT: 0.000003, Currency: "USD"}, nil)
+		resp := &MockTokenResponse{model: model, promptTokens: 10, responseTokens: 5, cacheReadTokens: 1000}
+		req, err := http.NewRequest(http.MethodPost, "/", nil)
+		require.NoError(t, err)
+
+		rec := buildChatRecord(mockService, &models.LLM{Vendor: models.ANTHROPIC}, &models.App{}, resp, req, time.Now())
+
+		assert.Equal(t, 10, rec.PromptTokens)
+		// completion 5×0.000015 + prompt 10×0.000003 = 0.000105, ×10000; cache reads at the unset price, as in 2.2.0.
+		assert.InDelta(t, 1.05, rec.Cost, 1e-9)
+	})
+}

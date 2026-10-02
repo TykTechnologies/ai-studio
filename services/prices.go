@@ -37,6 +37,9 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 
 // recalculateChatRecordCosts updates the cost and currency for all chat records of a specific model
 func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, currency string) error {
+	// Bill cache tokens the way the gateway does when it records them.
+	cacheWritePT, cacheReadPT = models.CachePricesFor(vendor, cpit, cacheWritePT, cacheReadPT)
+
 	// Update all matching records with a single query
 	result := tx.Exec(`
 		UPDATE llm_chat_records 

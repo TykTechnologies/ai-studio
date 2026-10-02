@@ -32,6 +32,30 @@ type ModelPrice struct {
 
 type ModelPrices []ModelPrice
 
+// CachePricesFor returns the per-token prices to bill a vendor's cache write
+// and cache read tokens at.
+//
+// OpenAI's prompt_tokens and Google's promptTokenCount already include the
+// cache tokens, so the gateway carves them out of the prompt count and bills
+// them separately. Before that split (OpenAI until 2.2.1) they were billed as
+// ordinary input tokens. Cache prices default to 0, and most price rows never
+// set them, so for these vendors a cache price of 0 means "not set" and the
+// tokens fall back to the input price: an unset cache price must never make
+// cached tokens free. Other vendors report cache tokens apart from the prompt
+// count, so their cache prices are used as set.
+func CachePricesFor(vendor string, cpit, cacheWritePT, cacheReadPT float64) (write, read float64) {
+	if vendor != string(OPENAI) && vendor != string(GOOGLEAI) {
+		return cacheWritePT, cacheReadPT
+	}
+	if cacheWritePT == 0 {
+		cacheWritePT = cpit
+	}
+	if cacheReadPT == 0 {
+		cacheReadPT = cpit
+	}
+	return cacheWritePT, cacheReadPT
+}
+
 // MaxPlausiblePerTokenPrice is the ceiling above which a submitted price is
 // almost certainly a unit error rather than a real figure.
 //

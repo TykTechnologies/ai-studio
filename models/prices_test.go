@@ -109,3 +109,28 @@ func TestGetOrCreateByModelName(t *testing.T) {
 		assert.Equal(t, "EUR", mp.Currency)
 	})
 }
+
+func TestCachePricesFor(t *testing.T) {
+	const cpit = 0.000002
+
+	tests := []struct {
+		name                string
+		vendor              Vendor
+		write, read         float64
+		wantWrite, wantRead float64
+	}{
+		{"openai unset falls back to input price", OPENAI, 0, 0, cpit, cpit},
+		{"openai set prices are kept", OPENAI, 0.0000025, 0.0000002, 0.0000025, 0.0000002},
+		{"openai only read set", OPENAI, 0, 0.0000002, cpit, 0.0000002},
+		{"google unset falls back to input price", GOOGLEAI, 0, 0, cpit, cpit},
+		{"anthropic unset stays zero", ANTHROPIC, 0, 0, 0, 0},
+		{"anthropic set prices are kept", ANTHROPIC, 0.0000025, 0.0000002, 0.0000025, 0.0000002},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			write, read := CachePricesFor(string(tt.vendor), cpit, tt.write, tt.read)
+			assert.Equal(t, tt.wantWrite, write)
+			assert.Equal(t, tt.wantRead, read)
+		})
+	}
+}
