@@ -227,6 +227,11 @@ type AnalyticsEvent struct {
 	RouteScore          float64 // Semantic Router: similarity that decided an embedding match
 	ShadowRoute         string  // Semantic Router shadow mode: the route the classifier picked
 
+	// Who the call was for and the agent that made it, when an auth plugin
+	// said (a delegated token's sub, and its act or azp). Audit only.
+	OnBehalfOf  string `gorm:"size:255"`
+	ActingAgent string `gorm:"size:255"`
+
 	// LLM failover: set when this attempt was a rung of FailoverFromLLMID's
 	// waterfall; nil / 0 for a primary attempt.
 	FailoverFromLLMID *uint `gorm:"index:idx_analytics_failover_from"`

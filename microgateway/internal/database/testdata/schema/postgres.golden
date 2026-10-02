@@ -63,6 +63,8 @@ TABLE analytics_events
   column router_selection_algo text(text) nullable=YES
   column route_score numeric(numeric) nullable=YES
   column shadow_route text(text) nullable=YES
+  column on_behalf_of character varying(varchar) nullable=YES len=255
+  column acting_agent character varying(varchar) nullable=YES len=255
   column failover_from_llm_id bigint(int8) nullable=YES precision=64 scale=0
   column failover_attempt bigint(int8) nullable=YES precision=64 scale=0 default=0
   column time_stamp timestamp with time zone(timestamptz) nullable=YES

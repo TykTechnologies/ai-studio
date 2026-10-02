@@ -28,7 +28,8 @@ const (
 	// 2: cluster_nodes.label and leader_eligible (nullable, additive).
 	// 3: tyk_connections.host_key and its unique index (nullable, additive).
 	// 4: endpoint_auth_plugins (new table, additive).
-	SchemaVersion          = 4
+	// 5: proxy_logs and llm_chat_records on_behalf_of, acting_agent (nullable, additive).
+	SchemaVersion          = 5
 	MinReaderSchemaVersion = 1
 )
 

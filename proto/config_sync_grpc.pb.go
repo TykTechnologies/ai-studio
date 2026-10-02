@@ -42,7 +42,9 @@ type ConfigurationSyncServiceClient interface {
 	GetFullConfiguration(ctx context.Context, in *ConfigurationRequest, opts ...grpc.CallOption) (*ConfigurationSnapshot, error)
 	// SubscribeToChanges establishes a bidirectional stream for real-time configuration updates
 	SubscribeToChanges(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[EdgeMessage, ControlMessage], error)
-	// SendHeartbeat sends periodic health status updates
+	// SendHeartbeat sends periodic health status updates.
+	// Deprecated: edges heartbeat on the SubscribeToChanges stream. Studio
+	// still answers this call, from its database, on any replica.
 	SendHeartbeat(ctx context.Context, in *HeartbeatRequest, opts ...grpc.CallOption) (*HeartbeatResponse, error)
 	// UnregisterEdge unregisters an edge instance
 	UnregisterEdge(ctx context.Context, in *EdgeUnregistrationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -158,7 +160,9 @@ type ConfigurationSyncServiceServer interface {
 	GetFullConfiguration(context.Context, *ConfigurationRequest) (*ConfigurationSnapshot, error)
 	// SubscribeToChanges establishes a bidirectional stream for real-time configuration updates
 	SubscribeToChanges(grpc.BidiStreamingServer[EdgeMessage, ControlMessage]) error
-	// SendHeartbeat sends periodic health status updates
+	// SendHeartbeat sends periodic health status updates.
+	// Deprecated: edges heartbeat on the SubscribeToChanges stream. Studio
+	// still answers this call, from its database, on any replica.
 	SendHeartbeat(context.Context, *HeartbeatRequest) (*HeartbeatResponse, error)
 	// UnregisterEdge unregisters an edge instance
 	UnregisterEdge(context.Context, *EdgeUnregistrationRequest) (*emptypb.Empty, error)

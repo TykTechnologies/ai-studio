@@ -83,6 +83,8 @@ type AnalyticsData struct {
 	RouterSelectionAlgo    string    `json:"router_selection_algo,omitempty"`
 	RouteScore             float64   `json:"route_score,omitempty"`  // Semantic Router: similarity that decided an embedding match
 	ShadowRoute            string    `json:"shadow_route,omitempty"` // Semantic Router shadow mode: the route the classifier picked
+	OnBehalfOf             string    `json:"on_behalf_of,omitempty"` // who the call was for, when an auth plugin said (audit only)
+	ActingAgent            string    `json:"acting_agent,omitempty"` // the agent that made it, when an auth plugin said (audit only)
 }
 
 // BudgetUsageData contains budget tracking information

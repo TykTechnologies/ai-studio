@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -22,7 +23,40 @@ var (
 	recMutex   sync.RWMutex
 )
 
+// stampIdentity records on a proxy log and chat record who the request was
+// for and the agent that made it, when an auth plugin said
+// (authidentity.Identity, put on the context by the credential validator).
+// Values a writer already set are kept.
+func stampIdentity(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
+	id := authidentity.From(ctx)
+	if id == nil {
+		return
+	}
+	onBehalfOf, actingAgent := id.OnBehalfOf(), id.ActingAgent()
+	if onBehalfOf == "" && actingAgent == "" {
+		return
+	}
+	if log != nil {
+		if log.OnBehalfOf == "" {
+			log.OnBehalfOf = onBehalfOf
+		}
+		if log.ActingAgent == "" {
+			log.ActingAgent = actingAgent
+		}
+	}
+	if rec != nil {
+		if rec.OnBehalfOf == "" {
+			rec.OnBehalfOf = onBehalfOf
+		}
+		if rec.ActingAgent == "" {
+			rec.ActingAgent = actingAgent
+		}
+	}
+}
+
 func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
+	stampIdentity(ctx, log, nil)
+
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
@@ -38,6 +72,8 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 // ExchangeRecorder gets both in one call; any other handler gets
 // RecordProxyLog followed by RecordChatRecord, as before.
 func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
+	stampIdentity(ctx, log, rec)
+
 	// The proxy paths build chat records without a latency; the gateway put
 	// the request's start on the context (WithRequestStart).
 	if rec != nil && rec.TotalTimeMS == 0 {
@@ -233,6 +269,8 @@ func RecordContentMessage(
 }
 
 func RecordChatRecord(ctx context.Context, record *models.LLMChatRecord) {
+	stampIdentity(ctx, nil, record)
+
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 

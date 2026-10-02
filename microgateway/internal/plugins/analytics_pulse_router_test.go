@@ -44,3 +44,25 @@ func TestAnalyticsPulsePlugin_RoutingDecisionReachesPulse(t *testing.T) {
 	assert.InDelta(t, 0.91, ev.RouteScore, 1e-9)
 	assert.Equal(t, "complex", ev.ShadowRoute)
 }
+
+// Who the call was for and the agent that made it, when an auth plugin said,
+// survive the plugin hand-off and reach the pulse.
+func TestAnalyticsPulsePlugin_IdentityReachesPulse(t *testing.T) {
+	plugin := &AnalyticsPulsePlugin{
+		config:        &PulsePluginConfig{MaxBufferSize: 100},
+		edgeID:        "test-edge",
+		edgeNamespace: "test",
+		lastPulseTime: time.Now().Add(-time.Minute),
+	}
+	_, err := plugin.HandleAnalytics(context.Background(), &interfaces.AnalyticsData{
+		LLMID: 7, AppID: 5, ModelName: "gpt-4o-mini", Vendor: "openai", RequestID: "req-delegated",
+		StatusCode: 200, Timestamp: time.Now(),
+		OnBehalfOf: "alice@example.com", ActingAgent: "agent-7",
+	}, nil)
+	require.NoError(t, err)
+
+	pulse := plugin.buildPulseMessage(plugin.analyticsBuffer, plugin.analyticsMetadata, nil, nil, nil, nil, 1)
+	require.Len(t, pulse.AnalyticsEvents, 1)
+	assert.Equal(t, "alice@example.com", pulse.AnalyticsEvents[0].OnBehalfOf)
+	assert.Equal(t, "agent-7", pulse.AnalyticsEvents[0].ActingAgent)
+}

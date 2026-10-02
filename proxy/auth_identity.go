@@ -5,43 +5,32 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
 )
 
 // Authentication methods (AuthIdentity.Method).
 const (
-	AuthMethodAppKey = "app_key" // an app secret, as a bearer token or an API key
-	AuthMethodOAuth  = "oauth"   // a Studio OAuth access token (MCP)
-	AuthMethodPlugin = "plugin"  // an auth plugin
+	AuthMethodAppKey = authidentity.MethodAppKey
+	AuthMethodOAuth  = authidentity.MethodOAuth
+	AuthMethodPlugin = authidentity.MethodPlugin
 )
 
 // AuthIdentity is who authenticated a request and how. The credential
 // validator puts it on the request context for every method; analytics, the
-// post-auth hook and the plugins read it.
-type AuthIdentity struct {
-	AppID  uint
-	Method string // AuthMethod*
-	// The plugin that authenticated the request (AuthMethodPlugin).
-	PluginID   uint
-	PluginName string
-	// Subject is who the call is for, when an auth plugin says; audit only.
-	Subject string
-	Claims  map[string]string
-	// OAuthUserID is the Studio user an OAuth access token was issued to.
-	OAuthUserID uint
-}
-
-type authIdentityKey struct{}
+// post-auth hook and the plugins read it. It lives in pkg/authidentity so
+// analytics can read it without importing the proxy.
+type AuthIdentity = authidentity.Identity
 
 // WithAuthIdentity returns ctx carrying id.
 func WithAuthIdentity(ctx context.Context, id *AuthIdentity) context.Context {
-	return context.WithValue(ctx, authIdentityKey{}, id)
+	return authidentity.With(ctx, id)
 }
 
 // AuthIdentityFromContext returns the identity the credential validator
 // recorded, or nil.
 func AuthIdentityFromContext(ctx context.Context) *AuthIdentity {
-	id, _ := ctx.Value(authIdentityKey{}).(*AuthIdentity)
-	return id
+	return authidentity.From(ctx)
 }
 
 // The /ai/ -> /llm/call/ loopback hands the outer hop's identity to the inner
