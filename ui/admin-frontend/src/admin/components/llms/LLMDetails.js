@@ -8,6 +8,7 @@ import { useDebounce } from "use-debounce";
 import apiClient from "../../utils/apiClient";
 import SearchInput from "../common/SearchInput";
 import FailoverCell from "../common/FailoverCell";
+import OnBehalfOfCaption from "../common/OnBehalfOfCaption";
 import {
   Typography,
   CircularProgress,
@@ -878,6 +879,7 @@ const LLMDetails = () => {
                   <StyledTableRow key={log.id}>
                     <StyledTableCell sx={{ verticalAlign: "top" }}>
                       {new Date(log.attributes.time_stamp).toLocaleString()}
+                      <OnBehalfOfCaption attributes={log.attributes} />
                     </StyledTableCell>
                     <StyledTableCell sx={{ verticalAlign: "top" }}>
                       {log.attributes.vendor}

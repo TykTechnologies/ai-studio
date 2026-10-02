@@ -1153,6 +1153,10 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			proxyLogs[i].RouteSelection = event.RouteSelection
 			proxyLogs[i].RouteScore = event.RouteScore
 			proxyLogs[i].ShadowRoute = event.ShadowRoute
+			// Who the call was for and the agent that made it, when an edge
+			// auth plugin said.
+			proxyLogs[i].OnBehalfOf = event.OnBehalfOf
+			proxyLogs[i].ActingAgent = event.ActingAgent
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{
@@ -1174,6 +1178,8 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				ChatID:                 "",                      // Not applicable for proxy
 				Choices:                1,                       // Default
 				ToolCalls:              0,                       // Default for proxy
+				OnBehalfOf:             event.OnBehalfOf,
+				ActingAgent:            event.ActingAgent,
 			}
 
 			logger.Log.Debug().

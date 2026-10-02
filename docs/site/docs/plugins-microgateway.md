@@ -31,7 +31,7 @@ Executes **before** authentication. Use for:
 - Integration with external identity providers
 - Multi-factor authentication
 
-Return `Authenticated: true` with the `AppId` the caller acts as. An authenticated response without a valid `AppId` is treated as a rejection. Set `UserId` to who the call is for (a delegated token's subject, say) and put anything else worth auditing in `Claims`; the gateway passes both to post-auth plugins and custom endpoints. They are for audit only: what the request may reach is decided by the App's own grants, never by the plugin.
+Return `Authenticated: true` with the `AppId` the caller acts as. An authenticated response without a valid `AppId` is treated as a rejection. Set `UserId` to who the call is for (a delegated token's subject, say), `Claims["auth_actor"]` to the agent acting for them (the token's `act` or `azp`), and put anything else worth auditing in `Claims`. The gateway passes them to post-auth plugins and custom endpoints, and records the subject and acting agent with the request: they reach Studio in the analytics pulse and show as **For** and **Agent** on the App's and the LLM's proxy logs (`on_behalf_of` and `acting_agent` on the proxy log and chat record; the user id stays the App owner). They are for audit only: what the request may reach is decided by the App's own grants, never by the plugin.
 
 **Where auth plugins run.** Every endpoint the gateway serves has an ordered list of auth plugins:
 

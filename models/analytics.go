@@ -45,6 +45,11 @@ type LLMChatRecord struct {
 	// TeamID is the team the spend is attributed to: the App's team for
 	// proxy and edge traffic, the user's budget team for chat.
 	TeamID *uint `gorm:"index:idx_llm_chat_records_team_time,priority:1"`
+	// OnBehalfOf and ActingAgent are who the call was for and the agent that
+	// made it, when an auth plugin said (a delegated token's sub, and its act
+	// or azp). UserID stays the App owner. Audit only.
+	OnBehalfOf  string `gorm:"size:255"`
+	ActingAgent string `gorm:"size:255"`
 }
 
 // LLMChatLogEntry for storing extra logs
@@ -141,6 +146,8 @@ type ProxyLogAttributes struct {
 	RouteSelection    string    `json:"route_selection,omitempty"`
 	RouteScore        float64   `json:"route_score,omitempty"`
 	ShadowRoute       string    `json:"shadow_route,omitempty"`
+	OnBehalfOf        string    `json:"on_behalf_of,omitempty"`
+	ActingAgent       string    `json:"acting_agent,omitempty"`
 }
 
 // NewProxyLogResponse serialises one ProxyLog row for the proxy-log
@@ -171,6 +178,8 @@ func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
 			RouteSelection:    log.RouteSelection,
 			RouteScore:        log.RouteScore,
 			ShadowRoute:       log.ShadowRoute,
+			OnBehalfOf:        log.OnBehalfOf,
+			ActingAgent:       log.ActingAgent,
 		},
 	}
 }
@@ -233,4 +242,9 @@ type ProxyLog struct {
 	// in shadow mode, the route the classifier picked (the default served).
 	RouteScore  float64
 	ShadowRoute string
+	// OnBehalfOf and ActingAgent are who the call was for and the agent that
+	// made it, when an auth plugin said (a delegated token's sub, and its act
+	// or azp). UserID stays the App owner. Audit only.
+	OnBehalfOf  string `gorm:"size:255"`
+	ActingAgent string `gorm:"size:255"`
 }

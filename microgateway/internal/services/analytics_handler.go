@@ -284,6 +284,8 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyL
 				RouterSelectionAlgo: event.RouterSelectionAlgo,
 				RouteScore:          event.RouteScore,
 				ShadowRoute:         event.ShadowRoute,
+				OnBehalfOf:          event.OnBehalfOf,
+				ActingAgent:         event.ActingAgent,
 			}
 			if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
 				log.Error().Err(err).Msg("Failed to execute analytics plugins for exchange")
@@ -409,6 +411,8 @@ func (h *MicrogatewaAnalyticsHandler) eventFromProxyLog(proxyLog *models.ProxyLo
 	event.RouterSelectionAlgo = proxyLog.RouteSelection
 	event.RouteScore = proxyLog.RouteScore
 	event.ShadowRoute = proxyLog.ShadowRoute
+	event.OnBehalfOf = proxyLog.OnBehalfOf
+	event.ActingAgent = proxyLog.ActingAgent
 	return event
 }
 

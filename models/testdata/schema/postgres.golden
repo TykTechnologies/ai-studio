@@ -706,6 +706,8 @@ TABLE llm_chat_records
   column cache_write_prompt_tokens bigint(int8) nullable=YES precision=64 scale=0
   column cache_read_prompt_tokens bigint(int8) nullable=YES precision=64 scale=0
   column team_id bigint(int8) nullable=YES precision=64 scale=0
+  column on_behalf_of character varying(varchar) nullable=YES len=255
+  column acting_agent character varying(varchar) nullable=YES len=255
 TABLE llm_filters
   constraint fk_llm_filters_filter FOREIGN KEY (filter_id) REFERENCES filters(id)
   constraint fk_llm_filters_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
@@ -1465,6 +1467,8 @@ TABLE proxy_logs
   column route_selection character varying(varchar) nullable=YES len=32
   column route_score numeric(numeric) nullable=YES
   column shadow_route text(text) nullable=YES
+  column on_behalf_of character varying(varchar) nullable=YES len=255
+  column acting_agent character varying(varchar) nullable=YES len=255
 TABLE push_operations
   constraint push_operations_pkey PRIMARY KEY (operation_id)
   index CREATE INDEX idx_push_operations_completed_at ON push_operations USING btree (completed_at)

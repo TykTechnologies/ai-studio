@@ -300,6 +300,28 @@ func TestAuthPlugins_Tool(t *testing.T) {
 	assert.Equal(t, AuthTarget{Kind: AuthTargetTool, ID: f.toolA.ID, Slug: f.toolA.Slug}, plugins.calls[0].Target)
 }
 
+// The subject and acting agent a plugin returned are recorded on the
+// request's proxy log, through both hops of the /ai/ loopback.
+func TestAuthPlugins_IdentityIsRecorded(t *testing.T) {
+	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
+	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "primary")
+	plugins.accept["jwt-for-app"] = h.app.ID
+	plugins.subject = "alice@example.com" // the fake also returns auth_actor=agent-1
+	h.proxy.credValidator.SetAuthHooks(&AuthHooks{CustomAuth: plugins.hook})
+
+	resp, body := h.post("/ai/primary/v1/chat/completions", failoverChatBody, "Authorization", "Bearer jwt-for-app")
+	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+
+	waitForProxyLog(t, h.db, h.app.ID, http.StatusOK)
+	logs := h.proxyLogs()
+	require.NotEmpty(t, logs)
+	for _, l := range logs {
+		assert.Equal(t, "alice@example.com", l.OnBehalfOf)
+		assert.Equal(t, "agent-1", l.ActingAgent)
+		assert.Equal(t, h.app.UserID, l.UserID, "the user id stays the App owner")
+	}
+}
+
 // authTarget resolves /ai/{slug} to a router when the slug names one.
 func TestAuthPlugins_RouterTarget(t *testing.T) {
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)

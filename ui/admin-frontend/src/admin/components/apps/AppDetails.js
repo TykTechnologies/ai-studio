@@ -9,6 +9,7 @@ import agentService from "../../services/agentService";
 import { resetAppBudget } from "../../services/appService";
 import SearchInput from "../common/SearchInput";
 import FailoverCell from "../common/FailoverCell";
+import OnBehalfOfCaption from "../common/OnBehalfOfCaption";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import {
@@ -990,6 +991,7 @@ const AppDetails = () => {
                     <StyledTableRow key={log.id}>
                       <StyledTableCell sx={{ verticalAlign: "top" }}>
                         {new Date(log.attributes.time_stamp).toLocaleString()}
+                        <OnBehalfOfCaption attributes={log.attributes} />
                       </StyledTableCell>
                       <StyledTableCell sx={{ verticalAlign: "top" }}>
                         {log.attributes.vendor}

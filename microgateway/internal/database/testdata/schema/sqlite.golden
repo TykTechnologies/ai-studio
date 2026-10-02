@@ -51,6 +51,8 @@ TABLE analytics_events
   column `router_selection_algo` text
   column `route_score` real
   column `shadow_route` text
+  column `on_behalf_of` text
+  column `acting_agent` text
   column `failover_from_llm_id` integer
   column `failover_attempt` integer DEFAULT 0
   column `time_stamp` datetime

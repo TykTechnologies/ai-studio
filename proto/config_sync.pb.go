@@ -1939,6 +1939,8 @@ type AnalyticsEvent struct {
 	RouteSelection   string  `protobuf:"bytes,37,opt,name=route_selection,json=routeSelection,proto3" json:"route_selection,omitempty"`         // how the target was selected ("round_robin", "weighted")
 	RouteScore       float64 `protobuf:"fixed64,38,opt,name=route_score,json=routeScore,proto3" json:"route_score,omitempty"`                   // Semantic Router: similarity that decided an embedding match
 	ShadowRoute      string  `protobuf:"bytes,39,opt,name=shadow_route,json=shadowRoute,proto3" json:"shadow_route,omitempty"`                  // Semantic Router shadow mode: the route the classifier picked
+	OnBehalfOf       string  `protobuf:"bytes,40,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"`                   // who the call was for, when an auth plugin said (audit only)
+	ActingAgent      string  `protobuf:"bytes,41,opt,name=acting_agent,json=actingAgent,proto3" json:"acting_agent,omitempty"`                  // the agent that made it, when an auth plugin said (audit only)
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2242,6 +2244,20 @@ func (x *AnalyticsEvent) GetRouteScore() float64 {
 func (x *AnalyticsEvent) GetShadowRoute() string {
 	if x != nil {
 		return x.ShadowRoute
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetOnBehalfOf() string {
+	if x != nil {
+		return x.OnBehalfOf
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetActingAgent() string {
+	if x != nil {
+		return x.ActingAgent
 	}
 	return ""
 }
@@ -3201,8 +3217,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xfb\n" +
-	"\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xc0\v\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -3252,7 +3267,10 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0froute_selection\x18% \x01(\tR\x0erouteSelection\x12\x1f\n" +
 	"\vroute_score\x18& \x01(\x01R\n" +
 	"routeScore\x12!\n" +
-	"\fshadow_route\x18' \x01(\tR\vshadowRoute\"\xa2\x03\n" +
+	"\fshadow_route\x18' \x01(\tR\vshadowRoute\x12 \n" +
+	"\fon_behalf_of\x18( \x01(\tR\n" +
+	"onBehalfOf\x12!\n" +
+	"\facting_agent\x18) \x01(\tR\vactingAgent\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +
