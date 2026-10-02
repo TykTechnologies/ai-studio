@@ -160,130 +160,147 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 // ===================================
 // CUSTOM AUTH HOOK (Auth Plugins)
 // ===================================
-// Allows plugins to REPLACE the validation step (extraction still happens in CredentialValidator)
+// Authenticates requests to an endpoint that has auth plugins attached: an
+// LLM's attached auth plugins, or the auth plugin list of a datasource, tool,
+// router or custom-endpoint plugin. Credential extraction stays in the
+// CredentialValidator; this decides only who the caller is.
 
-func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(string, *http.Request) (uint, bool, error) {
-	return func(credential string, r *http.Request) (uint, bool, error) {
-		// Only for LLM requests
-		if !strings.HasPrefix(r.URL.Path, "/llm/") {
-			return 0, false, nil // Use standard auth
-		}
+// authPluginManager is what the auth hook needs from the plugin manager.
+type authPluginManager interface {
+	GetAuthPlugins(endpointType string, endpointID uint) (attached int, loaded []*plugins.LoadedPlugin, err error)
+	CallAuth(lp *plugins.LoadedPlugin, req *interfaces.AuthRequest, pluginCtx *interfaces.PluginContext) (*interfaces.AuthResponse, error)
+}
 
-		llmSlug := extractLLMSlugFromPath(r.URL.Path)
-		if llmSlug == "" {
-			return 0, false, nil
-		}
+func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(*http.Request, proxy.AuthTarget, string, string) (proxy.AuthResult, error) {
+	return newPluginAuthenticator(serviceContainer, pluginManager, llms).authenticate
+}
 
-		llmInterface, err := llms.get(llmSlug)
-		if err != nil {
-			return 0, false, nil
-		}
+type pluginAuthenticator struct {
+	edgeID        string
+	edgeNamespace string
+	plugins       authPluginManager
+	llms          *hookLLMLookup
+}
 
-		var llmID uint
-		var dbLLM *database.LLM
-		if llm, ok := llmInterface.(*database.LLM); ok {
-			llmID = llm.ID
-			dbLLM = llm
-		} else {
-			return 0, false, nil
-		}
-
-		// Check if this LLM has auth plugins
-		authPlugins, err := pluginManager.GetPluginsForLLM(llmID, "auth")
-		if err != nil || isEmptySlice(authPlugins) {
-			return 0, false, nil // No auth plugins, use standard validation
-		}
-
-		// Get canonical request ID from context
-		requestID := ""
-		if reqID := r.Context().Value("request_id"); reqID != nil {
-			requestID = reqID.(string)
-		}
-		if requestID == "" {
-			log.Error().Msg("Request ID not found in context - RequestIDMiddleware not configured")
-			return 0, false, fmt.Errorf("request ID missing")
-		}
-
-		// Create plugin context for auth
-		// Include edge identity in metadata for plugin context
-		authMetadata := make(map[string]interface{})
-		if serviceContainer.EdgeID != "" {
-			authMetadata["edge_id"] = serviceContainer.EdgeID
-		}
-		if serviceContainer.EdgeNamespace != "" {
-			authMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
-		}
-		database.AddGovernedMetadataToContext(authMetadata, dbLLM)
-
-		pluginCtx := &interfaces.PluginContext{
-			RequestID:    requestID, // Use canonical request ID from context
-			LLMID:        llmID,
-			LLMSlug:      llmSlug,
-			Metadata:     authMetadata,
-			TraceContext: make(map[string]string),
-		}
-
-		// Read request body for the auth plugin
-		headers := make(map[string]string)
-		for key, values := range r.Header {
-			if len(values) > 0 {
-				headers[key] = values[0]
-			}
-		}
-		bodyBytes, _ := readBodyWithoutConsuming(r)
-
-		// Create auth request matching interfaces.AuthRequest structure
-		authReq := &interfaces.AuthRequest{
-			Credential: credential,
-			AuthType:   "bearer",
-			Request: &interfaces.PluginRequest{
-				Method:     r.Method,
-				Path:       r.URL.Path,
-				Headers:    headers,
-				Body:       bodyBytes,
-				RemoteAddr: r.RemoteAddr,
-				Context:    pluginCtx,
-			},
-		}
-
-		// Execute auth plugin chain
-		result, err := pluginManager.ExecutePluginChain(llmID, "auth", authReq, pluginCtx)
-		if err != nil {
-			log.Error().Err(err).Msg("Auth plugin chain failed")
-			return 0, false, err
-		}
-
-		// Parse plugin response
-		if authResp, ok := result.(*interfaces.AuthResponse); ok {
-			if !authResp.Authenticated {
-				// Auth plugin rejected authentication - this is a hard failure
-				// Do NOT fall back to standard validation when auth plugin exists
-				errMsg := authResp.ErrorMessage
-				if errMsg == "" {
-					errMsg = "authentication rejected by auth plugin"
-				}
-				log.Debug().Str("error", errMsg).Msg("Auth plugin rejected authentication")
-				return 0, false, fmt.Errorf("%s", errMsg)
-			}
-
-			// Extract app_id from plugin response (it's a string in the interface)
-			var appID uint
-			if authResp.AppID != "" {
-				if id, err := strconv.ParseUint(authResp.AppID, 10, 32); err == nil {
-					appID = uint(id)
-				}
-			}
-
-			if appID == 0 {
-				appID = 1 // Default fallback
-			}
-
-			log.Debug().Uint("app_id", appID).Msg("Auth plugin authenticated request")
-			return appID, true, nil
-		}
-
-		return 0, false, fmt.Errorf("invalid plugin response format")
+func newPluginAuthenticator(sc *services.ServiceContainer, pm authPluginManager, llms *hookLLMLookup) *pluginAuthenticator {
+	a := &pluginAuthenticator{plugins: pm, llms: llms}
+	if sc != nil {
+		a.edgeID, a.edgeNamespace = sc.EdgeID, sc.EdgeNamespace
 	}
+	return a
+}
+
+// authenticate asks the endpoint's auth plugins, in order, until one
+// authenticates the credential. An endpoint without auth plugins is not
+// handled (app keys apply). A plugin that errors, refuses, or names no valid
+// app is passed over; when none accepts, the request is rejected, and when
+// none could even be asked, the error makes the gateway answer 503 rather
+// than fall back to app keys.
+func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTarget, credential, credType string) (proxy.AuthResult, error) {
+	endpointType := target.Kind
+	if endpointType == proxy.AuthTargetLLM {
+		endpointType = plugins.AuthEndpointLLM
+	}
+	attached, loaded, err := a.plugins.GetAuthPlugins(endpointType, target.ID)
+	if err != nil {
+		return proxy.AuthResult{}, err
+	}
+	if attached == 0 {
+		return proxy.AuthResult{Outcome: proxy.AuthNotHandled}, nil
+	}
+	if len(loaded) == 0 {
+		return proxy.AuthResult{}, fmt.Errorf("none of the %d auth plugins on %s %q could be loaded", attached, target.Kind, target.Slug)
+	}
+
+	requestID, _ := r.Context().Value("request_id").(string)
+	if requestID == "" {
+		requestID = generateRequestID()
+	}
+	metadata := make(map[string]interface{})
+	if a.edgeID != "" {
+		metadata["edge_id"] = a.edgeID
+	}
+	if a.edgeNamespace != "" {
+		metadata["edge_namespace"] = a.edgeNamespace
+	}
+	metadata["endpoint_type"] = target.Kind
+	metadata["endpoint_slug"] = target.Slug
+	pluginCtx := &interfaces.PluginContext{
+		RequestID:    requestID,
+		Metadata:     metadata,
+		TraceContext: make(map[string]string),
+	}
+	if target.Kind == proxy.AuthTargetLLM {
+		pluginCtx.LLMID = target.ID
+		pluginCtx.LLMSlug = target.Slug
+		if a.llms != nil {
+			if v, err := a.llms.get(target.Slug); err == nil {
+				if llm, ok := v.(*database.LLM); ok {
+					database.AddGovernedMetadataToContext(metadata, llm)
+				}
+			}
+		}
+	}
+
+	headers := make(map[string]string)
+	for key, values := range r.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+	bodyBytes, _ := readBodyWithoutConsuming(r)
+	authReq := &interfaces.AuthRequest{
+		Credential: credential,
+		AuthType:   credType,
+		Request: &interfaces.PluginRequest{
+			Method:     r.Method,
+			Path:       r.URL.Path,
+			Headers:    headers,
+			Body:       bodyBytes,
+			RemoteAddr: r.RemoteAddr,
+			Context:    pluginCtx,
+		},
+	}
+
+	answered := false
+	reason := ""
+	for _, lp := range loaded {
+		resp, err := a.plugins.CallAuth(lp, authReq, pluginCtx)
+		if err != nil {
+			log.Warn().Err(err).Uint("plugin_id", lp.ID).Str("plugin_name", lp.Name).Msg("Auth plugin failed; trying the next")
+			continue
+		}
+		answered = true
+		if resp == nil || !resp.Authenticated {
+			if resp != nil && resp.ErrorMessage != "" {
+				reason = resp.ErrorMessage
+			} else {
+				reason = "rejected by auth plugin " + lp.Name
+			}
+			continue
+		}
+		// An authenticated answer must name an app. It used to fall back to
+		// app 1 when it did not, letting any plugin bug act as that app.
+		appID, err := strconv.ParseUint(resp.AppID, 10, 32)
+		if err != nil || appID == 0 {
+			log.Warn().Uint("plugin_id", lp.ID).Str("plugin_name", lp.Name).Str("app_id", resp.AppID).
+				Msg("Auth plugin authenticated a request without a valid app id; treating it as a rejection")
+			reason = "auth plugin " + lp.Name + " named no valid app"
+			continue
+		}
+		return proxy.AuthResult{
+			Outcome:    proxy.AuthAccepted,
+			AppID:      uint(appID),
+			Subject:    resp.UserID,
+			Claims:     resp.Claims,
+			PluginID:   lp.ID,
+			PluginName: lp.Name,
+		}, nil
+	}
+	if !answered {
+		return proxy.AuthResult{}, fmt.Errorf("no auth plugin on %s %q answered", target.Kind, target.Slug)
+	}
+	return proxy.AuthResult{Outcome: proxy.AuthRejected, Reason: reason}, nil
 }
 
 // ===================================
@@ -370,6 +387,21 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 
 		bodyBytes, _ := readBodyWithoutConsuming(r)
 
+		// Who authenticated the request, and how (proxy.AuthIdentity). The
+		// subject is set when an auth plugin said who the call is for.
+		subject := ""
+		authClaims := make(map[string]string)
+		if ident := proxy.AuthIdentityFromContext(r.Context()); ident != nil {
+			subject = ident.Subject
+			for k, v := range ident.Claims {
+				authClaims[k] = v
+			}
+			authClaims["auth_method"] = ident.Method
+			if ident.PluginID != 0 {
+				authClaims["auth_plugin_id"] = strconv.FormatUint(uint64(ident.PluginID), 10)
+			}
+		}
+
 		// Create enriched request matching interfaces.EnrichedRequest structure
 		enrichedReq := &interfaces.EnrichedRequest{
 			PluginRequest: &interfaces.PluginRequest{
@@ -380,9 +412,9 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 				RemoteAddr: r.RemoteAddr,
 				Context:    pluginCtx,
 			},
-			UserID:        "plugin-user",                          // String as per interface
+			UserID:        subject,
 			AppID:         strconv.FormatUint(uint64(appID), 10), // String as per interface
-			AuthClaims:    make(map[string]string),
+			AuthClaims:    authClaims,
 			Authenticated: true,
 		}
 

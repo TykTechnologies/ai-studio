@@ -2,11 +2,9 @@
 package services
 
 import (
-	"crypto/rand"
 	"errors"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -15,7 +13,6 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
@@ -24,53 +21,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
-
-// CurrentRequestContext stores the current request context for auth plugin selection
-var currentRequestContext struct {
-	mu      sync.RWMutex
-	llmID   uint
-	llmSlug string
-	active  bool
-}
-
-// SetCurrentLLMContext sets the current LLM context for auth plugin routing
-func SetCurrentLLMContext(llmID uint, llmSlug string) {
-	currentRequestContext.mu.Lock()
-	defer currentRequestContext.mu.Unlock()
-	currentRequestContext.llmID = llmID
-	currentRequestContext.llmSlug = llmSlug
-	currentRequestContext.active = true
-}
-
-// GetCurrentLLMContext gets the current LLM context if available
-func GetCurrentLLMContext() (uint, string, bool) {
-	currentRequestContext.mu.RLock()
-	defer currentRequestContext.mu.RUnlock()
-	return currentRequestContext.llmID, currentRequestContext.llmSlug, currentRequestContext.active
-}
-
-// ClearCurrentLLMContext clears the current LLM context
-func ClearCurrentLLMContext() {
-	currentRequestContext.mu.Lock()
-	defer currentRequestContext.mu.Unlock()
-	currentRequestContext.active = false
-}
-
-// generateNegativeCredID generates a unique negative credential ID for plugin auth
-// Negative IDs indicate plugin authentication and cannot collide with real database IDs
-func generateNegativeCredID() int {
-	// Use random 32-bit value as negative ID for uniqueness
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback to timestamp if random fails
-		return -int(time.Now().UnixNano())
-	}
-	positiveID := int(binary.BigEndian.Uint32(b))
-	if positiveID == 0 {
-		positiveID = 1 // Avoid -0
-	}
-	return -positiveID // Always negative
-}
 
 // GatewayServiceAdapter adapts our DatabaseGatewayService to implement services.ServiceInterface
 type GatewayServiceAdapter struct {
@@ -217,9 +167,10 @@ func (a *GatewayServiceAdapter) GetDatasourceByID(id uint) (*models.Datasource, 
 	return &ds, nil
 }
 
-// GetCredentialBySecret validates API tokens and returns credential info
-// This method is called by the AI Gateway during credential validation
-// For LLMs with auth plugins, this delegates to the plugin for validation
+// GetCredentialBySecret validates API tokens and returns credential info.
+// This method is called by the AI Gateway during credential validation. Auth
+// plugins are not consulted here: the gateway asks them first, through its
+// CustomAuth hook, for endpoints that have any.
 func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Credential, error) {
 	secretPrefix := secret
 	if len(secret) > 8 {
@@ -227,19 +178,6 @@ func (a *GatewayServiceAdapter) GetCredentialBySecret(secret string) (*models.Cr
 	}
 	log.Debug().Str("secret_prefix", secretPrefix).Str("gateway_type", fmt.Sprintf("%T", a.gatewayService)).Msg("GatewayServiceAdapter.GetCredentialBySecret() called by AI Gateway")
 	
-	// Check if we have LLM context and that LLM has auth plugins - route directly if so
-	llmID, llmSlug, hasContext := GetCurrentLLMContext()
-	if hasContext {
-		hasAuthPlugins, err := a.hasAuthPluginsForLLM(llmSlug)
-		if err == nil && hasAuthPlugins {
-			log.Debug().Uint("llm_id", llmID).Str("llm_slug", llmSlug).Msg("LLM has auth plugins, routing directly to auth plugin validation")
-			// Route directly to auth plugin validation for this specific LLM
-			return a.tryAuthPluginsForSpecificLLM(secret, llmID, llmSlug)
-		}
-		log.Debug().Uint("llm_id", llmID).Str("llm_slug", llmSlug).Bool("has_auth_plugins", hasAuthPlugins).Msg("LLM context available, using regular validation")
-	}
-	
-	// No LLM context or no auth plugins for this LLM - use regular token validation
 	return a.tryRegularTokenValidation(secret)
 }
 
@@ -315,233 +253,6 @@ func (a *GatewayServiceAdapter) tryRegularTokenValidation(secret string) (*model
 // AuthenticateUser authenticates a user (not implemented for microgateway)
 func (a *GatewayServiceAdapter) AuthenticateUser(email, password string) (*models.User, error) {
 	return nil, fmt.Errorf("user authentication not supported in microgateway")
-}
-
-// hasAuthPluginsForLLM checks if there are any active auth plugins for a specific LLM
-func (a *GatewayServiceAdapter) hasAuthPluginsForLLM(llmSlug string) (bool, error) {
-	// First get the LLM by slug to get its ID
-	llmInterface, err := a.gatewayService.GetLLMBySlug(llmSlug)
-	if err != nil {
-		return false, fmt.Errorf("failed to get LLM by slug: %w", err)
-	}
-	
-	var llmID uint
-	if dbLLM, ok := llmInterface.(*database.LLM); ok {
-		llmID = dbLLM.ID
-	} else {
-		return false, fmt.Errorf("unexpected LLM type")
-	}
-	
-	// Check if there are any active auth plugins for this specific LLM
-	// Use the plugin service interface to work with both database and provider-aware implementations
-	plugins, err := a.pluginService.GetPluginsForLLM(llmID)
-	if err != nil {
-		return false, fmt.Errorf("failed to get plugins for LLM: %w", err)
-	}
-
-	// Count active auth plugins
-	count := 0
-	for _, plugin := range plugins {
-		if plugin.HookType == "auth" && plugin.IsActive {
-			count++
-		}
-	}
-
-	return count > 0, nil
-}
-
-// hasAnyAuthPlugins checks if there are any active auth plugins in the system (fallback method)
-func (a *GatewayServiceAdapter) hasAnyAuthPlugins() (bool, error) {
-	// Use the plugin service interface to work with both database and provider-aware implementations
-	plugins, _, err := a.pluginService.ListPlugins(1, 1, "auth", true)
-	if err != nil {
-		return false, fmt.Errorf("failed to list auth plugins: %w", err)
-	}
-
-	return len(plugins) > 0, nil
-}
-
-// tryAuthPluginsWithContext attempts to authenticate with available auth plugins
-// This method tries to use LLM context when available for LLM-specific auth
-func (a *GatewayServiceAdapter) tryAuthPluginsWithContext(secret string) (*models.Credential, error) {
-	// Check if we have current LLM context from the request
-	llmID, llmSlug, hasContext := GetCurrentLLMContext()
-	if hasContext {
-		log.Debug().Uint("llm_id", llmID).Str("llm_slug", llmSlug).Msg("Using specific LLM context for auth plugin routing")
-		
-		// Try auth plugins for this specific LLM only
-		return a.tryAuthPluginsForSpecificLLM(secret, llmID, llmSlug)
-	}
-	
-	log.Debug().Msg("No LLM context available, falling back to trying all LLMs with auth plugins")
-	return a.tryAuthPlugins(secret)
-}
-
-// tryAuthPluginsForSpecificLLM tries auth plugins for a specific LLM only
-func (a *GatewayServiceAdapter) tryAuthPluginsForSpecificLLM(secret string, llmID uint, llmSlug string) (*models.Credential, error) {
-	log.Debug().Uint("llm_id", llmID).Str("llm_slug", llmSlug).Msg("Checking auth plugins for specific LLM")
-	
-	// Check if this specific LLM has auth plugins
-	hasAuthPlugins, err := a.hasAuthPluginsForLLM(llmSlug)
-	if err != nil {
-		log.Debug().Err(err).Str("llm_slug", llmSlug).Msg("Error checking auth plugins for LLM")
-		return nil, fmt.Errorf("failed to check auth plugins for LLM %s: %w", llmSlug, err)
-	}
-	
-	if !hasAuthPlugins {
-		log.Debug().Str("llm_slug", llmSlug).Msg("No auth plugins for this LLM, rejecting plugin auth")
-		return nil, fmt.Errorf("no auth plugins configured for LLM %s", llmSlug)
-	}
-	
-	log.Debug().Str("llm_slug", llmSlug).Msg("Trying auth plugin for specific LLM")
-	
-	// Get plugins for this LLM and try auth
-	plugins, err := a.pluginService.GetPluginsForLLM(llmID)
-	if err != nil {
-		log.Debug().Err(err).Str("llm_slug", llmSlug).Msg("Failed to get plugins for LLM")
-		return nil, fmt.Errorf("failed to get plugins for LLM %s: %w", llmSlug, err)
-	}
-	
-	// Find auth plugins and try to authenticate
-	for _, plugin := range plugins {
-		if plugin.HookType == "auth" && plugin.IsActive {
-			log.Debug().
-				Uint("plugin_id", plugin.ID).
-				Str("plugin_name", plugin.Name).
-				Str("secret_prefix", secret[:min(len(secret), 8)]).
-				Msg("Executing auth plugin via gRPC")
-
-			// Execute auth plugin via plugin manager
-			authReq := &interfaces.AuthRequest{
-				Credential: secret,
-				AuthType:   "bearer",
-			}
-
-			pluginCtx := &interfaces.PluginContext{
-				LLMID:   llmID,
-				LLMSlug: llmSlug,
-			}
-
-			result, err := a.pluginManager.ExecutePluginChain(llmID, "auth", authReq, pluginCtx)
-			if err != nil {
-				log.Debug().
-					Err(err).
-					Uint("plugin_id", plugin.ID).
-					Str("plugin_name", plugin.Name).
-					Msg("Auth plugin rejected token or execution failed")
-				continue // Try next auth plugin
-			}
-
-			authResp, ok := result.(*interfaces.AuthResponse)
-			if !ok {
-				log.Error().
-					Interface("result", result).
-					Str("plugin_name", plugin.Name).
-					Msg("Auth plugin returned invalid response type")
-				continue
-			}
-
-			if !authResp.Authenticated {
-				log.Debug().
-					Str("plugin_name", plugin.Name).
-					Str("error", authResp.ErrorMessage).
-					Msg("Auth plugin rejected authentication")
-				continue // Try next auth plugin
-			}
-
-			// Auth plugin accepted - extract AppID
-			appIDUint, err := strconv.ParseUint(authResp.AppID, 10, 32)
-			if err != nil {
-				log.Error().
-					Str("app_id", authResp.AppID).
-					Str("plugin_name", plugin.Name).
-					Msg("Auth plugin returned invalid AppID format")
-				return nil, fmt.Errorf("auth plugin returned invalid app_id: %s", authResp.AppID)
-			}
-
-			log.Debug().
-				Str("llm_slug", llmSlug).
-				Str("plugin_name", plugin.Name).
-				Uint("app_id", uint(appIDUint)).
-				Str("user_id", authResp.UserID).
-				Msg("Auth plugin authenticated token successfully")
-
-			// Generate unique negative credential ID
-			credID := generateNegativeCredID()
-
-			credential := &models.Credential{
-				ID:     uint(credID), // Negative ID (cast to uint for interface compatibility)
-				KeyID:  fmt.Sprintf("plugin-auth-llm-%d-app-%d", llmID, appIDUint),
-				Secret: secret,
-				Active: true,
-			}
-
-			// Store in cache for later retrieval by GetAppByCredentialID
-			a.pluginAuthCredentials.Store(credID, credential)
-
-			log.Debug().
-				Int("cred_id", credID).
-				Str("key_id", credential.KeyID).
-				Msg("Stored plugin auth credential in cache")
-
-			return credential, nil
-		}
-	}
-	
-	return nil, fmt.Errorf("auth plugins for LLM %s rejected the token", llmSlug)
-}
-
-// tryAuthPlugins attempts to authenticate with available auth plugins
-func (a *GatewayServiceAdapter) tryAuthPlugins(secret string) (*models.Credential, error) {
-	// Get all active LLMs that have auth plugins
-	llms, err := a.gatewayService.GetActiveLLMs()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get active LLMs: %w", err)
-	}
-	
-	for _, llmInterface := range llms {
-		if dbLLM, ok := llmInterface.(*database.LLM); ok {
-			// Check if this LLM has auth plugins
-			hasAuthPlugins, err := a.hasAuthPluginsForLLM(dbLLM.Slug)
-			if err != nil {
-				log.Debug().Err(err).Str("llm_slug", dbLLM.Slug).Msg("Error checking auth plugins for LLM")
-				continue
-			}
-			
-			if hasAuthPlugins {
-				log.Debug().Str("llm_slug", dbLLM.Slug).Msg("Trying auth plugin for LLM")
-				
-				// Get plugins for this LLM and try auth
-				plugins, err := a.pluginService.GetPluginsForLLM(dbLLM.ID)
-				if err != nil {
-					log.Debug().Err(err).Str("llm_slug", dbLLM.Slug).Msg("Failed to get plugins for LLM")
-					continue
-				}
-				
-				// Find auth plugins and try to authenticate
-				for _, plugin := range plugins {
-					if plugin.HookType == "auth" && plugin.IsActive {
-						log.Debug().Uint("plugin_id", plugin.ID).Str("plugin_name", plugin.Name).Msg("Calling auth plugin")
-						
-						// For now, since we know the example plugin accepts "moocow",
-						// let's implement a simple check and return appropriate credential
-						if secret == "moocow" {
-							log.Debug().Str("llm_slug", dbLLM.Slug).Str("plugin_name", plugin.Name).Msg("Auth plugin accepted token")
-							
-							return &models.Credential{
-								ID:     1000 + dbLLM.ID, // Use LLM-specific ID  
-								KeyID:  "plugin-auth-" + dbLLM.Slug,
-								Secret: secret,
-								Active: true,
-							}, nil
-						}
-					}
-				}
-			}
-		}
-	}
-	
-	return nil, fmt.Errorf("no auth plugins accepted the token")
 }
 
 // GetUserByAPIKey returns a user by API key (not implemented)

@@ -228,6 +228,10 @@ func hardDeleteModelRouter(tx *gorm.DB, id uint) error {
 		}
 	}
 
+	if err := DeleteEndpointAuthPlugins(tx, EndpointTypeModelRouter, id); err != nil {
+		return err
+	}
+
 	return tx.Unscoped().Delete(&ModelRouter{}, id).Error
 }
 

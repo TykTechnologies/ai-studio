@@ -235,6 +235,9 @@ func (r *SemanticRouter) Delete(db *gorm.DB) error {
 		if err := tx.Where("router_id = ?", r.ID).Delete(&SemanticRouterTarget{}).Error; err != nil {
 			return err
 		}
+		if err := DeleteEndpointAuthPlugins(tx, EndpointTypeSemanticRouter, r.ID); err != nil {
+			return err
+		}
 		return tx.Unscoped().Delete(&SemanticRouter{}, r.ID).Error
 	})
 }

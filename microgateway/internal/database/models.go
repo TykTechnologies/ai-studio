@@ -353,6 +353,30 @@ type LLMPlugin struct {
 	CreatedAt      time.Time      `json:"created_at"`
 }
 
+// EndpointAuthPlugin attaches an auth plugin to a gateway endpoint other than
+// an LLM (ObjectType: datasource, tool, model_router, semantic_router or
+// plugin, for a custom_endpoint plugin's /plugins/{slug}/ routes). When an
+// endpoint has any, they alone authenticate its requests, in OrderIndex order.
+// The hub owns the lists; the config sync rewrites them.
+type EndpointAuthPlugin struct {
+	ObjectType string    `gorm:"primaryKey;size:32;index:idx_endpoint_auth_plugins_order,priority:1" json:"object_type"`
+	ObjectID   uint      `gorm:"primaryKey;autoIncrement:false;index:idx_endpoint_auth_plugins_order,priority:2" json:"object_id"`
+	PluginID   uint      `gorm:"primaryKey;autoIncrement:false;index:idx_endpoint_auth_plugins_plugin" json:"plugin_id"`
+	OrderIndex int       `gorm:"default:0;index:idx_endpoint_auth_plugins_order,priority:3" json:"order_index"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (EndpointAuthPlugin) TableName() string { return "endpoint_auth_plugins" }
+
+// Endpoint kinds carrying an auth plugin list (EndpointAuthPlugin.ObjectType).
+const (
+	EndpointTypeDatasource     = "datasource"
+	EndpointTypeTool           = "tool"
+	EndpointTypeModelRouter    = "model_router"
+	EndpointTypeSemanticRouter = "semantic_router"
+	EndpointTypePlugin         = "plugin"
+)
+
 // TableName methods to ensure consistent table naming
 func (APIToken) TableName() string     { return "api_tokens" }
 func (TokenCache) TableName() string   { return "token_cache" }

@@ -72,6 +72,7 @@ func InitModels(db *gorm.DB) error {
 		&EdgePushCommand{},    // One per push and target edge
 		&Plugin{},             // Plugin configurations
 		&LLMPlugin{},          // LLM-Plugin associations
+		&EndpointAuthPlugin{}, // Auth plugins on datasources, tools, routers and plugin endpoints
 		&PluginConfigSchema{}, // Plugin config schema cache
 		&RegisteredPlugin{},   // Registered plugins with parsed manifests
 		&UIRegistry{},         // UI component registry

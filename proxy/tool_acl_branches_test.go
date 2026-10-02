@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,8 +16,7 @@ import (
 
 // The tool ACL is reached through six different authentication branches in
 // CredentialValidator.Middleware. Three of them - the OAuth branch and the two
-// custom-auth plugin branches - performed no tool check at all before this fix,
-// and the plugin_authenticated short-circuit skipped the middleware entirely.
+// custom-auth plugin branches - performed no tool check at all before this fix.
 //
 // Testing only the branch the bug was reported against would leave the same
 // defect live in the others, so every branch is driven through the same matrix:
@@ -232,12 +230,7 @@ func TestToolACL_BearerCustomAuthBranch(t *testing.T) {
 
 	// The plugin authenticates any credential as app A.
 	f.proxy.credValidator.SetAuthHooks(&AuthHooks{
-		CustomAuth: func(credential string, r *http.Request) (uint, bool, error) {
-			if credential == "plugin-credential" {
-				return f.appA.ID, true, nil
-			}
-			return 0, false, nil
-		},
+		CustomAuth: acceptCredential("plugin-credential", f.appA.ID),
 	})
 	t.Cleanup(func() { f.proxy.credValidator.SetAuthHooks(nil) })
 
@@ -252,12 +245,7 @@ func TestToolACL_APIKeyCustomAuthBranch(t *testing.T) {
 	f := newOAuthACLFixture(t, db)
 
 	f.proxy.credValidator.SetAuthHooks(&AuthHooks{
-		CustomAuth: func(credential string, r *http.Request) (uint, bool, error) {
-			if credential == "plugin-api-key" {
-				return f.appA.ID, true, nil
-			}
-			return 0, false, nil
-		},
+		CustomAuth: acceptCredential("plugin-api-key", f.appA.ID),
 	})
 	t.Cleanup(func() { f.proxy.credValidator.SetAuthHooks(nil) })
 
@@ -277,81 +265,6 @@ func TestToolACL_APIKeyCustomAuthBranch(t *testing.T) {
 	t.Run("foreign tool is refused", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		f.handler.ServeHTTP(rr, pluginKeyRequest(t, f.toolB.Slug))
-		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
-	})
-}
-
-// TestToolACL_PluginAuthenticatedShortCircuit covers the branch that skips
-// credential validation entirely because a microgateway plugin already
-// authenticated the request. It previously let any tool through on the MCP
-// routes while the REST route failed closed for want of a context tool.
-func TestToolACL_PluginAuthenticatedShortCircuit(t *testing.T) {
-	db, cancel := setupTest(t)
-	defer tearDownTest(db, cancel)
-
-	f := newOAuthACLFixture(t, db)
-
-	// Reproduce what microgateway's plugin middleware puts on the context.
-	preAuthenticated := func(t *testing.T, slug string, appID interface{}) *http.Request {
-		t.Helper()
-		req := mcpRequest(t, slug, "", initializePayloadForTest())
-		ctx := context.WithValue(req.Context(), "plugin_authenticated", true)
-		if appID != nil {
-			ctx = context.WithValue(ctx, "app_id", appID)
-		}
-		return req.WithContext(ctx)
-	}
-
-	t.Run("granted tool is authorized", func(t *testing.T) {
-		rr := httptest.NewRecorder()
-		f.handler.ServeHTTP(rr, preAuthenticated(t, f.toolA.Slug, f.appA.ID))
-		require.NotEqual(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	t.Run("foreign tool is refused", func(t *testing.T) {
-		rr := httptest.NewRecorder()
-		f.handler.ServeHTTP(rr, preAuthenticated(t, f.toolB.Slug, f.appA.ID))
-		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	t.Run("no app id on the context is refused", func(t *testing.T) {
-		rr := httptest.NewRecorder()
-		f.handler.ServeHTTP(rr, preAuthenticated(t, f.toolA.Slug, nil))
-		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	t.Run("an unresolvable app id is refused", func(t *testing.T) {
-		rr := httptest.NewRecorder()
-		f.handler.ServeHTTP(rr, preAuthenticated(t, f.toolA.Slug, uint(999999)))
-		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
-	})
-
-	// The microgateway middleware writes a uint; other producers on this context
-	// key use int/int64. All must resolve rather than silently fail open.
-	for _, appID := range []interface{}{f.appA.ID, int(f.appA.ID), int64(f.appA.ID), uint32(f.appA.ID)} {
-		t.Run(fmt.Sprintf("app id of type %T is honoured", appID), func(t *testing.T) {
-			rr := httptest.NewRecorder()
-			f.handler.ServeHTTP(rr, preAuthenticated(t, f.toolB.Slug, appID))
-			require.Equal(t, http.StatusUnauthorized, rr.Code,
-				"a resolvable app must still be held to the ACL; body: %s", rr.Body.String())
-
-			rr = httptest.NewRecorder()
-			f.handler.ServeHTTP(rr, preAuthenticated(t, f.toolA.Slug, appID))
-			require.NotEqual(t, http.StatusUnauthorized, rr.Code,
-				"the granted tool must clear authorization; body: %s", rr.Body.String())
-		})
-	}
-
-	// An LLM path used to pass straight through this branch unchecked. It is now
-	// held to the LLM ACL (see llm_acl_branches_test.go), which starts with
-	// needing an app to check: with no app id on the context it is refused.
-	t.Run("LLM paths without an app id are refused", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/llm/call/whatever/v1/chat/completions", nil)
-		ctx := context.WithValue(req.Context(), "plugin_authenticated", true)
-		req = req.WithContext(ctx)
-
-		rr := httptest.NewRecorder()
-		f.handler.ServeHTTP(rr, req)
 		require.Equal(t, http.StatusUnauthorized, rr.Code, "body: %s", rr.Body.String())
 	})
 }

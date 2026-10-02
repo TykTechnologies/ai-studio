@@ -27,7 +27,8 @@ import (
 const (
 	// 2: cluster_nodes.label and leader_eligible (nullable, additive).
 	// 3: tyk_connections.host_key and its unique index (nullable, additive).
-	SchemaVersion          = 3
+	// 4: endpoint_auth_plugins (new table, additive).
+	SchemaVersion          = 4
 	MinReaderSchemaVersion = 1
 )
 

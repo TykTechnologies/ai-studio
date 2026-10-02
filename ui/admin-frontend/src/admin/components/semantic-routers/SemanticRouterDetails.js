@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import Section from "../common/Section";
+import AuthPluginsSection from "../common/AuthPluginsSection";
 import UsedBySection from "../common/UsedBySection";
 import {
   Box,
@@ -318,6 +319,16 @@ const SemanticRouterDetails = () => {
                 </Fact>
               </Grid>
             </Section>
+          </Grid>
+
+          {/* Gateway authentication */}
+          <Grid item xs={12}>
+            <AuthPluginsSection
+              endpointPath="semantic-routers"
+              endpointId={id}
+              noun="router"
+              writePermission={P.SEMANTIC_ROUTERS_WRITE}
+            />
           </Grid>
 
           {/* Portal */}

@@ -78,7 +78,12 @@ func (d *Datasource) Update(db *gorm.DB) error {
 
 // Delete a datasource
 func (d *Datasource) Delete(db *gorm.DB) error {
-	return db.Delete(d).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := DeleteEndpointAuthPlugins(tx, EndpointTypeDatasource, d.ID); err != nil {
+			return err
+		}
+		return tx.Delete(d).Error
+	})
 }
 
 // Get all datasources

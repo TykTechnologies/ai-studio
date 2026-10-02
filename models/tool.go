@@ -176,7 +176,12 @@ func (t *Tool) Update(db *gorm.DB) error {
 
 // Delete a tool
 func (t *Tool) Delete(db *gorm.DB) error {
-	return db.Delete(t).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := DeleteEndpointAuthPlugins(tx, EndpointTypeTool, t.ID); err != nil {
+			return err
+		}
+		return tx.Delete(t).Error
+	})
 }
 
 // GetByName gets a tool by its name

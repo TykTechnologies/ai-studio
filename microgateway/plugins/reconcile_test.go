@@ -17,6 +17,7 @@ type mockPluginService struct {
 	getPluginByID      map[uint]PluginData
 	errGetAllActive    error
 	errGetPlugin       error
+	authByEndpoint     map[string][]PluginData // endpointType + ":" + id
 }
 
 func (m *mockPluginService) GetPlugin(id uint) (PluginData, error) {
@@ -43,6 +44,10 @@ func (m *mockPluginService) GetAllPlugins() ([]PluginData, error) {
 
 func (m *mockPluginService) GetAllLLMIDs() ([]uint, error) {
 	return m.llmIDs, nil
+}
+
+func (m *mockPluginService) GetAuthPluginsForEndpoint(endpointType string, endpointID uint) ([]PluginData, error) {
+	return m.authByEndpoint[fmt.Sprintf("%s:%d", endpointType, endpointID)], nil
 }
 
 func (m *mockPluginService) GetAllActiveGatewayPlugins() ([]PluginData, error) {

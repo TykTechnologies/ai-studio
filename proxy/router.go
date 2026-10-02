@@ -360,7 +360,17 @@ func setIfNotEmpty(h http.Header, k, v string) {
 
 // loopbackHeaders is every marker a loopback request for attempt a carries.
 func (p *Proxy) loopbackHeaders(ctx context.Context, a llmAttempt) http.Header {
-	return p.routerHeaders(ctx, p.failoverHeaders(a))
+	h := p.routerHeaders(ctx, p.failoverHeaders(a))
+	if h == nil {
+		h = http.Header{}
+	}
+	if authHandoffHeaders(ctx, h) {
+		h.Set(hdrFailoverToken, p.failoverToken)
+	}
+	if len(h) == 0 {
+		return nil
+	}
+	return h
 }
 
 // routerMarker is what the inner hop learns from a trusted router marker.

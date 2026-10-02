@@ -24,13 +24,26 @@ Executes **before** authentication. Use for:
 ### 2. AuthHandler
 
 **Interface**: `AuthHandler`
-**Method**: `HandleAuth(ctx Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error)`
+**Method**: `HandleAuth(ctx Context, req *pb.AuthRequest) (*pb.AuthResponse, error)`
 
-**Replaces** default token authentication. Use for:
+**Replaces** app-key authentication on the endpoints it is attached to. Use for:
 - Custom authentication schemes (OAuth, JWT, API keys)
 - Integration with external identity providers
 - Multi-factor authentication
-- Custom authorization logic
+
+Return `Authenticated: true` with the `AppId` the caller acts as. An authenticated response without a valid `AppId` is treated as a rejection. Set `UserId` to who the call is for (a delegated token's subject, say) and put anything else worth auditing in `Claims`; the gateway passes both to post-auth plugins and custom endpoints. They are for audit only: what the request may reach is decided by the App's own grants, never by the plugin.
+
+**Where auth plugins run.** Every endpoint the gateway serves has an ordered list of auth plugins:
+
+| Endpoint | List |
+|----------|------|
+| `/llm/...` | the LLM's plugins (those with the auth hook) |
+| `/ai/{slug}`, the unified `/v1`, `/anthropic/{slug}`, `/router/{slug}` | the LLM's list, or the model or semantic router's when the slug names a router |
+| `/datasource/{slug}` | the datasource's list |
+| `/tools/{slug}` and its MCP transports | the tool's list |
+| `/plugins/{slug}/...` (endpoints that require auth) | the custom-endpoint plugin's list |
+
+When an endpoint has auth plugins, they alone authenticate its requests: they are asked in order, the first to authenticate wins, and if all refuse the request gets a 401. App keys are refused on that endpoint. (Studio OAuth access tokens for MCP keep working on tools.) When none of the attached plugins can be loaded the request gets a 503 rather than falling back to app keys. An endpoint without auth plugins authenticates with app keys as usual, and no auth plugin is asked about its traffic.
 
 **Note**: Unified SDK provides credential validation via `ctx.Services.Gateway().ValidateCredential()`
 
@@ -336,6 +349,19 @@ curl -X PUT http://localhost:3000/api/v1/llms/1/plugins \
     "plugin_ids": [1, 2, 3]
   }'
 ```
+
+### 7. Attach an Auth Plugin to Other Endpoints
+
+Datasources, tools, model routers, semantic routers and custom-endpoint plugins take an ordered list of auth plugins of their own. Set it on the endpoint's detail page in the admin UI (**Authentication plugins**), or through the API:
+
+```bash
+curl -X PUT http://localhost:3000/api/v1/datasources/4/auth-plugins \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"plugin_ids": [7]}'
+```
+
+The same `GET`/`PUT .../auth-plugins` route exists under `/api/v1/tools/{id}`, `/api/v1/model-routers/{id}`, `/api/v1/semantic-routers/{id}` and `/api/v1/plugins/{id}`. Only plugins that provide the auth hook can be listed; an empty list detaches them all. Edges pick the change up with the next configuration push, and need to be on a release that knows these lists (an older edge keeps app keys on those endpoints).
 
 ## Configuration Schema
 

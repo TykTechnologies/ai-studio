@@ -1086,6 +1086,9 @@ type PluginConfig struct {
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	ServiceScopes []string               `protobuf:"bytes,13,rep,name=service_scopes,json=serviceScopes,proto3" json:"service_scopes,omitempty"` // Service API scopes (for plugins with service access)
 	HookTypes     []string               `protobuf:"bytes,14,rep,name=hook_types,json=hookTypes,proto3" json:"hook_types,omitempty"`             // NEW: All hook types this plugin supports (for hybrid plugins)
+	// Auth plugins for this plugin's /plugins/{slug}/ endpoints, in execution
+	// order. Set only for custom_endpoint plugins that have any.
+	AuthPluginIds []uint32 `protobuf:"varint,15,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1218,6 +1221,13 @@ func (x *PluginConfig) GetHookTypes() []string {
 	return nil
 }
 
+func (x *PluginConfig) GetAuthPluginIds() []uint32 {
+	if x != nil {
+		return x.AuthPluginIds
+	}
+	return nil
+}
+
 // ModelRouterConfig represents a model router configuration (Enterprise)
 type ModelRouterConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1231,6 +1241,7 @@ type ModelRouterConfig struct {
 	Pools         []*ModelPoolConfig     `protobuf:"bytes,8,rep,name=pools,proto3" json:"pools,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	AuthPluginIds []uint32               `protobuf:"varint,11,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"` // Auth plugins for /ai/{slug}, in execution order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1335,6 +1346,13 @@ func (x *ModelRouterConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *ModelRouterConfig) GetAuthPluginIds() []uint32 {
+	if x != nil {
+		return x.AuthPluginIds
+	}
+	return nil
+}
+
 // SemanticRouterConfig is a Semantic Router (Enterprise). Its routes and
 // settings travel as the JSON of pkg/semanticrouting.Config, which the edge
 // compiles with the engine; example vectors are computed on the edge and
@@ -1349,6 +1367,7 @@ type SemanticRouterConfig struct {
 	ConfigJson    string                 `protobuf:"bytes,6,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	AuthPluginIds []uint32               `protobuf:"varint,9,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"` // Auth plugins for /ai/{slug}, in execution order
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1435,6 +1454,13 @@ func (x *SemanticRouterConfig) GetCreatedAt() *timestamppb.Timestamp {
 func (x *SemanticRouterConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *SemanticRouterConfig) GetAuthPluginIds() []uint32 {
+	if x != nil {
+		return x.AuthPluginIds
 	}
 	return nil
 }
@@ -1696,8 +1722,11 @@ type ToolConfig struct {
 	// false) leaves both methods on, which is what such a hub's tools expect.
 	RestAccessDisabled bool `protobuf:"varint,19,opt,name=rest_access_disabled,json=restAccessDisabled,proto3" json:"rest_access_disabled,omitempty"` // true: /tools/{slug} is refused
 	McpAccessDisabled  bool `protobuf:"varint,20,opt,name=mcp_access_disabled,json=mcpAccessDisabled,proto3" json:"mcp_access_disabled,omitempty"`    // true: /tools/{slug}/mcp is refused
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Auth plugins for /tools/{slug} and its MCP transports, in execution
+	// order. When set they alone authenticate requests to the tool.
+	AuthPluginIds []uint32 `protobuf:"varint,21,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToolConfig) Reset() {
@@ -1870,6 +1899,13 @@ func (x *ToolConfig) GetMcpAccessDisabled() bool {
 	return false
 }
 
+func (x *ToolConfig) GetAuthPluginIds() []uint32 {
+	if x != nil {
+		return x.AuthPluginIds
+	}
+	return nil
+}
+
 // DatasourceConfig represents a datasource configuration
 type DatasourceConfig struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
@@ -1896,8 +1932,11 @@ type DatasourceConfig struct {
 	// Embedded relationship data (from join tables)
 	AppIds           []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                       // From app_datasources join table
 	GovernedMetadata string   `protobuf:"bytes,22,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Auth plugins for /datasource/{slug}, in execution order. When set they
+	// alone authenticate requests to the datasource.
+	AuthPluginIds []uint32 `protobuf:"varint,23,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DatasourceConfig) Reset() {
@@ -2082,6 +2121,13 @@ func (x *DatasourceConfig) GetGovernedMetadata() string {
 		return x.GovernedMetadata
 	}
 	return ""
+}
+
+func (x *DatasourceConfig) GetAuthPluginIds() []uint32 {
+	if x != nil {
+		return x.AuthPluginIds
+	}
+	return nil
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)
@@ -2884,7 +2930,7 @@ const file_proto_common_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
 	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\x12\x12\n" +
 	"\x04kind\x18\f \x01(\tR\x04kind\x12\x16\n" +
-	"\x06config\x18\r \x01(\tR\x06config\"\xcf\x03\n" +
+	"\x06config\x18\r \x01(\tR\x06config\"\xf7\x03\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2903,7 +2949,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12%\n" +
 	"\x0eservice_scopes\x18\r \x03(\tR\rserviceScopes\x12\x1d\n" +
 	"\n" +
-	"hook_types\x18\x0e \x03(\tR\thookTypes\"\xf2\x02\n" +
+	"hook_types\x18\x0e \x03(\tR\thookTypes\x12&\n" +
+	"\x0fauth_plugin_ids\x18\x0f \x03(\rR\rauthPluginIds\"\x9a\x03\n" +
 	"\x11ModelRouterConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2918,7 +2965,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa0\x02\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12&\n" +
+	"\x0fauth_plugin_ids\x18\v \x03(\rR\rauthPluginIds\"\xc8\x02\n" +
 	"\x14SemanticRouterConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2930,7 +2978,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe7\x01\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12&\n" +
+	"\x0fauth_plugin_ids\x18\t \x03(\rR\rauthPluginIds\"\xe7\x01\n" +
 	"\x0fModelPoolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
@@ -2948,7 +2997,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
-	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xe2\x05\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\x8a\x06\n" +
 	"\n" +
 	"ToolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -2974,7 +3023,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\aapp_ids\x18\x11 \x03(\rR\x06appIds\x12+\n" +
 	"\x11governed_metadata\x18\x12 \x01(\tR\x10governedMetadata\x120\n" +
 	"\x14rest_access_disabled\x18\x13 \x01(\bR\x12restAccessDisabled\x12.\n" +
-	"\x13mcp_access_disabled\x18\x14 \x01(\bR\x11mcpAccessDisabled\"\xb6\x06\n" +
+	"\x13mcp_access_disabled\x18\x14 \x01(\bR\x11mcpAccessDisabled\x12&\n" +
+	"\x0fauth_plugin_ids\x18\x15 \x03(\rR\rauthPluginIds\"\xde\x06\n" +
 	"\x10DatasourceConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12+\n" +
@@ -3001,7 +3051,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x17\n" +
 	"\aapp_ids\x18\x15 \x03(\rR\x06appIds\x12+\n" +
-	"\x11governed_metadata\x18\x16 \x01(\tR\x10governedMetadata\"\xd9\x02\n" +
+	"\x11governed_metadata\x18\x16 \x01(\tR\x10governedMetadata\x12&\n" +
+	"\x0fauth_plugin_ids\x18\x17 \x03(\rR\rauthPluginIds\"\xd9\x02\n" +
 	"\x11OAuthClientConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12,\n" +

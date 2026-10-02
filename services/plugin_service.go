@@ -270,6 +270,10 @@ func (s *PluginService) DeletePlugin(id uint) error {
 	if err := models.DeleteAssociationsForPlugin(s.db, id); err != nil {
 		return fmt.Errorf("failed to remove plugin associations: %w", err)
 	}
+	// And its place on endpoint auth lists, and its own endpoint's list.
+	if err := models.DeleteEndpointAuthPluginsForPlugin(s.db, id); err != nil {
+		return fmt.Errorf("failed to remove endpoint auth plugin associations: %w", err)
+	}
 
 	// Clean up UI registry entries for this plugin
 	if err := s.db.Where("plugin_id = ?", id).Delete(&models.UIRegistry{}).Error; err != nil {

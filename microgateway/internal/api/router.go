@@ -19,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -131,6 +132,10 @@ type RouterConfig struct {
 	// overloaded (see the overload package). Management, health, metrics
 	// and plugin endpoints are never refused.
 	Overload *overload.Manager
+	// PluginAuth authenticates requests to a custom endpoint whose plugin
+	// has auth plugins attached (the gateway's CustomAuth hook). Nil leaves
+	// those endpoints on app tokens.
+	PluginAuth func(r *http.Request, target proxy.AuthTarget, credential, credType string) (proxy.AuthResult, error)
 }
 
 // SetupRouter configures and returns the main application router
@@ -462,9 +467,10 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			},
 		}
 
-		// Handle authentication if required
-		// Uses the same GatewayService.ValidateAPIToken path as the LLM/Tool/Datasource proxy
-		// to ensure consistent token validation across all gateway endpoints.
+		// Handle authentication if required. A plugin with auth plugins
+		// attached is authenticated by them alone, as any other gateway
+		// endpoint is; otherwise the same GatewayService.ValidateAPIToken path
+		// as the LLM/Tool/Datasource proxy applies.
 		if route.RequireAuth {
 			token := extractBearerToken(c)
 			if token == "" {
@@ -472,22 +478,50 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 				return
 			}
 
-			tokenResult, err := config.Services.GatewayService.ValidateAPIToken(token)
-			if err != nil {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-				return
+			var appID uint
+			pluginAuthenticated := false
+			if config.PluginAuth != nil {
+				credType := proxy.CredTypeAPIKey
+				if strings.HasPrefix(c.GetHeader("Authorization"), "Bearer ") {
+					credType = proxy.CredTypeBearer
+				}
+				target := proxy.AuthTarget{Kind: proxy.AuthTargetPlugin, ID: route.PluginID, Slug: pluginName}
+				result, err := config.PluginAuth(c.Request, target, token, credType)
+				switch {
+				case err != nil:
+					log.Warn().Err(err).Uint("plugin_id", route.PluginID).Msg("Auth plugins could not be asked; refusing the plugin endpoint request")
+					c.JSON(http.StatusServiceUnavailable, gin.H{"error": "authentication is unavailable, retry shortly"})
+					return
+				case result.Outcome == proxy.AuthRejected:
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credential"})
+					return
+				case result.Outcome == proxy.AuthAccepted:
+					appID = result.AppID
+					pluginAuthenticated = true
+					endpointReq.Subject = result.Subject
+					endpointReq.Claims = result.Claims
+				}
+			}
+
+			if !pluginAuthenticated {
+				tokenResult, err := config.Services.GatewayService.ValidateAPIToken(token)
+				if err != nil {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+					return
+				}
+				appID = tokenResult.AppID
 			}
 
 			endpointReq.Authenticated = true
 
 			// Fetch the full App object for the plugin (cached, 30s TTL)
-			if tokenResult.AppID > 0 {
-				if cached, ok := endpointAppCache.get(tokenResult.AppID); ok {
+			if appID > 0 {
+				if cached, ok := endpointAppCache.get(appID); ok {
 					endpointReq.App = cached
 				} else if config.Services != nil && config.Services.Management != nil {
-					dbApp, err := config.Services.Management.GetApp(tokenResult.AppID)
+					dbApp, err := config.Services.Management.GetApp(appID)
 					if err != nil {
-						log.Warn().Uint("app_id", tokenResult.AppID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
+						log.Warn().Uint("app_id", appID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
 					} else if dbApp != nil {
 						metadataMap := make(map[string]string)
 						if dbApp.Metadata != nil {
@@ -564,9 +598,23 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 							}
 						}
 
-						endpointAppCache.set(tokenResult.AppID, pbApp)
+						endpointAppCache.set(appID, pbApp)
 						endpointReq.App = pbApp
 					}
+				}
+			}
+
+			// An auth plugin authenticates; the app it names must exist and be
+			// active. (App tokens of inactive apps are refused by
+			// ValidateAPIToken.)
+			if pluginAuthenticated {
+				if endpointReq.App == nil {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credential"})
+					return
+				}
+				if !endpointReq.App.IsActive {
+					c.JSON(http.StatusForbidden, gin.H{"error": "app is inactive"})
+					return
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
@@ -30,6 +31,9 @@ type Server struct {
 	// overload refuses new proxy requests while the gateway is overloaded.
 	overload     *overload.Manager
 	stopOverload context.CancelFunc
+	// pluginAuth is the gateway's auth plugin hook, also used by the custom
+	// plugin endpoints.
+	pluginAuth func(r *http.Request, target proxy.AuthTarget, credential, credType string) (proxy.AuthResult, error)
 
 	// Build information
 	version   string
@@ -183,6 +187,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		BuildHash:                   buildHash,
 		BuildTime:                   buildTime,
 		Overload:                    overloadManager,
+		PluginAuth:                  authHooks.CustomAuth,
 	}
 
 	router := api.SetupRouter(routerConfig)
@@ -206,6 +211,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		traceShutdown: traceShutdown,
 		overload:      overloadManager,
 		stopOverload:  stopOverload,
+		pluginAuth:    authHooks.CustomAuth,
 		version:       version,
 		buildHash:     buildHash,
 		buildTime:     buildTime,
@@ -238,6 +244,7 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 		BuildHash:                   s.buildHash,
 		BuildTime:                   s.buildTime,
 		Overload:                    s.overload,
+		PluginAuth:                  s.pluginAuth,
 	}
 
 	// Recreate router with reload coordinator
