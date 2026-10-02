@@ -1,6 +1,9 @@
 package services
 
-import "github.com/TykTechnologies/midsommar/v2/services/group_access"
+import (
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/group_access"
+)
 
 // autoAddToDefaultCatalogue reports whether a newly saved LLM, data source or
 // tool should be put into the Default catalogue when it is in no catalogue.
@@ -20,4 +23,21 @@ import "github.com/TykTechnologies/midsommar/v2/services/group_access"
 // edition-specific.
 func autoAddToDefaultCatalogue() bool {
 	return !group_access.IsFilteringEnabled()
+}
+
+// autoGrantsDefaultGroup reports whether active instances of a plugin
+// resource type are granted to the Default group automatically.
+//
+// Plugin resources are filtered by team grants in both editions, so in
+// Community Edition the Default grant is the only route by which an instance
+// reaches anyone: there it is always on, whatever the plugin declared. In
+// Enterprise builds a plugin may declare models.DefaultAccessExplicit for a
+// type whose instances should reach only the teams they are granted to (an
+// internal governance record, say); types that declare nothing keep the
+// automatic grant.
+func autoGrantsDefaultGroup(prt *models.PluginResourceType) bool {
+	if !group_access.IsFilteringEnabled() {
+		return true
+	}
+	return prt == nil || models.NormalizeDefaultAccess(prt.DefaultAccess) != models.DefaultAccessExplicit
 }

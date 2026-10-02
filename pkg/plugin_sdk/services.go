@@ -367,6 +367,7 @@ func (s *studioServicesImpl) RegisterResourceTypes(ctx context.Context, regs []R
 			SupportsMetadata:    r.SupportsMetadata,
 			AccessGrantedViaApp: r.AccessGrantedViaApp,
 			PortalDetailPath:    r.PortalDetailPath,
+			DefaultAccess:       r.DefaultAccess,
 		}
 		if r.FormComponent != nil {
 			spec.FormComponentTag = r.FormComponent.Tag

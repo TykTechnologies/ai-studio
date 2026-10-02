@@ -141,6 +141,23 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/ValidateObjectMetadata":    models.ServiceScopeMetadataRead,
 		"/ai_studio_management.AIStudioManagementService/SetObjectMetadata":         models.ServiceScopeMetadataWrite,
 		"/ai_studio_management.AIStudioManagementService/DeleteObjectMetadata":      models.ServiceScopeMetadataWrite,
+		"/ai_studio_management.AIStudioManagementService/ListObjectMetadataAudit":   models.ServiceScopeMetadataRead,
+
+		// Governance read methods
+		"/ai_studio_management.AIStudioManagementService/ListAuditRecords":    models.ServiceScopeAuditRead,
+		"/ai_studio_management.AIStudioManagementService/ListMCPServers":      models.ServiceScopeMCPServersRead,
+		"/ai_studio_management.AIStudioManagementService/GetMCPServer":        models.ServiceScopeMCPServersRead,
+		"/ai_studio_management.AIStudioManagementService/ListModelRouters":    models.ServiceScopeRoutersRead,
+		"/ai_studio_management.AIStudioManagementService/GetModelRouter":      models.ServiceScopeRoutersRead,
+		"/ai_studio_management.AIStudioManagementService/ListSemanticRouters": models.ServiceScopeRoutersRead,
+		"/ai_studio_management.AIStudioManagementService/GetSemanticRouter":   models.ServiceScopeRoutersRead,
+
+		// Plugin resource access methods
+		"/ai_studio_management.AIStudioManagementService/ListGroups":                      models.ServiceScopeResourceAccessManage,
+		"/ai_studio_management.AIStudioManagementService/GetResourceInstanceGroups":       models.ServiceScopeResourceAccessManage,
+		"/ai_studio_management.AIStudioManagementService/SetResourceInstanceGroups":       models.ServiceScopeResourceAccessManage,
+		"/ai_studio_management.AIStudioManagementService/ListAccessibleResourceInstances": models.ServiceScopeResourceAccessManage,
+		"/ai_studio_management.AIStudioManagementService/SetAppGovernanceState":           models.ServiceScopeAppsLifecycle,
 		"/ai_studio_management.AIStudioManagementService/CreateApp": models.ServiceScopeAppsWrite,
 		"/ai_studio_management.AIStudioManagementService/UpdateApp": models.ServiceScopeAppsWrite,
 		"/ai_studio_management.AIStudioManagementService/DeleteApp": models.ServiceScopeAppsWrite,

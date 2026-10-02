@@ -152,6 +152,260 @@ service AIStudioManagementService {
     // the role editor (sub-resources of "plugin:<manifest id>"). Requires the
     // rbac.register scope.
     rpc RegisterPermissionResources(RegisterPermissionResourcesRequest) returns (RegisterPermissionResourcesResponse);
+
+    // Governed metadata history (Enterprise): the audit trail of one object's
+    // governed metadata, newest first. Requires metadata.read.
+    rpc ListObjectMetadataAudit(ListObjectMetadataAuditRequest) returns (ListObjectMetadataAuditResponse);
+
+    // Platform audit trail (Enterprise), read-only and filtered to one
+    // resource. Never carries request or response bodies. Requires audit.read.
+    rpc ListAuditRecords(ListAuditRecordsRequest) returns (ListAuditRecordsResponse);
+
+    // MCP servers (Enterprise). Never carries upstream URLs, auth details or
+    // definitions. Requires mcp-servers.read.
+    rpc ListMCPServers(ListMCPServersRequest) returns (ListMCPServersResponse);
+    rpc GetMCPServer(GetMCPServerRequest) returns (GetMCPServerResponse);
+
+    // Model and semantic routers (Enterprise), with the LLMs they can route
+    // to. Requires routers.read.
+    rpc ListModelRouters(ListModelRoutersRequest) returns (ListModelRoutersResponse);
+    rpc GetModelRouter(GetModelRouterRequest) returns (GetModelRouterResponse);
+    rpc ListSemanticRouters(ListSemanticRoutersRequest) returns (ListSemanticRoutersResponse);
+    rpc GetSemanticRouter(GetSemanticRouterRequest) returns (GetSemanticRouterResponse);
+
+    // Team access to the calling plugin's own resource instances: the same
+    // grants the Teams page edits. A plugin can only read or change grants on
+    // resource types it registered. Requires resource-access.manage.
+    rpc ListGroups(ListGroupsRequest) returns (ListGroupsResponse);
+    rpc GetResourceInstanceGroups(GetResourceInstanceGroupsRequest) returns (GetResourceInstanceGroupsResponse);
+    rpc SetResourceInstanceGroups(SetResourceInstanceGroupsRequest) returns (SetResourceInstanceGroupsResponse);
+    rpc ListAccessibleResourceInstances(ListAccessibleResourceInstancesRequest) returns (ListAccessibleResourceInstancesResponse);
+
+    // App governance state: suspend or reactivate an App and raise or clear
+    // governance flags on it (e.g. "ownerless", "review_lapsed"), recorded in
+    // the audit trail. Cannot change an App's bindings. Requires apps.lifecycle.
+    rpc SetAppGovernanceState(SetAppGovernanceStateRequest) returns (SetAppGovernanceStateResponse);
+}
+
+// App Governance Messages
+
+message SetAppGovernanceStateRequest {
+    PluginContext context = 1;
+    uint32 app_id = 2;
+    optional bool is_active = 3;         // unset leaves the active state alone
+    map<string, string> flags = 4;       // flag -> value; an empty value clears the flag
+    string reason = 5;                   // shown with the flags and in the audit trail
+}
+
+message SetAppGovernanceStateResponse {
+    AppInfo app = 1;
+    bool changed = 2;
+}
+
+// Governed Metadata Audit Messages
+
+message ListObjectMetadataAuditRequest {
+    PluginContext context = 1;
+    string object_type = 2;              // as GetObjectMetadataRequest ("plugin_resource:self:<slug>" allowed)
+    string object_id = 3;
+    int32 limit = 4;                     // 0 = 100, capped at 500
+}
+
+message ObjectMetadataAuditEntry {
+    uint32 id = 1;
+    string action = 2;                   // set | merge | delete
+    uint32 user_id = 3;
+    string source = 4;                   // e.g. "user", "plugin:<id>", "system"
+    string before_json = 5;
+    string after_json = 6;
+    repeated string hooks_executed = 7;
+    google.protobuf.Timestamp created_at = 8;
+}
+
+message ListObjectMetadataAuditResponse {
+    repeated ObjectMetadataAuditEntry entries = 1;
+}
+
+// Platform Audit Trail Messages
+
+message ListAuditRecordsRequest {
+    PluginContext context = 1;
+    string resource_type = 2;            // snake_case singular, e.g. "llm", "tool", "mcp_server", "app"
+    string resource_id = 3;
+    int32 limit = 4;                     // 0 = 50, capped at 200
+    bool mutations_only = 5;             // only POST/PUT/PATCH/DELETE records
+}
+
+message AuditRecordInfo {
+    uint32 id = 1;
+    google.protobuf.Timestamp timestamp = 2;
+    uint32 user_id = 3;
+    string user_email = 4;
+    string user_name = 5;
+    string action = 6;
+    string method = 7;
+    string route = 8;
+    int32 status = 9;
+    string resource_type = 10;
+    string resource_id = 11;
+    string resource_name = 12;
+    string diff_json = 13;               // {"field": {"old":..,"new":..}}, sensitive columns already redacted
+    string error = 14;
+}
+
+message ListAuditRecordsResponse {
+    repeated AuditRecordInfo records = 1;
+}
+
+// MCP Server Messages
+
+message MCPServerInfo {
+    uint32 id = 1;
+    string name = 2;
+    string slug = 3;
+    string description = 4;
+    string kind = 5;                     // remote | local | ...
+    optional int32 privacy_score = 6;    // unset until an administrator sets it
+    bool is_active = 7;
+    string dashboard_state = 8;
+    bool brokerable = 9;
+    repeated string tags = 10;
+    google.protobuf.Timestamp updated_at = 11;
+}
+
+message ListMCPServersRequest {
+    PluginContext context = 1;
+    int32 page = 2;
+    int32 limit = 3;                     // 0 = 50, capped at 200
+    optional bool is_active = 4;
+}
+
+message ListMCPServersResponse {
+    repeated MCPServerInfo servers = 1;
+    int64 total_count = 2;
+}
+
+message GetMCPServerRequest {
+    PluginContext context = 1;
+    uint32 server_id = 2;
+}
+
+message GetMCPServerResponse {
+    MCPServerInfo server = 1;
+}
+
+// Router Messages
+
+message ModelRouterInfo {
+    uint32 id = 1;
+    string name = 2;
+    string slug = 3;
+    string namespace = 4;
+    string description = 5;
+    bool active = 6;
+    repeated uint32 llm_ids = 7;         // every LLM a pool vendor can route to
+    google.protobuf.Timestamp updated_at = 8;
+}
+
+message SemanticRouterInfo {
+    uint32 id = 1;
+    string name = 2;
+    string slug = 3;
+    string namespace = 4;
+    string description = 5;
+    bool active = 6;
+    repeated uint32 llm_ids = 7;         // route targets and the judge model
+    repeated uint32 model_router_ids = 8; // route targets that are model routers
+    google.protobuf.Timestamp updated_at = 9;
+}
+
+message ListModelRoutersRequest {
+    PluginContext context = 1;
+    int32 page = 2;
+    int32 limit = 3;                     // 0 = 50, capped at 200
+}
+
+message ListModelRoutersResponse {
+    repeated ModelRouterInfo routers = 1;
+    int64 total_count = 2;
+}
+
+message GetModelRouterRequest {
+    PluginContext context = 1;
+    uint32 router_id = 2;
+}
+
+message GetModelRouterResponse {
+    ModelRouterInfo router = 1;
+}
+
+message ListSemanticRoutersRequest {
+    PluginContext context = 1;
+    int32 page = 2;
+    int32 limit = 3;                     // 0 = 50, capped at 200
+}
+
+message ListSemanticRoutersResponse {
+    repeated SemanticRouterInfo routers = 1;
+    int64 total_count = 2;
+}
+
+message GetSemanticRouterRequest {
+    PluginContext context = 1;
+    uint32 router_id = 2;
+}
+
+message GetSemanticRouterResponse {
+    SemanticRouterInfo router = 1;
+}
+
+// Plugin Resource Access Messages
+
+message GroupInfo {
+    uint32 id = 1;
+    string name = 2;
+    bool is_default = 3;                 // the Default team every user joins
+}
+
+message ListGroupsRequest {
+    PluginContext context = 1;
+}
+
+message ListGroupsResponse {
+    repeated GroupInfo groups = 1;
+}
+
+message GetResourceInstanceGroupsRequest {
+    PluginContext context = 1;
+    string resource_type_slug = 2;       // one of the calling plugin's resource types
+    string instance_id = 3;
+}
+
+message GetResourceInstanceGroupsResponse {
+    repeated uint32 group_ids = 1;
+}
+
+message SetResourceInstanceGroupsRequest {
+    PluginContext context = 1;
+    string resource_type_slug = 2;
+    string instance_id = 3;
+    repeated uint32 group_ids = 4;
+    bool replace = 5;                    // true: the instance is granted to exactly group_ids; false: add them
+}
+
+message SetResourceInstanceGroupsResponse {
+    repeated uint32 group_ids = 1;       // the grants after the change
+}
+
+message ListAccessibleResourceInstancesRequest {
+    PluginContext context = 1;
+    string resource_type_slug = 2;
+    uint32 user_id = 3;
+}
+
+message ListAccessibleResourceInstancesResponse {
+    bool see_all = 1;                    // the user manages teams and sees every instance
+    repeated string instance_ids = 2;    // granted instances (empty when see_all)
 }
 
 // Notification Messages
@@ -188,6 +442,7 @@ message ResourceTypeSpec {
     bool supports_metadata = 10;         // Instances can carry governed metadata (Enterprise)
     optional bool access_granted_via_app = 11;  // An App credential grants access to instances; unset = platform default
     string portal_detail_path = 12;      // Portal path template for an instance, "{id}" is replaced
+    string default_access = 13;          // "" | auto: active instances join the Default team | explicit: only granted teams (Enterprise)
 }
 
 message RegisterResourceTypesRequest {
@@ -536,6 +791,16 @@ message AppInfo {
     repeated uint32 tool_ids = 12;
     repeated uint32 datasource_ids = 13;
     uint32 user_id = 14;
+    repeated uint32 mcp_server_ids = 15;
+    repeated uint32 model_router_ids = 16;
+    repeated uint32 semantic_router_ids = 17;
+    repeated AppPluginResourceRef plugin_resources = 18;
+}
+
+message AppPluginResourceRef {
+    uint32 plugin_id = 1;
+    string resource_type_slug = 2;
+    string instance_id = 3;
 }
 
 // App CRUD Messages

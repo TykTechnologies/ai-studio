@@ -17,7 +17,16 @@ import (
 
 func setupExtensionRPCTest(t *testing.T, scopes ...string) (*AIStudioManagementServer, *services.Service, *models.Plugin, context.Context) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	return setupExtensionRPCTestDSN(t, ":memory:", scopes...)
+}
+
+// setupExtensionRPCTestDSN is setupExtensionRPCTest on a given SQLite DSN.
+// Tests whose services write from background goroutines (the audit trail's
+// writer) need a named shared-cache database: every new connection to plain
+// ":memory:" is a fresh, empty database.
+func setupExtensionRPCTestDSN(t *testing.T, dsn string, scopes ...string) (*AIStudioManagementServer, *services.Service, *models.Plugin, context.Context) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, models.InitModels(db))
 

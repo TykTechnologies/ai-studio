@@ -1,6 +1,8 @@
 package models
 
 import (
+	"strings"
+
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -36,9 +38,36 @@ type PluginResourceType struct {
 	// PortalDetailPath is a same-origin path template to an instance's portal
 	// page; "{id}" is replaced with the escaped instance ID.
 	PortalDetailPath string `json:"portal_detail_path" gorm:"size:500"`
+	// DefaultAccess is what the plugin declared for Default-team access:
+	// "" or DefaultAccessAuto grants every active instance to the Default
+	// team; DefaultAccessExplicit leaves access to team grants alone. Read
+	// it through services' effective policy, which forces auto in Community
+	// Edition.
+	DefaultAccess string `json:"default_access" gorm:"size:16"`
 
 	// Relationships
 	Plugin *Plugin `json:"plugin,omitempty" gorm:"foreignKey:PluginID"`
+}
+
+// Default-team access modes for plugin resource types.
+const (
+	// DefaultAccessAuto grants every active instance to the Default team, so
+	// every user sees it. The default, and the only mode in Community
+	// Edition, where team segmentation is not available.
+	DefaultAccessAuto = "auto"
+	// DefaultAccessExplicit never grants automatically: instances reach the
+	// teams an administrator (or the plugin, through its grant calls) grants
+	// them to. Honoured only in Enterprise builds.
+	DefaultAccessExplicit = "explicit"
+)
+
+// NormalizeDefaultAccess maps a declared mode to a known one: anything other
+// than DefaultAccessExplicit (including empty) is DefaultAccessAuto.
+func NormalizeDefaultAccess(mode string) string {
+	if strings.EqualFold(strings.TrimSpace(mode), DefaultAccessExplicit) {
+		return DefaultAccessExplicit
+	}
+	return DefaultAccessAuto
 }
 
 // ResolveAccessGrantedViaApp returns the effective AccessGrantedViaApp for a

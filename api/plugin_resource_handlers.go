@@ -166,6 +166,7 @@ func serializePluginResourceType(t *models.PluginResourceType, portal bool) gin.
 		entry["supports_metadata"] = t.SupportsMetadata
 		entry["supports_submissions"] = t.SupportsSubmissions
 		entry["is_active"] = t.IsActive
+		entry["default_access"] = models.NormalizeDefaultAccess(t.DefaultAccess)
 		if t.FormComponentTag != "" {
 			entry["form_component"] = gin.H{
 				"tag":         t.FormComponentTag,

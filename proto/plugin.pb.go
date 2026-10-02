@@ -5214,6 +5214,7 @@ type ResourceTypeRegistrationProto struct {
 	SubmissionSchema    string                      `protobuf:"bytes,9,opt,name=submission_schema,json=submissionSchema,proto3" json:"submission_schema,omitempty"`                      // JSON Schema (object) describing the submission payload
 	AccessGrantedViaApp *bool                       `protobuf:"varint,10,opt,name=access_granted_via_app,json=accessGrantedViaApp,proto3,oneof" json:"access_granted_via_app,omitempty"` // An App credential grants access to instances; unset = platform default
 	PortalDetailPath    string                      `protobuf:"bytes,11,opt,name=portal_detail_path,json=portalDetailPath,proto3" json:"portal_detail_path,omitempty"`                   // Portal path template for an instance, e.g. "/portal/plugins/x#/items/{id}"
+	DefaultAccess       string                      `protobuf:"bytes,12,opt,name=default_access,json=defaultAccess,proto3" json:"default_access,omitempty"`                              // "" | auto: active instances join the Default team | explicit: only granted teams (Enterprise)
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -5321,6 +5322,13 @@ func (x *ResourceTypeRegistrationProto) GetAccessGrantedViaApp() bool {
 func (x *ResourceTypeRegistrationProto) GetPortalDetailPath() string {
 	if x != nil {
 		return x.PortalDetailPath
+	}
+	return ""
+}
+
+func (x *ResourceTypeRegistrationProto) GetDefaultAccess() string {
+	if x != nil {
+		return x.DefaultAccess
 	}
 	return ""
 }
@@ -6489,7 +6497,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x05ERROR\x10\x03\"%\n" +
 	"#GetResourceTypeRegistrationsRequest\"s\n" +
 	"$GetResourceTypeRegistrationsResponse\x12K\n" +
-	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\x84\x04\n" +
+	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\xab\x04\n" +
 	"\x1dResourceTypeRegistrationProto\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -6502,7 +6510,8 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x11submission_schema\x18\t \x01(\tR\x10submissionSchema\x128\n" +
 	"\x16access_granted_via_app\x18\n" +
 	" \x01(\bH\x00R\x13accessGrantedViaApp\x88\x01\x01\x12,\n" +
-	"\x12portal_detail_path\x18\v \x01(\tR\x10portalDetailPathB\x19\n" +
+	"\x12portal_detail_path\x18\v \x01(\tR\x10portalDetailPath\x12%\n" +
+	"\x0edefault_access\x18\f \x01(\tR\rdefaultAccessB\x19\n" +
 	"\x17_access_granted_via_app\"O\n" +
 	"\x1aResourceFormComponentProto\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1f\n" +

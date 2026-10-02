@@ -183,6 +183,10 @@ test('Asset Catalog rows in the role editor are honoured end to end', async ({
         const a = await rpc(page, pluginId, 'admin_create_asset', { type_slug: 'agent', name: agentName, lifecycle: 'production', requires_approval: true, metadata: { purpose: 'triage', endpoint_url: 'https://secret.example.com', risk_level: 'low' }, change_notes: 'e2e' });
         expect(a.env.ok, JSON.stringify(a.env)).toBe(true);
         created.assets.push(a.env.data.id);
+        // Assets are internal until published (1.2): publish the agent so
+        // portal users can find it and ask for access.
+        const pub = await rpc(page, pluginId, 'admin_set_publication', { id: a.env.data.id, state: 'published', audience: 'everyone', note: 'e2e' });
+        expect(pub.env.ok, JSON.stringify(pub.env)).toBe(true);
     }
     const [promptId, agentId] = created.assets;
 
@@ -225,6 +229,9 @@ test('Asset Catalog rows in the role editor are honoured end to end', async ({
         await expect(page.getByText(/Moved to/)).toBeVisible({ timeout: 15000 });
         const after = await rpc(page, pluginId, 'admin_list_assets', { q: promptName });
         expect(after.env.data.items[0].lifecycle).toBe('approved');
+        // The publish row also covers publishing to the portal.
+        const pub = await rpc(page, pluginId, 'admin_set_publication', { id: promptId, state: 'published', audience: 'everyone', note: 'e2e' });
+        expect(pub.env.ok, JSON.stringify(pub.env)).toBe(true);
         const denied = await rpc(page, pluginId, 'admin_create_asset', { type_slug: 'prompt', name: `nope ${ts}` });
         expect(denied.env.code).toBe('forbidden');
         const del = await rpc(page, pluginId, 'admin_delete_asset', { id: promptId });
@@ -261,7 +268,7 @@ test('Asset Catalog rows in the role editor are honoured end to end', async ({
         await expect(options).toHaveCount(1);
         await expect(options.first()).toHaveText('Agent');
         await page.getByRole('button', { name: 'Cancel' }).click();
-        // The prompt is approved (publicly visible) but of another type: no controls.
+        // The prompt is approved and published (publicly visible) but of another type: no controls.
         const promptRow = page.getByRole('row', { name: new RegExp(promptName) });
         await expect(promptRow).toBeVisible();
         for (const name of ['Lifecycle', 'Grants', 'Delete']) {
@@ -291,8 +298,9 @@ test('Asset Catalog rows in the role editor are honoured end to end', async ({
     await openPluginPage(page, 'Assets', 'asset-catalog-admin-assets');
     await expect(page.getByRole('button', { name: 'New asset' })).toHaveCount(0);
     {
-        // Without an Assets read row the page lists only the publicly visible
-        // stages (the approved prompt, the production agent), with no controls.
+        // Without an Assets read row the page lists only published assets in
+        // the publicly visible stages (the approved prompt, the production
+        // agent), with no controls.
         const row = page.getByRole('row', { name: new RegExp(promptName) });
         await expect(row).toBeVisible();
         for (const name of ['Lifecycle', 'Grants', 'Delete']) {

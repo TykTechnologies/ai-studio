@@ -240,6 +240,9 @@ func (s *AIStudioManagementServer) ListApps(ctx context.Context, req *pb.ListApp
 	for i, app := range apps {
 		pbApps[i] = convertAppToPB(&app)
 	}
+	if err := fillAppBindings(s.service.GetDB(), pbApps); err != nil {
+		log.Warn().Err(err).Msg("Failed to load app bindings for gRPC list")
+	}
 
 	log.Debug().
 		Int("app_count", len(apps)).
@@ -275,8 +278,12 @@ func (s *AIStudioManagementServer) GetApp(ctx context.Context, req *pb.GetAppReq
 		Str("app_name", app.Name).
 		Msg("Retrieved app via gRPC")
 
+	info := convertAppToPB(app)
+	if err := fillAppBindings(s.service.GetDB(), []*pb.AppInfo{info}); err != nil {
+		log.Warn().Err(err).Uint32("app_id", appID).Msg("Failed to load app bindings for gRPC get")
+	}
 	return &pb.GetAppResponse{
-		App: convertAppToPB(app),
+		App: info,
 	}, nil
 }
 
@@ -433,6 +440,9 @@ func (s *AIStudioManagementServer) PatchAppMetadata(ctx context.Context, req *pb
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
+		}
+		if errors.Is(err, services.ErrReservedAppMetadataKey) {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		log.Error().Err(err).Uint32("app_id", appID).Str("key", req.GetKey()).Msg("Failed to patch app metadata via gRPC")
 		return nil, status.Errorf(codes.Internal, "failed to patch app metadata: %v", err)
@@ -1575,6 +1585,7 @@ func (s *AIStudioManagementServer) RegisterResourceTypes(ctx context.Context, re
 			// platform default (hook-type heuristic) applies.
 			AccessGrantedViaAppDeclared: spec.AccessGrantedViaApp,
 			PortalDetailPath:            spec.PortalDetailPath,
+			DefaultAccess:               spec.DefaultAccess,
 		})
 		keep = append(keep, slugValue)
 	}

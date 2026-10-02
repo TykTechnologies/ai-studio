@@ -886,6 +886,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					// RegisterPluginResourceTypes; nil means "platform default".
 					AccessGrantedViaAppDeclared: rt.AccessGrantedViaApp,
 					PortalDetailPath:            rt.PortalDetailPath,
+					DefaultAccess:               rt.DefaultAccess,
 				}
 				if rt.FormComponent != nil {
 					prt.FormComponentTag = rt.FormComponent.Tag

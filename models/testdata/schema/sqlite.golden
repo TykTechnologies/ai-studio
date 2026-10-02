@@ -1178,6 +1178,7 @@ TABLE plugin_resource_types
   column `access_granted_via_app` numeric DEFAULT false
   column `access_granted_via_app_declared` numeric
   column `portal_detail_path` text
+  column `default_access` text
   constraint CONSTRAINT `fk_plugin_resource_types_plugin` FOREIGN KEY (`plugin_id`) REFERENCES `plugins`(`id`)
   index CREATE INDEX `idx_plugin_resource_types_deleted_at` ON `plugin_resource_types`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_prt_plugin_slug` ON `plugin_resource_types`(`plugin_id`,`slug`)

@@ -119,7 +119,9 @@ const AppForm = () => {
     try {
       const response = await apiClient.get(`/apps/${id}`);
       const appData = response.data.data.attributes;
-      const metadata = appData.metadata || {};
+      // Governance flags are raised by governance plugins and shown on the
+      // App details page; the server keeps them whatever the form sends.
+      const { governance_flags: _flags, ...metadata } = appData.metadata || {};
       setApp({
         ...appData,
         llm_ids: Array.isArray(appData.llm_ids)

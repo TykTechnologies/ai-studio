@@ -729,6 +729,7 @@ func (w *pluginServerWrapper) GetResourceTypeRegistrations(ctx context.Context, 
 			SubmissionSchema:    r.SubmissionSchema,
 			AccessGrantedViaApp: r.AccessGrantedViaApp,
 			PortalDetailPath:    r.PortalDetailPath,
+			DefaultAccess:       r.DefaultAccess,
 		}
 		if r.FormComponent != nil {
 			pr.FormComponent = &pb.ResourceFormComponentProto{

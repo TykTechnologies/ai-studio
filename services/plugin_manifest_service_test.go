@@ -309,3 +309,46 @@ func TestGetUIRegistry_ExcludesPortalEntries(t *testing.T) {
 	assert.Len(t, result, 1)
 	assert.Equal(t, "admin-comp", result[0].ComponentTag)
 }
+
+// Hidden routes are registered (the page works, links reach it) but stay out
+// of the admin and portal sidebars.
+func TestHiddenRoutesStayOutOfTheSidebar(t *testing.T) {
+	service, db := setupManifestServiceTest(t)
+	plugin := createTestPluginForManifest(t, db, "hidden-routes")
+	manifest := &models.PluginManifest{
+		ID: "com.test.hidden", Version: "1.0.0", Name: "Hidden",
+		UI: &struct {
+			Slots []models.UISlot `json:"slots"`
+		}{Slots: []models.UISlot{{Slot: "sidebar.section", Label: "Catalog", Items: []models.UISlotItem{
+			{Type: "route", Path: "/admin/x/list", Title: "List", Mount: models.UIMount{Kind: "webc", Tag: "x-list", Entry: "/ui/list.js"}},
+			{Type: "route", Path: "/admin/x/detail", Title: "Detail", Hidden: true, Mount: models.UIMount{Kind: "webc", Tag: "x-detail", Entry: "/ui/detail.js"}},
+		}}}},
+		Portal: &struct {
+			Slots []models.PortalUISlot `json:"slots"`
+		}{Slots: []models.PortalUISlot{{Slot: "portal_sidebar.section", Label: "Catalog", Items: []models.UISlotItem{
+			{Type: "route", Path: "/portal/plugins/x", Title: "Browse", Mount: models.UIMount{Kind: "webc", Tag: "x-browse", Entry: "/ui/browse.js"}},
+			{Type: "route", Path: "/portal/plugins/x/compose", Title: "Compose", Hidden: true, Mount: models.UIMount{Kind: "webc", Tag: "x-compose", Entry: "/ui/compose.js"}},
+		}}}},
+	}
+	require.NoError(t, service.RegisterPluginUI(plugin, manifest))
+
+	var registered int64
+	require.NoError(t, db.Model(&models.UIRegistry{}).Where("plugin_id = ?", plugin.ID).Count(&registered).Error)
+	assert.EqualValues(t, 4, registered, "every route is registered")
+
+	admin, err := service.GetSidebarMenuItems()
+	require.NoError(t, err)
+	require.Len(t, admin, 1)
+	paths := []string{}
+	for _, sub := range admin[0].SubItems {
+		paths = append(paths, sub.Path)
+	}
+	assert.Contains(t, paths, "/admin/x/list")
+	assert.NotContains(t, paths, "/admin/x/detail")
+
+	portal, err := service.GetPortalSidebarMenuItemsForUser(nil)
+	require.NoError(t, err)
+	require.Len(t, portal, 1)
+	require.Len(t, portal[0].SubItems, 1)
+	assert.Equal(t, "/portal/plugins/x", portal[0].SubItems[0].Path)
+}

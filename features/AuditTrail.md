@@ -190,6 +190,10 @@ Filters are parsed once by `parseAuditQuery` (dates as `YYYY-MM-DD` or RFC3339, 
 
 Each enterprise test opens its own named shared-cache SQLite memory database so the background writer's pooled connections see the same data without tests seeing each other.
 
+## Plugin read access
+
+Governance plugins read the trail of one resource through the management RPC `ListAuditRecords(resource_type, resource_id, limit, mutations_only)` (scope `audit.read`; `services/grpc/governance_read_server.go`, SDK `ctx.Services.Studio().ListAuditRecords`). It returns the fields of `models.AuditRecord` except `RequestDump`/`ResponseDump` (never sent), newest first, at most 200; `mutations_only` merges the POST/PUT/PATCH/DELETE pages so reads recorded with `AUDIT_RECORD_READS` do not crowd out changes. Community Edition answers `Unimplemented`; a node without an attached audit service (proxy-only) or with file-only storage answers `FailedPrecondition`. The Asset Catalog plugin uses it for the history of an asset's core components.
+
 ---
 
 ## Potential Enhancements

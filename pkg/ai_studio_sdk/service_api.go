@@ -1823,6 +1823,7 @@ type ResourceTypeSpec struct {
 	SupportsMetadata    bool  // instances can carry governed metadata (Enterprise)
 	AccessGrantedViaApp *bool // an App credential grants access; nil = platform default
 	PortalDetailPath    string
+	DefaultAccess       string // "" / "auto" (Default team) or "explicit" (granted teams only; Enterprise)
 }
 
 // RegisterResourceTypes (re)registers the calling plugin's resource types.
@@ -1848,6 +1849,7 @@ func RegisterResourceTypes(ctx context.Context, specs []ResourceTypeSpec, deacti
 			SupportsMetadata:    s.SupportsMetadata,
 			AccessGrantedViaApp: s.AccessGrantedViaApp,
 			PortalDetailPath:    s.PortalDetailPath,
+			DefaultAccess:       s.DefaultAccess,
 		})
 	}
 
