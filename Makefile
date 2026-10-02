@@ -502,6 +502,14 @@ schema-golden: ## Regenerate the schema snapshot goldens (SQLite + postgres:16 i
 	@scripts/schema-golden.sh
 
 # ============================================================================
+# API docs
+# ============================================================================
+.PHONY: swagger
+SWAG_VERSION ?= v1.16.4
+swagger: ## Regenerate docs/swagger from the handler annotations (general info in api/api.go)
+	@go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION) init -g api/api.go -o docs/swagger --overridesFile docs/swagger/.swaggo
+
+# ============================================================================
 # gorm: AI Studio's own copy (see third_party/README.md)
 # ============================================================================
 .PHONY: gorm-vendor gorm-verify
