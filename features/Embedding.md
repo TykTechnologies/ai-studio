@@ -478,7 +478,10 @@ roles pattern (Phase 4):
   for it: `dashboardToken` calls `Token` for every Dashboard client and
   probe, so a key the Dashboard rotates takes effect on the next request.
   On a node without the option the connection's requests fail with
-  `ErrDashboard` rather than going out unauthenticated.
+  `ErrDashboard` rather than going out unauthenticated. `Token` runs on
+  Studio's goroutines, so a panic in it is recovered (`safe.Call`, logged
+  with its stack) and costs that request its key, not the host its
+  process; an empty key leaves the connection pending.
 
 `studio.New` validates the option (`HostConnection.Validate`) before
 anything starts. Without the Enterprise implementation it is logged and
