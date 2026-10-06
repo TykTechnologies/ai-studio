@@ -322,6 +322,8 @@ type RegisterPrimitive struct {
 
 // RegisterInput describes an MCP proxy to create on a Tyk Dashboard.
 // UpstreamAuthToken is sent to the Dashboard and never persisted in Studio.
+// On a Tyk Gateway connection it is part of the desired definition Studio
+// keeps (encrypted) to reconcile the nodes.
 type RegisterInput struct {
 	ConnectionID    uint   `json:"connection_id"`
 	Kind            string `json:"kind"` // remote | rest_to_mcp

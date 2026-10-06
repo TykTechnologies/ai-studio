@@ -25,6 +25,22 @@ export const toKeyAccess = (form) => ({
 });
 
 /**
+ * keyAccessErrors returns the per-field problems the server would reject:
+ * a rate needs a period and a quota needs a renewal period. Exported for
+ * the test.
+ */
+export const keyAccessErrors = (form) => {
+  const errors = {};
+  const positive = (v) => Number(v) > 0;
+  if (Number(form.rate) < 0 || Number(form.per) < 0 || Number(form.quota_max) < 0 || Number(form.quota_renewal_rate) < 0) {
+    errors.negative = "Limits cannot be negative.";
+  }
+  if (positive(form.rate) && !positive(form.per)) errors.per = "A rate limit needs a period in seconds.";
+  if (positive(form.quota_max) && !positive(form.quota_renewal_rate)) errors.quota_renewal_rate = "A quota needs a renewal period in seconds.";
+  return errors;
+};
+
+/**
  * MCPKeyAccessEditor sets what keys minted on a Tyk Gateway connection grant
  * for one MCP server. Open-source gateways carry no policies AI Studio can
  * rely on, so the rights are written onto each key; saving rewrites the live
@@ -39,6 +55,8 @@ const MCPKeyAccessEditor = ({ server, onSaved, onError }) => {
   }, [server.key_access]);
 
   const toolOptions = (server.primitives || []).filter((p) => p.type === "tool").map((p) => p.name);
+  const errors = keyAccessErrors(form);
+  const invalid = Object.keys(errors).length > 0;
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
   const save = async () => {
@@ -78,7 +96,16 @@ const MCPKeyAccessEditor = ({ server, onSaved, onError }) => {
           <TextField fullWidth type="number" label="Requests" value={form.rate} onChange={set("rate")} inputProps={{ min: 0, "data-testid": "key-access-rate" }} />
         </Grid>
         <Grid item xs={6} sm={3}>
-          <TextField fullWidth type="number" label="per seconds" value={form.per} onChange={set("per")} inputProps={{ min: 0, "data-testid": "key-access-per" }} />
+          <TextField
+            fullWidth
+            type="number"
+            label="per seconds"
+            value={form.per}
+            onChange={set("per")}
+            error={Boolean(errors.per)}
+            helperText={errors.per}
+            inputProps={{ min: 0, "data-testid": "key-access-per" }}
+          />
         </Grid>
         <Grid item xs={6} sm={3}>
           <TextField fullWidth type="number" label="Quota (requests)" value={form.quota_max} onChange={set("quota_max")} inputProps={{ min: 0, "data-testid": "key-access-quota" }} />
@@ -90,15 +117,17 @@ const MCPKeyAccessEditor = ({ server, onSaved, onError }) => {
             label="renews every (seconds)"
             value={form.quota_renewal_rate}
             onChange={set("quota_renewal_rate")}
+            error={Boolean(errors.quota_renewal_rate)}
+            helperText={errors.quota_renewal_rate}
             inputProps={{ min: 0, "data-testid": "key-access-renewal" }}
           />
         </Grid>
       </Grid>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        Limits count per App key and per server. Leave them empty for no limit.
+      <Typography variant="body2" color={errors.negative ? "error" : "text.secondary"} sx={{ mt: 1 }}>
+        {errors.negative || "Limits count per App key and per server. Leave them empty for no limit."}
       </Typography>
       <Box sx={{ mt: 2 }}>
-        <PrimaryButton variant="contained" onClick={save} disabled={saving} data-testid="save-key-access">
+        <PrimaryButton variant="contained" onClick={save} disabled={saving || invalid} data-testid="save-key-access">
           {saving ? "Saving…" : "Save key access"}
         </PrimaryButton>
       </Box>

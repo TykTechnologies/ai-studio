@@ -203,6 +203,13 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice, platform = "Das
           : "The Dashboard is the source of truth: the push is refused if the proxy changed there since this page loaded. Leave"}{" "}
         masked values (***) in place; they are restored from the live definition and never shown here.
       </Typography>
+      {platform === "Gateway" && (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="secret-ref-hint">
+          Open-source gateways keep this definition on each node&apos;s disk. For upstream credentials, use a gateway secret
+          reference such as <code>$secret_env.WEATHER_TOKEN</code> (read from <code>TYK_SECRET_WEATHER_TOKEN</code> on the
+          gateways) rather than a literal value.
+        </Alert>
+      )}
       <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} inputProps={{ "data-testid": "definition-editor", style: { fontFamily: "monospace", fontSize: "0.8rem" } }} />
       {server.origin === "dashboard" && (
         <FormControlLabel control={<Checkbox checked={confirmOrigin} onChange={(e) => setConfirmOrigin(e.target.checked)} inputProps={{ "data-testid": "confirm-origin" }} />} label="This proxy was created on the Dashboard; AI Studio may overwrite it" />

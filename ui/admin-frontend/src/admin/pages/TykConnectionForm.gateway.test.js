@@ -5,7 +5,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import testTheme from "../utils/testTheme";
 import TykConnectionForm, { formToInput, emptyForm, connectionToForm } from "./TykConnectionForm";
-import { toKeyAccess } from "./MCPKeyAccessEditor";
+import { toKeyAccess, keyAccessErrors } from "./MCPKeyAccessEditor";
 import apiClient from "../utils/apiClient";
 
 jest.mock("../utils/apiClient", () => ({
@@ -128,6 +128,22 @@ describe("gateway connection payloads", () => {
       quota_max: 1000,
       quota_renewal_rate: 3600,
     });
+  });
+});
+
+describe("keyAccessErrors", () => {
+  const form = { allowed_tools: [], rate: "", per: "", quota_max: "", quota_renewal_rate: "" };
+  it("accepts empty limits", () => {
+    expect(keyAccessErrors(form)).toEqual({});
+  });
+  it("needs a period for a rate and a renewal for a quota", () => {
+    expect(keyAccessErrors({ ...form, rate: "10" }).per).toBeTruthy();
+    expect(keyAccessErrors({ ...form, rate: "10", per: "60" })).toEqual({});
+    expect(keyAccessErrors({ ...form, quota_max: "100" }).quota_renewal_rate).toBeTruthy();
+    expect(keyAccessErrors({ ...form, quota_max: "100", quota_renewal_rate: "3600" })).toEqual({});
+  });
+  it("refuses negative limits", () => {
+    expect(keyAccessErrors({ ...form, rate: "-1" }).negative).toBeTruthy();
   });
 });
 
