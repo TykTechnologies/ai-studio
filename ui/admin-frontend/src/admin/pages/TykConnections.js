@@ -13,10 +13,10 @@ import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDia
 import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import { TitleBox, ContentBox, PrimaryButton } from "../styles/sharedStyles";
 import { formatTime, apiErrorDetail } from "./webhookShared";
-import { ConnectionStatusChip, ModeChip, TykUpsell, TykDisabledNotice } from "./tykShared";
+import { ConnectionStatusChip, ModeChip, TykUpsell, TykDisabledNotice, KIND_LABELS } from "./tykShared";
 
 const INTRO =
-  "Tyk Connections link AI Studio to the Tyk Dashboards that run your MCP proxies. Each connection imports the Dashboard's MCP servers into the AI Portal, brokers Tyk access keys for Apps, and, in full mode, publishes new proxies there.";
+  "Tyk Connections link AI Studio to the Tyk Dashboards, or open-source Tyk Gateways, that run your MCP proxies. Each connection imports the MCP servers into the AI Portal, brokers Tyk access keys for Apps, and, in full mode, publishes new proxies there.";
 
 /**
  * TykConnections lists the connected Tyk Dashboards. Creating and editing
@@ -124,6 +124,19 @@ const TykConnections = () => {
         ),
       },
       {
+        field: "kind",
+        headerName: "Type",
+        renderCell: (conn) => (
+          <Chip
+            size="small"
+            variant="outlined"
+            label={conn.kind === "gateway" ? "Gateway" : "Dashboard"}
+            title={KIND_LABELS[conn.kind || "dashboard"]}
+            data-testid={`kind-${conn.kind || "dashboard"}`}
+          />
+        ),
+      },
+      {
         field: "mode",
         headerName: "Mode",
         renderCell: (conn) => <ModeChip declared={conn.declared_mode} effective={conn.effective_mode} />,
@@ -151,9 +164,13 @@ const TykConnections = () => {
       },
       {
         field: "gateway_tags",
-        headerName: "Gateway tags",
+        headerName: "Deployment",
         renderCell: (conn) =>
-          (conn.gateway_tags || []).length > 0 ? (
+          conn.kind === "gateway" ? (
+            <Typography variant="caption" color="text.secondary">
+              {conn.gateway_discovery === "dns" ? "nodes via DNS" : conn.gateway_discovery === "static" ? `${(conn.gateway_node_urls || []).length + 1} node(s)` : "1 node"}
+            </Typography>
+          ) : (conn.gateway_tags || []).length > 0 ? (
             <Chip size="small" label={`${conn.gateway_tags.length} tag(s)`} variant="outlined" />
           ) : (
             <Typography variant="caption" color="text.secondary">
@@ -225,7 +242,7 @@ const TykConnections = () => {
 
   const addButton = (
     <PrimaryButton variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/admin/tyk-connections/new")} data-testid="add-connection">
-      Connect Dashboard
+      Add connection
     </PrimaryButton>
   );
 
@@ -271,8 +288,8 @@ const TykConnections = () => {
           emptyState={
             connections.length === 0 ? (
               <EmptyStateWidget
-                title="No Tyk Dashboard connected yet"
-                description="Connect a Tyk Dashboard to import its MCP proxies into the AI Portal, broker access keys for Apps and, in full mode, publish new proxies from AI Studio."
+                title="No Tyk connection yet"
+                description="Connect a Tyk Dashboard, or open-source Tyk Gateways, to import their MCP proxies into the AI Portal, broker access keys for Apps and, in full mode, publish new proxies from AI Studio."
                 actions={canWrite ? addButton : null}
               />
             ) : undefined

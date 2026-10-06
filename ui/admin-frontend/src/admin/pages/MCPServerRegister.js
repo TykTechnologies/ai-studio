@@ -525,7 +525,7 @@ const MCPServerRegister = () => {
                     <TextField fullWidth label="Upstream auth header" value={form.upstream_auth_header_name} onChange={setUpstream("upstream_auth_header_name")} inputProps={{ "data-testid": "upstream-header" }} />
                   </Grid>
                   <Grid item xs={12} md={8}>
-                    <TextField fullWidth type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={setUpstream("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText="Used to discover tools and sent to the Dashboard; never stored in AI Studio." autoComplete="new-password" />
+                    <TextField fullWidth type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={setUpstream("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText={connection?.kind === "gateway" ? "Written into the proxy on every gateway node and kept encrypted in AI Studio to keep the nodes in step. Prefer a gateway secret reference such as $secret_env.WEATHER_TOKEN (read from TYK_SECRET_WEATHER_TOKEN on the gateways) so no literal token lands on their disks; tool discovery needs the literal value." : "Used to discover tools and sent to the Dashboard; never stored in AI Studio."} autoComplete="new-password" />
                   </Grid>
                   <Grid item xs={12}>
                     <ToolAccess

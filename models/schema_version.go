@@ -30,7 +30,10 @@ const (
 	// 4: endpoint_auth_plugins (new table, additive).
 	// 5: proxy_logs and llm_chat_records on_behalf_of, acting_agent (nullable, additive).
 	// 6: plugin_resource_types.default_access (nullable, additive).
-	SchemaVersion          = 6
+	// 7: Tyk OSS Gateway connections: tyk_connections.kind (defaulted) and
+	//    gateway_* columns, mcp_servers.key_access and gateway_coverage/partial
+	//    (nullable), tyk_gateway_nodes and tyk_gateway_definitions (new tables).
+	SchemaVersion          = 7
 	MinReaderSchemaVersion = 1
 )
 

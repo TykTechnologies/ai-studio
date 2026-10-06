@@ -271,6 +271,62 @@ func (a *API) setMCPServerBundle(c *gin.Context) {
 	c.JSON(http.StatusOK, view)
 }
 
+// setMCPServerKeyAccess godoc
+// @Summary Set what keys minted on a Tyk Gateway connection grant for an MCP server
+// @Description Tyk OSS Gateway connections carry no policies: keys get the server's rights inline (tool allow-list, rate limit, quota). Live keys are rewritten to match.
+// @Tags TykMCP
+// @Accept json
+// @Param id path int true "Server ID"
+// @Param body body models.MCPKeyAccess true "Key access"
+// @Success 200 {object} models.MCPServerResponse
+// @Failure 409 {object} models.ErrorResponse
+// @Router /mcp-servers/{id}/key-access [put]
+func (a *API) setMCPServerKeyAccess(c *gin.Context) {
+	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	if !ok {
+		return
+	}
+	id, ok := tykMCPIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var in models.MCPKeyAccess
+	if err := c.ShouldBindJSON(&in); err != nil {
+		webhookBadRequest(c, "invalid request body")
+		return
+	}
+	view, err := a.tykMCPService().SetServerKeyAccess(c.Request.Context(), actor, id, in)
+	if err != nil {
+		tykMCPErrorResponse(c, err, "Failed to set MCP server key access")
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
+// listTykGatewayNodes godoc
+// @Summary List the nodes of a Tyk Gateway connection
+// @Description Each node's reachability, version and whether it serves the MCP proxies AI Studio owns
+// @Tags TykMCP
+// @Produce json
+// @Param id path int true "Connection ID"
+// @Success 200 {array} models.TykGatewayNodeResponse
+// @Router /tyk-connections/{id}/nodes [get]
+func (a *API) listTykGatewayNodes(c *gin.Context) {
+	id, ok := tykMCPIDParam(c, "id")
+	if !ok {
+		return
+	}
+	nodes, err := a.tykMCPService().ListGatewayNodes(c.Request.Context(), id)
+	if err != nil {
+		tykMCPErrorResponse(c, err, "Failed to list gateway nodes")
+		return
+	}
+	if nodes == nil {
+		nodes = []models.TykGatewayNodeResponse{}
+	}
+	c.JSON(http.StatusOK, nodes)
+}
+
 // listTykPolicies godoc
 // @Summary List cached Tyk policies of a connection
 // @Tags TykMCP

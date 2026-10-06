@@ -27,6 +27,9 @@ const (
 	MCPOriginDashboard  = "dashboard"
 	MCPOriginStudio     = "studio"
 	MCPOriginSubmission = "submission"
+	// MCPOriginGateway: found on a Tyk OSS Gateway, created there by someone
+	// else. Studio catalogues it and never changes or deletes it.
+	MCPOriginGateway = "gateway"
 )
 
 // Consumer authentication modes derived from the proxy definition.
@@ -98,6 +101,23 @@ type MCPGatewayTags struct {
 	Tags    []string `json:"tags"`
 }
 
+// MCPKeyAccess is what a key Studio mints on a Tyk Gateway connection grants
+// for one MCP server. Gateway connections carry no policies: Studio writes
+// these rights straight onto each key (access_rights[api id]), so they hold
+// on every node the moment Redis has the key. The zero value grants the
+// whole proxy without limits.
+type MCPKeyAccess struct {
+	// AllowedTools narrows the tools a key may list and call; empty means
+	// every tool the proxy exposes.
+	AllowedTools []string `json:"allowed_tools,omitempty"`
+	// Rate requests per Per seconds; 0 means no rate limit.
+	Rate float64 `json:"rate,omitempty"`
+	Per  float64 `json:"per,omitempty"`
+	// QuotaMax requests per QuotaRenewalRate seconds; 0 means no quota.
+	QuotaMax         int64 `json:"quota_max,omitempty"`
+	QuotaRenewalRate int64 `json:"quota_renewal_rate,omitempty"`
+}
+
 // MCPServer is an MCP proxy managed by a Tyk Gateway, catalogued in AI
 // Studio. Definition-derived columns follow the Dashboard on every sync;
 // Studio-owned presentation and governance columns never do.
@@ -154,6 +174,17 @@ type MCPServer struct {
 	LastSeenAt   *time.Time `json:"last_seen_at"`
 	LastSyncedAt *time.Time `json:"last_synced_at"`
 	LockVersion  int        `gorm:"not null;default:0" json:"lock_version"`
+
+	// Tyk Gateway connections only.
+	//
+	// KeyAccessJSON holds MCPKeyAccess, the rights minted keys get for this server.
+	KeyAccessJSON string `gorm:"column:key_access;type:text" json:"-"`
+	// GatewayCoverage is "n/m": the proxy was found on n of the m reachable
+	// nodes. GatewayPartial is set when n < m for a proxy Studio does not
+	// own, which Studio does not replicate: clients would reach it on some
+	// nodes only, so it is flagged and keys are not minted for it.
+	GatewayCoverage string `gorm:"size:32" json:"gateway_coverage"`
+	GatewayPartial  bool   `json:"gateway_partial"`
 
 	// Portal visibility follows the platform rule: catalogues bundle assets,
 	// teams are granted catalogues. MCP servers live in tool catalogues.
@@ -256,6 +287,25 @@ func (m *MCPServer) SetEndpointURLs(u map[string]string) {
 	m.EndpointURLsJSON = string(b)
 }
 
+// KeyAccess decodes the key rights for a Tyk Gateway connection.
+func (m *MCPServer) KeyAccess() MCPKeyAccess {
+	var out MCPKeyAccess
+	if strings.TrimSpace(m.KeyAccessJSON) != "" {
+		_ = json.Unmarshal([]byte(m.KeyAccessJSON), &out)
+	}
+	return out
+}
+
+// SetKeyAccess encodes the key rights.
+func (m *MCPServer) SetKeyAccess(a MCPKeyAccess) {
+	if len(a.AllowedTools) == 0 && a.Rate == 0 && a.Per == 0 && a.QuotaMax == 0 && a.QuotaRenewalRate == 0 {
+		m.KeyAccessJSON = ""
+		return
+	}
+	b, _ := json.Marshal(a)
+	m.KeyAccessJSON = string(b)
+}
+
 // CanPublish reports whether the server may be made visible in the portal.
 func (m *MCPServer) CanPublish() (bool, string) {
 	if m.DashboardState != MCPDashboardActive {
@@ -304,6 +354,9 @@ type MCPServerResponse struct {
 	LastSeenAt         *time.Time        `json:"last_seen_at,omitempty"`
 	LastSyncedAt       *time.Time        `json:"last_synced_at,omitempty"`
 	LockVersion        int               `json:"lock_version"`
+	KeyAccess          *MCPKeyAccess     `json:"key_access,omitempty"`
+	GatewayCoverage    string            `json:"gateway_coverage,omitempty"`
+	GatewayPartial     bool              `json:"gateway_partial,omitempty"`
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 	// Detail-only fields.
@@ -330,6 +383,11 @@ func (m *MCPServer) ToResponse(detail bool) MCPServerResponse {
 	}
 	if m.Connection != nil {
 		r.ConnectionName = m.Connection.Name
+	}
+	r.GatewayCoverage, r.GatewayPartial = m.GatewayCoverage, m.GatewayPartial
+	if m.Connection != nil && m.Connection.IsGateway() {
+		ka := m.KeyAccess()
+		r.KeyAccess = &ka
 	}
 	if detail {
 		r.Definition = m.Definition

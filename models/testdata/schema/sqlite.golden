@@ -916,6 +916,9 @@ TABLE mcp_servers
   column `last_seen_at` datetime
   column `last_synced_at` datetime
   column `lock_version` integer NOT NULL DEFAULT 0
+  column `key_access` text
+  column `gateway_coverage` text
+  column `gateway_partial` numeric
   constraint CONSTRAINT `fk_mcp_servers_connection` FOREIGN KEY (`connection_id`) REFERENCES `tyk_connections`(`id`)
   index CREATE INDEX `idx_mcp_servers_connection_id` ON `mcp_servers`(`connection_id`)
   index CREATE INDEX `idx_mcp_servers_dashboard_state` ON `mcp_servers`(`dashboard_state`)
@@ -1681,6 +1684,7 @@ TABLE tyk_connections
   column `deleted_at` datetime
   column `name` text NOT NULL
   column `description` text
+  column `kind` text NOT NULL DEFAULT "dashboard"
   column `dashboard_url` text NOT NULL
   column `gateway_base_url` text
   column `template_id` text
@@ -1719,10 +1723,45 @@ TABLE tyk_connections
   column `activated_at` datetime
   column `lock_version` integer NOT NULL DEFAULT 0
   column `host_key` text
+  column `gateway_discovery` text
+  column `gateway_node_urls` text
+  column `gateway_shared_storage` numeric
+  column `gateway_owner_id` text
   index CREATE INDEX `idx_tyk_connections_deleted_at` ON `tyk_connections`(`deleted_at`)
   index CREATE INDEX `idx_tyk_connections_next_sync_at` ON `tyk_connections`(`next_sync_at`)
   index CREATE INDEX `idx_tyk_connections_status` ON `tyk_connections`(`status`)
   index CREATE UNIQUE INDEX `idx_tyk_connections_host_key` ON `tyk_connections`(`host_key`)
+TABLE tyk_gateway_definitions
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `connection_id` integer NOT NULL
+  column `tyk_api_id` text NOT NULL
+  column `definition` text NOT NULL
+  column `definition_hash` text NOT NULL
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE UNIQUE INDEX `idx_tyk_gateway_definitions_conn_api` ON `tyk_gateway_definitions`(`connection_id`,`tyk_api_id`)
+TABLE tyk_gateway_nodes
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `connection_id` integer NOT NULL
+  column `address` text NOT NULL
+  column `url` text NOT NULL
+  column `pinned_ip` text
+  column `source` text NOT NULL
+  column `state` text NOT NULL DEFAULT "pending"
+  column `reachable` numeric
+  column `version` text
+  column `mcp_count` integer
+  column `studio_count` integer
+  column `expected_count` integer
+  column `applied` text
+  column `first_seen_at` datetime
+  column `last_seen_at` datetime
+  column `last_reconcile_at` datetime
+  column `last_error` text
+  column `gone_at` datetime
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE UNIQUE INDEX `idx_tyk_gateway_nodes_conn_addr` ON `tyk_gateway_nodes`(`connection_id`,`address`)
 TABLE tyk_policies
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

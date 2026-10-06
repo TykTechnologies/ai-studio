@@ -34,6 +34,7 @@ import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/Feed
 import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import RelationshipPicker from "../components/common/relationship-picker";
 import { P } from "../rbac/permissions";
+import MCPKeyAccessEditor from "./MCPKeyAccessEditor";
 import {
   TitleBox,
   ContentBox,
@@ -151,7 +152,7 @@ const PolicyCreator = ({ open, server, onClose, onCreated, onError }) => {
 
 // DefinitionEditor edits the masked definition and pushes it to the
 // Dashboard. Masked values are restored server-side from the live document.
-const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
+const DefinitionEditor = ({ server, onPushed, onError, onNotice, platform = "Dashboard" }) => {
   const [text, setText] = useState("");
   const [confirmOrigin, setConfirmOrigin] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -180,7 +181,11 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
       });
       if (dryRun) {
         setPreview(res.data);
-        onNotice(res.data.dashboard_validated ? "The Dashboard accepted the definition. Push to apply it." : "AI Studio validated the definition; the Dashboard validates it on push.");
+        onNotice(
+          res.data.dashboard_validated
+            ? `The ${platform} accepted the definition. Push to apply it.`
+            : `AI Studio validated the definition; the ${platform} validates it on push.`,
+        );
       } else {
         onPushed(res.data.server, res.data.warnings || []);
       }
@@ -193,9 +198,18 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        The Dashboard is the source of truth: the push is refused if the proxy changed there since this page loaded. Leave
+        {platform === "Gateway"
+          ? "AI Studio keeps this proxy on every gateway node: the push is refused if it changed on the gateways since this page loaded. Leave"
+          : "The Dashboard is the source of truth: the push is refused if the proxy changed there since this page loaded. Leave"}{" "}
         masked values (***) in place; they are restored from the live definition and never shown here.
       </Typography>
+      {platform === "Gateway" && (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="secret-ref-hint">
+          Open-source gateways keep this definition on each node&apos;s disk. For upstream credentials, use a gateway secret
+          reference such as <code>$secret_env.WEATHER_TOKEN</code> (read from <code>TYK_SECRET_WEATHER_TOKEN</code> on the
+          gateways) rather than a literal value.
+        </Alert>
+      )}
       <TextField fullWidth multiline minRows={12} value={text} onChange={(e) => setText(e.target.value)} inputProps={{ "data-testid": "definition-editor", style: { fontFamily: "monospace", fontSize: "0.8rem" } }} />
       {server.origin === "dashboard" && (
         <FormControlLabel control={<Checkbox checked={confirmOrigin} onChange={(e) => setConfirmOrigin(e.target.checked)} inputProps={{ "data-testid": "confirm-origin" }} />} label="This proxy was created on the Dashboard; AI Studio may overwrite it" />
@@ -210,7 +224,7 @@ const DefinitionEditor = ({ server, onPushed, onError, onNotice }) => {
           Validate definition
         </SecondaryOutlineButton>
         <PrimaryButton variant="contained" onClick={() => run(false)} disabled={busy || (server.origin === "dashboard" && !confirmOrigin)} data-testid="push-definition">
-          Push to the Dashboard
+          {platform === "Gateway" ? "Push to every gateway node" : "Push to the Dashboard"}
         </PrimaryButton>
       </Box>
     </Box>
@@ -488,6 +502,9 @@ const MCPServerDetail = () => {
   const onDashboard = server.dashboard_state !== "missing" && server.dashboard_state !== "pending_platform";
   const studioOwned = server.origin === "studio" || server.origin === "submission";
   const canDelete = !onDashboard || (studioOwned && fullMode);
+  // Open-source Tyk Gateways: keys carry the rights inline instead of policies.
+  const isGatewayConn = connection?.kind === "gateway";
+  const platform = isGatewayConn ? "Gateway" : "Dashboard";
   const prettyDefinition = server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available";
 
   return (
@@ -498,6 +515,9 @@ const MCPServerDetail = () => {
           <KindChip kind={server.kind} />
           <DashboardStateChip state={server.dashboard_state} />
           {server.brokerable && <Chip size="small" color="primary" variant="outlined" label="Brokerable" />}
+          {server.gateway_partial && (
+            <Chip size="small" color="warning" label={`On ${server.gateway_coverage} nodes`} data-testid="partial-chip" />
+          )}
         </Box>
         <Stack direction="row" spacing={2} alignItems="center">
           <PublishSwitch
@@ -528,7 +548,7 @@ const MCPServerDetail = () => {
         {!canPublish && !server.is_active && (
           <Alert severity="info" sx={{ mb: 2 }}>
             {server.dashboard_state !== "active"
-              ? "This server is not active on the Tyk Dashboard and cannot be published."
+              ? `This server is not active on the Tyk ${platform} and cannot be published.`
               : "Set a privacy score before publishing this server to the portal."}
           </Alert>
         )}
@@ -601,7 +621,7 @@ const MCPServerDetail = () => {
             <InfoRow label="Kind">
               <KindChip kind={server.kind} />
             </InfoRow>
-            <InfoRow label="Dashboard">
+            <InfoRow label={platform}>
               <DashboardStateChip state={server.dashboard_state} />
               {server.tyk_api_id ? (
                 <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
@@ -609,7 +629,7 @@ const MCPServerDetail = () => {
                 </Typography>
               ) : (
                 <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                  not on the Dashboard yet
+                  not on the {platform} yet
                 </Typography>
               )}
             </InfoRow>
@@ -640,9 +660,13 @@ const MCPServerDetail = () => {
               {server.privacy_score === null || server.privacy_score === undefined ? "Not set" : <PrivacyLevelChip score={server.privacy_score} />}
             </InfoRow>
             <InfoRow label="Deployed to">
-              {(server.gateway_tags?.tags || []).length > 0
-                ? server.gateway_tags.tags.map((t) => <Chip key={t} size="small" label={t} sx={{ mr: 0.5 }} />)
-                : "every non-segmented gateway"}
+              {isGatewayConn
+                ? server.gateway_coverage
+                  ? `${server.gateway_coverage} gateway nodes`
+                  : "not seen on any node yet"
+                : (server.gateway_tags?.tags || []).length > 0
+                  ? server.gateway_tags.tags.map((t) => <Chip key={t} size="small" label={t} sx={{ mr: 0.5 }} />)
+                  : "every non-segmented gateway"}
             </InfoRow>
             <InfoRow label="Origin">
               {server.origin} · last seen {server.last_seen_at ? formatTime(server.last_seen_at) : "never"}
@@ -650,10 +674,10 @@ const MCPServerDetail = () => {
           </Grid>
         </Section>
 
-        <Section title="Presentation and governance" description="What portal users read about this server. Definition-derived fields above always follow the Dashboard.">
+        <Section title="Presentation and governance" description={`What portal users read about this server. Definition-derived fields above always follow the ${platform}.`}>
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
-              <TextField fullWidth label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} helperText={server.name_overridden ? "Overridden; the Dashboard name no longer applies" : "Follows the Dashboard until edited"} />
+              <TextField fullWidth label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} helperText={server.name_overridden ? `Overridden; the ${platform} name no longer applies` : `Follows the ${platform} until edited`} />
             </Grid>
             <Grid item xs={12} md={3}>
               <TextField fullWidth type="number" label="Privacy score" value={form.privacy_score} onChange={(e) => setForm({ ...form, privacy_score: e.target.value })} inputProps={{ min: 0, max: 100, "data-testid": "privacy-score" }} />
@@ -681,7 +705,13 @@ const MCPServerDetail = () => {
         </Section>
 
         <Section title="Portal visibility" description="Portal users see this server through the teams granted these catalogs.">
-          {!server.brokerable && (
+          {server.gateway_partial && (
+            <Alert severity="warning" sx={{ mb: 2 }} data-testid="partial-alert">
+              This proxy is loaded on {server.gateway_coverage} gateway nodes only. AI Studio does not copy proxies it did not create, so
+              clients would reach it on some nodes and get 404 on the others. No keys are minted for it until every node serves it.
+            </Alert>
+          )}
+          {!server.brokerable && !server.gateway_partial && (
             <Alert severity="info" sx={{ mb: 2 }} data-testid="not-brokerable">
               AI Studio does not broker access to this server. Portal users connect to it directly with {directAccessWording(server.auth_mode)}; the
               portal shows no Build app button for it.
@@ -705,6 +735,17 @@ const MCPServerDetail = () => {
           </Can>
         </Section>
 
+        {isGatewayConn ? (
+          <Section
+            title="Key access"
+            description="What the Tyk keys AI Studio mints grant for this server. Open-source gateways keep policies on each node's disk, so the rights are written onto every key instead and hold on every node at once. Saving rewrites the live keys of the Apps that use this server."
+            data-testid="key-access-section"
+          >
+            <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{(server.key_access?.allowed_tools || []).join(", ") || "Every tool, no limits."}</Typography>}>
+              <MCPKeyAccessEditor server={server} onSaved={(s) => { setServer(s); notify("Key access saved"); }} onError={setError} />
+            </Can>
+          </Section>
+        ) : (
         <Section
           title="Access policies"
           description="A bundle is one access policy (the ACL that names this proxy) plus optional consumption policies (rate limit and quota partitions). Keys minted for Apps carry the union of the bundles of every MCP server they use; Tyk applies policy changes to those keys at request time."
@@ -734,6 +775,7 @@ const MCPServerDetail = () => {
             }}
           />
         </Section>
+        )}
 
         {/* "MCP tools", not "tools": Tools are a different object in AI Studio. */}
         <Section title={`MCP tools, resources and prompts (${(server.primitives || []).length})`}>
@@ -784,22 +826,23 @@ const MCPServerDetail = () => {
           </Typography>
         </Section>
 
-        {fullMode && onDashboard ? (
-          <Section title="Definition" description="Edit the Tyk OAS document and push it to the Dashboard.">
+        {fullMode && onDashboard && server.origin !== "gateway" ? (
+          <Section title="Definition" description={`Edit the Tyk OAS document and push it to the ${isGatewayConn ? "gateway nodes" : "Dashboard"}.`}>
             <Can permission={P.MCP_SERVERS_EXECUTE} fallback={<Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>{prettyDefinition}</Box>}>
               <DefinitionEditor
                 server={server}
+                platform={platform}
                 onError={setError}
                 onNotice={notify}
                 onPushed={(s, warnings) => {
                   setServer(s);
-                  notify(warnings.length ? `Pushed. ${warnings.join(" ")}` : "Pushed to the Dashboard");
+                  notify(warnings.length ? `Pushed. ${warnings.join(" ")}` : `Pushed to the ${platform}`);
                 }}
               />
             </Can>
           </Section>
         ) : (
-          <Section title="Definition" description="As synced from the Dashboard, upstream credentials masked.">
+          <Section title="Definition" description={`As synced from the ${platform}, upstream credentials masked.`}>
             <Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>
               {prettyDefinition}
             </Box>
@@ -810,10 +853,10 @@ const MCPServerDetail = () => {
           <Can permission={P.MCP_SERVERS_DELETE}>
             <Section
               title="Danger zone"
-              description={onDashboard ? "Removes the proxy from the Tyk Dashboard and this record from AI Studio." : "Removes this record from AI Studio."}
+              description={onDashboard ? `Removes the proxy from the Tyk ${isGatewayConn ? "Gateway nodes" : "Dashboard"} and this record from AI Studio.` : "Removes this record from AI Studio."}
             >
               <DangerOutlineButton onClick={() => (onDashboard ? setDeleteOpen(true) : remove())} data-testid="delete-server">
-                {onDashboard ? "Delete from the Dashboard" : "Delete record"}
+                {onDashboard ? (isGatewayConn ? "Delete from the gateways" : "Delete from the Dashboard") : "Delete record"}
               </DangerOutlineButton>
             </Section>
           </Can>
@@ -823,7 +866,7 @@ const MCPServerDetail = () => {
       <ConfirmationDialog
         open={deleteOpen}
         data-testid="delete-dialog"
-        title={`Delete ${server.name} from the Tyk Dashboard?`}
+        title={`Delete ${server.name} from the Tyk ${isGatewayConn ? "Gateway nodes" : "Dashboard"}?`}
         message={
           <>
             The proxy is removed from the Dashboard and the gateways stop serving it. Apps lose the binding; keys that reach nothing else on

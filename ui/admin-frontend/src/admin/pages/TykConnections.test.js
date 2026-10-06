@@ -97,14 +97,14 @@ describe("TykConnections", () => {
     expect(screen.getByText("1 tag(s)")).toBeInTheDocument();
   });
 
-  it("shows the empty state with a Connect Dashboard action that opens the form page", async () => {
+  it("shows the empty state with an Add connection action that opens the form page", async () => {
     apiClient.get.mockImplementation((path) => {
       if (path === "/tyk-mcp/status") return Promise.resolve(enabled);
       if (path === "/tyk-connections") return Promise.resolve({ data: [] });
       return Promise.reject(new Error("unexpected " + path));
     });
     renderPage();
-    expect(await screen.findByText("No Tyk Dashboard connected yet")).toBeInTheDocument();
+    expect(await screen.findByText("No Tyk connection yet")).toBeInTheDocument();
     fireEvent.click(screen.getAllByTestId("add-connection")[0]);
     expect(mockNavigate).toHaveBeenCalledWith("/admin/tyk-connections/new");
   });

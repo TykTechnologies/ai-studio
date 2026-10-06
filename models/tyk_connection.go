@@ -26,6 +26,29 @@ const (
 	TykConnectionDisabled = "disabled"
 )
 
+// Tyk connection kinds: what Studio talks to.
+const (
+	// TykConnectionKindDashboard is a Tyk Dashboard (one organisation).
+	TykConnectionKindDashboard = "dashboard"
+	// TykConnectionKindGateway is a Tyk OSS Gateway cluster without a
+	// Dashboard, managed through each node's Gateway API for MCP proxies only.
+	TykConnectionKindGateway = "gateway"
+)
+
+// How Studio finds the nodes of a Tyk Gateway connection.
+const (
+	// TykGatewayDiscoverySingle: the connection URL is the only node.
+	TykGatewayDiscoverySingle = "single"
+	// TykGatewayDiscoveryStatic: the connection URL plus an administrator-entered list.
+	TykGatewayDiscoveryStatic = "static"
+	// TykGatewayDiscoveryDNS: every address the connection URL's hostname
+	// resolves to is a node (a Kubernetes headless Service, a Compose service).
+	TykGatewayDiscoveryDNS = "dns"
+)
+
+// TykGatewayDiscoveryModes lists the valid discovery modes.
+var TykGatewayDiscoveryModes = []string{TykGatewayDiscoverySingle, TykGatewayDiscoveryStatic, TykGatewayDiscoveryDNS}
+
 // TykConnectionModes is every mode in ascending order of trust.
 var TykConnectionModes = []string{TykConnectionModeCatalogue, TykConnectionModeBroker, TykConnectionModeFull}
 
@@ -44,9 +67,12 @@ func TykModeRank(mode string) int {
 // integration never stores a Dashboard credential in plaintext.
 var ErrSecretsKeyRequired = errors.New("TYK_AI_SECRET_KEY must be configured before storing Tyk Dashboard credentials")
 
-// TykConnection is one Tyk Dashboard (one organisation) that AI Studio
-// imports MCP proxies from, registers MCP proxies into, and brokers access
-// keys against.
+// TykConnection is one Tyk Dashboard (one organisation), or one Tyk OSS
+// Gateway cluster (Kind gateway), that AI Studio imports MCP proxies from,
+// registers MCP proxies into, and brokers access keys against.
+//
+// A gateway connection reuses DashboardURL for a node's Gateway API URL and
+// DashboardAccessToken for the gateway secret.
 //
 // Secret-bearing columns carry "token" in their name so the audit trail's
 // built-in redaction masks them in diffs, and they are encrypted at rest by
@@ -55,6 +81,8 @@ type TykConnection struct {
 	gorm.Model
 	Name        string `gorm:"size:200;not null" json:"name"`
 	Description string `gorm:"size:1024" json:"description"`
+	// Kind is dashboard or gateway (TykConnectionKind*).
+	Kind string `gorm:"size:16;not null;default:dashboard" json:"kind"`
 
 	DashboardURL   string `gorm:"size:2048;not null" json:"dashboard_url"`
 	GatewayBaseURL string `gorm:"size:2048" json:"gateway_base_url"`
@@ -122,6 +150,59 @@ type TykConnection struct {
 	// the host on each use, never stored. Nil for the connections
 	// administrators create.
 	HostKey *string `gorm:"size:64;uniqueIndex" json:"-"`
+
+	// Tyk Gateway connections only.
+	//
+	// GatewayDiscovery is how the nodes are found (TykGatewayDiscovery*).
+	GatewayDiscovery string `gorm:"size:16" json:"gateway_discovery"`
+	// GatewayNodeURLsJSON holds []string, the extra node URLs of static discovery.
+	GatewayNodeURLsJSON string `gorm:"column:gateway_node_urls;type:text" json:"-"`
+	// GatewaySharedStorage says the nodes share app_path, so a definition is
+	// written through one node and a group reload loads it everywhere.
+	GatewaySharedStorage bool `json:"gateway_shared_storage"`
+	// GatewayOwnerID is the random marker in the API ids of the MCP proxies
+	// Studio creates on this connection (studio-<owner>-...). Studio only ever
+	// changes or deletes proxies carrying it, so two Studios, or two
+	// connections, sharing a cluster cannot remove each other's proxies.
+	GatewayOwnerID string `gorm:"size:32" json:"gateway_owner_id"`
+}
+
+// IsGateway reports whether the connection is a Tyk OSS Gateway cluster.
+func (t *TykConnection) IsGateway() bool { return t.Kind == TykConnectionKindGateway }
+
+// GatewayNodeURLs decodes the static node list.
+func (t *TykConnection) GatewayNodeURLs() []string {
+	out := []string{}
+	if strings.TrimSpace(t.GatewayNodeURLsJSON) != "" {
+		_ = json.Unmarshal([]byte(t.GatewayNodeURLsJSON), &out)
+	}
+	return out
+}
+
+// SetGatewayNodeURLs encodes the static node list.
+func (t *TykConnection) SetGatewayNodeURLs(urls []string) {
+	if len(urls) == 0 {
+		t.GatewayNodeURLsJSON = ""
+		return
+	}
+	b, _ := json.Marshal(urls)
+	t.GatewayNodeURLsJSON = string(b)
+}
+
+// GatewayAPIIDPrefix is the API id prefix of the proxies Studio owns on a
+// gateway connection, or "" when the connection has no owner id.
+func (t *TykConnection) GatewayAPIIDPrefix() string {
+	if t.GatewayOwnerID == "" {
+		return ""
+	}
+	return "studio-" + t.GatewayOwnerID + "-"
+}
+
+// OwnsGatewayAPI reports whether Studio created the proxy with this API id
+// on this gateway connection.
+func (t *TykConnection) OwnsGatewayAPI(apiID string) bool {
+	p := t.GatewayAPIIDPrefix()
+	return p != "" && strings.HasPrefix(apiID, p)
 }
 
 // TykHostConnectionKey is the HostKey of the host-managed connection.
@@ -162,6 +243,12 @@ const (
 	// locally from then on.
 	TykCapMCPDryRun        = "mcp_dry_run"
 	TykCapDashboardVersion = "dashboard_version"
+	// TykCapGatewayNodes records how many Tyk Gateway nodes answered the probe.
+	TykCapGatewayNodes = "gateway_nodes"
+	// TykCapClusterSharedRedis records whether the nodes of a Tyk Gateway
+	// connection share one Redis: a key written through one node must be
+	// readable through another, or keys Studio mints would work on one node only.
+	TykCapClusterSharedRedis = "cluster_shared_redis"
 )
 
 // TykCapability is one probed capability.
@@ -227,6 +314,9 @@ func (t *TykConnection) BeforeSave(tx *gorm.DB) error {
 	}
 	if t.Status == "" {
 		t.Status = TykConnectionPending
+	}
+	if t.Kind == "" {
+		t.Kind = TykConnectionKindDashboard
 	}
 	return nil
 }
@@ -379,49 +469,54 @@ func tokenHint(v string) string {
 // TykConnectionResponse is the API shape of a connection. Tokens are never
 // included; a presence flag and a last-four hint replace them.
 type TykConnectionResponse struct {
-	ID                  uint                     `json:"id"`
-	Name                string                   `json:"name"`
-	Description         string                   `json:"description"`
-	DashboardURL        string                   `json:"dashboard_url"`
-	GatewayBaseURL      string                   `json:"gateway_base_url"`
-	TemplateID          string                   `json:"template_id"`
-	HasToken            bool                     `json:"has_token"`
-	TokenHint           string                   `json:"token_hint,omitempty"`
-	OrgID               string                   `json:"org_id"`
-	DeclaredMode        string                   `json:"declared_mode"`
-	EffectiveMode       string                   `json:"effective_mode"`
-	Capabilities        map[string]TykCapability `json:"capabilities"`
-	Status              string                   `json:"status"`
-	Degraded            bool                     `json:"degraded"`
-	DegradedReason      string                   `json:"degraded_reason,omitempty"`
-	SyncIntervalSeconds int                      `json:"sync_interval_seconds"`
-	NextSyncAt          *time.Time               `json:"next_sync_at,omitempty"`
-	AutoPublish         bool                     `json:"auto_publish"`
-	DefaultPrivacyScore *int                     `json:"default_privacy_score"`
-	AcceptHandoffs      bool                     `json:"accept_handoffs"`
-	KeyDefaults         TykKeyDefaults           `json:"key_defaults"`
-	AllowInternalHost   bool                     `json:"allow_internal_host"`
-	MDCBURL             string                   `json:"mdcb_url"`
-	HasMDCBToken        bool                     `json:"has_mdcb_token"`
-	MDCBAllowInternal   bool                     `json:"mdcb_allow_internal_host"`
-	KnownGatewayTags    []TykGatewayTag          `json:"known_gateway_tags"`
-	GatewayBaseURLs     map[string]string        `json:"gateway_base_urls"`
-	DataPlanes          []TykDataPlane           `json:"data_planes"`
-	GatewayTags         []string                 `json:"gateway_tags"`
-	LastSyncAt          *time.Time               `json:"last_sync_at,omitempty"`
-	LastSyncStatus      string                   `json:"last_sync_status,omitempty"`
-	LastSyncError       string                   `json:"last_sync_error,omitempty"`
-	LastProbeAt         *time.Time               `json:"last_probe_at,omitempty"`
-	LastMDCBProbeAt     *time.Time               `json:"last_mdcb_probe_at,omitempty"`
-	CreatedByUserID     uint                     `json:"created_by_user_id"`
-	CreatedByEmail      string                   `json:"created_by_email"`
-	ActivatedByUserID   uint                     `json:"activated_by_user_id"`
-	ActivatedByEmail    string                   `json:"activated_by_email"`
-	ActivatedAt         *time.Time               `json:"activated_at,omitempty"`
-	LockVersion         int                      `json:"lock_version"`
-	HostManaged         bool                     `json:"host_managed"`
-	CreatedAt           time.Time                `json:"created_at"`
-	UpdatedAt           time.Time                `json:"updated_at"`
+	ID                   uint                     `json:"id"`
+	Name                 string                   `json:"name"`
+	Description          string                   `json:"description"`
+	Kind                 string                   `json:"kind"`
+	DashboardURL         string                   `json:"dashboard_url"`
+	GatewayBaseURL       string                   `json:"gateway_base_url"`
+	TemplateID           string                   `json:"template_id"`
+	HasToken             bool                     `json:"has_token"`
+	TokenHint            string                   `json:"token_hint,omitempty"`
+	OrgID                string                   `json:"org_id"`
+	DeclaredMode         string                   `json:"declared_mode"`
+	EffectiveMode        string                   `json:"effective_mode"`
+	Capabilities         map[string]TykCapability `json:"capabilities"`
+	Status               string                   `json:"status"`
+	Degraded             bool                     `json:"degraded"`
+	DegradedReason       string                   `json:"degraded_reason,omitempty"`
+	SyncIntervalSeconds  int                      `json:"sync_interval_seconds"`
+	NextSyncAt           *time.Time               `json:"next_sync_at,omitempty"`
+	AutoPublish          bool                     `json:"auto_publish"`
+	DefaultPrivacyScore  *int                     `json:"default_privacy_score"`
+	AcceptHandoffs       bool                     `json:"accept_handoffs"`
+	KeyDefaults          TykKeyDefaults           `json:"key_defaults"`
+	AllowInternalHost    bool                     `json:"allow_internal_host"`
+	MDCBURL              string                   `json:"mdcb_url"`
+	HasMDCBToken         bool                     `json:"has_mdcb_token"`
+	MDCBAllowInternal    bool                     `json:"mdcb_allow_internal_host"`
+	KnownGatewayTags     []TykGatewayTag          `json:"known_gateway_tags"`
+	GatewayBaseURLs      map[string]string        `json:"gateway_base_urls"`
+	DataPlanes           []TykDataPlane           `json:"data_planes"`
+	GatewayTags          []string                 `json:"gateway_tags"`
+	LastSyncAt           *time.Time               `json:"last_sync_at,omitempty"`
+	LastSyncStatus       string                   `json:"last_sync_status,omitempty"`
+	LastSyncError        string                   `json:"last_sync_error,omitempty"`
+	LastProbeAt          *time.Time               `json:"last_probe_at,omitempty"`
+	LastMDCBProbeAt      *time.Time               `json:"last_mdcb_probe_at,omitempty"`
+	CreatedByUserID      uint                     `json:"created_by_user_id"`
+	CreatedByEmail       string                   `json:"created_by_email"`
+	ActivatedByUserID    uint                     `json:"activated_by_user_id"`
+	ActivatedByEmail     string                   `json:"activated_by_email"`
+	ActivatedAt          *time.Time               `json:"activated_at,omitempty"`
+	LockVersion          int                      `json:"lock_version"`
+	HostManaged          bool                     `json:"host_managed"`
+	GatewayDiscovery     string                   `json:"gateway_discovery,omitempty"`
+	GatewayNodeURLs      []string                 `json:"gateway_node_urls,omitempty"`
+	GatewaySharedStorage bool                     `json:"gateway_shared_storage,omitempty"`
+	GatewayAPIIDPrefix   string                   `json:"gateway_api_id_prefix,omitempty"`
+	CreatedAt            time.Time                `json:"created_at"`
+	UpdatedAt            time.Time                `json:"updated_at"`
 }
 
 // ToResponse converts the connection to its API shape, dropping every secret.
@@ -430,8 +525,12 @@ func (t *TykConnection) ToResponse() TykConnectionResponse {
 	if tags == nil {
 		tags = []string{}
 	}
-	return TykConnectionResponse{
-		ID: t.ID, Name: t.Name, Description: t.Description,
+	kind := t.Kind
+	if kind == "" {
+		kind = TykConnectionKindDashboard
+	}
+	r := TykConnectionResponse{
+		ID: t.ID, Name: t.Name, Description: t.Description, Kind: kind,
 		DashboardURL: t.DashboardURL, GatewayBaseURL: t.GatewayBaseURL, TemplateID: t.TemplateID,
 		HasToken: t.DashboardAccessToken != "" || t.HostManaged(), TokenHint: tokenHint(t.DashboardAccessToken),
 		OrgID: t.OrgID, DeclaredMode: t.DeclaredMode, EffectiveMode: t.EffectiveMode,
@@ -448,4 +547,11 @@ func (t *TykConnection) ToResponse() TykConnectionResponse {
 		ActivatedByUserID: t.ActivatedByUserID, ActivatedByEmail: t.ActivatedByEmail, ActivatedAt: t.ActivatedAt,
 		LockVersion: t.LockVersion, HostManaged: t.HostManaged(), CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
+	if t.IsGateway() {
+		r.GatewayDiscovery = t.GatewayDiscovery
+		r.GatewayNodeURLs = t.GatewayNodeURLs()
+		r.GatewaySharedStorage = t.GatewaySharedStorage
+		r.GatewayAPIIDPrefix = t.GatewayAPIIDPrefix()
+	}
+	return r
 }
