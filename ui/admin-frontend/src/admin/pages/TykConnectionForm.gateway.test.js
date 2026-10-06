@@ -5,7 +5,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import testTheme from "../utils/testTheme";
 import TykConnectionForm, { formToInput, emptyForm, connectionToForm } from "./TykConnectionForm";
-import { toKeyAccess, keyAccessErrors } from "./MCPKeyAccessEditor";
+import { toKeyAccess, keyAccessErrors, toolNamesHelp } from "./MCPKeyAccessEditor";
 import apiClient from "../utils/apiClient";
 
 jest.mock("../utils/apiClient", () => ({
@@ -144,6 +144,26 @@ describe("keyAccessErrors", () => {
   });
   it("refuses negative limits", () => {
     expect(keyAccessErrors({ ...form, rate: "-1" }).negative).toBeTruthy();
+  });
+});
+
+describe("toolNamesHelp", () => {
+  it("explains the field when nothing is listed", () => {
+    expect(toolNamesHelp([], ["get-weather"]).warning).toBe(false);
+  });
+  it("is quiet for known tools", () => {
+    expect(toolNamesHelp(["get-weather"], ["get-weather", "get-forecast"]).warning).toBe(false);
+  });
+  it("names tools the proxy does not have", () => {
+    const help = toolNamesHelp(["get-wether", "get-weather"], ["get-weather"]);
+    expect(help.warning).toBe(true);
+    expect(help.text).toContain("get-wether");
+    expect(help.text).not.toContain("get-weather,");
+  });
+  it("warns that names cannot be checked when the definition lists no tools", () => {
+    const help = toolNamesHelp(["anything"], []);
+    expect(help.warning).toBe(true);
+    expect(help.text).toContain("tools/list");
   });
 });
 

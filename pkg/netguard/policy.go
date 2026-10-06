@@ -262,6 +262,11 @@ func (p *URLPolicy) NewHTTPClient(timeout time.Duration) *http.Client {
 // ip, while the URL, the Host header and the TLS server name keep the
 // hostname. Whether an internal ip may be dialled is decided for the
 // hostname, exactly as for an unpinned dial of it.
+//
+// Like NewHTTPClient it is a constructor: each call builds a new transport
+// with its own connection pool. Callers keep the client for as long as they
+// talk to that address (the Tyk Gateway connections pool one per node)
+// rather than building one per request.
 func (p *URLPolicy) NewPinnedHTTPClient(timeout time.Duration, ip net.IP) *http.Client {
 	c := p.NewHTTPClient(timeout)
 	transport := c.Transport.(*http.Transport)

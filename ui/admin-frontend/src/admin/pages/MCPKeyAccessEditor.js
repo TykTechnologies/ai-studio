@@ -41,6 +41,24 @@ export const keyAccessErrors = (form) => {
 };
 
 /**
+ * toolNamesHelp explains the allowed-tools field. Names stay free text:
+ * a remote proxy's definition often lists no tools, and the server's own
+ * tools/list is the authority. Names the definition does not know are
+ * called out, since a typo would silently block that tool. Exported for the
+ * test.
+ */
+export const toolNamesHelp = (allowed, known) => {
+  const base = "Empty: keys may list and call every tool. Otherwise only these, and tools/list shows only these.";
+  if (!allowed || allowed.length === 0) return { text: base, warning: false };
+  if (!known || known.length === 0) {
+    return { text: "This proxy's definition lists no tools, so the names cannot be checked here: copy them exactly from the server's tools/list.", warning: true };
+  }
+  const unknown = allowed.filter((t) => !known.includes(t));
+  if (unknown.length === 0) return { text: base, warning: false };
+  return { text: `Not a tool of this proxy: ${unknown.join(", ")}. Keys will not be able to call a tool that does not exist under that exact name.`, warning: true };
+};
+
+/**
  * MCPKeyAccessEditor sets what keys minted on a Tyk Gateway connection grant
  * for one MCP server. Open-source gateways carry no policies AI Studio can
  * rely on, so the rights are written onto each key; saving rewrites the live
@@ -57,6 +75,7 @@ const MCPKeyAccessEditor = ({ server, onSaved, onError }) => {
   const toolOptions = (server.primitives || []).filter((p) => p.type === "tool").map((p) => p.name);
   const errors = keyAccessErrors(form);
   const invalid = Object.keys(errors).length > 0;
+  const toolsHelp = toolNamesHelp(form.allowed_tools, toolOptions);
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
   const save = async () => {
@@ -86,7 +105,8 @@ const MCPKeyAccessEditor = ({ server, onSaved, onError }) => {
                 {...params}
                 label="Allowed tools"
                 placeholder="Every tool the proxy exposes"
-                helperText="Empty: keys may list and call every tool. Otherwise only these, and tools/list shows only these."
+                helperText={toolsHelp.text}
+                FormHelperTextProps={{ sx: toolsHelp.warning ? { color: "warning.main" } : undefined, "data-testid": "key-access-tools-help" }}
                 inputProps={{ ...params.inputProps, "data-testid": "key-access-tools" }}
               />
             )}
