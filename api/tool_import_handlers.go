@@ -58,7 +58,9 @@ func (a *API) listToolImportConnections(c *gin.Context) {
 	}
 	out := []ToolImportConnection{}
 	for _, conn := range list {
-		if conn.Status == models.TykConnectionDisabled {
+		// Tyk Gateway connections manage MCP proxies only; REST APIs are
+		// read from a Dashboard.
+		if conn.Status == models.TykConnectionDisabled || conn.Kind == models.TykConnectionKindGateway {
 			continue
 		}
 		out = append(out, toolImportConnection(conn))

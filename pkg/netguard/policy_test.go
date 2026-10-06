@@ -2,6 +2,7 @@ package netguard
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -104,6 +105,32 @@ func TestURLPolicy_DialerBlocksInternalAtConnectTime(t *testing.T) {
 	resp, err = exempt.NewHTTPClient(2 * time.Second).Get(srv.URL)
 	require.NoError(t, err)
 	resp.Body.Close()
+}
+
+func TestURLPolicy_PinnedClientDialsTheIPAndKeepsTheHostname(t *testing.T) {
+	var host string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host = r.Host
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	port := srv.URL[strings.LastIndex(srv.URL, ":")+1:]
+	target := "http://gateways.example.test:" + port + "/hello"
+	ip := net.ParseIP("127.0.0.1")
+
+	// The hostname is not internal-exempt, so the internal ip is refused,
+	// as an unpinned dial resolving to it would be.
+	strict := NewURLPolicy(PolicyOptions{})
+	_, err := strict.NewPinnedHTTPClient(2*time.Second, ip).Get(target)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrPolicyDial), "expected policy dial error, got %v", err)
+
+	exempt := NewURLPolicy(PolicyOptions{ExemptHosts: []string{"gateways.example.test"}})
+	resp, err := exempt.NewPinnedHTTPClient(2*time.Second, ip).Get(target)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "gateways.example.test:"+port, host, "the Host header keeps the hostname")
 }
 
 func TestURLPolicy_ClientDoesNotFollowRedirects(t *testing.T) {

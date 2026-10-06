@@ -54,10 +54,14 @@ type Actor struct {
 	CanExecute bool
 }
 
-// ConnectionInput creates a connection.
+// ConnectionInput creates a connection. Kind gateway connects a Tyk OSS
+// Gateway cluster: DashboardURL is then a node's Gateway API URL and
+// DashboardAccessToken the gateway secret, and the Dashboard-only fields
+// (template, MDCB, gateway tags) must be empty.
 type ConnectionInput struct {
 	Name                  string                 `json:"name"`
 	Description           string                 `json:"description"`
+	Kind                  string                 `json:"kind"` // dashboard (default) | gateway
 	DashboardURL          string                 `json:"dashboard_url"`
 	GatewayBaseURL        string                 `json:"gateway_base_url"`
 	TemplateID            string                 `json:"template_id"`
@@ -75,6 +79,10 @@ type ConnectionInput struct {
 	MDCBAllowInternalHost bool                   `json:"mdcb_allow_internal_host"`
 	KnownGatewayTags      []models.TykGatewayTag `json:"known_gateway_tags"`
 	GatewayBaseURLs       map[string]string      `json:"gateway_base_urls"`
+	// Tyk Gateway connections only.
+	GatewayDiscovery     string   `json:"gateway_discovery"` // single (default) | static | dns
+	GatewayNodeURLs      []string `json:"gateway_node_urls"`
+	GatewaySharedStorage bool     `json:"gateway_shared_storage"`
 }
 
 // ConnectionPatch updates a connection. Nil fields are left unchanged. An
@@ -100,6 +108,9 @@ type ConnectionPatch struct {
 	MDCBAllowInternalHost *bool                   `json:"mdcb_allow_internal_host"`
 	KnownGatewayTags      *[]models.TykGatewayTag `json:"known_gateway_tags"`
 	GatewayBaseURLs       *map[string]string      `json:"gateway_base_urls"`
+	GatewayDiscovery      *string                 `json:"gateway_discovery"`
+	GatewayNodeURLs       *[]string               `json:"gateway_node_urls"`
+	GatewaySharedStorage  *bool                   `json:"gateway_shared_storage"`
 	LockVersion           int                     `json:"lock_version"`
 }
 
@@ -509,6 +520,10 @@ type Service interface {
 	// teams see it through the catalogues they are granted.
 	SetServerCatalogues(ctx context.Context, actor Actor, id uint, catalogueIDs []uint) (*models.MCPServerResponse, error)
 	SetServerBundle(ctx context.Context, actor Actor, id uint, pins []PinInput) (*models.MCPServerResponse, error)
+	// SetServerKeyAccess sets what keys minted on a Tyk Gateway connection
+	// grant for the server (tool allow-list, rate limit, quota). Gateway
+	// connections carry no policies; live keys are rewritten to match.
+	SetServerKeyAccess(ctx context.Context, actor Actor, id uint, access models.MCPKeyAccess) (*models.MCPServerResponse, error)
 
 	// Policies and sync
 	ListPolicies(ctx context.Context, connectionID uint, f PolicyFilter) ([]models.TykPolicyResponse, error)
@@ -536,6 +551,9 @@ type Service interface {
 	ProbeInput(ctx context.Context, in ConnectionInput) (*ProbeResult, error)
 	// TriggerSync asks for the next sync to run as soon as a node polls.
 	TriggerSync(ctx context.Context, actor Actor, id uint) error
+	// ListGatewayNodes lists the nodes of a Tyk Gateway connection and
+	// whether each holds the MCP proxies Studio owns.
+	ListGatewayNodes(ctx context.Context, connectionID uint) ([]models.TykGatewayNodeResponse, error)
 
 	// Apps
 	// SyncAppGrants reconciles the access-grant ledger of an App with its

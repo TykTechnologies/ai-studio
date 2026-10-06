@@ -2,6 +2,8 @@
 
 Status: design 2026-09-16; implemented M1–M7 (see §18) and verified live against Tyk Dashboard 5.14 + Gateway EE on 2026-09-16 (§19). Reviewed once for codebase and Tyk API consistency. Enterprise Edition only. Target: AI Studio ≥ 2.2, Tyk Dashboard/Gateway ≥ 5.13 (remote MCP proxies), ≥ 5.15 for REST-to-MCP.
 
+Open-source Tyk Gateways without a Dashboard are a second connection kind (`kind: gateway`), specified in `features/TykOSSGatewayMCP.md`.
+
 ## 1. Context
 
 Tyk Gateway now natively terminates MCP (Streamable HTTP, JSON-RPC 2.0, spec 2025-11-25) as **MCP proxies**: Tyk OAS definitions with `mcpTools` / `mcpResources` / `mcpPrompts` middleware, per-primitive policies, OAuth 2.1 protected-resource metadata, and MCP analytics. That is the supported way for a Tyk customer to run MCP in production.

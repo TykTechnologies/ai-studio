@@ -1152,6 +1152,7 @@ func (a *API) setupRoutes() error {
 	v1.POST("/tyk-connections/:id/sync", authz.Execute("tyk-connections"), a.syncTykConnection)
 	v1.GET("/tyk-connections/:id/policies", authz.Read("tyk-connections"), a.listTykPolicies)
 	v1.GET("/tyk-connections/:id/sync-runs", authz.Read("tyk-connections"), a.listTykSyncRuns)
+	v1.GET("/tyk-connections/:id/nodes", authz.Read("tyk-connections"), a.listTykGatewayNodes)
 	// Registration helpers and the minimal policy creator: creating policies
 	// writes to the Dashboard, so it is an execute on mcp-servers.
 	v1.GET("/tyk-connections/:id/apis", authz.Read("tyk-connections"), a.listTykSourceAPIs)
@@ -1167,6 +1168,7 @@ func (a *API) setupRoutes() error {
 	v1.POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.unpublishMCPServer)
 	v1.PUT("/mcp-servers/:id/catalogues", authz.Write("mcp-servers"), a.setMCPServerCatalogues)
 	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
+	v1.PUT("/mcp-servers/:id/key-access", authz.Write("mcp-servers"), a.setMCPServerKeyAccess)
 	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
 	// Discovery calls the upstream MCP server from Studio, so it needs the
 	// same permission as registering the proxy.

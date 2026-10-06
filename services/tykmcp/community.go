@@ -61,6 +61,10 @@ func (s *communityService) TriggerSync(ctx context.Context, actor Actor, id uint
 	return ErrEnterpriseFeature
 }
 
+func (s *communityService) ListGatewayNodes(ctx context.Context, connectionID uint) ([]models.TykGatewayNodeResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
 func (s *communityService) Status() Status {
 	return Status{Available: false}
 }
@@ -138,6 +142,10 @@ func (s *communityService) SetServerCatalogues(ctx context.Context, actor Actor,
 }
 
 func (s *communityService) SetServerBundle(ctx context.Context, actor Actor, id uint, pins []PinInput) (*models.MCPServerResponse, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) SetServerKeyAccess(ctx context.Context, actor Actor, id uint, access models.MCPKeyAccess) (*models.MCPServerResponse, error) {
 	return nil, ErrEnterpriseFeature
 }
 

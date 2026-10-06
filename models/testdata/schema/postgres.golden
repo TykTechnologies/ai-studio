@@ -994,6 +994,9 @@ TABLE mcp_servers
   column last_seen_at timestamp with time zone(timestamptz) nullable=YES
   column last_synced_at timestamp with time zone(timestamptz) nullable=YES
   column lock_version bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column key_access text(text) nullable=YES
+  column gateway_coverage character varying(varchar) nullable=YES len=32
+  column gateway_partial boolean(bool) nullable=YES
 TABLE mcp_sync_runs
   constraint mcp_sync_runs_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_mcp_sync_runs_connection_id ON mcp_sync_runs USING btree (connection_id)
@@ -1842,6 +1845,7 @@ TABLE tyk_connections
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
   column name character varying(varchar) nullable=NO len=200
   column description character varying(varchar) nullable=YES len=1024
+  column kind character varying(varchar) nullable=NO len=16 default='dashboard'::character varying
   column dashboard_url character varying(varchar) nullable=NO len=2048
   column gateway_base_url character varying(varchar) nullable=YES len=2048
   column template_id character varying(varchar) nullable=YES len=255
@@ -1880,6 +1884,45 @@ TABLE tyk_connections
   column activated_at timestamp with time zone(timestamptz) nullable=YES
   column lock_version bigint(int8) nullable=NO precision=64 scale=0 default=0
   column host_key character varying(varchar) nullable=YES len=64
+  column gateway_discovery character varying(varchar) nullable=YES len=16
+  column gateway_node_urls text(text) nullable=YES
+  column gateway_shared_storage boolean(bool) nullable=YES
+  column gateway_owner_id character varying(varchar) nullable=YES len=32
+TABLE tyk_gateway_definitions
+  constraint tyk_gateway_definitions_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_tyk_gateway_definitions_conn_api ON tyk_gateway_definitions USING btree (connection_id, tyk_api_id)
+  index CREATE UNIQUE INDEX tyk_gateway_definitions_pkey ON tyk_gateway_definitions USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('tyk_gateway_definitions_id_seq'::regclass)
+  column connection_id bigint(int8) nullable=NO precision=64 scale=0
+  column tyk_api_id character varying(varchar) nullable=NO len=64
+  column definition text(text) nullable=NO
+  column definition_hash character varying(varchar) nullable=NO len=64
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE tyk_gateway_nodes
+  constraint tyk_gateway_nodes_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_tyk_gateway_nodes_conn_addr ON tyk_gateway_nodes USING btree (connection_id, address)
+  index CREATE UNIQUE INDEX tyk_gateway_nodes_pkey ON tyk_gateway_nodes USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('tyk_gateway_nodes_id_seq'::regclass)
+  column connection_id bigint(int8) nullable=NO precision=64 scale=0
+  column address character varying(varchar) nullable=NO len=512
+  column url character varying(varchar) nullable=NO len=2048
+  column pinned_ip character varying(varchar) nullable=YES len=64
+  column source character varying(varchar) nullable=NO len=16
+  column state character varying(varchar) nullable=NO len=16 default='pending'::character varying
+  column reachable boolean(bool) nullable=YES
+  column version character varying(varchar) nullable=YES len=64
+  column mcp_count bigint(int8) nullable=YES precision=64 scale=0
+  column studio_count bigint(int8) nullable=YES precision=64 scale=0
+  column expected_count bigint(int8) nullable=YES precision=64 scale=0
+  column applied text(text) nullable=YES
+  column first_seen_at timestamp with time zone(timestamptz) nullable=YES
+  column last_seen_at timestamp with time zone(timestamptz) nullable=YES
+  column last_reconcile_at timestamp with time zone(timestamptz) nullable=YES
+  column last_error character varying(varchar) nullable=YES len=2048
+  column gone_at timestamp with time zone(timestamptz) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE tyk_policies
   constraint tyk_policies_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX idx_tyk_policies_conn_pol ON tyk_policies USING btree (connection_id, tyk_policy_id)

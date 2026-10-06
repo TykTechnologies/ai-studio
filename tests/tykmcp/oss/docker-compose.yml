@@ -1,0 +1,54 @@
+# Two Tyk OSS Gateway replicas sharing one Redis, each with its own app_path
+# (the default emptyDir-style layout), for the OSS Gateway MCP backend tests.
+# Studio reaches the replicas on :18181 and :18182; the demo MCP upstream runs
+# on the host (tests/tykmcp/mcpsrv, port 4021) and is reached through
+# host.docker.internal.
+#
+#   docker compose -p tyk-oss-mcp -f tests/tykmcp/oss/docker-compose.yml up -d
+#   docker compose -p tyk-oss-mcp -f tests/tykmcp/oss/docker-compose.yml up -d --scale gw3=1   # (see profile below)
+name: tyk-oss-mcp
+
+x-gateway: &gateway
+  image: tykio/tyk-gateway:${TYK_GW_TAG:-v5.15.1}
+  depends_on: [redis]
+  # The image runs as a non-root user, and a fresh named volume is root-owned,
+  # so Gateway API writes to app_path fail with "file object creation failed"
+  # unless the directory is writable. Production installs must ensure the same.
+  user: "0"
+  extra_hosts: ["host.docker.internal:host-gateway"]
+  environment:
+    TYK_GW_SECRET: ${TYK_GW_SECRET:-oss-secret}
+    TYK_GW_STORAGE_HOST: redis
+    TYK_GW_STORAGE_PORT: "6379"
+    TYK_GW_HASHKEYS: "true"
+    TYK_GW_ENABLEHASHEDKEYSLISTING: "true"
+    TYK_GW_POLICIES_POLICYPATH: /opt/tyk-gateway/policies
+    TYK_GW_LOGLEVEL: info
+    # Resolved by "$secret_env.DEMO_UPSTREAM" references in definitions.
+    TYK_SECRET_DEMO_UPSTREAM: ${TYK_SECRET_DEMO_UPSTREAM:-Bearer from-env-secret}
+
+services:
+  redis:
+    image: redis:7-alpine
+
+  gw1:
+    <<: *gateway
+    ports: ["18181:8080"]
+    volumes: ["gw1-apps:/opt/tyk-gateway/apps", "gw1-policies:/opt/tyk-gateway/policies"]
+
+  gw2:
+    <<: *gateway
+    ports: ["18182:8080"]
+    volumes: ["gw2-apps:/opt/tyk-gateway/apps", "gw2-policies:/opt/tyk-gateway/policies"]
+
+  # A third replica that joins mid-run (scale-up test): `up -d gw3`.
+  gw3:
+    <<: *gateway
+    profiles: ["scale"]
+    ports: ["18183:8080"]
+
+volumes:
+  gw1-apps:
+  gw1-policies:
+  gw2-apps:
+  gw2-policies:

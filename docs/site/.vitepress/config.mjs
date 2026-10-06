@@ -68,7 +68,8 @@ export default defineConfig({
           { text: 'Roles and Permissions (Enterprise)', link: '/docs/rbac' }, // Fine-grained RBAC
           { text: 'Notifications', link: '/docs/notifications' }, // New
           { text: 'Edge Gateways (Enterprise)', link: '/docs/edge-gateways' }, // Enterprise hub-spoke management
-          { text: 'Tyk Dashboard MCP Integration (Enterprise)', link: '/docs/tyk-mcp-integration' } // MCP proxies as portal assets, keys, registration
+          { text: 'Tyk Dashboard MCP Integration (Enterprise)', link: '/docs/tyk-mcp-integration' }, // MCP proxies as portal assets, keys, registration
+          { text: 'Tyk Gateway (OSS) MCP Connections (Enterprise)', link: '/docs/tyk-oss-gateway-mcp' } // Same, against open-source gateways without a Dashboard
           // Removed: apps, model-prices, call-settings (to be merged)
         ]
       },

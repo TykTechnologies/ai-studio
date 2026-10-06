@@ -6,6 +6,12 @@ Community Edition the Settings → Tyk Connections page shows what the feature
 offers and every integration route answers `403`.
 :::
 
+:::tip No Dashboard?
+The same features work against open-source Tyk Gateways directly, for MCP
+proxies and keys only: see
+[Tyk Gateway (open source) MCP Connections](./tyk-oss-gateway-mcp.md).
+:::
+
 Tyk Gateway terminates the Model Context Protocol natively: an **MCP proxy**
 is a Tyk OAS API definition with MCP middleware, per-primitive policies,
 OAuth 2.1 protected-resource metadata and MCP analytics. This integration
@@ -131,6 +137,34 @@ The **deployment target** control (registration wizard, submission form,
 reviewer page) only renders when a connection knows at least one tag, and
 warns when none is chosen. A per-tag public gateway URL on the connection
 lets the portal show the right endpoint for each target.
+
+### Endpoint URLs in the portal
+
+AI Studio does not proxy MCP traffic, so the URL portal users see is where
+the **Tyk Gateway** serves the proxy. It is not `PROXY_URL`, which is the
+URL of AI Studio's own gateway for LLMs and AI Studio tools.
+
+AI Studio builds the URL, in this order:
+
+1. **The proxy's custom domain.** A proxy with `server.customDomain` enabled
+   gets `scheme://<custom domain><listen path><transport path>`.
+   - The scheme is that of the connection's public gateway base URL, or
+     https when none is set.
+   - Tyk serves such a proxy on that host only (with `enable_custom_domains`
+     on the gateways).
+   - Domain patterns such as `{tenant:[a-z]+}.example.com` name no single URL
+     and are ignored.
+2. **The per-tag public URL** of each gateway tag the proxy is deployed to
+   (segmented gateways). Portal users see one URL per target.
+3. **The connection's public gateway base URL**, typically the load
+   balancer in front of the gateways, plus the listen path and transport
+   path, for example `https://gateway.example.com/weather/mcp`.
+
+With none of them set, the portal says the URL is not configured. Changing
+the base URLs on a connection runs a sync at the next poll, and every
+server's URL follows, whether or not its definition changed. The Gateway's
+own `servers` entries in the definition are ignored: they name the gateway's
+listen address, not what clients can reach.
 
 ## Discovery and publishing
 

@@ -256,3 +256,25 @@ func (p *URLPolicy) NewHTTPClient(timeout time.Duration) *http.Client {
 		},
 	}
 }
+
+// NewPinnedHTTPClient is NewHTTPClient for one of several servers behind a
+// hostname that resolves to more than one address: every connection goes to
+// ip, while the URL, the Host header and the TLS server name keep the
+// hostname. Whether an internal ip may be dialled is decided for the
+// hostname, exactly as for an unpinned dial of it.
+func (p *URLPolicy) NewPinnedHTTPClient(timeout time.Duration, ip net.IP) *http.Client {
+	c := p.NewHTTPClient(timeout)
+	transport := c.Transport.(*http.Transport)
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		if IsInternalIP(ip) && !p.internalPermitted(strings.ToLower(host)) {
+			return nil, ErrPolicyDial
+		}
+		d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+		return d.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+	}
+	return c
+}

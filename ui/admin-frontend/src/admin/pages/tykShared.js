@@ -15,6 +15,37 @@ export const MODE_HELP = {
   full: "Broker plus creating MCP proxies and policies on the Dashboard.",
 };
 
+// A Tyk OSS Gateway connection has no Dashboard: Studio talks to each node's
+// Gateway API, for MCP proxies and keys only.
+export const CONNECTION_KINDS = ["dashboard", "gateway"];
+
+export const KIND_LABELS = {
+  dashboard: "Tyk Dashboard",
+  gateway: "Tyk Gateway (open source)",
+};
+
+export const GATEWAY_MODE_HELP = {
+  catalogue: "Import the MCP proxies the gateways serve. Registrations become handoff packages.",
+  broker: "Catalogue plus minting and revoking Tyk keys that carry each server's access rights.",
+  full: "Broker plus creating MCP proxies on every gateway node and keeping the nodes in step.",
+};
+
+export const modeHelp = (kind, mode) => (kind === "gateway" ? GATEWAY_MODE_HELP : MODE_HELP)[mode];
+
+export const DISCOVERY_LABELS = {
+  single: "Single node",
+  static: "List of nodes",
+  dns: "DNS (every address the hostname resolves to)",
+};
+
+export const DISCOVERY_HELP = {
+  single: "The gateway URL is the only node.",
+  static: "The gateway URL plus the nodes listed below, one URL per line.",
+  dns: "Every address the URL's hostname resolves to is a node, re-resolved on every sync: use a Kubernetes headless Service or a Compose service name.",
+};
+
+export const productName = (kind) => (kind === "gateway" ? "Gateway" : "Dashboard");
+
 export const CAPABILITY_LABELS = {
   mcp_supported: "MCP proxies",
   rest_to_mcp_supported: "REST API to MCP",
@@ -28,6 +59,9 @@ export const CAPABILITY_LABELS = {
   policies_write: "Create policies",
   mdcb_read: "MDCB data planes",
   template_read: "API template",
+  mcp_dry_run: "Dry-run validation",
+  gateway_nodes: "Gateway nodes",
+  cluster_shared_redis: "Shared Redis",
 };
 
 export const connectionStatusColor = (status, degraded) => {
@@ -121,6 +155,7 @@ export const TykUpsell = () => (
       </Typography>
       <ul>
         <li>Discover MCP proxies defined in a Tyk Dashboard and publish them as portal assets</li>
+        <li>Or connect open-source Tyk Gateways directly, without a Dashboard, for MCP proxies and keys</li>
         <li>Register MCP servers from AI Studio or through community submissions</li>
         <li>Mint, rotate and revoke Tyk access keys for Apps against pinned security policies</li>
         <li>An audited record of who has access to which MCP server</li>
@@ -154,6 +189,7 @@ export const TykDisabledNotice = ({ status }) => (
 // --- Connection form state shared by the settings page and the Tools import wizard ---
 
 export const emptyForm = {
+  kind: "dashboard",
   name: "",
   description: "",
   dashboard_url: "",
@@ -174,7 +210,16 @@ export const emptyForm = {
   mdcb_allow_internal_host: false,
   known_gateway_tags: "",
   gateway_base_urls: [],
+  gateway_discovery: "single",
+  gateway_node_urls: "",
+  gateway_shared_storage: false,
 };
+
+const parseLines = (text) =>
+  (text || "")
+    .split(/[\n,]/)
+    .map((t) => t.trim())
+    .filter(Boolean);
 
 const parseTags = (text) =>
   text
@@ -220,11 +265,28 @@ export const formToInput = (form, editing) => {
   }
   if (form.dashboard_access_token) input.dashboard_access_token = form.dashboard_access_token;
   if (form.mdcb_access_token) input.mdcb_access_token = form.mdcb_access_token;
+  if (form.kind === "gateway") {
+    // The Dashboard-only settings do not exist on a gateway connection.
+    input.kind = "gateway";
+    input.template_id = "";
+    input.mdcb_url = "";
+    input.mdcb_allow_internal_host = false;
+    input.known_gateway_tags = [];
+    input.gateway_base_urls = {};
+    delete input.mdcb_access_token;
+    input.gateway_discovery = form.gateway_discovery || "single";
+    input.gateway_node_urls = input.gateway_discovery === "static" ? parseLines(form.gateway_node_urls) : [];
+    input.gateway_shared_storage = Boolean(form.gateway_shared_storage);
+  }
   return input;
 };
 
 export const connectionToForm = (connection) => ({
   ...emptyForm,
+  kind: connection.kind || "dashboard",
+  gateway_discovery: connection.gateway_discovery || "single",
+  gateway_node_urls: (connection.gateway_node_urls || []).join("\n"),
+  gateway_shared_storage: Boolean(connection.gateway_shared_storage),
   name: connection.name || "",
   description: connection.description || "",
   dashboard_url: connection.dashboard_url || "",
@@ -262,17 +324,18 @@ export const DataPlanes = ({ planes }) =>
     </Box>
   ) : null;
 
-// ProbePanel shows what a probe learned about a Dashboard.
-export const ProbePanel = ({ result }) => {
+// ProbePanel shows what a probe learned about a Dashboard or Gateway.
+export const ProbePanel = ({ result, kind }) => {
   if (!result) return null;
+  const what = productName(kind);
   return (
     <Box sx={{ mt: 2 }} data-testid="probe-panel">
       <Alert severity={result.reachable ? (result.effective_mode ? "success" : "warning") : "error"} sx={{ mb: 1 }}>
         {result.reachable
           ? result.effective_mode
-            ? `Dashboard reachable. Effective mode: ${MODE_LABELS[result.effective_mode]}.`
-            : "Dashboard reachable but not usable in any mode."
-          : "Dashboard not reachable with these settings."}
+            ? `${what} reachable. Effective mode: ${MODE_LABELS[result.effective_mode]}.`
+            : `${what} reachable but not usable in any mode.`
+          : `${what} not reachable with these settings.`}
         {result.org_id ? ` Organisation ${result.org_id}.` : ""}
       </Alert>
       <CapabilityChips capabilities={result.capabilities} />

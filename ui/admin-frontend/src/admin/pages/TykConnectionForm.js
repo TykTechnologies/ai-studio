@@ -29,7 +29,12 @@ import { formatTime, apiErrorDetail } from "./webhookShared";
 import {
   CONNECTION_MODES,
   MODE_LABELS,
-  MODE_HELP,
+  CONNECTION_KINDS,
+  KIND_LABELS,
+  DISCOVERY_LABELS,
+  DISCOVERY_HELP,
+  modeHelp,
+  productName,
   CapabilityChips,
   TykUpsell,
   TykDisabledNotice,
@@ -39,6 +44,7 @@ import {
   DataPlanes,
   ProbePanel,
 } from "./tykShared";
+import TykGatewayNodes from "./TykGatewayNodes";
 
 // The form pieces the Tools import wizard shares live in tykShared; they
 // stay exported from here for existing imports and tests.
@@ -106,7 +112,7 @@ const TykConnectionForm = () => {
   const runProbe = async () => {
     setError(null);
     if (editing && !form.dashboard_access_token) {
-      setError("Enter the access token to test unsaved settings, or use Probe now to check the saved connection.");
+      setError(`Enter the ${form.kind === "gateway" ? "gateway secret" : "access token"} to test unsaved settings, or use Probe now to check the saved connection.`);
       return;
     }
     setProbing(true);
@@ -170,6 +176,10 @@ const TykConnectionForm = () => {
   if (status && !status.enabled) return <TykDisabledNotice status={status} />;
 
   const canSave = form.name && form.dashboard_url && (editing || form.dashboard_access_token);
+  // A Tyk Gateway connection talks to open-source gateways directly: no
+  // Dashboard, no policies, templates or segmentation; MCP proxies and keys only.
+  const isGateway = form.kind === "gateway";
+  const what = productName(form.kind);
   // The application AI Studio is embedded in provides this connection: its
   // Dashboard, organisation, mode, gateway URL and key are set there.
   const hostManaged = Boolean(connection?.host_managed);
@@ -177,15 +187,16 @@ const TykConnectionForm = () => {
   return (
     <>
       <TitleBox top="var(--studio-header-height)">
-        <Typography variant="headingXLarge">{editing ? "Edit connection" : "Connect a Tyk Dashboard"}</Typography>
+        <Typography variant="headingXLarge">{editing ? "Edit connection" : isGateway ? "Connect Tyk Gateways" : "Connect a Tyk Dashboard"}</Typography>
         <SecondaryLinkButton startIcon={<ArrowBackIcon />} onClick={backToList} color="inherit">
           Back to connections
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-          A connection is one Tyk Dashboard, one dedicated Dashboard user and one organisation. Its trust mode caps
-          what AI Studio may do there: import MCP proxies, mint keys for Apps, or create proxies and policies.
+          {isGateway
+            ? "A Tyk Gateway connection is one cluster of open-source Tyk Gateways sharing a Redis, managed through each node's Gateway API for MCP proxies and keys only. Its trust mode caps what AI Studio may do there: import MCP proxies, mint keys for Apps, or create proxies on every node."
+            : "A connection is one Tyk Dashboard, one dedicated Dashboard user and one organisation. Its trust mode caps what AI Studio may do there: import MCP proxies, mint keys for Apps, or create proxies and policies."}
         </Typography>
       </Box>
       <ContentBox sx={{ pt: 0 }}>
@@ -222,7 +233,7 @@ const TykConnectionForm = () => {
             data-testid="capabilities-section"
           >
             <CapabilityChips capabilities={connection.capabilities} />
-            <DataPlanes planes={connection.data_planes} />
+            {!isGateway && <DataPlanes planes={connection.data_planes} />}
             {(connection.gateway_tags || []).length > 0 && (
               <Box sx={{ mt: 1, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
                 {connection.gateway_tags.map((t) => (
@@ -233,9 +244,48 @@ const TykConnectionForm = () => {
           </Section>
         )}
 
+        {editing && connection && isGateway && (
+          <Section
+            title="Gateway nodes"
+            description="Each node keeps its MCP proxies on its own disk. Every sync writes the proxies AI Studio owns to every node it finds and records which nodes serve them."
+            data-testid="gateway-nodes-section"
+          >
+            <TykGatewayNodes connectionId={id} refreshKey={connection.last_sync_at} />
+          </Section>
+        )}
+
         <Box component="form" onSubmit={handleSubmit} noValidate>
-          <Section title="Connection" description="Where the Dashboard is and how much AI Studio may do there.">
+          <Section title="Connection" description={`Where the ${what} is and how much AI Studio may do there.`}>
             <Grid container spacing={3}>
+              {!editing && (
+                <Grid item xs={12}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Connect to"
+                    name="kind"
+                    value={form.kind}
+                    onChange={set("kind")}
+                    helperText={
+                      isGateway
+                        ? "Open-source Tyk Gateways without a Dashboard. AI Studio manages MCP proxies and keys on them, nothing else."
+                        : "A Tyk Dashboard: MCP proxies, policies, templates and keys across its gateways."
+                    }
+                    inputProps={{ "data-testid": "kind-input" }}
+                  >
+                    {CONNECTION_KINDS.map((k) => (
+                      <MenuItem key={k} value={k}>
+                        {KIND_LABELS[k]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+              )}
+              {editing && (
+                <Grid item xs={12}>
+                  <Chip label={KIND_LABELS[form.kind] || form.kind} size="small" data-testid="kind-chip" />
+                </Grid>
+              )}
               <Grid item xs={12} sm={6}>
                 <TextField fullWidth label="Name" name="name" value={form.name} onChange={set("name")} required inputProps={{ "data-testid": "name-input" }} />
               </Grid>
@@ -247,7 +297,7 @@ const TykConnectionForm = () => {
                   name="declared_mode"
                   value={form.declared_mode}
                   onChange={set("declared_mode")}
-                  helperText={MODE_HELP[form.declared_mode]}
+                  helperText={modeHelp(form.kind, form.declared_mode)}
                   disabled={hostManaged}
                   inputProps={{ "data-testid": "mode-input" }}
                 >
@@ -264,9 +314,14 @@ const TykConnectionForm = () => {
               <Grid item xs={12} sm={8}>
                 <TextField
                   fullWidth
-                  label="Dashboard URL"
+                  label={isGateway ? "Gateway API URL" : "Dashboard URL"}
                   name="dashboard_url"
-                  placeholder="https://dashboard.example.com"
+                  placeholder={isGateway ? "http://tyk-gateway:8080" : "https://dashboard.example.com"}
+                  helperText={
+                    isGateway
+                      ? "The Gateway API of a node (the /tyk/ endpoints). Prefer a control_api_port that is not reachable from the internet."
+                      : undefined
+                  }
                   value={form.dashboard_url}
                   onChange={set("dashboard_url")}
                   required
@@ -289,9 +344,21 @@ const TykConnectionForm = () => {
                   <TextField
                     fullWidth
                     type="password"
-                    label={editing ? "Dashboard access token (leave empty to keep)" : "Dashboard access token"}
+                    label={
+                      isGateway
+                        ? editing
+                          ? "Gateway secret (leave empty to keep)"
+                          : "Gateway secret"
+                        : editing
+                          ? "Dashboard access token (leave empty to keep)"
+                          : "Dashboard access token"
+                    }
                     name="dashboard_access_token"
-                    helperText="The API access key of a dedicated Dashboard user. Stored encrypted, never shown again."
+                    helperText={
+                      isGateway
+                        ? "The gateways' secret (sent as X-Tyk-Authorization). It grants full control of the gateways; AI Studio only uses it for MCP proxies and keys. Stored encrypted, never shown again."
+                        : "The API access key of a dedicated Dashboard user. Stored encrypted, never shown again."
+                    }
                     value={form.dashboard_access_token}
                     onChange={set("dashboard_access_token")}
                     required={!editing}
@@ -326,15 +393,70 @@ const TykConnectionForm = () => {
                 <Grid item xs={12}>
                   <FormControlLabel
                     control={<Checkbox checked={form.allow_internal_host} onChange={setBool("allow_internal_host")} disabled={hostManaged} />}
-                    label="Allow this Dashboard host to be on an internal network address"
+                    label={`Allow the ${what} host${isGateway ? "s" : ""} to be on an internal network address`}
                   />
                 </Grid>
               )}
             </Grid>
           </Section>
 
+          {isGateway && (
+            <Section
+              title="Nodes"
+              description="An open-source gateway keeps MCP proxies on its own disk and has no API for the whole cluster, so AI Studio needs to know every node. Keys live in the Redis the nodes share and need no copying."
+              data-testid="gateway-discovery-section"
+            >
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Find nodes by"
+                    name="gateway_discovery"
+                    value={form.gateway_discovery}
+                    onChange={set("gateway_discovery")}
+                    helperText={DISCOVERY_HELP[form.gateway_discovery]}
+                    inputProps={{ "data-testid": "discovery-input" }}
+                  >
+                    {Object.keys(DISCOVERY_LABELS).map((d) => (
+                      <MenuItem key={d} value={d}>
+                        {DISCOVERY_LABELS[d]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControlLabel
+                    control={<Checkbox checked={form.gateway_shared_storage} onChange={setBool("gateway_shared_storage")} />}
+                    label="The nodes share app_path (shared volume)"
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    AI Studio then writes each proxy through one node and a group reload loads it everywhere. New nodes
+                    serve the proxies from their first start.
+                  </Typography>
+                </Grid>
+                {form.gateway_discovery === "static" && (
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      minRows={3}
+                      label="Other node URLs (one per line)"
+                      name="gateway_node_urls"
+                      value={form.gateway_node_urls}
+                      onChange={set("gateway_node_urls")}
+                      placeholder={"http://tyk-gateway-2:8080\nhttp://tyk-gateway-3:8080"}
+                      inputProps={{ "data-testid": "node-urls-input" }}
+                    />
+                  </Grid>
+                )}
+              </Grid>
+            </Section>
+          )}
+
           <Section title="Governance" description="Defaults the API team sets for every proxy AI Studio publishes, and how imported servers reach the portal.">
             <Grid container spacing={3}>
+              {!isGateway && (
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -346,6 +468,7 @@ const TykConnectionForm = () => {
                   inputProps={{ "data-testid": "template-id-input" }}
                 />
               </Grid>
+              )}
               <Grid item xs={12} sm={4}>
                 <FormControlLabel
                   control={<Checkbox checked={form.auto_publish} onChange={setBool("auto_publish")} />}
@@ -391,6 +514,7 @@ const TykConnectionForm = () => {
             </Grid>
           </Section>
 
+          {!isGateway && (
           <Section
             title="Gateway segmentation"
             description="Optional. In sharded deployments a proxy is loaded only by gateways whose tags match. Configure MDCB to discover data planes, or list the tags by hand."
@@ -448,8 +572,9 @@ const TykConnectionForm = () => {
               </Grid>
             </Grid>
           </Section>
+          )}
 
-          <ProbePanel result={probe} />
+          <ProbePanel result={probe} kind={form.kind} />
 
           <Box display="flex" gap={2} sx={{ mt: 3 }}>
             <SecondaryOutlineButton onClick={backToList} disabled={saving}>
