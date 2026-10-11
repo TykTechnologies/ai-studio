@@ -455,6 +455,14 @@ func (v *Bedrock) ProvidesEmbedder() bool {
 	return false
 }
 
+func (v *Bedrock) ProvidesChat() bool {
+	return true
+}
+
+func (v *Bedrock) DecisionEndpoint() string {
+	return ""
+}
+
 // --- Internal helpers ---
 
 func extractAWSCredentials(llm *models.LLM) (accessKeyID, secretAccessKey, sessionToken string, err error) {

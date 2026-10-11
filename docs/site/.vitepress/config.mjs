@@ -44,6 +44,7 @@ export default defineConfig({
           { text: 'AI Portal', link: '/docs/ai-portal' }, // New
           { text: 'Chat Interface', link: '/docs/chat-interface' }, // Moved up
           { text: 'LLM Management', link: '/docs/llm-management' },
+          { text: 'Decision Models', link: '/docs/decision-models' },
           { text: 'Model Router (Enterprise)', link: '/docs/model-router' }, // Enterprise model routing
           { text: 'Semantic Router (Enterprise)', link: '/docs/semantic-router' }, // Enterprise semantic routing
           { text: 'Tools & Extensibility', link: '/docs/tools' },

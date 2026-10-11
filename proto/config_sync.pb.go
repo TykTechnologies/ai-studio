@@ -1941,8 +1941,12 @@ type AnalyticsEvent struct {
 	ShadowRoute      string  `protobuf:"bytes,39,opt,name=shadow_route,json=shadowRoute,proto3" json:"shadow_route,omitempty"`                  // Semantic Router shadow mode: the route the classifier picked
 	OnBehalfOf       string  `protobuf:"bytes,40,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"`                   // who the call was for, when an auth plugin said (audit only)
 	ActingAgent      string  `protobuf:"bytes,41,opt,name=acting_agent,json=actingAgent,proto3" json:"acting_agent,omitempty"`                  // the agent that made it, when an auth plugin said (audit only)
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Model class: "" for generative traffic, "decision" for decision models.
+	RequestKind       string `protobuf:"bytes,42,opt,name=request_kind,json=requestKind,proto3" json:"request_kind,omitempty"`
+	DecisionQuestions uint32 `protobuf:"varint,43,opt,name=decision_questions,json=decisionQuestions,proto3" json:"decision_questions,omitempty"` // decision calls: questions asked
+	DecisionRefusals  uint32 `protobuf:"varint,44,opt,name=decision_refusals,json=decisionRefusals,proto3" json:"decision_refusals,omitempty"`    // decision calls: questions the model declined (answered = choices)
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AnalyticsEvent) Reset() {
@@ -2260,6 +2264,27 @@ func (x *AnalyticsEvent) GetActingAgent() string {
 		return x.ActingAgent
 	}
 	return ""
+}
+
+func (x *AnalyticsEvent) GetRequestKind() string {
+	if x != nil {
+		return x.RequestKind
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetDecisionQuestions() uint32 {
+	if x != nil {
+		return x.DecisionQuestions
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetDecisionRefusals() uint32 {
+	if x != nil {
+		return x.DecisionRefusals
+	}
+	return 0
 }
 
 // Budget usage event for pulse batching
@@ -3217,7 +3242,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xc0\v\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xbf\f\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -3270,7 +3295,10 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\fshadow_route\x18' \x01(\tR\vshadowRoute\x12 \n" +
 	"\fon_behalf_of\x18( \x01(\tR\n" +
 	"onBehalfOf\x12!\n" +
-	"\facting_agent\x18) \x01(\tR\vactingAgent\"\xa2\x03\n" +
+	"\facting_agent\x18) \x01(\tR\vactingAgent\x12!\n" +
+	"\frequest_kind\x18* \x01(\tR\vrequestKind\x12-\n" +
+	"\x12decision_questions\x18+ \x01(\rR\x11decisionQuestions\x12+\n" +
+	"\x11decision_refusals\x18, \x01(\rR\x10decisionRefusals\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

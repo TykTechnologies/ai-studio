@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -188,15 +187,6 @@ func bridgeBody(prompt string, stream bool, maxTokens int) []byte {
 	return b
 }
 
-func mustPost(t *testing.T, h *harness, url string, body []byte) *response {
-	t.Helper()
-	ctx, cancel := h.CallContext(context.Background())
-	defer cancel()
-	resp, err := h.post(ctx, url, body, nil)
-	require.NoError(t, err)
-	return resp
-}
-
 // newNonce tags one request so its analytics event can be found among the
 // others the shared harness accumulates.
 func newNonce() string {
@@ -209,41 +199,6 @@ func newNonce() string {
 func waitForLoggedRequest(t *testing.T, h *harness, nonce string) mgwdb.AnalyticsEvent {
 	t.Helper()
 	return waitForLoggedRequestOn(t, h, h.filteredBedrock.ID, nonce)
-}
-
-// waitForLoggedRequestOn is waitForLoggedRequest for any route.
-func waitForLoggedRequestOn(t *testing.T, h *harness, llmID uint, nonce string) mgwdb.AnalyticsEvent {
-	t.Helper()
-	// On the /ai/ loopback path the request body lands on the event when the
-	// outer hop's chat record is merged into the inner hop's proxy log, which
-	// can trail the response by well over ten seconds; the Bedrock direct
-	// paths log in one step and were the only users of this before.
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		var events []mgwdb.AnalyticsEvent
-		err := h.db.Where("llm_id = ? AND request_body LIKE ?", llmID, "%"+nonce+"%").
-			Order("id desc").Limit(1).Find(&events).Error
-		// The gateway writes the event on another connection of the same
-		// shared-cache SQLite; a lock while it does so is a reason to poll
-		// again, not a failure.
-		if err != nil && !strings.Contains(err.Error(), "locked") {
-			require.NoError(t, err)
-		}
-		if err == nil && len(events) == 1 {
-			return events[0]
-		}
-		if time.Now().After(deadline) {
-			// Say what was logged instead, so a lookup miss can be told apart
-			// from a request that was never logged at all.
-			var recent []mgwdb.AnalyticsEvent
-			h.db.Where("llm_id = ?", llmID).Order("id desc").Limit(5).Find(&recent)
-			for _, ev := range recent {
-				t.Logf("  event %d status=%d request_body[%d]=%q", ev.ID, ev.StatusCode, len(ev.RequestBody), bodyExcerpt([]byte(ev.RequestBody)))
-			}
-			t.Fatalf("no analytics event logged for request %s on llm %d (%d recent events listed above)", nonce, llmID, len(recent))
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
 }
 
 // anthropicErrorType decodes an Anthropic error envelope and returns error.type.

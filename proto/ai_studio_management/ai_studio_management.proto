@@ -125,6 +125,9 @@ service AIStudioManagementService {
     rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
     rpc QueryDatasource(QueryDatasourceRequest) returns (QueryDatasourceResponse);
     rpc CallLLM(CallLLMRequest) returns (stream CallLLMResponse);
+    // CallDecision asks a decision model (OpenAI Decisions schema) through the
+    // governed gateway path, as CallLLM does for chat.
+    rpc CallDecision(CallDecisionRequest) returns (CallDecisionResponse);
 
     // Schedule Management Operations
     rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
@@ -1995,4 +1998,20 @@ message GetLicenseInfoResponse {
     repeated string entitlements = 4; // List of enabled features/entitlements
     string organization = 5;          // Licensed organization name (enterprise only)
     google.protobuf.Timestamp expires_at = 6; // License expiration timestamp (nil for community)
+}
+
+// CallDecisionRequest carries an OpenAI Decisions request as JSON (model,
+// input, questions). An empty model uses the LLM's default model. The gateway
+// translates it for the LLM's vendor (OpenAI Decisions or System One).
+message CallDecisionRequest {
+    PluginContext context = 1;
+    uint32 llm_id = 2;
+    string request_json = 3;
+}
+
+message CallDecisionResponse {
+    bool success = 1;
+    string response_json = 2;   // OpenAI Decisions response JSON
+    string error_message = 3;
+    int32 status_code = 4;      // gateway status when the call failed
 }

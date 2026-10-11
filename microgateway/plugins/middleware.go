@@ -12,6 +12,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -110,6 +111,7 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Vendor:       vendor,
+			RequestKind:  decisions.KindForPath(c.Request.URL.Path),
 			AppID:        appID,
 			UserID:       userID,
 			Metadata:     middlewareMetadata,

@@ -55,6 +55,9 @@ TABLE analytics_events
   column `acting_agent` text
   column `failover_from_llm_id` integer
   column `failover_attempt` integer DEFAULT 0
+  column `request_kind` text DEFAULT ""
+  column `decision_questions` integer
+  column `decision_refusals` integer
   column `time_stamp` datetime
   column `created_at` datetime
   constraint CONSTRAINT `fk_analytics_events_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
@@ -62,6 +65,7 @@ TABLE analytics_events
   constraint CONSTRAINT `fk_llms_events` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
   index CREATE INDEX `idx_analytics_app` ON `analytics_events`(`app_id`,`created_at`)
   index CREATE INDEX `idx_analytics_failover_from` ON `analytics_events`(`failover_from_llm_id`)
+  index CREATE INDEX `idx_analytics_request_kind` ON `analytics_events`(`request_kind`)
   index CREATE INDEX `idx_analytics_timestamp` ON `analytics_events`(`time_stamp`)
   index CREATE INDEX `idx_analytics_user` ON `analytics_events`(`user_id`)
   index CREATE UNIQUE INDEX `idx_analytics_events_request_id` ON `analytics_events`(`request_id`)

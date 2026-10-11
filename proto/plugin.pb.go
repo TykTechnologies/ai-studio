@@ -464,15 +464,18 @@ func (x *ShutdownResponse) GetSuccess() bool {
 }
 
 type PluginContext struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Vendor        string                 `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
-	LlmId         uint32                 `protobuf:"varint,3,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
-	LlmSlug       string                 `protobuf:"bytes,4,opt,name=llm_slug,json=llmSlug,proto3" json:"llm_slug,omitempty"`
-	AppId         uint32                 `protobuf:"varint,5,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	UserId        uint32                 `protobuf:"varint,6,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	TraceContext  map[string]string      `protobuf:"bytes,8,rep,name=trace_context,json=traceContext,proto3" json:"trace_context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	RequestId    string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Vendor       string                 `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	LlmId        uint32                 `protobuf:"varint,3,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
+	LlmSlug      string                 `protobuf:"bytes,4,opt,name=llm_slug,json=llmSlug,proto3" json:"llm_slug,omitempty"`
+	AppId        uint32                 `protobuf:"varint,5,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	UserId       uint32                 `protobuf:"varint,6,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Metadata     map[string]string      `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	TraceContext map[string]string      `protobuf:"bytes,8,rep,name=trace_context,json=traceContext,proto3" json:"trace_context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Model class of the request: "" for generative (chat, completions,
+	// embeddings), "decision" for decision models (/v1/decisions, /v1/systemone).
+	RequestKind   string `protobuf:"bytes,9,opt,name=request_kind,json=requestKind,proto3" json:"request_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -561,6 +564,13 @@ func (x *PluginContext) GetTraceContext() map[string]string {
 		return x.TraceContext
 	}
 	return nil
+}
+
+func (x *PluginContext) GetRequestKind() string {
+	if x != nil {
+		return x.RequestKind
+	}
+	return ""
 }
 
 type PluginRequest struct {
@@ -2013,8 +2023,13 @@ type AnalyticsRequest struct {
 	Choices                int32                  `protobuf:"varint,15,opt,name=choices,proto3" json:"choices,omitempty"`
 	RequestId              string                 `protobuf:"bytes,16,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	Context                *PluginContext         `protobuf:"bytes,17,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Model class ("" generative, "decision"); for decisions, the questions
+	// asked and the ones the model declined (answered questions are choices).
+	RequestKind       string `protobuf:"bytes,18,opt,name=request_kind,json=requestKind,proto3" json:"request_kind,omitempty"`
+	DecisionQuestions int32  `protobuf:"varint,19,opt,name=decision_questions,json=decisionQuestions,proto3" json:"decision_questions,omitempty"`
+	DecisionRefusals  int32  `protobuf:"varint,20,opt,name=decision_refusals,json=decisionRefusals,proto3" json:"decision_refusals,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AnalyticsRequest) Reset() {
@@ -2164,6 +2179,27 @@ func (x *AnalyticsRequest) GetContext() *PluginContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *AnalyticsRequest) GetRequestKind() string {
+	if x != nil {
+		return x.RequestKind
+	}
+	return ""
+}
+
+func (x *AnalyticsRequest) GetDecisionQuestions() int32 {
+	if x != nil {
+		return x.DecisionQuestions
+	}
+	return 0
+}
+
+func (x *AnalyticsRequest) GetDecisionRefusals() int32 {
+	if x != nil {
+		return x.DecisionRefusals
+	}
+	return 0
 }
 
 type BudgetUsageRequest struct {
@@ -6002,7 +6038,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x0fShutdownRequest\x12'\n" +
 	"\x0ftimeout_seconds\x18\x01 \x01(\x03R\x0etimeoutSeconds\",\n" +
 	"\x10ShutdownResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xb5\x03\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xd8\x03\n" +
 	"\rPluginContext\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x16\n" +
@@ -6012,7 +6048,8 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x06app_id\x18\x05 \x01(\rR\x05appId\x12\x17\n" +
 	"\auser_id\x18\x06 \x01(\rR\x06userId\x12?\n" +
 	"\bmetadata\x18\a \x03(\v2#.plugin.PluginContext.MetadataEntryR\bmetadata\x12L\n" +
-	"\rtrace_context\x18\b \x03(\v2'.plugin.PluginContext.TraceContextEntryR\ftraceContext\x1a;\n" +
+	"\rtrace_context\x18\b \x03(\v2'.plugin.PluginContext.TraceContextEntryR\ftraceContext\x12!\n" +
+	"\frequest_kind\x18\t \x01(\tR\vrequestKind\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a?\n" +
@@ -6176,7 +6213,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\b \x01(\tR\trequestId\x12/\n" +
-	"\acontext\x18\t \x01(\v2\x15.plugin.PluginContextR\acontext\"\xcc\x04\n" +
+	"\acontext\x18\t \x01(\v2\x15.plugin.PluginContextR\acontext\"\xcb\x05\n" +
 	"\x10AnalyticsRequest\x12\x15\n" +
 	"\x06llm_id\x18\x01 \x01(\rR\x05llmId\x12\x1d\n" +
 	"\n" +
@@ -6198,7 +6235,10 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\achoices\x18\x0f \x01(\x05R\achoices\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x10 \x01(\tR\trequestId\x12/\n" +
-	"\acontext\x18\x11 \x01(\v2\x15.plugin.PluginContextR\acontext\"\xa0\x03\n" +
+	"\acontext\x18\x11 \x01(\v2\x15.plugin.PluginContextR\acontext\x12!\n" +
+	"\frequest_kind\x18\x12 \x01(\tR\vrequestKind\x12-\n" +
+	"\x12decision_questions\x18\x13 \x01(\x05R\x11decisionQuestions\x12+\n" +
+	"\x11decision_refusals\x18\x14 \x01(\x05R\x10decisionRefusals\"\xa0\x03\n" +
 	"\x12BudgetUsageRequest\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

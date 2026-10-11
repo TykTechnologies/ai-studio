@@ -121,6 +121,9 @@ message PluginContext {
     uint32 user_id = 6;
     map<string, string> metadata = 7;
     map<string, string> trace_context = 8;
+    // Model class of the request: "" for generative (chat, completions,
+    // embeddings), "decision" for decision models (/v1/decisions, /v1/systemone).
+    string request_kind = 9;
 }
 
 message PluginRequest {
@@ -300,6 +303,11 @@ message AnalyticsRequest {
     int32 choices = 15;
     string request_id = 16;
     PluginContext context = 17;
+    // Model class ("" generative, "decision"); for decisions, the questions
+    // asked and the ones the model declined (answered questions are choices).
+    string request_kind = 18;
+    int32 decision_questions = 19;
+    int32 decision_refusals = 20;
 }
 
 message BudgetUsageRequest {

@@ -51,6 +51,9 @@ func TestGatewayRoutes_ForwardAnthropicBridge(t *testing.T) {
 		{"llm passthrough", http.MethodPost, "/llm/call/aws-bedrock/v1/messages", http.StatusOK, true},
 		{"unified router chat", http.MethodPost, "/v1/chat/completions", http.StatusOK, true},
 		{"unified router completions", http.MethodPost, "/v1/completions", http.StatusOK, true},
+		{"unified router decisions", http.MethodPost, "/v1/decisions", http.StatusOK, true},
+		{"openai-compatible decisions", http.MethodPost, "/ai/jev/v1/decisions", http.StatusOK, true},
+		{"native decisions passthrough", http.MethodPost, "/llm/call/jev/v1/systemone", http.StatusOK, true},
 		{"unmounted path", http.MethodPost, "/nope/x", http.StatusNotFound, false},
 	}
 	for _, tc := range cases {

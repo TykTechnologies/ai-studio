@@ -96,6 +96,14 @@ func (v *HuggingFace) ProvidesEmbedder() bool {
 	return true
 }
 
+func (v *HuggingFace) ProvidesChat() bool {
+	return true
+}
+
+func (v *HuggingFace) DecisionEndpoint() string {
+	return ""
+}
+
 func setupHuggingFaceDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]huggingface.Option, 0)
 

@@ -67,6 +67,12 @@ type harness struct {
 	guardrails       *vc.GuardrailsConfig
 	guardrailed      *mgwdb.LLM
 	guardrailedModel string
+	// decisions is the decision-model half of the configuration, and
+	// decisionRoutes the route seeded for each target, by key (see
+	// seedDecisionTargets). Decision targets are kept out of cfg.Vendors: the
+	// chat matrix cannot send them a request.
+	decisions      *vc.DecisionsConfig
+	decisionRoutes map[string]*mgwdb.LLM
 }
 
 // filteredBedrockSlug is the route slug of the filter-bearing Bedrock LLM.
@@ -269,19 +275,24 @@ func buildHarness() (*harness, string) {
 	if !cfg.Enabled {
 		return nil, "VENDOR_TESTS_ENABLED is not true (set it in test-secrets/vendors.env)"
 	}
-	if len(cfg.Vendors) == 0 {
-		return nil, "no vendors have credentials:\n" + cfg.Summary()
+	decisionCfg, err := vc.LoadDecisions()
+	if err != nil {
+		return nil, "decision conformance config error: " + err.Error()
+	}
+	if len(cfg.Vendors) == 0 && len(decisionCfg.Targets) == 0 {
+		return nil, "no vendors have credentials:\n" + cfg.Summary() + decisionCfg.Summary()
 	}
 
-	fmt.Fprint(os.Stderr, "\n"+cfg.Summary()+"\n")
+	fmt.Fprint(os.Stderr, "\n"+cfg.Summary()+decisionCfg.Summary()+"\n")
 
 	h := &harness{
 		cfg:      cfg,
 		recorder: vc.NewRecorder(cfg.ArtifactDir),
 		// No client timeout: per-request deadlines come from the context, so a
 		// slow vendor produces a clear context error rather than an opaque one.
-		client:   &http.Client{Timeout: 0},
-		inflight: make(chan struct{}, cfg.Parallel),
+		client:    &http.Client{Timeout: 0},
+		inflight:  make(chan struct{}, cfg.Parallel),
+		decisions: decisionCfg,
 	}
 	if err := h.boot(); err != nil {
 		return nil, "booting microgateway: " + err.Error()
@@ -391,6 +402,11 @@ func (h *harness) boot() error {
 		h.guardrailed = llm
 		h.guardrailedModel = model
 	}
+	routes, err := seedDecisionTargets(db, container, h.decisions, app.ID, h.cfg.MaxTokens)
+	if err != nil {
+		return fmt.Errorf("seeding decision routes: %w", err)
+	}
+	h.decisionRoutes = routes
 	h.db = db
 
 	if err := db.Create(&mgwdb.APIToken{
@@ -820,4 +836,50 @@ func requireJSON(t *testing.T, body []byte) {
 	var probe any
 	require.NoErrorf(t, json.Unmarshal(body, &probe),
 		"response is not valid JSON:\n%s", bodyExcerpt(body))
+}
+
+// mustPost sends a request with the call budget and fails the test on a
+// transport error.
+func mustPost(t *testing.T, h *harness, url string, body []byte) *response {
+	t.Helper()
+	ctx, cancel := h.CallContext(context.Background())
+	defer cancel()
+	resp, err := h.post(ctx, url, body, nil)
+	require.NoError(t, err)
+	return resp
+}
+
+// waitForLoggedRequestOn is waitForLoggedRequest for any route.
+func waitForLoggedRequestOn(t *testing.T, h *harness, llmID uint, nonce string) mgwdb.AnalyticsEvent {
+	t.Helper()
+	// On the /ai/ loopback path the request body lands on the event when the
+	// outer hop's chat record is merged into the inner hop's proxy log, which
+	// can trail the response by well over ten seconds; the Bedrock direct
+	// paths log in one step and were the only users of this before.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		var events []mgwdb.AnalyticsEvent
+		err := h.db.Where("llm_id = ? AND request_body LIKE ?", llmID, "%"+nonce+"%").
+			Order("id desc").Limit(1).Find(&events).Error
+		// The gateway writes the event on another connection of the same
+		// shared-cache SQLite; a lock while it does so is a reason to poll
+		// again, not a failure.
+		if err != nil && !strings.Contains(err.Error(), "locked") {
+			require.NoError(t, err)
+		}
+		if err == nil && len(events) == 1 {
+			return events[0]
+		}
+		if time.Now().After(deadline) {
+			// Say what was logged instead, so a lookup miss can be told apart
+			// from a request that was never logged at all.
+			var recent []mgwdb.AnalyticsEvent
+			h.db.Where("llm_id = ?", llmID).Order("id desc").Limit(5).Find(&recent)
+			for _, ev := range recent {
+				t.Logf("  event %d status=%d request_body[%d]=%q", ev.ID, ev.StatusCode, len(ev.RequestBody), bodyExcerpt([]byte(ev.RequestBody)))
+			}
+			t.Fatalf("no analytics event logged for request %s on llm %d (%d recent events listed above)", nonce, llmID, len(recent))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }

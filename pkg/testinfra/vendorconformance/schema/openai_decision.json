@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "openai_decision.json",
+  "title": "OpenAI Decisions response",
+  "description": "POST /v1/decisions. What the shim (/ai/{slug}/v1/decisions) and universal (/v1/decisions) surfaces promise for every vendor, and what OpenAI answers natively. Objects are left open: OpenAI's guide documents answers but not the rest of the envelope, so anything else is recorded as drift for review rather than failed. usage is required because without it the gateway cannot price or budget the call.",
+  "type": "object",
+  "required": ["answers", "usage"],
+  "properties": {
+    "id": { "type": "string" },
+    "object": { "type": "string" },
+    "created": { "type": "integer" },
+    "model": { "type": "string", "minLength": 1 },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "name"],
+        "properties": {
+          "type": { "type": "string", "enum": ["predicate", "choice", "score", "refusal"] },
+          "name": { "type": "string", "minLength": 1 },
+          "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+          "choice": { "type": "string" },
+          "score": { "type": "number" },
+          "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "probabilities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["value", "probability"],
+              "properties": {
+                "value": { "type": ["string", "integer"] },
+                "label": { "type": "string" },
+                "probability": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          },
+          "refusal": { "type": ["string", "null"] }
+        },
+        "allOf": [
+          { "if": { "properties": { "type": { "const": "predicate" } } }, "then": { "required": ["probability"] } },
+          { "if": { "properties": { "type": { "const": "choice" } } }, "then": { "required": ["choice"] } },
+          { "if": { "properties": { "type": { "const": "score" } } }, "then": { "required": ["score"] } }
+        ]
+      }
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "input_tokens_details": {
+          "type": "object",
+          "description": "Prompt-cache share of input_tokens (live API, 2026-10). Priced through the chat record's cache counters.",
+          "properties": {
+            "cached_tokens": { "type": "integer", "minimum": 0 },
+            "cache_write_tokens": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens_details": {
+          "type": "object",
+          "properties": {
+            "reasoning_tokens": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "total_tokens": { "type": "integer", "minimum": 0 },
+        "prompt_tokens": { "type": "integer", "minimum": 0 },
+        "completion_tokens": { "type": "integer", "minimum": 0 }
+      },
+      "anyOf": [
+        { "required": ["input_tokens"] },
+        { "required": ["prompt_tokens"] }
+      ]
+    }
+  }
+}

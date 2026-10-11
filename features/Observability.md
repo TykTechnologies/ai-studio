@@ -118,6 +118,7 @@ conventions, so they keep their own names:
 | `aistudio_policy_blocks_total` | counter | `rule_name`, `block_type` |
 | `aistudio_compliance_events_total` | counter | `event_type`, `severity`, `filter_name` |
 | `aistudio_tool_calls_total` | counter | `tool_name`, `app_id` |
+| `aistudio_decision_questions_total` | counter | `vendor`, `model`, `outcome` (`answered`, `refused`) |
 
 ### Legacy metrics
 

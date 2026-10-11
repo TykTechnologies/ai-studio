@@ -82,6 +82,14 @@ func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMCh
 		}
 	}
 
+	// Metrics read the records before they are handed off: a handler writes
+	// them asynchronously, and GORM sets columns with a default (request_kind)
+	// on the struct while it inserts, so reading after the hand-off races.
+	recordProxyLogMetrics(ctx, log)
+	if rec != nil {
+		recordChatRecordMetrics(ctx, rec)
+	}
+
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
@@ -92,11 +100,6 @@ func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMCh
 		if rec != nil {
 			globalHandler.RecordChatRecord(ctx, rec)
 		}
-	}
-
-	recordProxyLogMetrics(ctx, log)
-	if rec != nil {
-		recordChatRecordMetrics(ctx, rec)
 	}
 }
 
@@ -271,14 +274,15 @@ func RecordContentMessage(
 func RecordChatRecord(ctx context.Context, record *models.LLMChatRecord) {
 	stampIdentity(ctx, nil, record)
 
+	// Before the hand-off; see RecordExchange.
+	recordChatRecordMetrics(ctx, record)
+
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
 		globalHandler.RecordChatRecord(ctx, record)
 	}
-
-	recordChatRecordMetrics(ctx, record)
 }
 
 func recordChatRecordMetrics(ctx context.Context, record *models.LLMChatRecord) {
@@ -288,6 +292,12 @@ func recordChatRecordMetrics(ctx context.Context, record *models.LLMChatRecord) 
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "cache_read", record.CacheReadPromptTokens)
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "cache_write", record.CacheWritePromptTokens)
 	metrics.RecordCost(ctx, record.Vendor, record.Name, appID, record.Cost)
+	// Only a call the model answered or refused adds series: a failed call
+	// (possibly naming a model the caller invented) counts nothing, so the
+	// model label comes from the vendor's own response.
+	if record.RequestKind == models.DecisionRequest && record.Choices+record.DecisionRefusals > 0 {
+		metrics.RecordDecisionQuestions(ctx, record.Vendor, record.Name, record.Choices, record.DecisionRefusals)
+	}
 }
 
 func RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry) {

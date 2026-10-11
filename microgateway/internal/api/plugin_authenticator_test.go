@@ -22,6 +22,7 @@ type fakeAuthPluginManager struct {
 	asked    []uint
 	gotType  string
 	gotReq   *interfaces.AuthRequest
+	gotCtx   *interfaces.PluginContext
 }
 
 func (f *fakeAuthPluginManager) GetAuthPlugins(endpointType string, _ uint) (int, []*plugins.LoadedPlugin, error) {
@@ -29,9 +30,10 @@ func (f *fakeAuthPluginManager) GetAuthPlugins(endpointType string, _ uint) (int
 	return f.attached[endpointType], f.loaded[endpointType], nil
 }
 
-func (f *fakeAuthPluginManager) CallAuth(lp *plugins.LoadedPlugin, req *interfaces.AuthRequest, _ *interfaces.PluginContext) (*interfaces.AuthResponse, error) {
+func (f *fakeAuthPluginManager) CallAuth(lp *plugins.LoadedPlugin, req *interfaces.AuthRequest, pctx *interfaces.PluginContext) (*interfaces.AuthResponse, error) {
 	f.asked = append(f.asked, lp.ID)
 	f.gotReq = req
+	f.gotCtx = pctx
 	return f.answers[lp.ID](req)
 }
 
@@ -141,4 +143,27 @@ func TestPluginAuthenticator_LLMTarget(t *testing.T) {
 	_, err := newPluginAuthenticator(nil, pm, nil).authenticate(authRequest(), proxy.AuthTarget{Kind: proxy.AuthTargetLLM, ID: 5, Slug: "gpt"}, "tok", proxy.CredTypeBearer)
 	require.NoError(t, err)
 	assert.Equal(t, plugins.AuthEndpointLLM, pm.gotType)
+}
+
+// An auth plugin on the edge learns the request kind from the path: decision
+// calls (/v1/decisions, /v1/systemone) are "decision", everything else "".
+func TestPluginAuthenticator_RequestKind(t *testing.T) {
+	llmTarget := proxy.AuthTarget{Kind: proxy.AuthTargetLLM, ID: 5, Slug: "jev"}
+	for path, want := range map[string]string{
+		"/llm/call/jev/v1/systemone":        "decision",
+		"/llm/rest/oai/v1/decisions":        "decision",
+		"/llm/rest/oai/v1/chat/completions": "",
+	} {
+		t.Run(path, func(t *testing.T) {
+			pm := &fakeAuthPluginManager{
+				attached: map[string]int{plugins.AuthEndpointLLM: 1},
+				loaded:   map[string][]*plugins.LoadedPlugin{plugins.AuthEndpointLLM: {{ID: 1, Name: "a"}}},
+				answers:  map[uint]func(*interfaces.AuthRequest) (*interfaces.AuthResponse, error){1: rejected},
+			}
+			r := httptest.NewRequest(http.MethodPost, path, nil)
+			_, _ = newPluginAuthenticator(nil, pm, nil).authenticate(r, llmTarget, "tok", proxy.CredTypeBearer)
+			require.NotNil(t, pm.gotCtx, "the auth plugin was called")
+			assert.Equal(t, want, pm.gotCtx.RequestKind)
+		})
+	}
 }

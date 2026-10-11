@@ -96,6 +96,14 @@ func (v *Vertex) ProvidesEmbedder() bool {
 	return true
 }
 
+func (v *Vertex) ProvidesChat() bool {
+	return true
+}
+
+func (v *Vertex) DecisionEndpoint() string {
+	return ""
+}
+
 func setupVertexDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	// format for project and location is split with a colon
 	split := strings.Split(connDef.APIEndpoint, ":")

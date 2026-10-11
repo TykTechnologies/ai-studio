@@ -1097,6 +1097,7 @@ func (a *API) setupRoutes() error {
 	v1.GET("/analytics/budget-usage-for-app", authz.Read("analytics"), a.getBudgetUsageForApp)
 	v1.GET("/analytics/app-interactions-over-time", authz.Read("analytics"), a.getAppInteractionsOverTime)
 	v1.GET("/analytics/apps-for-model", authz.Read("analytics"), a.getAppsForModel)
+	v1.GET("/analytics/decisions", authz.Read("analytics"), a.getDecisionUsage)
 
 	v1.GET("/analytics/proxy-logs-for-app", authz.Read("proxy-logs"), a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", authz.Read("proxy-logs"), a.getProxyLogsForLLM)

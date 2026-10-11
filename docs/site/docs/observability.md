@@ -101,6 +101,7 @@ conventions, and keep their own names:
 | `aistudio_policy_blocks_total` | `rule_name`, `block_type` | Blocked requests. `block_type` is `budget` (spend limit), `firewall` (request filter) or `filter` (response or tool filter) |
 | `aistudio_compliance_events_total` | `event_type`, `severity`, `filter_name` | Raised by filter scripts |
 | `aistudio_tool_calls_total` | `tool_name`, `app_id` | Tool / MCP invocations |
+| `aistudio_decision_questions_total` | `vendor`, `model`, `outcome` | Questions put to [decision models](./decision-models.md); `outcome` is `answered` or `refused` |
 
 ### Migrating existing dashboards
 

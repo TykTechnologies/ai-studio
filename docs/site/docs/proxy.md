@@ -47,6 +47,7 @@ Every LLM endpoint below authenticates with the same App API key and enforces th
 | Endpoint | LLM chosen by | Request format | Use it when |
 |----------|---------------|----------------|-------------|
 | **Main Ingress** — `/v1/chat/completions` | The `model` field, namespaced `{llmSlug}/{model}` | OpenAI Chat Completions only | You want one base URL covering every LLM the App can reach, choosing the model — including across vendors — per request |
+| **Decisions** — `/v1/decisions` | The `model` field, namespaced `{llmSlug}/{model}` | OpenAI Decisions | Asking a [decision model](./decision-models.md) typed questions; System One providers (TypeSafe Jev, self-hosted) are translated |
 | **Vendor-native** — `/llm/call/{llmSlug}/...` | The URL | The vendor's own API | You are working with a vendor's own SDK, or need a capability the OpenAI schema cannot express |
 | **OpenAI-compatible** — `/ai/{llmSlug}/v1/...` | The URL | OpenAI | A client should only ever reach one LLM, or cannot send a namespaced model string |
 | **Anthropic Messages** — `/anthropic/{llmSlug}` | The URL | Anthropic Messages | The client speaks the Anthropic Messages API (Claude Code, for example). Bedrock-backed LLMs only |
@@ -185,7 +186,7 @@ The hub (AI Studio) and the edge (Microgateway) read **different environment var
 | Base path | `UNIFIED_ROUTER_PATH` | `GATEWAY_UNIFIED_ROUTER_PATH` | `/v1` |
 | Disable entirely | `UNIFIED_ROUTER_DISABLED` | `GATEWAY_UNIFIED_ROUTER_DISABLED` | `false` |
 
-Setting the base path to `/ai-gateway/v1`, for example, moves all three routes to `/ai-gateway/v1/chat/completions`, `/ai-gateway/v1/completions` and `/ai-gateway/v1/models`. The value is normalized on load: a leading slash is added, a trailing slash and any empty or dot segments are cleaned, and a value of `/` is refused in favour of the default so the ingress can never swallow the whole gateway.
+Setting the base path to `/ai-gateway/v1`, for example, moves all four routes to `/ai-gateway/v1/chat/completions`, `/ai-gateway/v1/completions`, `/ai-gateway/v1/decisions` and `/ai-gateway/v1/models`. The value is normalized on load: a leading slash is added, a trailing slash and any empty or dot segments are cleaned, and a value of `/` is refused in favour of the default so the ingress can never swallow the whole gateway.
 
 The Developer Portal reads the **hub's** value when it advertises the Main Ingress on an App's detail page — that is why the two must agree — and hides the Main Ingress entirely when the hub has it disabled.
 

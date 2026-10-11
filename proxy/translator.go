@@ -283,6 +283,10 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil, false)
 		return
 	}
+	if !switches.SupportsChat(conf.Vendor) {
+		decisionOnlyVendorError(w, routeID, conf.Vendor)
+		return
+	}
 
 	// Validate required fields
 	if len(req.Messages) == 0 || req.Model == "" {
@@ -305,7 +309,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	// Walk the failover waterfall: the primary first, then each rung in turn
 	// while the failure is one the primary's triggers say to fail over on.
 	// With no waterfall this is exactly one attempt, as before.
-	plan := p.planFailover(conf, req.Model, r)
+	plan := chatPlan(p.planFailover(conf, req.Model, r))
 	overall, cancelAll := context.WithTimeout(context.Background(), p.config.llmTimeout())
 	defer cancelAll()
 
@@ -597,7 +601,7 @@ func (p *Proxy) handleChatCompletionStream(
 	// Walk the failover waterfall. A rung can only be retried while nothing
 	// has been written: once the first frame is out the response is committed
 	// to this attempt, and a later failure is reported in-band as before.
-	plan := p.planFailover(conf, req.Model, r)
+	plan := chatPlan(p.planFailover(conf, req.Model, r))
 	overall, cancelAll := context.WithTimeout(context.Background(), p.config.llmTimeout())
 	defer cancelAll()
 

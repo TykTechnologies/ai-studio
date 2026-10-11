@@ -636,6 +636,67 @@ four one-sentence completions on one vendor.
 
 ---
 
+## 10. Decision model conformance
+
+Decision models (OpenAI `/v1/decisions`, the System One wire format of TypeSafe
+Jev and llama.cpp self-hosts; see `features/DecisionModels.md`) answer typed
+questions instead of generating text, so they get their own test family on the
+same harness rather than rows in the chat matrix. The chat pre-flight,
+matrix and equivalence checks send every configured vendor chat requests; a
+System One model cannot answer one.
+
+**Config:** `pkg/testinfra/vendorconformance/decisions.go` loads
+`DecisionsConfig`:
+
+| Target | Required | Optional |
+|---|---|---|
+| `openai` | `VT_OPENAI_API_KEY` (shared with chat), `VT_OPENAI_MODEL_DECISION` | `VT_OPENAI_ENDPOINT` |
+| `systemone` | `VT_SYSTEMONE_MODEL`; `VT_SYSTEMONE_API_KEY` for the hosted API | `VT_SYSTEMONE_ENDPOINT` (default `https://api.typesafe.ai`; a llama.cpp URL needs no key) |
+
+`VENDOR_TESTS_VENDORS` accepts `systemone`; `VENDOR_TESTS_DECISION_SCENARIOS`
+narrows the scenarios (`basic`, `messages`). Each target is seeded as its own
+route (`vt-dec-<key>`) with a priced model, outside `cfg.Vendors`, and the
+harness boots when only decision targets are configured.
+
+**Canonical schemas:** `openai_decision.json` (what shim and universal promise
+for every vendor, and what OpenAI answers natively) and
+`systemone_decision.json` (the native System One answer on the sdk surface).
+Objects stay open so new vendor fields are drift, not failures; `usage` is
+required because without it the gateway cannot price or budget the call.
+
+**Tests** (`microgateway/tests/vendorconformance/decisions_live_test.go`, CE
+build, `make test-vendors-decisions`):
+
+| Test | Asserts |
+|---|---|
+| `TestPreflightDecisionModelsCallable` | One single-question call per target (also run by `make test-vendors-preflight`). |
+| `TestDecisionConformance` | Target x {shim, sdk, universal} x scenario: schema of the surface's wire format, drift, then `CheckDecisionResponse`: one answer per question in question order, types match (or refusal), probabilities in [0,1] summing to 1, choice among the options, score within the levels, `usage.input_tokens > 0`. `DecisionPlausibility` logs (not fails) answers a competent model should not give, which is where scrambled options show up first. Served-LLM header on the OpenAI-format surfaces. |
+| `TestDecisionEquivalence` | Same request on every surface: same answer names and types (refusals excepted), same usage presence. The sdk answer is read through `pkg/decisions`. |
+| `TestDecisionErrors` | Shim and universal: a one-option choice and `stream: true` are 400s naming the `param`, before any vendor call; an unknown model is a 4xx OpenAI envelope, not a 5xx. |
+| `TestDecisionAnalytics` | Shim and sdk: the edge analytics event has `request_kind=decision`, the question count, answered + refused = asked, input tokens as reported (net of OpenAI's cached share, as for chat) and a non-zero cost from the seeded price. A zero cost names the model the vendor reported, the usual cause being a dated snapshot name that misses the price lookup. |
+| `TestDecisionModelListing` | `/v1/models` lists each route with the `decisions` capability, and System One routes without `chat`. |
+
+**First live run (2026-10-11, `gpt-6-luna`):** all green on every surface.
+The live response has no `id` or `object` (the guide's examples imply them),
+and `usage` carries `input_tokens_details {cached_tokens, cache_write_tokens}`
+and `output_tokens_details {reasoning_tokens}`. Both detail objects were
+undocumented drift on the first run; the cache counters are now read into the
+chat record's cache fields (`responses.DecisionResponse`) and the schema
+documents them.
+
+**TypeSafe Jev (2026-10-12, `jev-latest`):** schema and translation green on
+every surface with no drift. The live answer matches the documented shape:
+choice probabilities as an option-keyed object, score probabilities and legend
+as index-keyed objects (`{"0": ...}`), `usage.output_tokens` non-zero (72 for
+three questions) although output is not billed. `TestDecisionAnalytics`
+failed on the first run and found a real bug: asked for the alias
+`jev-latest`, Jev answers as `jev-1.13.0`, and pricing by the reported name
+alone recorded the call at zero cost, outside budgets. `proxy.priceForExchange`
+now falls back to the requested model's price when the reported model has
+none (the same applies to chat models that answer with a dated snapshot).
+
+---
+
 ## 8. Related
 
 - `features/Proxy.md` — proxy and translation layer

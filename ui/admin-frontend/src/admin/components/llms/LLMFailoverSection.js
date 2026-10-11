@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { failoverCompatible } from "../../utils/vendorLogos";
 import {
   Alert,
   Autocomplete,
@@ -94,11 +95,15 @@ export const validateFailover = (failover, llmsById, current) => {
   return errors;
 };
 
-const LLMFailoverSection = ({ value, onChange, llms, currentId, errors = {} }) => {
+const LLMFailoverSection = ({ value, onChange, llms, currentId, vendor, errors = {} }) => {
   const [newCode, setNewCode] = useState("");
   const targets = value?.targets || [];
   const triggers = value?.triggers || {};
-  const candidates = llms.filter((l) => String(l.id) !== String(currentId));
+  // Only LLMs that serve a request kind the primary serves: a decision-only
+  // fallback can never answer a chat request, and the reverse.
+  const candidates = llms.filter(
+    (l) => String(l.id) !== String(currentId) && failoverCompatible(vendor, l.vendor)
+  );
   const llmsById = Object.fromEntries(llms.map((l) => [String(l.id), l]));
 
   const update = (nextTargets, nextTriggers = triggers) => {

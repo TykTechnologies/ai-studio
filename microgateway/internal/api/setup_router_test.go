@@ -72,6 +72,20 @@ func TestSetupRouter_UnifiedRouterRoute(t *testing.T) {
 		}
 	})
 
+	// Decision models ride the same edge prefixes as chat: the unified
+	// ingress, the per-route /ai/ shim and the native /llm/ passthrough.
+	for _, path := range []string{"/v1/decisions", "/ai/jev/v1/decisions", "/llm/call/jev/v1/systemone", "/llm/rest/oai/v1/decisions"} {
+		path := path
+		t.Run("decisions "+path+" forwards to gateway handler", func(t *testing.T) {
+			stub.gotPath = ""
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`)))
+			if stub.gotPath != path {
+				t.Fatalf("expected forward to gateway handler with %s, got %q (status %d)", path, stub.gotPath, w.Code)
+			}
+		})
+	}
+
 	t.Run("legacy /router/ is an alias of the gateway's /ai/ chain", func(t *testing.T) {
 		// A /router/{slug}/ request is rewritten to /ai/{slug}/ and handed to the
 		// gateway, which resolves the router after authentication. It must not

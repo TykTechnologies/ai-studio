@@ -321,6 +321,11 @@ message AnalyticsEvent {
   string shadow_route = 39;         // Semantic Router shadow mode: the route the classifier picked
   string on_behalf_of = 40;         // who the call was for, when an auth plugin said (audit only)
   string acting_agent = 41;         // the agent that made it, when an auth plugin said (audit only)
+
+  // Model class: "" for generative traffic, "decision" for decision models.
+  string request_kind = 42;
+  uint32 decision_questions = 43;   // decision calls: questions asked
+  uint32 decision_refusals = 44;    // decision calls: questions the model declined (answered = choices)
 }
 
 // Budget usage event for pulse batching

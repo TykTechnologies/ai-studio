@@ -787,6 +787,17 @@ test-vendors-filters: ## Live check that request filters run on the Bedrock /ai/
 		go test -tags "vendorlive enterprise" -v -count=1 \
 		-timeout 15m -run 'TestBedrockRequestFilters' ./tests/vendorconformance/...
 
+# Decision models (OpenAI /v1/decisions, System One / TypeSafe Jev / llama.cpp)
+# through the shim, sdk and universal surfaces: schemas, translation, errors,
+# equivalence and analytics. Needs VT_OPENAI_MODEL_DECISION and/or VT_SYSTEMONE_*.
+#   VENDORS=openai,systemone   SURFACES=shim,universal   (both optional)
+.PHONY: test-vendors-decisions
+test-vendors-decisions: ## Live decision-model conformance (needs VT_OPENAI_MODEL_DECISION or VT_SYSTEMONE_* in test-secrets/vendors.env)
+	cd microgateway && VENDOR_TESTS_VENDORS="$(VENDORS)" \
+		VENDOR_TESTS_SURFACES="$(SURFACES)" \
+		go test -tags vendorlive -v -count=1 \
+		-timeout 15m -run 'TestPreflightDecision|TestDecision' ./tests/vendorconformance/...
+
 .PHONY: test-vendors-harness
 test-vendors-harness: ## Run the credential-free unit tests that protect the conformance harness itself
 	go test -count=1 ./pkg/testinfra/vendorconformance/...

@@ -237,6 +237,12 @@ type AnalyticsEvent struct {
 	FailoverFromLLMID *uint `gorm:"index:idx_analytics_failover_from"`
 	FailoverAttempt   int   `gorm:"default:0"`
 
+	// Model class ("" generative, "decision") and, for a decision call, the
+	// questions asked and the ones the model declined (answered = Choices).
+	RequestKind       string `gorm:"size:16;default:'';index:idx_analytics_request_kind"`
+	DecisionQuestions int
+	DecisionRefusals  int
+
 	// Timestamps
 	TimeStamp      time.Time      `gorm:"index:idx_analytics_timestamp"` // Match LLMChatRecord field name
 	CreatedAt      time.Time      `gorm:"index:idx_analytics_app"`

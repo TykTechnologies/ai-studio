@@ -59,6 +59,7 @@ type PluginContext struct {
 	UserID       uint                   `json:"user_id,omitempty"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 	TraceContext map[string]string      `json:"trace_context,omitempty"`
+	RequestKind  string                 `json:"request_kind,omitempty"` // model class: "" generative, "decision"
 }
 
 // PluginRequest represents an HTTP request for plugin processing

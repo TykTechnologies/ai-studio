@@ -648,8 +648,12 @@ TABLE llm_chat_records
   column `team_id` integer
   column `on_behalf_of` text
   column `acting_agent` text
+  column `request_kind` text DEFAULT ""
+  column `decision_questions` integer
+  column `decision_refusals` integer
   index CREATE INDEX `idx_llm_chat_records_app_time` ON `llm_chat_records`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_llm_chat_records_deleted_at` ON `llm_chat_records`(`deleted_at`)
+  index CREATE INDEX `idx_llm_chat_records_kind_time` ON `llm_chat_records`(`request_kind`,`time_stamp`)
   index CREATE INDEX `idx_llm_chat_records_llm_time` ON `llm_chat_records`(`llm_id`,`time_stamp`)
   index CREATE INDEX `idx_llm_chat_records_team_time` ON `llm_chat_records`(`team_id`,`time_stamp`)
   index CREATE INDEX `idx_llm_chat_records_time` ON `llm_chat_records`(`time_stamp`)
@@ -1346,12 +1350,14 @@ TABLE proxy_logs
   column `shadow_route` text
   column `on_behalf_of` text
   column `acting_agent` text
+  column `request_kind` text DEFAULT ""
   index CREATE INDEX `idx_proxy_logs_app_code_time` ON `proxy_logs`(`app_id`,`response_code`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_app_time` ON `proxy_logs`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_code` ON `proxy_logs`(`response_code`)
   index CREATE INDEX `idx_proxy_logs_deleted_at` ON `proxy_logs`(`deleted_at`)
   index CREATE INDEX `idx_proxy_logs_failover_from` ON `proxy_logs`(`failover_from_llm_id`)
   index CREATE INDEX `idx_proxy_logs_llm_time` ON `proxy_logs`(`llm_id`,`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_request_kind` ON `proxy_logs`(`request_kind`)
   index CREATE INDEX `idx_proxy_logs_router` ON `proxy_logs`(`router_slug`)
   index CREATE INDEX `idx_proxy_logs_time` ON `proxy_logs`(`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_user_id` ON `proxy_logs`(`user_id`)

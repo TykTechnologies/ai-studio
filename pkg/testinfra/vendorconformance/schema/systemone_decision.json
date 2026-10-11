@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "systemone_decision.json",
+  "title": "System One decision response",
+  "description": "POST /v1/systemone, as TypeSafe Jev and wire-compatible self-hosts (llama.cpp) answer it, and as the sdk surface relays it. answers is keyed by question name; an unanswered question is absent. probabilities is an option->probability object for choice and an array or index-keyed object for score.",
+  "type": "object",
+  "required": ["answers", "usage"],
+  "properties": {
+    "model": { "type": "string", "minLength": 1 },
+    "answers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["noul", "choice", "score"] },
+          "noul": { "type": "number", "minimum": 0, "maximum": 1 },
+          "choice": { "type": "string" },
+          "score": { "type": "number" },
+          "legend": { "type": ["object", "array"] },
+          "probabilities": { "type": ["object", "array"] },
+          "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+        },
+        "allOf": [
+          { "if": { "properties": { "type": { "const": "noul" } } }, "then": { "required": ["noul"] } },
+          { "if": { "properties": { "type": { "const": "choice" } } }, "then": { "required": ["choice"] } },
+          { "if": { "properties": { "type": { "const": "score" } } }, "then": { "required": ["score"] } }
+        ]
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": ["input_tokens"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

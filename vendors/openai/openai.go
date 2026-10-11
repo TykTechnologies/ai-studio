@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
@@ -88,6 +89,15 @@ func (v *OpenAI) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImp
 
 func (v *OpenAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	var response models.ITokenResponse
+	// Decisions API replies carry answers, not choices; without this branch the
+	// exchange would fail analysis and go unrecorded and unbudgeted.
+	if decisions.IsDecisionPath(r.URL.Path) {
+		dr, err := responses.NewDecisionResponse(body)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return llm, app, dr, nil
+	}
 	// embedding replies have the same usage section
 	if strings.Contains(strings.ToLower(r.URL.Path), OpenAICompletionsEndpoint) ||
 		strings.Contains(strings.ToLower(r.URL.Path), OpenAIEmbeddingsEndpoint) ||
@@ -154,6 +164,14 @@ func (v *OpenAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamin
 		return err
 	}
 
+	// Decision models answer in one pass; there is nothing to stream.
+	if decisions.IsDecisionPath(r.URL.Path) {
+		if isStreamingChannel || req.Stream {
+			return fmt.Errorf("streaming is not supported for decision requests")
+		}
+		return nil
+	}
+
 	if isStreamingChannel {
 		if !req.Stream {
 			return fmt.Errorf("streaming is required for this endpoint: %s", r.URL.String())
@@ -172,6 +190,14 @@ func (v *OpenAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamin
 
 func (v *OpenAI) ProvidesEmbedder() bool {
 	return true
+}
+
+func (v *OpenAI) ProvidesChat() bool {
+	return true
+}
+
+func (v *OpenAI) DecisionEndpoint() string {
+	return decisions.OpenAIEndpoint
 }
 
 func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {

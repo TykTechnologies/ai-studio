@@ -27,6 +27,7 @@ import (
 	mockVendor "github.com/TykTechnologies/midsommar/v2/vendors/mock"
 	ollamaVendor "github.com/TykTechnologies/midsommar/v2/vendors/ollama"
 	openaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/openai"
+	systemoneVendor "github.com/TykTechnologies/midsommar/v2/vendors/systemone"
 	vertexVendor "github.com/TykTechnologies/midsommar/v2/vendors/vertex"
 	"google.golang.org/api/option"
 )
@@ -51,6 +52,23 @@ var VendorMap = map[models.Vendor]newVendorFunc{
 	models.HUGGINGFACE: hfVendor.New,
 	models.BEDROCK:     bedrockVendor.New,
 	models.MOCK_VENDOR: mockVendor.New,
+	models.SYSTEMONE:   systemoneVendor.New,
+}
+
+// defaultAPIEndpoints are the upstreams used when an LLM of the vendor has no
+// API endpoint configured. Only vendors with a single canonical hosted API
+// have one.
+var defaultAPIEndpoints = map[models.Vendor]string{
+	models.SYSTEMONE: systemoneVendor.DefaultAPIEndpoint,
+}
+
+// UpstreamEndpoint is the API base the proxy forwards an LLM's traffic to:
+// its configured endpoint, or the vendor's default when none is set.
+func UpstreamEndpoint(llm *models.LLM) string {
+	if llm.APIEndpoint != "" {
+		return llm.APIEndpoint
+	}
+	return defaultAPIEndpoints[llm.Vendor]
 }
 
 // Handles token count finding for analytics, different vendors have different response types and we nee dto handle all of them
@@ -210,6 +228,62 @@ func EmbeddingVendors() []models.Vendor {
 	return out
 }
 
+// DecisionVendors lists the vendors that serve decision models, in a stable
+// order.
+func DecisionVendors() []models.Vendor {
+	var out []models.Vendor
+	for vendor, v := range VendorMap {
+		if v().DecisionEndpoint() != "" {
+			out = append(out, vendor)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// SupportsDecisions reports whether the vendor serves decision models.
+func SupportsDecisions(vendor models.Vendor) bool {
+	return DecisionEndpoint(vendor) != ""
+}
+
+// DecisionEndpoint is the vendor's upstream decision API path, or "".
+func DecisionEndpoint(vendor models.Vendor) string {
+	v, ok := VendorMap[vendor]
+	if !ok {
+		return ""
+	}
+	return v().DecisionEndpoint()
+}
+
+// SupportsChat reports whether the vendor serves generative chat. Unknown
+// vendors are reported as chat-capable so existing paths keep their own
+// "unsupported vendor" errors.
+func SupportsChat(vendor models.Vendor) bool {
+	v, ok := VendorMap[vendor]
+	return !ok || v().ProvidesChat()
+}
+
+// VendorCapabilities lists what a vendor serves: "chat", "embeddings",
+// "decisions".
+func VendorCapabilities(vendor models.Vendor) []string {
+	v, ok := VendorMap[vendor]
+	if !ok {
+		return nil
+	}
+	vn := v()
+	caps := []string{}
+	if vn.ProvidesChat() {
+		caps = append(caps, "chat")
+	}
+	if vn.ProvidesEmbedder() {
+		caps = append(caps, "embeddings")
+	}
+	if vn.DecisionEndpoint() != "" {
+		caps = append(caps, "decisions")
+	}
+	return caps
+}
+
 // SupportsEmbeddings reports whether the vendor's driver can embed.
 func SupportsEmbeddings(vendor models.Vendor) bool {
 	v, ok := VendorMap[vendor]
@@ -342,6 +416,10 @@ func DetectStreamingIntent(vendor models.Vendor, r *http.Request) (bool, error) 
 			}
 			return req.Stream, nil
 		})
+
+	case models.SYSTEMONE:
+		// Decision models answer in one pass and never stream.
+		return false, nil
 
 	default:
 		return false, fmt.Errorf("unsupported vendor for streaming detection: %s", vendor)

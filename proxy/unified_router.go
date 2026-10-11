@@ -1,7 +1,7 @@
 package proxy
 
 // Unified router endpoint: an OpenRouter-style ingress (by default
-// /v1/chat/completions and /v1/completions) that accepts OpenAI-format requests
+// /v1/chat/completions, /v1/completions and /v1/decisions) that accepts OpenAI-format requests
 // with "vendor/model" model strings. The vendor prefix is resolved against the gateway's LLM route table and
 // the request is rewritten to the existing /ai/{routeId}/v1/... shim path, then
 // handed to the /ai/ handler chain directly — no HTTP hop and no new middleware.
@@ -27,6 +27,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 )
 
 // maxUnifiedRouterBodyBytes caps how much of a unified-router completion request body the
@@ -111,13 +112,15 @@ func NewUnifiedRouterHandler(next http.Handler, basePath string) http.Handler {
 	base := NormalizeUnifiedRouterBasePath(basePath)
 	chatCompletionsPath := base + "/chat/completions"
 	completionsPath := base + "/completions"
+	decisionsPath := base + "/decisions"
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Only the completion endpoints carry a routable model field. Everything
-		// else under the base path (e.g. GET {base}/models) passes through untouched
-		// so the authenticated chain can serve or reject it.
+		// Only the completion and decision endpoints carry a routable model
+		// field. Everything else under the base path (e.g. GET {base}/models)
+		// passes through untouched so the authenticated chain can serve or
+		// reject it.
 		if r.Method != http.MethodPost ||
-			(r.URL.Path != chatCompletionsPath && r.URL.Path != completionsPath) {
+			(r.URL.Path != chatCompletionsPath && r.URL.Path != completionsPath && r.URL.Path != decisionsPath) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -192,6 +195,10 @@ type unifiedModelInfo struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	OwnedBy string `json:"owned_by"`
+	// Capabilities is a gateway extension: what the route serves ("chat",
+	// "embeddings", "decisions"), so clients can find decision-model routes.
+	// OpenAI clients ignore unknown fields.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 type unifiedModelList struct {
@@ -229,9 +236,10 @@ func (p *Proxy) handleUnifiedListModels(w http.ResponseWriter, r *http.Request) 
 			}
 			seen[m] = true
 			entries = append(entries, unifiedModelInfo{
-				ID:      routeSlug + "/" + m,
-				Object:  "model",
-				OwnedBy: string(conf.Vendor),
+				ID:           routeSlug + "/" + m,
+				Object:       "model",
+				OwnedBy:      string(conf.Vendor),
+				Capabilities: switches.VendorCapabilities(conf.Vendor),
 			})
 		}
 	}

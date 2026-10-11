@@ -15,6 +15,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
+	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -36,6 +38,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		log.Printf("failed to analyze response: %v", err)
 		return
 	}
+	applyDecisionRequest(response, reqBody, r)
 
 	l := &models.ProxyLog{
 		AppID:        app.ID,
@@ -47,6 +50,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(body), maxBodySize),
 		ResponseCode: statusCode,
+		RequestKind:  requestKindOf(response),
 	}
 
 	if llm.DontLogBodies {
@@ -73,6 +77,7 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		logger.Errorf("Failed to analyze streaming response: %v", err)
 		return
 	}
+	applyDecisionRequest(response, reqBody, r)
 
 	l := &models.ProxyLog{
 		AppID:        app.ID,
@@ -84,6 +89,7 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(decompressedResponses), maxBodySize),
 		ResponseCode: statusCode,
+		RequestKind:  requestKindOf(response),
 	}
 
 	if llm.DontLogBodies {
@@ -143,7 +149,7 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 	// Get pricing information
 	var cpt, cpit, cacheWritePT, cacheReadPT float64
 	var currency string = "USD" // Default currency if no price found
-	price, err := service.GetModelPriceByModelNameAndVendor(model, string(llm.Vendor))
+	price, err := priceForExchange(service, model, requestedModel(r), string(llm.Vendor))
 	if err == nil && price != nil { // Check price != nil to avoid nil dereference
 		cpt = price.CPT
 		cpit = price.CPIT
@@ -170,7 +176,7 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 	cacheWritePT, cacheReadPT = models.CachePricesFor(string(llm.Vendor), cpit, cacheWritePT, cacheReadPT)
 
 	// Use actual timestamp for the record, not budget start dates
-	return &models.LLMChatRecord{
+	rec := &models.LLMChatRecord{
 		LLMID:                  llm.ID,
 		Name:                   model, // Set the model name from the response
 		Vendor:                 string(llm.Vendor),
@@ -191,6 +197,69 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 		Currency:        currency, // Set the currency (defaults to USD if no price found)
 		InteractionType: models.ProxyInteraction,
 	}
+	if dr, ok := response.(models.IDecisionResponse); ok {
+		rec.RequestKind = models.DecisionRequest
+		rec.DecisionQuestions = dr.GetDecisionQuestions()
+		rec.DecisionRefusals = dr.GetDecisionRefusals()
+	}
+	return rec
+}
+
+// requestedModel is the model the caller asked for, as the model validation
+// middleware read it from the request.
+func requestedModel(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	m, _ := r.Context().Value("model_name").(string)
+	return m
+}
+
+// priceForExchange prices an exchange by the model the vendor reported and,
+// when that model has no price, by the model the caller asked for. Vendors
+// answer an alias with the model it resolved to (TypeSafe's jev-latest comes
+// back as jev-1.13.0; OpenAI dates its snapshots), and an admin prices the
+// name they configured. Without the fallback such calls were recorded at
+// zero cost and never reached a budget. A miss is a zero price on both the
+// Studio and the edge side (Studio stores one), so "no price" is all rates
+// zero.
+func priceForExchange(service services.ServiceInterface, reported, requested, vendor string) (*models.ModelPrice, error) {
+	price, err := service.GetModelPriceByModelNameAndVendor(reported, vendor)
+	if requested == "" || requested == reported || (err == nil && price != nil && !unpriced(price)) {
+		return price, err
+	}
+	fallback, ferr := service.GetModelPriceByModelNameAndVendor(requested, vendor)
+	if ferr == nil && fallback != nil && !unpriced(fallback) {
+		return fallback, nil
+	}
+	return price, err
+}
+
+func unpriced(p *models.ModelPrice) bool {
+	return p.CPT == 0 && p.CPIT == 0 && p.CacheWritePT == 0 && p.CacheReadPT == 0
+}
+
+// requestKindOf is the request kind an analysed response belongs to.
+func requestKindOf(response models.ITokenResponse) models.RequestKind {
+	if _, ok := response.(models.IDecisionResponse); ok {
+		return models.DecisionRequest
+	}
+	return models.GenerativeRequest
+}
+
+// applyDecisionRequest recounts a decision response's questions against the
+// request that produced it: System One responses leave unanswered questions
+// out, so only the request says how many were asked.
+func applyDecisionRequest(response models.ITokenResponse, reqBody []byte, r *http.Request) {
+	dr, ok := response.(*responses.DecisionResponse)
+	if !ok || len(reqBody) == 0 {
+		return
+	}
+	format, ok := decisions.FormatForPath(r.URL.Path)
+	if !ok {
+		return
+	}
+	dr.ApplyRequest(reqBody, format)
 }
 
 // afterChatRecord runs what follows a recorded chat record: the

@@ -195,6 +195,12 @@ func (h *harness) slugIsConfigured(slug string) bool {
 	if h.guardrailed != nil && slug == h.guardrailed.Slug {
 		return true
 	}
+	// Decision routes are seeded outside cfg.Vendors (decisions_live_test.go).
+	for _, r := range h.decisionRoutes {
+		if r.Slug == slug {
+			return true
+		}
+	}
 	for _, v := range h.cfg.Vendors {
 		if v.Slug() == slug {
 			return true

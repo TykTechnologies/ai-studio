@@ -24,7 +24,7 @@ import {
   PrimaryOutlineButton
 } from "../../styles/sharedStyles";
 
-import { getVendorCodes, getVendorName } from "../../utils/vendorLogos";
+import { getChatVendorCodes, getVendorName } from "../../utils/vendorLogos";
 import modelPresets from "../../utils/modelPresets";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 
@@ -221,7 +221,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                       onChange={handleInputChange}
                       required
                     >
-                      {getVendorCodes().map((vendorCode) => (
+                      {getChatVendorCodes().map((vendorCode) => (
                         <MenuItem key={vendorCode} value={vendorCode}>
                           <Box sx={{ display: "flex", alignItems: "center" }}>
                             <img

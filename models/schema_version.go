@@ -33,7 +33,10 @@ const (
 	// 7: Tyk OSS Gateway connections: tyk_connections.kind (defaulted) and
 	//    gateway_* columns, mcp_servers.key_access and gateway_coverage/partial
 	//    (nullable), tyk_gateway_nodes and tyk_gateway_definitions (new tables).
-	SchemaVersion          = 7
+	// 8: decision models: proxy_logs.request_kind and llm_chat_records
+	//    request_kind (defaulted, indexed with time_stamp), decision_questions and
+	//    decision_refusals (nullable, additive).
+	SchemaVersion          = 8
 	MinReaderSchemaVersion = 1
 )
 

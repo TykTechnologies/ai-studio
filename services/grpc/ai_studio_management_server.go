@@ -1053,42 +1053,11 @@ func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIS
 		return err
 	}
 
-	// Load agent config for this plugin with App.LLMs preloaded
-	var agentConfig models.AgentConfig
-	if err := s.service.GetDB().
-		Preload("App.LLMs").
-		Preload("App.Credential").
-		Where("plugin_id = ?", plugin.ID).
-		First(&agentConfig).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return status.Errorf(codes.NotFound, "no agent configuration found for plugin")
-		}
-		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load agent config")
-		return status.Errorf(codes.Internal, "failed to load agent configuration")
-	}
-
-	// Verify LLM is in app's allowed LLMs
+	// The agent's App must hold the LLM (see agentLLMForPlugin).
 	llmID := req.GetLlmId()
-	llmAllowed := false
-	for _, llm := range agentConfig.App.LLMs {
-		if llm.ID == uint(llmID) {
-			llmAllowed = true
-			break
-		}
-	}
-	if !llmAllowed {
-		log.Warn().
-			Uint32("llm_id", llmID).
-			Uint("app_id", agentConfig.App.ID).
-			Msg("LLM not allowed for agent's app")
-		return status.Errorf(codes.PermissionDenied, "LLM not allowed for this agent")
-	}
-
-	// Load the full LLM record
-	var llm models.LLM
-	if err := s.service.GetDB().First(&llm, llmID).Error; err != nil {
-		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to load LLM")
-		return status.Errorf(codes.Internal, "failed to load LLM")
+	agentConfig, llm, err := s.agentLLMForPlugin(plugin, llmID)
+	if err != nil {
+		return err
 	}
 
 	// Generate slug from LLM name
@@ -1120,7 +1089,7 @@ func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIS
 
 	// Make internal HTTP call to OpenAI shim endpoint (/ai/)
 	// This ensures all proxy middleware (analytics, budget, filters, plugins) are applied
-	proxyURL := fmt.Sprintf("http://localhost:9090/ai/%s/v1/chat/completions", llmSlug)
+	proxyURL := fmt.Sprintf("%s/ai/%s/v1/chat/completions", agentProxyBaseURL, llmSlug)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", proxyURL, bytes.NewReader(requestJSON))
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to create HTTP request for LLM proxy")
