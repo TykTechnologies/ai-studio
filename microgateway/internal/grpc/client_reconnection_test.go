@@ -495,7 +495,7 @@ func TestSimpleEdgeClient_ConnectionManagement(t *testing.T) {
 
 	t.Run("Connection State Management", func(t *testing.T) {
 		// Initially not connected
-		assert.False(t, client.connected)
+		assert.False(t, client.connected.Load())
 		assert.False(t, client.reconnecting.Load())
 		assert.Equal(t, 0, client.reconnectAttempts)
 
