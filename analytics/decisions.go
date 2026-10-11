@@ -1,12 +1,17 @@
 package analytics
 
 import (
-	"sort"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
+
+// recordedCostScale is the unit LLMChatRecord.Cost is stored in: currency
+// units x 10000, as the gateway writes it (proxy.buildChatRecord), the edge
+// pulses it (AnalyticsEvent.cost) and every report in stats.go reads it. The
+// decision report returns currency units, like the others.
+const recordedCostScale = 10000
 
 // DecisionTotals summarises decision-model traffic over a period. Costs are
 // in currency units (dollars), keyed by currency.
@@ -86,6 +91,7 @@ func GetDecisionUsage(db *gorm.DB, startDate, endDate time.Time, llmID, appID *u
 			"COALESCE(SUM(decision_refusals), 0) AS refusals, COALESCE(SUM(prompt_tokens), 0) AS input_tokens, " +
 			"COALESCE(SUM(cost), 0) AS cost").
 		Group("vendor, name, currency").
+		Order("requests DESC, vendor, name").
 		Find(&byModel).Error; err != nil {
 		return nil, err
 	}
@@ -114,7 +120,7 @@ func GetDecisionUsage(db *gorm.DB, startDate, endDate time.Time, llmID, appID *u
 		ByModel: make([]DecisionModelUsage, 0, len(byModel)),
 	}
 	for _, m := range byModel {
-		cost := m.Cost / 10000
+		cost := m.Cost / recordedCostScale
 		currency := m.Currency
 		if currency == "" {
 			currency = "USD"
@@ -136,18 +142,12 @@ func GetDecisionUsage(db *gorm.DB, startDate, endDate time.Time, llmID, appID *u
 		out.Totals.InputTokens += m.InputTokens
 		out.Totals.CostByCurrency[currency] += cost
 	}
-	sort.Slice(out.ByModel, func(i, j int) bool {
-		if out.ByModel[i].Requests != out.ByModel[j].Requests {
-			return out.ByModel[i].Requests > out.ByModel[j].Requests
-		}
-		return out.ByModel[i].Vendor+"/"+out.ByModel[i].Model < out.ByModel[j].Vendor+"/"+out.ByModel[j].Model
-	})
 	for _, d := range byDay {
 		out.ByDay.Labels = append(out.ByDay.Labels, d.Date)
 		out.ByDay.Requests = append(out.ByDay.Requests, d.Requests)
 		out.ByDay.Questions = append(out.ByDay.Questions, d.Questions)
 		out.ByDay.Refusals = append(out.ByDay.Refusals, d.Refusals)
-		out.ByDay.Cost = append(out.ByDay.Cost, d.Cost/10000)
+		out.ByDay.Cost = append(out.ByDay.Cost, d.Cost/recordedCostScale)
 	}
 	return out, nil
 }

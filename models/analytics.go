@@ -44,7 +44,7 @@ type LLMChatRecord struct {
 	PromptTokens           int
 	ResponseTokens         int
 	TotalTokens            int
-	TimeStamp              time.Time `gorm:"index:idx_llm_chat_records_time;index:idx_llm_chat_records_app_time,priority:2;index:idx_llm_chat_records_llm_time,priority:2;index:idx_llm_chat_records_team_time,priority:2"`
+	TimeStamp              time.Time `gorm:"index:idx_llm_chat_records_time;index:idx_llm_chat_records_app_time,priority:2;index:idx_llm_chat_records_llm_time,priority:2;index:idx_llm_chat_records_team_time,priority:2;index:idx_llm_chat_records_kind_time,priority:2"`
 	UserID                 uint      `gorm:"index"`
 	Choices                int
 	ToolCalls              int
@@ -64,7 +64,7 @@ type LLMChatRecord struct {
 	OnBehalfOf  string `gorm:"size:255"`
 	ActingAgent string `gorm:"size:255"`
 	// RequestKind is the model class of the call ("" generative, "decision").
-	RequestKind RequestKind `gorm:"size:16;default:'';index"`
+	RequestKind RequestKind `gorm:"size:16;default:'';index:idx_llm_chat_records_kind_time,priority:1"`
 	// DecisionQuestions and DecisionRefusals count, for a decision call, the
 	// questions asked and the ones the model declined to answer. Answered
 	// questions are Choices.

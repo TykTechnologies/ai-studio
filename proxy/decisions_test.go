@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,6 +103,15 @@ func TestDecisions_NativeOpenAIPassThroughIsRecordedAndPriced(t *testing.T) {
 	logs := h.proxyLogs()
 	require.Len(t, logs, 1)
 	assert.Equal(t, models.DecisionRequest, logs[0].RequestKind)
+
+	// The decision report reads the stored cost back in currency units: the
+	// call cost 120 input tokens at $0.10 per million, whatever scale the
+	// record keeps it in.
+	usage, err := analytics.GetDecisionUsage(h.db, time.Now().Add(-time.Hour), time.Now().Add(time.Hour), nil, nil)
+	require.NoError(t, err)
+	assert.InDelta(t, 120*0.0000001, usage.Totals.CostByCurrency["USD"], 1e-12, "dollars, end to end")
+	require.Len(t, usage.ByModel, 1)
+	assert.InDelta(t, 120*0.0000001*1000, usage.ByModel[0].CostPerThousand, 1e-9, "cost of a thousand such calls")
 }
 
 func TestDecisions_NativeSystemOnePassThroughIsRecordedAndPriced(t *testing.T) {
