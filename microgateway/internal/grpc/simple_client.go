@@ -78,8 +78,9 @@ type SimpleEdgeClient struct {
 	// Control payload queue for edge-to-control plugin communication
 	controlPayloadQueue *ControlPayloadQueue
 
-	// Connection state
-	connected bool
+	// Connection state. Set by the goroutine that opens a stream, cleared
+	// by that stream's receive loop, read by the heartbeat worker.
+	connected atomic.Bool
 
 	// Reconnection handling
 	// reconnecting guards attemptReconnection: a stream that drops again
@@ -502,13 +503,18 @@ func (c *SimpleEdgeClient) establishStream() error {
 	// reload handler is set are held (see HandleReloadRequest).
 	c.sendHeartbeatMessage()
 
+	// Connected before the goroutines start: a stream that ends at once
+	// clears it from its receive loop, and setting it afterwards would
+	// overwrite that with a stale true.
+	c.connected.Store(true)
+
 	// Start message handling goroutines
 	go c.handleIncomingMessages()
 
-	// Start heartbeat worker
-	go c.heartbeatWorker()
-
-	c.connected = true
+	// Start heartbeat worker for this stream. It gets the stream's context
+	// rather than reading c.streamCtx, which the next reconnect replaces:
+	// the old worker would then wait on the new stream and never stop.
+	go c.heartbeatWorker(ctx)
 
 	log.Debug().Msg("Bidirectional stream established successfully")
 	return nil
@@ -567,7 +573,7 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 			log.Error().Interface("panic", r).Msg("Panic in message handler, recovering")
 		}
 
-		c.connected = false
+		c.connected.Store(false)
 
 		// Stop event bridge before cancelling stream context
 		c.stopEventBridge()
@@ -909,8 +915,9 @@ func (c *SimpleEdgeClient) Stop() error {
 	return nil
 }
 
-// heartbeatWorker sends periodic heartbeats to the control instance
-func (c *SimpleEdgeClient) heartbeatWorker() {
+// heartbeatWorker sends periodic heartbeats to the control instance until
+// streamCtx, the context of the stream it was started for, is done.
+func (c *SimpleEdgeClient) heartbeatWorker(streamCtx context.Context) {
 	ticker := time.NewTicker(c.config.HubSpoke.HeartbeatInterval)
 	defer ticker.Stop()
 
@@ -921,15 +928,15 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 	for {
 		select {
 		case <-ticker.C:
-			if c.connected && c.currentStream() != nil {
+			if c.connected.Load() && c.currentStream() != nil {
 				c.sendHeartbeat()
 			} else {
 				log.Debug().
-					Bool("connected", c.connected).
+					Bool("connected", c.connected.Load()).
 					Bool("stream_not_nil", c.currentStream() != nil).
 					Msg("Skipping heartbeat - not connected or stream is nil")
 			}
-		case <-c.streamCtx.Done():
+		case <-streamCtx.Done():
 			log.Debug().Msg("Heartbeat worker stopping")
 			return
 		}
