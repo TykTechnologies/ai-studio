@@ -1443,6 +1443,30 @@ func CallLLMSimple(ctx context.Context, llmID uint32, model string, messages []*
 	return resp.Content, nil
 }
 
+// CallDecision asks a decision model through the governed gateway path, as
+// CallLLM does for chat. requestJSON is an OpenAI Decisions request (model,
+// input, questions; an empty model uses the LLM's default) and the result is
+// the OpenAI Decisions response JSON, whatever the LLM's vendor. Needs the
+// llms.proxy scope and an agent App that holds the LLM.
+func CallDecision(ctx context.Context, llmID uint32, requestJSON []byte) ([]byte, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	resp, err := client.CallDecision(ctx, &mgmtpb.CallDecisionRequest{
+		Context:     createPluginContext(AvailableScopes.LLMsProxy),
+		LlmId:       llmID,
+		RequestJson: string(requestJSON),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to call decision model: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("%s", resp.ErrorMessage)
+	}
+	return []byte(resp.ResponseJson), nil
+}
+
 // ===========================
 // Schedule Management Methods
 // ===========================

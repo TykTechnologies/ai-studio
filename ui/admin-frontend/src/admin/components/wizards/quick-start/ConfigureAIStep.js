@@ -18,7 +18,7 @@ import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
 import Icon from '../../../../components/common/Icon';
 import RadioSelectionGroup from '../../common/RadioSelectionGroup';
-import { getVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
+import { getChatVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
 import { PRIVACY_LEVEL_SCORES, PRIVACY_LEVEL_OPTIONS, PRIVACY_BADGE_CONFIGS, privacyLevelKeyForScore } from './utils';
 import { withBase } from "../../../../runtimeConfig";
 
@@ -82,7 +82,8 @@ const ConfigureAIStep = () => {
   }, [newLlmFormData, llmType, selectedLlmId, setStepValid]);
 
   useEffect(() => {
-    const vendorCodes = getVendorCodes();
+    // The quick start sets up a chat model; decision-only vendors cannot serve one.
+    const vendorCodes = getChatVendorCodes();
     const vendorList = vendorCodes.map(code => ({
       value: code,
       label: getVendorName(code)

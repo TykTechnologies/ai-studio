@@ -39,6 +39,12 @@ type Context struct {
 	// Vendor is the LLM vendor (e.g., "anthropic", "openai")
 	Vendor string
 
+	// RequestKind is the model class of the request: "" for generative
+	// traffic (chat, completions, embeddings), RequestKindDecision for
+	// decision models. A plugin that reads request or response bodies uses
+	// it to pick the schema (see ParseDecisionRequest).
+	RequestKind string
+
 	// EdgeID is the edge instance identifier (only set in RuntimeGateway)
 	// Empty string in RuntimeStudio context
 	EdgeID string
@@ -417,6 +423,14 @@ func detectRuntime() RuntimeType {
 
 	// Default to studio (including when GATEWAY_MODE=control)
 	return RuntimeStudio
+}
+
+// RequestKindDecision is Context.RequestKind for decision-model requests.
+const RequestKindDecision = "decision"
+
+// IsDecision reports whether the request is a decision-model call.
+func (c Context) IsDecision() bool {
+	return c.RequestKind == RequestKindDecision
 }
 
 // NewContext creates a new plugin context with the given parameters

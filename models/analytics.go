@@ -14,6 +14,19 @@ const (
 	ProxyInteraction InteractionType = "proxy"
 )
 
+// RequestKind is the model class a call was made to. It is orthogonal to
+// InteractionType, which says where the call came from (chat UI or proxy).
+type RequestKind string
+
+const (
+	// GenerativeRequest is chat, completion and embedding traffic. It is the
+	// empty string so rows written before request kinds existed match it.
+	GenerativeRequest RequestKind = ""
+	// DecisionRequest is a call to a decision model (/v1/decisions,
+	// /v1/systemone): typed answers instead of generated text.
+	DecisionRequest RequestKind = "decision"
+)
+
 // LLMChatRecord logs usage for cost and analytics.
 //
 // Rows are insert-only: never update or delete them. The hub budget sync
@@ -50,6 +63,13 @@ type LLMChatRecord struct {
 	// or azp). UserID stays the App owner. Audit only.
 	OnBehalfOf  string `gorm:"size:255"`
 	ActingAgent string `gorm:"size:255"`
+	// RequestKind is the model class of the call ("" generative, "decision").
+	RequestKind RequestKind `gorm:"size:16;default:'';index"`
+	// DecisionQuestions and DecisionRefusals count, for a decision call, the
+	// questions asked and the ones the model declined to answer. Answered
+	// questions are Choices.
+	DecisionQuestions int
+	DecisionRefusals  int
 }
 
 // LLMChatLogEntry for storing extra logs
@@ -247,4 +267,6 @@ type ProxyLog struct {
 	// or azp). UserID stays the App owner. Audit only.
 	OnBehalfOf  string `gorm:"size:255"`
 	ActingAgent string `gorm:"size:255"`
+	// RequestKind is the model class of the call ("" generative, "decision").
+	RequestKind RequestKind `gorm:"size:16;default:'';index"`
 }

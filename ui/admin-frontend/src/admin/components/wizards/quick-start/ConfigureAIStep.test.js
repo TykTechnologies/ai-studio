@@ -130,7 +130,7 @@ jest.mock('../../common/RadioSelectionGroup', () => {
 
 // Mock the vendor logo utilities
 jest.mock('../../../utils/vendorLogos', () => ({
-  getVendorCodes: jest.fn(),
+  getChatVendorCodes: jest.fn(),
   getVendorName: jest.fn(),
   getVendorLogo: jest.fn(),
   vendorRequiresAccessDetails: jest.fn(),
@@ -221,7 +221,7 @@ describe('ConfigureAIStep Component', () => {
     jest.clearAllMocks();
     mockSetStepValid.mockClear(); // Clear the mockSetStepValid mock before each test
     useQuickStart.mockReturnValue(defaultContextValues);
-    vendorLogos.getVendorCodes.mockReturnValue(['openai', 'anthropic', 'google_ai', 'ollama']);
+    vendorLogos.getChatVendorCodes.mockReturnValue(['openai', 'anthropic', 'google_ai', 'ollama']);
     vendorLogos.getVendorName.mockImplementation((code) => {
       const vendorMap = {
         'openai': 'OpenAI',

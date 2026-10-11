@@ -128,3 +128,11 @@ func (v *Mock) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamingC
 func (v *Mock) ProvidesEmbedder() bool {
 	return false
 }
+
+func (v *Mock) ProvidesChat() bool {
+	return true
+}
+
+func (v *Mock) DecisionEndpoint() string {
+	return ""
+}

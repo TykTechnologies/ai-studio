@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
+import { chatCapableLLMs } from "../../utils/vendorLogos";
 import { generateSlug } from "../../components/wizards/quick-start/utils";
 import {
   TextField,
@@ -399,7 +400,8 @@ const SemanticRouterForm = () => {
   const fetchLLMs = async () => {
     try {
       const response = await listAll(apiClient, "/llms");
-      setLLMs(response.data.data || []);
+      // Routes target chat models; decision-only LLMs are not targets.
+      setLLMs(chatCapableLLMs(response.data.data));
     } catch (error) {
       console.error("Error fetching LLMs:", error);
     }

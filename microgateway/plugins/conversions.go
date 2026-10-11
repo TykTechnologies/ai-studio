@@ -21,6 +21,7 @@ func convertPluginContext(ctx *interfaces.PluginContext) *pb.PluginContext {
 	return &pb.PluginContext{
 		RequestId:    ctx.RequestID,
 		Vendor:       ctx.Vendor,
+		RequestKind:  ctx.RequestKind,
 		LlmId:        uint32(ctx.LLMID),
 		LlmSlug:      ctx.LLMSlug,
 		AppId:        uint32(ctx.AppID),
@@ -99,6 +100,7 @@ func convertPBPluginContext(ctx *pb.PluginContext) *interfaces.PluginContext {
 		LLMID:        uint(ctx.LlmId),
 		LLMSlug:      ctx.LlmSlug,
 		Vendor:       ctx.Vendor,
+		RequestKind:  ctx.RequestKind,
 		AppID:        uint(ctx.AppId),
 		UserID:       uint(ctx.UserId),
 		Metadata:     metadata,

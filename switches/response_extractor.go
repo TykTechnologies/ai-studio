@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/responses"
 )
 
@@ -13,6 +14,23 @@ import (
 // This leverages the existing vendor parsers for consistency
 // Returns the response text that would be sent to the user
 func ExtractResponseText(vendor models.Vendor, responseBody []byte) (string, error) {
+	// Decision models answer typed questions instead of generating text, in
+	// either the OpenAI or the System One format. Filters get the answers
+	// rendered one per line ("topic: choice=billing (confidence 0.9)").
+	// A chat completion always carries choices; only a body without them is
+	// taken for a decision, so a chat response that happens to have an
+	// "answers" field keeps its normal extraction.
+	if _, ok := decisions.DetectResponseFormat(responseBody); ok && !hasChoices(responseBody) {
+		resp, err := decisions.ParseResponse(responseBody, nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse decision response: %w", err)
+		}
+		return decisions.RenderAnswers(resp), nil
+	}
+	if vendor == models.SYSTEMONE {
+		return "", fmt.Errorf("no answers in decision response")
+	}
+
 	switch vendor {
 	case models.OPENAI, models.OLLAMA:
 		var resp responses.OpenAIResponse
@@ -87,6 +105,14 @@ func ExtractResponseText(vendor models.Vendor, responseBody []byte) (string, err
 		}
 		return resp.Choices[0].Message.Content, nil
 	}
+}
+
+// hasChoices reports whether a body has a top-level choices field.
+func hasChoices(body []byte) bool {
+	var probe struct {
+		Choices json.RawMessage `json:"choices"`
+	}
+	return json.Unmarshal(body, &probe) == nil && len(probe.Choices) > 0
 }
 
 // ExtractStreamingChunkText extracts text from a streaming chunk

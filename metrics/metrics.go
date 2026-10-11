@@ -32,6 +32,7 @@ var (
 	failoverTotal         otelmetric.Int64Counter
 	guardrailErrorsTotal  otelmetric.Int64Counter
 	goroutinePanicsTotal  otelmetric.Int64Counter
+	decisionQuestionsTotal otelmetric.Int64Counter
 
 	// Histograms
 	requestDuration  otelmetric.Float64Histogram
@@ -153,6 +154,13 @@ func registerInstruments(meter otelmetric.Meter) {
 		panic("failed to create goroutinePanicsTotal counter: " + err.Error())
 	}
 
+	decisionQuestionsTotal, err = meter.Int64Counter("aistudio_decision_questions_total",
+		otelmetric.WithDescription("Questions put to decision models, by vendor, model and outcome (answered or refused)"),
+	)
+	if err != nil {
+		panic("failed to create decisionQuestionsTotal counter: " + err.Error())
+	}
+
 	guardrailLatency, err = meter.Float64Histogram("aistudio_guardrail_latency_seconds",
 		otelmetric.WithDescription("Guardrail provider call latency"),
 		otelmetric.WithExplicitBucketBoundaries(0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5),
@@ -253,6 +261,25 @@ func RecordCost(ctx context.Context, vendor, model, appID string, cost float64) 
 			attribute.String("app_id", appID),
 		),
 	)
+}
+
+// RecordDecisionQuestions counts a decision call's questions by outcome.
+func RecordDecisionQuestions(ctx context.Context, vendor, model string, answered, refused int) {
+	if !initialized.Load() {
+		return
+	}
+	for outcome, n := range map[string]int{"answered": answered, "refused": refused} {
+		if n <= 0 {
+			continue
+		}
+		decisionQuestionsTotal.Add(ctx, int64(n),
+			otelmetric.WithAttributes(
+				attribute.String("vendor", vendor),
+				attribute.String("model", model),
+				attribute.String("outcome", outcome),
+			),
+		)
+	}
 }
 
 // RecordToolCall increments the tool calls counter.

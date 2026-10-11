@@ -19,4 +19,11 @@ type LLMVendorProvider interface {
 	ProxyScreenRequest(llm *LLM, r *http.Request, isStreamingChannel bool) error
 
 	ProvidesEmbedder() bool
+	// ProvidesChat reports whether the vendor serves generative chat (a
+	// langchaingo driver and the chat-shaped /ai/ and /v1 bridges).
+	// Decision-only vendors return false.
+	ProvidesChat() bool
+	// DecisionEndpoint is the upstream path of the vendor's decision-model API
+	// (e.g. /v1/decisions), or "" when the vendor serves no decision models.
+	DecisionEndpoint() string
 }

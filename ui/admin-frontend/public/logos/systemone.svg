@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#5c6bc0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Decision model">
+  <circle cx="5" cy="12" r="2.5"/>
+  <path d="M7.5 12h3l4-6h2"/>
+  <path d="M10.5 12l4 6h2"/>
+  <path d="M17 4l2.5 2-2.5 2"/>
+  <path d="M17 16l2.5 2-2.5 2"/>
+</svg>

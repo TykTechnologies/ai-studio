@@ -679,6 +679,7 @@ TABLE llm_chat_records
   index CREATE INDEX idx_llm_chat_records_app_time ON llm_chat_records USING btree (app_id, time_stamp)
   index CREATE INDEX idx_llm_chat_records_deleted_at ON llm_chat_records USING btree (deleted_at)
   index CREATE INDEX idx_llm_chat_records_llm_time ON llm_chat_records USING btree (llm_id, time_stamp)
+  index CREATE INDEX idx_llm_chat_records_request_kind ON llm_chat_records USING btree (request_kind)
   index CREATE INDEX idx_llm_chat_records_team_time ON llm_chat_records USING btree (team_id, time_stamp)
   index CREATE INDEX idx_llm_chat_records_time ON llm_chat_records USING btree (time_stamp)
   index CREATE INDEX idx_llm_chat_records_user_id ON llm_chat_records USING btree (user_id)
@@ -708,6 +709,9 @@ TABLE llm_chat_records
   column team_id bigint(int8) nullable=YES precision=64 scale=0
   column on_behalf_of character varying(varchar) nullable=YES len=255
   column acting_agent character varying(varchar) nullable=YES len=255
+  column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
+  column decision_questions bigint(int8) nullable=YES precision=64 scale=0
+  column decision_refusals bigint(int8) nullable=YES precision=64 scale=0
 TABLE llm_filters
   constraint fk_llm_filters_filter FOREIGN KEY (filter_id) REFERENCES filters(id)
   constraint fk_llm_filters_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
@@ -1442,6 +1446,7 @@ TABLE proxy_logs
   index CREATE INDEX idx_proxy_logs_deleted_at ON proxy_logs USING btree (deleted_at)
   index CREATE INDEX idx_proxy_logs_failover_from ON proxy_logs USING btree (failover_from_llm_id)
   index CREATE INDEX idx_proxy_logs_llm_time ON proxy_logs USING btree (llm_id, time_stamp)
+  index CREATE INDEX idx_proxy_logs_request_kind ON proxy_logs USING btree (request_kind)
   index CREATE INDEX idx_proxy_logs_router ON proxy_logs USING btree (router_slug)
   index CREATE INDEX idx_proxy_logs_time ON proxy_logs USING btree (time_stamp)
   index CREATE INDEX idx_proxy_logs_user_id ON proxy_logs USING btree (user_id)
@@ -1473,6 +1478,7 @@ TABLE proxy_logs
   column shadow_route text(text) nullable=YES
   column on_behalf_of character varying(varchar) nullable=YES len=255
   column acting_agent character varying(varchar) nullable=YES len=255
+  column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
 TABLE push_operations
   constraint push_operations_pkey PRIMARY KEY (operation_id)
   index CREATE INDEX idx_push_operations_completed_at ON push_operations USING btree (completed_at)

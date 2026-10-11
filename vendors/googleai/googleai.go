@@ -210,6 +210,14 @@ func (v *GoogleAI) ProvidesEmbedder() bool {
 	return true
 }
 
+func (v *GoogleAI) ProvidesChat() bool {
+	return true
+}
+
+func (v *GoogleAI) DecisionEndpoint() string {
+	return ""
+}
+
 func setupGoogleDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]googleai.Option, 0)
 	if connDef.APIKey != "" {

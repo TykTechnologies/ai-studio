@@ -85,6 +85,12 @@ type AnalyticsData struct {
 	ShadowRoute            string    `json:"shadow_route,omitempty"` // Semantic Router shadow mode: the route the classifier picked
 	OnBehalfOf             string    `json:"on_behalf_of,omitempty"` // who the call was for, when an auth plugin said (audit only)
 	ActingAgent            string    `json:"acting_agent,omitempty"` // the agent that made it, when an auth plugin said (audit only)
+
+	// Model class ("" generative, "decision") and, for a decision call, the
+	// questions asked and the ones the model declined (answered = Choices).
+	RequestKind       string `json:"request_kind,omitempty"`
+	DecisionQuestions int    `json:"decision_questions,omitempty"`
+	DecisionRefusals  int    `json:"decision_refusals,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information

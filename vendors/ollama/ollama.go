@@ -95,6 +95,14 @@ func (v *Ollama) ProvidesEmbedder() bool {
 	return true
 }
 
+func (v *Ollama) ProvidesChat() bool {
+	return true
+}
+
+func (v *Ollama) DecisionEndpoint() string {
+	return ""
+}
+
 func setupOllamaDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]ollama.Option, 0)
 

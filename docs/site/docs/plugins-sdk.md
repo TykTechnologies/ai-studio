@@ -509,6 +509,10 @@ type Context struct {
 }
 ```
 
+### Request Kind (Decision Models)
+
+`ctx.RequestKind` is `"decision"` when the request goes to a [decision model](./decision-models.md) (`/v1/decisions` or `/v1/systemone`) and empty for chat, completion and embedding traffic; `ctx.IsDecision()` tests it. Decision bodies are not chat-shaped. Read them, in either wire format, with `plugin_sdk.ParseDecisionRequest(path, body)` and `plugin_sdk.ParseDecisionResponse(body, req)`, which return OpenAI Decisions types. Studio agent plugins can ask a decision model through the governed gateway path with `plugin_sdk.CallDecision(ctx, llmID, req)` (scope `llms.proxy`). Data collectors receive `request_kind`, `decision_questions` and `decision_refusals` on each analytics record.
+
 ### Runtime Detection
 
 Plugins can adapt behavior based on runtime:

@@ -44,6 +44,7 @@ func (w *pluginServerWrapper) createPluginContext(baseCtx context.Context, pbCtx
 		LLMID:        pbCtx.LlmId,
 		LLMSlug:      pbCtx.LlmSlug,
 		Vendor:       pbCtx.Vendor,
+		RequestKind:  pbCtx.RequestKind,
 		Metadata:     pbCtx.Metadata,
 		TraceContext: pbCtx.TraceContext,
 		Services:     w.services,

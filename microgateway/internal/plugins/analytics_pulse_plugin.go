@@ -369,6 +369,11 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		ShadowRoute:            req.ShadowRoute,
 		OnBehalfOf:             req.OnBehalfOf,
 		ActingAgent:            req.ActingAgent,
+
+		// Model class, and the decision counts of a decision call
+		RequestKind:            req.RequestKind,
+		DecisionQuestions:      req.DecisionQuestions,
+		DecisionRefusals:       req.DecisionRefusals,
 	}
 
 	// Store metadata for pulse transmission
@@ -874,6 +879,9 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			ShadowRoute:       event.ShadowRoute,
 			OnBehalfOf:        event.OnBehalfOf,
 			ActingAgent:       event.ActingAgent,
+			RequestKind:       event.RequestKind,
+			DecisionQuestions: uint32(event.DecisionQuestions),
+			DecisionRefusals:  uint32(event.DecisionRefusals),
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

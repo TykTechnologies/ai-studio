@@ -16701,6 +16701,137 @@ func (x *GetLicenseInfoResponse) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// CallDecisionRequest carries an OpenAI Decisions request as JSON (model,
+// input, questions). An empty model uses the LLM's default model. The gateway
+// translates it for the LLM's vendor (OpenAI Decisions or System One).
+type CallDecisionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	LlmId         uint32                 `protobuf:"varint,2,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
+	RequestJson   string                 `protobuf:"bytes,3,opt,name=request_json,json=requestJson,proto3" json:"request_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallDecisionRequest) Reset() {
+	*x = CallDecisionRequest{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[253]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallDecisionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallDecisionRequest) ProtoMessage() {}
+
+func (x *CallDecisionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[253]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallDecisionRequest.ProtoReflect.Descriptor instead.
+func (*CallDecisionRequest) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{253}
+}
+
+func (x *CallDecisionRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *CallDecisionRequest) GetLlmId() uint32 {
+	if x != nil {
+		return x.LlmId
+	}
+	return 0
+}
+
+func (x *CallDecisionRequest) GetRequestJson() string {
+	if x != nil {
+		return x.RequestJson
+	}
+	return ""
+}
+
+type CallDecisionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ResponseJson  string                 `protobuf:"bytes,2,opt,name=response_json,json=responseJson,proto3" json:"response_json,omitempty"` // OpenAI Decisions response JSON
+	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	StatusCode    int32                  `protobuf:"varint,4,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"` // gateway status when the call failed
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallDecisionResponse) Reset() {
+	*x = CallDecisionResponse{}
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[254]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallDecisionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallDecisionResponse) ProtoMessage() {}
+
+func (x *CallDecisionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_ai_studio_management_ai_studio_management_proto_msgTypes[254]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallDecisionResponse.ProtoReflect.Descriptor instead.
+func (*CallDecisionResponse) Descriptor() ([]byte, []int) {
+	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP(), []int{254}
+}
+
+func (x *CallDecisionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CallDecisionResponse) GetResponseJson() string {
+	if x != nil {
+		return x.ResponseJson
+	}
+	return ""
+}
+
+func (x *CallDecisionResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *CallDecisionResponse) GetStatusCode() int32 {
+	if x != nil {
+		return x.StatusCode
+	}
+	return 0
+}
+
 var File_proto_ai_studio_management_ai_studio_management_proto protoreflect.FileDescriptor
 
 const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
@@ -18141,7 +18272,17 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\fentitlements\x18\x04 \x03(\tR\fentitlements\x12\"\n" +
 	"\forganization\x18\x05 \x01(\tR\forganization\x129\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt2\xa3\\\n" +
+	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\x8e\x01\n" +
+	"\x13CallDecisionRequest\x12=\n" +
+	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
+	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12!\n" +
+	"\frequest_json\x18\x03 \x01(\tR\vrequestJson\"\x9b\x01\n" +
+	"\x14CallDecisionResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
+	"\rresponse_json\x18\x02 \x01(\tR\fresponseJson\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12\x1f\n" +
+	"\vstatus_code\x18\x04 \x01(\x05R\n" +
+	"statusCode2\x8a]\n" +
 	"\x19AIStudioManagementService\x12b\n" +
 	"\vListPlugins\x12(.ai_studio_management.ListPluginsRequest\x1a).ai_studio_management.ListPluginsResponse\x12\\\n" +
 	"\tGetPlugin\x12&.ai_studio_management.GetPluginRequest\x1a'.ai_studio_management.GetPluginResponse\x12w\n" +
@@ -18229,7 +18370,8 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\x0eDeletePluginKV\x12+.ai_studio_management.DeletePluginKVRequest\x1a,.ai_studio_management.DeletePluginKVResponse\x12b\n" +
 	"\vExecuteTool\x12(.ai_studio_management.ExecuteToolRequest\x1a).ai_studio_management.ExecuteToolResponse\x12n\n" +
 	"\x0fQueryDatasource\x12,.ai_studio_management.QueryDatasourceRequest\x1a-.ai_studio_management.QueryDatasourceResponse\x12X\n" +
-	"\aCallLLM\x12$.ai_studio_management.CallLLMRequest\x1a%.ai_studio_management.CallLLMResponse0\x01\x12k\n" +
+	"\aCallLLM\x12$.ai_studio_management.CallLLMRequest\x1a%.ai_studio_management.CallLLMResponse0\x01\x12e\n" +
+	"\fCallDecision\x12).ai_studio_management.CallDecisionRequest\x1a*.ai_studio_management.CallDecisionResponse\x12k\n" +
 	"\x0eCreateSchedule\x12+.ai_studio_management.CreateScheduleRequest\x1a,.ai_studio_management.CreateScheduleResponse\x12b\n" +
 	"\vGetSchedule\x12(.ai_studio_management.GetScheduleRequest\x1a).ai_studio_management.GetScheduleResponse\x12h\n" +
 	"\rListSchedules\x12*.ai_studio_management.ListSchedulesRequest\x1a+.ai_studio_management.ListSchedulesResponse\x12k\n" +
@@ -18266,7 +18408,7 @@ func file_proto_ai_studio_management_ai_studio_management_proto_rawDescGZIP() []
 	return file_proto_ai_studio_management_ai_studio_management_proto_rawDescData
 }
 
-var file_proto_ai_studio_management_ai_studio_management_proto_msgTypes = make([]protoimpl.MessageInfo, 263)
+var file_proto_ai_studio_management_ai_studio_management_proto_msgTypes = make([]protoimpl.MessageInfo, 265)
 var file_proto_ai_studio_management_ai_studio_management_proto_goTypes = []any{
 	(*SetAppGovernanceStateRequest)(nil),            // 0: ai_studio_management.SetAppGovernanceStateRequest
 	(*SetAppGovernanceStateResponse)(nil),           // 1: ai_studio_management.SetAppGovernanceStateResponse
@@ -18521,35 +18663,37 @@ var file_proto_ai_studio_management_ai_studio_management_proto_goTypes = []any{
 	(*ScheduleInfo)(nil),                            // 250: ai_studio_management.ScheduleInfo
 	(*GetLicenseInfoRequest)(nil),                   // 251: ai_studio_management.GetLicenseInfoRequest
 	(*GetLicenseInfoResponse)(nil),                  // 252: ai_studio_management.GetLicenseInfoResponse
-	nil,                                             // 253: ai_studio_management.SetAppGovernanceStateRequest.FlagsEntry
-	nil,                                             // 254: ai_studio_management.CreateNotificationRequest.LinksEntry
-	nil,                                             // 255: ai_studio_management.LLMInfo.MetadataEntry
-	nil,                                             // 256: ai_studio_management.ToolInfo.MetadataEntry
-	nil,                                             // 257: ai_studio_management.DocumentWithEmbedding.MetadataEntry
-	nil,                                             // 258: ai_studio_management.DocumentChunk.MetadataEntry
-	nil,                                             // 259: ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
-	nil,                                             // 260: ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
-	nil,                                             // 261: ai_studio_management.DatasourceInfo.MetadataEntry
-	nil,                                             // 262: ai_studio_management.DatasourceResult.MetadataEntry
-	(*timestamppb.Timestamp)(nil),                   // 263: google.protobuf.Timestamp
+	(*CallDecisionRequest)(nil),                     // 253: ai_studio_management.CallDecisionRequest
+	(*CallDecisionResponse)(nil),                    // 254: ai_studio_management.CallDecisionResponse
+	nil,                                             // 255: ai_studio_management.SetAppGovernanceStateRequest.FlagsEntry
+	nil,                                             // 256: ai_studio_management.CreateNotificationRequest.LinksEntry
+	nil,                                             // 257: ai_studio_management.LLMInfo.MetadataEntry
+	nil,                                             // 258: ai_studio_management.ToolInfo.MetadataEntry
+	nil,                                             // 259: ai_studio_management.DocumentWithEmbedding.MetadataEntry
+	nil,                                             // 260: ai_studio_management.DocumentChunk.MetadataEntry
+	nil,                                             // 261: ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
+	nil,                                             // 262: ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
+	nil,                                             // 263: ai_studio_management.DatasourceInfo.MetadataEntry
+	nil,                                             // 264: ai_studio_management.DatasourceResult.MetadataEntry
+	(*timestamppb.Timestamp)(nil),                   // 265: google.protobuf.Timestamp
 }
 var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32{
 	40,  // 0: ai_studio_management.SetAppGovernanceStateRequest.context:type_name -> ai_studio_management.PluginContext
-	253, // 1: ai_studio_management.SetAppGovernanceStateRequest.flags:type_name -> ai_studio_management.SetAppGovernanceStateRequest.FlagsEntry
+	255, // 1: ai_studio_management.SetAppGovernanceStateRequest.flags:type_name -> ai_studio_management.SetAppGovernanceStateRequest.FlagsEntry
 	77,  // 2: ai_studio_management.SetAppGovernanceStateResponse.app:type_name -> ai_studio_management.AppInfo
 	40,  // 3: ai_studio_management.ListObjectMetadataAuditRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 4: ai_studio_management.ObjectMetadataAuditEntry.created_at:type_name -> google.protobuf.Timestamp
+	265, // 4: ai_studio_management.ObjectMetadataAuditEntry.created_at:type_name -> google.protobuf.Timestamp
 	3,   // 5: ai_studio_management.ListObjectMetadataAuditResponse.entries:type_name -> ai_studio_management.ObjectMetadataAuditEntry
 	40,  // 6: ai_studio_management.ListAuditRecordsRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 7: ai_studio_management.AuditRecordInfo.timestamp:type_name -> google.protobuf.Timestamp
+	265, // 7: ai_studio_management.AuditRecordInfo.timestamp:type_name -> google.protobuf.Timestamp
 	6,   // 8: ai_studio_management.ListAuditRecordsResponse.records:type_name -> ai_studio_management.AuditRecordInfo
-	263, // 9: ai_studio_management.MCPServerInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 9: ai_studio_management.MCPServerInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 10: ai_studio_management.ListMCPServersRequest.context:type_name -> ai_studio_management.PluginContext
 	8,   // 11: ai_studio_management.ListMCPServersResponse.servers:type_name -> ai_studio_management.MCPServerInfo
 	40,  // 12: ai_studio_management.GetMCPServerRequest.context:type_name -> ai_studio_management.PluginContext
 	8,   // 13: ai_studio_management.GetMCPServerResponse.server:type_name -> ai_studio_management.MCPServerInfo
-	263, // 14: ai_studio_management.ModelRouterInfo.updated_at:type_name -> google.protobuf.Timestamp
-	263, // 15: ai_studio_management.SemanticRouterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 14: ai_studio_management.ModelRouterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 15: ai_studio_management.SemanticRouterInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 16: ai_studio_management.ListModelRoutersRequest.context:type_name -> ai_studio_management.PluginContext
 	13,  // 17: ai_studio_management.ListModelRoutersResponse.routers:type_name -> ai_studio_management.ModelRouterInfo
 	40,  // 18: ai_studio_management.GetModelRouterRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18564,7 +18708,7 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 27: ai_studio_management.SetResourceInstanceGroupsRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 28: ai_studio_management.ListAccessibleResourceInstancesRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 29: ai_studio_management.CreateNotificationRequest.context:type_name -> ai_studio_management.PluginContext
-	254, // 30: ai_studio_management.CreateNotificationRequest.links:type_name -> ai_studio_management.CreateNotificationRequest.LinksEntry
+	256, // 30: ai_studio_management.CreateNotificationRequest.links:type_name -> ai_studio_management.CreateNotificationRequest.LinksEntry
 	40,  // 31: ai_studio_management.RegisterResourceTypesRequest.context:type_name -> ai_studio_management.PluginContext
 	34,  // 32: ai_studio_management.RegisterResourceTypesRequest.types:type_name -> ai_studio_management.ResourceTypeSpec
 	40,  // 33: ai_studio_management.RegisterPermissionResourcesRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18574,17 +18718,17 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 37: ai_studio_management.GetPluginRequest.context:type_name -> ai_studio_management.PluginContext
 	47,  // 38: ai_studio_management.GetPluginResponse.plugin:type_name -> ai_studio_management.PluginInfo
 	40,  // 39: ai_studio_management.UpdatePluginConfigRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 40: ai_studio_management.PluginInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 41: ai_studio_management.PluginInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 40: ai_studio_management.PluginInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 41: ai_studio_management.PluginInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 42: ai_studio_management.ListLLMsRequest.context:type_name -> ai_studio_management.PluginContext
 	54,  // 43: ai_studio_management.ListLLMsResponse.llms:type_name -> ai_studio_management.LLMInfo
 	40,  // 44: ai_studio_management.GetLLMRequest.context:type_name -> ai_studio_management.PluginContext
 	54,  // 45: ai_studio_management.GetLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
 	40,  // 46: ai_studio_management.GetLLMPluginsRequest.context:type_name -> ai_studio_management.PluginContext
 	47,  // 47: ai_studio_management.GetLLMPluginsResponse.plugins:type_name -> ai_studio_management.PluginInfo
-	263, // 48: ai_studio_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 49: ai_studio_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
-	255, // 50: ai_studio_management.LLMInfo.metadata:type_name -> ai_studio_management.LLMInfo.MetadataEntry
+	265, // 48: ai_studio_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 49: ai_studio_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
+	257, // 50: ai_studio_management.LLMInfo.metadata:type_name -> ai_studio_management.LLMInfo.MetadataEntry
 	40,  // 51: ai_studio_management.CreateLLMRequest.context:type_name -> ai_studio_management.PluginContext
 	54,  // 52: ai_studio_management.CreateLLMResponse.llm:type_name -> ai_studio_management.LLMInfo
 	40,  // 53: ai_studio_management.UpdateLLMRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18598,13 +18742,13 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	71,  // 61: ai_studio_management.GetUsageStatisticsResponse.statistics:type_name -> ai_studio_management.UsageStatistic
 	40,  // 62: ai_studio_management.GetCostAnalysisRequest.context:type_name -> ai_studio_management.PluginContext
 	72,  // 63: ai_studio_management.GetCostAnalysisResponse.breakdown:type_name -> ai_studio_management.CostBreakdown
-	263, // 64: ai_studio_management.UsageStatistic.timestamp:type_name -> google.protobuf.Timestamp
+	265, // 64: ai_studio_management.UsageStatistic.timestamp:type_name -> google.protobuf.Timestamp
 	40,  // 65: ai_studio_management.ListAppsRequest.context:type_name -> ai_studio_management.PluginContext
 	77,  // 66: ai_studio_management.ListAppsResponse.apps:type_name -> ai_studio_management.AppInfo
 	40,  // 67: ai_studio_management.GetAppRequest.context:type_name -> ai_studio_management.PluginContext
 	77,  // 68: ai_studio_management.GetAppResponse.app:type_name -> ai_studio_management.AppInfo
-	263, // 69: ai_studio_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 70: ai_studio_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 69: ai_studio_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 70: ai_studio_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
 	78,  // 71: ai_studio_management.AppInfo.plugin_resources:type_name -> ai_studio_management.AppPluginResourceRef
 	40,  // 72: ai_studio_management.CreateAppRequest.context:type_name -> ai_studio_management.PluginContext
 	77,  // 73: ai_studio_management.CreateAppResponse.app:type_name -> ai_studio_management.AppInfo
@@ -18613,7 +18757,7 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 76: ai_studio_management.DeleteAppRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 77: ai_studio_management.PatchAppMetadataRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 78: ai_studio_management.GetObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 79: ai_studio_management.GetObjectMetadataResponse.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 79: ai_studio_management.GetObjectMetadataResponse.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 80: ai_studio_management.DeleteObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 81: ai_studio_management.SetObjectMetadataRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 82: ai_studio_management.GetResolvedMetadataSchemaRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18625,9 +18769,9 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 88: ai_studio_management.GetToolOperationsRequest.context:type_name -> ai_studio_management.PluginContext
 	106, // 89: ai_studio_management.GetToolOperationsResponse.operations:type_name -> ai_studio_management.ToolOperation
 	40,  // 90: ai_studio_management.CallToolOperationRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 91: ai_studio_management.ToolInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 92: ai_studio_management.ToolInfo.updated_at:type_name -> google.protobuf.Timestamp
-	256, // 93: ai_studio_management.ToolInfo.metadata:type_name -> ai_studio_management.ToolInfo.MetadataEntry
+	265, // 91: ai_studio_management.ToolInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 92: ai_studio_management.ToolInfo.updated_at:type_name -> google.protobuf.Timestamp
+	258, // 93: ai_studio_management.ToolInfo.metadata:type_name -> ai_studio_management.ToolInfo.MetadataEntry
 	107, // 94: ai_studio_management.ToolOperation.parameters:type_name -> ai_studio_management.ToolParameter
 	108, // 95: ai_studio_management.ToolOperation.request_body:type_name -> ai_studio_management.ToolRequestBody
 	40,  // 96: ai_studio_management.CreateToolRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18653,23 +18797,23 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	133, // 116: ai_studio_management.GenerateEmbeddingResponse.vectors:type_name -> ai_studio_management.EmbeddingVector
 	40,  // 117: ai_studio_management.StoreDocumentsRequest.context:type_name -> ai_studio_management.PluginContext
 	135, // 118: ai_studio_management.StoreDocumentsRequest.documents:type_name -> ai_studio_management.DocumentWithEmbedding
-	257, // 119: ai_studio_management.DocumentWithEmbedding.metadata:type_name -> ai_studio_management.DocumentWithEmbedding.MetadataEntry
+	259, // 119: ai_studio_management.DocumentWithEmbedding.metadata:type_name -> ai_studio_management.DocumentWithEmbedding.MetadataEntry
 	40,  // 120: ai_studio_management.ProcessAndStoreRequest.context:type_name -> ai_studio_management.PluginContext
 	138, // 121: ai_studio_management.ProcessAndStoreRequest.chunks:type_name -> ai_studio_management.DocumentChunk
-	258, // 122: ai_studio_management.DocumentChunk.metadata:type_name -> ai_studio_management.DocumentChunk.MetadataEntry
+	260, // 122: ai_studio_management.DocumentChunk.metadata:type_name -> ai_studio_management.DocumentChunk.MetadataEntry
 	40,  // 123: ai_studio_management.DeleteDocumentsByMetadataRequest.context:type_name -> ai_studio_management.PluginContext
-	259, // 124: ai_studio_management.DeleteDocumentsByMetadataRequest.metadata_filter:type_name -> ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
+	261, // 124: ai_studio_management.DeleteDocumentsByMetadataRequest.metadata_filter:type_name -> ai_studio_management.DeleteDocumentsByMetadataRequest.MetadataFilterEntry
 	40,  // 125: ai_studio_management.QueryByMetadataOnlyRequest.context:type_name -> ai_studio_management.PluginContext
-	260, // 126: ai_studio_management.QueryByMetadataOnlyRequest.metadata_filter:type_name -> ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
+	262, // 126: ai_studio_management.QueryByMetadataOnlyRequest.metadata_filter:type_name -> ai_studio_management.QueryByMetadataOnlyRequest.MetadataFilterEntry
 	231, // 127: ai_studio_management.QueryByMetadataOnlyResponse.results:type_name -> ai_studio_management.DatasourceResult
 	40,  // 128: ai_studio_management.ListNamespacesRequest.context:type_name -> ai_studio_management.PluginContext
 	146, // 129: ai_studio_management.ListNamespacesResponse.namespaces:type_name -> ai_studio_management.NamespaceInfo
 	40,  // 130: ai_studio_management.DeleteNamespaceRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 131: ai_studio_management.QueryByVectorRequest.context:type_name -> ai_studio_management.PluginContext
 	174, // 132: ai_studio_management.DatasourceInfo.tags:type_name -> ai_studio_management.TagInfo
-	263, // 133: ai_studio_management.DatasourceInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 134: ai_studio_management.DatasourceInfo.updated_at:type_name -> google.protobuf.Timestamp
-	261, // 135: ai_studio_management.DatasourceInfo.metadata:type_name -> ai_studio_management.DatasourceInfo.MetadataEntry
+	265, // 133: ai_studio_management.DatasourceInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 134: ai_studio_management.DatasourceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	263, // 135: ai_studio_management.DatasourceInfo.metadata:type_name -> ai_studio_management.DatasourceInfo.MetadataEntry
 	40,  // 136: ai_studio_management.ListDataCataloguesRequest.context:type_name -> ai_studio_management.PluginContext
 	161, // 137: ai_studio_management.ListDataCataloguesResponse.data_catalogues:type_name -> ai_studio_management.DataCatalogueInfo
 	40,  // 138: ai_studio_management.GetDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18681,8 +18825,8 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 144: ai_studio_management.DeleteDataCatalogueRequest.context:type_name -> ai_studio_management.PluginContext
 	150, // 145: ai_studio_management.DataCatalogueInfo.datasources:type_name -> ai_studio_management.DatasourceInfo
 	174, // 146: ai_studio_management.DataCatalogueInfo.tags:type_name -> ai_studio_management.TagInfo
-	263, // 147: ai_studio_management.DataCatalogueInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 148: ai_studio_management.DataCatalogueInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 147: ai_studio_management.DataCatalogueInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 148: ai_studio_management.DataCatalogueInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 149: ai_studio_management.ListTagsRequest.context:type_name -> ai_studio_management.PluginContext
 	174, // 150: ai_studio_management.ListTagsResponse.tags:type_name -> ai_studio_management.TagInfo
 	40,  // 151: ai_studio_management.GetTagRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18694,8 +18838,8 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 157: ai_studio_management.DeleteTagRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 158: ai_studio_management.SearchTagsRequest.context:type_name -> ai_studio_management.PluginContext
 	174, // 159: ai_studio_management.SearchTagsResponse.tags:type_name -> ai_studio_management.TagInfo
-	263, // 160: ai_studio_management.TagInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 161: ai_studio_management.TagInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 160: ai_studio_management.TagInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 161: ai_studio_management.TagInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 162: ai_studio_management.GetChatRecordsPerDayRequest.context:type_name -> ai_studio_management.PluginContext
 	185, // 163: ai_studio_management.GetChatRecordsPerDayResponse.records:type_name -> ai_studio_management.DayRecord
 	40,  // 164: ai_studio_management.GetModelUsageRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18717,8 +18861,8 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 180: ai_studio_management.DeleteModelPriceRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 181: ai_studio_management.GetModelPricesByVendorRequest.context:type_name -> ai_studio_management.PluginContext
 	202, // 182: ai_studio_management.GetModelPricesByVendorResponse.model_prices:type_name -> ai_studio_management.ModelPriceInfo
-	263, // 183: ai_studio_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 184: ai_studio_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 183: ai_studio_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 184: ai_studio_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 185: ai_studio_management.ListFiltersRequest.context:type_name -> ai_studio_management.PluginContext
 	213, // 186: ai_studio_management.ListFiltersResponse.filters:type_name -> ai_studio_management.FilterInfo
 	40,  // 187: ai_studio_management.GetFilterRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18728,8 +18872,8 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 191: ai_studio_management.UpdateFilterRequest.context:type_name -> ai_studio_management.PluginContext
 	213, // 192: ai_studio_management.UpdateFilterResponse.filter:type_name -> ai_studio_management.FilterInfo
 	40,  // 193: ai_studio_management.DeleteFilterRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 194: ai_studio_management.FilterInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 195: ai_studio_management.FilterInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 194: ai_studio_management.FilterInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 195: ai_studio_management.FilterInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 196: ai_studio_management.GetAvailableLLMDriversRequest.context:type_name -> ai_studio_management.PluginContext
 	220, // 197: ai_studio_management.GetAvailableLLMDriversResponse.drivers:type_name -> ai_studio_management.VendorDriverInfo
 	40,  // 198: ai_studio_management.GetAvailableEmbeddersRequest.context:type_name -> ai_studio_management.PluginContext
@@ -18737,13 +18881,13 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 200: ai_studio_management.GetAvailableVectorStoresRequest.context:type_name -> ai_studio_management.PluginContext
 	220, // 201: ai_studio_management.GetAvailableVectorStoresResponse.vector_stores:type_name -> ai_studio_management.VendorDriverInfo
 	40,  // 202: ai_studio_management.WritePluginKVRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 203: ai_studio_management.WritePluginKVRequest.expire_at:type_name -> google.protobuf.Timestamp
+	265, // 203: ai_studio_management.WritePluginKVRequest.expire_at:type_name -> google.protobuf.Timestamp
 	40,  // 204: ai_studio_management.ReadPluginKVRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 205: ai_studio_management.DeletePluginKVRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 206: ai_studio_management.ExecuteToolRequest.context:type_name -> ai_studio_management.PluginContext
 	40,  // 207: ai_studio_management.QueryDatasourceRequest.context:type_name -> ai_studio_management.PluginContext
 	231, // 208: ai_studio_management.QueryDatasourceResponse.results:type_name -> ai_studio_management.DatasourceResult
-	262, // 209: ai_studio_management.DatasourceResult.metadata:type_name -> ai_studio_management.DatasourceResult.MetadataEntry
+	264, // 209: ai_studio_management.DatasourceResult.metadata:type_name -> ai_studio_management.DatasourceResult.MetadataEntry
 	40,  // 210: ai_studio_management.CallLLMRequest.context:type_name -> ai_studio_management.PluginContext
 	234, // 211: ai_studio_management.CallLLMRequest.messages:type_name -> ai_studio_management.LLMMessage
 	235, // 212: ai_studio_management.CallLLMRequest.tools:type_name -> ai_studio_management.LLMTool
@@ -18760,227 +18904,230 @@ var file_proto_ai_studio_management_ai_studio_management_proto_depIdxs = []int32
 	40,  // 223: ai_studio_management.UpdateScheduleRequest.context:type_name -> ai_studio_management.PluginContext
 	250, // 224: ai_studio_management.UpdateScheduleResponse.schedule:type_name -> ai_studio_management.ScheduleInfo
 	40,  // 225: ai_studio_management.DeleteScheduleRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 226: ai_studio_management.ScheduleInfo.last_run:type_name -> google.protobuf.Timestamp
-	263, // 227: ai_studio_management.ScheduleInfo.next_run:type_name -> google.protobuf.Timestamp
-	263, // 228: ai_studio_management.ScheduleInfo.created_at:type_name -> google.protobuf.Timestamp
-	263, // 229: ai_studio_management.ScheduleInfo.updated_at:type_name -> google.protobuf.Timestamp
+	265, // 226: ai_studio_management.ScheduleInfo.last_run:type_name -> google.protobuf.Timestamp
+	265, // 227: ai_studio_management.ScheduleInfo.next_run:type_name -> google.protobuf.Timestamp
+	265, // 228: ai_studio_management.ScheduleInfo.created_at:type_name -> google.protobuf.Timestamp
+	265, // 229: ai_studio_management.ScheduleInfo.updated_at:type_name -> google.protobuf.Timestamp
 	40,  // 230: ai_studio_management.GetLicenseInfoRequest.context:type_name -> ai_studio_management.PluginContext
-	263, // 231: ai_studio_management.GetLicenseInfoResponse.expires_at:type_name -> google.protobuf.Timestamp
-	41,  // 232: ai_studio_management.AIStudioManagementService.ListPlugins:input_type -> ai_studio_management.ListPluginsRequest
-	43,  // 233: ai_studio_management.AIStudioManagementService.GetPlugin:input_type -> ai_studio_management.GetPluginRequest
-	45,  // 234: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:input_type -> ai_studio_management.UpdatePluginConfigRequest
-	48,  // 235: ai_studio_management.AIStudioManagementService.ListLLMs:input_type -> ai_studio_management.ListLLMsRequest
-	50,  // 236: ai_studio_management.AIStudioManagementService.GetLLM:input_type -> ai_studio_management.GetLLMRequest
-	52,  // 237: ai_studio_management.AIStudioManagementService.GetLLMPlugins:input_type -> ai_studio_management.GetLLMPluginsRequest
-	55,  // 238: ai_studio_management.AIStudioManagementService.CreateLLM:input_type -> ai_studio_management.CreateLLMRequest
-	57,  // 239: ai_studio_management.AIStudioManagementService.UpdateLLM:input_type -> ai_studio_management.UpdateLLMRequest
-	59,  // 240: ai_studio_management.AIStudioManagementService.DeleteLLM:input_type -> ai_studio_management.DeleteLLMRequest
-	61,  // 241: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:input_type -> ai_studio_management.UpdateLLMPluginsRequest
-	63,  // 242: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:input_type -> ai_studio_management.GetAnalyticsSummaryRequest
-	65,  // 243: ai_studio_management.AIStudioManagementService.GetUsageStatistics:input_type -> ai_studio_management.GetUsageStatisticsRequest
-	67,  // 244: ai_studio_management.AIStudioManagementService.GetCostAnalysis:input_type -> ai_studio_management.GetCostAnalysisRequest
-	175, // 245: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:input_type -> ai_studio_management.GetChatRecordsPerDayRequest
-	177, // 246: ai_studio_management.AIStudioManagementService.GetModelUsage:input_type -> ai_studio_management.GetModelUsageRequest
-	179, // 247: ai_studio_management.AIStudioManagementService.GetVendorUsage:input_type -> ai_studio_management.GetVendorUsageRequest
-	181, // 248: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:input_type -> ai_studio_management.GetTokenUsagePerAppRequest
-	183, // 249: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:input_type -> ai_studio_management.GetToolUsageStatisticsRequest
-	73,  // 250: ai_studio_management.AIStudioManagementService.ListApps:input_type -> ai_studio_management.ListAppsRequest
-	75,  // 251: ai_studio_management.AIStudioManagementService.GetApp:input_type -> ai_studio_management.GetAppRequest
-	79,  // 252: ai_studio_management.AIStudioManagementService.CreateApp:input_type -> ai_studio_management.CreateAppRequest
-	81,  // 253: ai_studio_management.AIStudioManagementService.UpdateApp:input_type -> ai_studio_management.UpdateAppRequest
-	83,  // 254: ai_studio_management.AIStudioManagementService.DeleteApp:input_type -> ai_studio_management.DeleteAppRequest
-	85,  // 255: ai_studio_management.AIStudioManagementService.PatchAppMetadata:input_type -> ai_studio_management.PatchAppMetadataRequest
-	87,  // 256: ai_studio_management.AIStudioManagementService.GetObjectMetadata:input_type -> ai_studio_management.GetObjectMetadataRequest
-	91,  // 257: ai_studio_management.AIStudioManagementService.SetObjectMetadata:input_type -> ai_studio_management.SetObjectMetadataRequest
-	93,  // 258: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:input_type -> ai_studio_management.GetResolvedMetadataSchemaRequest
-	95,  // 259: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:input_type -> ai_studio_management.ValidateObjectMetadataRequest
-	89,  // 260: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:input_type -> ai_studio_management.DeleteObjectMetadataRequest
-	97,  // 261: ai_studio_management.AIStudioManagementService.ListTools:input_type -> ai_studio_management.ListToolsRequest
-	99,  // 262: ai_studio_management.AIStudioManagementService.GetTool:input_type -> ai_studio_management.GetToolRequest
-	101, // 263: ai_studio_management.AIStudioManagementService.GetToolOperations:input_type -> ai_studio_management.GetToolOperationsRequest
-	103, // 264: ai_studio_management.AIStudioManagementService.CallToolOperation:input_type -> ai_studio_management.CallToolOperationRequest
-	109, // 265: ai_studio_management.AIStudioManagementService.CreateTool:input_type -> ai_studio_management.CreateToolRequest
-	111, // 266: ai_studio_management.AIStudioManagementService.UpdateTool:input_type -> ai_studio_management.UpdateToolRequest
-	113, // 267: ai_studio_management.AIStudioManagementService.DeleteTool:input_type -> ai_studio_management.DeleteToolRequest
-	115, // 268: ai_studio_management.AIStudioManagementService.ListDatasources:input_type -> ai_studio_management.ListDatasourcesRequest
-	117, // 269: ai_studio_management.AIStudioManagementService.GetDatasource:input_type -> ai_studio_management.GetDatasourceRequest
-	119, // 270: ai_studio_management.AIStudioManagementService.CreateDatasource:input_type -> ai_studio_management.CreateDatasourceRequest
-	121, // 271: ai_studio_management.AIStudioManagementService.UpdateDatasource:input_type -> ai_studio_management.UpdateDatasourceRequest
-	123, // 272: ai_studio_management.AIStudioManagementService.DeleteDatasource:input_type -> ai_studio_management.DeleteDatasourceRequest
-	125, // 273: ai_studio_management.AIStudioManagementService.CloneDatasource:input_type -> ai_studio_management.CloneDatasourceRequest
-	127, // 274: ai_studio_management.AIStudioManagementService.SearchDatasources:input_type -> ai_studio_management.SearchDatasourcesRequest
-	129, // 275: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:input_type -> ai_studio_management.ProcessEmbeddingsRequest
-	131, // 276: ai_studio_management.AIStudioManagementService.GenerateEmbedding:input_type -> ai_studio_management.GenerateEmbeddingRequest
-	134, // 277: ai_studio_management.AIStudioManagementService.StoreDocuments:input_type -> ai_studio_management.StoreDocumentsRequest
-	137, // 278: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:input_type -> ai_studio_management.ProcessAndStoreRequest
-	149, // 279: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:input_type -> ai_studio_management.QueryByVectorRequest
-	140, // 280: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:input_type -> ai_studio_management.DeleteDocumentsByMetadataRequest
-	142, // 281: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:input_type -> ai_studio_management.QueryByMetadataOnlyRequest
-	144, // 282: ai_studio_management.AIStudioManagementService.ListNamespaces:input_type -> ai_studio_management.ListNamespacesRequest
-	147, // 283: ai_studio_management.AIStudioManagementService.DeleteNamespace:input_type -> ai_studio_management.DeleteNamespaceRequest
-	151, // 284: ai_studio_management.AIStudioManagementService.ListDataCatalogues:input_type -> ai_studio_management.ListDataCataloguesRequest
-	153, // 285: ai_studio_management.AIStudioManagementService.GetDataCatalogue:input_type -> ai_studio_management.GetDataCatalogueRequest
-	155, // 286: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:input_type -> ai_studio_management.CreateDataCatalogueRequest
-	157, // 287: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:input_type -> ai_studio_management.UpdateDataCatalogueRequest
-	159, // 288: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:input_type -> ai_studio_management.DeleteDataCatalogueRequest
-	162, // 289: ai_studio_management.AIStudioManagementService.ListTags:input_type -> ai_studio_management.ListTagsRequest
-	164, // 290: ai_studio_management.AIStudioManagementService.GetTag:input_type -> ai_studio_management.GetTagRequest
-	166, // 291: ai_studio_management.AIStudioManagementService.CreateTag:input_type -> ai_studio_management.CreateTagRequest
-	168, // 292: ai_studio_management.AIStudioManagementService.UpdateTag:input_type -> ai_studio_management.UpdateTagRequest
-	170, // 293: ai_studio_management.AIStudioManagementService.DeleteTag:input_type -> ai_studio_management.DeleteTagRequest
-	172, // 294: ai_studio_management.AIStudioManagementService.SearchTags:input_type -> ai_studio_management.SearchTagsRequest
-	190, // 295: ai_studio_management.AIStudioManagementService.ListModelPrices:input_type -> ai_studio_management.ListModelPricesRequest
-	192, // 296: ai_studio_management.AIStudioManagementService.GetModelPrice:input_type -> ai_studio_management.GetModelPriceRequest
-	194, // 297: ai_studio_management.AIStudioManagementService.CreateModelPrice:input_type -> ai_studio_management.CreateModelPriceRequest
-	196, // 298: ai_studio_management.AIStudioManagementService.UpdateModelPrice:input_type -> ai_studio_management.UpdateModelPriceRequest
-	198, // 299: ai_studio_management.AIStudioManagementService.DeleteModelPrice:input_type -> ai_studio_management.DeleteModelPriceRequest
-	200, // 300: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:input_type -> ai_studio_management.GetModelPricesByVendorRequest
-	203, // 301: ai_studio_management.AIStudioManagementService.ListFilters:input_type -> ai_studio_management.ListFiltersRequest
-	205, // 302: ai_studio_management.AIStudioManagementService.GetFilter:input_type -> ai_studio_management.GetFilterRequest
-	207, // 303: ai_studio_management.AIStudioManagementService.CreateFilter:input_type -> ai_studio_management.CreateFilterRequest
-	209, // 304: ai_studio_management.AIStudioManagementService.UpdateFilter:input_type -> ai_studio_management.UpdateFilterRequest
-	211, // 305: ai_studio_management.AIStudioManagementService.DeleteFilter:input_type -> ai_studio_management.DeleteFilterRequest
-	214, // 306: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:input_type -> ai_studio_management.GetAvailableLLMDriversRequest
-	216, // 307: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:input_type -> ai_studio_management.GetAvailableEmbeddersRequest
-	218, // 308: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:input_type -> ai_studio_management.GetAvailableVectorStoresRequest
-	221, // 309: ai_studio_management.AIStudioManagementService.WritePluginKV:input_type -> ai_studio_management.WritePluginKVRequest
-	223, // 310: ai_studio_management.AIStudioManagementService.ReadPluginKV:input_type -> ai_studio_management.ReadPluginKVRequest
-	225, // 311: ai_studio_management.AIStudioManagementService.DeletePluginKV:input_type -> ai_studio_management.DeletePluginKVRequest
-	227, // 312: ai_studio_management.AIStudioManagementService.ExecuteTool:input_type -> ai_studio_management.ExecuteToolRequest
-	229, // 313: ai_studio_management.AIStudioManagementService.QueryDatasource:input_type -> ai_studio_management.QueryDatasourceRequest
-	232, // 314: ai_studio_management.AIStudioManagementService.CallLLM:input_type -> ai_studio_management.CallLLMRequest
-	240, // 315: ai_studio_management.AIStudioManagementService.CreateSchedule:input_type -> ai_studio_management.CreateScheduleRequest
-	242, // 316: ai_studio_management.AIStudioManagementService.GetSchedule:input_type -> ai_studio_management.GetScheduleRequest
-	244, // 317: ai_studio_management.AIStudioManagementService.ListSchedules:input_type -> ai_studio_management.ListSchedulesRequest
-	246, // 318: ai_studio_management.AIStudioManagementService.UpdateSchedule:input_type -> ai_studio_management.UpdateScheduleRequest
-	248, // 319: ai_studio_management.AIStudioManagementService.DeleteSchedule:input_type -> ai_studio_management.DeleteScheduleRequest
-	251, // 320: ai_studio_management.AIStudioManagementService.GetLicenseInfo:input_type -> ai_studio_management.GetLicenseInfoRequest
-	32,  // 321: ai_studio_management.AIStudioManagementService.CreateNotification:input_type -> ai_studio_management.CreateNotificationRequest
-	35,  // 322: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:input_type -> ai_studio_management.RegisterResourceTypesRequest
-	38,  // 323: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:input_type -> ai_studio_management.RegisterPermissionResourcesRequest
-	2,   // 324: ai_studio_management.AIStudioManagementService.ListObjectMetadataAudit:input_type -> ai_studio_management.ListObjectMetadataAuditRequest
-	5,   // 325: ai_studio_management.AIStudioManagementService.ListAuditRecords:input_type -> ai_studio_management.ListAuditRecordsRequest
-	9,   // 326: ai_studio_management.AIStudioManagementService.ListMCPServers:input_type -> ai_studio_management.ListMCPServersRequest
-	11,  // 327: ai_studio_management.AIStudioManagementService.GetMCPServer:input_type -> ai_studio_management.GetMCPServerRequest
-	15,  // 328: ai_studio_management.AIStudioManagementService.ListModelRouters:input_type -> ai_studio_management.ListModelRoutersRequest
-	17,  // 329: ai_studio_management.AIStudioManagementService.GetModelRouter:input_type -> ai_studio_management.GetModelRouterRequest
-	19,  // 330: ai_studio_management.AIStudioManagementService.ListSemanticRouters:input_type -> ai_studio_management.ListSemanticRoutersRequest
-	21,  // 331: ai_studio_management.AIStudioManagementService.GetSemanticRouter:input_type -> ai_studio_management.GetSemanticRouterRequest
-	24,  // 332: ai_studio_management.AIStudioManagementService.ListGroups:input_type -> ai_studio_management.ListGroupsRequest
-	26,  // 333: ai_studio_management.AIStudioManagementService.GetResourceInstanceGroups:input_type -> ai_studio_management.GetResourceInstanceGroupsRequest
-	28,  // 334: ai_studio_management.AIStudioManagementService.SetResourceInstanceGroups:input_type -> ai_studio_management.SetResourceInstanceGroupsRequest
-	30,  // 335: ai_studio_management.AIStudioManagementService.ListAccessibleResourceInstances:input_type -> ai_studio_management.ListAccessibleResourceInstancesRequest
-	0,   // 336: ai_studio_management.AIStudioManagementService.SetAppGovernanceState:input_type -> ai_studio_management.SetAppGovernanceStateRequest
-	42,  // 337: ai_studio_management.AIStudioManagementService.ListPlugins:output_type -> ai_studio_management.ListPluginsResponse
-	44,  // 338: ai_studio_management.AIStudioManagementService.GetPlugin:output_type -> ai_studio_management.GetPluginResponse
-	46,  // 339: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:output_type -> ai_studio_management.UpdatePluginConfigResponse
-	49,  // 340: ai_studio_management.AIStudioManagementService.ListLLMs:output_type -> ai_studio_management.ListLLMsResponse
-	51,  // 341: ai_studio_management.AIStudioManagementService.GetLLM:output_type -> ai_studio_management.GetLLMResponse
-	53,  // 342: ai_studio_management.AIStudioManagementService.GetLLMPlugins:output_type -> ai_studio_management.GetLLMPluginsResponse
-	56,  // 343: ai_studio_management.AIStudioManagementService.CreateLLM:output_type -> ai_studio_management.CreateLLMResponse
-	58,  // 344: ai_studio_management.AIStudioManagementService.UpdateLLM:output_type -> ai_studio_management.UpdateLLMResponse
-	60,  // 345: ai_studio_management.AIStudioManagementService.DeleteLLM:output_type -> ai_studio_management.DeleteLLMResponse
-	62,  // 346: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:output_type -> ai_studio_management.UpdateLLMPluginsResponse
-	64,  // 347: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:output_type -> ai_studio_management.GetAnalyticsSummaryResponse
-	66,  // 348: ai_studio_management.AIStudioManagementService.GetUsageStatistics:output_type -> ai_studio_management.GetUsageStatisticsResponse
-	68,  // 349: ai_studio_management.AIStudioManagementService.GetCostAnalysis:output_type -> ai_studio_management.GetCostAnalysisResponse
-	176, // 350: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:output_type -> ai_studio_management.GetChatRecordsPerDayResponse
-	178, // 351: ai_studio_management.AIStudioManagementService.GetModelUsage:output_type -> ai_studio_management.GetModelUsageResponse
-	180, // 352: ai_studio_management.AIStudioManagementService.GetVendorUsage:output_type -> ai_studio_management.GetVendorUsageResponse
-	182, // 353: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:output_type -> ai_studio_management.GetTokenUsagePerAppResponse
-	184, // 354: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:output_type -> ai_studio_management.GetToolUsageStatisticsResponse
-	74,  // 355: ai_studio_management.AIStudioManagementService.ListApps:output_type -> ai_studio_management.ListAppsResponse
-	76,  // 356: ai_studio_management.AIStudioManagementService.GetApp:output_type -> ai_studio_management.GetAppResponse
-	80,  // 357: ai_studio_management.AIStudioManagementService.CreateApp:output_type -> ai_studio_management.CreateAppResponse
-	82,  // 358: ai_studio_management.AIStudioManagementService.UpdateApp:output_type -> ai_studio_management.UpdateAppResponse
-	84,  // 359: ai_studio_management.AIStudioManagementService.DeleteApp:output_type -> ai_studio_management.DeleteAppResponse
-	86,  // 360: ai_studio_management.AIStudioManagementService.PatchAppMetadata:output_type -> ai_studio_management.PatchAppMetadataResponse
-	88,  // 361: ai_studio_management.AIStudioManagementService.GetObjectMetadata:output_type -> ai_studio_management.GetObjectMetadataResponse
-	92,  // 362: ai_studio_management.AIStudioManagementService.SetObjectMetadata:output_type -> ai_studio_management.SetObjectMetadataResponse
-	94,  // 363: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:output_type -> ai_studio_management.GetResolvedMetadataSchemaResponse
-	96,  // 364: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:output_type -> ai_studio_management.ValidateObjectMetadataResponse
-	90,  // 365: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:output_type -> ai_studio_management.DeleteObjectMetadataResponse
-	98,  // 366: ai_studio_management.AIStudioManagementService.ListTools:output_type -> ai_studio_management.ListToolsResponse
-	100, // 367: ai_studio_management.AIStudioManagementService.GetTool:output_type -> ai_studio_management.GetToolResponse
-	102, // 368: ai_studio_management.AIStudioManagementService.GetToolOperations:output_type -> ai_studio_management.GetToolOperationsResponse
-	104, // 369: ai_studio_management.AIStudioManagementService.CallToolOperation:output_type -> ai_studio_management.CallToolOperationResponse
-	110, // 370: ai_studio_management.AIStudioManagementService.CreateTool:output_type -> ai_studio_management.CreateToolResponse
-	112, // 371: ai_studio_management.AIStudioManagementService.UpdateTool:output_type -> ai_studio_management.UpdateToolResponse
-	114, // 372: ai_studio_management.AIStudioManagementService.DeleteTool:output_type -> ai_studio_management.DeleteToolResponse
-	116, // 373: ai_studio_management.AIStudioManagementService.ListDatasources:output_type -> ai_studio_management.ListDatasourcesResponse
-	118, // 374: ai_studio_management.AIStudioManagementService.GetDatasource:output_type -> ai_studio_management.GetDatasourceResponse
-	120, // 375: ai_studio_management.AIStudioManagementService.CreateDatasource:output_type -> ai_studio_management.CreateDatasourceResponse
-	122, // 376: ai_studio_management.AIStudioManagementService.UpdateDatasource:output_type -> ai_studio_management.UpdateDatasourceResponse
-	124, // 377: ai_studio_management.AIStudioManagementService.DeleteDatasource:output_type -> ai_studio_management.DeleteDatasourceResponse
-	126, // 378: ai_studio_management.AIStudioManagementService.CloneDatasource:output_type -> ai_studio_management.CloneDatasourceResponse
-	128, // 379: ai_studio_management.AIStudioManagementService.SearchDatasources:output_type -> ai_studio_management.SearchDatasourcesResponse
-	130, // 380: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:output_type -> ai_studio_management.ProcessEmbeddingsResponse
-	132, // 381: ai_studio_management.AIStudioManagementService.GenerateEmbedding:output_type -> ai_studio_management.GenerateEmbeddingResponse
-	136, // 382: ai_studio_management.AIStudioManagementService.StoreDocuments:output_type -> ai_studio_management.StoreDocumentsResponse
-	139, // 383: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:output_type -> ai_studio_management.ProcessAndStoreResponse
-	230, // 384: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:output_type -> ai_studio_management.QueryDatasourceResponse
-	141, // 385: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:output_type -> ai_studio_management.DeleteDocumentsByMetadataResponse
-	143, // 386: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:output_type -> ai_studio_management.QueryByMetadataOnlyResponse
-	145, // 387: ai_studio_management.AIStudioManagementService.ListNamespaces:output_type -> ai_studio_management.ListNamespacesResponse
-	148, // 388: ai_studio_management.AIStudioManagementService.DeleteNamespace:output_type -> ai_studio_management.DeleteNamespaceResponse
-	152, // 389: ai_studio_management.AIStudioManagementService.ListDataCatalogues:output_type -> ai_studio_management.ListDataCataloguesResponse
-	154, // 390: ai_studio_management.AIStudioManagementService.GetDataCatalogue:output_type -> ai_studio_management.GetDataCatalogueResponse
-	156, // 391: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:output_type -> ai_studio_management.CreateDataCatalogueResponse
-	158, // 392: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:output_type -> ai_studio_management.UpdateDataCatalogueResponse
-	160, // 393: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:output_type -> ai_studio_management.DeleteDataCatalogueResponse
-	163, // 394: ai_studio_management.AIStudioManagementService.ListTags:output_type -> ai_studio_management.ListTagsResponse
-	165, // 395: ai_studio_management.AIStudioManagementService.GetTag:output_type -> ai_studio_management.GetTagResponse
-	167, // 396: ai_studio_management.AIStudioManagementService.CreateTag:output_type -> ai_studio_management.CreateTagResponse
-	169, // 397: ai_studio_management.AIStudioManagementService.UpdateTag:output_type -> ai_studio_management.UpdateTagResponse
-	171, // 398: ai_studio_management.AIStudioManagementService.DeleteTag:output_type -> ai_studio_management.DeleteTagResponse
-	173, // 399: ai_studio_management.AIStudioManagementService.SearchTags:output_type -> ai_studio_management.SearchTagsResponse
-	191, // 400: ai_studio_management.AIStudioManagementService.ListModelPrices:output_type -> ai_studio_management.ListModelPricesResponse
-	193, // 401: ai_studio_management.AIStudioManagementService.GetModelPrice:output_type -> ai_studio_management.GetModelPriceResponse
-	195, // 402: ai_studio_management.AIStudioManagementService.CreateModelPrice:output_type -> ai_studio_management.CreateModelPriceResponse
-	197, // 403: ai_studio_management.AIStudioManagementService.UpdateModelPrice:output_type -> ai_studio_management.UpdateModelPriceResponse
-	199, // 404: ai_studio_management.AIStudioManagementService.DeleteModelPrice:output_type -> ai_studio_management.DeleteModelPriceResponse
-	201, // 405: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:output_type -> ai_studio_management.GetModelPricesByVendorResponse
-	204, // 406: ai_studio_management.AIStudioManagementService.ListFilters:output_type -> ai_studio_management.ListFiltersResponse
-	206, // 407: ai_studio_management.AIStudioManagementService.GetFilter:output_type -> ai_studio_management.GetFilterResponse
-	208, // 408: ai_studio_management.AIStudioManagementService.CreateFilter:output_type -> ai_studio_management.CreateFilterResponse
-	210, // 409: ai_studio_management.AIStudioManagementService.UpdateFilter:output_type -> ai_studio_management.UpdateFilterResponse
-	212, // 410: ai_studio_management.AIStudioManagementService.DeleteFilter:output_type -> ai_studio_management.DeleteFilterResponse
-	215, // 411: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:output_type -> ai_studio_management.GetAvailableLLMDriversResponse
-	217, // 412: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:output_type -> ai_studio_management.GetAvailableEmbeddersResponse
-	219, // 413: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:output_type -> ai_studio_management.GetAvailableVectorStoresResponse
-	222, // 414: ai_studio_management.AIStudioManagementService.WritePluginKV:output_type -> ai_studio_management.WritePluginKVResponse
-	224, // 415: ai_studio_management.AIStudioManagementService.ReadPluginKV:output_type -> ai_studio_management.ReadPluginKVResponse
-	226, // 416: ai_studio_management.AIStudioManagementService.DeletePluginKV:output_type -> ai_studio_management.DeletePluginKVResponse
-	228, // 417: ai_studio_management.AIStudioManagementService.ExecuteTool:output_type -> ai_studio_management.ExecuteToolResponse
-	230, // 418: ai_studio_management.AIStudioManagementService.QueryDatasource:output_type -> ai_studio_management.QueryDatasourceResponse
-	233, // 419: ai_studio_management.AIStudioManagementService.CallLLM:output_type -> ai_studio_management.CallLLMResponse
-	241, // 420: ai_studio_management.AIStudioManagementService.CreateSchedule:output_type -> ai_studio_management.CreateScheduleResponse
-	243, // 421: ai_studio_management.AIStudioManagementService.GetSchedule:output_type -> ai_studio_management.GetScheduleResponse
-	245, // 422: ai_studio_management.AIStudioManagementService.ListSchedules:output_type -> ai_studio_management.ListSchedulesResponse
-	247, // 423: ai_studio_management.AIStudioManagementService.UpdateSchedule:output_type -> ai_studio_management.UpdateScheduleResponse
-	249, // 424: ai_studio_management.AIStudioManagementService.DeleteSchedule:output_type -> ai_studio_management.DeleteScheduleResponse
-	252, // 425: ai_studio_management.AIStudioManagementService.GetLicenseInfo:output_type -> ai_studio_management.GetLicenseInfoResponse
-	33,  // 426: ai_studio_management.AIStudioManagementService.CreateNotification:output_type -> ai_studio_management.CreateNotificationResponse
-	36,  // 427: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:output_type -> ai_studio_management.RegisterResourceTypesResponse
-	39,  // 428: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:output_type -> ai_studio_management.RegisterPermissionResourcesResponse
-	4,   // 429: ai_studio_management.AIStudioManagementService.ListObjectMetadataAudit:output_type -> ai_studio_management.ListObjectMetadataAuditResponse
-	7,   // 430: ai_studio_management.AIStudioManagementService.ListAuditRecords:output_type -> ai_studio_management.ListAuditRecordsResponse
-	10,  // 431: ai_studio_management.AIStudioManagementService.ListMCPServers:output_type -> ai_studio_management.ListMCPServersResponse
-	12,  // 432: ai_studio_management.AIStudioManagementService.GetMCPServer:output_type -> ai_studio_management.GetMCPServerResponse
-	16,  // 433: ai_studio_management.AIStudioManagementService.ListModelRouters:output_type -> ai_studio_management.ListModelRoutersResponse
-	18,  // 434: ai_studio_management.AIStudioManagementService.GetModelRouter:output_type -> ai_studio_management.GetModelRouterResponse
-	20,  // 435: ai_studio_management.AIStudioManagementService.ListSemanticRouters:output_type -> ai_studio_management.ListSemanticRoutersResponse
-	22,  // 436: ai_studio_management.AIStudioManagementService.GetSemanticRouter:output_type -> ai_studio_management.GetSemanticRouterResponse
-	25,  // 437: ai_studio_management.AIStudioManagementService.ListGroups:output_type -> ai_studio_management.ListGroupsResponse
-	27,  // 438: ai_studio_management.AIStudioManagementService.GetResourceInstanceGroups:output_type -> ai_studio_management.GetResourceInstanceGroupsResponse
-	29,  // 439: ai_studio_management.AIStudioManagementService.SetResourceInstanceGroups:output_type -> ai_studio_management.SetResourceInstanceGroupsResponse
-	31,  // 440: ai_studio_management.AIStudioManagementService.ListAccessibleResourceInstances:output_type -> ai_studio_management.ListAccessibleResourceInstancesResponse
-	1,   // 441: ai_studio_management.AIStudioManagementService.SetAppGovernanceState:output_type -> ai_studio_management.SetAppGovernanceStateResponse
-	337, // [337:442] is the sub-list for method output_type
-	232, // [232:337] is the sub-list for method input_type
-	232, // [232:232] is the sub-list for extension type_name
-	232, // [232:232] is the sub-list for extension extendee
-	0,   // [0:232] is the sub-list for field type_name
+	265, // 231: ai_studio_management.GetLicenseInfoResponse.expires_at:type_name -> google.protobuf.Timestamp
+	40,  // 232: ai_studio_management.CallDecisionRequest.context:type_name -> ai_studio_management.PluginContext
+	41,  // 233: ai_studio_management.AIStudioManagementService.ListPlugins:input_type -> ai_studio_management.ListPluginsRequest
+	43,  // 234: ai_studio_management.AIStudioManagementService.GetPlugin:input_type -> ai_studio_management.GetPluginRequest
+	45,  // 235: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:input_type -> ai_studio_management.UpdatePluginConfigRequest
+	48,  // 236: ai_studio_management.AIStudioManagementService.ListLLMs:input_type -> ai_studio_management.ListLLMsRequest
+	50,  // 237: ai_studio_management.AIStudioManagementService.GetLLM:input_type -> ai_studio_management.GetLLMRequest
+	52,  // 238: ai_studio_management.AIStudioManagementService.GetLLMPlugins:input_type -> ai_studio_management.GetLLMPluginsRequest
+	55,  // 239: ai_studio_management.AIStudioManagementService.CreateLLM:input_type -> ai_studio_management.CreateLLMRequest
+	57,  // 240: ai_studio_management.AIStudioManagementService.UpdateLLM:input_type -> ai_studio_management.UpdateLLMRequest
+	59,  // 241: ai_studio_management.AIStudioManagementService.DeleteLLM:input_type -> ai_studio_management.DeleteLLMRequest
+	61,  // 242: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:input_type -> ai_studio_management.UpdateLLMPluginsRequest
+	63,  // 243: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:input_type -> ai_studio_management.GetAnalyticsSummaryRequest
+	65,  // 244: ai_studio_management.AIStudioManagementService.GetUsageStatistics:input_type -> ai_studio_management.GetUsageStatisticsRequest
+	67,  // 245: ai_studio_management.AIStudioManagementService.GetCostAnalysis:input_type -> ai_studio_management.GetCostAnalysisRequest
+	175, // 246: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:input_type -> ai_studio_management.GetChatRecordsPerDayRequest
+	177, // 247: ai_studio_management.AIStudioManagementService.GetModelUsage:input_type -> ai_studio_management.GetModelUsageRequest
+	179, // 248: ai_studio_management.AIStudioManagementService.GetVendorUsage:input_type -> ai_studio_management.GetVendorUsageRequest
+	181, // 249: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:input_type -> ai_studio_management.GetTokenUsagePerAppRequest
+	183, // 250: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:input_type -> ai_studio_management.GetToolUsageStatisticsRequest
+	73,  // 251: ai_studio_management.AIStudioManagementService.ListApps:input_type -> ai_studio_management.ListAppsRequest
+	75,  // 252: ai_studio_management.AIStudioManagementService.GetApp:input_type -> ai_studio_management.GetAppRequest
+	79,  // 253: ai_studio_management.AIStudioManagementService.CreateApp:input_type -> ai_studio_management.CreateAppRequest
+	81,  // 254: ai_studio_management.AIStudioManagementService.UpdateApp:input_type -> ai_studio_management.UpdateAppRequest
+	83,  // 255: ai_studio_management.AIStudioManagementService.DeleteApp:input_type -> ai_studio_management.DeleteAppRequest
+	85,  // 256: ai_studio_management.AIStudioManagementService.PatchAppMetadata:input_type -> ai_studio_management.PatchAppMetadataRequest
+	87,  // 257: ai_studio_management.AIStudioManagementService.GetObjectMetadata:input_type -> ai_studio_management.GetObjectMetadataRequest
+	91,  // 258: ai_studio_management.AIStudioManagementService.SetObjectMetadata:input_type -> ai_studio_management.SetObjectMetadataRequest
+	93,  // 259: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:input_type -> ai_studio_management.GetResolvedMetadataSchemaRequest
+	95,  // 260: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:input_type -> ai_studio_management.ValidateObjectMetadataRequest
+	89,  // 261: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:input_type -> ai_studio_management.DeleteObjectMetadataRequest
+	97,  // 262: ai_studio_management.AIStudioManagementService.ListTools:input_type -> ai_studio_management.ListToolsRequest
+	99,  // 263: ai_studio_management.AIStudioManagementService.GetTool:input_type -> ai_studio_management.GetToolRequest
+	101, // 264: ai_studio_management.AIStudioManagementService.GetToolOperations:input_type -> ai_studio_management.GetToolOperationsRequest
+	103, // 265: ai_studio_management.AIStudioManagementService.CallToolOperation:input_type -> ai_studio_management.CallToolOperationRequest
+	109, // 266: ai_studio_management.AIStudioManagementService.CreateTool:input_type -> ai_studio_management.CreateToolRequest
+	111, // 267: ai_studio_management.AIStudioManagementService.UpdateTool:input_type -> ai_studio_management.UpdateToolRequest
+	113, // 268: ai_studio_management.AIStudioManagementService.DeleteTool:input_type -> ai_studio_management.DeleteToolRequest
+	115, // 269: ai_studio_management.AIStudioManagementService.ListDatasources:input_type -> ai_studio_management.ListDatasourcesRequest
+	117, // 270: ai_studio_management.AIStudioManagementService.GetDatasource:input_type -> ai_studio_management.GetDatasourceRequest
+	119, // 271: ai_studio_management.AIStudioManagementService.CreateDatasource:input_type -> ai_studio_management.CreateDatasourceRequest
+	121, // 272: ai_studio_management.AIStudioManagementService.UpdateDatasource:input_type -> ai_studio_management.UpdateDatasourceRequest
+	123, // 273: ai_studio_management.AIStudioManagementService.DeleteDatasource:input_type -> ai_studio_management.DeleteDatasourceRequest
+	125, // 274: ai_studio_management.AIStudioManagementService.CloneDatasource:input_type -> ai_studio_management.CloneDatasourceRequest
+	127, // 275: ai_studio_management.AIStudioManagementService.SearchDatasources:input_type -> ai_studio_management.SearchDatasourcesRequest
+	129, // 276: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:input_type -> ai_studio_management.ProcessEmbeddingsRequest
+	131, // 277: ai_studio_management.AIStudioManagementService.GenerateEmbedding:input_type -> ai_studio_management.GenerateEmbeddingRequest
+	134, // 278: ai_studio_management.AIStudioManagementService.StoreDocuments:input_type -> ai_studio_management.StoreDocumentsRequest
+	137, // 279: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:input_type -> ai_studio_management.ProcessAndStoreRequest
+	149, // 280: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:input_type -> ai_studio_management.QueryByVectorRequest
+	140, // 281: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:input_type -> ai_studio_management.DeleteDocumentsByMetadataRequest
+	142, // 282: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:input_type -> ai_studio_management.QueryByMetadataOnlyRequest
+	144, // 283: ai_studio_management.AIStudioManagementService.ListNamespaces:input_type -> ai_studio_management.ListNamespacesRequest
+	147, // 284: ai_studio_management.AIStudioManagementService.DeleteNamespace:input_type -> ai_studio_management.DeleteNamespaceRequest
+	151, // 285: ai_studio_management.AIStudioManagementService.ListDataCatalogues:input_type -> ai_studio_management.ListDataCataloguesRequest
+	153, // 286: ai_studio_management.AIStudioManagementService.GetDataCatalogue:input_type -> ai_studio_management.GetDataCatalogueRequest
+	155, // 287: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:input_type -> ai_studio_management.CreateDataCatalogueRequest
+	157, // 288: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:input_type -> ai_studio_management.UpdateDataCatalogueRequest
+	159, // 289: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:input_type -> ai_studio_management.DeleteDataCatalogueRequest
+	162, // 290: ai_studio_management.AIStudioManagementService.ListTags:input_type -> ai_studio_management.ListTagsRequest
+	164, // 291: ai_studio_management.AIStudioManagementService.GetTag:input_type -> ai_studio_management.GetTagRequest
+	166, // 292: ai_studio_management.AIStudioManagementService.CreateTag:input_type -> ai_studio_management.CreateTagRequest
+	168, // 293: ai_studio_management.AIStudioManagementService.UpdateTag:input_type -> ai_studio_management.UpdateTagRequest
+	170, // 294: ai_studio_management.AIStudioManagementService.DeleteTag:input_type -> ai_studio_management.DeleteTagRequest
+	172, // 295: ai_studio_management.AIStudioManagementService.SearchTags:input_type -> ai_studio_management.SearchTagsRequest
+	190, // 296: ai_studio_management.AIStudioManagementService.ListModelPrices:input_type -> ai_studio_management.ListModelPricesRequest
+	192, // 297: ai_studio_management.AIStudioManagementService.GetModelPrice:input_type -> ai_studio_management.GetModelPriceRequest
+	194, // 298: ai_studio_management.AIStudioManagementService.CreateModelPrice:input_type -> ai_studio_management.CreateModelPriceRequest
+	196, // 299: ai_studio_management.AIStudioManagementService.UpdateModelPrice:input_type -> ai_studio_management.UpdateModelPriceRequest
+	198, // 300: ai_studio_management.AIStudioManagementService.DeleteModelPrice:input_type -> ai_studio_management.DeleteModelPriceRequest
+	200, // 301: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:input_type -> ai_studio_management.GetModelPricesByVendorRequest
+	203, // 302: ai_studio_management.AIStudioManagementService.ListFilters:input_type -> ai_studio_management.ListFiltersRequest
+	205, // 303: ai_studio_management.AIStudioManagementService.GetFilter:input_type -> ai_studio_management.GetFilterRequest
+	207, // 304: ai_studio_management.AIStudioManagementService.CreateFilter:input_type -> ai_studio_management.CreateFilterRequest
+	209, // 305: ai_studio_management.AIStudioManagementService.UpdateFilter:input_type -> ai_studio_management.UpdateFilterRequest
+	211, // 306: ai_studio_management.AIStudioManagementService.DeleteFilter:input_type -> ai_studio_management.DeleteFilterRequest
+	214, // 307: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:input_type -> ai_studio_management.GetAvailableLLMDriversRequest
+	216, // 308: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:input_type -> ai_studio_management.GetAvailableEmbeddersRequest
+	218, // 309: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:input_type -> ai_studio_management.GetAvailableVectorStoresRequest
+	221, // 310: ai_studio_management.AIStudioManagementService.WritePluginKV:input_type -> ai_studio_management.WritePluginKVRequest
+	223, // 311: ai_studio_management.AIStudioManagementService.ReadPluginKV:input_type -> ai_studio_management.ReadPluginKVRequest
+	225, // 312: ai_studio_management.AIStudioManagementService.DeletePluginKV:input_type -> ai_studio_management.DeletePluginKVRequest
+	227, // 313: ai_studio_management.AIStudioManagementService.ExecuteTool:input_type -> ai_studio_management.ExecuteToolRequest
+	229, // 314: ai_studio_management.AIStudioManagementService.QueryDatasource:input_type -> ai_studio_management.QueryDatasourceRequest
+	232, // 315: ai_studio_management.AIStudioManagementService.CallLLM:input_type -> ai_studio_management.CallLLMRequest
+	253, // 316: ai_studio_management.AIStudioManagementService.CallDecision:input_type -> ai_studio_management.CallDecisionRequest
+	240, // 317: ai_studio_management.AIStudioManagementService.CreateSchedule:input_type -> ai_studio_management.CreateScheduleRequest
+	242, // 318: ai_studio_management.AIStudioManagementService.GetSchedule:input_type -> ai_studio_management.GetScheduleRequest
+	244, // 319: ai_studio_management.AIStudioManagementService.ListSchedules:input_type -> ai_studio_management.ListSchedulesRequest
+	246, // 320: ai_studio_management.AIStudioManagementService.UpdateSchedule:input_type -> ai_studio_management.UpdateScheduleRequest
+	248, // 321: ai_studio_management.AIStudioManagementService.DeleteSchedule:input_type -> ai_studio_management.DeleteScheduleRequest
+	251, // 322: ai_studio_management.AIStudioManagementService.GetLicenseInfo:input_type -> ai_studio_management.GetLicenseInfoRequest
+	32,  // 323: ai_studio_management.AIStudioManagementService.CreateNotification:input_type -> ai_studio_management.CreateNotificationRequest
+	35,  // 324: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:input_type -> ai_studio_management.RegisterResourceTypesRequest
+	38,  // 325: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:input_type -> ai_studio_management.RegisterPermissionResourcesRequest
+	2,   // 326: ai_studio_management.AIStudioManagementService.ListObjectMetadataAudit:input_type -> ai_studio_management.ListObjectMetadataAuditRequest
+	5,   // 327: ai_studio_management.AIStudioManagementService.ListAuditRecords:input_type -> ai_studio_management.ListAuditRecordsRequest
+	9,   // 328: ai_studio_management.AIStudioManagementService.ListMCPServers:input_type -> ai_studio_management.ListMCPServersRequest
+	11,  // 329: ai_studio_management.AIStudioManagementService.GetMCPServer:input_type -> ai_studio_management.GetMCPServerRequest
+	15,  // 330: ai_studio_management.AIStudioManagementService.ListModelRouters:input_type -> ai_studio_management.ListModelRoutersRequest
+	17,  // 331: ai_studio_management.AIStudioManagementService.GetModelRouter:input_type -> ai_studio_management.GetModelRouterRequest
+	19,  // 332: ai_studio_management.AIStudioManagementService.ListSemanticRouters:input_type -> ai_studio_management.ListSemanticRoutersRequest
+	21,  // 333: ai_studio_management.AIStudioManagementService.GetSemanticRouter:input_type -> ai_studio_management.GetSemanticRouterRequest
+	24,  // 334: ai_studio_management.AIStudioManagementService.ListGroups:input_type -> ai_studio_management.ListGroupsRequest
+	26,  // 335: ai_studio_management.AIStudioManagementService.GetResourceInstanceGroups:input_type -> ai_studio_management.GetResourceInstanceGroupsRequest
+	28,  // 336: ai_studio_management.AIStudioManagementService.SetResourceInstanceGroups:input_type -> ai_studio_management.SetResourceInstanceGroupsRequest
+	30,  // 337: ai_studio_management.AIStudioManagementService.ListAccessibleResourceInstances:input_type -> ai_studio_management.ListAccessibleResourceInstancesRequest
+	0,   // 338: ai_studio_management.AIStudioManagementService.SetAppGovernanceState:input_type -> ai_studio_management.SetAppGovernanceStateRequest
+	42,  // 339: ai_studio_management.AIStudioManagementService.ListPlugins:output_type -> ai_studio_management.ListPluginsResponse
+	44,  // 340: ai_studio_management.AIStudioManagementService.GetPlugin:output_type -> ai_studio_management.GetPluginResponse
+	46,  // 341: ai_studio_management.AIStudioManagementService.UpdatePluginConfig:output_type -> ai_studio_management.UpdatePluginConfigResponse
+	49,  // 342: ai_studio_management.AIStudioManagementService.ListLLMs:output_type -> ai_studio_management.ListLLMsResponse
+	51,  // 343: ai_studio_management.AIStudioManagementService.GetLLM:output_type -> ai_studio_management.GetLLMResponse
+	53,  // 344: ai_studio_management.AIStudioManagementService.GetLLMPlugins:output_type -> ai_studio_management.GetLLMPluginsResponse
+	56,  // 345: ai_studio_management.AIStudioManagementService.CreateLLM:output_type -> ai_studio_management.CreateLLMResponse
+	58,  // 346: ai_studio_management.AIStudioManagementService.UpdateLLM:output_type -> ai_studio_management.UpdateLLMResponse
+	60,  // 347: ai_studio_management.AIStudioManagementService.DeleteLLM:output_type -> ai_studio_management.DeleteLLMResponse
+	62,  // 348: ai_studio_management.AIStudioManagementService.UpdateLLMPlugins:output_type -> ai_studio_management.UpdateLLMPluginsResponse
+	64,  // 349: ai_studio_management.AIStudioManagementService.GetAnalyticsSummary:output_type -> ai_studio_management.GetAnalyticsSummaryResponse
+	66,  // 350: ai_studio_management.AIStudioManagementService.GetUsageStatistics:output_type -> ai_studio_management.GetUsageStatisticsResponse
+	68,  // 351: ai_studio_management.AIStudioManagementService.GetCostAnalysis:output_type -> ai_studio_management.GetCostAnalysisResponse
+	176, // 352: ai_studio_management.AIStudioManagementService.GetChatRecordsPerDay:output_type -> ai_studio_management.GetChatRecordsPerDayResponse
+	178, // 353: ai_studio_management.AIStudioManagementService.GetModelUsage:output_type -> ai_studio_management.GetModelUsageResponse
+	180, // 354: ai_studio_management.AIStudioManagementService.GetVendorUsage:output_type -> ai_studio_management.GetVendorUsageResponse
+	182, // 355: ai_studio_management.AIStudioManagementService.GetTokenUsagePerApp:output_type -> ai_studio_management.GetTokenUsagePerAppResponse
+	184, // 356: ai_studio_management.AIStudioManagementService.GetToolUsageStatistics:output_type -> ai_studio_management.GetToolUsageStatisticsResponse
+	74,  // 357: ai_studio_management.AIStudioManagementService.ListApps:output_type -> ai_studio_management.ListAppsResponse
+	76,  // 358: ai_studio_management.AIStudioManagementService.GetApp:output_type -> ai_studio_management.GetAppResponse
+	80,  // 359: ai_studio_management.AIStudioManagementService.CreateApp:output_type -> ai_studio_management.CreateAppResponse
+	82,  // 360: ai_studio_management.AIStudioManagementService.UpdateApp:output_type -> ai_studio_management.UpdateAppResponse
+	84,  // 361: ai_studio_management.AIStudioManagementService.DeleteApp:output_type -> ai_studio_management.DeleteAppResponse
+	86,  // 362: ai_studio_management.AIStudioManagementService.PatchAppMetadata:output_type -> ai_studio_management.PatchAppMetadataResponse
+	88,  // 363: ai_studio_management.AIStudioManagementService.GetObjectMetadata:output_type -> ai_studio_management.GetObjectMetadataResponse
+	92,  // 364: ai_studio_management.AIStudioManagementService.SetObjectMetadata:output_type -> ai_studio_management.SetObjectMetadataResponse
+	94,  // 365: ai_studio_management.AIStudioManagementService.GetResolvedMetadataSchema:output_type -> ai_studio_management.GetResolvedMetadataSchemaResponse
+	96,  // 366: ai_studio_management.AIStudioManagementService.ValidateObjectMetadata:output_type -> ai_studio_management.ValidateObjectMetadataResponse
+	90,  // 367: ai_studio_management.AIStudioManagementService.DeleteObjectMetadata:output_type -> ai_studio_management.DeleteObjectMetadataResponse
+	98,  // 368: ai_studio_management.AIStudioManagementService.ListTools:output_type -> ai_studio_management.ListToolsResponse
+	100, // 369: ai_studio_management.AIStudioManagementService.GetTool:output_type -> ai_studio_management.GetToolResponse
+	102, // 370: ai_studio_management.AIStudioManagementService.GetToolOperations:output_type -> ai_studio_management.GetToolOperationsResponse
+	104, // 371: ai_studio_management.AIStudioManagementService.CallToolOperation:output_type -> ai_studio_management.CallToolOperationResponse
+	110, // 372: ai_studio_management.AIStudioManagementService.CreateTool:output_type -> ai_studio_management.CreateToolResponse
+	112, // 373: ai_studio_management.AIStudioManagementService.UpdateTool:output_type -> ai_studio_management.UpdateToolResponse
+	114, // 374: ai_studio_management.AIStudioManagementService.DeleteTool:output_type -> ai_studio_management.DeleteToolResponse
+	116, // 375: ai_studio_management.AIStudioManagementService.ListDatasources:output_type -> ai_studio_management.ListDatasourcesResponse
+	118, // 376: ai_studio_management.AIStudioManagementService.GetDatasource:output_type -> ai_studio_management.GetDatasourceResponse
+	120, // 377: ai_studio_management.AIStudioManagementService.CreateDatasource:output_type -> ai_studio_management.CreateDatasourceResponse
+	122, // 378: ai_studio_management.AIStudioManagementService.UpdateDatasource:output_type -> ai_studio_management.UpdateDatasourceResponse
+	124, // 379: ai_studio_management.AIStudioManagementService.DeleteDatasource:output_type -> ai_studio_management.DeleteDatasourceResponse
+	126, // 380: ai_studio_management.AIStudioManagementService.CloneDatasource:output_type -> ai_studio_management.CloneDatasourceResponse
+	128, // 381: ai_studio_management.AIStudioManagementService.SearchDatasources:output_type -> ai_studio_management.SearchDatasourcesResponse
+	130, // 382: ai_studio_management.AIStudioManagementService.ProcessDatasourceEmbeddings:output_type -> ai_studio_management.ProcessEmbeddingsResponse
+	132, // 383: ai_studio_management.AIStudioManagementService.GenerateEmbedding:output_type -> ai_studio_management.GenerateEmbeddingResponse
+	136, // 384: ai_studio_management.AIStudioManagementService.StoreDocuments:output_type -> ai_studio_management.StoreDocumentsResponse
+	139, // 385: ai_studio_management.AIStudioManagementService.ProcessAndStoreDocuments:output_type -> ai_studio_management.ProcessAndStoreResponse
+	230, // 386: ai_studio_management.AIStudioManagementService.QueryDatasourceByVector:output_type -> ai_studio_management.QueryDatasourceResponse
+	141, // 387: ai_studio_management.AIStudioManagementService.DeleteDocumentsByMetadata:output_type -> ai_studio_management.DeleteDocumentsByMetadataResponse
+	143, // 388: ai_studio_management.AIStudioManagementService.QueryByMetadataOnly:output_type -> ai_studio_management.QueryByMetadataOnlyResponse
+	145, // 389: ai_studio_management.AIStudioManagementService.ListNamespaces:output_type -> ai_studio_management.ListNamespacesResponse
+	148, // 390: ai_studio_management.AIStudioManagementService.DeleteNamespace:output_type -> ai_studio_management.DeleteNamespaceResponse
+	152, // 391: ai_studio_management.AIStudioManagementService.ListDataCatalogues:output_type -> ai_studio_management.ListDataCataloguesResponse
+	154, // 392: ai_studio_management.AIStudioManagementService.GetDataCatalogue:output_type -> ai_studio_management.GetDataCatalogueResponse
+	156, // 393: ai_studio_management.AIStudioManagementService.CreateDataCatalogue:output_type -> ai_studio_management.CreateDataCatalogueResponse
+	158, // 394: ai_studio_management.AIStudioManagementService.UpdateDataCatalogue:output_type -> ai_studio_management.UpdateDataCatalogueResponse
+	160, // 395: ai_studio_management.AIStudioManagementService.DeleteDataCatalogue:output_type -> ai_studio_management.DeleteDataCatalogueResponse
+	163, // 396: ai_studio_management.AIStudioManagementService.ListTags:output_type -> ai_studio_management.ListTagsResponse
+	165, // 397: ai_studio_management.AIStudioManagementService.GetTag:output_type -> ai_studio_management.GetTagResponse
+	167, // 398: ai_studio_management.AIStudioManagementService.CreateTag:output_type -> ai_studio_management.CreateTagResponse
+	169, // 399: ai_studio_management.AIStudioManagementService.UpdateTag:output_type -> ai_studio_management.UpdateTagResponse
+	171, // 400: ai_studio_management.AIStudioManagementService.DeleteTag:output_type -> ai_studio_management.DeleteTagResponse
+	173, // 401: ai_studio_management.AIStudioManagementService.SearchTags:output_type -> ai_studio_management.SearchTagsResponse
+	191, // 402: ai_studio_management.AIStudioManagementService.ListModelPrices:output_type -> ai_studio_management.ListModelPricesResponse
+	193, // 403: ai_studio_management.AIStudioManagementService.GetModelPrice:output_type -> ai_studio_management.GetModelPriceResponse
+	195, // 404: ai_studio_management.AIStudioManagementService.CreateModelPrice:output_type -> ai_studio_management.CreateModelPriceResponse
+	197, // 405: ai_studio_management.AIStudioManagementService.UpdateModelPrice:output_type -> ai_studio_management.UpdateModelPriceResponse
+	199, // 406: ai_studio_management.AIStudioManagementService.DeleteModelPrice:output_type -> ai_studio_management.DeleteModelPriceResponse
+	201, // 407: ai_studio_management.AIStudioManagementService.GetModelPricesByVendor:output_type -> ai_studio_management.GetModelPricesByVendorResponse
+	204, // 408: ai_studio_management.AIStudioManagementService.ListFilters:output_type -> ai_studio_management.ListFiltersResponse
+	206, // 409: ai_studio_management.AIStudioManagementService.GetFilter:output_type -> ai_studio_management.GetFilterResponse
+	208, // 410: ai_studio_management.AIStudioManagementService.CreateFilter:output_type -> ai_studio_management.CreateFilterResponse
+	210, // 411: ai_studio_management.AIStudioManagementService.UpdateFilter:output_type -> ai_studio_management.UpdateFilterResponse
+	212, // 412: ai_studio_management.AIStudioManagementService.DeleteFilter:output_type -> ai_studio_management.DeleteFilterResponse
+	215, // 413: ai_studio_management.AIStudioManagementService.GetAvailableLLMDrivers:output_type -> ai_studio_management.GetAvailableLLMDriversResponse
+	217, // 414: ai_studio_management.AIStudioManagementService.GetAvailableEmbedders:output_type -> ai_studio_management.GetAvailableEmbeddersResponse
+	219, // 415: ai_studio_management.AIStudioManagementService.GetAvailableVectorStores:output_type -> ai_studio_management.GetAvailableVectorStoresResponse
+	222, // 416: ai_studio_management.AIStudioManagementService.WritePluginKV:output_type -> ai_studio_management.WritePluginKVResponse
+	224, // 417: ai_studio_management.AIStudioManagementService.ReadPluginKV:output_type -> ai_studio_management.ReadPluginKVResponse
+	226, // 418: ai_studio_management.AIStudioManagementService.DeletePluginKV:output_type -> ai_studio_management.DeletePluginKVResponse
+	228, // 419: ai_studio_management.AIStudioManagementService.ExecuteTool:output_type -> ai_studio_management.ExecuteToolResponse
+	230, // 420: ai_studio_management.AIStudioManagementService.QueryDatasource:output_type -> ai_studio_management.QueryDatasourceResponse
+	233, // 421: ai_studio_management.AIStudioManagementService.CallLLM:output_type -> ai_studio_management.CallLLMResponse
+	254, // 422: ai_studio_management.AIStudioManagementService.CallDecision:output_type -> ai_studio_management.CallDecisionResponse
+	241, // 423: ai_studio_management.AIStudioManagementService.CreateSchedule:output_type -> ai_studio_management.CreateScheduleResponse
+	243, // 424: ai_studio_management.AIStudioManagementService.GetSchedule:output_type -> ai_studio_management.GetScheduleResponse
+	245, // 425: ai_studio_management.AIStudioManagementService.ListSchedules:output_type -> ai_studio_management.ListSchedulesResponse
+	247, // 426: ai_studio_management.AIStudioManagementService.UpdateSchedule:output_type -> ai_studio_management.UpdateScheduleResponse
+	249, // 427: ai_studio_management.AIStudioManagementService.DeleteSchedule:output_type -> ai_studio_management.DeleteScheduleResponse
+	252, // 428: ai_studio_management.AIStudioManagementService.GetLicenseInfo:output_type -> ai_studio_management.GetLicenseInfoResponse
+	33,  // 429: ai_studio_management.AIStudioManagementService.CreateNotification:output_type -> ai_studio_management.CreateNotificationResponse
+	36,  // 430: ai_studio_management.AIStudioManagementService.RegisterResourceTypes:output_type -> ai_studio_management.RegisterResourceTypesResponse
+	39,  // 431: ai_studio_management.AIStudioManagementService.RegisterPermissionResources:output_type -> ai_studio_management.RegisterPermissionResourcesResponse
+	4,   // 432: ai_studio_management.AIStudioManagementService.ListObjectMetadataAudit:output_type -> ai_studio_management.ListObjectMetadataAuditResponse
+	7,   // 433: ai_studio_management.AIStudioManagementService.ListAuditRecords:output_type -> ai_studio_management.ListAuditRecordsResponse
+	10,  // 434: ai_studio_management.AIStudioManagementService.ListMCPServers:output_type -> ai_studio_management.ListMCPServersResponse
+	12,  // 435: ai_studio_management.AIStudioManagementService.GetMCPServer:output_type -> ai_studio_management.GetMCPServerResponse
+	16,  // 436: ai_studio_management.AIStudioManagementService.ListModelRouters:output_type -> ai_studio_management.ListModelRoutersResponse
+	18,  // 437: ai_studio_management.AIStudioManagementService.GetModelRouter:output_type -> ai_studio_management.GetModelRouterResponse
+	20,  // 438: ai_studio_management.AIStudioManagementService.ListSemanticRouters:output_type -> ai_studio_management.ListSemanticRoutersResponse
+	22,  // 439: ai_studio_management.AIStudioManagementService.GetSemanticRouter:output_type -> ai_studio_management.GetSemanticRouterResponse
+	25,  // 440: ai_studio_management.AIStudioManagementService.ListGroups:output_type -> ai_studio_management.ListGroupsResponse
+	27,  // 441: ai_studio_management.AIStudioManagementService.GetResourceInstanceGroups:output_type -> ai_studio_management.GetResourceInstanceGroupsResponse
+	29,  // 442: ai_studio_management.AIStudioManagementService.SetResourceInstanceGroups:output_type -> ai_studio_management.SetResourceInstanceGroupsResponse
+	31,  // 443: ai_studio_management.AIStudioManagementService.ListAccessibleResourceInstances:output_type -> ai_studio_management.ListAccessibleResourceInstancesResponse
+	1,   // 444: ai_studio_management.AIStudioManagementService.SetAppGovernanceState:output_type -> ai_studio_management.SetAppGovernanceStateResponse
+	339, // [339:445] is the sub-list for method output_type
+	233, // [233:339] is the sub-list for method input_type
+	233, // [233:233] is the sub-list for extension type_name
+	233, // [233:233] is the sub-list for extension extendee
+	0,   // [0:233] is the sub-list for field type_name
 }
 
 func init() { file_proto_ai_studio_management_ai_studio_management_proto_init() }
@@ -19016,7 +19163,7 @@ func file_proto_ai_studio_management_ai_studio_management_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_ai_studio_management_ai_studio_management_proto_rawDesc), len(file_proto_ai_studio_management_ai_studio_management_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   263,
+			NumMessages:   265,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

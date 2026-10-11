@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
@@ -98,6 +99,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Vendor:       vendor,
+			RequestKind:  decisions.KindForPath(r.URL.Path),
 			AppID:        uint(0), // NOT authenticated yet
 			UserID:       uint(0),
 			Metadata:     metadata,
@@ -229,6 +231,7 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 		RequestID:    requestID,
 		Metadata:     metadata,
 		TraceContext: make(map[string]string),
+		RequestKind:  decisions.KindForPath(r.URL.Path),
 	}
 	if target.Kind == proxy.AuthTargetLLM {
 		pluginCtx.LLMID = target.ID
@@ -371,6 +374,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Vendor:       vendor,
+			RequestKind:  decisions.KindForPath(r.URL.Path),
 			AppID:        appID, // AUTHENTICATED app_id available!
 			UserID:       uint(0),
 			Metadata:     postAuthMetadata,

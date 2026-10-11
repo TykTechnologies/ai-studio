@@ -193,6 +193,11 @@ Each feature specification below provides detailed documentation on the individu
 - Datasource `embed_*` API fields kept as a copy-on-write facade; startup migration moves existing settings onto embedders
 - Model locked while datasources use it; privacy and delete guards; flattened into the edge snapshot (no proto change)
 
+### [Decision Models](DecisionModels.md)
+- Decision ("System One") models as a request kind of LLMs: OpenAI `/v1/decisions` and the System One wire format (new `systemone` vendor: TypeSafe Jev, llama.cpp self-hosts)
+- Unified `/v1/decisions` ingress in the OpenAI Decisions schema, translated per vendor through the loopback hop; failover across decision vendors
+- Filters/guardrails, plugin request kind and SDK parsing/`CallDecision`, analytics and budgets on hub and edge; `/analytics/decisions` report
+
 ### [Model Pricing System](Pricing.md)
 - Cost definition for various LLM models
 - Accurate tracking of token usage and costs

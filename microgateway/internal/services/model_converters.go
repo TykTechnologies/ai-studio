@@ -243,6 +243,9 @@ func ValidateCreateLLMRequest(req *CreateLLMRequest) error {
 		"google":    true,
 		"vertex":    true,
 		"ollama":    true,
+		// Decision models (System One wire format); the endpoint defaults to
+		// TypeSafe's hosted API and self-hosts may run without a key.
+		"systemone": true,
 	}
 
 	if !validVendors[req.Vendor] {

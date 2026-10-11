@@ -1181,6 +1181,16 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				OnBehalfOf:             event.OnBehalfOf,
 				ActingAgent:            event.ActingAgent,
 			}
+			// Model class. A decision call's choices are its answered
+			// questions, so the edge's count is kept instead of the default.
+			kind := models.RequestKind(event.RequestKind)
+			proxyLogs[i].RequestKind = kind
+			chatRecords[i].RequestKind = kind
+			if kind == models.DecisionRequest {
+				chatRecords[i].Choices = int(event.Choices)
+				chatRecords[i].DecisionQuestions = int(event.DecisionQuestions)
+				chatRecords[i].DecisionRefusals = int(event.DecisionRefusals)
+			}
 
 			logger.Log.Debug().
 				Str("edge_id", req.EdgeId).

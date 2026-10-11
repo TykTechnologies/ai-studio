@@ -198,6 +198,14 @@ func (v *Anthropic) ProvidesEmbedder() bool {
 	return false
 }
 
+func (v *Anthropic) ProvidesChat() bool {
+	return true
+}
+
+func (v *Anthropic) DecisionEndpoint() string {
+	return ""
+}
+
 // DriverBaseURL returns the base URL to hand the langchaingo Anthropic client
 // for a configured endpoint. That client appends "/messages" to its base URL
 // (its own default is https://api.anthropic.com/v1), so an endpoint configured

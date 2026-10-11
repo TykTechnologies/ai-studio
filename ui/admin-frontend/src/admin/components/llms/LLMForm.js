@@ -61,6 +61,8 @@ import {
   getVendorLogo,
   getVendorCodes,
   getVendorDefaultEndpoint,
+  isDecisionOnlyVendor,
+  vendorServesDecisions,
 } from "../../utils/vendorLogos";
 import { useTheme } from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
@@ -614,6 +616,13 @@ const LLMForm = () => {
                 </Select>
                 {errors.vendor && <FormHelperText>{errors.vendor}</FormHelperText>}
               </FormControl>
+              {vendorServesDecisions(llm.vendor) && (
+                <Alert severity="info" sx={{ mt: 1 }} data-testid="llmform-decision-hint">
+                  {isDecisionOnlyVendor(llm.vendor)
+                    ? "This vendor serves decision models only: typed answers to questions, billed by input tokens. Apps call it through /v1/decisions (OpenAI Decisions schema); it cannot back chat rooms, agents or routers."
+                    : "This vendor also serves decision models: Apps can call them through /v1/decisions."}
+                </Alert>
+              )}
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -835,6 +844,7 @@ const LLMForm = () => {
                 onChange={(next) => setLLM((prev) => ({ ...prev, failover: next }))}
                 llms={availableLLMs}
                 currentId={id}
+                vendor={llm.vendor}
                 errors={failoverErrors}
               />
             </Grid>

@@ -665,6 +665,9 @@ func parseVendorFilter(raw string) (map[string]bool, error) {
 	for _, l := range vendorLoaders() {
 		known[l.key] = true
 	}
+	for _, k := range decisionTargetKeys {
+		known[k] = true
+	}
 	out := map[string]bool{}
 	for _, item := range splitList(raw) {
 		if !known[item] && !strings.HasPrefix(item, "compat_") {

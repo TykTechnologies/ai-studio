@@ -231,8 +231,9 @@ func convertPluginContextToPB(ctx *proxy.PluginContext) *pb.PluginContext {
 	}
 	
 	return &pb.PluginContext{
-		RequestId: ctx.RequestID,
-		Vendor:    "", // Will be set from LLM context if needed
+		RequestId:   ctx.RequestID,
+		Vendor:      ctx.Vendor,
+		RequestKind: ctx.RequestKind,
 		LlmId:     uint32(ctx.LLMID),
 		LlmSlug:   ctx.LLMSlug,
 		AppId:     uint32(ctx.AppID),

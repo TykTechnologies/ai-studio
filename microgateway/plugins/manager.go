@@ -1914,11 +1914,16 @@ func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *Glo
 		ToolCalls:              int32(data.ToolCalls),
 		Choices:                int32(data.Choices),
 		RequestId:              data.RequestID,
+		RequestKind:            data.RequestKind,
+		DecisionQuestions:      int32(data.DecisionQuestions),
+		DecisionRefusals:       int32(data.DecisionRefusals),
 		Context: &pb.PluginContext{
-			RequestId: data.RequestID,
-			LlmId:     uint32(data.LLMID),
-			AppId:     uint32(data.AppID),
-			UserId:    uint32(data.UserID),
+			RequestId:   data.RequestID,
+			LlmId:       uint32(data.LLMID),
+			AppId:       uint32(data.AppID),
+			UserId:      uint32(data.UserID),
+			Vendor:      data.Vendor,
+			RequestKind: data.RequestKind,
 		},
 	}
 

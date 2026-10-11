@@ -69,6 +69,10 @@ type PluginContext struct {
 	AppID     uint              `json:"app_id"`
 	UserID    uint              `json:"user_id"`
 	Metadata  map[string]string `json:"metadata"`
+	// Vendor is the LLM's vendor; RequestKind its model class ("" generative,
+	// "decision" for decision models).
+	Vendor      string `json:"vendor,omitempty"`
+	RequestKind string `json:"request_kind,omitempty"`
 }
 
 // ResponseHook defines the interface that response hook implementations must satisfy

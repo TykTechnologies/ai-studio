@@ -16,7 +16,12 @@
           "id": { "type": "string", "minLength": 1 },
           "object": { "const": "model" },
           "created": { "type": "integer" },
-          "owned_by": { "type": "string" }
+          "owned_by": { "type": "string" },
+          "capabilities": {
+            "description": "Gateway extension: what the route serves, so clients can find decision-model routes. OpenAI clients ignore it.",
+            "type": "array",
+            "items": { "type": "string", "enum": ["chat", "embeddings", "decisions"] }
+          }
         }
       }
     }

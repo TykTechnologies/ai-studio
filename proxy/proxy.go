@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -321,6 +322,7 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	val.RegisterValidator(strings.ToLower(string(models.OLLAMA)), OpenAIValidator)
 	val.RegisterValidator(strings.ToLower(string(models.BEDROCK)), BedrockValidator)
 	val.RegisterValidator(strings.ToLower(string(models.MOCK_VENDOR)), MockValidator)
+	val.RegisterValidator(strings.ToLower(string(models.SYSTEMONE)), OpenAIValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 	p.credValidator = val
 
@@ -333,6 +335,7 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	modelVal.RegisterExtractor(strings.ToLower(string(models.OLLAMA)), OpenAIModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.BEDROCK)), BedrockModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.SYSTEMONE)), OpenAIModelExtractor)
 	p.modelValidator = modelVal
 
 	// Initialize message extractor registry for filter scripts
@@ -342,6 +345,8 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	messageExtractorRegistry.Register(&GoogleAIMessageExtractor{})
 	messageExtractorRegistry.Register(&VertexMessageExtractor{})
 	messageExtractorRegistry.Register(&OllamaMessageExtractor{})
+	messageExtractorRegistry.Register(&OpenAIDecisionsMessageExtractor{})
+	messageExtractorRegistry.Register(&SystemOneMessageExtractor{})
 	p.messageExtractorRegistry = messageExtractorRegistry
 
 	// Initialize message reconstructor registry for message modification
@@ -351,6 +356,8 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	messageReconstructorRegistry.Register(&GoogleAIMessageReconstructor{})
 	messageReconstructorRegistry.Register(&VertexMessageReconstructor{})
 	messageReconstructorRegistry.Register(&OllamaMessageReconstructor{})
+	messageReconstructorRegistry.Register(&OpenAIDecisionsMessageReconstructor{})
+	messageReconstructorRegistry.Register(&SystemOneMessageReconstructor{})
 	p.messageReconstructorRegistry = messageReconstructorRegistry
 
 	return p
@@ -522,6 +529,8 @@ func (p *Proxy) createHandler() http.Handler {
 	aiRouter := mux.NewRouter()
 	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+	// Decision models (OpenAI Decisions schema), translated per vendor.
+	aiRouter.HandleFunc("/ai/{routeId}/v1/decisions", p.CreateDecisionHandler).Methods("POST")
 	// Unified router model discovery: behind the same credential middleware, and
 	// scoped to the authenticated app's LLM associations by the handler. Registered
 	// only when the unified ingress is enabled, and at its configured base path.
@@ -971,7 +980,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check for upstream override from plugins (e.g., DLB load balancer)
-	upstreamEndpoint := llm.APIEndpoint
+	upstreamEndpoint := switches.UpstreamEndpoint(llm)
 	if override := r.Context().Value("upstream_override"); override != nil {
 		if overrideURL, ok := override.(string); ok && overrideURL != "" {
 			logger.Debugf("Using upstream override from plugin: %s", overrideURL)
@@ -1119,12 +1128,14 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 
 	// Create plugin context
 	pluginCtx := &PluginContext{
-		RequestID: requestID, // Use canonical request ID from context
-		LLMSlug:   llm.Name,
-		LLMID:     llm.ID,
-		AppID:     app.ID,
-		UserID:    app.UserID,
-		Metadata:  make(map[string]string),
+		RequestID:   requestID, // Use canonical request ID from context
+		LLMSlug:     llm.Name,
+		LLMID:       llm.ID,
+		AppID:       app.ID,
+		UserID:      app.UserID,
+		Metadata:    make(map[string]string),
+		Vendor:      string(llm.Vendor),
+		RequestKind: decisions.KindForPath(r.URL.Path),
 	}
 
 	ctx := context.Background()
@@ -1715,7 +1726,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	// Check for upstream override from plugins (e.g., DLB load balancer)
-	upstreamEndpoint := llm.APIEndpoint
+	upstreamEndpoint := switches.UpstreamEndpoint(llm)
 	if override := r.Context().Value("upstream_override"); override != nil {
 		if overrideURL, ok := override.(string); ok && overrideURL != "" {
 			logger.Debugf("Using upstream override from plugin for streaming: %s", overrideURL)
@@ -1967,12 +1978,14 @@ func (p *Proxy) executeOnStreamComplete(r *http.Request, resp *http.Response, ll
 
 	// Create plugin context
 	pluginCtx := &PluginContext{
-		RequestID: requestID,
-		LLMSlug:   llm.Name,
-		LLMID:     llm.ID,
-		AppID:     app.ID,
-		UserID:    app.UserID,
-		Metadata:  make(map[string]string),
+		RequestID:   requestID,
+		LLMSlug:     llm.Name,
+		LLMID:       llm.ID,
+		AppID:       app.ID,
+		UserID:      app.UserID,
+		Metadata:    make(map[string]string),
+		Vendor:      string(llm.Vendor),
+		RequestKind: decisions.KindForPath(r.URL.Path),
 	}
 
 	// Add vendor to metadata for SSE format detection
@@ -2112,7 +2125,13 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	// Extract model from context (set by modelValidationMiddleware)
 	modelName, _ := r.Context().Value("model_name").(string)
 
-	bodyBytes, err = p.runRequestFilters(llm, r, bodyBytes, string(llm.Vendor), modelName)
+	// A decision request is not chat-shaped whatever its vendor; filters read
+	// it through the decision formats (see decisions_filters.go).
+	format := string(llm.Vendor)
+	if df := decisionFilterFormat(r.URL.Path); df != "" {
+		format = df
+	}
+	bodyBytes, err = p.runRequestFilters(llm, r, bodyBytes, format, modelName)
 	if err != nil {
 		return err
 	}
@@ -2178,9 +2197,11 @@ func (p *Proxy) runRequestFilters(llm *models.LLM, r *http.Request, bodyBytes []
 		VendorName: string(llm.Vendor),
 		ModelName:  modelName,
 		Context: map[string]interface{}{
-			"llm_id":     int64(llm.ID),    // Convert uint to int64 for Tengo
-			"app_id":     int64(appID),      // Convert uint to int64 for Tengo
+			"llm_id":     int64(llm.ID), // Convert uint to int64 for Tengo
+			"app_id":     int64(appID),  // Convert uint to int64 for Tengo
 			"request_id": r.Header.Get("X-Request-ID"),
+			// "decision" for decision-model requests, "" otherwise.
+			"request_kind": string(requestKindForPath(r.URL.Path)),
 		},
 		IsChat: false,
 		Ctx:    r.Context(),

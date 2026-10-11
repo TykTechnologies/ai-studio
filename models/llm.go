@@ -52,6 +52,9 @@ const (
 	OLLAMA      Vendor = "ollama"
 	BEDROCK     Vendor = "bedrock"
 	MOCK_VENDOR Vendor = "mock"
+	// SYSTEMONE serves decision models over the System One wire format
+	// (POST /v1/systemone): TypeSafe Jev and wire-compatible self-hosts.
+	SYSTEMONE Vendor = "systemone"
 )
 
 type LLMs []LLM

@@ -455,6 +455,12 @@ func (s *ManagementService) validateCreateLLMRequest(req *CreateLLMRequest) erro
 		}
 	case "google", "vertex":
 		// May require different validation
+	case "systemone":
+		// Decision models. The endpoint defaults to TypeSafe's hosted API, which
+		// needs a key; a self-host (llama.cpp) may run without one.
+		if req.APIKey == "" && req.Endpoint == "" {
+			return fmt.Errorf("API key is required for the hosted System One API (or set an endpoint for a self-host)")
+		}
 	default:
 		return fmt.Errorf("unsupported vendor: %s", req.Vendor)
 	}

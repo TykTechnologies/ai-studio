@@ -286,6 +286,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyL
 				ShadowRoute:         event.ShadowRoute,
 				OnBehalfOf:          event.OnBehalfOf,
 				ActingAgent:         event.ActingAgent,
+				RequestKind:         string(record.RequestKind),
+				DecisionQuestions:   record.DecisionQuestions,
+				DecisionRefusals:    record.DecisionRefusals,
 			}
 			if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
 				log.Error().Err(err).Msg("Failed to execute analytics plugins for exchange")
@@ -331,6 +334,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 			TotalTimeMS:            record.TotalTimeMS,
 			RequestID:              requestID,
 			StatusCode:             200, // Standalone chat interactions are successful by definition
+			RequestKind:            string(record.RequestKind),
+			DecisionQuestions:      record.DecisionQuestions,
+			DecisionRefusals:       record.DecisionRefusals,
 		}
 
 		// Execute analytics plugins
@@ -413,6 +419,7 @@ func (h *MicrogatewaAnalyticsHandler) eventFromProxyLog(proxyLog *models.ProxyLo
 	event.ShadowRoute = proxyLog.ShadowRoute
 	event.OnBehalfOf = proxyLog.OnBehalfOf
 	event.ActingAgent = proxyLog.ActingAgent
+	event.RequestKind = string(proxyLog.RequestKind)
 	return event
 }
 
@@ -435,6 +442,9 @@ func applyChatRecord(event *database.AnalyticsEvent, record *models.LLMChatRecor
 	event.Choices = record.Choices
 	event.ToolCalls = record.ToolCalls
 	event.ChatID = record.ChatID
+	event.RequestKind = string(record.RequestKind)
+	event.DecisionQuestions = record.DecisionQuestions
+	event.DecisionRefusals = record.DecisionRefusals
 	// Keep the latency the row already has when the record carries none.
 	if record.TotalTimeMS > 0 {
 		event.TotalTimeMS = record.TotalTimeMS

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
+import { chatCapableLLMs } from "../../utils/vendorLogos";
 import {
   TextField,
   Box,
@@ -225,7 +226,8 @@ const ChatForm = () => {
   const fetchLLMs = async () => {
     try {
       const response = await listAll(apiClient, "/llms");
-      setLLMs(response.data.data);
+      // Chat rooms need a generative model; decision-only LLMs cannot serve one.
+      setLLMs(chatCapableLLMs(response.data.data));
     } catch (error) {
       console.error("Error fetching LLMs", error);
       throw error;

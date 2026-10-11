@@ -24,6 +24,7 @@ TABLE analytics_events
   index CREATE INDEX idx_analytics_app ON analytics_events USING btree (app_id, created_at)
   index CREATE UNIQUE INDEX idx_analytics_events_request_id ON analytics_events USING btree (request_id)
   index CREATE INDEX idx_analytics_failover_from ON analytics_events USING btree (failover_from_llm_id)
+  index CREATE INDEX idx_analytics_request_kind ON analytics_events USING btree (request_kind)
   index CREATE INDEX idx_analytics_timestamp ON analytics_events USING btree (time_stamp)
   index CREATE INDEX idx_analytics_user ON analytics_events USING btree (user_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('analytics_events_id_seq'::regclass)
@@ -67,6 +68,9 @@ TABLE analytics_events
   column acting_agent character varying(varchar) nullable=YES len=255
   column failover_from_llm_id bigint(int8) nullable=YES precision=64 scale=0
   column failover_attempt bigint(int8) nullable=YES precision=64 scale=0 default=0
+  column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
+  column decision_questions bigint(int8) nullable=YES precision=64 scale=0
+  column decision_refusals bigint(int8) nullable=YES precision=64 scale=0
   column time_stamp timestamp with time zone(timestamptz) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE api_tokens
