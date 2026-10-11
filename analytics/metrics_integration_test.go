@@ -474,3 +474,48 @@ func TestMetricsWithoutInit(t *testing.T) {
 	RecordChatRecordsBatch(ctx, []*models.LLMChatRecord{{Vendor: "test"}})
 	RecordProxyLogsBatch(ctx, []*models.ProxyLog{{Vendor: "test"}})
 }
+
+func TestRecordChatRecord_DecisionQuestionsOnlyForAnsweredCalls(t *testing.T) {
+	metrics.Init()
+
+	handlerMu.Lock()
+	oldHandler := globalHandler
+	globalHandler = nil
+	handlerMu.Unlock()
+	defer func() {
+		handlerMu.Lock()
+		globalHandler = oldHandler
+		handlerMu.Unlock()
+	}()
+
+	// Answered: two questions answered, one refused.
+	RecordChatRecord(context.Background(), &models.LLMChatRecord{
+		Name: "jev-1.13.0", Vendor: "systemone", AppID: 7,
+		RequestKind: models.DecisionRequest, Choices: 2, DecisionRefusals: 1,
+		PromptTokens: 40,
+	})
+	// Failed: the upstream rejected the call, so the model name is the
+	// caller's and must not become a label.
+	RecordChatRecord(context.Background(), &models.LLMChatRecord{
+		Name: "caller-invented-model-8f3a", Vendor: "systemone", AppID: 7,
+		RequestKind: models.DecisionRequest,
+	})
+
+	body := scrapeMetrics(t)
+	var answered, refused bool
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "aistudio_decision_questions_total") {
+			continue
+		}
+		if strings.Contains(line, "caller-invented-model-8f3a") {
+			t.Errorf("failed decision call created a series: %s", line)
+		}
+		if strings.Contains(line, `model="jev-1.13.0"`) {
+			answered = answered || strings.Contains(line, `outcome="answered"`)
+			refused = refused || strings.Contains(line, `outcome="refused"`)
+		}
+	}
+	if !answered || !refused {
+		t.Errorf("answered call: want answered and refused series, got answered=%v refused=%v", answered, refused)
+	}
+}

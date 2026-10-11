@@ -292,7 +292,10 @@ func recordChatRecordMetrics(ctx context.Context, record *models.LLMChatRecord) 
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "cache_read", record.CacheReadPromptTokens)
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "cache_write", record.CacheWritePromptTokens)
 	metrics.RecordCost(ctx, record.Vendor, record.Name, appID, record.Cost)
-	if record.RequestKind == models.DecisionRequest {
+	// Only a call the model answered or refused adds series: a failed call
+	// (possibly naming a model the caller invented) counts nothing, so the
+	// model label comes from the vendor's own response.
+	if record.RequestKind == models.DecisionRequest && record.Choices+record.DecisionRefusals > 0 {
 		metrics.RecordDecisionQuestions(ctx, record.Vendor, record.Name, record.Choices, record.DecisionRefusals)
 	}
 }
