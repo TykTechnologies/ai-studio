@@ -143,19 +143,25 @@ func RecordContentMessage(
 
 	rec := &models.LLMChatRecord{}
 
-	totalTokens := 0
 	promptTokens := 0
 	responseTokens := 0
 	toolCalls := 0
 
+	// Usage belongs to the response, not to a choice: the langchaingo providers
+	// copy the response's full usage onto every choice (Anthropic returns one
+	// choice per content block, OpenAI and Google one per candidate). Read it
+	// once, from the first choice that carries it, as the translator does
+	// (proxy extractTokenUsageFromContentResponse).
+	var usageInfo map[string]any
 	responseParts := []string{}
 	for _, c := range cr.Choices {
 		toolCalls += len(c.ToolCalls)
-		tt, pt, rt := switches.GetTokenCounts(c, vendor)
-
-		totalTokens += tt
-		promptTokens += pt
-		responseTokens += rt
+		if usageInfo == nil {
+			if _, pt, rt := switches.GetTokenCounts(c, vendor); pt+rt > 0 {
+				promptTokens, responseTokens = pt, rt
+				usageInfo = c.GenerationInfo
+			}
+		}
 
 		if c.Content != "" {
 			responseParts = append(responseParts, c.Content)
@@ -177,14 +183,7 @@ func RecordContentMessage(
 	prompt := strings.Join(promptParts, "\n")
 
 	price, err := svc.GetModelPriceByModelNameAndVendor(name, string(vendor))
-	cpt := 0.0
-	cpit := 0.0
-	if err == nil {
-		cpt = price.CPT
-		cpit = price.CPIT
-	}
-
-	if price == nil {
+	if err != nil || price == nil {
 		price = &models.ModelPrice{
 			CPT:       0.0,
 			CPIT:      0.0,
@@ -194,28 +193,26 @@ func RecordContentMessage(
 		}
 	}
 
-	// Get cache token information from the response if available
-	if len(cr.Choices) > 0 && cr.Choices[0].GenerationInfo != nil {
-		// Log the keys in GenerationInfo for debugging
-		logger.Log.Debug().Interface("keys", cr.Choices[0].GenerationInfo).Msg("GenerationInfo keys")
+	// Get cache token information from the response if available. Value types
+	// differ by provider (Google's are int32), and OpenAI reports its cached
+	// prompt tokens as PromptCachedTokens.
+	if usageInfo == nil && len(cr.Choices) > 0 {
+		usageInfo = cr.Choices[0].GenerationInfo
+	}
+	if usageInfo != nil {
+		info := usageInfo
+		logger.Log.Debug().Interface("keys", info).Msg("GenerationInfo keys")
 
-		// Try int first, then float64
-		if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(int); ok {
-			rec.CacheWritePromptTokens = cacheWrite
-			logger.Log.Debug().Int("value", rec.CacheWritePromptTokens).Msg("Cache write tokens (int)")
-		} else if cacheWrite, ok := cr.Choices[0].GenerationInfo["CacheCreationInputTokens"].(float64); ok {
-			rec.CacheWritePromptTokens = int(cacheWrite)
-			logger.Log.Debug().Int("value", rec.CacheWritePromptTokens).Msg("Cache write tokens (float64)")
-		}
-
-		if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(int); ok {
-			rec.CacheReadPromptTokens = cacheRead
-			logger.Log.Debug().Int("value", rec.CacheReadPromptTokens).Msg("Cache read tokens (int)")
-		} else if cacheRead, ok := cr.Choices[0].GenerationInfo["CacheReadInputTokens"].(float64); ok {
-			rec.CacheReadPromptTokens = int(cacheRead)
-			logger.Log.Debug().Int("value", rec.CacheReadPromptTokens).Msg("Cache read tokens (float64)")
+		rec.CacheWritePromptTokens = generationInfoInt(info, "CacheCreationInputTokens")
+		rec.CacheReadPromptTokens = generationInfoInt(info, "CacheReadInputTokens")
+		if rec.CacheReadPromptTokens == 0 && vendor == models.OPENAI {
+			rec.CacheReadPromptTokens = generationInfoInt(info, "PromptCachedTokens")
 		}
 	}
+
+	// Same accounting as the proxy path (proxy.buildChatRecordFor): carve the
+	// cache tokens out of the prompt count where the vendor includes them.
+	promptTokens = models.PromptTokensExcludingCache(string(vendor), promptTokens, rec.CacheWritePromptTokens, rec.CacheReadPromptTokens)
 
 	rec.Choices = len(cr.Choices)
 	// Use provided model name if available, fallback to price model name
@@ -228,27 +225,15 @@ func RecordContentMessage(
 	rec.TotalTimeMS = timeMs
 	rec.PromptTokens = promptTokens
 	rec.ResponseTokens = responseTokens
-	rec.TotalTokens = promptTokens + responseTokens
+	rec.TotalTokens = promptTokens + responseTokens + rec.CacheWritePromptTokens + rec.CacheReadPromptTokens
 	rec.TimeStamp = t
 	rec.UserID = userID
 	rec.ToolCalls = toolCalls
 	rec.ChatID = chatID
 	rec.AppID = appID
-	// Calculate cost including cache tokens (store as cents with 4 decimal places)
-	cost := cpt*float64(responseTokens) +
-		cpit*float64(promptTokens) +
-		price.CacheWritePT*float64(rec.CacheWritePromptTokens) +
-		price.CacheReadPT*float64(rec.CacheReadPromptTokens)
-
-	logger.Log.Debug().
-		Float64("cost", cost).
-		Int("responseTokens", responseTokens).
-		Int("promptTokens", promptTokens).
-		Int("cacheWriteTokens", rec.CacheWritePromptTokens).
-		Int("cacheReadTokens", rec.CacheReadPromptTokens).
-		Msg("Calculated cost before scaling")
-
-	rec.Cost = cost * 10000
+	// An unset (zero) cache price bills those tokens at the input price.
+	rec.Cost = models.ChatRecordCost(string(vendor), price.CPT, price.CPIT, price.CacheWritePT, price.CacheReadPT,
+		promptTokens, responseTokens, rec.CacheWritePromptTokens, rec.CacheReadPromptTokens)
 	rec.Currency = price.Currency
 	rec.InteractionType = models.ChatInteraction
 	rec.LLMID = llmID
@@ -269,6 +254,22 @@ func RecordContentMessage(
 	// No HTTP request context available in chat session path
 	RecordChatRecord(context.Background(), rec)
 	RecordChatLogEntry(context.Background(), chatLog)
+}
+
+// generationInfoInt reads a token count from a langchaingo GenerationInfo map,
+// whatever integer or float type the provider stored it as; 0 when absent.
+func generationInfoInt(info map[string]any, key string) int {
+	switch v := info[key].(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	}
+	return 0
 }
 
 func RecordChatRecord(ctx context.Context, record *models.LLMChatRecord) {

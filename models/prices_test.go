@@ -134,3 +134,10 @@ func TestCachePricesFor(t *testing.T) {
 		})
 	}
 }
+
+func TestPromptTokensExcludingCache(t *testing.T) {
+	assert.Equal(t, 1000, PromptTokensExcludingCache(string(OPENAI), 1600, 200, 400))
+	assert.Equal(t, 1000, PromptTokensExcludingCache(string(GOOGLEAI), 1600, 200, 400))
+	assert.Equal(t, 1600, PromptTokensExcludingCache(string(ANTHROPIC), 1600, 200, 400))
+	assert.Equal(t, 1600, PromptTokensExcludingCache(string(BEDROCK), 1600, 200, 400))
+}
