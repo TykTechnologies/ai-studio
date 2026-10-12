@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
-
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
@@ -85,64 +83,19 @@ func TestCatalogueEndpoints(t *testing.T) {
 	assert.Equal(t, "Updated Catalogue", searchResponse["data"][0].Attributes.Name)
 
 	// Test Add LLM to Catalogue
-	createLLMInput := LLMInput{
-		Data: struct {
-			Type       string `json:"type"`
-			Attributes struct {
-				Name             string   `json:"name"`
-				APIKey           string   `json:"api_key"`
-				APIEndpoint      string   `json:"api_endpoint"`
-				PrivacyScore     int      `json:"privacy_score"`
-				ShortDescription string   `json:"short_description"`
-				LongDescription  string   `json:"long_description"`
-				LogoURL          string   `json:"logo_url"`
-				Vendor           string   `json:"vendor"`
-				Active           bool     `json:"active"`
-				Filters          []uint   `json:"filters"`
-				DefaultModel     string   `json:"default_model"`
-				AllowedModels    []string `json:"allowed_models"`
-				MonthlyBudget    *float64 `json:"monthly_budget"`
-				BudgetStartDate  *string  `json:"budget_start_date"`
-				Namespace        string   `json:"namespace,omitempty"`
-				DontLogBodies    bool                   `json:"dont_log_bodies"`
-				Metadata         map[string]interface{} `json:"metadata,omitempty"`
-				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
-				Failover         *models.LLMFailover     `json:"failover,omitempty"`
-			} `json:"attributes"`
-		}{
-			Type: "llms",
-			Attributes: struct {
-				Name             string                 `json:"name"`
-				APIKey           string                 `json:"api_key"`
-				APIEndpoint      string                 `json:"api_endpoint"`
-				PrivacyScore     int                    `json:"privacy_score"`
-				ShortDescription string                 `json:"short_description"`
-				LongDescription  string                 `json:"long_description"`
-				LogoURL          string                 `json:"logo_url"`
-				Vendor           string                 `json:"vendor"`
-				Active           bool                   `json:"active"`
-				Filters          []uint                 `json:"filters"`
-				DefaultModel     string                 `json:"default_model"`
-				AllowedModels    []string               `json:"allowed_models"`
-				MonthlyBudget    *float64               `json:"monthly_budget"`
-				BudgetStartDate  *string                `json:"budget_start_date"`
-				Namespace        string                 `json:"namespace,omitempty"`
-				DontLogBodies    bool                   `json:"dont_log_bodies"`
-				Metadata         map[string]interface{} `json:"metadata,omitempty"`
-				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
-				Failover         *models.LLMFailover     `json:"failover,omitempty"`
-			}{
-				Name:             "Test LLM",
-				APIKey:           "test-api-key",
-				APIEndpoint:      "https://api.test.com",
-				PrivacyScore:     75,
-				ShortDescription: "A test LLM",
-				LongDescription:  "This is a test LLM for API testing",
-				LogoURL:          "https://testllm.com/logo.png",
-				Vendor:           "openai",
-			},
-		},
-	}
+	// Built on the named input type rather than a mirrored anonymous struct,
+	// so new LLM attributes cannot break this test.
+	var createLLMInput LLMInput
+	createLLMInput.Data.Type = "llms"
+	llmAttrs := &createLLMInput.Data.Attributes
+	llmAttrs.Name = "Test LLM"
+	llmAttrs.APIKey = "test-api-key"
+	llmAttrs.APIEndpoint = "https://api.test.com"
+	llmAttrs.PrivacyScore = 75
+	llmAttrs.ShortDescription = "A test LLM"
+	llmAttrs.LongDescription = "This is a test LLM for API testing"
+	llmAttrs.LogoURL = "https://testllm.com/logo.png"
+	llmAttrs.Vendor = "openai"
 
 	w = performRequest(api.router, "POST", "/api/v1/llms", createLLMInput)
 	assert.Equal(t, http.StatusCreated, w.Code)
