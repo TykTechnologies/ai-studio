@@ -19,14 +19,14 @@ Read **What to check** below whether or not you have seen anything unusual, and 
 
 ## Security
 
-- **`POST /api/v1/auth/token` issued admin tokens to anyone** (PRNUM). The route needed no credentials and issued a token for any App with any scopes, `admin` included. That token opened the whole management API to a caller who could reach the microgateway's HTTP port:
+- **`POST /api/v1/auth/token` issued admin tokens to anyone** ([#731](https://github.com/TykTechnologies/ai-studio/pull/731), [#732](https://github.com/TykTechnologies/ai-studio/pull/732)). The route needed no credentials and issued a token for any App with any scopes, `admin` included. That token opened the whole management API to a caller who could reach the microgateway's HTTP port:
   - **register plugins and attach them to LLMs** (`POST /api/v1/plugins`, `PUT /api/v1/llms/{id}/plugins`). A plugin served over gRPC from the attacker's own host needs no signature, and a plugin can also be a binary already on the gateway's host. OCI plugins must be signed unless `OCI_PLUGINS_REQUIRE_SIGNATURE` was set to `false`;
   - change LLMs (including their upstream endpoints), Apps, filters and prices;
   - read analytics, with request and response bodies where they are stored;
   - mint tokens for any App.
 
   The route is removed in every mode. Tokens are created by an admin (`POST /api/v1/tokens`) or with `microgateway -create-admin-token`.
-- **Edge gateways serve no `/api/v1`** (PRNUM). An edge is configured by AI Studio over gRPC, and its local management API wrote to the edge's copy of that configuration, so whatever it changed, including plugins, was served until the next configuration change from AI Studio or a restart. The API is no longer mounted, even for a valid admin token. The AI gateway endpoints, custom plugin endpoints under `/plugins/`, `/health`, `/ready` and metrics are unchanged.
+- **Edge gateways serve no `/api/v1`** ([#731](https://github.com/TykTechnologies/ai-studio/pull/731), [#732](https://github.com/TykTechnologies/ai-studio/pull/732)). An edge is configured by AI Studio over gRPC, and its local management API wrote to the edge's copy of that configuration, so whatever it changed, including plugins, was served until the next configuration change from AI Studio or a restart. The API is no longer mounted, even for a valid admin token. The AI gateway endpoints, custom plugin endpoints under `/plugins/`, `/health`, `/ready` and metrics are unchanged.
 
 ### What to check
 
