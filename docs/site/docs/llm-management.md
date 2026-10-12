@@ -104,6 +104,7 @@ When a vendor deprecates a model, or you want to move teams onto a newer one, yo
     *   **Requests** and **Apps**: how many calls were made and how many distinct apps made them.
     *   **Last used**: when the model was most recently called (relative, with the exact time underneath).
     *   **Total cost** and token totals, with the same breakdown as before.
+    *   The prompt, response and cache cost columns split each request's recorded cost, so they always add up to the total. Batch requests are billed at half price, so their columns are half the list price.
 
     Click any column header to sort. The default order is most recently used first. Adjust the date range picker above the table to widen or narrow the period.
 3.  **Model details:** Click a model name to open its detail view. This shows token and cost charts for that model alone, plus an **Apps using this model** table with each app's owner email, request count, tokens, cost, and the first and last time the app called the model in the period. App names link to the app's details page; owner emails are `mailto:` links so you can contact the team directly.

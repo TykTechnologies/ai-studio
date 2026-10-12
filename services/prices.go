@@ -35,25 +35,41 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 	return modelPrice, nil
 }
 
-// recalculateChatRecordCosts updates the cost and currency for all chat records of a specific model
-func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, currency string) error {
-	// Bill cache tokens the way the gateway does when it records them.
-	cacheWritePT, cacheReadPT = models.CachePricesFor(vendor, cpit, cacheWritePT, cacheReadPT)
+// recalculateChatRecordCosts reprices all chat records of a model at the
+// updated price and sets their currency.
+//
+// Each row keeps the ratio of its recorded cost to its list cost at the old
+// price, so a batch row recorded at a price multiplier
+// (models.IPriceAdjustedResponse, e.g. 0.5x) stays at that multiplier, and a
+// row recorded at list price gets exactly the new list price. A row with no
+// old list cost (no price before, or old is the zero value) or no recorded
+// cost gets the new list price at 1x, as before.
+func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, old, updated models.ModelPrice) error {
+	oldList, oldArgs := chatRecordListCostSQL(vendor, old)
+	newList, newArgs := chatRecordListCostSQL(vendor, updated)
 
-	// Update all matching records with a single query
+	args := append(append(newArgs, oldArgs...), updated.Currency, modelName, vendor)
 	result := tx.Exec(`
-		UPDATE llm_chat_records 
-		SET cost = (
-			COALESCE(response_tokens::DECIMAL * ?::DECIMAL, 0) + 
-			COALESCE(prompt_tokens::DECIMAL * ?::DECIMAL, 0) + 
-			COALESCE(NULLIF(cache_write_prompt_tokens, 0)::DECIMAL * ?::DECIMAL, 0) + 
-			COALESCE(NULLIF(cache_read_prompt_tokens, 0)::DECIMAL * ?::DECIMAL, 0)
-		) * 10000,
+		UPDATE llm_chat_records
+		SET cost = `+newList+` * COALESCE(NULLIF(cost, 0) / NULLIF(`+oldList+`, 0), 1),
 		currency = ?
 		WHERE name = ? AND vendor = ?`,
-		cpt, cpit, cacheWritePT, cacheReadPT, currency, modelName, vendor,
+		args...,
 	)
 	return result.Error
+}
+
+// chatRecordListCostSQL is a chat record's cost at price p in SQL, in the
+// stored unit, matching models.ChatRecordCost. The casts keep Postgres from
+// typing the price parameters as integers and also work on SQLite.
+func chatRecordListCostSQL(vendor string, p models.ModelPrice) (string, []any) {
+	// Bill cache tokens the way the gateway does when it records them.
+	cacheWritePT, cacheReadPT := models.CachePricesFor(vendor, p.CPIT, p.CacheWritePT, p.CacheReadPT)
+	return `((COALESCE(response_tokens, 0) * CAST(? AS DOUBLE PRECISION) +
+			COALESCE(prompt_tokens, 0) * CAST(? AS DOUBLE PRECISION) +
+			COALESCE(cache_write_prompt_tokens, 0) * CAST(? AS DOUBLE PRECISION) +
+			COALESCE(cache_read_prompt_tokens, 0) * CAST(? AS DOUBLE PRECISION)) * 10000)`,
+		[]any{p.CPT, p.CPIT, cacheWritePT, cacheReadPT}
 }
 
 // UpdateModelPrice updates an existing model price
@@ -89,6 +105,12 @@ func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor stri
 		if err = mp.Get(tx, id); err != nil {
 			return err
 		}
+		// The records being repriced were priced at this row only if it keeps
+		// its model and vendor; after a rename they were not priced by it.
+		var old models.ModelPrice
+		if mp.ModelName == modelName && mp.Vendor == vendor {
+			old = *mp
+		}
 
 		// Update model price fields
 		mp.ModelName = modelName
@@ -105,7 +127,7 @@ func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor stri
 		}
 
 		// Recalculate costs and currency for all associated chat records
-		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, cpt, cpit, cacheWritePT, cacheReadPT, currency); err != nil {
+		if err = s.recalculateChatRecordCosts(tx, modelName, vendor, old, *mp); err != nil {
 			return err
 		}
 

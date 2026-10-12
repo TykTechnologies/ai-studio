@@ -242,6 +242,19 @@ pulse. Pricing:
   tier is a batch result.
 - **Unbilled lines:** errored, canceled and expired lines are not billed.
 - **Timestamp:** the accounting time, which matches budget-period semantics.
+- **Cost breakdown:** the analytics breakdown (prompt, response, cache write
+  and cache read cost per model, `analytics.GetTotalCostPerVendorAndModel`) is
+  scaled to each row's recorded cost, so a batch row's components are half
+  their list price and still add up to its total. Rows whose price changed
+  after they were recorded split their recorded cost in today's list-price
+  proportions, and unset OpenAI and Google cache prices bill at the input
+  price as in `models.CachePricesFor`. There is no schema or pulse change:
+  edge rows arrive with their cost already multiplied.
+- **Repricing:** a model price edit with recalculation
+  (`UpdateModelPriceAndRecalculate`) keeps each record's ratio of recorded to
+  list cost, so batch records stay at 0.5x of the new price rather than being
+  re-billed at list price. A record with no old list cost gets the new list
+  price at 1x (see [Pricing.md](Pricing.md)).
 
 Outcomes of an accounting attempt:
 
@@ -360,6 +373,18 @@ See [Observability.md](Observability.md).
 - **At-most-once crash window.** A crash between the settle and the async
   analytics hand-off loses that batch's record, as for today's async
   analytics.
+- **Ambiguous settle commit.** `settleNativeWithRetry` retries a settle that
+  returned a store error. If that settle had in fact committed (the connection
+  dropped after the commit), the retry matches no `claimed` row and reports a
+  lost claim. The same happens when that attempt committed and every later
+  retry errors. The batch is then `accounted` with no chat records and no
+  spend: an undercount, never a double charge. It needs an ambiguous commit
+  error, so it is rare. To spot it, look for an `accounted` row in
+  `native_resources` with no `llm_chat_records` row for its `app_id` and
+  `llm_id` written within seconds of its `accounted_at` (usage is recorded
+  right after the settle). Don't key on the proxy log's `native_resource`
+  summary: it is empty on LLMs with `dont_log_bodies`. Making `Settle`
+  idempotent for its token closes it (tracked as a follow-up).
 - **Lost edge SQLite.** Batches whose edge lost its SQLite are never accounted.
 - **Expired results.** Results expired before anyone read them make the batch
   `unaccountable`, with a warning.

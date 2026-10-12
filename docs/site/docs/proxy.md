@@ -156,6 +156,7 @@ Limitations:
 *   **Results downloads are refused (`501`) on an LLM with response plugins.** A streamed results file cannot be handed to a plugin that rewrites response bodies.
 *   **A failover rung or router does not grant batch access.** Batches need the App to hold the LLM directly (otherwise `403`). Plugin upstream overrides do not apply to batch calls, because the batches live in the LLM's own Anthropic account.
 *   **Headers and query parameters are filtered.** Only `anthropic-version`, `anthropic-beta`, `content-type`, `accept` and `x-request-id` are forwarded, and only the `beta` query parameter. `anthropic-workspace-id` is dropped, so batches always live in the workspace of the LLM's API key.
+*   **A dropped database connection can lose a batch's usage.** If the connection drops just after the gateway marks a batch as accounted, but before it gets the confirmation, the batch stays accounted and its usage is never recorded. The App is undercharged, never charged twice. This is rare. An affected batch shows as accounted in the `native_resources` table but has no matching usage in analytics.
 *   **Batch IDs depend on the API key.** Rotating the LLM's Anthropic API key invalidates outstanding batch IDs everywhere except on the gateway that created them.
 
 | Setting | AI Studio | Microgateway | Default |
