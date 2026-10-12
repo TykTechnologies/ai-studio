@@ -65,6 +65,17 @@ func CachePricesFor(vendor string, cpit, cacheWritePT, cacheReadPT float64) (wri
 // the input price; see CachePricesFor.
 var CacheFallbackVendors = []string{string(OPENAI), string(GOOGLEAI)}
 
+// PromptTokensExcludingCache returns the prompt token count to record for a
+// vendor's response: OpenAI's and Google's prompt counts include the cache
+// tokens (see CachePricesFor), so they are subtracted to avoid counting them
+// twice in TotalTokens and in ChatRecordCost. Other vendors report them apart.
+func PromptTokensExcludingCache(vendor string, promptTokens, cacheWriteTokens, cacheReadTokens int) int {
+	if !slices.Contains(CacheFallbackVendors, vendor) {
+		return promptTokens
+	}
+	return promptTokens - cacheWriteTokens - cacheReadTokens
+}
+
 // ChatRecordCost is the cost the gateway stores on a chat record at list
 // price, in currency units x 10000, before any price multiplier
 // (IPriceAdjustedResponse) is applied.

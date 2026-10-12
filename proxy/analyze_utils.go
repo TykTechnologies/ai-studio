@@ -178,9 +178,7 @@ func buildChatRecordFor(service services.ServiceInterface, llm *models.LLM, app 
 	// TotalTokens or in the cost below: Google's promptTokenCount includes
 	// cachedContentTokenCount, and OpenAI's prompt_tokens includes
 	// prompt_tokens_details.cached_tokens (and cache_write_tokens).
-	if llm.Vendor == models.GOOGLEAI || llm.Vendor == models.OPENAI {
-		pt = pt - cacheReadTokens - cacheWriteTokens
-	}
+	pt = models.PromptTokensExcludingCache(string(llm.Vendor), pt, cacheWriteTokens, cacheReadTokens)
 
 	// Use actual timestamp for the record, not budget start dates
 	rec := &models.LLMChatRecord{
