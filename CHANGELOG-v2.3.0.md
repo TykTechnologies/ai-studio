@@ -97,6 +97,7 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 - **The Helm chart, quickstarts and deployment docs default to v2.2.1** (`725d561a`).
 
 ## Security
+- **Unauthenticated admin access to the microgateway, leading to malicious plugin loading** (PRNUM, also released as 2.2.2). `POST /api/v1/auth/token` needed no credentials and issued a token for any App with any scopes, `admin` included. Anyone who could reach a microgateway's HTTP port could use it to load a malicious plugin of their own onto the gateway and attach it to its LLMs, where it sees and can change every prompt and response. They could also change LLMs, Apps, filters and prices, read analytics with stored bodies, and mint tokens. Edges and standalone microgateways were both affected. The route is removed in every mode, and an edge gateway (`GATEWAY_MODE=edge`) now mounts no `/api/v1` at all, since its configuration comes only from the control plane. See `CHANGELOG-v2.2.2.md` for what to check on existing gateways.
 - **Gateway connections are MCP only** ([#721](https://github.com/TykTechnologies/ai-studio/pull/721)). Every call to a Tyk Gateway goes through a fixed allow-list, and AI Studio never changes or deletes proxies it did not create.
 - **Proxies that AI Studio creates on Gateways set `stripAuthorizationData`**, so a client's Tyk key is not forwarded to the upstream MCP server. Dashboard connections do not; see Known issues.
 - **The internal-address rule applies to every Gateway node.** With DNS discovery, AI Studio reaches each node by its resolved address. Whether an internal address may be dialled is still decided for the connection's hostname, as for any other outbound call.
@@ -104,6 +105,7 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 
 ## Breaking changes and upgrade notes
 
+- **Edge gateways answer `404` on every `/api/v1` path**, and the `mgw` CLI no longer works against an edge. Configure edges from AI Studio. A standalone microgateway keeps its authenticated management API, but `POST /api/v1/auth/token` is removed: create tokens with `POST /api/v1/tokens` (admin token) or `microgateway -create-admin-token`.
 - **Edges must run 2.3.0 to serve decision models.** Older edges do not know the `systemone` vendor and refuse that LLM. OpenAI decision calls pass through older edges but are not recorded there.
 - **Price decision models.** Decision models are billed by input tokens, and output is usually free. Add a model price with the provider's input price and an output price of `0`. You can price the alias (`jev-latest`) or the version it resolves to (`jev-1.13.0`). An unpriced call is recorded at zero cost.
 - **Edge response plugins now receive the LLM's `vendor`** in their context. It used to be sent empty.
