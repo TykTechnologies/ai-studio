@@ -1,0 +1,180 @@
+name: Release Gate
+
+# The full test suite, cold: every test re-runs, nothing is skipped by path,
+# and the suites too slow or heavy for pull requests run too (UI E2E, the
+# enterprise plugins' unit, integration and E2E tests).
+#
+# - release.yml runs it before anything is published, unless a passing run
+#   already exists for the tagged commit.
+# - Run it by hand on main before cutting a release candidate (Actions >
+#   Release Gate > Run workflow); tagging that commit afterwards reuses the
+#   result and the release starts at once.
+# - It runs nightly on main, as the cold check behind the cached pull
+#   request runs (see ci-test.yml).
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      include_package_smoke:
+        description: "Also build the ENT .deb/.rpm packages and smoke-test them (about 45 minutes)"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 2 * * *"
+
+permissions:
+  contents: read
+
+env:
+  # Only the enterprise module is private; every other TykTechnologies module
+  # (tyk-identity-broker, storage, ...) is public and comes through the proxy.
+  GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
+
+jobs:
+  # Every job of the pull request workflow, in full mode: -count=1,
+  # coverage, both editions, the enterprise module and the Postgres suites.
+  core:
+    name: Core
+    uses: ./.github/workflows/ci-test.yml
+    with:
+      mode: full
+    secrets: inherit
+
+  ui-e2e:
+    name: UI
+    uses: ./.github/workflows/ui-tests.yml
+    secrets: inherit
+
+  # The enterprise plugins are Go modules of their own, which no other
+  # workflow tests. Their go.sum files are not committed (enterprise
+  # .gitignore), so -mod=mod lets Go write them.
+  enterprise-plugins:
+    name: Enterprise Plugin Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GOWORK: "off"
+      GOFLAGS: -mod=mod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Create placeholders for embeds
+        run: |
+          mkdir -p docs/site/dist ui/admin-frontend/build
+          echo "placeholder" > docs/site/dist/index.html
+          echo "placeholder" > ui/admin-frontend/build/index.html
+
+      - name: Unit tests
+        run: |
+          failed=""
+          for mod in $(find enterprise/plugins -name go.mod -not -path '*/node_modules/*' | sort); do
+            dir=$(dirname "$mod")
+            echo "::group::$dir"
+            (cd "$dir" && go test -tags enterprise -v -race -count=1 ./...) || failed="$failed $dir"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Plugin unit tests failed in:$failed"
+            exit 1
+          fi
+
+      # Docker: Redis and the other backing services start in containers.
+      - name: Integration tests
+        run: make test-plugins-integration TEST_EDITION=ent TEST_TIMEOUT=30m
+
+      - name: E2E tests
+        run: make test-plugins-e2e TEST_EDITION=ent TEST_TIMEOUT=30m
+
+  # goreleaser builds the ENT packages in Docker, and Playwright checks the
+  # installed result. release.yml builds the same packages, so this only runs
+  # when asked for.
+  package-smoke:
+    name: Package Smoke Tests (ENT)
+    if: inputs.include_package_smoke == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Pre-fetch Go modules
+        # The goreleaser container mounts the host module cache and has no
+        # credentials of its own.
+        run: |
+          mkdir -p ~/go/pkg/mod ~/.cache/go-build
+          go mod download
+          (cd microgateway && go mod download)
+
+      - name: Build packages and run smoke tests
+        env:
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+        run: make test-package-smoke-ent
+
+  gate:
+    name: Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [core, ui-e2e, enterprise-plugins, package-smoke]
+    if: always()
+    steps:
+      - name: Summary
+        env:
+          RESULTS: |
+            Core (both editions, full)=${{ needs.core.result }}
+            UI E2E=${{ needs.ui-e2e.result }}
+            Enterprise plugins=${{ needs.enterprise-plugins.result }}
+            Package smoke=${{ needs.package-smoke.result }}
+        run: |
+          {
+            echo "# Release Gate"
+            echo ""
+            echo "| Suite | Status |"
+            echo "|-------|--------|"
+            while IFS='=' read -r suite result; do
+              [ -n "$suite" ] || continue
+              case "$result" in
+                success) icon=':white_check_mark:' ;;
+                skipped) icon=':fast_forward: skipped' ;;
+                *) icon=":x: $result" ;;
+              esac
+              echo "| $suite | $icon |"
+            done <<< "$RESULTS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Every suite must pass; only the opt-in package smoke may be skipped.
+      - name: Check Results
+        if: >-
+          needs.core.result != 'success' ||
+          needs.ui-e2e.result != 'success' ||
+          needs.enterprise-plugins.result != 'success' ||
+          !contains(fromJSON('["success","skipped"]'), needs.package-smoke.result)
+        run: |
+          echo "The release gate failed."
+          exit 1
