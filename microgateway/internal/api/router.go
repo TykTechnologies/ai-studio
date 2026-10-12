@@ -113,6 +113,9 @@ type RouterConfig struct {
 	PluginManager             PluginManagerInterface
 	ReloadCoordinator         *services.ReloadCoordinator
 	ModelRouterService        *services.ModelRouterService // Enterprise: Model router service
+	// DisableManagementAPI leaves /api/v1 unmounted. Set for edge gateways,
+	// which are configured by the control plane only.
+	DisableManagementAPI bool
 	EnableSwagger             bool
 	EnableMetrics             bool
 	MetricsHandler            http.Handler
@@ -169,11 +172,26 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		})
 	})
 
-	// API v1 routes
+	// Management API. An edge gateway gets its configuration from the hub over
+	// gRPC, so it serves no /api/v1 at all: anything written there would
+	// bypass the hub's governance.
+	if config.DisableManagementAPI {
+		log.Info().Msg("Management API (/api/v1) disabled: edge gateways are configured by the control plane")
+	} else {
+		registerManagementRoutes(router, config)
+	}
+
+	registerGatewayRoutes(router, config)
+	return router
+}
+
+// registerManagementRoutes mounts the /api/v1 management API.
+func registerManagementRoutes(router *gin.Engine, config *RouterConfig) {
 	v1 := router.Group("/api/v1")
 	{
-		// Public endpoints
-		v1.POST("/auth/token", handlers.GenerateToken(config.Services))
+		// Public endpoints. There is deliberately no public token-issuing
+		// endpoint: tokens are created by an admin (POST /api/v1/tokens) or
+		// with -create-admin-token.
 		v1.POST("/auth/validate", handlers.ValidateTokenEndpoint(config.Services))
 
 		// Protected management endpoints
@@ -297,7 +315,11 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			}
 		}
 	}
+}
 
+// registerGatewayRoutes mounts the AI gateway, custom plugin endpoints,
+// metrics and swagger.
+func registerGatewayRoutes(router *gin.Engine, config *RouterConfig) {
 	// Gateway endpoints - mount the AI Gateway handler
 	// Plugins are now integrated via hooks in the proxy layer, so router is a simple passthrough
 	if config.Gateway != nil {
@@ -377,8 +399,6 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	if config.EnableSwagger {
 		router.GET("/swagger/*any", handlers.SwaggerHandler())
 	}
-
-	return router
 }
 
 // handlePluginEndpoint dispatches HTTP requests to the appropriate plugin's custom endpoint handler.

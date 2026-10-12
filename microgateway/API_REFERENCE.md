@@ -8,6 +8,7 @@ This document provides a comprehensive reference for all microgateway API endpoi
 - **Content-Type**: `application/json`
 - **Authentication**: Bearer token in Authorization header
 - **API Version**: v1 (all endpoints prefixed with `/api/v1`)
+- **Edge gateways** (`GATEWAY_MODE=edge`) do not serve the management API: every `/api/v1` path answers `404`. Their configuration comes from AI Studio over gRPC.
 
 ## Authentication
 
@@ -354,11 +355,6 @@ Soft deletes the LLM (sets deleted_at timestamp).
   "expires_in": 86400000000000  // Duration in nanoseconds (24h)
 }
 ```
-
-### Generate Token (Public)
-**POST** `/api/v1/auth/token`
-
-Same request format as create token, but available without admin authentication.
 
 ### Revoke Token
 **DELETE** `/api/v1/tokens/{token}`
@@ -715,7 +711,8 @@ POST /api/v1/apps/1/credentials
 
 ### 3. Generate App Token  
 ```bash
-POST /api/v1/auth/token
+POST /api/v1/tokens
+Authorization: Bearer <admin-token>
 {
   "app_id": 1,
   "name": "App Token",

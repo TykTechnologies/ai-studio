@@ -10,42 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GenerateToken generates a new API token (public endpoint)
-func GenerateToken(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req services.GenerateTokenRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Invalid request format",
-				"message": err.Error(),
-			})
-			return
-		}
-
-		// Generate token using token service
-		tokenResponse, err := serviceContainer.Token.GenerateToken(&req)
-		if err != nil {
-			if isNotFoundError(err) {
-				c.JSON(http.StatusNotFound, gin.H{
-					"error":   "App not found",
-					"message": err.Error(),
-				})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "Failed to generate token",
-				"message": err.Error(),
-			})
-			return
-		}
-
-		c.JSON(http.StatusCreated, gin.H{
-			"data":    tokenResponse,
-			"message": "Token generated successfully",
-		})
-	}
-}
-
 // ListTokens lists all tokens for an app
 func ListTokens(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 	return func(c *gin.Context) {
