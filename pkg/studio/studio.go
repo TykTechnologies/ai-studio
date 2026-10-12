@@ -230,6 +230,10 @@ type Studio struct {
 	telemetry        *services.TelemetryManager
 	tracingShutdown  tracing.Shutdown
 	cancelBackground context.CancelFunc
+	// background holds the goroutines that run until backgroundCtx is
+	// cancelled and that Stop waits for, so none outlives this Studio
+	// (they log through the process-wide logger the next one replaces).
+	background sync.WaitGroup
 	// analyticsTee copies analytics records to Options.AnalyticsSinks;
 	// analyticsPrimary is the handler it wraps, put back on Stop.
 	analyticsTee     *analytics.Tee
@@ -320,6 +324,11 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := ensureDefaults(s.db, opts.SkipLLMDefaults, conf.SkipFilterDefaults); err != nil {
 		return nil, fmt.Errorf("studio: seed defaults: %w", err)
 	}
+	s.background.Add(1)
+	safe.Go("legacy secret re-encryption", func() {
+		defer s.background.Done()
+		reencryptSecrets(backgroundCtx, s.db)
+	})
 
 	// Licensing (Enterprise: validates the licence and starts periodic checks).
 	s.licensing = licensing.NewService(licensing.Config{
@@ -806,6 +815,7 @@ func (s *Studio) stop(ctx context.Context) error {
 	// Stops the marketplace sync and the analytics recorder, among others.
 	if s.cancelBackground != nil {
 		s.cancelBackground()
+		s.background.Wait()
 		// Let the next Studio in this process start a fresh recorder.
 		analytics.ResetHandler()
 	}
