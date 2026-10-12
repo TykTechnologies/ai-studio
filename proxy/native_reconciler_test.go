@@ -110,7 +110,6 @@ func TestNativeReconciler_AccountsUndownloadedBatchOnce(t *testing.T) {
 	assert.Equal(t, nativeAccountSettled, out)
 	resp, body := h.do(h.keyA, http.MethodGet, resultsPath(h.wrap(h.llm, h.appA, "msgbatch_R1")), "")
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
-	time.Sleep(100 * time.Millisecond)
 	assert.Len(t, h.chatRecords(h.appA), 2)
 	_, calls = spend.totals()
 	assert.Equal(t, 2, calls)
@@ -522,7 +521,6 @@ func TestNativeReconciler_SettleStoreErrors(t *testing.T) {
 			if tc.records > 0 {
 				require.Eventually(t, func() bool { return len(h.chatRecords(h.appA)) == tc.records }, 5*time.Second, 20*time.Millisecond)
 			} else {
-				time.Sleep(100 * time.Millisecond)
 				assert.Empty(t, h.chatRecords(h.appA))
 			}
 		})

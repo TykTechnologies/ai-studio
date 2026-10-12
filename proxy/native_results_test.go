@@ -94,7 +94,6 @@ func TestNativeResults_AccountedOnceAtBatchPrice(t *testing.T) {
 		recs = h.chatRecords(h.appA)
 		return len(recs) == 2
 	}, 5*time.Second, 50*time.Millisecond)
-	time.Sleep(200 * time.Millisecond)
 	recs = h.chatRecords(h.appA)
 	require.Len(t, recs, 2, "exactly one record per model across two downloads")
 
@@ -312,7 +311,6 @@ func TestNativeResults_InterruptedDownloadRecordsNothing(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	close(gate)
 
-	time.Sleep(300 * time.Millisecond)
 	assert.Empty(t, h.chatRecords(h.appA))
 	got, err := h.service.NativeResourceStore().GetByOwner(context.Background(), h.llm.ID, h.appA.ID, anthropicVendor.ResourceMessageBatch, "msgbatch_INT")
 	require.NoError(t, err)
@@ -336,9 +334,8 @@ func TestNativeResults_NonCreatorNodePassesThrough(t *testing.T) {
 	h.vendor.setResults("msgbatch_NC", succeededLine("a", "claude-luna", 1, 1))
 	resp, body := h.do(h.keyA, http.MethodGet, resultsPath(h.wrap(h.llm, h.appA, "msgbatch_NC")), "")
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
-	time.Sleep(200 * time.Millisecond)
 	assert.Empty(t, h.chatRecords(h.appA))
-	logs := h.proxyLogs(h.appA)
+	logs := h.proxyLogs(h.appA, 1)
 	require.Len(t, logs, 1)
 	assert.Equal(t, http.StatusOK, logs[0].ResponseCode)
 	assert.Contains(t, logs[0].ResponseBody, `"results_lines":1`)

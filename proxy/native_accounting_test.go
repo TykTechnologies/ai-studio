@@ -84,7 +84,6 @@ func TestNativeResults_DownloadAccountingRetriesStoreErrors(t *testing.T) {
 			if tc.records > 0 {
 				require.Eventually(t, func() bool { return len(h.chatRecords(h.appA)) == tc.records }, 5*time.Second, 20*time.Millisecond)
 			}
-			time.Sleep(100 * time.Millisecond)
 			assert.Len(t, h.chatRecords(h.appA), tc.records)
 		})
 	}

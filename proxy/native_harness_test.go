@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,11 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -250,6 +253,9 @@ type nativeHarness struct {
 	primary          *models.LLM
 	appA, appB, appC *models.App
 	keyA, keyB, keyC string
+	// inflight counts requests the gateway is still handling: a handler can
+	// go on (and record usage) after the client has its response or gave up.
+	inflight atomic.Int64
 }
 
 type nativeHarnessOpts struct {
@@ -336,7 +342,12 @@ func newNativeHarness(t *testing.T, opts nativeHarnessOpts) *nativeHarness {
 	p := New(svc, budgetSvc, cfg)
 	require.NoError(t, p.loadResources())
 	h.proxy = p
-	srv := &http.Server{Handler: p.createHandler()}
+	handler := p.createHandler()
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.inflight.Add(1)
+		defer h.inflight.Add(-1)
+		handler.ServeHTTP(w, r)
+	})}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -388,13 +399,19 @@ func wrapBatchID(t *testing.T, key string, llmID, appID uint, vendorID string) s
 	return id
 }
 
-func (h *nativeHarness) proxyLogs(app *models.App) []models.ProxyLog {
+// proxyLogs returns app's proxy logs once at least want of them are written.
+// waitForAnalyzers only covers the hand-off: RecordProxyLog queues the log on
+// the analytics handler's channel (analytics/database_handler.go
+// RecordProxyLog), and the handler's writer goroutine inserts it later
+// (startWorker, the proxyLogChan case).
+func (h *nativeHarness) proxyLogs(app *models.App, want int) []models.ProxyLog {
 	h.t.Helper()
 	h.proxy.waitForAnalyzers()
 	var logs []models.ProxyLog
-	require.Eventually(h.t, func() bool {
-		return h.db.Where("app_id = ?", app.ID).Order("id asc").Find(&logs).Error == nil
-	}, 2*time.Second, 20*time.Millisecond)
+	require.Eventuallyf(h.t, func() bool {
+		logs = nil
+		return h.db.Where("app_id = ?", app.ID).Order("id asc").Find(&logs).Error == nil && len(logs) >= want
+	}, 5*time.Second, 20*time.Millisecond, "want at least %d proxy logs for app %d", want, app.ID)
 	return logs
 }
 
@@ -432,9 +449,64 @@ func (h *nativeHarness) addPrice(model string, cpt, cpit float64) {
 	require.NoError(h.t, h.db.Create(&models.ModelPrice{ModelName: model, Vendor: string(models.ANTHROPIC), CPT: cpt, CPIT: cpit, Currency: "USD"}).Error)
 }
 
+// settle returns once everything recorded so far is in the database: no
+// request is still being handled, every analysis goroutine (goAnalyze) has
+// handed its records off, and the analytics writer has written them. So a
+// read after it proves "no record" as well as an exact count. Usage recorded
+// by background workers (StartNativeWorkers) is covered only after stop.
+func (h *nativeHarness) settle() {
+	h.t.Helper()
+	require.Eventually(h.t, func() bool { return h.inflight.Load() == 0 }, 10*time.Second, 2*time.Millisecond,
+		"gateway requests still in flight")
+	h.proxy.waitForAnalyzers()
+	h.flushAnalytics()
+}
+
+// flushAnalytics waits for the analytics writer to write everything queued so
+// far. The writer is one goroutine taking each channel in order
+// (analytics.DatabaseHandler startWorker), so once a marker chat record and a
+// marker proxy log queued now are in the database, every record and log
+// queued before them has been written (or dropped by the writer). The markers
+// go to the handler directly, skipping metrics, and are deleted afterwards. A
+// marker the writer drops (shared-cache SQLite "table is locked") is
+// replaced by a new one.
+func (h *nativeHarness) flushAnalytics() {
+	h.t.Helper()
+	handler := analytics.GetHandler()
+	require.NotNil(h.t, handler, "analytics recording is not started")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		marker := fmt.Sprintf("__native_harness_flush_%d", time.Now().UnixNano())
+		handler.RecordChatRecord(context.Background(), &models.LLMChatRecord{Name: marker, TimeStamp: time.Now()})
+		handler.RecordProxyLog(context.Background(), &models.ProxyLog{ModelName: marker, TimeStamp: time.Now()})
+		for retry := time.Now().Add(time.Second); time.Now().Before(retry); time.Sleep(5 * time.Millisecond) {
+			var recs, logs int64
+			if h.db.Model(&models.LLMChatRecord{}).Where("name = ?", marker).Count(&recs).Error != nil ||
+				h.db.Model(&models.ProxyLog{}).Where("model_name = ?", marker).Count(&logs).Error != nil {
+				continue
+			}
+			if recs == 1 && logs == 1 {
+				h.deleteFlushMarkers()
+				return
+			}
+		}
+		require.True(h.t, time.Now().Before(deadline), "the analytics writer did not reach the flush marker")
+	}
+}
+
+func (h *nativeHarness) deleteFlushMarkers() {
+	h.t.Helper()
+	require.Eventually(h.t, func() bool {
+		return h.db.Unscoped().Where("name LIKE ?", "__native_harness_flush_%").Delete(&models.LLMChatRecord{}).Error == nil &&
+			h.db.Unscoped().Where("model_name LIKE ?", "__native_harness_flush_%").Delete(&models.ProxyLog{}).Error == nil
+	}, 5*time.Second, 5*time.Millisecond)
+}
+
+// chatRecords returns app's chat records once everything recorded so far is
+// written (settle), so an empty result means none was recorded.
 func (h *nativeHarness) chatRecords(app *models.App) []models.LLMChatRecord {
 	h.t.Helper()
-	h.proxy.waitForAnalyzers()
+	h.settle()
 	// The shared-cache SQLite refuses a read that overlaps the analytics
 	// writer ("database table is locked") instead of waiting; retry it.
 	var (

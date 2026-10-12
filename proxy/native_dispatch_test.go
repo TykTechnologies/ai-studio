@@ -76,7 +76,7 @@ func TestNative_RetrieveWrapsIDsAndPinsTheUpstream(t *testing.T) {
 	}
 
 	// One proxy log row per call, bodies as the client saw them.
-	logs := h.proxyLogs(h.appA)
+	logs := h.proxyLogs(h.appA, 3)
 	require.Len(t, logs, 3)
 	for _, l := range logs {
 		assert.Equal(t, http.StatusOK, l.ResponseCode)

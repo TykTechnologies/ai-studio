@@ -59,12 +59,10 @@ func TestNativeCreate_AdmittedBatchIsRecordedAndWrapped(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// The create is logged, with no chat record (its cost is in the results).
-	logs := h.proxyLogs(h.appA)
+	logs := h.proxyLogs(h.appA, 1)
 	require.NotEmpty(t, logs)
 	assert.Equal(t, http.StatusOK, logs[0].ResponseCode)
-	var n int64
-	h.db.Model(&models.LLMChatRecord{}).Where("app_id = ?", h.appA.ID).Count(&n)
-	assert.Zero(t, n)
+	assert.Empty(t, h.chatRecords(h.appA))
 }
 
 // One request asking for a model the LLM does not allow refuses the batch,

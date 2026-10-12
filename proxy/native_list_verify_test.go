@@ -108,7 +108,7 @@ func TestNativeDeleteVerify_ConcurrentDeletesAndReconcilerOnPostgres(t *testing.
 		return int(n)
 	}
 	require.Eventually(t, func() bool { return count() >= rounds }, 10*time.Second, 50*time.Millisecond)
-	time.Sleep(300 * time.Millisecond)
+	h.settle()
 	require.Eventually(t, func() bool { return count() >= 0 }, 5*time.Second, 50*time.Millisecond)
 	assert.Equal(t, rounds, count(), "each batch accounted exactly once")
 }

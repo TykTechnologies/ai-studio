@@ -77,7 +77,7 @@ func TestNativeCreate_RedactionRewritesOnlyChangedItems(t *testing.T) {
 	assert.True(t, strings.HasSuffix(sent, `}], "extra" : true }`), sent)
 
 	// The proxy log holds the body the filters let through.
-	logs := h.proxyLogs(h.appA)
+	logs := h.proxyLogs(h.appA, 1)
 	require.Len(t, logs, 1)
 	assert.NotContains(t, logs[0].RequestBody, "SECRET")
 }

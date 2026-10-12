@@ -92,7 +92,7 @@ func TestNativeResultsVerify_ConcurrentDownloadsAccountOnce(t *testing.T) {
 		return int(n)
 	}
 	require.Eventually(t, func() bool { return countRecords() >= 2 }, 10*time.Second, 50*time.Millisecond)
-	time.Sleep(300 * time.Millisecond)
+	h.settle()
 	require.Eventually(t, func() bool { return countRecords() >= 0 }, 5*time.Second, 50*time.Millisecond)
 	assert.Equal(t, 2, countRecords(), "8 concurrent downloads, one record per model")
 	_, calls := spend.totals()
@@ -129,7 +129,6 @@ func TestNativeResultsVerify_UpstreamTruncationRecordsNothing(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	time.Sleep(300 * time.Millisecond)
 	assert.Empty(t, h.chatRecords(h.appA), "a truncated download must not account the batch")
 	assert.Equal(t, models.NativeAccountingPending, h.batchRow("msgbatch_TR").AccountingState)
 }
@@ -149,7 +148,6 @@ func TestNativeResultsVerify_OversizedLineRecordsNothing(t *testing.T) {
 	resp, body := h.do(h.keyA, http.MethodGet, resultsPath(id), "")
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Less(t, len(body), 1<<20, "the oversized line is not passed through")
-	time.Sleep(300 * time.Millisecond)
 	assert.Empty(t, h.chatRecords(h.appA))
 	assert.Equal(t, models.NativeAccountingPending, h.batchRow("msgbatch_OL").AccountingState)
 }

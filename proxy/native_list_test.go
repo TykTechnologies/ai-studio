@@ -149,7 +149,7 @@ func TestNativeList_OwnBatchesNewestFirstWithWrappedCursors(t *testing.T) {
 	assert.Equal(t, []string{h.wrap(h.llm2, h.appA, "msgbatch_T0")}, decodeListPage(t, body).ids())
 
 	assert.Empty(t, h.vendor.recorded(), "a listing never reaches the vendor")
-	logs := h.proxyLogs(h.appA)
+	logs := h.proxyLogs(h.appA, 1)
 	require.NotEmpty(t, logs, "listings are logged")
 	assert.Equal(t, http.StatusOK, logs[0].ResponseCode)
 }
@@ -324,7 +324,6 @@ func TestNativeDelete_AccountsUnsettledEndedBatchOnceThenDeletes(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, resp.StatusCode, string(body))
 	assert.Len(t, h.vendor.callsTo(http.MethodDelete, "/v1/messages/batches/msgbatch_D5"), 1)
 
-	time.Sleep(200 * time.Millisecond)
 	assert.Len(t, h.chatRecords(h.appA), 1, "accounted exactly once")
 	_, calls := spend.totals()
 	assert.Equal(t, 1, calls)
@@ -370,7 +369,6 @@ func TestNativeDelete_ConcurrentDeletesAccountOnce(t *testing.T) {
 		}
 	}
 	assert.LessOrEqual(t, ok, 1, "the vendor deletes the batch at most once")
-	time.Sleep(200 * time.Millisecond)
 	recs := h.chatRecords(h.appA)
 	assert.LessOrEqual(t, len(recs), 1, "accounted at most once")
 	if ok == 1 {

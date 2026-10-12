@@ -106,7 +106,7 @@ func TestNativeReconcilerVerify_ThreeWayRace(t *testing.T) {
 				return int(n)
 			}
 			require.Eventually(t, func() bool { return count() >= 2*rounds }, 10*time.Second, 50*time.Millisecond)
-			time.Sleep(300 * time.Millisecond)
+			h.settle()
 			require.Eventually(t, func() bool { return count() >= 0 }, 5*time.Second, 50*time.Millisecond)
 			assert.Equal(t, 2*rounds, count(), "two models per batch, each batch accounted once")
 		})
