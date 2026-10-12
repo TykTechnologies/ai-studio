@@ -1,6 +1,7 @@
 # Tyk AI Studio 2.2.2
 
-**Status:** Unreleased
+**Status:** Released — `v2.2.2`
+**Release date:** 2026-10-12
 **Diff:** [`v2.2.1...v2.2.2`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.1...v2.2.2)
 
 2.2.2 is a security release for the microgateway. **Upgrade every microgateway, edges and standalone, as soon as you can.** AI Studio itself is unchanged from 2.2.1 and does not need upgrading.
