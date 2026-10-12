@@ -175,6 +175,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		PluginManager:               api.NewPluginManagerAdapter(pluginManager),
 		ReloadCoordinator:           nil, // Will be set for control instances
 		ModelRouterService:          serviceContainer.ModelRouterService, // Enterprise: Model router
+		DisableManagementAPI:        cfg.IsEdge(),
 		EnableSwagger:               cfg.IsDevelopment(),
 		EnableMetrics:               cfg.Observability.EnableMetrics,
 		MetricsHandler:              metricsHandler,
@@ -232,6 +233,7 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 		Gateway:                     s.gateway,
 		PluginManager:               api.NewPluginManagerAdapter(s.pluginManager),
 		ReloadCoordinator:           reloadCoordinator, // Add reload coordinator
+		DisableManagementAPI:        s.config.IsEdge(),
 		EnableSwagger:               s.config.IsDevelopment(),
 		EnableMetrics:               s.config.Observability.EnableMetrics,
 		MetricsHandler:              metrics.Handler(),

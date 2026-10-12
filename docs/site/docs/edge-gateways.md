@@ -23,6 +23,12 @@ This architecture enables:
 - **High Availability:** Continue processing even if the hub is temporarily unreachable
 - **Multi-Tenancy:** Isolate resources between different teams or customers using namespaces
 
+### No management API on edges
+
+An edge gateway (`GATEWAY_MODE=edge`) does not serve the microgateway management API: every `/api/v1/...` path answers `404`. Its LLMs, Apps, credentials, filters and plugins come only from the control plane, over gRPC. The `mgw` CLI, which uses that API, works only against a standalone microgateway. An edge still serves the AI gateway endpoints (`/llm/`, `/ai/`, `/v1/`, `/tools/`, `/datasource/`, `/anthropic/`, `/router/`), custom plugin endpoints under `/plugins/`, `/health`, `/ready` and, when enabled, metrics.
+
+Before 2.2.2 an edge served the full management API. One of its routes, `POST /api/v1/auth/token`, needed no credentials and issued a token with any scopes, including `admin`, which an attacker could use to load a malicious plugin onto the edge. Upgrade every edge, and keep edge ports reachable only by the clients that need the gateway. An upgraded edge applies AI Studio's configuration in full when it starts, replacing anything written through the old API.
+
 ## Edge Gateway Management UI
 
 The Edge Gateways page in the Admin UI provides visibility into all connected edge instances. Access it via **Admin > Edge Gateways** in the sidebar.

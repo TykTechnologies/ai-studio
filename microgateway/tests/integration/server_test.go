@@ -18,9 +18,18 @@ import (
 )
 
 func setupIntegrationTest(t *testing.T) (*server.Server, *services.ServiceContainer) {
+	return setupIntegrationTestInMode(t, "standalone")
+}
+
+// setupIntegrationTestInMode builds the server for a GATEWAY_MODE.
+func setupIntegrationTestInMode(t *testing.T, mode string) (*server.Server, *services.ServiceContainer) {
 	// Create in-memory database
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// Every pooled connection to ":memory:" is a new, empty database.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 
 	// Run migrations
 	err = database.Migrate(db)
@@ -53,6 +62,9 @@ func setupIntegrationTest(t *testing.T) (*server.Server, *services.ServiceContai
 		Observability: config.ObservabilityConfig{
 			LogLevel:  "info",
 			LogFormat: "json",
+		},
+		HubSpoke: config.HubSpokeConfig{
+			Mode: mode,
 		},
 	}
 

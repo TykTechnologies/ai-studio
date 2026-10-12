@@ -239,7 +239,8 @@ echo "Token rotated successfully: $NEW_TOKEN"
 ### Token Creation API
 ```bash
 # Create token via API
-curl -X POST http://localhost:8080/api/v1/auth/token \
+curl -X POST http://localhost:8080/api/v1/tokens \
+  -H "Authorization: Bearer $MGW_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "app_id": 1,
