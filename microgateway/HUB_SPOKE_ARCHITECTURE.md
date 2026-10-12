@@ -322,8 +322,8 @@ EDGE_AUTH_TOKEN=wrong-token ./microgateway
 
 #### Configuration Not Syncing
 ```bash
-# Force full sync from edge
-curl -X POST "http://edge:8080/api/v1/sync"
+# Edges serve no /api/v1 management API; push configuration from the
+# control plane instead (AI Studio: Edge Gateways > Push Configuration)
 
 # Check control instance logs
 tail -f /var/log/microgateway/control.log
