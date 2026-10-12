@@ -243,6 +243,19 @@ type Config struct {
 	// NativeMaxInProgressPerApp caps the batches an App may have in progress
 	// on one LLM, as this node's ledger counts them. Zero: no cap.
 	NativeMaxInProgressPerApp int
+
+	// Native resource reconciler (native_reconciler.go); zero keeps each
+	// default. NativeReconcileInterval is how often it looks for due ledger
+	// rows (30s), NativeReconcileBatch the rows one pass takes (50),
+	// NativeReconcileWorkers the rows reconciled at once (4),
+	// NativePollInterval the wait before polling an unfinished batch again
+	// (2m) and NativePollMaxBackoff the cap of the doubling wait after failed
+	// polls (30m; never below NativePollInterval).
+	NativeReconcileInterval time.Duration
+	NativeReconcileBatch    int
+	NativeReconcileWorkers  int
+	NativePollInterval      time.Duration
+	NativePollMaxBackoff    time.Duration
 }
 
 // unifiedRouterBasePath returns the normalized ingress base path, or "" when the

@@ -211,7 +211,7 @@ func TestNativeReconciler_TransientErrorBacksOff(t *testing.T) {
 	assert.WithinDuration(t, now.Add(2*nativePollInterval), *got.NextPollAt, time.Second)
 	assert.Empty(t, h.chatRecords(h.appA))
 
-	assert.Equal(t, nativePollMaxBackoff, nativePollBackoff(50))
+	assert.Equal(t, nativePollMaxBackoff, (*Config)(nil).nativePollBackoff(50))
 }
 
 // A row whose LLM is gone stays pending (with backoff) until its results
@@ -553,4 +553,74 @@ func TestNativeReconciler_OversizedLineSkipped(t *testing.T) {
 	require.Eventually(t, func() bool { recs = h.chatRecords(h.appA); return len(recs) == 1 }, 5*time.Second, 20*time.Millisecond)
 	assert.Equal(t, 1500, recs[0].PromptTokens, "the lines around the oversized one are accounted")
 	assert.Equal(t, 300, recs[0].ResponseTokens)
+}
+
+// Unset (nil or zero) reconciler settings keep today's defaults exactly;
+// set ones override them, and the max backoff never drops below the poll
+// interval.
+func TestNativeReconcilerConfig(t *testing.T) {
+	for _, c := range []*Config{nil, {}} {
+		assert.Equal(t, 30*time.Second, c.nativeReconcileInterval())
+		assert.Equal(t, 50, c.nativeReconcileBatch())
+		assert.Equal(t, 4, c.nativeReconcileWorkers())
+		assert.Equal(t, 2*time.Minute, c.nativePollInterval())
+		assert.Equal(t, 30*time.Minute, c.nativePollMaxBackoff())
+		assert.Equal(t, 2*time.Minute, c.nativePollBackoff(1))
+		assert.Equal(t, 16*time.Minute, c.nativePollBackoff(4))
+		assert.Equal(t, 30*time.Minute, c.nativePollBackoff(5))
+		assert.Equal(t, 30*time.Minute, c.nativePollBackoff(1000))
+	}
+
+	c := &Config{NativeReconcileInterval: 45 * time.Second, NativeReconcileBatch: 7, NativeReconcileWorkers: 2,
+		NativePollInterval: 5 * time.Minute, NativePollMaxBackoff: 12 * time.Minute}
+	assert.Equal(t, 45*time.Second, c.nativeReconcileInterval())
+	assert.Equal(t, 7, c.nativeReconcileBatch())
+	assert.Equal(t, 2, c.nativeReconcileWorkers())
+	assert.Equal(t, 5*time.Minute, c.nativePollInterval())
+	assert.Equal(t, []time.Duration{5 * time.Minute, 10 * time.Minute, 12 * time.Minute, 12 * time.Minute},
+		[]time.Duration{c.nativePollBackoff(1), c.nativePollBackoff(2), c.nativePollBackoff(3), c.nativePollBackoff(9)})
+
+	low := &Config{NativePollInterval: time.Hour, NativePollMaxBackoff: time.Minute}
+	assert.Equal(t, time.Hour, low.nativePollMaxBackoff(), "the backoff cap is never below the poll interval")
+	assert.Equal(t, time.Hour, low.nativePollBackoff(3))
+	neg := &Config{NativeReconcileInterval: -time.Second, NativeReconcileBatch: -1, NativeReconcileWorkers: -1,
+		NativePollInterval: -time.Second, NativePollMaxBackoff: -time.Second}
+	assert.Equal(t, 30*time.Second, neg.nativeReconcileInterval())
+	assert.Equal(t, 50, neg.nativeReconcileBatch())
+	assert.Equal(t, 4, neg.nativeReconcileWorkers())
+	assert.Equal(t, 30*time.Minute, neg.nativePollMaxBackoff())
+}
+
+// The running reconciler uses the configured timings: the pass interval,
+// rows per pass, and the next poll of an unfinished batch.
+func TestNativeWorkers_UseConfiguredTimings(t *testing.T) {
+	h := newNativeHarness(t, nativeHarnessOpts{config: &Config{
+		NativeReconcileInterval: 10 * time.Millisecond,
+		NativeReconcileBatch:    1,
+		NativePollInterval:      7 * time.Minute,
+	}})
+	for _, id := range []string{"msgbatch_C1", "msgbatch_C2"} {
+		h.vendor.addBatch(id, "in_progress")
+	}
+	r1 := h.seedBatchRow(h.llm, h.appA, "msgbatch_C1")
+	r2 := h.seedBatchRow(h.llm, h.appA, "msgbatch_C2")
+
+	// One row per pass: a single pass polls only the first due row.
+	start := time.Now()
+	h.proxy.reconcileNative(context.Background(), h.service.NativeResourceStore(), start)
+	assert.Len(t, h.vendor.callsTo(http.MethodGet, "/v1/messages/batches/msgbatch_C1"), 1)
+	assert.Empty(t, h.vendor.callsTo(http.MethodGet, "/v1/messages/batches/msgbatch_C2"))
+	got := h.ledgerRow(r1.ID)
+	require.NotNil(t, got.NextPollAt)
+	assert.WithinDuration(t, start.Add(7*time.Minute), *got.NextPollAt, time.Second, "configured poll interval")
+
+	// The 10ms pass interval (the default is 30s) reaches the second row
+	// quickly; the package defaults are untouched.
+	stop := h.proxy.StartNativeWorkers(context.Background(), nil)
+	defer stop()
+	require.Eventually(t, func() bool {
+		return len(h.vendor.callsTo(http.MethodGet, "/v1/messages/batches/msgbatch_C2")) > 0
+	}, 2*time.Second, 5*time.Millisecond)
+	require.NotNil(t, h.ledgerRow(r2.ID).NextPollAt)
+	assert.Equal(t, 30*time.Second, nativeReconcileInterval)
 }

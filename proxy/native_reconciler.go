@@ -30,6 +30,7 @@ import (
 // It never follows a vendor-supplied URL: every request is built from the
 // extension's canonical paths on the LLM's configured, SSRF-guarded endpoint.
 
+// The reconciler's default timings; proxy.Config overrides each when set.
 var (
 	// nativeReconcileInterval is how often the reconciler looks for due rows.
 	nativeReconcileInterval = 30 * time.Second
@@ -108,7 +109,7 @@ func (p *Proxy) StartNativeWorkers(ctx context.Context, gate func() bool) (stop 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		t := time.NewTicker(nativeReconcileInterval)
+		t := time.NewTicker(p.config.nativeReconcileInterval())
 		defer t.Stop()
 		for {
 			if gate == nil || gate() {
@@ -138,14 +139,14 @@ func (p *Proxy) reconcileNative(ctx context.Context, store services.NativeResour
 	} else if n > 0 {
 		slog.Debug("native ledger swept expired rows", "rows", n)
 	}
-	rows, err := store.Due(ctx, now, nativeClaimLease, nativeReconcileBatch)
+	rows, err := store.Due(ctx, now, nativeClaimLease, p.config.nativeReconcileBatch())
 	if err != nil {
 		if ctx.Err() == nil {
 			slog.Warn("native reconciler could not list due rows", "error", err)
 		}
 		return
 	}
-	sem := make(chan struct{}, nativeReconcileWorkers)
+	sem := make(chan struct{}, p.config.nativeReconcileWorkers())
 	var wg sync.WaitGroup
 	for i := range rows {
 		if ctx.Err() != nil {
@@ -173,14 +174,14 @@ func (p *Proxy) reconcileNativeRow(ctx context.Context, store services.NativeRes
 	switch {
 	case err != nil:
 		failures := row.PollFailures + 1
-		next := now.Add(nativePollBackoff(failures))
+		next := now.Add(p.config.nativePollBackoff(failures))
 		slog.Warn("native reconciler could not account resource; retrying", "row", row.ID, "type", row.ResourceType,
 			"llm_id", row.LLMID, "failures", failures, "next_poll", next, "error", err)
 		if serr := store.SchedulePoll(sctx, row.ID, next, failures); serr != nil && !errors.Is(serr, services.ErrNativeResourceNotFound) {
 			slog.Warn("native reconciler could not schedule poll", "row", row.ID, "error", serr)
 		}
 	case outcome == nativeAccountNotEnded:
-		if serr := store.SchedulePoll(sctx, row.ID, now.Add(nativePollInterval), 0); serr != nil && !errors.Is(serr, services.ErrNativeResourceNotFound) {
+		if serr := store.SchedulePoll(sctx, row.ID, now.Add(p.config.nativePollInterval()), 0); serr != nil && !errors.Is(serr, services.ErrNativeResourceNotFound) {
 			slog.Warn("native reconciler could not schedule poll", "row", row.ID, "error", serr)
 		}
 	default:
@@ -188,16 +189,51 @@ func (p *Proxy) reconcileNativeRow(ctx context.Context, store services.NativeRes
 	}
 }
 
-// nativePollBackoff is the wait after failures consecutive failed polls.
-func nativePollBackoff(failures int) time.Duration {
-	d := nativePollInterval
-	for i := 1; i < failures && d < nativePollMaxBackoff; i++ {
+func (c *Config) nativeReconcileInterval() time.Duration {
+	if c == nil || c.NativeReconcileInterval <= 0 {
+		return nativeReconcileInterval
+	}
+	return c.NativeReconcileInterval
+}
+
+func (c *Config) nativeReconcileBatch() int {
+	if c == nil || c.NativeReconcileBatch <= 0 {
+		return nativeReconcileBatch
+	}
+	return c.NativeReconcileBatch
+}
+
+func (c *Config) nativeReconcileWorkers() int {
+	if c == nil || c.NativeReconcileWorkers <= 0 {
+		return nativeReconcileWorkers
+	}
+	return c.NativeReconcileWorkers
+}
+
+func (c *Config) nativePollInterval() time.Duration {
+	if c == nil || c.NativePollInterval <= 0 {
+		return nativePollInterval
+	}
+	return c.NativePollInterval
+}
+
+// nativePollMaxBackoff is never below the poll interval.
+func (c *Config) nativePollMaxBackoff() time.Duration {
+	d := nativePollMaxBackoff
+	if c != nil && c.NativePollMaxBackoff > 0 {
+		d = c.NativePollMaxBackoff
+	}
+	return max(d, c.nativePollInterval())
+}
+
+// nativePollBackoff is the wait after failures consecutive failed polls: the
+// poll interval, doubled per further failure, capped at the max backoff.
+func (c *Config) nativePollBackoff(failures int) time.Duration {
+	d, ceiling := c.nativePollInterval(), c.nativePollMaxBackoff()
+	for i := 1; i < failures && d < ceiling; i++ {
 		d *= 2
 	}
-	if d > nativePollMaxBackoff {
-		d = nativePollMaxBackoff
-	}
-	return d
+	return min(d, ceiling)
 }
 
 // accountNativeRow brings an async native resource's accounting to an end if

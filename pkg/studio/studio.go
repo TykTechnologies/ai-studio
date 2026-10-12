@@ -588,6 +588,12 @@ func New(opts Options) (_ *Studio, err error) {
 		NativeMaxConcurrentCreates: conf.NativeMaxConcurrentCreates,
 		NativeMaxFilteredItems:     conf.NativeMaxFilteredItems,
 		NativeMaxInProgressPerApp:  conf.NativeMaxInProgressPerApp,
+
+		NativeReconcileInterval: conf.NativeReconcileInterval,
+		NativeReconcileBatch:    conf.NativeReconcileBatch,
+		NativeReconcileWorkers:  conf.NativeReconcileWorkers,
+		NativePollInterval:      conf.NativePollInterval,
+		NativePollMaxBackoff:    conf.NativePollMaxBackoff,
 	}, service.Budget)
 	// Account native batches whose results nobody downloads. The ledger is
 	// shared by the replicas; only the leader polls the vendor.

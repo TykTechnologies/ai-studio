@@ -1,6 +1,12 @@
 package config
 
-import "testing"
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/rs/zerolog"
+)
 
 func TestLoadFrom_NativeAPILimits(t *testing.T) {
 	vals := map[string]string{
@@ -26,5 +32,72 @@ func TestLoadFrom_NativeAPILimits(t *testing.T) {
 		conf.NativeMaxFilteredItems != 0 || conf.NativeMaxInProgressPerApp != 0 {
 		t.Errorf("invalid or unset native limits should be 0: %d %d %d %d", conf.NativeMaxBodyBytes,
 			conf.NativeMaxConcurrentCreates, conf.NativeMaxFilteredItems, conf.NativeMaxInProgressPerApp)
+	}
+}
+
+// NATIVE_API_MAX_BODY_BYTES is capped at 256 MiB at load, with a warning;
+// values at or below the cap, and unset, are kept.
+func TestLoadFrom_NativeMaxBodyBytesCapped(t *testing.T) {
+	for _, tc := range []struct {
+		name, value string
+		want        int64
+	}{
+		{"over the cap", "1073741824", NativeMaxBodyBytesLimit},
+		{"just over the cap", "268435457", NativeMaxBodyBytesLimit},
+		{"at the cap", "268435456", NativeMaxBodyBytesLimit},
+		{"below the cap", "1048576", 1048576},
+		{"unset", "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			saved := cfgLog
+			cfgLog = zerolog.New(&logs)
+			defer func() { cfgLog = saved }()
+
+			conf := LoadFrom(func(k string) string {
+				if k == "NATIVE_API_MAX_BODY_BYTES" {
+					return tc.value
+				}
+				return ""
+			})
+			if conf.NativeMaxBodyBytes != tc.want {
+				t.Errorf("NATIVE_API_MAX_BODY_BYTES=%q: got %d, want %d", tc.value, conf.NativeMaxBodyBytes, tc.want)
+			}
+			wantWarnings := 0
+			if tc.want == NativeMaxBodyBytesLimit && tc.value != "268435456" {
+				wantWarnings = 1
+			}
+			if n := strings.Count(logs.String(), "NATIVE_API_MAX_BODY_BYTES"); n != wantWarnings {
+				t.Errorf("NATIVE_API_MAX_BODY_BYTES=%q: %d warnings naming the variable, want %d:\n%s", tc.value, n, wantWarnings, logs.String())
+			}
+		})
+	}
+}
+
+func TestClampNativeMaxBodyBytes(t *testing.T) {
+	for _, tc := range []struct {
+		in, want int64
+		warned   bool
+	}{
+		{0, 0, false},
+		{1 << 20, 1 << 20, false},
+		{NativeMaxBodyBytesLimit, NativeMaxBodyBytesLimit, false},
+		{NativeMaxBodyBytesLimit + 1, NativeMaxBodyBytesLimit, true},
+		{1 << 40, NativeMaxBodyBytesLimit, true},
+	} {
+		var warnedWith int64 = -1
+		got := ClampNativeMaxBodyBytes(tc.in, func(n int64) { warnedWith = n })
+		if got != tc.want {
+			t.Errorf("ClampNativeMaxBodyBytes(%d) = %d, want %d", tc.in, got, tc.want)
+		}
+		if tc.warned != (warnedWith >= 0) {
+			t.Errorf("ClampNativeMaxBodyBytes(%d): warned = %v, want %v", tc.in, warnedWith >= 0, tc.warned)
+		}
+		if tc.warned && warnedWith != tc.in {
+			t.Errorf("ClampNativeMaxBodyBytes(%d) warned with %d, want the configured value", tc.in, warnedWith)
+		}
+	}
+	if got := ClampNativeMaxBodyBytes(1<<40, nil); got != NativeMaxBodyBytesLimit {
+		t.Errorf("a nil warn still clamps: got %d", got)
 	}
 }

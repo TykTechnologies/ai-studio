@@ -254,12 +254,15 @@ Outcomes of an accounting attempt:
 | `lost` | The vendor no longer knows the batch (404) |
 | `failed` | Transient error (network, vendor 5xx, store); retried with backoff |
 
-The reconciler timings are package variables, not yet configurable:
+The reconciler's timings are configurable (see [Configuration](#configuration));
+the defaults are:
 
 - **Pass:** every 30 s, up to 50 rows, 4 workers.
 - **Polling:** each batch is polled every 2 min. After failures the wait
-  doubles, up to 30 min.
+  doubles, up to 30 min (never less than the poll interval).
 - **Sweeping:** settled rows past `results_expire_at` are swept.
+
+The accounting claim lease (5 min) is not configurable.
 
 ## Anthropic Message Batches
 
@@ -298,15 +301,22 @@ logged without a chat record.
 | Studio env | Microgateway env | Default | Meaning |
 |---|---|---|---|
 | `PROXY_URL` | `GATEWAY_PUBLIC_URL` | — | Public base URL for gateway URLs handed out (`results_url`); empty means root-relative |
-| `NATIVE_API_MAX_BODY_BYTES` | `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB) | Create body limit; capped at 256 MiB |
+| `NATIVE_API_MAX_BODY_BYTES` | `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB) | Create body limit; a larger value is capped at 256 MiB (`config.NativeMaxBodyBytesLimit`) when the config is loaded, with a warning |
 | `NATIVE_API_MAX_CONCURRENT_CREATES` | same | `4` | Creates admitted at once (bodies are held in memory); others wait |
 | `NATIVE_API_MAX_FILTERED_ITEMS` | same | `10000` | Max requests per batch when the LLM has request filters |
 | `NATIVE_API_MAX_IN_PROGRESS_PER_APP` | same | `0` (no cap) | Max in-progress batches per App and LLM, as this node's ledger counts them |
+| `NATIVE_API_RECONCILE_INTERVAL` | same | `30s` | How often the reconciler looks for due ledger rows (Go duration) |
+| `NATIVE_API_RECONCILE_BATCH` | same | `50` | Ledger rows one reconciler pass takes |
+| `NATIVE_API_RECONCILE_WORKERS` | same | `4` | Rows reconciled at once (vendor polls and results downloads in parallel) |
+| `NATIVE_API_POLL_INTERVAL` | same | `2m` | Wait before polling an unfinished batch again (Go duration) |
+| `NATIVE_API_POLL_MAX_BACKOFF` | same | `30m` | Cap of the doubling wait after failed polls; never below the poll interval (Go duration) |
 
-`0` or unset keeps the default. Embedders set the same limits on
-`proxy.Config` / `aigateway.Config` (`NativeMaxBodyBytes`,
-`NativeMaxConcurrentCreates`, `NativeMaxFilteredItems`,
-`NativeMaxInProgressPerApp`, `NativePublicURL`).
+`0` or unset keeps the default; an invalid or negative value is logged and
+ignored. Embedders set the same settings on `proxy.Config` / `aigateway.Config`
+(`NativeMaxBodyBytes`, `NativeMaxConcurrentCreates`, `NativeMaxFilteredItems`,
+`NativeMaxInProgressPerApp`, `NativePublicURL`, `NativeReconcileInterval`,
+`NativeReconcileBatch`, `NativeReconcileWorkers`, `NativePollInterval`,
+`NativePollMaxBackoff`).
 
 ## Metrics
 

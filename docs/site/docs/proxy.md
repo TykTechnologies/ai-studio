@@ -165,6 +165,11 @@ Limitations:
 | Batch creates admitted at once | `NATIVE_API_MAX_CONCURRENT_CREATES` | same | `4` |
 | Max requests per batch when the LLM has filters | `NATIVE_API_MAX_FILTERED_ITEMS` | same | `10000` |
 | Max in-progress batches per App and LLM | `NATIVE_API_MAX_IN_PROGRESS_PER_APP` | same | `0` (no cap) |
+| Reconciler pass interval | `NATIVE_API_RECONCILE_INTERVAL` | same | `30s` |
+| Batches per reconciler pass | `NATIVE_API_RECONCILE_BATCH` | same | `50` |
+| Batches reconciled at once | `NATIVE_API_RECONCILE_WORKERS` | same | `4` |
+| Poll interval of an unfinished batch | `NATIVE_API_POLL_INTERVAL` | same | `2m` |
+| Longest wait after failed polls | `NATIVE_API_POLL_MAX_BACKOFF` | same | `30m` |
 
 The operations are counted in the `aistudio_native_*` metrics (see [Observability](./observability.md#governance-metrics)).
 

@@ -89,6 +89,14 @@ type Config struct {
 	NativeMaxConcurrentCreates int
 	NativeMaxFilteredItems     int
 	NativeMaxInProgressPerApp  int
+
+	// Native resource reconciler timings; zero keeps the default. See the
+	// proxy.Config fields of the same names.
+	NativeReconcileInterval time.Duration
+	NativeReconcileBatch    int
+	NativeReconcileWorkers  int
+	NativePollInterval      time.Duration
+	NativePollMaxBackoff    time.Duration
 }
 
 // New creates a new Gateway instance using the unified services interface with default database analytics.
@@ -169,6 +177,12 @@ func NewWithAnalytics(
 		NativeMaxConcurrentCreates: config.NativeMaxConcurrentCreates,
 		NativeMaxFilteredItems:     config.NativeMaxFilteredItems,
 		NativeMaxInProgressPerApp:  config.NativeMaxInProgressPerApp,
+
+		NativeReconcileInterval: config.NativeReconcileInterval,
+		NativeReconcileBatch:    config.NativeReconcileBatch,
+		NativeReconcileWorkers:  config.NativeReconcileWorkers,
+		NativePollInterval:      config.NativePollInterval,
+		NativePollMaxBackoff:    config.NativePollMaxBackoff,
 	}
 	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{

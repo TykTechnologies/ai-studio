@@ -66,6 +66,13 @@ type AppConf struct {
 	NativeMaxConcurrentCreates int   // NATIVE_API_MAX_CONCURRENT_CREATES (4)
 	NativeMaxFilteredItems     int   // NATIVE_API_MAX_FILTERED_ITEMS (10000)
 	NativeMaxInProgressPerApp  int   // NATIVE_API_MAX_IN_PROGRESS_PER_APP (0: no cap)
+	// Native resource reconciler timings (batches nobody downloads); zero
+	// keeps the gateway's default. Durations are Go durations ("45s").
+	NativeReconcileInterval time.Duration // NATIVE_API_RECONCILE_INTERVAL (30s)
+	NativeReconcileBatch    int           // NATIVE_API_RECONCILE_BATCH (50 rows per pass)
+	NativeReconcileWorkers  int           // NATIVE_API_RECONCILE_WORKERS (4)
+	NativePollInterval      time.Duration // NATIVE_API_POLL_INTERVAL (2m)
+	NativePollMaxBackoff    time.Duration // NATIVE_API_POLL_MAX_BACKOFF (30m)
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -578,10 +585,31 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 		}
 		return n
 	}
-	conf.NativeMaxBodyBytes = nativeLimit("NATIVE_API_MAX_BODY_BYTES")
+	conf.NativeMaxBodyBytes = ClampNativeMaxBodyBytes(nativeLimit("NATIVE_API_MAX_BODY_BYTES"), func(n int64) {
+		cfgLog.Warn().Msgf("Warning: NATIVE_API_MAX_BODY_BYTES=%d is above the maximum of %d (256 MiB); using %d", n, NativeMaxBodyBytesLimit, NativeMaxBodyBytesLimit)
+	})
 	conf.NativeMaxConcurrentCreates = int(nativeLimit("NATIVE_API_MAX_CONCURRENT_CREATES"))
 	conf.NativeMaxFilteredItems = int(nativeLimit("NATIVE_API_MAX_FILTERED_ITEMS"))
 	conf.NativeMaxInProgressPerApp = int(nativeLimit("NATIVE_API_MAX_IN_PROGRESS_PER_APP"))
+	// Reconciler timings: non-negative Go durations and counts; 0 or unset
+	// keeps the default.
+	nativeDuration := func(name string) time.Duration {
+		v := strings.TrimSpace(getenv(name))
+		if v == "" {
+			return 0
+		}
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 0 {
+			cfgLog.Warn().Msgf("Warning: invalid %s value %q (want a duration such as 30s); using the default", name, v)
+			return 0
+		}
+		return d
+	}
+	conf.NativeReconcileInterval = nativeDuration("NATIVE_API_RECONCILE_INTERVAL")
+	conf.NativeReconcileBatch = int(nativeLimit("NATIVE_API_RECONCILE_BATCH"))
+	conf.NativeReconcileWorkers = int(nativeLimit("NATIVE_API_RECONCILE_WORKERS"))
+	conf.NativePollInterval = nativeDuration("NATIVE_API_POLL_INTERVAL")
+	conf.NativePollMaxBackoff = nativeDuration("NATIVE_API_POLL_MAX_BACKOFF")
 
 	// Docs server configuration - read port first so we can use it in default URL
 	docsPortStr := getenv("DOCS_PORT")

@@ -165,6 +165,12 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 			NativeMaxConcurrentCreates: cfg.Gateway.NativeMaxConcurrentCreates,
 			NativeMaxFilteredItems:     cfg.Gateway.NativeMaxFilteredItems,
 			NativeMaxInProgressPerApp:  cfg.Gateway.NativeMaxInProgressPerApp,
+
+			NativeReconcileInterval: cfg.Gateway.NativeReconcileInterval,
+			NativeReconcileBatch:    cfg.Gateway.NativeReconcileBatch,
+			NativeReconcileWorkers:  cfg.Gateway.NativeReconcileWorkers,
+			NativePollInterval:      cfg.Gateway.NativePollInterval,
+			NativePollMaxBackoff:    cfg.Gateway.NativePollMaxBackoff,
 		},
 	)
 	

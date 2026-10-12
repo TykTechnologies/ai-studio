@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
@@ -28,7 +29,7 @@ import (
 
 const (
 	nativeDefaultMaxBody       = 64 << 20
-	nativeHardMaxBody          = 256 << 20
+	nativeHardMaxBody          = config.NativeMaxBodyBytesLimit
 	nativeDefaultCreates       = 4
 	nativeDefaultFilteredItems = 10000
 	// nativeFilterWorkers bounds the items filtered at once per create.

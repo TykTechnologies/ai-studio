@@ -113,6 +113,14 @@ SDK features served as native API operations on `/llm/call/{llmSlug}/...`, such 
 *   Requests per batch when the LLM has filters (`NATIVE_API_MAX_FILTERED_ITEMS`): default `10000`
 *   In-progress batches per App and LLM (`NATIVE_API_MAX_IN_PROGRESS_PER_APP`): default `0`, no cap
 
+Batches nobody downloads are accounted by a background reconciler on the gateway that created them. Its timings take Go durations (`45s`, `5m`):
+
+*   How often it looks for due batches (`NATIVE_API_RECONCILE_INTERVAL`): default `30s`
+*   Batches one pass takes (`NATIVE_API_RECONCILE_BATCH`): default `50`
+*   Batches handled at once (`NATIVE_API_RECONCILE_WORKERS`): default `4`
+*   Wait before polling an unfinished batch again (`NATIVE_API_POLL_INTERVAL`): default `2m`
+*   Longest wait after repeated failed polls (`NATIVE_API_POLL_MAX_BACKOFF`): default `30m`; the wait doubles after each failure, and is never shorter than the poll interval
+
 A batch's `results_url` uses `PROXY_URL` (Microgateway: `GATEWAY_PUBLIC_URL`) as its base when set, and is a relative path otherwise. See [Proxy & API Gateway](./proxy.md#message-batches-and-other-native-api-operations).
 
 ### Audit Trail (Enterprise)
