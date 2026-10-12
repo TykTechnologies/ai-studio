@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -8,7 +9,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 )
@@ -81,20 +81,6 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error
 		}
 	}
 
-	// Upgrade any legacy-format encrypted secrets to authenticated encryption.
-	// Runs in the background so scrypt's deliberate cost never delays startup;
-	// decrypt handles both formats, so reads are correct while it runs.
-	safe.Go("legacy secret re-encryption", func() {
-		logger.Info("Starting background re-encryption of legacy secrets (if any)")
-		if migrated, err := secrets.ReencryptLegacySecrets(db); err != nil {
-			logger.Errorf("Failed to re-encrypt legacy secrets: %v", err)
-		} else if migrated > 0 {
-			logger.Infof("Background migration complete: re-encrypted %d legacy secret(s) to AES-GCM format", migrated)
-		} else {
-			logger.Info("No legacy-format secrets to re-encrypt")
-		}
-	})
-
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {
 		if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
@@ -148,4 +134,24 @@ func linkToolCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *model
 		return db.Model(group).Association("ToolCatalogues").Append(catalogue)
 	}
 	return nil
+}
+
+// reencryptSecrets is reencryptLegacySecrets; tests replace it.
+var reencryptSecrets = reencryptLegacySecrets
+
+// reencryptLegacySecrets upgrades legacy-format encrypted secrets to
+// authenticated encryption. Studio runs it in the background so scrypt's
+// deliberate cost never delays startup; decrypt handles both formats, so
+// reads are correct while it runs. Stop cancels ctx and waits for it.
+func reencryptLegacySecrets(ctx context.Context, db *gorm.DB) {
+	logger.Info("Starting background re-encryption of legacy secrets (if any)")
+	if migrated, err := secrets.ReencryptLegacySecrets(db.WithContext(ctx)); err != nil {
+		if ctx.Err() == nil {
+			logger.Errorf("Failed to re-encrypt legacy secrets: %v", err)
+		}
+	} else if migrated > 0 {
+		logger.Infof("Background migration complete: re-encrypted %d legacy secret(s) to AES-GCM format", migrated)
+	} else {
+		logger.Info("No legacy-format secrets to re-encrypt")
+	}
 }
