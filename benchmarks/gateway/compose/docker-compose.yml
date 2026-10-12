@@ -49,10 +49,10 @@ services:
     environment:
       DATABASE_TYPE: postgres
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/midsommar?sslmode=disable
-      TYK_AI_SECRET_KEY: ${BENCH_SECRET_KEY:-822d3d1e0e2d849263e45fc7bb842364}
+      TYK_AI_SECRET_KEY: ${BENCH_SECRET_KEY:-ad115047f87092ae29e1270b6323ea71}
       # Must equal the edge's ENCRYPTION_KEY: LLM credentials are encrypted
       # with it for the edge.
-      MICROGATEWAY_ENCRYPTION_KEY: ${BENCH_SECRET_KEY:-822d3d1e0e2d849263e45fc7bb842364}
+      MICROGATEWAY_ENCRYPTION_KEY: ${BENCH_SECRET_KEY:-ad115047f87092ae29e1270b6323ea71}
       TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
       GATEWAY_MODE: control
       GRPC_PORT: "50051"
@@ -101,7 +101,7 @@ services:
       EDGE_HEARTBEAT_INTERVAL: 5s
       # The production default; the S8 variant turns it off to show the cold path.
       EDGE_TOKEN_CACHE_ENABLED: ${EDGE_TOKEN_CACHE_ENABLED:-true}
-      ENCRYPTION_KEY: ${BENCH_SECRET_KEY:-822d3d1e0e2d849263e45fc7bb842364}
+      ENCRYPTION_KEY: ${BENCH_SECRET_KEY:-ad115047f87092ae29e1270b6323ea71}
       TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
       PORT: "8080"
       LOG_LEVEL: info

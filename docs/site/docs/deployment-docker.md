@@ -31,15 +31,15 @@ Before starting, generate the required secret keys. These will be used in the co
 ```bash
 # Secret key for encryption (used for secrets management and SSO)
 openssl rand -hex 16
-# Example output: a35b3f7b0fb4dd3a048ba4fc6e9fe0a8
+# Example output (SAMPLE ONLY — generate your own, never copy this): xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Encryption key for microgateway communication (must be exactly 32 hex chars)
 openssl rand -hex 16
-# Example output: 822d3d1e0e2d849263e45fc7bb842364
+# Example output (SAMPLE ONLY — generate your own, never copy this): yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 
 # gRPC auth token (for hub-spoke communication)
 openssl rand -hex 16
-# Example output: 9f2c4a6b8d0e1f3a5c7d9e1b3a5c7d9e
+# Example output (SAMPLE ONLY — generate your own, never copy this): zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
 ```
 
 Save these values — you will need them for both the AI Studio and Microgateway configuration files.
