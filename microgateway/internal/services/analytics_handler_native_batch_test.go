@@ -51,15 +51,12 @@ func TestRecordExchange_NativeBatchUsageReachesEventsAndBudget(t *testing.T) {
 	t.Cleanup(func() { analytics.SetHandler(nil) })
 
 	now := time.Now()
-	// 1500 prompt + 300 completion tokens at half of a $2/$10 per MTok price,
-	// in the gateway's ×10000 cost units.
-	const batchCost = (1500*0.000002 + 300*0.00001) * 0.5 * 10000
 	analytics.RecordExchange(context.Background(),
 		&models.ProxyLog{AppID: 4, UserID: 9, LLMID: 2, Vendor: "anthropic", ModelName: "Claude", ResponseCode: 200, TimeStamp: now,
 			ResponseBody: `{"native_resource":"anthropic.message_batch","model":"claude-luna","requests":2}`,
 			OnBehalfOf:   "user:alice", ActingAgent: "agent:bot"},
 		&models.LLMChatRecord{AppID: 4, UserID: 9, LLMID: 2, Vendor: "anthropic", Name: "claude-luna",
-			PromptTokens: 1500, ResponseTokens: 300, TotalTokens: 1800, Cost: batchCost, Currency: "USD", TimeStamp: now,
+			PromptTokens: batchPromptTokens, ResponseTokens: batchResponseTokens, TotalTokens: batchPromptTokens + batchResponseTokens, Cost: batchCost, Currency: "USD", TimeStamp: now,
 			OnBehalfOf: "user:alice", ActingAgent: "agent:bot", InteractionType: models.ProxyInteraction})
 
 	var events []database.AnalyticsEvent
@@ -68,8 +65,8 @@ func TestRecordExchange_NativeBatchUsageReachesEventsAndBudget(t *testing.T) {
 	}, 2*time.Second, 20*time.Millisecond)
 	ev := events[0]
 	assert.Equal(t, uint(4), ev.AppID)
-	assert.Equal(t, 1500, ev.PromptTokens)
-	assert.Equal(t, 300, ev.ResponseTokens)
+	assert.Equal(t, batchPromptTokens, ev.PromptTokens)
+	assert.Equal(t, batchResponseTokens, ev.ResponseTokens)
 	assert.InDelta(t, batchCost, ev.Cost, 1e-9, "the hub stores the edge's cost as is")
 	assert.Equal(t, "user:alice", ev.OnBehalfOf)
 	assert.Equal(t, "agent:bot", ev.ActingAgent)

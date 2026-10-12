@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -36,7 +37,8 @@ func TestNativeReconciler_EdgeAccountingReachesEventsAndBudget(t *testing.T) {
 				`"results_url":"https://api.anthropic.com/v1/messages/batches/msgbatch_EDGE/results"}`))
 		case "/v1/messages/batches/msgbatch_EDGE/results":
 			_, _ = w.Write([]byte(`{"custom_id":"a","result":{"type":"succeeded","message":{"id":"m1","type":"message","role":"assistant",` +
-				`"model":"claude-luna","content":[],"usage":{"input_tokens":1500,"output_tokens":300,"service_tier":"batch"}}}}` + "\n" +
+				`"model":"claude-luna","content":[],"usage":{"input_tokens":` + strconv.Itoa(batchPromptTokens) +
+				`,"output_tokens":` + strconv.Itoa(batchResponseTokens) + `,"service_tier":"batch"}}}}` + "\n" +
 				`{"custom_id":"b","result":{"type":"errored","error":{"type":"error","error":{"type":"api_error","message":"x"}}}}` + "\n"))
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -64,7 +66,7 @@ func TestNativeReconciler_EdgeAccountingReachesEventsAndBudget(t *testing.T) {
 	require.NoError(t, db.Create(llm).Error)
 	app := &database.App{Name: "Edge App", UserID: 9, IsActive: true}
 	require.NoError(t, db.Create(app).Error)
-	require.NoError(t, db.Create(&database.ModelPrice{ModelName: "claude-luna", Vendor: "anthropic", CPT: 0.00001, CPIT: 0.000002, Currency: "USD"}).Error)
+	require.NoError(t, db.Create(&database.ModelPrice{ModelName: "claude-luna", Vendor: "anthropic", CPT: batchResponseTokenPrice, CPIT: batchPromptTokenPrice, Currency: "USD"}).Error)
 
 	budget := &usageRecorder{}
 	analytics.SetHandler(NewMicrogatewaAnalyticsHandler(db, nil, nil, budget))
@@ -95,9 +97,6 @@ func TestNativeReconciler_EdgeAccountingReachesEventsAndBudget(t *testing.T) {
 	require.True(t, ok, "the edge gateway exposes the reconciler")
 	stop := workers.StartNativeWorkers(ctx, nil) // the first pass runs at once
 
-	// 1500 prompt + 300 completion tokens at half of the $2/$10 per MTok
-	// price, in the gateway's ×10000 cost units.
-	const batchCost = (1500*0.000002 + 300*0.00001) * 0.5 * 10000
 	var events []database.AnalyticsEvent
 	require.Eventually(t, func() bool {
 		return db.Find(&events).Error == nil && len(events) == 1
@@ -107,8 +106,8 @@ func TestNativeReconciler_EdgeAccountingReachesEventsAndBudget(t *testing.T) {
 
 	ev := events[0]
 	assert.Equal(t, app.ID, ev.AppID)
-	assert.Equal(t, 1500, ev.PromptTokens)
-	assert.Equal(t, 300, ev.ResponseTokens)
+	assert.Equal(t, batchPromptTokens, ev.PromptTokens)
+	assert.Equal(t, batchResponseTokens, ev.ResponseTokens)
 	assert.InDelta(t, batchCost, ev.Cost, 1e-9)
 	assert.Equal(t, "user:alice", ev.OnBehalfOf)
 	assert.Equal(t, "agent:bot", ev.ActingAgent)
