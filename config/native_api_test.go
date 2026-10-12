@@ -41,12 +41,13 @@ func TestLoadFrom_NativeMaxBodyBytesCapped(t *testing.T) {
 	for _, tc := range []struct {
 		name, value string
 		want        int64
+		warned      bool
 	}{
-		{"over the cap", "1073741824", NativeMaxBodyBytesLimit},
-		{"just over the cap", "268435457", NativeMaxBodyBytesLimit},
-		{"at the cap", "268435456", NativeMaxBodyBytesLimit},
-		{"below the cap", "1048576", 1048576},
-		{"unset", "", 0},
+		{"over the cap", "1073741824", NativeMaxBodyBytesLimit, true},
+		{"just over the cap", "268435457", NativeMaxBodyBytesLimit, true},
+		{"at the cap", "268435456", NativeMaxBodyBytesLimit, false},
+		{"below the cap", "1048576", 1048576, false},
+		{"unset", "", 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var logs bytes.Buffer
@@ -64,7 +65,7 @@ func TestLoadFrom_NativeMaxBodyBytesCapped(t *testing.T) {
 				t.Errorf("NATIVE_API_MAX_BODY_BYTES=%q: got %d, want %d", tc.value, conf.NativeMaxBodyBytes, tc.want)
 			}
 			wantWarnings := 0
-			if tc.want == NativeMaxBodyBytesLimit && tc.value != "268435456" {
+			if tc.warned {
 				wantWarnings = 1
 			}
 			if n := strings.Count(logs.String(), "NATIVE_API_MAX_BODY_BYTES"); n != wantWarnings {
