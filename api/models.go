@@ -180,6 +180,14 @@ type LLMInput struct {
 			// Failover waterfall. On PATCH an absent key keeps the stored
 			// value and an explicit null clears it.
 			Failover *models.LLMFailover `json:"failover,omitempty"`
+			// VendorWorkspaceID pins the vendor workspace (Anthropic:
+			// anthropic-workspace-id). On PATCH an absent key keeps the stored
+			// value and "" removes the pin.
+			VendorWorkspaceID string `json:"vendor_workspace_id"`
+			// PriceMultipliers overrides the vendor's price multiplier per
+			// service tier ({"batch": 0.4}). On PATCH an absent key keeps the
+			// stored value and null or {} removes the overrides.
+			PriceMultipliers models.LLMPriceMultipliers `json:"price_multipliers"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -238,6 +246,8 @@ type LLMResponse struct {
 		Plugins          []PluginResponse       `json:"plugins"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		Failover         *models.LLMFailover    `json:"failover,omitempty"`
+		VendorWorkspaceID string `json:"vendor_workspace_id"`
+		PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 	} `json:"attributes"`
 }
 

@@ -308,6 +308,9 @@ message AnalyticsRequest {
     string request_kind = 18;
     int32 decision_questions = 19;
     int32 decision_refusals = 20;
+    // Vendor service tier the usage was billed at ("batch", "priority"...);
+    // empty for list-price traffic.
+    string service_tier = 21;
 }
 
 message BudgetUsageRequest {

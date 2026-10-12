@@ -78,6 +78,12 @@ func mergeLLMPatch(input *LLMInput, existing *models.LLM, present map[string]jso
 			attrs.Failover = &f
 		}
 	}
+	if !has("vendor_workspace_id") {
+		attrs.VendorWorkspaceID = existing.VendorWorkspaceID
+	}
+	if !has("price_multipliers") {
+		attrs.PriceMultipliers = existing.PriceMultipliers
+	}
 	if !has("monthly_budget") {
 		attrs.MonthlyBudget = existing.MonthlyBudget
 	}

@@ -37,6 +37,8 @@ func existingLLM() *models.LLM {
 		Failover: models.LLMFailover{
 			Targets: []models.LLMFailoverTarget{{LLMID: 9, Model: "claude-sonnet-4"}},
 		},
+		VendorWorkspaceID: "wrkspc_stored",
+		PriceMultipliers:  models.LLMPriceMultipliers{"batch": 0.4},
 	}
 }
 

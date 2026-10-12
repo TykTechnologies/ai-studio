@@ -1917,6 +1917,7 @@ func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *Glo
 		RequestKind:            data.RequestKind,
 		DecisionQuestions:      int32(data.DecisionQuestions),
 		DecisionRefusals:       int32(data.DecisionRefusals),
+		ServiceTier:            data.ServiceTier,
 		Context: &pb.PluginContext{
 			RequestId:   data.RequestID,
 			LlmId:       uint32(data.LLMID),

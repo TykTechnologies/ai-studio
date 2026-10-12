@@ -762,6 +762,34 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		}
 	}
 
+	// Per-tier price multiplier overrides: the shared proxy prices edge
+	// usage with them exactly as the hub does.
+	var priceMultipliers models.LLMPriceMultipliers
+	if len(dbLLM.PriceMultipliers) > 0 {
+		if err := json.Unmarshal(dbLLM.PriceMultipliers, &priceMultipliers); err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to unmarshal LLM price multipliers")
+			priceMultipliers = nil
+		}
+	}
+
+	// The native API resource signing keys are held in plaintext in memory,
+	// as the API key is (models.LLM.ResourceSigningKeys reads them as is).
+	var signingSecret, signingPrev string
+	if dbLLM.ResourceSigningSecretEncrypted != "" {
+		if v, err := a.crypto.Decrypt(dbLLM.ResourceSigningSecretEncrypted); err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to decrypt resource signing secret")
+		} else {
+			signingSecret = v
+		}
+	}
+	if dbLLM.ResourceSigningSecretPrevEncrypted != "" {
+		if v, err := a.crypto.Decrypt(dbLLM.ResourceSigningSecretPrevEncrypted); err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to decrypt previous resource signing secret")
+		} else {
+			signingPrev = v
+		}
+	}
+
 	llm := models.LLM{
 		Model:         gorm.Model{ID: dbLLM.ID, CreatedAt: dbLLM.CreatedAt, UpdatedAt: dbLLM.UpdatedAt},
 		ID:            dbLLM.ID,
@@ -777,6 +805,12 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		DontLogBodies: dbLLM.DontLogBodies,
 		Metadata:      metadata,
 		Failover:      failover,
+
+		ResourceSigningSecret:        signingSecret,
+		ResourceSigningSecretPrev:    signingPrev,
+		ResourceSigningPrevExpiresAt: dbLLM.ResourceSigningPrevExpiresAt,
+		VendorWorkspaceID:            dbLLM.VendorWorkspaceID,
+		PriceMultipliers:             priceMultipliers,
 	}
 
 	log.Debug().

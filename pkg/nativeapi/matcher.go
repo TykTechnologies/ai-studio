@@ -194,3 +194,52 @@ func (m *Matcher) MatchesPath(path string) bool {
 	}
 	return false
 }
+
+// foldSegments splits path into its non-empty segments.
+func foldSegments(path string) []string {
+	var out []string
+	for _, s := range strings.Split(path, "/") {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// matchFold is match with literal segments compared case-insensitively.
+func (p pattern) matchFold(parts []string) bool {
+	if len(parts) != len(p.segs) {
+		return false
+	}
+	for i, s := range p.segs {
+		if s.param == "" && !strings.EqualFold(parts[i], s.literal) {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchesFold reports whether path names a path some operation or chain
+// hook declares once case and empty segments are ignored ("/v1/Messages/
+// Batches/", "/V1/responses"). The proxy refuses such a spelling of a native
+// path rather than let it reach the vendor around the native handling: an
+// upstream that routes paths case-insensitively would serve it.
+func (m *Matcher) MatchesFold(path string) bool {
+	if m == nil {
+		return false
+	}
+	parts := foldSegments(path)
+	for _, c := range m.ops {
+		if c.pat.matchFold(parts) {
+			return true
+		}
+	}
+	if m.spec.ChainHooks != nil {
+		for _, h := range m.spec.ChainHooks.Hooks {
+			if pat, err := compilePattern(h.Path); err == nil && pat.matchFold(parts) {
+				return true
+			}
+		}
+	}
+	return false
+}

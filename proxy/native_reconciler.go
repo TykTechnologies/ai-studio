@@ -286,6 +286,9 @@ func (p *Proxy) accountNativeRow(ctx context.Context, row *models.NativeResource
 	if info.State != nativeapi.StateEnded {
 		return nativeAccountNotEnded, nil
 	}
+	if rt.Async.ObjectUsage != nil {
+		return p.accountNativeObject(ctx, store, row, llm, rt, obj)
+	}
 	rreq, hasResults := rt.Async.Results(vendorID, obj)
 	if !hasResults {
 		slog.Warn("native resource ended without results; usage not recorded",
@@ -393,10 +396,34 @@ func (p *Proxy) resolveNativeRow(row *models.NativeResource) (*models.LLM, *nati
 	}
 	rt, ok := nv.matcher.Spec().Resource(row.ResourceType)
 	if !ok || rt.Async == nil || rt.Async.Poll == nil || rt.Async.State == nil ||
-		rt.Async.Results == nil || rt.Async.LineUsage == nil {
+		(rt.Async.ObjectUsage == nil && (rt.Async.Results == nil || rt.Async.LineUsage == nil)) {
 		return nil, nil, nativeapi.ResourceType{}, false
 	}
 	return llm, nv, rt, true
+}
+
+// accountNativeObject accounts an ended resource whose usage is on its own
+// polled object (AsyncSpec.ObjectUsage, an OpenAI background response): claim,
+// settle, and record only if the settle won, as for a results download.
+func (p *Proxy) accountNativeObject(ctx context.Context, store services.NativeResourceStore, row *models.NativeResource,
+	llm *models.LLM, rt nativeapi.ResourceType, obj []byte) (nativeAccountOutcome, error) {
+	u, billed, err := rt.Async.ObjectUsage(obj)
+	if err != nil {
+		return nativeAccountFailed, fmt.Errorf("vendor object usage not understood: %w", err)
+	}
+	usage := newNativeUsage()
+	if billed {
+		usage.add(u)
+	}
+	won, err := settleNativeAccounting(context.WithoutCancel(ctx), store, row)
+	if err != nil {
+		return nativeAccountFailed, err
+	}
+	if !won {
+		return nativeAccountSettled, nil
+	}
+	p.recordAsyncUsage(row, llm, p.nativeRowApp(row), usage, time.Now())
+	return nativeAccountAccounted, nil
 }
 
 // nativeRowApp is the App a row's usage is recorded against: the stored App,
@@ -510,7 +537,7 @@ func (p *Proxy) refreshNativeSnapshot(ctx context.Context, store services.Native
 	llm *models.LLM, nv *nativeVendor, rt nativeapi.ResourceType, obj []byte, info nativeapi.StateInfo) {
 	snapshot := row.Snapshot
 	if op := nativeRetrieveOp(nv, rt.Name); op != nil {
-		if codec, err := nativeapi.NewCodec(llm.APIKey); err == nil {
+		if codec, err := nativeapi.CodecForLLM(llm, time.Now()); err == nil {
 			c := &nativeCall{
 				p:     p,
 				nr:    &nativeRoute{mode: "call", slug: slug.Make(llm.Name), llm: llm, vendor: nv},
@@ -523,6 +550,7 @@ func (p *Proxy) refreshNativeSnapshot(ctx context.Context, store services.Native
 					snapshot = string(b)
 				}
 			}
+			p.recordNativeChildren(context.WithoutCancel(ctx), store, row, llm, nv, codec, op.ResponseIDs, obj)
 		}
 	}
 	endedAt, expireAt := info.EndedAt, info.ResultsExpireAt

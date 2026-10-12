@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
 	"reflect"
 	"runtime"
@@ -159,6 +160,11 @@ func (c *nativeCall) createdResource() (nativeapi.ResourceType, bool) {
 // (custom_id) in the script context. One refused item refuses the whole
 // body. Only items a filter rewrote are rewritten in the forwarded body.
 func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
+	if c.op.Admit.Multipart && !multipartOpensWithBoundary(c.r.Header.Get("Content-Type"), body) {
+		c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest,
+			"the body must be multipart/form-data opening with the boundary its Content-Type names")
+		return nil, false
+	}
 	items, err := c.op.Admit.Split(body)
 	if err != nil {
 		c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, err.Error())
@@ -166,9 +172,13 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 	}
 	mv := NewModelValidator(c.nr.llm.AllowedModels)
 	for _, it := range items {
-		if !mv.IsModelAllowed(it.Model) {
-			c.fail(w, http.StatusForbidden, nativeErrPermission,
-				fmt.Sprintf("model '%s' is not allowed (custom_id %q)", it.Model, it.Key))
+		// An item that invokes no model (conversation items) has none to check.
+		if it.Model != "" && !mv.IsModelAllowed(it.Model) {
+			msg := fmt.Sprintf("model '%s' is not allowed", it.Model)
+			if it.Key != "" {
+				msg += fmt.Sprintf(" (custom_id %q)", it.Key)
+			}
+			c.fail(w, http.StatusForbidden, nativeErrPermission, msg)
 			return nil, false
 		}
 	}
@@ -212,8 +222,13 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 					return
 				}
 				it := items[i]
-				out, err := c.p.runRequestFiltersWith(runners, c.nr.llm, c.r, it.Body, it.Format, it.Model,
-					map[string]interface{}{"custom_id": it.Key, "batch_index": int64(i)})
+				// A single-body operation's item has no key: its filters
+				// see the call as a synchronous one would.
+				var extra map[string]interface{}
+				if it.Key != "" {
+					extra = map[string]interface{}{"custom_id": it.Key, "batch_index": int64(i)}
+				}
+				out, err := c.p.runRequestFiltersWith(runners, c.nr.llm, c.r, it.Body, it.Format, it.Model, extra)
 				outs[i], errs[i] = out, err
 				if err != nil {
 					mu.Lock()
@@ -229,8 +244,11 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 	for i, err := range errs {
 		if err != nil {
 			metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
-			c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest,
-				fmt.Sprintf("request %q refused: %v", items[i].Key, err))
+			msg := fmt.Sprintf("request refused: %v", err)
+			if items[i].Key != "" {
+				msg = fmt.Sprintf("request %q refused: %v", items[i].Key, err)
+			}
+			c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, msg)
 			return nil, false
 		}
 	}
@@ -262,16 +280,30 @@ func (c *nativeCall) recordCreated(w http.ResponseWriter, raw, wrapped []byte) b
 	if !ok {
 		return true
 	}
-	obj, err := decodeNativeObject(raw)
-	if err != nil {
+	err := c.ledgerCreated(rt, raw, wrapped)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, errNativeCreatedUnexpected):
 		c.fail(w, http.StatusBadGateway, nativeErrAPI, "unexpected upstream response")
-		return false
+	default:
+		c.fail(w, http.StatusServiceUnavailable, nativeErrAPI,
+			fmt.Sprintf("the %s could not be recorded by the gateway and was canceled; retry shortly", nativeNoun(rt.Name)))
 	}
-	var vendorID string
-	_ = rewriteBodyRef(obj, c.op.ResponseIDs[0].Path, func(s string) (string, error) { vendorID = s; return s, nil })
+	return false
+}
+
+// errNativeCreatedUnexpected is a created object the gateway cannot read.
+var errNativeCreatedUnexpected = errors.New("unexpected created object")
+
+// ledgerCreated writes the ledger row of a resource of type rt the vendor
+// just created (raw as the vendor sent it, wrapped as the client gets it).
+// If the row cannot be written the resource is cancelled upstream and the
+// error returned: an unrecorded async resource would never be accounted.
+func (c *nativeCall) ledgerCreated(rt nativeapi.ResourceType, raw, wrapped []byte) error {
+	vendorID := createdVendorID(c.op, raw)
 	if vendorID == "" {
-		c.fail(w, http.StatusBadGateway, nativeErrAPI, "unexpected upstream response")
-		return false
+		return errNativeCreatedUnexpected
 	}
 
 	row := &models.NativeResource{
@@ -299,21 +331,20 @@ func (c *nativeCall) recordCreated(w http.ResponseWriter, raw, wrapped []byte) b
 	// The client may give up; the row must still be written (or the batch
 	// cancelled), so this does not follow the request's cancellation.
 	ctx := context.WithoutCancel(c.r.Context())
+	var err error
 	for attempt := 0; attempt < nativeLedgerAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(time.Duration(50<<attempt) * time.Millisecond)
 		}
 		r := *row
 		if err = c.store.Create(ctx, &r); err == nil || errors.Is(err, services.ErrNativeResourceExists) {
-			return true
+			return nil
 		}
 	}
 	slog.Error("native resource not recorded; cancelling it upstream",
 		"llm", c.nr.llm.Name, "app_id", c.app.ID, "type", rt.Name, "vendor_id", vendorID, "error", err)
 	c.cancelUpstream(ctx, rt, vendorID)
-	c.fail(w, http.StatusServiceUnavailable, nativeErrAPI,
-		"the batch could not be recorded by the gateway and was canceled; retry shortly")
-	return false
+	return err
 }
 
 // cancelUpstream cancels a resource the gateway could not record.
@@ -350,4 +381,17 @@ func jsonEquivalent(a, b []byte) bool {
 		return false
 	}
 	return reflect.DeepEqual(va, vb)
+}
+
+// multipartOpensWithBoundary reports whether contentType is multipart/form-data
+// and body opens with its boundary line. A preamble before it would let the
+// vendor (reading the Content-Type boundary) and the gateway (reading the
+// body's first line) see different parts.
+func multipartOpensWithBoundary(contentType string, body []byte) bool {
+	mt, params, err := mime.ParseMediaType(contentType)
+	if err != nil || mt != "multipart/form-data" || params["boundary"] == "" {
+		return false
+	}
+	open := "--" + params["boundary"]
+	return bytes.HasPrefix(body, []byte(open+"\r\n")) || bytes.HasPrefix(body, []byte(open+"\n"))
 }

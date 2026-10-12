@@ -101,6 +101,8 @@ type nativeRoute struct {
 	// match is the operation; its Op is nil for a native path requested with
 	// a method no operation declares.
 	match nativeapi.Match
+	// variant is a non-canonical spelling of a declared path.
+	variant bool
 }
 
 // splitNativePath splits /llm/{mode}/{slug}/{rest...}. rest keeps its leading
@@ -145,7 +147,24 @@ func (p *Proxy) resolveNative(r *http.Request) (*nativeRoute, bool) {
 		nr.match = m
 		return nr, true
 	}
+	// A path a chain hook declares for the method stays on the synchronous
+	// chain even when an operation's pattern also matches it (OpenAI's POST
+	// /v1/responses/compact against /v1/responses/{id}).
+	if _, hooked := nv.matcher.Spec().ChainHooks.Hook(r.Method, canonical); hooked {
+		return nil, false
+	}
 	if nv.matcher.MatchesPath(canonical) {
+		return nr, true
+	}
+	// Another spelling of a declared path (case, empty segments) would reach
+	// the vendor around the native handling, and an upstream that routes
+	// case-insensitively would serve it: it is claimed and refused. The
+	// caller's own path is checked too: joining it to the endpoint's path is
+	// case-sensitive, so /V1/responses on a .../v1 endpoint canonicalises to
+	// /v1/V1/responses, which no declared path folds to.
+	if !nv.matcher.Spec().ChainHooks.Declares(canonical) &&
+		(nv.matcher.MatchesFold(canonical) || nv.matcher.MatchesFold(rest)) {
+		nr.variant = true
 		return nr, true
 	}
 	return nil, false
@@ -193,6 +212,9 @@ type nativeCall struct {
 
 // opName names the call's operation for metrics.
 func (c *nativeCall) opName() string {
+	if c.nr.variant {
+		return "path_variant"
+	}
 	if c.op == nil {
 		return "method_not_allowed"
 	}
@@ -232,16 +254,29 @@ func (p *Proxy) handleNative(w http.ResponseWriter, r *http.Request) {
 	c.app = app
 	defer c.log()
 
+	if nr.variant {
+		c.fail(w, http.StatusNotFound, nativeErrNotFound, "unknown path: native API paths are matched exactly (lower case, no empty segments)")
+		return
+	}
+
 	if c.op == nil {
 		w.Header().Set("Allow", strings.Join(nr.allowedMethods(), ", "))
 		c.fail(w, http.StatusMethodNotAllowed, nativeErrInvalidRequest, "method not allowed")
 		return
 	}
-	if !c.directGrant() {
+	if name, refused := refusedQuery(c.op, r.URL.Query()); refused {
+		c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest,
+			fmt.Sprintf("query parameter %q is not supported by this gateway on this endpoint", name))
+		return
+	}
+	// An operation that touches no vendor resource (Anthropic's
+	// count_tokens) needs neither a direct grant nor the ledger and codec.
+	resourceFree := nativeResourceFree(c.op)
+	if !resourceFree && !c.directGrant() {
 		c.fail(w, http.StatusForbidden, nativeErrPermission, "this endpoint requires direct access to the LLM")
 		return
 	}
-	if !c.prerequisites(w) {
+	if !resourceFree && !c.prerequisites(w) {
 		return
 	}
 	if !nativeOpImplemented(c.op) {
@@ -254,7 +289,7 @@ func (p *Proxy) handleNative(w http.ResponseWriter, r *http.Request) {
 	if c.op.Ledger == nativeapi.LedgerCreate && !c.checkInProgressCap(w) {
 		return
 	}
-	if c.op.Admit != nil {
+	if c.op.Admit != nil && c.op.Ledger == nativeapi.LedgerCreate {
 		release, ok := c.acquireCreate(w)
 		if !ok {
 			return
@@ -293,6 +328,27 @@ func (p *Proxy) handleNative(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.forward(w, upstreamPath, body)
+}
+
+// nativeResourceFree reports whether op neither names, hands out nor lists a
+// vendor resource: a single synchronous call the gateway only admits (model
+// allow-list, filters) and logs, such as Anthropic's count_tokens.
+func nativeResourceFree(op *nativeapi.Operation) bool {
+	return op.Ledger == nativeapi.LedgerNone && op.PathResource == "" && len(op.RequestRefs) == 0 &&
+		len(op.ResponseIDs) == 0 && op.List == nil && op.Results == nil && op.Transform == nil
+}
+
+// refusedQuery returns the first query parameter of op's Upstream.RefuseQuery
+// the request carries with a value other than "false".
+func refusedQuery(op *nativeapi.Operation, q url.Values) (string, bool) {
+	for _, name := range op.Upstream.RefuseQuery {
+		for _, v := range q[name] {
+			if !strings.EqualFold(v, "false") {
+				return name, true
+			}
+		}
+	}
+	return "", false
 }
 
 // allowedMethods lists the methods the vendor declares on the route's path.
@@ -361,9 +417,9 @@ func (c *nativeCall) prerequisites(w http.ResponseWriter) bool {
 		c.fail(w, http.StatusNotImplemented, nativeErrAPI, "native API operations are not available on this gateway")
 		return false
 	}
-	codec, err := nativeapi.NewCodec(c.nr.llm.APIKey)
+	codec, err := nativeapi.CodecForLLM(c.nr.llm, time.Now())
 	if err != nil {
-		c.fail(w, http.StatusNotImplemented, nativeErrAPI, "native API operations need the LLM's vendor credential")
+		c.fail(w, http.StatusNotImplemented, nativeErrAPI, "native API operations need the LLM's signing secret or vendor credential")
 		return false
 	}
 	c.codec = codec
@@ -374,18 +430,19 @@ func (c *nativeCall) prerequisites(w http.ResponseWriter) bool {
 // unwrapID verifies a wrapped ID of resource type rt for the calling App and
 // LLM and returns the vendor ID. A MAC that fails verification is still
 // accepted when this node's ledger holds the App's row for the vendor ID: the
-// vendor credential was rotated since the ID was minted.
+// signing key was rotated past its grace period (or, on an LLM without a
+// signing secret, the vendor credential) since the ID was minted.
 func (c *nativeCall) unwrapID(rt nativeapi.ResourceType, wrapped string) (string, bool) {
 	vendorID, err := c.codec.Unwrap(rt, wrapped, c.scope)
 	if err == nil {
 		return vendorID, true
 	}
 	parsed, perr := nativeapi.ParseID(rt, wrapped)
-	if perr != nil {
+	if perr != nil || c.store == nil {
 		return "", false
 	}
 	if _, gerr := c.store.GetByOwner(c.r.Context(), c.nr.llm.ID, c.app.ID, rt.Name, parsed.VendorID); gerr == nil {
-		slog.Info("native resource id accepted by the ledger after a signature mismatch (rotated vendor key?)",
+		slog.Info("native resource id accepted by the ledger after a signature mismatch (rotated signing key?)",
 			"llm_id", c.nr.llm.ID, "app_id", c.app.ID, "type", rt.Name, "kid", parsed.KID, "error", err)
 		return parsed.VendorID, true
 	}
@@ -457,10 +514,14 @@ func (c *nativeCall) requestBody(w http.ResponseWriter) ([]byte, bool) {
 		c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, "request body is not a JSON object")
 		return nil, false
 	}
+	if k, ok := refKeyVariant(obj, c.op.RequestRefs); ok {
+		c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, fmt.Sprintf("unsupported parameter %q", k))
+		return nil, false
+	}
 	spec := c.nr.vendor.matcher.Spec()
 	for _, ref := range c.op.RequestRefs {
 		rt, _ := spec.Resource(ref.Resource)
-		if err := rewriteBodyRef(obj, ref.Path, func(wrapped string) (string, error) {
+		if err := rewriteRef(obj, ref, func(wrapped string) (string, error) {
 			if v, ok := c.unwrapID(rt, wrapped); ok {
 				return v, nil
 			}
@@ -479,6 +540,23 @@ func (c *nativeCall) requestBody(w http.ResponseWriter) ([]byte, bool) {
 }
 
 var errNativeRef = errors.New("native resource reference does not verify")
+
+// refKeyVariant returns a top-level key of obj that differs only in case from
+// the field of one of refs ("Previous_Response_Id"). The gateway verifies the
+// exact field; an upstream that matched parameters case-insensitively would
+// read the variant unverified, so it is refused.
+func refKeyVariant(obj map[string]any, refs []nativeapi.BodyRef) (string, bool) {
+	for k := range obj {
+		for _, ref := range refs {
+			top, _, _ := strings.Cut(ref.Path, ".")
+			top = strings.TrimSuffix(top, "[]")
+			if k != top && strings.EqualFold(k, top) {
+				return k, true
+			}
+		}
+	}
+	return "", false
+}
 
 // upstreamRequest builds the vendor request: the LLM's configured endpoint
 // (never a plugin's upstream_override: the resources live in this LLM's
@@ -630,7 +708,7 @@ func (c *nativeCall) wrapResponse(obj map[string]any) bool {
 		return c.codec.Wrap(rt, vendorID, c.scope)
 	}
 	for _, ref := range c.op.ResponseIDs {
-		if err := rewriteBodyRef(obj, ref.Path, func(id string) (string, error) { return wrap(ref.Resource, id) }); err != nil {
+		if err := rewriteRef(obj, ref, func(id string) (string, error) { return wrap(ref.Resource, id) }); err != nil {
 			slog.Error("native response id not wrapped", "op", c.op.Name, "path", ref.Path, "error", err)
 			return false
 		}
@@ -648,7 +726,7 @@ func (c *nativeCall) updateLedger(raw, wrapped []byte) {
 		return
 	}
 	rt, ok := c.nr.vendor.matcher.Spec().Resource(c.op.PathResource)
-	if !ok || rt.Async == nil || rt.Async.State == nil {
+	if !ok {
 		return
 	}
 	vendorID, ok := c.unwrapID(rt, c.nr.match.ID())
@@ -660,15 +738,22 @@ func (c *nativeCall) updateLedger(raw, wrapped []byte) {
 	if err != nil {
 		return
 	}
-	info, err := rt.Async.State(raw)
-	if err != nil {
-		return
+	// A resource without a lifecycle (a file) keeps its state; only the
+	// listed snapshot is refreshed.
+	snap := services.NativeResourceSnapshot{
+		State: row.State, Snapshot: string(wrapped), EndedAt: row.EndedAt, ResultsExpireAt: row.ResultsExpireAt,
 	}
-	if err := c.store.UpdateSnapshot(ctx, row.ID, services.NativeResourceSnapshot{
-		State: string(info.State), Snapshot: string(wrapped), EndedAt: info.EndedAt, ResultsExpireAt: info.ResultsExpireAt,
-	}); err != nil {
+	if rt.Async != nil && rt.Async.State != nil {
+		info, err := rt.Async.State(raw)
+		if err != nil {
+			return
+		}
+		snap.State, snap.EndedAt, snap.ResultsExpireAt = string(info.State), info.EndedAt, info.ResultsExpireAt
+	}
+	if err := c.store.UpdateSnapshot(ctx, row.ID, snap); err != nil {
 		slog.Warn("native ledger snapshot not updated", "id", row.ID, "error", err)
 	}
+	c.p.recordNativeChildren(ctx, c.store, row, c.nr.llm, c.nr.vendor, c.codec, c.op.ResponseIDs, raw)
 }
 
 // log records the call's proxy log row.
@@ -744,10 +829,16 @@ func decodeNativeObject(b []byte) (map[string]any, error) {
 // with fn's result. A segment with a "[]" suffix iterates an array; a missing
 // or null field is skipped, a field of another type is an error.
 func rewriteBodyRef(obj map[string]any, path string, fn func(string) (string, error)) error {
-	return rewriteRefSegs(obj, strings.Split(path, "."), fn)
+	return rewriteRefSegs(obj, strings.Split(path, "."), false, fn)
 }
 
-func rewriteRefSegs(obj map[string]any, segs []string, fn func(string) (string, error)) error {
+// rewriteRef is rewriteBodyRef for ref, honouring ref.ObjectID: the field
+// may also be an object whose "id" is the reference.
+func rewriteRef(obj map[string]any, ref nativeapi.BodyRef, fn func(string) (string, error)) error {
+	return rewriteRefSegs(obj, strings.Split(ref.Path, "."), ref.ObjectID, fn)
+}
+
+func rewriteRefSegs(obj map[string]any, segs []string, objectID bool, fn func(string) (string, error)) error {
 	name, isArr := strings.CutSuffix(segs[0], "[]")
 	v, ok := obj[name]
 	if !ok || v == nil {
@@ -756,6 +847,9 @@ func rewriteRefSegs(obj map[string]any, segs []string, fn func(string) (string, 
 	last := len(segs) == 1
 	if !isArr {
 		if last {
+			if m, isObj := v.(map[string]any); isObj && objectID {
+				return rewriteRefSegs(m, []string{"id"}, false, fn)
+			}
 			s, ok := v.(string)
 			if !ok {
 				return fmt.Errorf("%s is not a string", name)
@@ -771,7 +865,7 @@ func rewriteRefSegs(obj map[string]any, segs []string, fn func(string) (string, 
 		if !ok {
 			return fmt.Errorf("%s is not an object", name)
 		}
-		return rewriteRefSegs(child, segs[1:], fn)
+		return rewriteRefSegs(child, segs[1:], objectID, fn)
 	}
 	arr, ok := v.([]any)
 	if !ok {
@@ -794,7 +888,7 @@ func rewriteRefSegs(obj map[string]any, segs []string, fn func(string) (string, 
 		if !ok {
 			return fmt.Errorf("%s[%d] is not an object", name, i)
 		}
-		if err := rewriteRefSegs(child, segs[1:], fn); err != nil {
+		if err := rewriteRefSegs(child, segs[1:], objectID, fn); err != nil {
 			return err
 		}
 	}

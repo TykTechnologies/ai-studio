@@ -38,6 +38,17 @@ message LLMConfig {
   bool dont_log_bodies = 24;        // When true, suppress request/response body logging
   string governed_metadata = 25;    // JSON object of gateway-visible governed metadata (Enterprise); empty when none
   string failover = 26;             // JSON LLMFailover waterfall ({"targets":[{"llm_id":..,"model":".."}],"triggers":{..}}); empty when none
+  // Resource signing keys for native API resource IDs (pkg/nativeapi),
+  // encrypted like api_key_encrypted. The previous key is still accepted
+  // until resource_signing_prev_expires_at; its plaintext "vendor-credential"
+  // stands for the key derived from the vendor credential. Empty when the
+  // hub has no secret for the LLM: the edge then signs with the
+  // vendor-credential key.
+  string resource_signing_secret_encrypted = 27;
+  string resource_signing_secret_prev_encrypted = 28;
+  google.protobuf.Timestamp resource_signing_prev_expires_at = 29;
+  string vendor_workspace_id = 30;  // Pinned vendor workspace (Anthropic: anthropic-workspace-id); empty when none
+  string price_multipliers = 31;    // JSON object of per-service-tier price multiplier overrides ({"batch":0.4}); empty when none
 }
 
 // AppConfig represents an application configuration with embedded relationships

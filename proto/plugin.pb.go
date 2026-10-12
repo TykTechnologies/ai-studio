@@ -2028,8 +2028,11 @@ type AnalyticsRequest struct {
 	RequestKind       string `protobuf:"bytes,18,opt,name=request_kind,json=requestKind,proto3" json:"request_kind,omitempty"`
 	DecisionQuestions int32  `protobuf:"varint,19,opt,name=decision_questions,json=decisionQuestions,proto3" json:"decision_questions,omitempty"`
 	DecisionRefusals  int32  `protobuf:"varint,20,opt,name=decision_refusals,json=decisionRefusals,proto3" json:"decision_refusals,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Vendor service tier the usage was billed at ("batch", "priority"...);
+	// empty for list-price traffic.
+	ServiceTier   string `protobuf:"bytes,21,opt,name=service_tier,json=serviceTier,proto3" json:"service_tier,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnalyticsRequest) Reset() {
@@ -2200,6 +2203,13 @@ func (x *AnalyticsRequest) GetDecisionRefusals() int32 {
 		return x.DecisionRefusals
 	}
 	return 0
+}
+
+func (x *AnalyticsRequest) GetServiceTier() string {
+	if x != nil {
+		return x.ServiceTier
+	}
+	return ""
 }
 
 type BudgetUsageRequest struct {
@@ -6213,7 +6223,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\ttimestamp\x18\a \x01(\x03R\ttimestamp\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\b \x01(\tR\trequestId\x12/\n" +
-	"\acontext\x18\t \x01(\v2\x15.plugin.PluginContextR\acontext\"\xcb\x05\n" +
+	"\acontext\x18\t \x01(\v2\x15.plugin.PluginContextR\acontext\"\xee\x05\n" +
 	"\x10AnalyticsRequest\x12\x15\n" +
 	"\x06llm_id\x18\x01 \x01(\rR\x05llmId\x12\x1d\n" +
 	"\n" +
@@ -6238,7 +6248,8 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\acontext\x18\x11 \x01(\v2\x15.plugin.PluginContextR\acontext\x12!\n" +
 	"\frequest_kind\x18\x12 \x01(\tR\vrequestKind\x12-\n" +
 	"\x12decision_questions\x18\x13 \x01(\x05R\x11decisionQuestions\x12+\n" +
-	"\x11decision_refusals\x18\x14 \x01(\x05R\x10decisionRefusals\"\xa0\x03\n" +
+	"\x11decision_refusals\x18\x14 \x01(\x05R\x10decisionRefusals\x12!\n" +
+	"\fservice_tier\x18\x15 \x01(\tR\vserviceTier\"\xa0\x03\n" +
 	"\x12BudgetUsageRequest\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

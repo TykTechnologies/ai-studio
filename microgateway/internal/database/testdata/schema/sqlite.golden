@@ -58,6 +58,7 @@ TABLE analytics_events
   column `request_kind` text DEFAULT ""
   column `decision_questions` integer
   column `decision_refusals` integer
+  column `service_tier` text
   column `time_stamp` datetime
   column `created_at` datetime
   constraint CONSTRAINT `fk_analytics_events_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
@@ -300,6 +301,11 @@ TABLE llms
   column `auth_config` JSON
   column `namespace` text DEFAULT ""
   column `dont_log_bodies` numeric DEFAULT false
+  column `resource_signing_secret_encrypted` text
+  column `resource_signing_secret_prev_encrypted` text
+  column `resource_signing_prev_expires_at` datetime
+  column `vendor_workspace_id` text
+  column `price_multipliers` JSON
   index CREATE INDEX `idx_llm_active` ON `llms`(`is_active`)
   index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
   index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)

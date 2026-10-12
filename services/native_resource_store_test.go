@@ -531,3 +531,18 @@ func TestNativeResourceStore_ClaimIsIdempotentForItsToken(t *testing.T) {
 		assert.False(t, ok, "a settled row is never claimed, not even by its last holder")
 	})
 }
+
+func TestNativeResourceStore_Get(t *testing.T) {
+	nativeStoreDBs(t, func(t *testing.T, db *gorm.DB) {
+		ctx := context.Background()
+		st := NewNativeResourceStore(db, db)
+		r := newBatchRow(1, "msgbatch_get")
+		require.NoError(t, st.Create(ctx, r))
+		got, err := st.Get(ctx, r.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "msgbatch_get", got.VendorResourceID)
+		require.NoError(t, st.Delete(ctx, r.ID))
+		_, err = st.Get(ctx, r.ID)
+		assert.ErrorIs(t, err, ErrNativeResourceNotFound)
+	})
+}

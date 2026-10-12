@@ -51,6 +51,7 @@ The analytics subsystem in the Microgateway also supports plugins, offering mult
     *   Completion Tokens
     *   Total Tokens
     *   Calculated Cost
+    *   Service tier, when the vendor billed the usage at a tier other than list price (for example `batch` for Anthropic Message Batches, `priority` or `flex`)
     *   Latency (ms)
     *   Success/Error Status
 *   **Per Tool Call (if applicable):**
@@ -72,6 +73,7 @@ Administrators typically access analytics data via dashboards within the Tyk AI 
 *   **Filtering & Grouping:** Ability to filter data by time range, user, application, LLM configuration, etc.
 *   **Visualizations:** Charts and graphs showing trends in cost, token usage, request volume, and latency.
 *   **Detailed Logs:** Access to raw or near-raw event logs for specific interactions (useful for debugging).
+*   **Spend by service tier:** `GET /api/v1/analytics/service-tier-usage?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` breaks requests, tokens and cost down by service tier and by model, optionally for one LLM (`llm_id`), App (`app_id`) or tier (`service_tier`; `none` selects list-price traffic). Costs are already at each tier's price, and usage recorded on edge gateways is included. Usage recorded before this version has no tier. On the admin dashboard, the **Service Tiers** panel shows the same breakdown for the selected date range, with untiered traffic shown as "Untiered (list price)" and a tier filter for the per-model table. It appears once some usage ran at a tier other than list price.
 
 ## Integration with Other Systems
 

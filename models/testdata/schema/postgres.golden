@@ -712,6 +712,7 @@ TABLE llm_chat_records
   column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
   column decision_questions bigint(int8) nullable=YES precision=64 scale=0
   column decision_refusals bigint(int8) nullable=YES precision=64 scale=0
+  column service_tier character varying(varchar) nullable=YES len=32
 TABLE llm_filters
   constraint fk_llm_filters_filter FOREIGN KEY (filter_id) REFERENCES filters(id)
   constraint fk_llm_filters_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
@@ -780,6 +781,12 @@ TABLE llms
   column allowed_models text(text) nullable=YES
   column metadata json(json) nullable=YES
   column failover json(json) nullable=YES
+  column vendor_workspace_id character varying(varchar) nullable=YES len=128
+  column price_multipliers json(json) nullable=YES
+  column resource_signing_secret text(text) nullable=YES
+  column resource_signing_secret_prev text(text) nullable=YES
+  column resource_signing_prev_expires_at timestamp with time zone(timestamptz) nullable=YES
+  column resource_signing_rotated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE marketplace_config
   constraint marketplace_config_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_marketplace_config_deleted_at ON marketplace_config USING btree (deleted_at)
@@ -1509,6 +1516,7 @@ TABLE proxy_logs
   column on_behalf_of character varying(varchar) nullable=YES len=255
   column acting_agent character varying(varchar) nullable=YES len=255
   column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
+  column service_tier character varying(varchar) nullable=YES len=32
 TABLE push_operations
   constraint push_operations_pkey PRIMARY KEY (operation_id)
   index CREATE INDEX idx_push_operations_completed_at ON push_operations USING btree (completed_at)

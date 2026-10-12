@@ -152,7 +152,7 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 
 	case models.ANTHROPIC:
 		opts := []anthropic.Option{
-			anthropic.WithHTTPClient(httpClient),
+			anthropic.WithHTTPClient(anthropicVendor.PinWorkspace(httpClient, LLMConfig)),
 		}
 		if LLMConfig.APIEndpoint != "" {
 			opts = append(opts, anthropic.WithBaseURL(anthropicVendor.DriverBaseURL(LLMConfig.APIEndpoint)))

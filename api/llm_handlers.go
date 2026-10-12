@@ -1,6 +1,7 @@
 package api
 
 import (
+	"maps"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,6 +85,8 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.DontLogBodies,
 			models.JSONMap(input.Data.Attributes.Metadata),
 			input.Data.Attributes.Failover,
+			services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
+			services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
 		)
 	} else {
 		llm, err = a.service.CreateLLM(
@@ -104,6 +107,8 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.DontLogBodies,
 			models.JSONMap(input.Data.Attributes.Metadata),
 			input.Data.Attributes.Failover,
+			services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
+			services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
 		)
 	}
 	if err != nil {
@@ -268,6 +273,8 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.DontLogBodies,
 		models.JSONMap(input.Data.Attributes.Metadata),
 		input.Data.Attributes.Failover,
+		services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
+		services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
 	)
 	if err != nil {
 		respondLLMServiceError(c, err)
@@ -287,6 +294,8 @@ func (a *API) updateLLM(c *gin.Context) {
 			!sliceEqual(thisLLM.AllowedModels, input.Data.Attributes.AllowedModels) ||
 			len(thisLLM.Filters) != len(filters) ||
 			failoverChanged(thisLLM.Failover, input.Data.Attributes.Failover) ||
+			thisLLM.VendorWorkspaceID != input.Data.Attributes.VendorWorkspaceID ||
+			!maps.Equal(thisLLM.PriceMultipliers, input.Data.Attributes.PriceMultipliers) ||
 			metadataChanged)
 
 		if activeStateChanged || (input.Data.Attributes.Active && hasChanges) {
@@ -334,7 +343,8 @@ func respondLLMServiceError(c *gin.Context, err error) {
 		return
 	}
 	var verr *services.LLMFailoverValidationError
-	if errors.As(err, &verr) || errors.Is(err, models.ErrRouteSlugTaken) {
+	var lverr *services.LLMValidationError
+	if errors.As(err, &verr) || errors.As(err, &lverr) || errors.Is(err, models.ErrRouteSlugTaken) {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -705,6 +715,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Plugins          []PluginResponse       `json:"plugins"`
 			Metadata         map[string]interface{} `json:"metadata,omitempty"`
 			Failover         *models.LLMFailover    `json:"failover,omitempty"`
+			VendorWorkspaceID string `json:"vendor_workspace_id"`
+			PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 		}{
 			Name:             llm.Name,
 			APIKey:           services.REDACTED_VALUE,
@@ -728,6 +740,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Plugins:          plugins,
 			Metadata:         redactMetadataSecrets(llm.Metadata),
 			Failover:         failoverForResponse(llm.Failover),
+			VendorWorkspaceID: llm.VendorWorkspaceID,
+			PriceMultipliers:  llm.PriceMultipliers,
 		},
 	}
 }
@@ -827,6 +841,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Plugins          []PluginResponse       `json:"plugins"`
 				Metadata         map[string]interface{} `json:"metadata,omitempty"`
 				Failover         *models.LLMFailover    `json:"failover,omitempty"`
+				VendorWorkspaceID string `json:"vendor_workspace_id"`
+				PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 			}{
 				Name:             llm.Name,
 				APIKey:           services.REDACTED_VALUE,
@@ -850,6 +866,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Plugins:          plugins,
 				Metadata:         redactMetadataSecrets(llm.Metadata),
 				Failover:         failoverForResponse(llm.Failover),
+				VendorWorkspaceID: llm.VendorWorkspaceID,
+				PriceMultipliers:  llm.PriceMultipliers,
 			},
 		}
 	}

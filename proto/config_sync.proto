@@ -326,6 +326,9 @@ message AnalyticsEvent {
   string request_kind = 42;
   uint32 decision_questions = 43;   // decision calls: questions asked
   uint32 decision_refusals = 44;    // decision calls: questions the model declined (answered = choices)
+
+  // Vendor service tier the usage was billed at ("batch", "priority", "flex"...); empty for list-price traffic.
+  string service_tier = 45;
 }
 
 // Budget usage event for pulse batching

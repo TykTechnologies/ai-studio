@@ -74,7 +74,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
 	budgetStartDate *time.Time, dontLogBodies bool, metadata models.JSONMap,
-	failover *models.LLMFailover) (*models.LLM, error) {
+	failover *models.LLMFailover, opts ...LLMOption) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -96,6 +96,9 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	}
 	if failover != nil {
 		llm.Failover = *failover
+	}
+	if err := applyLLMOptions(llm, opts); err != nil {
+		return nil, err
 	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
@@ -175,7 +178,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
 	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap,
-	failover *models.LLMFailover) (*models.LLM, error) {
+	failover *models.LLMFailover, opts ...LLMOption) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -197,6 +200,9 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	}
 	if failover != nil {
 		llm.Failover = *failover
+	}
+	if err := applyLLMOptions(llm, opts); err != nil {
+		return nil, err
 	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
@@ -275,7 +281,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
 	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap,
-	failover *models.LLMFailover) (*models.LLM, error) {
+	failover *models.LLMFailover, opts ...LLMOption) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -327,6 +333,9 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.Failover = models.LLMFailover{}
 	if failover != nil {
 		llm.Failover = *failover
+	}
+	if err := applyLLMOptions(llm, opts); err != nil {
+		return nil, err
 	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err

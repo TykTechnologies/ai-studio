@@ -24,15 +24,84 @@ type Spec struct {
 	Resources  []ResourceType
 	Operations []Operation
 
-	// ChainHooks is reserved for hooks on the existing synchronous chain
-	// (e.g. minting OpenAI Responses IDs and verifying previous_response_id).
-	// It is declared so the contract does not change when it is implemented;
-	// the proxy ignores it today.
+	// ChainHooks are hooks on the existing synchronous chain: calls that stay
+	// on the legacy native pass-through (model validation, filters, usage
+	// analysis) but hand out or reference vendor resource IDs, such as
+	// OpenAI's POST /v1/responses and its previous_response_id.
 	ChainHooks *ChainHooks
 }
 
-// ChainHooks is reserved; see Spec.ChainHooks.
-type ChainHooks struct{}
+// ChainHooks are a vendor's hooks on the synchronous chain.
+type ChainHooks struct {
+	Hooks []ChainHook
+}
+
+// ChainHook applies to synchronous-chain requests with exactly Method and
+// the canonical Path (no parameters). The proxy verifies and unwraps
+// RequestRefs before the request filters run (any failure is the same 404 as
+// for a native operation), and wraps ResponseIDs in a successful JSON
+// response and in the resource object of every server-sent event.
+//
+// When the created object is a tracked async resource (ResponseIDs[0]
+// names a ResourceType with Async, and Async.Tracked reports the object),
+// the proxy records it in the native resource ledger so the reconciler
+// accounts it; the vendor's synchronous usage analysis must then record no
+// usage for it, or it is counted twice.
+type ChainHook struct {
+	Name   string
+	Method string
+	Path   string
+	// RequestRefs are IDs in the request body to verify and unwrap.
+	RequestRefs []BodyRef
+	// ResponseIDs are IDs in the resource object to wrap. The resource
+	// object is the response body, or EventObject inside an event's data.
+	ResponseIDs []BodyRef
+	// EventObject is the dotted path of the resource object inside a
+	// server-sent event's JSON data ("response"); events without it pass
+	// through unchanged. Empty: streamed responses are not rewritten.
+	EventObject string
+	// DropHeaders are client headers removed before the request leaves the
+	// gateway, so it reaches the vendor account the native operations and
+	// the reconciler use (OpenAI-Project would create a response elsewhere).
+	DropHeaders []string
+	// FilterFormat is the format the request filters read the body as (a
+	// key of the proxy's message extractor and reconstructor registries,
+	// such as "openai_responses"); empty means the vendor's own.
+	FilterFormat string
+	// CheckBody, when set, vets the request body before the model checks
+	// and filters see it (CheckJSONKeys refuses duplicate keys); an error is
+	// a 400 naming it.
+	CheckBody func(body []byte) error
+	// ErrorShape renders a vendor-shaped error body.
+	ErrorShape func(status int, typ, msg string) []byte
+}
+
+// Declares reports whether a chain hook declares exactly path, for any
+// method.
+func (h *ChainHooks) Declares(path string) bool {
+	if h == nil {
+		return false
+	}
+	for i := range h.Hooks {
+		if h.Hooks[i].Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// Hook returns the chain hook declared for method and the canonical path.
+func (h *ChainHooks) Hook(method, path string) (*ChainHook, bool) {
+	if h == nil {
+		return nil, false
+	}
+	for i := range h.Hooks {
+		if h.Hooks[i].Method == method && h.Hooks[i].Path == path {
+			return &h.Hooks[i], true
+		}
+	}
+	return nil, false
+}
 
 // Resource returns the declared resource type with the given name.
 func (s Spec) Resource(name string) (ResourceType, bool) {
@@ -179,6 +248,21 @@ type AsyncSpec struct {
 	// it cannot be cancelled. The proxy cancels a resource it created but
 	// could not record in its ledger, so it never runs unaccounted.
 	Cancel func(vendorID string) UpstreamReq
+	// ObjectUsage, when set, reads the usage of an ended resource from the
+	// polled object itself (an OpenAI background response) instead of a
+	// results download; Results and LineUsage are then not used. ok=false
+	// means the object carries no billable usage.
+	ObjectUsage func(obj []byte) (u Usage, ok bool, err error)
+	// Tracked, when set, reports whether an object of the type is a
+	// long-running resource the gateway ledgers and accounts (an OpenAI
+	// response created with background: true); other objects of the type
+	// are accounted synchronously and never ledgered. Nil: every object is.
+	Tracked func(obj []byte) bool
+}
+
+// IsTracked reports whether obj is ledgered and accounted asynchronously.
+func (a *AsyncSpec) IsTracked(obj []byte) bool {
+	return a != nil && (a.Tracked == nil || a.Tracked(obj))
 }
 
 // LedgerEffect is what an operation does to the native resource ledger.
@@ -221,7 +305,9 @@ type Item struct {
 	// item Body as (e.g. "anthropic").
 	Format string
 	// Model is the model the item asks for; checked against the LLM's
-	// allow-list.
+	// allow-list. Empty: the item invokes no model (items stored in an
+	// OpenAI conversation) and only the filters run on it. A Split for an
+	// item that does invoke a model must refuse one without it.
 	Model string
 	// Body is the item's request body as the filters see it.
 	Body []byte
@@ -231,7 +317,12 @@ type Item struct {
 // allow-list, request filters) one by one, and joins them back after filters
 // may have rewritten some of them.
 type AdmitSpec struct {
-	Split func(body []byte) ([]Item, error)
+	// Multipart marks a multipart/form-data body (an OpenAI file upload).
+	// The proxy requires the Content-Type boundary to open the body (no
+	// preamble), so Split, which reads the boundary from the body's first
+	// line, parses the body as the vendor will.
+	Multipart bool
+	Split     func(body []byte) ([]Item, error)
 	// Join rebuilds the upstream body from the original body and the items in
 	// Split order; only items whose Body changed need rewriting.
 	Join func(original []byte, items []Item) ([]byte, error)
@@ -242,6 +333,15 @@ type AdmitSpec struct {
 type BodyRef struct {
 	Path     string
 	Resource string
+	// Child marks, in ResponseIDs of an operation on an async resource, an
+	// ID of a resource derived from it (a batch's output file). The node
+	// that holds the async resource's ledger row records the child there
+	// too (ParentID), so it can be listed and retrieved, and cannot be
+	// deleted before its parent is accounted.
+	Child bool
+	// ObjectID marks a field that holds the ID itself or an object whose
+	// "id" holds it (OpenAI's conversation: "conv_..." or {"id": ...}).
+	ObjectID bool
 }
 
 // TransformEnv is what a Transform may use.
@@ -292,6 +392,11 @@ type UpstreamSpec struct {
 	// LongRunning marks responses that may stream for a long time (results);
 	// the proxy uses an idle timeout instead of the request timeout.
 	LongRunning bool
+	// RefuseQuery are query parameters the gateway does not support on the
+	// operation: a request carrying one with a value other than "false" is
+	// refused with 400 (OpenAI's ?stream=true on a response retrieve would
+	// expect a stream the operation does not serve).
+	RefuseQuery []string
 }
 
 // Operation is one native endpoint.
@@ -376,6 +481,11 @@ func (s Spec) Validate() error {
 				return fmt.Errorf("nativeapi: operation %q: invalid body ref %+v", op.Name, ref)
 			}
 		}
+		for _, ref := range op.RequestRefs {
+			if ref.Child {
+				return fmt.Errorf("nativeapi: operation %q: a request ref cannot be a child", op.Name)
+			}
+		}
 		if op.Admit != nil && (op.Admit.Split == nil || op.Admit.Join == nil) {
 			return fmt.Errorf("nativeapi: operation %q: Admit needs Split and Join", op.Name)
 		}
@@ -384,6 +494,54 @@ func (s Spec) Validate() error {
 		}
 		if op.List != nil && op.List.Envelope == nil {
 			return fmt.Errorf("nativeapi: operation %q: List needs Envelope", op.Name)
+		}
+	}
+	for _, rt := range s.Resources {
+		if a := rt.Async; a != nil && a.ObjectUsage == nil && (a.Results == nil) != (a.LineUsage == nil) {
+			return fmt.Errorf("nativeapi: resource %q: Async needs both Results and LineUsage, or ObjectUsage", rt.Name)
+		}
+	}
+	return s.validateChainHooks(seen)
+}
+
+// validateChainHooks checks the chain hooks against the declared resources
+// and operations; seen holds the resource names.
+func (s Spec) validateChainHooks(seen map[string]bool) error {
+	if s.ChainHooks == nil {
+		return nil
+	}
+	keys := map[string]bool{}
+	for _, h := range s.ChainHooks.Hooks {
+		if h.Name == "" {
+			return fmt.Errorf("nativeapi: chain hook %s %s has no name", h.Method, h.Path)
+		}
+		if !validMethods[h.Method] {
+			return fmt.Errorf("nativeapi: chain hook %q: invalid method %q", h.Name, h.Method)
+		}
+		pat, err := compilePattern(h.Path)
+		if err != nil {
+			return fmt.Errorf("nativeapi: chain hook %q: %w", h.Name, err)
+		}
+		if pat.literals() != len(pat.segs) {
+			return fmt.Errorf("nativeapi: chain hook %q: path must not have parameters", h.Name)
+		}
+		key := h.Method + " " + h.Path
+		if keys[key] {
+			return fmt.Errorf("nativeapi: duplicate chain hook for %s", key)
+		}
+		keys[key] = true
+		for _, op := range s.Operations {
+			if op.Method == h.Method && op.Path == h.Path {
+				return fmt.Errorf("nativeapi: chain hook %q: operation %q serves the same requests", h.Name, op.Name)
+			}
+		}
+		for _, ref := range append(append([]BodyRef{}, h.RequestRefs...), h.ResponseIDs...) {
+			if ref.Path == "" || !seen[ref.Resource] {
+				return fmt.Errorf("nativeapi: chain hook %q: invalid body ref %+v", h.Name, ref)
+			}
+		}
+		if h.EventObject != "" && len(h.ResponseIDs) == 0 {
+			return fmt.Errorf("nativeapi: chain hook %q: EventObject without ResponseIDs", h.Name)
 		}
 	}
 	return nil

@@ -651,6 +651,7 @@ TABLE llm_chat_records
   column `request_kind` text DEFAULT ""
   column `decision_questions` integer
   column `decision_refusals` integer
+  column `service_tier` text
   index CREATE INDEX `idx_llm_chat_records_app_time` ON `llm_chat_records`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_llm_chat_records_deleted_at` ON `llm_chat_records`(`deleted_at`)
   index CREATE INDEX `idx_llm_chat_records_kind_time` ON `llm_chat_records`(`request_kind`,`time_stamp`)
@@ -720,6 +721,12 @@ TABLE llms
   column `allowed_models` text
   column `metadata` json
   column `failover` json
+  column `vendor_workspace_id` text
+  column `price_multipliers` json
+  column `resource_signing_secret` text
+  column `resource_signing_secret_prev` text
+  column `resource_signing_prev_expires_at` datetime
+  column `resource_signing_rotated_at` datetime
   index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
   index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)
 TABLE marketplace_config
@@ -1379,6 +1386,7 @@ TABLE proxy_logs
   column `on_behalf_of` text
   column `acting_agent` text
   column `request_kind` text DEFAULT ""
+  column `service_tier` text
   index CREATE INDEX `idx_proxy_logs_app_code_time` ON `proxy_logs`(`app_id`,`response_code`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_app_time` ON `proxy_logs`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_code` ON `proxy_logs`(`response_code`)

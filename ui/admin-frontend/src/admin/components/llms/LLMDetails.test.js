@@ -125,3 +125,87 @@ describe("LLMDetails edit/activate affordances", () => {
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms/7/activate"));
   });
 });
+
+describe("LLMDetails native API resource signing key", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    clearIdentity();
+    apiClient.post.mockResolvedValue({ data: {} });
+  });
+
+  const mockVendor = (vendor) => {
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/llms/7") {
+        const res = llm(true);
+        res.data.data.attributes.vendor = vendor;
+        return Promise.resolve(res);
+      }
+      if (url === "/llms/7/resource-signing-key") {
+        return Promise.resolve({ data: { data: { llm_id: 7, source: "secret", kid: "deadbeef" } } });
+      }
+      if (url === "/analytics/budget-usage") return Promise.resolve({ data: [] });
+      if (url === "/analytics/total-cost-per-vendor-and-model") return Promise.resolve({ data: [] });
+      if (url === "/analytics/usage") return Promise.resolve({ data: { labels: [], datasets: [] } });
+      if (url === "/analytics/proxy-logs-for-llm") {
+        return Promise.resolve({ data: { data: [], meta: { total_count: 0, total_pages: 0 } } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+  };
+
+  it.each(["anthropic", "openai"])("shows the signing key section for a %s LLM", async (vendor) => {
+    mockVendor(vendor);
+    renderWith(["llms:read"]);
+    expect(await screen.findByText("deadbeef")).toBeInTheDocument();
+    expect(screen.getByText("Native API resource IDs")).toBeInTheDocument();
+  });
+
+  it("shows the Anthropic workspace pin, or the default when unset", async () => {
+    mockVendor("anthropic");
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/llms/7") {
+        return base(url).then((res) => {
+          res.data.data.attributes.vendor_workspace_id = "wrkspc_01pinned";
+          return res;
+        });
+      }
+      return base(url);
+    });
+    renderWith(["llms:read"]);
+    expect(await screen.findByText("wrkspc_01pinned")).toBeInTheDocument();
+  });
+
+  it("lists price multiplier overrides when set", async () => {
+    mockVendor("anthropic");
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/llms/7") {
+        return base(url).then((res) => {
+          res.data.data.attributes.price_multipliers = { batch: 0.4, priority: 1.2 };
+          return res;
+        });
+      }
+      return base(url);
+    });
+    renderWith(["llms:read"]);
+    expect(await screen.findByText("batch ×0.4, priority ×1.2")).toBeInTheDocument();
+  });
+
+  it("shows no workspace row for other vendors", async () => {
+    mockVendor("openai");
+    renderWith(["llms:read"]);
+    await screen.findByText("LLM provider details");
+    expect(screen.queryByText("Workspace:")).not.toBeInTheDocument();
+    expect(screen.queryByText("API key's default workspace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Price Multipliers:")).not.toBeInTheDocument();
+  });
+
+  it("does not fetch or show it for a vendor without native resource IDs", async () => {
+    mockVendor("ollama");
+    renderWith(["llms:read"]);
+    await screen.findByText("LLM provider details");
+    expect(screen.queryByText("Native API resource IDs")).not.toBeInTheDocument();
+    expect(apiClient.get).not.toHaveBeenCalledWith("/llms/7/resource-signing-key");
+  });
+});

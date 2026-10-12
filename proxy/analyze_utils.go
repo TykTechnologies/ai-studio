@@ -51,6 +51,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		ResponseBody: truncateString(string(body), maxBodySize),
 		ResponseCode: statusCode,
 		RequestKind:  requestKindOf(response),
+		ServiceTier:  serviceTierOf(response),
 	}
 
 	if llm.DontLogBodies {
@@ -96,6 +97,7 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		ResponseBody: truncateString(string(decompressedResponses), maxBodySize),
 		ResponseCode: statusCode,
 		RequestKind:  requestKindOf(response),
+		ServiceTier:  serviceTierOf(response),
 	}
 
 	if llm.DontLogBodies {
@@ -107,6 +109,12 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.
 	ctx := context.WithoutCancel(r.Context())
+	if response == nil {
+		// A stream that carries no usage here (an OpenAI background
+		// response, accounted by the native reconciler): log it only.
+		analytics.RecordExchange(ctx, l, nil)
+		return
+	}
 	analyzeExchange(service, llm, app, response, ctx, r, l, timestamp)
 }
 
@@ -201,7 +209,10 @@ func buildChatRecordFor(service services.ServiceInterface, llm *models.LLM, app 
 		InteractionType: models.ProxyInteraction,
 	}
 	if pa, ok := response.(models.IPriceAdjustedResponse); ok {
-		rec.Cost *= pa.PriceMultiplier()
+		// The LLM's per-tier override (negotiated pricing) wins over the
+		// vendor's multiplier.
+		rec.Cost *= llm.PriceMultipliers.Multiplier(pa.ServiceTier(), pa.PriceMultiplier())
+		rec.ServiceTier = pa.ServiceTier()
 	}
 	if dr, ok := response.(models.IDecisionResponse); ok {
 		rec.RequestKind = models.DecisionRequest
@@ -243,6 +254,15 @@ func priceForExchange(service services.ServiceInterface, reported, requested, ve
 
 func unpriced(p *models.ModelPrice) bool {
 	return p.CPT == 0 && p.CPIT == 0 && p.CacheWritePT == 0 && p.CacheReadPT == 0
+}
+
+// serviceTierOf is the vendor service tier an analysed response was billed
+// at, when it says ("" for list-price traffic).
+func serviceTierOf(response models.ITokenResponse) string {
+	if pa, ok := response.(models.IPriceAdjustedResponse); ok {
+		return pa.ServiceTier()
+	}
+	return ""
 }
 
 // requestKindOf is the request kind an analysed response belongs to.

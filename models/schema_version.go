@@ -38,7 +38,10 @@ const (
 	//    decision_refusals (nullable, additive).
 	// 9: native_resources (new table, additive): the native API extension
 	//    ledger (Anthropic message batches).
-	SchemaVersion          = 9
+	// 10: native API extensions follow-ups: llms resource_signing_*,
+	//     vendor_workspace_id and price_multipliers, llm_chat_records and
+	//     proxy_logs service_tier (nullable, additive).
+	SchemaVersion          = 10
 	MinReaderSchemaVersion = 1
 )
 

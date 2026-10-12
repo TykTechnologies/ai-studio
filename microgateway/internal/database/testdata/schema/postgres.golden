@@ -71,6 +71,7 @@ TABLE analytics_events
   column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
   column decision_questions bigint(int8) nullable=YES precision=64 scale=0
   column decision_refusals bigint(int8) nullable=YES precision=64 scale=0
+  column service_tier character varying(varchar) nullable=YES len=32
   column time_stamp timestamp with time zone(timestamptz) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE api_tokens
@@ -327,6 +328,11 @@ TABLE llms
   column auth_config jsonb(jsonb) nullable=YES
   column namespace text(text) nullable=YES default=''::text
   column dont_log_bodies boolean(bool) nullable=YES default=false
+  column resource_signing_secret_encrypted text(text) nullable=YES
+  column resource_signing_secret_prev_encrypted text(text) nullable=YES
+  column resource_signing_prev_expires_at timestamp with time zone(timestamptz) nullable=YES
+  column vendor_workspace_id text(text) nullable=YES
+  column price_multipliers jsonb(jsonb) nullable=YES
 TABLE model_mappings
   constraint fk_pool_vendors_mappings FOREIGN KEY (vendor_id) REFERENCES pool_vendors(id) ON DELETE CASCADE
   constraint model_mappings_pkey PRIMARY KEY (id)

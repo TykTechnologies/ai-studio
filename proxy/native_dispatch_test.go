@@ -198,7 +198,9 @@ func TestNative_MissingPrerequisitesAre501(t *testing.T) {
 		"no ledger": {wrapService: func(s services.ServiceInterface) services.ServiceInterface {
 			return serviceWithoutNativeStore{s}
 		}},
-		"no vendor key": {vendorKey: "-"},
+		// No signing secret (a standalone edge's LLM) and no vendor
+		// credential to derive a key from.
+		"no signing key": {vendorKey: "-", mutateLLM: func(l *models.LLM) { l.ResourceSigningSecret = "" }},
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newNativeHarness(t, opts)
@@ -294,7 +296,8 @@ func TestNative_RetrieveUpdatesLedgerSnapshot(t *testing.T) {
 	assert.Equal(t, models.NativeAccountingPending, got.AccountingState, "a retrieve never settles accounting")
 }
 
-// A rotated vendor key breaks the MAC of IDs minted before; the creator
+// A key no longer in the codec (here a vendor-credential key the LLM never
+// had in its grace window) breaks the MAC of IDs minted under it; the creator
 // node's ledger row for the same App still authorises them. Without the row
 // (another node, or another App) they are not found.
 func TestNative_KeyRotationFallbackToLedger(t *testing.T) {

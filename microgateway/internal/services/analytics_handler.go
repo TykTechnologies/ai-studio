@@ -289,6 +289,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyL
 				RequestKind:         string(record.RequestKind),
 				DecisionQuestions:   record.DecisionQuestions,
 				DecisionRefusals:    record.DecisionRefusals,
+				ServiceTier:         record.ServiceTier,
 			}
 			if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
 				log.Error().Err(err).Msg("Failed to execute analytics plugins for exchange")
@@ -337,6 +338,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 			RequestKind:            string(record.RequestKind),
 			DecisionQuestions:      record.DecisionQuestions,
 			DecisionRefusals:       record.DecisionRefusals,
+			ServiceTier:            record.ServiceTier,
 		}
 
 		// Execute analytics plugins
@@ -420,6 +422,7 @@ func (h *MicrogatewaAnalyticsHandler) eventFromProxyLog(proxyLog *models.ProxyLo
 	event.OnBehalfOf = proxyLog.OnBehalfOf
 	event.ActingAgent = proxyLog.ActingAgent
 	event.RequestKind = string(proxyLog.RequestKind)
+	event.ServiceTier = proxyLog.ServiceTier
 	return event
 }
 
@@ -445,6 +448,9 @@ func applyChatRecord(event *database.AnalyticsEvent, record *models.LLMChatRecor
 	event.RequestKind = string(record.RequestKind)
 	event.DecisionQuestions = record.DecisionQuestions
 	event.DecisionRefusals = record.DecisionRefusals
+	if record.ServiceTier != "" {
+		event.ServiceTier = record.ServiceTier
+	}
 	// Keep the latency the row already has when the record carries none.
 	if record.TotalTimeMS > 0 {
 		event.TotalTimeMS = record.TotalTimeMS

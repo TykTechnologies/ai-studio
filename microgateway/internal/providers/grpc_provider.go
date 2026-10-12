@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // GRPCProvider implements ConfigurationProvider using gRPC communication with control instance
@@ -431,6 +432,14 @@ func jsonOrNil(s string) database.JSON {
 	return database.JSON(s)
 }
 
+func timeOrNil(ts *timestamppb.Timestamp) *time.Time {
+	if ts == nil {
+		return nil
+	}
+	t := ts.AsTime()
+	return &t
+}
+
 func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM {
 	// Convert protobuf timestamps
 	var createdAt, updatedAt time.Time
@@ -463,6 +472,12 @@ func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM
 		GovernedMetadata: database.GovernedMetadataJSON(pbLLM.GovernedMetadata),
 		// Failover rides as a JSON string; an empty string must stay NULL.
 		Failover: jsonOrNil(pbLLM.Failover),
+
+		ResourceSigningSecretEncrypted:     pbLLM.ResourceSigningSecretEncrypted,
+		ResourceSigningSecretPrevEncrypted: pbLLM.ResourceSigningSecretPrevEncrypted,
+		ResourceSigningPrevExpiresAt:       timeOrNil(pbLLM.ResourceSigningPrevExpiresAt),
+		VendorWorkspaceID:                  pbLLM.VendorWorkspaceId,
+		PriceMultipliers:                   jsonOrNil(pbLLM.PriceMultipliers),
 		// Note: JSON fields (Metadata, AllowedModels, AuthConfig) would need proper JSON unmarshaling
 		// For now, we'll leave them empty or implement conversion if needed
 	}

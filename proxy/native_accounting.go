@@ -140,6 +140,7 @@ func (p *Proxy) recordAsyncUsage(row *models.NativeResource, llm *models.LLM, ap
 			ResponseCode: 200,
 			OnBehalfOf:   row.OnBehalfOf,
 			ActingAgent:  row.ActingAgent,
+			ServiceTier:  rec.ServiceTier,
 		}
 		if llm.DontLogBodies {
 			l.ResponseBody = ""
