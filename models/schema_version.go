@@ -36,7 +36,9 @@ const (
 	// 8: decision models: proxy_logs.request_kind and llm_chat_records
 	//    request_kind (defaulted, indexed with time_stamp), decision_questions and
 	//    decision_refusals (nullable, additive).
-	SchemaVersion          = 8
+	// 9: native_resources (new table, additive): the native API extension
+	//    ledger (Anthropic message batches).
+	SchemaVersion          = 9
 	MinReaderSchemaVersion = 1
 )
 

@@ -102,6 +102,10 @@ conventions, and keep their own names:
 | `aistudio_compliance_events_total` | `event_type`, `severity`, `filter_name` | Raised by filter scripts |
 | `aistudio_tool_calls_total` | `tool_name`, `app_id` | Tool / MCP invocations |
 | `aistudio_decision_questions_total` | `vendor`, `model`, `outcome` | Questions put to [decision models](./decision-models.md); `outcome` is `answered` or `refused` |
+| `aistudio_native_requests_total` | `vendor`, `operation`, `status_code` | [Native API operations](./proxy.md#message-batches-and-other-native-api-operations) such as `anthropic.message_batches.create` |
+| `aistudio_native_request_duration_seconds` | `vendor`, `operation`, `status_code` | Native API operation latency (histogram; results downloads can run for minutes) |
+| `aistudio_native_results_bytes_total` | `vendor`, `operation` | Bytes of batch results files streamed to clients |
+| `aistudio_native_reconcile_outcomes_total` | `vendor`, `resource_type`, `outcome` | Batches the background reconciler looked at; `outcome` is `accounted`, `settled`, `not_ended`, `unaccountable`, `lost` or `failed` |
 
 ### Migrating existing dashboards
 

@@ -56,9 +56,12 @@ func (v *Anthropic) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.Embedder
 
 func (v *Anthropic) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	var response models.ITokenResponse
-	pathLower := strings.ToLower(r.URL.Path)
-	// Check for both /v1/messages (direct API calls) and /messages suffix (SDK internal routing via /ai/)
-	if strings.Contains(pathLower, AnthropicCompletionsEndpoint) || strings.HasSuffix(pathLower, "/messages") {
+	pathLower := strings.TrimSuffix(strings.ToLower(r.URL.Path), "/")
+	// Only a Messages call carries a message: /v1/messages (direct API calls)
+	// and a /messages suffix (SDK internal routing via /ai/). The suffix match
+	// keeps /v1/messages/batches* and /v1/messages/count_tokens out: they
+	// carry no usage and used to log as zero-cost chat records.
+	if strings.HasSuffix(pathLower, "/messages") {
 		response = &responses.AnthropicResponse{}
 		err := json.Unmarshal(body, response)
 		if err != nil {
@@ -66,6 +69,12 @@ func (v *Anthropic) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode
 		}
 
 		return llm, app, response, nil
+	}
+	// The other Messages API calls (count_tokens, batches) are proxied
+	// calls without message usage: no response and no error, so the proxy
+	// logs the call without a chat record.
+	if strings.Contains(pathLower, AnthropicCompletionsEndpoint+"/") {
+		return llm, app, nil, nil
 	}
 
 	return llm, app, nil, fmt.Errorf("unknown response type: %s", r.URL.Path)

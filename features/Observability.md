@@ -119,6 +119,17 @@ conventions, so they keep their own names:
 | `aistudio_compliance_events_total` | counter | `event_type`, `severity`, `filter_name` |
 | `aistudio_tool_calls_total` | counter | `tool_name`, `app_id` |
 | `aistudio_decision_questions_total` | counter | `vendor`, `model`, `outcome` (`answered`, `refused`) |
+| `aistudio_native_requests_total` | counter | `vendor`, `operation`, `status_code` |
+| `aistudio_native_request_duration_seconds` | histogram | `vendor`, `operation`, `status_code` |
+| `aistudio_native_results_bytes_total` | counter | `vendor`, `operation` |
+| `aistudio_native_reconcile_outcomes_total` | counter | `vendor`, `resource_type`, `outcome` (`accounted`, `settled`, `not_ended`, `unaccountable`, `lost`, `failed`) |
+
+The `aistudio_native_*` series cover the native API extensions
+([NativeAPIExtensions.md](NativeAPIExtensions.md)): `operation` is the
+extension's operation name (`anthropic.message_batches.results`), or
+`method_not_allowed`. Batch usage itself is recorded through the normal
+chat-record path, so it appears in `aistudio_llm_cost_total` and the token
+metrics like any other usage.
 
 ### Legacy metrics
 

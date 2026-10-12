@@ -18,3 +18,14 @@ type IDecisionResponse interface {
 	GetDecisionQuestions() int
 	GetDecisionRefusals() int
 }
+
+// IPriceAdjustedResponse is a token response billed at other than the model's
+// list price, such as a Message Batches result billed at half price. The
+// gateway multiplies the record's cost by PriceMultiplier (1 means list price).
+// ServiceTier names the vendor tier that set it ("batch", "priority"...), for
+// logs; it is not stored yet.
+type IPriceAdjustedResponse interface {
+	ITokenResponse
+	ServiceTier() string
+	PriceMultiplier() float64
+}

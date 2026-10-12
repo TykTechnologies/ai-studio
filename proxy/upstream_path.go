@@ -53,3 +53,50 @@ func joinUpstreamPath(upstreamPath, remainingPath string) string {
 	}
 	return path.Join(base, remainingPath)
 }
+
+// canonicalVendorPath is the vendor's own path for a request: the path
+// joinUpstreamPath sends upstream, less any corporate prefix the LLM's
+// endpoint carries. A version segment that ends the endpoint (the /v1 of
+// https://gw/anthropic/v1) belongs to the vendor's API and is kept; whatever
+// precedes it (the /anthropic) is the proxy's mount point and is dropped. So
+// every endpoint shape that sends .../v1/messages/batches upstream names the
+// same canonical /v1/messages/batches, which native operations are matched on.
+func canonicalVendorPath(upstreamPath, remainingPath string) string {
+	joined := joinUpstreamPath(upstreamPath, remainingPath)
+	base := strings.Trim(upstreamPath, "/")
+	if base == "" {
+		return joined
+	}
+	segments := strings.Split(base, "/")
+	if isVersionSegment(segments[len(segments)-1]) {
+		segments = segments[:len(segments)-1]
+	}
+	prefix := ""
+	if len(segments) > 0 {
+		prefix = "/" + strings.Join(segments, "/")
+	}
+	if prefix == "" {
+		return joined
+	}
+	if joined == prefix {
+		return "/"
+	}
+	if strings.HasPrefix(joined, prefix+"/") {
+		return joined[len(prefix):]
+	}
+	return joined
+}
+
+// isVersionSegment reports whether seg names an API version: v1, v2, v1beta,
+// v1alpha2 and the like.
+func isVersionSegment(seg string) bool {
+	if len(seg) < 2 || seg[0] != 'v' || seg[1] < '0' || seg[1] > '9' {
+		return false
+	}
+	for _, c := range seg[2:] {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'z') {
+			return false
+		}
+	}
+	return true
+}

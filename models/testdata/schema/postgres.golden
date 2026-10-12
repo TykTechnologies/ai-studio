@@ -1134,6 +1134,36 @@ TABLE namespace_sync_status
   column config_version character varying(varchar) nullable=NO len=64
   column last_config_change timestamp with time zone(timestamptz) nullable=NO
   column last_push_at timestamp with time zone(timestamptz) nullable=YES
+TABLE native_resources
+  constraint native_resources_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_native_resources_due ON native_resources USING btree (accounting_state, next_poll_at)
+  index CREATE INDEX idx_native_resources_owner_keyset ON native_resources USING btree (app_id, llm_id, resource_type, created_at, id)
+  index CREATE INDEX idx_native_resources_parent_id ON native_resources USING btree (parent_id)
+  index CREATE INDEX idx_native_resources_results_expire_at ON native_resources USING btree (results_expire_at)
+  index CREATE UNIQUE INDEX idx_native_resources_vendor_id ON native_resources USING btree (llm_id, resource_type, vendor_resource_id)
+  index CREATE UNIQUE INDEX native_resources_pkey ON native_resources USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('native_resources_id_seq'::regclass)
+  column vendor character varying(varchar) nullable=NO len=64
+  column llm_id bigint(int8) nullable=NO precision=64 scale=0
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column on_behalf_of character varying(varchar) nullable=YES len=255
+  column acting_agent character varying(varchar) nullable=YES len=255
+  column resource_type character varying(varchar) nullable=NO len=128
+  column vendor_resource_id character varying(varchar) nullable=NO len=255
+  column parent_id bigint(int8) nullable=YES precision=64 scale=0
+  column state character varying(varchar) nullable=YES len=32
+  column snapshot text(text) nullable=YES
+  column ended_at timestamp with time zone(timestamptz) nullable=YES
+  column results_expire_at timestamp with time zone(timestamptz) nullable=YES
+  column accounting_state character varying(varchar) nullable=NO len=16
+  column claim_token character varying(varchar) nullable=YES len=64
+  column claimed_at timestamp with time zone(timestamptz) nullable=YES
+  column accounted_at timestamp with time zone(timestamptz) nullable=YES
+  column next_poll_at timestamp with time zone(timestamptz) nullable=YES
+  column poll_failures bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE notifications
   constraint notifications_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_notifications_deleted_at ON notifications USING btree (deleted_at)

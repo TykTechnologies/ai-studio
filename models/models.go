@@ -140,6 +140,8 @@ func InitModels(db *gorm.DB) error {
 		// Team budgets (Enterprise; tables exist in CE for team cost reporting)
 		&TeamBudget{},         // Per-team budget, allocation pool and enforcement
 		&TeamBudgetSettings{}, // Global team budget switch
+		// Native API extensions (pkg/nativeapi)
+		&NativeResource{}, // Vendor resources created on this node (message batches)
 	); err != nil {
 		return err
 	}

@@ -59,6 +59,13 @@ type AppConf struct {
 	// GatewayServerTiming adds Server-Timing headers/trailers to embedded
 	// gateway LLM responses (GATEWAY_SERVER_TIMING), for benchmarking.
 	GatewayServerTiming bool
+	// Native API extension limits of the embedded gateway (Anthropic
+	// Message Batches on the native /llm routes); see proxy.Config. Zero
+	// keeps the gateway's default.
+	NativeMaxBodyBytes         int64 // NATIVE_API_MAX_BODY_BYTES (64 MiB, at most 256 MiB)
+	NativeMaxConcurrentCreates int   // NATIVE_API_MAX_CONCURRENT_CREATES (4)
+	NativeMaxFilteredItems     int   // NATIVE_API_MAX_FILTERED_ITEMS (10000)
+	NativeMaxInProgressPerApp  int   // NATIVE_API_MAX_IN_PROGRESS_PER_APP (0: no cap)
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -556,6 +563,25 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 		conf.GatewayServerTiming = true
 		cfgLog.Info().Msg("Gateway Server-Timing headers enabled")
 	}
+
+	// Native API extension limits (non-negative integers; 0 or unset keeps
+	// the gateway's default).
+	nativeLimit := func(name string) int64 {
+		v := strings.TrimSpace(getenv(name))
+		if v == "" {
+			return 0
+		}
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			cfgLog.Warn().Msgf("Warning: invalid %s value %q; using the default", name, v)
+			return 0
+		}
+		return n
+	}
+	conf.NativeMaxBodyBytes = nativeLimit("NATIVE_API_MAX_BODY_BYTES")
+	conf.NativeMaxConcurrentCreates = int(nativeLimit("NATIVE_API_MAX_CONCURRENT_CREATES"))
+	conf.NativeMaxFilteredItems = int(nativeLimit("NATIVE_API_MAX_FILTERED_ITEMS"))
+	conf.NativeMaxInProgressPerApp = int(nativeLimit("NATIVE_API_MAX_IN_PROGRESS_PER_APP"))
 
 	// Docs server configuration - read port first so we can use it in default URL
 	docsPortStr := getenv("DOCS_PORT")

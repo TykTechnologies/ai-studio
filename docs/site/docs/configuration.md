@@ -105,6 +105,16 @@ The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/comp
 
 The Microgateway reads the **same settings under different names** — `GATEWAY_UNIFIED_ROUTER_PATH` and `GATEWAY_UNIFIED_ROUTER_DISABLED`. Set both sides to the same value in a hub-and-spoke deployment: the Developer Portal advertises the Main Ingress on an App's detail page using the **hub's** value, so a hub and edge that disagree send developers to a URL the edge does not serve. See [Proxy & API Gateway](./proxy.md#configuring-the-main-ingress).
 
+### Native API operations (Message Batches)
+SDK features served as native API operations on `/llm/call/{llmSlug}/...`, such as Anthropic Message Batches, have a few limits of their own. Unset or `0` keeps the default, and the Microgateway reads the same variable names.
+
+*   Body limit of a batch create in bytes (`NATIVE_API_MAX_BODY_BYTES`): default `67108864` (64 MiB), at most 256 MiB
+*   Batch creates admitted at once (`NATIVE_API_MAX_CONCURRENT_CREATES`): default `4`; further creates wait
+*   Requests per batch when the LLM has filters (`NATIVE_API_MAX_FILTERED_ITEMS`): default `10000`
+*   In-progress batches per App and LLM (`NATIVE_API_MAX_IN_PROGRESS_PER_APP`): default `0`, no cap
+
+A batch's `results_url` uses `PROXY_URL` (Microgateway: `GATEWAY_PUBLIC_URL`) as its base when set, and is a relative path otherwise. See [Proxy & API Gateway](./proxy.md#message-batches-and-other-native-api-operations).
+
 ### Audit Trail (Enterprise)
 Every action on the management API is recorded for incident reconstruction. On by default in Enterprise Edition.
 

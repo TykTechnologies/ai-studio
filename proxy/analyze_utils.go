@@ -62,6 +62,12 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.
 	ctx := context.WithoutCancel(r.Context())
+	if response == nil {
+		// The vendor recognised a call that carries no usage (Anthropic
+		// count_tokens): log it, without a chat record or budget usage.
+		analytics.RecordExchange(ctx, l, nil)
+		return
+	}
 	analyzeExchange(service, llm, app, response, ctx, r, l, time.Now())
 }
 
@@ -124,19 +130,24 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 // buildChatRecord turns a parsed response into the request's chat record,
 // priced from the model's price.
 func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, r *http.Request, timestamp time.Time) *models.LLMChatRecord {
-	var pt, rt, choices, tools int
-	// Get model from response, fallback to context if not available
+	return buildChatRecordFor(service, llm, app, response, requestedModel(r), timestamp)
+}
+
+// buildChatRecordFor is buildChatRecord without a request: requested is the
+// model the caller asked for (the fallback name and price when the response
+// names none, or an unpriced one). Usage recorded after the request that
+// produced it has gone, such as an async batch's results, is built here.
+// A response implementing models.IPriceAdjustedResponse has its cost scaled
+// by its multiplier.
+func buildChatRecordFor(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, requested string, timestamp time.Time) *models.LLMChatRecord {
+	var pt, rt, choices, tools, cacheWriteTokens, cacheReadTokens int
+	// Get model from response, fallback to the requested model if not available
 	model := ""
 	if response != nil {
 		model = response.GetModel()
 	}
-
 	if model == "" {
-		if modelFromCtx := r.Context().Value("model_name"); modelFromCtx != nil {
-			if modelStr, ok := modelFromCtx.(string); ok {
-				model = modelStr
-			}
-		}
+		model = requested
 	}
 
 	if response != nil {
@@ -144,12 +155,14 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 		rt = response.GetResponseTokens()
 		choices = response.GetChoiceCount()
 		tools = response.GetToolCount()
+		cacheWriteTokens = response.GetCacheWritePromptTokens()
+		cacheReadTokens = response.GetCacheReadPromptTokens()
 	}
 
 	// Get pricing information
 	var cpt, cpit, cacheWritePT, cacheReadPT float64
 	var currency string = "USD" // Default currency if no price found
-	price, err := priceForExchange(service, model, requestedModel(r), string(llm.Vendor))
+	price, err := priceForExchange(service, model, requested, string(llm.Vendor))
 	if err == nil && price != nil { // Check price != nil to avoid nil dereference
 		cpt = price.CPT
 		cpit = price.CPIT
@@ -159,10 +172,6 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 	} else {
 		log.Printf("Price not found for model: %s, vendor: %s", model, llm.Vendor)
 	}
-
-	// Get cache token counts
-	cacheWriteTokens := response.GetCacheWritePromptTokens()
-	cacheReadTokens := response.GetCacheReadPromptTokens()
 
 	// Subtract cached tokens from prompt tokens for vendors whose prompt token
 	// count already includes them, so the cache tokens are not counted twice in
@@ -196,6 +205,9 @@ func buildChatRecord(service services.ServiceInterface, llm *models.LLM, app *mo
 			(cacheReadPT * float64(cacheReadTokens))) * 10000,
 		Currency:        currency, // Set the currency (defaults to USD if no price found)
 		InteractionType: models.ProxyInteraction,
+	}
+	if pa, ok := response.(models.IPriceAdjustedResponse); ok {
+		rec.Cost *= pa.PriceMultiplier()
 	}
 	if dr, ok := response.(models.IDecisionResponse); ok {
 		rec.RequestKind = models.DecisionRequest

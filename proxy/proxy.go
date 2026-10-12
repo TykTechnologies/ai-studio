@@ -163,6 +163,10 @@ type Proxy struct {
 	// response is written (see goAnalyze). They outlive the request, so anything
 	// that tears the proxy or the analytics handler down waits on it.
 	analyzers sync.WaitGroup
+
+	// nativeCreates bounds the native creates in flight (native_create.go).
+	nativeCreatesOnce sync.Once
+	nativeCreates     chan struct{}
 }
 
 type Config struct {
@@ -219,6 +223,26 @@ type Config struct {
 	// split each request into gateway time and upstream time (see
 	// server_timing.go). Off by default; meant for benchmarking and diagnosis.
 	ServerTiming bool
+
+	// NativePublicURL is the absolute public base URL clients reach this
+	// gateway at (Studio's PROXY_URL, the edge's GATEWAY_PUBLIC_URL). Native
+	// API extensions use it for the gateway URLs they hand out, such as an
+	// Anthropic batch's results_url. Empty: those URLs are root-relative.
+	// The request's Host and forwarding headers are never used instead.
+	NativePublicURL string
+
+	// NativeMaxBodyBytes caps the body of a native create (an Anthropic
+	// message batch). Zero: 64 MiB. Larger values are capped at 256 MiB.
+	NativeMaxBodyBytes int64
+	// NativeMaxConcurrentCreates bounds the native creates in flight on this
+	// gateway; their bodies are held in memory while admitted. Zero: 4.
+	NativeMaxConcurrentCreates int
+	// NativeMaxFilteredItems caps the items of a native create when the LLM
+	// has request filters, each of which runs on every item. Zero: 10000.
+	NativeMaxFilteredItems int
+	// NativeMaxInProgressPerApp caps the batches an App may have in progress
+	// on one LLM, as this node's ledger counts them. Zero: no cap.
+	NativeMaxInProgressPerApp int
 }
 
 // unifiedRouterBasePath returns the normalized ingress base path, or "" when the
@@ -502,6 +526,10 @@ func (p *Proxy) createHandler() http.Handler {
 	// Main router for authenticated routes
 	r := mux.NewRouter()
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
+	// Native API extensions (native_dispatch.go): claims only the methods and
+	// paths a vendor declares, so it must precede the legacy /llm routes; any
+	// other request falls through to them unchanged.
+	r.Path("/llm/{mode:rest|stream|call}/{llmSlug}/{rest:.*}").MatcherFunc(p.nativeMatch).HandlerFunc(p.handleNative)
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
 	// Unified endpoint that automatically detects streaming vs non-streaming based on request
@@ -2173,7 +2201,37 @@ func (p *Proxy) hasRequestFilters(llm *models.LLM) bool {
 // request filters fail closed. The request itself is not modified; callers
 // decide what to do with the returned body.
 func (p *Proxy) runRequestFilters(llm *models.LLM, r *http.Request, bodyBytes []byte, format, modelName string) ([]byte, error) {
-	if !p.hasRequestFilters(llm) {
+	return p.runRequestFiltersWith(requestFilterRunners(llm), llm, r, bodyBytes, format, modelName, nil)
+}
+
+// requestFilterRunner is one of an LLM's request filters, ready to run.
+type requestFilterRunner struct {
+	filter *models.Filter
+	runner scripting.FilterRunner
+}
+
+// requestFilterRunners builds llm's request filters (response filters are
+// skipped) in chain order. The runners may be built once and reused for many
+// bodies, including from several goroutines at once, such as for every item of
+// a batch.
+func requestFilterRunners(llm *models.LLM) []requestFilterRunner {
+	var runners []requestFilterRunner
+	for _, filter := range llm.Filters {
+		// Skip response filters - they only execute on responses
+		if filter.ResponseFilter {
+			continue
+		}
+		runners = append(runners, requestFilterRunner{filter: filter, runner: scripting.NewFilterRunner(filter)})
+	}
+	return runners
+}
+
+// runRequestFiltersWith is runRequestFilters with the runners built by the
+// caller (see requestFilterRunners). extraCtx entries are added to the
+// script context, such as a batch item's custom_id; they never replace the
+// entries the gateway sets.
+func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models.LLM, r *http.Request, bodyBytes []byte, format, modelName string, extraCtx map[string]interface{}) ([]byte, error) {
+	if len(runners) == 0 {
 		return bodyBytes, nil
 	}
 
@@ -2190,32 +2248,31 @@ func (p *Proxy) runRequestFilters(llm *models.LLM, r *http.Request, bodyBytes []
 		appID = app.ID
 	}
 
+	scriptCtx := make(map[string]interface{}, len(extraCtx)+4)
+	for k, v := range extraCtx {
+		scriptCtx[k] = v
+	}
+	scriptCtx["llm_id"] = int64(llm.ID) // Convert uint to int64 for Tengo
+	scriptCtx["app_id"] = int64(appID)  // Convert uint to int64 for Tengo
+	scriptCtx["request_id"] = r.Header.Get("X-Request-ID")
+	// "decision" for decision-model requests, "" otherwise.
+	scriptCtx["request_kind"] = string(requestKindForPath(r.URL.Path))
+
 	// Build script input with rich context
 	scriptInput := &scripting.ScriptInput{
 		RawInput:   string(bodyBytes),
 		Messages:   messages,
 		VendorName: string(llm.Vendor),
 		ModelName:  modelName,
-		Context: map[string]interface{}{
-			"llm_id":     int64(llm.ID), // Convert uint to int64 for Tengo
-			"app_id":     int64(appID),  // Convert uint to int64 for Tengo
-			"request_id": r.Header.Get("X-Request-ID"),
-			// "decision" for decision-model requests, "" otherwise.
-			"request_kind": string(requestKindForPath(r.URL.Path)),
-		},
-		IsChat: false,
-		Ctx:    r.Context(),
+		Context:    scriptCtx,
+		IsChat:     false,
+		Ctx:        r.Context(),
 	}
 
-	// Run REQUEST filters in chain (exclude response filters)
-	for _, filter := range llm.Filters {
-		// Skip response filters - they only execute on responses
-		if filter.ResponseFilter {
-			continue
-		}
-
-		runner := scripting.NewFilterRunner(filter)
-		output, err := runner.RunScript(scriptInput, p.gatewayService)
+	// Run REQUEST filters in chain
+	for _, rf := range runners {
+		filter := rf.filter
+		output, err := rf.runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
 			return nil, fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
 		}
