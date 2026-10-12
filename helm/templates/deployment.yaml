@@ -39,6 +39,9 @@ spec:
                 (default 5432 .Values.database.port)
                 (default "midsommar" .Values.database.name))
                 .Values.database.url }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "midsommar.fullname" . }}-config
@@ -65,6 +68,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /opt/tyk-ai-studio/data
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- if .Values.midsommar.resources }}
           resources:
             {{- toYaml .Values.midsommar.resources | nindent 12 }}
@@ -72,6 +78,9 @@ spec:
       volumes:
         - name: data
           emptyDir: {}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
 {{- if .Values.database.internal }}
 ---
 apiVersion: apps/v1
