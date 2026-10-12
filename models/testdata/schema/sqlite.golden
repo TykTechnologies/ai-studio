@@ -1048,6 +1048,34 @@ TABLE namespace_sync_status
   column `last_push_at` datetime
   index CREATE INDEX `idx_namespace_sync_status_deleted_at` ON `namespace_sync_status`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_namespace_sync_status_namespace` ON `namespace_sync_status`(`namespace`)
+TABLE native_resources
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `vendor` text NOT NULL
+  column `llm_id` integer NOT NULL
+  column `app_id` integer NOT NULL
+  column `user_id` integer
+  column `on_behalf_of` text
+  column `acting_agent` text
+  column `resource_type` text NOT NULL
+  column `vendor_resource_id` text NOT NULL
+  column `parent_id` integer
+  column `state` text
+  column `snapshot` text
+  column `ended_at` datetime
+  column `results_expire_at` datetime
+  column `accounting_state` text NOT NULL
+  column `claim_token` text
+  column `claimed_at` datetime
+  column `accounted_at` datetime
+  column `next_poll_at` datetime
+  column `poll_failures` integer NOT NULL DEFAULT 0
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE INDEX `idx_native_resources_due` ON `native_resources`(`accounting_state`,`next_poll_at`)
+  index CREATE INDEX `idx_native_resources_owner_keyset` ON `native_resources`(`app_id`,`llm_id`,`resource_type`,`created_at`,`id`)
+  index CREATE INDEX `idx_native_resources_parent_id` ON `native_resources`(`parent_id`)
+  index CREATE INDEX `idx_native_resources_results_expire_at` ON `native_resources`(`results_expire_at`)
+  index CREATE UNIQUE INDEX `idx_native_resources_vendor_id` ON `native_resources`(`llm_id`,`resource_type`,`vendor_resource_id`)
 TABLE notifications
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

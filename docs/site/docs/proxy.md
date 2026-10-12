@@ -118,6 +118,62 @@ A single OpenAI-compatible endpoint at the root of the gateway, fronting every L
       }'
     ```
 
+#### Claude Code and the Anthropic SDKs
+
+Point an Anthropic client at the vendor-native endpoint of an Anthropic LLM and authenticate with the App's API key. Everything the SDK sends to `/v1/messages`, streaming or not, passes through as it would to Anthropic.
+
+```bash
+# Claude Code
+export ANTHROPIC_BASE_URL="https://your-gateway-host/llm/call/my-anthropic-config"
+export ANTHROPIC_AUTH_TOKEN="YOUR_APP_API_KEY"   # sent as Authorization: Bearer
+claude
+```
+
+```python
+# Anthropic Python SDK (the TypeScript SDK works the same way)
+import anthropic
+client = anthropic.Anthropic(
+    base_url="https://your-gateway-host/llm/call/my-anthropic-config",
+    api_key="YOUR_APP_API_KEY",   # sent as x-api-key
+)
+```
+
+Use an edge gateway's address (for example `http://edge-host:8081/llm/call/my-anthropic-config`) to go through a Microgateway instead.
+
+#### Message Batches and other native API operations
+
+Some SDK features are not a single `POST` with a `model`, so a plain pass-through cannot govern them. The gateway serves these as **native API operations**. For Anthropic that is the [Message Batches API](https://docs.anthropic.com/en/api/creating-message-batches): `client.messages.batches.create`, `retrieve`, `list`, `cancel`, `results` and `delete` all work against the native endpoint above, with the same governance as a synchronous call:
+
+*   **Every request in a batch is checked.** Each `params.model` must be one of the LLM's allowed models (otherwise 403, naming the `custom_id`), and the LLM's filters run on every request. A request a filter refuses rejects the whole batch (400) before it reaches Anthropic. Response filters run on every line of the results; a blocked line comes back as an `errored` result with the same `custom_id`.
+*   **Budgets apply.** A batch create passes the same budget check as a synchronous call. Its usage is recorded once, when the results are first downloaded or, if nobody downloads them, by a background reconciler on the gateway that created the batch. It is priced at the batch rate (half the model's list price) and counts toward the App's budget and analytics like any other usage, including usage on an edge gateway.
+*   **Batches belong to an App.** Batch IDs returned by the gateway are signed for the App and LLM that created them, for example `msgbatch_01Hk….t1k3f2a9c1d.9b…`. Use them exactly as returned. Another App's key, another LLM or an altered ID gets `404 not_found_error`. The gateway's listing shows only the calling App's batches.
+*   **Results come through the gateway.** `results_url` points at the gateway, never at `api.anthropic.com`, and results are streamed line by line. With `PROXY_URL` (AI Studio) or `GATEWAY_PUBLIC_URL` (Microgateway) set, `results_url` is an absolute URL. Without them it is a path such as `/v1/messages/batches/{id}/results`, which the Python and TypeScript SDKs resolve against their base URL.
+
+Limitations:
+
+*   **The gateway that created a batch owns it.** It keeps the list of batches it created, and it accounts their usage. On edge gateways, `list` shows only the batches created through that edge, and a batch can only be deleted through the edge that created it (other gateways answer `409`). AI Studio replicas share one list.
+*   **Deleting a batch needs its usage accounted first.** A batch that is still in progress cannot be deleted (`409`). An ended batch is accounted first, then deleted.
+*   **Results downloads are refused (`501`) on an LLM with response plugins.** A streamed results file cannot be handed to a plugin that rewrites response bodies.
+*   **A failover rung or router does not grant batch access.** Batches need the App to hold the LLM directly (otherwise `403`). Plugin upstream overrides do not apply to batch calls, because the batches live in the LLM's own Anthropic account.
+*   **Headers and query parameters are filtered.** Only `anthropic-version`, `anthropic-beta`, `content-type`, `accept` and `x-request-id` are forwarded, and only the `beta` query parameter. `anthropic-workspace-id` is dropped, so batches always live in the workspace of the LLM's API key.
+*   **A dropped database connection can lose a batch's usage.** If the connection drops just after the gateway marks a batch as accounted, but before it gets the confirmation, the batch stays accounted and its usage is never recorded. The App is undercharged, never charged twice. This is rare. An affected batch shows as accounted in the `native_resources` table but has no matching usage in analytics.
+*   **Batch IDs depend on the API key.** Rotating the LLM's Anthropic API key invalidates outstanding batch IDs everywhere except on the gateway that created them.
+
+| Setting | AI Studio | Microgateway | Default |
+|---------|-----------|--------------|---------|
+| Public base URL for `results_url` | `PROXY_URL` | `GATEWAY_PUBLIC_URL` | unset (relative URL) |
+| Batch create body limit (bytes) | `NATIVE_API_MAX_BODY_BYTES` | `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB; at most 256 MiB) |
+| Batch creates admitted at once | `NATIVE_API_MAX_CONCURRENT_CREATES` | same | `4` |
+| Max requests per batch when the LLM has filters | `NATIVE_API_MAX_FILTERED_ITEMS` | same | `10000` |
+| Max in-progress batches per App and LLM | `NATIVE_API_MAX_IN_PROGRESS_PER_APP` | same | `0` (no cap) |
+| Reconciler pass interval | `NATIVE_API_RECONCILE_INTERVAL` | same | `30s` |
+| Batches per reconciler pass | `NATIVE_API_RECONCILE_BATCH` | same | `50` |
+| Batches reconciled at once | `NATIVE_API_RECONCILE_WORKERS` | same | `4` |
+| Poll interval of an unfinished batch | `NATIVE_API_POLL_INTERVAL` | same | `2m` |
+| Longest wait after failed polls | `NATIVE_API_POLL_MAX_BACKOFF` | same | `30m` |
+
+The operations are counted in the `aistudio_native_*` metrics (see [Observability](./observability.md#governance-metrics)).
+
 ### 3. OpenAI-compatible Endpoint (`/ai/{llmSlug}/v1/...`)
 
 *   **Purpose:** accepts OpenAI-format requests and translates them to the target vendor's API, translating the response back. Unlike the Main Ingress it is pinned to one LLM by its URL, so the `model` field takes a plain vendor model name — or can be omitted, falling back to the default model configured on that LLM.

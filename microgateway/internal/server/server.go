@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	aiservices "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/overload"
@@ -39,6 +41,56 @@ type Server struct {
 	version   string
 	buildHash string
 	buildTime string
+
+	// nativeMu guards the native resource reconciler, which Start starts
+	// and Shutdown stops (they run on different goroutines).
+	nativeMu   sync.Mutex
+	stopNative func()
+	nativeDown bool
+}
+
+// nativeWorkerHost is the gateway's native resource reconciler
+// (proxy.StartNativeWorkers).
+type nativeWorkerHost interface {
+	StartNativeWorkers(ctx context.Context, gate func() bool) (stop func())
+}
+
+// startNativeWorkers starts the reconciler of the batches this edge created.
+// There is no gate: an edge's ledger is its own, and its CAS claims keep a
+// results download and the reconciler from both accounting a batch.
+func (s *Server) startNativeWorkers() {
+	h, ok := s.gateway.(nativeWorkerHost)
+	if !ok {
+		return
+	}
+	s.nativeMu.Lock()
+	defer s.nativeMu.Unlock()
+	if s.nativeDown || s.stopNative != nil {
+		return
+	}
+	s.stopNative = h.StartNativeWorkers(context.Background(), nil)
+}
+
+// stopNativeWorkers stops the reconciler, for good.
+func (s *Server) stopNativeWorkers() {
+	s.nativeMu.Lock()
+	stop := s.stopNative
+	s.stopNative, s.nativeDown = nil, true
+	s.nativeMu.Unlock()
+	if stop != nil {
+		stop()
+	}
+}
+
+// attachNativeResourceStore gives the gateway adapter the edge's native API
+// resource ledger (message batches). It reads through the pool and writes
+// through the writer handle, like the analytics rows.
+func attachNativeResourceStore(adapter aiservices.ServiceInterface, sc *services.ServiceContainer) {
+	if a, ok := adapter.(interface {
+		SetNativeResourceStore(aiservices.NativeResourceStore)
+	}); ok {
+		a.SetNativeResourceStore(aiservices.NewNativeResourceStore(sc.DB, sc.Writer()))
+	}
 }
 
 // New creates a new server instance
@@ -61,6 +113,8 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		serviceContainer.PluginManager,
 		serviceContainer.DB,
 	)
+
+	attachNativeResourceStore(gatewayServiceAdapter, serviceContainer)
 
 	budgetServiceAdapter := services.NewBudgetServiceAdapter(
 		serviceContainer.BudgetService,
@@ -105,6 +159,18 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 			UnifiedRouterBasePath: cfg.Gateway.UnifiedRouterPath,
 			DisableUnifiedRouter:  cfg.Gateway.UnifiedRouterDisabled,
 			ServerTiming:          cfg.Gateway.ServerTiming,
+			NativePublicURL:       cfg.Gateway.PublicURL,
+
+			NativeMaxBodyBytes:         cfg.Gateway.NativeMaxBodyBytes,
+			NativeMaxConcurrentCreates: cfg.Gateway.NativeMaxConcurrentCreates,
+			NativeMaxFilteredItems:     cfg.Gateway.NativeMaxFilteredItems,
+			NativeMaxInProgressPerApp:  cfg.Gateway.NativeMaxInProgressPerApp,
+
+			NativeReconcileInterval: cfg.Gateway.NativeReconcileInterval,
+			NativeReconcileBatch:    cfg.Gateway.NativeReconcileBatch,
+			NativeReconcileWorkers:  cfg.Gateway.NativeReconcileWorkers,
+			NativePollInterval:      cfg.Gateway.NativePollInterval,
+			NativePollMaxBackoff:    cfg.Gateway.NativePollMaxBackoff,
 		},
 	)
 	
@@ -258,6 +324,7 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 
 // Start starts the unified HTTP server with mounted AI Gateway
 func (s *Server) Start() error {
+	s.startNativeWorkers()
 	log.Debug().
 		Int("port", s.config.Server.Port).
 		Msg("Starting unified server with management API and mounted AI Gateway")
@@ -289,6 +356,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// server finishes the requests in flight, and they still run their
 	// plugins and record analytics.
 	drainErr := s.server.Shutdown(ctx)
+
+	// The reconciler records usage the same way; stop it before waiting.
+	s.stopNativeWorkers()
 
 	// A response is analysed after it is written; wait for that too, so its
 	// records reach the data collection plugins before they stop.

@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -161,6 +162,9 @@ func Migrate(db *gorm.DB) error {
 		&AppSemanticRouter{},
 		&AppDatasource{},
 		&ToolFilter{},
+		// Native API extension ledger: the Studio model itself, so the
+		// proxy's store works on either side. Each edge's rows are its own.
+		&models.NativeResource{},
 	)
 }
 

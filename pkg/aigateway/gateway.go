@@ -78,6 +78,25 @@ type Config struct {
 	// ServerTiming adds Server-Timing headers/trailers splitting each LLM
 	// request into gateway and upstream time. Off by default.
 	ServerTiming bool
+
+	// NativePublicURL is the absolute base URL clients reach the gateway at,
+	// for the URLs native API extensions hand out (proxy.Config.NativePublicURL).
+	NativePublicURL string
+
+	// Native API extension limits; zero keeps the default. See the
+	// proxy.Config fields of the same names.
+	NativeMaxBodyBytes         int64
+	NativeMaxConcurrentCreates int
+	NativeMaxFilteredItems     int
+	NativeMaxInProgressPerApp  int
+
+	// Native resource reconciler timings; zero keeps the default. See the
+	// proxy.Config fields of the same names.
+	NativeReconcileInterval time.Duration
+	NativeReconcileBatch    int
+	NativeReconcileWorkers  int
+	NativePollInterval      time.Duration
+	NativePollMaxBackoff    time.Duration
 }
 
 // New creates a new Gateway instance using the unified services interface with default database analytics.
@@ -152,6 +171,18 @@ func NewWithAnalytics(
 		UnifiedRouterBasePath: config.UnifiedRouterBasePath,
 		DisableUnifiedRouter:  config.DisableUnifiedRouter,
 		ServerTiming:          config.ServerTiming,
+		NativePublicURL:       config.NativePublicURL,
+
+		NativeMaxBodyBytes:         config.NativeMaxBodyBytes,
+		NativeMaxConcurrentCreates: config.NativeMaxConcurrentCreates,
+		NativeMaxFilteredItems:     config.NativeMaxFilteredItems,
+		NativeMaxInProgressPerApp:  config.NativeMaxInProgressPerApp,
+
+		NativeReconcileInterval: config.NativeReconcileInterval,
+		NativeReconcileBatch:    config.NativeReconcileBatch,
+		NativeReconcileWorkers:  config.NativeReconcileWorkers,
+		NativePollInterval:      config.NativePollInterval,
+		NativePollMaxBackoff:    config.NativePollMaxBackoff,
 	}
 	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{
@@ -174,6 +205,12 @@ func (g *gateway) Stop(ctx context.Context) error {
 // after draining their server.
 func (g *gateway) WaitForAnalytics(ctx context.Context) error {
 	return g.proxy.WaitForAnalytics(ctx)
+}
+
+// StartNativeWorkers starts the native resource reconciler (see
+// proxy.StartNativeWorkers). Hosts stop it before WaitForAnalytics.
+func (g *gateway) StartNativeWorkers(ctx context.Context, gate func() bool) (stop func()) {
+	return g.proxy.StartNativeWorkers(ctx, gate)
 }
 
 // Handler returns the HTTP handler for integration with existing servers

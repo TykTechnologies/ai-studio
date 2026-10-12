@@ -125,3 +125,43 @@ func TestAnalyzeResponse(t *testing.T) {
 	assert.Equal(t, 17476, tokenResp.GetCacheReadPromptTokens())
 	assert.Equal(t, "claude-3-sonnet-20240229", tokenResp.GetModel())
 }
+
+// AnalyzeResponse parses only Messages calls; batch and count_tokens paths
+// share the /v1/messages prefix but carry no message usage, so they return no
+// response and no error (the proxy logs them without a chat record). Paths
+// outside the Messages API stay an error.
+func TestAnalyzeResponse_MessagesPathsOnly(t *testing.T) {
+	v := &Anthropic{}
+	body := []byte(`{"id":"msg_1","type":"message","model":"claude-x","usage":{"input_tokens":1,"output_tokens":2}}`)
+	const (
+		usage   = "usage"
+		noUsage = "no usage"
+		unknown = "unknown"
+	)
+	for path, want := range map[string]string{
+		"/v1/messages":                            usage,
+		"/V1/Messages/":                           usage,
+		"/llm/rest/slug/v1/messages":              usage,
+		"/ai/slug/messages":                       usage,
+		"/v1/messages/batches":                    noUsage,
+		"/v1/messages/batches/msgbatch_1":         noUsage,
+		"/v1/messages/batches/msgbatch_1/results": noUsage,
+		"/v1/messages/count_tokens":               noUsage,
+		"/llm/call/slug/v1/messages/count_tokens": noUsage,
+		"/v1/models":                              unknown,
+	} {
+		req, _ := http.NewRequest("POST", path, nil)
+		_, _, resp, err := v.AnalyzeResponse(&models.LLM{}, &models.App{}, 200, body, req)
+		switch want {
+		case usage:
+			assert.NoError(t, err, path)
+			assert.NotNil(t, resp, path)
+		case noUsage:
+			assert.NoError(t, err, path)
+			assert.Nil(t, resp, path)
+		default:
+			assert.Error(t, err, path)
+			assert.Nil(t, resp, path)
+		}
+	}
+}

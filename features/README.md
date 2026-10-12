@@ -181,6 +181,12 @@ Each feature specification below provides detailed documentation on the individu
 - Analytics and observability for all LLM interactions
 - Streaming support for real-time responses
 
+### [Native API Extensions](NativeAPIExtensions.md)
+- SDK-specific vendor endpoints on the native `/llm/` routes, declared through `pkg/nativeapi`
+- Anthropic Message Batches: create, list, retrieve, cancel, results and delete
+- Signed per-App resource IDs, per-item and per-line filters, exactly-once accounting at the batch price
+- Node-local resource ledger and background reconciler on Studio and edge gateways
+
 ### [Routers](Routers.md) (Enterprise)
 - Model Routers (`{router}/{model}`) and Semantic Routers (`{router}/auto`) on the unified ingress, resolved after auth on the edge
 - Semantic Routers pick a route from the prompt: keywords, embeddings, optional LLM judge, default route; shadow mode and a test panel

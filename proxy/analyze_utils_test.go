@@ -471,3 +471,66 @@ func TestBuildChatRecord_UnsetCachePriceBillsAtInputPrice(t *testing.T) {
 		assert.InDelta(t, 1.05, rec.Cost, 1e-9)
 	})
 }
+
+// priceAdjustedTokenResponse is a token response billed at a multiple of the
+// list price, as a Message Batches result is.
+type priceAdjustedTokenResponse struct {
+	*MockTokenResponse
+	tier       string
+	multiplier float64
+}
+
+func (r *priceAdjustedTokenResponse) ServiceTier() string      { return r.tier }
+func (r *priceAdjustedTokenResponse) PriceMultiplier() float64 { return r.multiplier }
+
+// TestBuildChatRecord_PriceAdjustedResponse pins that a response implementing
+// models.IPriceAdjustedResponse is billed at its multiplier of the list price,
+// with the token counts untouched, and that other responses are unchanged.
+func TestBuildChatRecord_PriceAdjustedResponse(t *testing.T) {
+	const model = "claude-batchy"
+	mockService := new(MockService)
+	mockService.On("GetModelPriceByModelNameAndVendor", model, string(models.ANTHROPIC)).
+		Return(&models.ModelPrice{ModelName: model, Vendor: string(models.ANTHROPIC), CPT: 0.000015, CPIT: 0.000003, Currency: "USD"}, nil)
+	llm := &models.LLM{Vendor: models.ANTHROPIC}
+	usage := func() *MockTokenResponse {
+		return &MockTokenResponse{model: model, promptTokens: 1000, responseTokens: 200}
+	}
+
+	full := buildChatRecordFor(mockService, llm, &models.App{}, usage(), "", time.Now())
+	half := buildChatRecordFor(mockService, llm, &models.App{}, &priceAdjustedTokenResponse{MockTokenResponse: usage(), tier: "batch", multiplier: 0.5}, "", time.Now())
+
+	// completion 200×0.000015 + prompt 1000×0.000003 = 0.006, ×10000.
+	assert.InDelta(t, 60, full.Cost, 1e-9, "a plain response is billed at list price")
+	assert.InDelta(t, 30, half.Cost, 1e-9, "a 0.5 multiplier halves the cost")
+	assert.Equal(t, full.PromptTokens, half.PromptTokens)
+	assert.Equal(t, full.ResponseTokens, half.ResponseTokens)
+	assert.Equal(t, full.TotalTokens, half.TotalTokens)
+}
+
+// TestBuildChatRecordFor_RequestedModelFallback pins that buildChatRecordFor,
+// which has no request, names and prices the record by the requested model
+// when the response names none, as buildChatRecord does from the request.
+func TestBuildChatRecordFor_RequestedModelFallback(t *testing.T) {
+	const model = "claude-requested"
+	mockService := new(MockService)
+	mockService.On("GetModelPriceByModelNameAndVendor", model, string(models.ANTHROPIC)).
+		Return(&models.ModelPrice{ModelName: model, Vendor: string(models.ANTHROPIC), CPT: 0.00001, CPIT: 0.00001, Currency: "EUR"}, nil)
+
+	rec := buildChatRecordFor(mockService, &models.LLM{ID: 3, Vendor: models.ANTHROPIC}, &models.App{ID: 7, UserID: 9},
+		&MockTokenResponse{promptTokens: 10, responseTokens: 10}, model, time.Now())
+
+	assert.Equal(t, model, rec.Name)
+	assert.Equal(t, "EUR", rec.Currency)
+	assert.InDelta(t, 2, rec.Cost, 1e-9)
+	assert.Equal(t, uint(3), rec.LLMID)
+	assert.Equal(t, uint(7), rec.AppID)
+	assert.Equal(t, uint(9), rec.UserID)
+
+	// buildChatRecord reads the same fallback from the request context.
+	req, err := http.NewRequest(http.MethodPost, "/", nil)
+	require.NoError(t, err)
+	req = req.WithContext(context.WithValue(req.Context(), "model_name", model))
+	fromReq := buildChatRecord(mockService, &models.LLM{ID: 3, Vendor: models.ANTHROPIC}, &models.App{ID: 7, UserID: 9},
+		&MockTokenResponse{promptTokens: 10, responseTokens: 10}, req, rec.TimeStamp)
+	assert.Equal(t, rec, fromReq)
+}

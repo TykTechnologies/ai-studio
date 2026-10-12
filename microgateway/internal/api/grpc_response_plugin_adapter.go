@@ -38,6 +38,21 @@ func (a *GRPCResponsePluginAdapter) GetName() string {
 	return "grpc-response-plugin-adapter"
 }
 
+// HasHooksForLLM reports whether any response plugin acts on the LLM's
+// responses. The gateway refuses what it cannot hand to them (a streamed
+// batch results file), so a lookup error counts as yes.
+func (a *GRPCResponsePluginAdapter) HasHooksForLLM(llmID uint) bool {
+	if a.pluginManager == nil {
+		return false
+	}
+	plugins, err := a.pluginManager.GetPluginsForLLM(llmID, interfaces.HookTypeOnResponse)
+	if err != nil {
+		log.Error().Err(err).Uint("llm_id", llmID).Msg("Failed to get response plugins for LLM")
+		return true
+	}
+	return len(plugins) > 0
+}
+
 // OnBeforeWriteHeaders implements proxy.ResponseHook
 func (a *GRPCResponsePluginAdapter) OnBeforeWriteHeaders(ctx context.Context, req *proxy.HeadersRequest) (*proxy.HeadersResponse, error) {
 	log.Debug().Uint("llm_id", req.Context.LLMID).Msg("OnBeforeWriteHeaders called via adapter")

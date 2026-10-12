@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/caarlos0/env/v9"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
@@ -96,6 +97,24 @@ type GatewayConfig struct {
 	// ServerTiming adds Server-Timing headers/trailers to LLM responses that
 	// split each request into gateway and upstream time (for benchmarking).
 	ServerTiming bool `env:"GATEWAY_SERVER_TIMING" envDefault:"false"`
+	// PublicURL is the absolute base URL clients reach this gateway at. Native
+	// API extensions use it for the URLs they hand out (an Anthropic batch's
+	// results_url); empty makes those URLs root-relative.
+	PublicURL string `env:"GATEWAY_PUBLIC_URL"`
+	// Native API extension limits (Anthropic Message Batches on the native
+	// /llm routes); zero keeps the gateway's default. See proxy.Config.
+	NativeMaxBodyBytes         int64 `env:"NATIVE_API_MAX_BODY_BYTES" envDefault:"0"`          // 0: 64 MiB, at most 256 MiB
+	NativeMaxConcurrentCreates int   `env:"NATIVE_API_MAX_CONCURRENT_CREATES" envDefault:"0"`  // 0: 4
+	NativeMaxFilteredItems     int   `env:"NATIVE_API_MAX_FILTERED_ITEMS" envDefault:"0"`      // 0: 10000
+	NativeMaxInProgressPerApp  int   `env:"NATIVE_API_MAX_IN_PROGRESS_PER_APP" envDefault:"0"` // 0: no cap
+	// Native resource reconciler timings (Go durations, counts); zero keeps
+	// the gateway's default.
+	NativeReconcileInterval time.Duration `env:"NATIVE_API_RECONCILE_INTERVAL" envDefault:"0"` // 0: 30s
+	NativeReconcileBatch    int           `env:"NATIVE_API_RECONCILE_BATCH" envDefault:"0"`    // 0: 50 rows per pass
+	NativeReconcileWorkers  int           `env:"NATIVE_API_RECONCILE_WORKERS" envDefault:"0"`  // 0: 4
+	NativePollInterval      time.Duration `env:"NATIVE_API_POLL_INTERVAL" envDefault:"0"`      // 0: 2m
+	NativePollMaxBackoff    time.Duration `env:"NATIVE_API_POLL_MAX_BACKOFF" envDefault:"0"`   // 0: 30m
+
 	PluginEndpointMaxBodySize    int64         `env:"PLUGIN_ENDPOINT_MAX_BODY_SIZE" envDefault:"1048576"`    // 1MB max request body for custom plugin endpoints
 	PluginEndpointStreamTimeout time.Duration `env:"PLUGIN_ENDPOINT_STREAM_TIMEOUT" envDefault:"5m"`       // Timeout for streaming plugin endpoints
 
@@ -283,6 +302,13 @@ func Load(envFile string) (*Config, error) {
 
 	// Post-process OCI plugin configuration
 	cfg.postProcessOCIConfig()
+
+	// Cap the native API create body limit, so the effective value shows at
+	// startup (the proxy caps it too).
+	cfg.Gateway.NativeMaxBodyBytes = aiconfig.ClampNativeMaxBodyBytes(cfg.Gateway.NativeMaxBodyBytes, func(n int64) {
+		log.Warn().Int64("configured", n).Int64("max", aiconfig.NativeMaxBodyBytesLimit).
+			Msg("NATIVE_API_MAX_BODY_BYTES is above the maximum of 256 MiB; using the maximum")
+	})
 
 	// Debug: Log OCI plugin configuration
 	log.Debug().

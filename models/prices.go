@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -43,8 +44,12 @@ type ModelPrices []ModelPrice
 // tokens fall back to the input price: an unset cache price must never make
 // cached tokens free. Other vendors report cache tokens apart from the prompt
 // count, so their cache prices are used as set.
+//
+// The analytics cost breakdown (analytics.costBreakdownColumns) applies the
+// same rule in SQL, so change both together; the analytics test
+// TestCostBreakdown_MatchesChatRecordCost fails when they drift.
 func CachePricesFor(vendor string, cpit, cacheWritePT, cacheReadPT float64) (write, read float64) {
-	if vendor != string(OPENAI) && vendor != string(GOOGLEAI) {
+	if !slices.Contains(CacheFallbackVendors, vendor) {
 		return cacheWritePT, cacheReadPT
 	}
 	if cacheWritePT == 0 {
@@ -54,6 +59,21 @@ func CachePricesFor(vendor string, cpit, cacheWritePT, cacheReadPT float64) (wri
 		cacheReadPT = cpit
 	}
 	return cacheWritePT, cacheReadPT
+}
+
+// CacheFallbackVendors are the vendors whose unset (zero) cache prices bill at
+// the input price; see CachePricesFor.
+var CacheFallbackVendors = []string{string(OPENAI), string(GOOGLEAI)}
+
+// ChatRecordCost is the cost the gateway stores on a chat record at list
+// price, in currency units x 10000, before any price multiplier
+// (IPriceAdjustedResponse) is applied.
+func ChatRecordCost(vendor string, cpt, cpit, cacheWritePT, cacheReadPT float64, promptTokens, responseTokens, cacheWriteTokens, cacheReadTokens int) float64 {
+	cacheWritePT, cacheReadPT = CachePricesFor(vendor, cpit, cacheWritePT, cacheReadPT)
+	return ((cpt * float64(responseTokens)) +
+		(cpit * float64(promptTokens)) +
+		(cacheWritePT * float64(cacheWriteTokens)) +
+		(cacheReadPT * float64(cacheReadTokens))) * 10000
 }
 
 // MaxPlausiblePerTokenPrice is the ceiling above which a submitted price is

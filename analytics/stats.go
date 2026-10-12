@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -880,6 +881,44 @@ type VendorModelCost struct {
 	LastUsed     ScanTime `json:"lastUsed"`
 }
 
+// costBreakdownColumns are the prompt_cost, response_cost, cache_write_cost
+// and cache_read_cost aggregates of GetTotalCostPerVendorAndModel.
+//
+// Each row's components are priced at today's model_prices, billing unset
+// cache prices the way models.CachePricesFor does, and then scaled by the
+// row's recorded cost over that list cost. So the breakdown always adds up to
+// total_cost (the recorded cost, which budgets bill): batch rows recorded at a
+// price multiplier (models.IPriceAdjustedResponse) and rows whose price
+// changed after they were recorded split their recorded cost in list-price
+// proportions. A zero or missing list cost leaves the components unscaled
+// (they are zero then anyway).
+var costBreakdownColumns = func() string {
+	quoted := make([]string, len(models.CacheFallbackVendors))
+	for i, v := range models.CacheFallbackVendors {
+		quoted[i] = "'" + strings.ReplaceAll(v, "'", "''") + "'"
+	}
+	cpit := "COALESCE(model_prices.cpit, 0)"
+	cachePrice := func(col string) string {
+		return fmt.Sprintf("CASE WHEN llm_chat_records.vendor IN (%s) AND COALESCE(model_prices.%s, 0) = 0 THEN %s ELSE COALESCE(model_prices.%s, 0) END",
+			strings.Join(quoted, ", "), col, cpit, col)
+	}
+	prompt := "llm_chat_records.prompt_tokens * " + cpit
+	response := "llm_chat_records.response_tokens * COALESCE(model_prices.cpt, 0)"
+	cacheWrite := "llm_chat_records.cache_write_prompt_tokens * (" + cachePrice("cache_write_pt") + ")"
+	cacheRead := "llm_chat_records.cache_read_prompt_tokens * (" + cachePrice("cache_read_pt") + ")"
+	list := fmt.Sprintf("((%s) + (%s) + (%s) + (%s)) * 10000", prompt, response, cacheWrite, cacheRead)
+	scale := fmt.Sprintf("COALESCE(llm_chat_records.cost / NULLIF(%s, 0), 1)", list)
+	column := func(component, name string) string {
+		return fmt.Sprintf("SUM(COALESCE((%s) * 10000 * %s, 0)) as %s", component, scale, name)
+	}
+	return strings.Join([]string{
+		column(prompt, "prompt_cost"),
+		column(response, "response_cost"),
+		column(cacheWrite, "cache_write_cost"),
+		column(cacheRead, "cache_read_cost"),
+	}, ",\n\t\t\t")
+}()
+
 // GetTotalCostPerVendorAndModel returns the total cost per vendor and model with detailed breakdowns
 func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, interactionType *models.InteractionType, llmID *uint) ([]VendorModelCost, error) {
 	var results []VendorModelCost
@@ -894,10 +933,7 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 			COUNT(DISTINCT llm_chat_records.app_id) as app_count,
 			MAX(llm_chat_records.time_stamp) as last_used,
 			SUM(llm_chat_records.cost) as total_cost,
-			SUM(COALESCE(llm_chat_records.prompt_tokens * COALESCE(model_prices.cpit, 0) * 10000, 0)) as prompt_cost,
-			SUM(COALESCE(llm_chat_records.response_tokens * COALESCE(model_prices.cpt, 0) * 10000, 0)) as response_cost,
-			SUM(COALESCE(llm_chat_records.cache_write_prompt_tokens * COALESCE(model_prices.cache_write_pt, 0) * 10000, 0)) as cache_write_cost,
-			SUM(COALESCE(llm_chat_records.cache_read_prompt_tokens * COALESCE(model_prices.cache_read_pt, 0) * 10000, 0)) as cache_read_cost,
+			`+costBreakdownColumns+`,
 			SUM(COALESCE(llm_chat_records.total_tokens, 0)) as total_tokens,
 			SUM(COALESCE(llm_chat_records.prompt_tokens, 0)) as prompt_tokens,
 			SUM(COALESCE(llm_chat_records.response_tokens, 0)) as response_tokens,

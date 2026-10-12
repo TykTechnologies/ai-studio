@@ -43,6 +43,22 @@ type GatewayServiceAdapter struct {
 	// tokens. The proxy tries every Bearer credential as an OAuth token
 	// first, and most edges hold none.
 	accessTokensPresent *database.GenCache[struct{}, bool]
+
+	// nativeStore is the edge's native API resource ledger (message
+	// batches), set by server.New; nil leaves native operations off (501).
+	nativeStore services.NativeResourceStore
+}
+
+// SetNativeResourceStore sets the edge's native API resource ledger. Call it
+// before the gateway serves requests.
+func (a *GatewayServiceAdapter) SetNativeResourceStore(store services.NativeResourceStore) {
+	a.nativeStore = store
+}
+
+// NativeResourceStore returns the edge's native API resource ledger, or nil.
+// The proxy finds it through this method (see proxy.nativeStoreOf).
+func (a *GatewayServiceAdapter) NativeResourceStore() services.NativeResourceStore {
+	return a.nativeStore
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface

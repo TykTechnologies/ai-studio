@@ -238,6 +238,9 @@ type Studio struct {
 	// analyticsPrimary is the handler it wraps, put back on Stop.
 	analyticsTee     *analytics.Tee
 	analyticsPrimary analytics.AnalyticsHandler
+	// stopNative stops the native resource reconciler (message batches
+	// nobody downloaded), which runs on the leader replica.
+	stopNative func()
 
 	stopOnce sync.Once
 	stopErr  error
@@ -579,7 +582,22 @@ func New(opts Options) (_ *Studio, err error) {
 		DisableUnifiedRouter:  conf.UnifiedRouterDisabled,
 		ServerTiming:          conf.GatewayServerTiming,
 		DebugHTTPProxy:        conf.DebugHTTPProxy,
+		NativePublicURL:       conf.ProxyURL,
+
+		NativeMaxBodyBytes:         conf.NativeMaxBodyBytes,
+		NativeMaxConcurrentCreates: conf.NativeMaxConcurrentCreates,
+		NativeMaxFilteredItems:     conf.NativeMaxFilteredItems,
+		NativeMaxInProgressPerApp:  conf.NativeMaxInProgressPerApp,
+
+		NativeReconcileInterval: conf.NativeReconcileInterval,
+		NativeReconcileBatch:    conf.NativeReconcileBatch,
+		NativeReconcileWorkers:  conf.NativeReconcileWorkers,
+		NativePollInterval:      conf.NativePollInterval,
+		NativePollMaxBackoff:    conf.NativePollMaxBackoff,
 	}, service.Budget)
+	// Account native batches whose results nobody downloads. The ledger is
+	// shared by the replicas; only the leader polls the vendor.
+	s.stopNative = startNativeWorkers(s.proxy, backgroundCtx, s.leadership.IsLeader)
 
 	if conf.GatewayMode == "control" {
 		if err := s.wireControlPlane(opts.Version, opts.GRPCTLSConfig); err != nil {
@@ -778,6 +796,14 @@ func (s *Studio) stop(ctx context.Context) error {
 	if s.proxy != nil {
 		if err := s.proxy.Stop(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("stop gateway: %w", err))
+		}
+	}
+	if s.stopNative != nil {
+		// Before the cluster (the leader lease gates it) and the analytics
+		// recorder: what it accounted is analysed before the recorder stops.
+		s.stopNative()
+		if err := s.proxy.WaitForAnalytics(ctx); err != nil {
+			logger.Warnf("Stopped waiting for gateway analytics to finish: %v", err)
 		}
 	}
 	if s.control != nil {
