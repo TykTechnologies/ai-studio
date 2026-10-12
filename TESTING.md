@@ -141,37 +141,62 @@ export TYK_AI_SECRET_KEY=your-secret
 
 ## CI/CD
 
-### Automatic Tests (on every PR)
+CI has two speeds: pull requests get a fast, incremental run, and releases
+get the full suite, cold.
 
-The following tests run automatically on pull requests:
+### Pull requests and main (`.github/workflows/ci-test.yml`)
 
-1. **Frontend Tests** - Jest unit tests for React components
-2. **Go Unit Tests** - Matrix testing for CE and ENT editions
-3. **Documentation Build** - Validates docs build correctly
+- **Dependency Guard** runs first. A pull request that changes any `go.mod`,
+  `go.sum`, `package.json` or `package-lock.json` (at any depth) stops here
+  until a reviewer checks the change and adds the `deps-reviewed` label.
+- **Go Unit Tests** (CE and ENT, `-race`): the root, microgateway and, in
+  ENT, the enterprise module. **Go Postgres Tests** run the tests that need
+  a real PostgreSQL. **Frontend Tests**, **gorm Copy Verification**,
+  **Module Zip Check**, **Host Compatibility** and **Documentation Build**
+  run alongside.
+- **CI Gate** is the single check that sums them up.
 
-Workflow: `.github/workflows/ci-test.yml`
+What makes it fast:
 
-### UI E2E Tests (on PR and main)
+- **Go test cache.** Pushes to `main` save the Go build cache, including
+  test results. Pull requests restore it, so a package whose code and test
+  inputs are unchanged reports `ok … (cached)` instead of re-running.
+  `scripts/stamp-mtimes.sh` gives every file a content-derived mtime, which
+  lets cached results survive a fresh checkout. Postgres tests always
+  re-run.
+- **Path filters.** A pull request that only touches `ui/`, `docs/`,
+  `features/`, `read/` or top-level Markdown skips the Go jobs. One that
+  doesn't touch `ui/` skips the frontend tests.
+- **No coverage** on pull requests.
 
-Playwright browser tests run on:
-- Pull requests
-- Pushes to `main`, `release-*`, `QA-*` branches
+To re-run everything on a branch, without the cache and with coverage, go to
+Actions > "CI Tests" > Run workflow, pick the branch and `mode: full`.
 
-Workflow: `.github/workflows/ui-tests.yml`
+### UI E2E Tests (`.github/workflows/ui-tests.yml`)
 
-### Comprehensive Tests (manual trigger)
+Playwright browser tests run on pull requests, on pushes to `main`,
+`release-*` and `QA-*`, and in the release gate.
 
-For heavy E2E and full integration tests, use the manual workflow:
+### Release Gate (`.github/workflows/release-gate.yml`)
 
-1. Go to Actions > "Comprehensive Test Suite"
-2. Click "Run workflow"
-3. Select options:
-   - Edition: `ce`, `ent`, or `both`
-   - Include plugin E2E: yes/no
-   - Include UI E2E: yes/no
-   - Include full integration (Redis cluster + syslog): yes/no
+The full suite, cold:
 
-Workflow: `.github/workflows/test-comprehensive.yml`
+- CI Tests in `mode: full`: every test re-runs with `-count=1` and
+  coverage, and nothing is path-filtered.
+- UI E2E.
+- The enterprise plugins' unit (`-race`), integration and E2E tests.
+- Optionally, the ENT package smoke test.
+
+It runs:
+
+- **Before every release.** `release.yml` publishes nothing and tags
+  nothing until the gate has passed on the tagged commit.
+- **Nightly** on `main`.
+- **By hand** (Actions > "Release Gate" > Run workflow).
+
+Run it by hand on `main` before tagging a release candidate. The tag then
+reuses that passing run and the release starts at once. Without one, the
+release runs the gate first.
 
 ## Writing Tests
 

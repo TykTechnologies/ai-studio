@@ -11,9 +11,30 @@ on:
   push:
     branches:
       - main
+  # A full run on any branch: every test re-runs and coverage is collected.
+  # Use it on a pull request to bypass the test cache.
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "pr: incremental (Go test cache, no coverage). full: every test re-runs, with coverage."
+        type: choice
+        options: [full, pr]
+        default: full
+  # The release gate (release-gate.yml) runs this workflow in full mode.
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: full
 
 permissions:
   contents: read
+
+# A new push to a pull request cancels its running checks; pushes to main
+# and full runs are never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Only the enterprise module is private; every other TykTechnologies module
@@ -26,15 +47,92 @@ env:
   # repository (see CONTRIBUTING.md). The go-unit-tests matrix repeats this
   # expression, because env is not available there.
   FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+  # pr: pull requests and pushes to main. Go reuses cached test results for
+  # packages whose code and test inputs are unchanged (see
+  # scripts/stamp-mtimes.sh), and no coverage is collected.
+  # full: manual runs and the release gate. Every test re-runs (-count=1)
+  # and coverage is collected.
+  MODE: ${{ inputs.mode || 'pr' }}
 
 jobs:
   # ==========================================================================
-  # Dependency Guard
+  # Dependency Guard: a pull request that changes a dependency manifest
+  # fails here until a reviewer has checked the change and added the
+  # deps-reviewed label. Nothing else runs before it passes, so new
+  # dependency code never runs with this repository's secrets unreviewed.
+  # Outside pull requests it has nothing to compare, so it is skipped.
   # ==========================================================================
   dep-guard:
+    if: github.event_name == 'pull_request'
     uses: TykTechnologies/github-actions/.github/workflows/dependency-guard.yml@d3fa20888fa2878e877e22bb7702141217290e7c  # main
     permissions:
       contents: read
+    with:
+      # The defaults only cover the root manifests; the nested Go modules
+      # (microgateway, plugins, tools) and npm projects (admin UI, docs,
+      # tests) are dependencies just the same. :(glob) keeps the guard's
+      # unquoted loop from expanding the pattern itself, and makes ** match
+      # at any depth.
+      extra_paths: ":(glob)**/go.mod :(glob)**/go.sum :(glob)**/package.json :(glob)**/package-lock.json"
+
+  # ==========================================================================
+  # Changes: which parts of the tree a pull request touches. Jobs whose
+  # inputs did not change are skipped; CI Gate counts a skipped job as
+  # passed. Everything runs on pushes, manual runs and in full mode.
+  # ==========================================================================
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.classify.outputs.go }}
+      frontend: ${{ steps.classify.outputs.frontend }}
+    steps:
+      # The pull_request checkout is the merge commit, so its first parent is
+      # the base branch and the diff between them is the pull request.
+      - name: Checkout
+        if: github.event_name == 'pull_request' && env.MODE != 'full'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+
+      # Go jobs are skipped only when every changed file is known not to
+      # affect Go: the admin UI, the docs site, feature specs, read/ and
+      # top-level Markdown. Anything else, including an enterprise pointer
+      # bump, a workflow, the Makefile or a script, runs them.
+      - name: Classify changed files
+        id: classify
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ] || [ "$MODE" = full ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Fail safe: if the diff cannot be read, run everything.
+          if ! files=$(git diff --name-only HEAD^1 HEAD); then
+            echo "::warning::Could not list the changed files; running every job."
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          go=false
+          frontend=false
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              ui/*) frontend=true ;;
+              docs/* | features/* | read/*) ;;
+              */*) go=true ;;
+              *.md) ;;
+              *) go=true ;;
+            esac
+            case "$f" in
+              .github/*) frontend=true ;;
+            esac
+          done <<< "$files"
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "Go jobs: $go, frontend jobs: $frontend" >> "$GITHUB_STEP_SUMMARY"
 
   # ==========================================================================
   # Go Linting (disabled for now)
@@ -70,9 +168,12 @@ jobs:
   # Frontend Tests (Jest)
   # ==========================================================================
   frontend-tests:
-    needs: [dep-guard]
+    needs: [dep-guard, changes]
+    # Runs when dep-guard passed or was skipped (outside pull requests).
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.frontend == 'true' }}
     name: Frontend Tests
     runs-on: warp-ubuntu-latest-arm64-2x
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -99,12 +200,21 @@ jobs:
           CI=false npm run build
 
   # ==========================================================================
-  # Go Unit Tests (Studio + Microgateway) - Matrix for CE/ENT
+  # Go Unit Tests (Studio + Microgateway + Enterprise) - Matrix for CE/ENT
+  #
+  # Caching: one cache of the build and module caches per edition. Pull
+  # requests only restore it; pushes to main save a fresh one, so pull
+  # requests start from the latest main. In pr mode it also holds main's
+  # test results, and packages whose code and test inputs are unchanged are
+  # reported as "(cached)" instead of re-running. setup-go's own cache is off:
+  # it stored the same directories a second time.
   # ==========================================================================
   go-unit-tests:
-    needs: [dep-guard]
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: Go Unit Tests (${{ matrix.edition }})
     runs-on: warp-ubuntu-latest-arm64-4x
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -132,26 +242,36 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
 
-      - name: Go Cache
-        uses: WarpBuilds/cache@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+      - name: Restore Go cache
+        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-gotest-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.edition }}-
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-gotest-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-gotest-${{ matrix.edition }}-
 
-      - name: Set build tags
-        id: tags
+      - name: Go cache size
+        run: du -sh ~/.cache/go-build ~/go/pkg/mod 2>/dev/null || true
+
+      - name: Set test flags
+        id: flags
         run: |
           if [ "${{ matrix.edition }}" == "ent" ]; then
             echo "BUILD_TAGS=-tags enterprise" >> $GITHUB_OUTPUT
           else
             echo "BUILD_TAGS=" >> $GITHUB_OUTPUT
+          fi
+          # The flags are part of Go's test cache key: pr mode must use the
+          # same flags on pull requests and on main, or nothing is reused.
+          if [ "$MODE" = full ]; then
+            echo "FULL=-count=1 -covermode=atomic" >> $GITHUB_OUTPUT
+          else
+            echo "FULL=" >> $GITHUB_OUTPUT
           fi
 
       - name: Verify Go dependencies
@@ -176,6 +296,15 @@ jobs:
         if: matrix.edition == 'ent'
         run: make ent-link
 
+      # After everything that writes into the tree: give each file an mtime
+      # derived from its content, so cached test results survive the fresh
+      # checkout (see the script).
+      - name: Stamp file times for the Go test cache
+        run: |
+          scripts/stamp-mtimes.sh .env docs/site/dist/index.html \
+            ui/admin-frontend/build/index.html \
+            ${{ matrix.edition == 'ce' && 'enterprise/go.mod' || '' }}
+
       # go vet over our own code; third_party/ (the vendored gorm) is left
       # out, see third_party/README.md. The ent edition also vets the
       # enterprise module.
@@ -191,34 +320,65 @@ jobs:
 
       - name: Run AI Studio Unit Tests
         run: |
-          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
-            -coverprofile=coverage-studio-${{ matrix.edition }}.out \
-            -covermode=atomic ./...
+          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short \
+            ${{ steps.flags.outputs.FULL }} \
+            ${{ env.MODE == 'full' && format('-coverprofile=coverage-studio-{0}.out', matrix.edition) || '' }} \
+            ./...
 
       - name: Run Microgateway Unit Tests
         run: |
           cd microgateway
-          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
-            -coverprofile=../coverage-microgateway-${{ matrix.edition }}.out \
-            -covermode=atomic ./...
+          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short \
+            ${{ steps.flags.outputs.FULL }} \
+            ${{ env.MODE == 'full' && format('-coverprofile=../coverage-microgateway-{0}.out', matrix.edition) || '' }} \
+            ./...
+
+      # The enterprise module's own packages (features/, scripting/, ...).
+      # Its Postgres-gated tests skip here and run in go-postgres-tests.
+      - name: Run Enterprise Module Unit Tests
+        if: matrix.edition == 'ent'
+        working-directory: enterprise
+        run: |
+          go test -tags enterprise -v -race -short \
+            ${{ steps.flags.outputs.FULL }} \
+            ${{ env.MODE == 'full' && '-coverprofile=../coverage-enterprise-ent.out' || '' }} \
+            ./...
 
       - name: Upload Coverage
+        if: env.MODE == 'full'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-${{ matrix.edition }}
           path: coverage-*.out
           retention-days: 7
 
+      # Saved even when a test failed: the build cache is still good, and Go
+      # never caches a failing result.
+      - name: Save Go cache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' }}
+        uses: WarpBuilds/cache/save@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-gotest-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
   # ==========================================================================
   # Go Postgres Tests: the tests that need a real PostgreSQL (SQLite hides
   # multi-connection behaviour: advisory locks, concurrent find-or-create,
   # transaction deadlocks, dialect-specific SQL). They skip without
   # DATABASE_URL, so the unit jobs above never run them.
+  #
+  # They talk to a live database, so they always re-run (-count=1); the job
+  # restores the CE unit-test cache for its compiled packages and saves none
+  # of its own.
   # ==========================================================================
   go-postgres-tests:
-    needs: [dep-guard]
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: Go Postgres Tests
     runs-on: warp-ubuntu-latest-arm64-4x
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16-alpine
@@ -259,18 +419,18 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache: false
 
-      - name: Go Cache
-        uses: WarpBuilds/cache@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+      - name: Restore Go cache
+        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-ce-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-gotest-ce-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-go-ce-
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-gotest-ce-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-gotest-ce-
 
       - name: Create placeholders for embeds
         run: |
@@ -351,9 +511,11 @@ jobs:
   # produces, and no module imports gorm.io (see third_party/README.md)
   # ==========================================================================
   gorm-verify:
-    needs: [dep-guard]
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: gorm Copy Verification
     runs-on: warp-ubuntu-latest-arm64-2x
+    timeout-minutes: 15
     steps:
       # The enterprise module is part of the import check. Fork pull requests
       # check the root and microgateway modules in the CE edition only.
@@ -417,9 +579,11 @@ jobs:
   # accepts, or nobody can `go get` Studio (see tools/modcheck)
   # ==========================================================================
   module-check:
-    needs: [dep-guard]
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: Module Zip Check
     runs-on: warp-ubuntu-latest-arm64-2x
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -440,10 +604,11 @@ jobs:
   # Reads the hosts' private go.mod at run time, so never on forks.
   # ==========================================================================
   host-compat:
-    needs: [dep-guard]
+    needs: [dep-guard, changes]
     name: Host Compatibility (${{ matrix.name }})
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: warp-ubuntu-latest-arm64-4x
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -475,12 +640,15 @@ jobs:
         run: make host-compat HOST_REPOS=${{ matrix.repo }}
 
   # ==========================================================================
-  # Documentation Build
+  # Documentation Build (cheap, and the site may read files outside docs/,
+  # so it is not path-filtered)
   # ==========================================================================
   docs-build:
     needs: [dep-guard]
+    if: ${{ !cancelled() && !failure() }}
     name: Documentation Build
     runs-on: warp-ubuntu-latest-arm64-2x
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -509,15 +677,19 @@ jobs:
           NODE_ENV=production npm run docs:build
 
   # ==========================================================================
-  # Test Summary
+  # CI Gate: the one check a branch ruleset needs to require. Fails when the
+  # dependency guard fails or any gating job fails or is cancelled; a job
+  # skipped because its inputs did not change counts as passed.
   # ==========================================================================
-  test-summary:
-    name: Test Summary
-    runs-on: warp-ubuntu-latest-arm64-2x
-    needs: [frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build]
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build]
     if: always()
     steps:
       - name: Download Coverage Artifacts
+        if: env.MODE == 'full'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: coverage-*
@@ -525,28 +697,42 @@ jobs:
         continue-on-error: true
 
       - name: Generate Summary
+        env:
+          RESULTS: |
+            Dependency Guard=${{ needs.dep-guard.result }}
+            Detect Changes=${{ needs.changes.result }}
+            Frontend Tests=${{ needs.frontend-tests.result }}
+            Go Unit Tests=${{ needs.go-unit-tests.result }}
+            Go Postgres Tests=${{ needs.go-postgres-tests.result }}
+            gorm Copy Verification=${{ needs.gorm-verify.result }}
+            Module Zip Check=${{ needs.module-check.result }}
+            Host Compatibility=${{ needs.host-compat.result }}
+            Documentation Build=${{ needs.docs-build.result }}
         run: |
-          echo "# CI Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend Tests | ${{ needs.frontend-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Go Unit Tests (CE) | ${{ contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Go Unit Tests (ENT) | ${{ env.FORK_PR == 'true' && ':fast_forward:' || (contains(needs.go-unit-tests.result, 'success') && ':white_check_mark:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Go Postgres Tests | ${{ needs.go-postgres-tests.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| gorm Copy Verification | ${{ needs.gorm-verify.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Module Zip Check | ${{ needs.module-check.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Host Compatibility (Dashboard, MDCB) | ${{ needs.host-compat.result == 'success' && ':white_check_mark:' || (needs.host-compat.result == 'skipped' && ':fast_forward:' || ':x:') }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Documentation Build | ${{ needs.docs-build.result == 'success' && ':white_check_mark:' || ':x:' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "$FORK_PR" = true ]; then
-            echo "Pull request from a fork: the enterprise checks did not run. A maintainer runs them before merging (see CONTRIBUTING.md)." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "Coverage files:" >> $GITHUB_STEP_SUMMARY
-          ls -la coverage-*.out 2>/dev/null || echo "No coverage files found"
+          {
+            echo "# CI Test Summary ($MODE mode)"
+            echo ""
+            echo "| Job | Status |"
+            echo "|-----|--------|"
+            while IFS='=' read -r job result; do
+              [ -n "$job" ] || continue
+              case "$result" in
+                success) icon=':white_check_mark:' ;;
+                skipped) icon=':fast_forward: skipped' ;;
+                *) icon=":x: $result" ;;
+              esac
+              echo "| $job | $icon |"
+            done <<< "$RESULTS"
+            echo ""
+            if [ "$FORK_PR" = true ]; then
+              echo "Pull request from a fork: the enterprise checks did not run. A maintainer runs them before merging (see CONTRIBUTING.md)."
+              echo ""
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          ls -la coverage-*.out 2>/dev/null || echo "No coverage files"
 
       - name: Upload Combined Coverage
+        if: env.MODE == 'full'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-combined
@@ -554,8 +740,16 @@ jobs:
           retention-days: 30
         continue-on-error: true
 
+      # Module zip, host compatibility and the docs build report as checks of
+      # their own but do not fail the gate.
       - name: Check Results
-        if: needs.frontend-tests.result != 'success' || needs.go-unit-tests.result != 'success' || needs.go-postgres-tests.result != 'success' || needs.gorm-verify.result != 'success'
+        if: >-
+          !contains(fromJSON('["success","skipped"]'), needs.dep-guard.result) ||
+          needs.changes.result != 'success' ||
+          !contains(fromJSON('["success","skipped"]'), needs.frontend-tests.result) ||
+          !contains(fromJSON('["success","skipped"]'), needs.go-unit-tests.result) ||
+          !contains(fromJSON('["success","skipped"]'), needs.go-postgres-tests.result) ||
+          !contains(fromJSON('["success","skipped"]'), needs.gorm-verify.result)
         run: |
-          echo "Some tests failed!"
+          echo "Some checks failed!"
           exit 1

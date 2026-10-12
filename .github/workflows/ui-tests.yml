@@ -11,9 +11,10 @@ on:
       - main
       - release-**
       - QA-**
-    tags:
-      - "v*"
   workflow_dispatch:
+  # Release tags are covered by the release gate (release-gate.yml), which
+  # calls this workflow before release.yml publishes anything.
+  workflow_call:
 
 permissions:
   contents: read
