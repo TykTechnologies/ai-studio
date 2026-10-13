@@ -74,6 +74,18 @@ The table displays the following columns:
 #### **Quick Insights**
 This section simplifies the process of tracking and updating LLM pricing, ensuring transparency and control over usage costs. The ability to edit or add prices directly from this interface provides flexibility for managing vendor costs dynamically as new models or pricing structures are introduced.
 
+#### **Units in the API**
+The admin form and detail page show prices **per million tokens**. The REST API (`/api/v1/model-prices`) stores and returns them **per single token**:
+
+| Field | Meaning |
+|---|---|
+| `cpit` | Price per **input** (prompt) token |
+| `cpt` | Price per **output** (completion) token |
+| `cache_write_pt` | Price per token written to the prompt cache |
+| `cache_read_pt` | Price per token read from the prompt cache |
+
+To store $3 per million input tokens, send `"cpit": 0.000003`. A value above `0.01` per token is rejected with HTTP 400, because it is almost certainly a per-million figure sent to a per-token field. The error message gives the value to send instead.
+
 ### Edit/Create Model Prices
 
 The **Edit/Create Model Price Form** allows administrators to define or update the cost structure for a specific Large Language Model (LLM). The pricing information configured here is used for cost tracking and billing purposes and must align with the model names used in API calls or the model settings screen.

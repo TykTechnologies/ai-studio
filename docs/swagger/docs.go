@@ -483,6 +483,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/analytics/decisions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Decision-model traffic (/v1/decisions, /v1/systemone) for a period: totals, a per-day series and a per-model breakdown with cost per thousand decisions. Decision spend is also included in the general cost endpoints.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Get decision-model usage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only this LLM",
+                        "name": "llm_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only this App",
+                        "name": "app_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.DecisionUsage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/analytics/model-usage": {
             "get": {
                 "description": "Get the usage statistics for a specific model over time",
@@ -727,6 +795,80 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.PaginatedProxyLogs"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/service-tier-usage": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Spend and tokens for a period broken down by vendor service tier (batch, priority, flex...), per tier and per vendor/model. Records without a tier (list-price traffic, and rows recorded before tiers were stored) have service_tier \"\". Costs are already at each tier's price. Edge traffic is included.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Get usage by service tier",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only this LLM",
+                        "name": "llm_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Only this App",
+                        "name": "app_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only this tier; none selects records without a tier",
+                        "name": "service_tier",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.ServiceTierUsage"
                         }
                     },
                     "400": {
@@ -18011,6 +18153,115 @@ const docTemplate = `{
                 }
             }
         },
+        "/llms/{id}/resource-signing-key": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The kid, source and rotation state of the key that signs the native API resource IDs (for example Anthropic batch IDs) the gateway hands out for this LLM. The key itself is never returned.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "llms"
+                ],
+                "summary": "Get an LLM's resource signing key status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "LLM ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ResourceSigningStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/llms/{id}/resource-signing-key/rotate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Generates a new secret for signing the LLM's native API resource IDs. IDs signed with the old key keep working for the grace period (default 720 hours; 0 revokes them at once). Edges receive the new key with the next configuration push.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "llms"
+                ],
+                "summary": "Rotate an LLM's resource signing key",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "LLM ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Grace period",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.RotateResourceSigningKeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ResourceSigningStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/login-sso-profile": {
             "get": {
                 "description": "Get a sanitized view (name, provider type, login URL) of the profile that has UseInLoginPage set to true",
@@ -18748,6 +18999,50 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/tykmcp.HandoffPackage"
+                        }
+                    }
+                }
+            }
+        },
+        "/mcp-servers/{id}/key-access": {
+            "put": {
+                "description": "Tyk OSS Gateway connections carry no policies: keys get the server's rights inline (tool allow-list, rate limit, quota). Live keys are rewritten to match.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Set what keys minted on a Tyk Gateway connection grant for an MCP server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Key access",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPKeyAccess"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.MCPServerResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
                         }
                     }
                 }
@@ -24743,6 +25038,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/tyk-connections/{id}/nodes": {
+            "get": {
+                "description": "Each node's reachability, version and whether it serves the MCP proxies AI Studio owns",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "List the nodes of a Tyk Gateway connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.TykGatewayNodeResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/tyk-connections/{id}/policies": {
             "get": {
                 "produces": [
@@ -26937,6 +27264,117 @@ const docTemplate = `{
                 }
             }
         },
+        "analytics.DecisionDaySeries": {
+            "type": "object",
+            "properties": {
+                "cost": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "refusals": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "requests": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "analytics.DecisionModelUsage": {
+            "type": "object",
+            "properties": {
+                "cost": {
+                    "type": "number"
+                },
+                "cost_per_thousand": {
+                    "description": "CostPerThousand is the cost of a thousand decision requests at this\nperiod's average, the number decision pricing is usually compared on.",
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "questions": {
+                    "type": "integer"
+                },
+                "refusals": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.DecisionTotals": {
+            "type": "object",
+            "properties": {
+                "answered": {
+                    "type": "integer"
+                },
+                "cost_by_currency": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "input_tokens": {
+                    "type": "integer"
+                },
+                "questions": {
+                    "type": "integer"
+                },
+                "refusals": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                }
+            }
+        },
+        "analytics.DecisionUsage": {
+            "type": "object",
+            "properties": {
+                "by_day": {
+                    "$ref": "#/definitions/analytics.DecisionDaySeries"
+                },
+                "by_model": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.DecisionModelUsage"
+                    }
+                },
+                "totals": {
+                    "$ref": "#/definitions/analytics.DecisionTotals"
+                }
+            }
+        },
         "analytics.ModelAppUsage": {
             "type": "object",
             "properties": {
@@ -26977,6 +27415,75 @@ const docTemplate = `{
             "properties": {
                 "time.Time": {
                     "type": "string"
+                }
+            }
+        },
+        "analytics.ServiceTierModelUsage": {
+            "type": "object",
+            "properties": {
+                "cost": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "prompt_tokens": {
+                    "type": "integer"
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "response_tokens": {
+                    "type": "integer"
+                },
+                "service_tier": {
+                    "type": "string"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.ServiceTierTotals": {
+            "type": "object",
+            "properties": {
+                "cost_by_currency": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
+                "requests": {
+                    "type": "integer"
+                },
+                "service_tier": {
+                    "type": "string"
+                },
+                "total_tokens": {
+                    "type": "integer"
+                }
+            }
+        },
+        "analytics.ServiceTierUsage": {
+            "type": "object",
+            "properties": {
+                "by_model": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.ServiceTierModelUsage"
+                    }
+                },
+                "by_tier": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.ServiceTierTotals"
+                    }
                 }
             }
         },
@@ -29546,6 +30053,14 @@ const docTemplate = `{
                                 "namespace": {
                                     "type": "string"
                                 },
+                                "price_multipliers": {
+                                    "description": "PriceMultipliers overrides the vendor's price multiplier per\nservice tier ({\"batch\": 0.4}). On PATCH an absent key keeps the\nstored value and null or {} removes the overrides.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/definitions/models.LLMPriceMultipliers"
+                                        }
+                                    ]
+                                },
                                 "privacy_score": {
                                     "type": "integer"
                                 },
@@ -29553,6 +30068,10 @@ const docTemplate = `{
                                     "type": "string"
                                 },
                                 "vendor": {
+                                    "type": "string"
+                                },
+                                "vendor_workspace_id": {
+                                    "description": "VendorWorkspaceID pins the vendor workspace (Anthropic:\nanthropic-workspace-id). On PATCH an absent key keeps the stored\nvalue and \"\" removes the pin.",
                                     "type": "string"
                                 }
                             }
@@ -29638,6 +30157,9 @@ const docTemplate = `{
                                 "$ref": "#/definitions/api.PluginResponse"
                             }
                         },
+                        "price_multipliers": {
+                            "$ref": "#/definitions/models.LLMPriceMultipliers"
+                        },
                         "privacy_score": {
                             "type": "integer"
                         },
@@ -29645,6 +30167,9 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "vendor": {
+                            "type": "string"
+                        },
+                        "vendor_workspace_id": {
                             "type": "string"
                         }
                     }
@@ -30039,15 +30564,19 @@ const docTemplate = `{
                             "type": "object",
                             "properties": {
                                 "cache_read_pt": {
+                                    "description": "Price per token read from the provider's prompt cache, per single token. Values above 0.01 are rejected.",
                                     "type": "number"
                                 },
                                 "cache_write_pt": {
+                                    "description": "Price per token written to the provider's prompt cache, per single token. Values above 0.01 are rejected.",
                                     "type": "number"
                                 },
                                 "cpit": {
+                                    "description": "Price per INPUT (prompt) token, in currency units per single token (not per million). Values above 0.01 are rejected as a likely per-million figure.",
                                     "type": "number"
                                 },
                                 "cpt": {
+                                    "description": "Price per OUTPUT (completion) token, in currency units per single token (not per million). Values above 0.01 are rejected as a likely per-million figure.",
                                     "type": "number"
                                 },
                                 "currency": {
@@ -30076,15 +30605,19 @@ const docTemplate = `{
                     "type": "object",
                     "properties": {
                         "cache_read_pt": {
+                            "description": "Price per token read from the provider's prompt cache, per single token.",
                             "type": "number"
                         },
                         "cache_write_pt": {
+                            "description": "Price per token written to the provider's prompt cache, per single token.",
                             "type": "number"
                         },
                         "cpit": {
+                            "description": "Price per INPUT (prompt) token, in currency units per single token (not per million).",
                             "type": "number"
                         },
                         "cpt": {
+                            "description": "Price per OUTPUT (completion) token, in currency units per single token (not per million).",
                             "type": "number"
                         },
                         "currency": {
@@ -31246,6 +31779,54 @@ const docTemplate = `{
                 }
             }
         },
+        "api.ResourceSigningPreviousKey": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "description": "Active is false once ExpiresAt has passed: IDs it signed no longer\nverify (except on the node whose ledger holds the resource).",
+                    "type": "boolean"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "kid": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source is \"secret\" (hub-generated) or \"vendor_credential\" (derived\nfrom the LLM's API key, for IDs minted before the LLM had a secret).",
+                    "type": "string"
+                }
+            }
+        },
+        "api.ResourceSigningStatus": {
+            "type": "object",
+            "properties": {
+                "kid": {
+                    "type": "string"
+                },
+                "llm_id": {
+                    "type": "integer"
+                },
+                "previous": {
+                    "$ref": "#/definitions/api.ResourceSigningPreviousKey"
+                },
+                "rotated_at": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "Source of the current key: \"secret\", or \"vendor_credential\" while the\nLLM has no secret (it gets one at the next Studio start or rotation),\nor \"none\" when it has neither.",
+                    "type": "string"
+                }
+            }
+        },
+        "api.ResourceSigningStatusResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/api.ResourceSigningStatus"
+                }
+            }
+        },
         "api.RoleAttributes": {
             "description": "Role attributes",
             "type": "object",
@@ -31380,6 +31961,15 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.RotateResourceSigningKeyRequest": {
+            "type": "object",
+            "properties": {
+                "grace_period_hours": {
+                    "description": "GracePeriodHours keeps the old key verifiable after the rotation.\nOmitted: 720 (30 days). 0 revokes it at once. At most 8760.",
+                    "type": "integer"
                 }
             }
         },
@@ -33843,6 +34433,12 @@ const docTemplate = `{
                 }
             }
         },
+        "models.LLMPriceMultipliers": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "number"
+            }
+        },
         "models.MCPAuthDetails": {
             "type": "object",
             "properties": {
@@ -33997,6 +34593,32 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "models.MCPKeyAccess": {
+            "type": "object",
+            "properties": {
+                "allowed_tools": {
+                    "description": "AllowedTools narrows the tools a key may list and call; empty means\nevery tool the proxy exposes.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "per": {
+                    "type": "number"
+                },
+                "quota_max": {
+                    "description": "QuotaMax requests per QuotaRenewalRate seconds; 0 means no quota.",
+                    "type": "integer"
+                },
+                "quota_renewal_rate": {
+                    "type": "integer"
+                },
+                "rate": {
+                    "description": "Rate requests per Per seconds; 0 means no rate limit.",
+                    "type": "number"
                 }
             }
         },
@@ -34158,6 +34780,12 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "gateway_coverage": {
+                    "type": "string"
+                },
+                "gateway_partial": {
+                    "type": "boolean"
+                },
                 "gateway_tags": {
                     "$ref": "#/definitions/models.MCPGatewayTags"
                 },
@@ -34166,6 +34794,9 @@ const docTemplate = `{
                 },
                 "is_active": {
                     "type": "boolean"
+                },
+                "key_access": {
+                    "$ref": "#/definitions/models.MCPKeyAccess"
                 },
                 "kind": {
                     "type": "string"
@@ -34661,6 +35292,9 @@ const docTemplate = `{
                 "effective_mode": {
                     "type": "string"
                 },
+                "gateway_api_id_prefix": {
+                    "type": "string"
+                },
                 "gateway_base_url": {
                     "type": "string"
                 },
@@ -34669,6 +35303,18 @@ const docTemplate = `{
                     "additionalProperties": {
                         "type": "string"
                     }
+                },
+                "gateway_discovery": {
+                    "type": "string"
+                },
+                "gateway_node_urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "gateway_shared_storage": {
+                    "type": "boolean"
                 },
                 "gateway_tags": {
                     "type": "array",
@@ -34690,6 +35336,9 @@ const docTemplate = `{
                 },
                 "key_defaults": {
                     "$ref": "#/definitions/models.TykKeyDefaults"
+                },
+                "kind": {
+                    "type": "string"
                 },
                 "known_gateway_tags": {
                     "type": "array",
@@ -34773,6 +35422,59 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "models.TykGatewayNodeResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "expected_count": {
+                    "type": "integer"
+                },
+                "first_seen_at": {
+                    "type": "string"
+                },
+                "gone_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_reconcile_at": {
+                    "type": "string"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "mcp_count": {
+                    "type": "integer"
+                },
+                "pinned_ip": {
+                    "type": "string"
+                },
+                "reachable": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "studio_count": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
                 }
             }
         },
@@ -36140,8 +36842,25 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "gateway_discovery": {
+                    "description": "Tyk Gateway connections only.",
+                    "type": "string"
+                },
+                "gateway_node_urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "gateway_shared_storage": {
+                    "type": "boolean"
+                },
                 "key_defaults": {
                     "$ref": "#/definitions/models.TykKeyDefaults"
+                },
+                "kind": {
+                    "description": "dashboard (default) | gateway",
+                    "type": "string"
                 },
                 "known_gateway_tags": {
                     "type": "array",
@@ -36210,6 +36929,18 @@ const docTemplate = `{
                     "additionalProperties": {
                         "type": "string"
                     }
+                },
+                "gateway_discovery": {
+                    "type": "string"
+                },
+                "gateway_node_urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "gateway_shared_storage": {
+                    "type": "boolean"
                 },
                 "key_defaults": {
                     "$ref": "#/definitions/models.TykKeyDefaults"

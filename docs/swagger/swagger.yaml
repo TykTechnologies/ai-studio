@@ -15,6 +15,81 @@ definitions:
           type: string
         type: array
     type: object
+  analytics.DecisionDaySeries:
+    properties:
+      cost:
+        items:
+          type: number
+        type: array
+      labels:
+        items:
+          type: string
+        type: array
+      questions:
+        items:
+          type: integer
+        type: array
+      refusals:
+        items:
+          type: integer
+        type: array
+      requests:
+        items:
+          type: integer
+        type: array
+    type: object
+  analytics.DecisionModelUsage:
+    properties:
+      cost:
+        type: number
+      cost_per_thousand:
+        description: |-
+          CostPerThousand is the cost of a thousand decision requests at this
+          period's average, the number decision pricing is usually compared on.
+        type: number
+      currency:
+        type: string
+      input_tokens:
+        type: integer
+      model:
+        type: string
+      questions:
+        type: integer
+      refusals:
+        type: integer
+      requests:
+        type: integer
+      vendor:
+        type: string
+    type: object
+  analytics.DecisionTotals:
+    properties:
+      answered:
+        type: integer
+      cost_by_currency:
+        additionalProperties:
+          type: number
+        type: object
+      input_tokens:
+        type: integer
+      questions:
+        type: integer
+      refusals:
+        type: integer
+      requests:
+        type: integer
+    type: object
+  analytics.DecisionUsage:
+    properties:
+      by_day:
+        $ref: '#/definitions/analytics.DecisionDaySeries'
+      by_model:
+        items:
+          $ref: '#/definitions/analytics.DecisionModelUsage'
+        type: array
+      totals:
+        $ref: '#/definitions/analytics.DecisionTotals'
+    type: object
   analytics.ModelAppUsage:
     properties:
       appDeleted:
@@ -42,6 +117,51 @@ definitions:
     properties:
       time.Time:
         type: string
+    type: object
+  analytics.ServiceTierModelUsage:
+    properties:
+      cost:
+        type: number
+      currency:
+        type: string
+      model:
+        type: string
+      prompt_tokens:
+        type: integer
+      requests:
+        type: integer
+      response_tokens:
+        type: integer
+      service_tier:
+        type: string
+      total_tokens:
+        type: integer
+      vendor:
+        type: string
+    type: object
+  analytics.ServiceTierTotals:
+    properties:
+      cost_by_currency:
+        additionalProperties:
+          type: number
+        type: object
+      requests:
+        type: integer
+      service_tier:
+        type: string
+      total_tokens:
+        type: integer
+    type: object
+  analytics.ServiceTierUsage:
+    properties:
+      by_model:
+        items:
+          $ref: '#/definitions/analytics.ServiceTierModelUsage'
+        type: array
+      by_tier:
+        items:
+          $ref: '#/definitions/analytics.ServiceTierTotals'
+        type: array
     type: object
   api.AccessTokenResponse:
     properties:
@@ -1815,11 +1935,24 @@ definitions:
                 type: string
               namespace:
                 type: string
+              price_multipliers:
+                allOf:
+                - $ref: '#/definitions/models.LLMPriceMultipliers'
+                description: |-
+                  PriceMultipliers overrides the vendor's price multiplier per
+                  service tier ({"batch": 0.4}). On PATCH an absent key keeps the
+                  stored value and null or {} removes the overrides.
               privacy_score:
                 type: integer
               short_description:
                 type: string
               vendor:
+                type: string
+              vendor_workspace_id:
+                description: |-
+                  VendorWorkspaceID pins the vendor workspace (Anthropic:
+                  anthropic-workspace-id). On PATCH an absent key keeps the stored
+                  value and "" removes the pin.
                 type: string
             type: object
           type:
@@ -1876,11 +2009,15 @@ definitions:
             items:
               $ref: '#/definitions/api.PluginResponse'
             type: array
+          price_multipliers:
+            $ref: '#/definitions/models.LLMPriceMultipliers'
           privacy_score:
             type: integer
           short_description:
             type: string
           vendor:
+            type: string
+          vendor_workspace_id:
             type: string
         type: object
       governed_metadata:
@@ -2139,12 +2276,22 @@ definitions:
           attributes:
             properties:
               cache_read_pt:
+                description: Price per token read from the provider's prompt cache,
+                  per single token. Values above 0.01 are rejected.
                 type: number
               cache_write_pt:
+                description: Price per token written to the provider's prompt cache,
+                  per single token. Values above 0.01 are rejected.
                 type: number
               cpit:
+                description: Price per INPUT (prompt) token, in currency units per
+                  single token (not per million). Values above 0.01 are rejected as
+                  a likely per-million figure.
                 type: number
               cpt:
+                description: Price per OUTPUT (completion) token, in currency units
+                  per single token (not per million). Values above 0.01 are rejected
+                  as a likely per-million figure.
                 type: number
               currency:
                 type: string
@@ -2163,12 +2310,20 @@ definitions:
       attributes:
         properties:
           cache_read_pt:
+            description: Price per token read from the provider's prompt cache, per
+              single token.
             type: number
           cache_write_pt:
+            description: Price per token written to the provider's prompt cache, per
+              single token.
             type: number
           cpit:
+            description: Price per INPUT (prompt) token, in currency units per single
+              token (not per million).
             type: number
           cpt:
+            description: Price per OUTPUT (completion) token, in currency units per
+              single token (not per million).
             type: number
           currency:
             type: string
@@ -2950,6 +3105,45 @@ definitions:
             type: string
         type: object
     type: object
+  api.ResourceSigningPreviousKey:
+    properties:
+      active:
+        description: |-
+          Active is false once ExpiresAt has passed: IDs it signed no longer
+          verify (except on the node whose ledger holds the resource).
+        type: boolean
+      expires_at:
+        type: string
+      kid:
+        type: string
+      source:
+        description: |-
+          Source is "secret" (hub-generated) or "vendor_credential" (derived
+          from the LLM's API key, for IDs minted before the LLM had a secret).
+        type: string
+    type: object
+  api.ResourceSigningStatus:
+    properties:
+      kid:
+        type: string
+      llm_id:
+        type: integer
+      previous:
+        $ref: '#/definitions/api.ResourceSigningPreviousKey'
+      rotated_at:
+        type: string
+      source:
+        description: |-
+          Source of the current key: "secret", or "vendor_credential" while the
+          LLM has no secret (it gets one at the next Studio start or rotation),
+          or "none" when it has neither.
+        type: string
+    type: object
+  api.ResourceSigningStatusResponse:
+    properties:
+      data:
+        $ref: '#/definitions/api.ResourceSigningStatus'
+    type: object
   api.RoleAttributes:
     description: Role attributes
     properties:
@@ -3047,6 +3241,14 @@ definitions:
         type: string
       type:
         type: string
+    type: object
+  api.RotateResourceSigningKeyRequest:
+    properties:
+      grace_period_hours:
+        description: |-
+          GracePeriodHours keeps the old key verifiable after the rotation.
+          Omitted: 720 (30 days). 0 revokes it at once. At most 8760.
+        type: integer
     type: object
   api.SecretInput:
     description: Secret input model
@@ -4781,6 +4983,10 @@ definitions:
           type: integer
         type: array
     type: object
+  models.LLMPriceMultipliers:
+    additionalProperties:
+      type: number
+    type: object
   models.MCPAuthDetails:
     properties:
       cookie_name:
@@ -4884,6 +5090,26 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  models.MCPKeyAccess:
+    properties:
+      allowed_tools:
+        description: |-
+          AllowedTools narrows the tools a key may list and call; empty means
+          every tool the proxy exposes.
+        items:
+          type: string
+        type: array
+      per:
+        type: number
+      quota_max:
+        description: QuotaMax requests per QuotaRenewalRate seconds; 0 means no quota.
+        type: integer
+      quota_renewal_rate:
+        type: integer
+      rate:
+        description: Rate requests per Per seconds; 0 means no rate limit.
+        type: number
     type: object
   models.MCPPrimitive:
     properties:
@@ -4989,12 +5215,18 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      gateway_coverage:
+        type: string
+      gateway_partial:
+        type: boolean
       gateway_tags:
         $ref: '#/definitions/models.MCPGatewayTags'
       id:
         type: integer
       is_active:
         type: boolean
+      key_access:
+        $ref: '#/definitions/models.MCPKeyAccess'
       kind:
         type: string
       last_seen_at:
@@ -5327,12 +5559,22 @@ definitions:
         type: string
       effective_mode:
         type: string
+      gateway_api_id_prefix:
+        type: string
       gateway_base_url:
         type: string
       gateway_base_urls:
         additionalProperties:
           type: string
         type: object
+      gateway_discovery:
+        type: string
+      gateway_node_urls:
+        items:
+          type: string
+        type: array
+      gateway_shared_storage:
+        type: boolean
       gateway_tags:
         items:
           type: string
@@ -5347,6 +5589,8 @@ definitions:
         type: integer
       key_defaults:
         $ref: '#/definitions/models.TykKeyDefaults'
+      kind:
+        type: string
       known_gateway_tags:
         items:
           $ref: '#/definitions/models.TykGatewayTag'
@@ -5402,6 +5646,41 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  models.TykGatewayNodeResponse:
+    properties:
+      address:
+        type: string
+      expected_count:
+        type: integer
+      first_seen_at:
+        type: string
+      gone_at:
+        type: string
+      id:
+        type: integer
+      last_error:
+        type: string
+      last_reconcile_at:
+        type: string
+      last_seen_at:
+        type: string
+      mcp_count:
+        type: integer
+      pinned_ip:
+        type: string
+      reachable:
+        type: boolean
+      source:
+        type: string
+      state:
+        type: string
+      studio_count:
+        type: integer
+      url:
+        type: string
+      version:
+        type: string
     type: object
   models.TykGatewayTag:
     properties:
@@ -6347,8 +6626,20 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      gateway_discovery:
+        description: Tyk Gateway connections only.
+        type: string
+      gateway_node_urls:
+        items:
+          type: string
+        type: array
+      gateway_shared_storage:
+        type: boolean
       key_defaults:
         $ref: '#/definitions/models.TykKeyDefaults'
+      kind:
+        description: dashboard (default) | gateway
+        type: string
       known_gateway_tags:
         items:
           $ref: '#/definitions/models.TykGatewayTag'
@@ -6394,6 +6685,14 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      gateway_discovery:
+        type: string
+      gateway_node_urls:
+        items:
+          type: string
+        type: array
+      gateway_shared_storage:
+        type: boolean
       key_defaults:
         $ref: '#/definitions/models.TykKeyDefaults'
       known_gateway_tags:
@@ -7360,6 +7659,52 @@ paths:
       summary: Get cost analysis
       tags:
       - Analytics
+  /analytics/decisions:
+    get:
+      consumes:
+      - application/json
+      description: 'Decision-model traffic (/v1/decisions, /v1/systemone) for a period:
+        totals, a per-day series and a per-model breakdown with cost per thousand
+        decisions. Decision spend is also included in the general cost endpoints.'
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: Only this LLM
+        in: query
+        name: llm_id
+        type: integer
+      - description: Only this App
+        in: query
+        name: app_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/analytics.DecisionUsage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get decision-model usage
+      tags:
+      - Analytics
   /analytics/model-usage:
     get:
       consumes:
@@ -7534,6 +7879,57 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get proxy logs for a specific LLM
+      tags:
+      - Analytics
+  /analytics/service-tier-usage:
+    get:
+      consumes:
+      - application/json
+      description: Spend and tokens for a period broken down by vendor service tier
+        (batch, priority, flex...), per tier and per vendor/model. Records without
+        a tier (list-price traffic, and rows recorded before tiers were stored) have
+        service_tier "". Costs are already at each tier's price. Edge traffic is included.
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: Only this LLM
+        in: query
+        name: llm_id
+        type: integer
+      - description: Only this App
+        in: query
+        name: app_id
+        type: integer
+      - description: Only this tier; none selects records without a tier
+        in: query
+        name: service_tier
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/analytics.ServiceTierUsage'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get usage by service tier
       tags:
       - Analytics
   /analytics/team-costs:
@@ -18578,6 +18974,80 @@ paths:
       summary: Get LLM dependents
       tags:
       - llms
+  /llms/{id}/resource-signing-key:
+    get:
+      description: The kid, source and rotation state of the key that signs the native
+        API resource IDs (for example Anthropic batch IDs) the gateway hands out for
+        this LLM. The key itself is never returned.
+      parameters:
+      - description: LLM ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ResourceSigningStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an LLM's resource signing key status
+      tags:
+      - llms
+  /llms/{id}/resource-signing-key/rotate:
+    post:
+      consumes:
+      - application/json
+      description: Generates a new secret for signing the LLM's native API resource
+        IDs. IDs signed with the old key keep working for the grace period (default
+        720 hours; 0 revokes them at once). Edges receive the new key with the next
+        configuration push.
+      parameters:
+      - description: LLM ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Grace period
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api.RotateResourceSigningKeyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ResourceSigningStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Rotate an LLM's resource signing key
+      tags:
+      - llms
   /llms/bulk:
     post:
       consumes:
@@ -19183,6 +19653,37 @@ paths:
           schema:
             $ref: '#/definitions/tykmcp.HandoffPackage'
       summary: Handoff package for a server awaiting the platform team
+      tags:
+      - TykMCP
+  /mcp-servers/{id}/key-access:
+    put:
+      consumes:
+      - application/json
+      description: 'Tyk OSS Gateway connections carry no policies: keys get the server''s
+        rights inline (tool allow-list, rate limit, quota). Live keys are rewritten
+        to match.'
+      parameters:
+      - description: Server ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Key access
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.MCPKeyAccess'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MCPServerResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Set what keys minted on a Tyk Gateway connection grant for an MCP server
       tags:
       - TykMCP
   /mcp-servers/{id}/link:
@@ -23116,6 +23617,28 @@ paths:
               $ref: '#/definitions/tykmcp.GatewayTagOption'
             type: array
       summary: Deployment targets known for a connection
+      tags:
+      - TykMCP
+  /tyk-connections/{id}/nodes:
+    get:
+      description: Each node's reachability, version and whether it serves the MCP
+        proxies AI Studio owns
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.TykGatewayNodeResponse'
+            type: array
+      summary: List the nodes of a Tyk Gateway connection
       tags:
       - TykMCP
   /tyk-connections/{id}/policies:
