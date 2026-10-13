@@ -48,6 +48,8 @@ The primary goal is to enhance LLM interactions by:
 
     *Note: Privacy levels are stored as integer scores in the system. The values shown in parentheses are the typical score mappings.*
 
+    The tool and data source forms, the OpenAPI import wizard and the submission review's final score warn when the chosen level is above every active LLM provider, because nothing could then use the resource. The warning names the highest provider level. With no active providers yet, a neutral hint appears instead. The contributor submission form does not show provider levels.
+
 ## Availability
 
 Data Sources are available on both **AI Studio** (embedded gateway) and **Microgateway** (edge gateways). Datasource configurations including vector store connection strings, API keys, and embedder credentials are synced to edge gateways via the hub-spoke configuration system with encryption in transit. Datasources support namespace filtering for enterprise multi-tenant deployments. All four proxy endpoints (search, vector search, metadata query, and embedding generation) are functional on edge gateways.

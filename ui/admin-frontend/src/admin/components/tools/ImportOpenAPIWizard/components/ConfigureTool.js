@@ -77,6 +77,7 @@ const ConfigureTool = ({
         <PrivacyLevelInput
           value={toolConfig.privacy_score}
           onChange={handlePrivacyChange}
+          checkProviders
         />
       </Box>
 
