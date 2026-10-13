@@ -33,8 +33,12 @@ export const resolveRef = (property, root) => {
 // Per-field uiSchema for an object schema's properties, recursing into nested
 // objects, array items and local $refs. Secret fields always get the password
 // widget: the long-description textarea rule used to override format
-// "password" and show secrets in clear.
-export const fieldUiSchemas = (schema, root = schema) => {
+// "password" and show secrets in clear. Nesting is capped at MAX_DEPTH levels:
+// a self-referencing definition (Node.child -> #/definitions/Node) would
+// otherwise recurse forever and crash the page.
+const MAX_DEPTH = 8;
+export const fieldUiSchemas = (schema, root = schema, depth = 0) => {
+  if (depth > MAX_DEPTH) return {};
   const properties = resolveRef(schema, root)?.properties;
   if (!properties) return {};
   return Object.keys(properties).reduce((acc, key) => {
@@ -72,7 +76,7 @@ export const fieldUiSchemas = (schema, root = schema) => {
     // Nested objects get the same treatment, so a secret inside one is
     // masked too.
     if (property.type === 'object' && property.properties) {
-      const nested = fieldUiSchemas(property, root);
+      const nested = fieldUiSchemas(property, root, depth + 1);
       if (Object.keys(nested).length > 0) acc[key] = { ...(acc[key] || {}), ...nested };
     }
 
@@ -82,7 +86,7 @@ export const fieldUiSchemas = (schema, root = schema) => {
       const itemSchema = resolveRef(property.items, root);
       const items = isSecretProperty(itemSchema)
         ? { "ui:widget": "password" }
-        : fieldUiSchemas(itemSchema, root);
+        : fieldUiSchemas(itemSchema, root, depth + 1);
       if (Object.keys(items).length > 0) acc[key] = { ...(acc[key] || {}), items };
     }
 

@@ -114,6 +114,36 @@ describe("SchemaFormRenderer secret fields", () => {
     expect(ui.pool.items.password).toEqual({ "ui:widget": "password" });
   });
 
+  it("handles a self-referencing definition without recursing forever", () => {
+    const tree = {
+      type: "object",
+      definitions: {
+        node: {
+          type: "object",
+          properties: {
+            token: { type: "string", format: "password", title: "Token" },
+            child: { $ref: "#/definitions/node" },
+          },
+        },
+      },
+      properties: { root: { $ref: "#/definitions/node", title: "Root" } },
+    };
+    let ui;
+    expect(() => {
+      ui = fieldUiSchemas(tree);
+    }).not.toThrow();
+    expect(ui.root.token).toEqual({ "ui:widget": "password" });
+    expect(ui.root.child.token).toEqual({ "ui:widget": "password" });
+    // The recursion stops at the depth cap instead of overflowing the stack.
+    let level = ui.root;
+    let depth = 0;
+    while (level.child) {
+      level = level.child;
+      depth += 1;
+    }
+    expect(depth).toBeLessThanOrEqual(9);
+  });
+
   it("gives up on a $ref cycle or an unresolvable ref instead of looping", () => {
     const odd = {
       type: "object",
