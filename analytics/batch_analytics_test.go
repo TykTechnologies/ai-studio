@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,14 +13,37 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
+// setupBatchTestDB opens a private in-memory database on one connection.
+// The handler writes on its own goroutine: with plain ":memory:" every pooled
+// connection is a separate, empty database, so its writes could land where
+// the test never reads them.
 func setupBatchTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	name := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+	t.Cleanup(func() { sqlDB.Close() })
 
 	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.ProxyLog{})
 	require.NoError(t, err)
 
 	return db
+}
+
+// waitForRows waits until model's table holds want rows: the handler's
+// batch writes are asynchronous, and a fixed sleep was too short on loaded
+// CI runners.
+func waitForRows(t *testing.T, db *gorm.DB, model interface{}, want int64) {
+	t.Helper()
+	var count int64
+	require.Eventually(t, func() bool {
+		return db.Model(model).Count(&count).Error == nil && count >= want
+	}, 10*time.Second, 10*time.Millisecond, "expected %d rows, have %d", want, count)
+	require.Equal(t, want, count)
 }
 
 func TestDatabaseHandler_RecordChatRecordsBatch(t *testing.T) {
@@ -63,20 +87,13 @@ func TestDatabaseHandler_RecordChatRecordsBatch(t *testing.T) {
 	// Test batch recording
 	handler.RecordChatRecordsBatch(ctx, records)
 
-	// Wait for processing
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify records were created
-	var count int64
-	err := db.Model(&models.LLMChatRecord{}).Count(&count).Error
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), count)
+	waitForRows(t, db, &models.LLMChatRecord{}, 2)
 
 	// Verify record details
 	var savedRecords []models.LLMChatRecord
-	err = db.Find(&savedRecords).Error
+	err := db.Order("id").Find(&savedRecords).Error
 	require.NoError(t, err)
-	assert.Len(t, savedRecords, 2)
+	require.Len(t, savedRecords, 2)
 
 	// Check that both records were saved correctly
 	assert.Equal(t, "gpt-4", savedRecords[0].Name)
@@ -118,20 +135,13 @@ func TestDatabaseHandler_RecordProxyLogsBatch(t *testing.T) {
 	// Test batch recording
 	handler.RecordProxyLogsBatch(ctx, logs)
 
-	// Wait for processing
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify logs were created
-	var count int64
-	err := db.Model(&models.ProxyLog{}).Count(&count).Error
-	require.NoError(t, err)
-	assert.Equal(t, int64(2), count)
+	waitForRows(t, db, &models.ProxyLog{}, 2)
 
 	// Verify log details
 	var savedLogs []models.ProxyLog
-	err = db.Find(&savedLogs).Error
+	err := db.Order("id").Find(&savedLogs).Error
 	require.NoError(t, err)
-	assert.Len(t, savedLogs, 2)
+	require.Len(t, savedLogs, 2)
 
 	// Check that both logs were saved correctly
 	assert.Equal(t, "openai", savedLogs[0].Vendor)
@@ -192,21 +202,16 @@ func TestDatabaseHandler_LargeBatch(t *testing.T) {
 	startTime := time.Now()
 	handler.RecordChatRecordsBatch(ctx, records)
 
-	// Wait for processing
-	time.Sleep(200 * time.Millisecond)
+	waitForRows(t, db, &models.LLMChatRecord{}, 200)
 
 	processingTime := time.Since(startTime)
 	t.Logf("Large batch processing time: %v", processingTime)
 
-	// Verify all records were created
-	var count int64
-	err := db.Model(&models.LLMChatRecord{}).Count(&count).Error
-	require.NoError(t, err)
-	assert.Equal(t, int64(200), count)
-
 	// Performance assertion: batch should be significantly faster than individual inserts
 	// This is more of a regression test to ensure batching remains efficient
-	assert.Less(t, processingTime.Milliseconds(), int64(1000), "Batch processing should complete within 1 second")
+	// Generous for loaded CI runners; row-by-row inserts of 200 records with
+	// a flush each would still blow well past it.
+	assert.Less(t, processingTime.Milliseconds(), int64(5000), "Batch processing should complete within 5 seconds")
 }
 
 func BenchmarkDatabaseHandler_BatchVsIndividual(b *testing.B) {
