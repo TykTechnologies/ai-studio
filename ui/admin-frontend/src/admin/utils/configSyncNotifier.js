@@ -50,17 +50,40 @@ export const affectsGatewayConfig = (method, url) => {
   return GATEWAY_AFFECTING.some((re) => re.test(path));
 };
 
+// Requests to a gateway-affecting resource that do not save it: a filter
+// test run and a plugin's own RPC calls. They still refresh sync status, but
+// they are not "you just saved this" moments, so they raise no push reminder.
+const NOT_A_SAVE = [/^\/?filters\/test$/, /^\/?plugins\/[^/]+\/rpc(\/|$)/];
+
+/**
+ * isConfigSave reports whether a request saved (created, changed or deleted)
+ * something the edge gateways consume: the same resource list as
+ * affectsGatewayConfig, minus the non-saving actions above. The UI uses it
+ * to remind the user, right after the save, that edges need a push (#506).
+ */
+export const isConfigSave = (method, url) => {
+  if (!affectsGatewayConfig(method, url)) return false;
+  const path = url.split("?")[0];
+  return !NOT_A_SAVE.some((re) => re.test(path));
+};
+
+let savedInBurst = false;
+
 /**
  * Coalesces bursts of saves (a catalog form issues one request per member)
- * into a single refresh shortly after the last one.
+ * into a single refresh shortly after the last one. The refresh is told
+ * whether any request in the burst was a save ({ saved: true }).
  */
-export const notifyConfigChanged = () => {
+export const notifyConfigChanged = ({ saved = false } = {}) => {
   if (!refresh) return;
+  savedInBurst = savedInBurst || saved;
   if (scheduled) clearTimeout(scheduled);
   scheduled = setTimeout(() => {
     scheduled = null;
     const fn = refresh;
-    if (fn) fn();
+    const options = { saved: savedInBurst };
+    savedInBurst = false;
+    if (fn) fn(options);
   }, 500);
 };
 
@@ -68,4 +91,5 @@ export const __resetForTests = () => {
   refresh = null;
   if (scheduled) clearTimeout(scheduled);
   scheduled = null;
+  savedInBurst = false;
 };

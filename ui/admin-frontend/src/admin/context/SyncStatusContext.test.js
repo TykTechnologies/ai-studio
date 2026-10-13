@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SyncStatusProvider, useSyncStatus } from './SyncStatusContext';
+import { notifyConfigChanged } from '../utils/configSyncNotifier';
 
 jest.mock('../services/syncStatusService', () => ({
   __esModule: true,
@@ -36,6 +37,7 @@ const Probe = () => {
       <span data-testid="pending">{String(api.hasPendingSync)}</span>
       <span data-testid="count">{api.pendingChanges ? JSON.stringify(api.pendingChanges) : 'unknown'}</span>
       <span data-testid="last-push">{String(api.getLastPushAt('default'))}</span>
+      <span data-testid="reminder">{api.pushReminder ? 'shown' : 'none'}</span>
     </div>
   );
 };
@@ -135,5 +137,44 @@ describe('SyncStatusProvider', () => {
     await act(async () => { jest.advanceTimersByTime(6000); });
     await flush();
     expect(syncStatusService.getSyncStatus.mock.calls.length).toBeLessThanOrEqual(atTimeout + 1);
+  });
+
+  // #506: a save that leaves edges out of date raises a push reminder.
+  describe('push reminder after a save', () => {
+    const saveThenRefresh = async (saved) => {
+      notifyConfigChanged({ saved });
+      await act(async () => {
+        jest.advanceTimersByTime(600);
+      });
+      await flush();
+    };
+
+    it('is raised when a save leaves edges pending, and can be dismissed', async () => {
+      render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
+      await flush();
+      expect(screen.getByTestId('reminder')).toHaveTextContent('none');
+
+      await saveThenRefresh(true);
+      expect(screen.getByTestId('reminder')).toHaveTextContent('shown');
+
+      act(() => api.dismissPushReminder());
+      expect(screen.getByTestId('reminder')).toHaveTextContent('none');
+    });
+
+    it('is not raised when no edge needs a push (none registered, or all in sync)', async () => {
+      syncStatusService.getSyncStatus.mockResolvedValue(inSync);
+      render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
+      await flush();
+      await saveThenRefresh(true);
+      expect(screen.getByTestId('reminder')).toHaveTextContent('none');
+    });
+
+    it('is not raised by a change that was not a save', async () => {
+      render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
+      await flush();
+      await saveThenRefresh(false);
+      expect(syncStatusService.getSyncStatus).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('reminder')).toHaveTextContent('none');
+    });
   });
 });

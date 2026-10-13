@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { fetchCSRFToken } from './urlUtils';
-import { affectsGatewayConfig, notifyConfigChanged } from './configSyncNotifier';
+import { affectsGatewayConfig, isConfigSave, notifyConfigChanged } from './configSyncNotifier';
 import { classifyAuthError } from './apiErrors';
 import { emitPermissionDenied } from './permissionDeniedBus';
 import { canAccessAdminNow } from './identityStore';
@@ -34,8 +34,9 @@ const createApiClient = () => {
       // until a config push. Refresh sync status now rather than leaving the
       // banner up to a 30-second poll, which is the window in which people
       // conclude their change did nothing.
-      if (affectsGatewayConfig(response?.config?.method, response?.config?.url)) {
-        notifyConfigChanged();
+      const { method, url } = response?.config || {};
+      if (affectsGatewayConfig(method, url)) {
+        notifyConfigChanged({ saved: isConfigSave(method, url) });
       }
       return response;
     },
