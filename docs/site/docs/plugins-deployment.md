@@ -354,8 +354,9 @@ data:
 Configure public keys for signature verification:
 
 ```bash
-# Public key for verifying plugin signatures
-OCI_PLUGINS_PUBLIC_KEY_1=/path/to/cosign.pub
+# Public keys for verifying plugin signatures (the Tyk signing key is always trusted)
+OCI_PLUGINS_PUBKEY_1="$(cat /path/to/cosign.pub)"   # key content, selected with ?pubkey=1
+OCI_PLUGINS_PUBKEY_FILE_CI=/path/to/ci-cosign.pub     # key file, selected with ?pubkey=CI
 ```
 
 #### Cloudsmith-Specific Notes
@@ -405,20 +406,21 @@ The check catches a binary that was corrupted or replaced on disk. It does not p
 
 ## Security Considerations
 
-### Command Validation
+Plugins run as separate processes with the host's privileges, so install only plugins you trust. The [Plugin Security Model](./plugins-security.md) describes what process isolation does and does not cover (network egress, plugin configuration and secrets), which command checks are enforced and which are warning-only by default, and how to lock down OCI plugins.
 
-The platform validates plugin commands for security:
+In short, for production:
 
-1. **Absolute Paths**: `file://` commands must use absolute paths
-2. **Internal Network Block**: By default, `grpc://` commands cannot target internal IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x, link-local, IPv6 loopback/unique-local, localhost). Hosts are parsed rather than substring-matched, so IPv4-mapped IPv6 (`[::ffff:127.0.0.1]`) and decimal, hex or octal IPv4 spellings in a URL (`grpc://2130706433:50051`) are caught too. A plugin service also flags internal addresses in a command's `host:port` arguments: it warns, or refuses the command when `PLUGIN_BLOCK_INTERNAL_URLS=true`
-3. **Allowlist**: Configure allowed commands via `PLUGIN_COMMAND_ALLOWLIST`
-
-Example warnings:
-
+```bash
+# Refuse internal hosts in plugin commands (the default; never set to true in production)
+ALLOW_INTERNAL_NETWORK_ACCESS=false
+# Also refuse internal addresses that the advisory check finds in host:port arguments
+PLUGIN_BLOCK_INTERNAL_URLS=true
+# Only load OCI plugins from these registries, and require signatures (Enterprise Edition)
+AI_STUDIO_OCI_ALLOWED_REGISTRIES=registry.example.com
+AI_STUDIO_OCI_REQUIRE_SIGNATURE=true
 ```
-⚠️  PLUGIN SECURITY WARNING: Plugin command uses absolute path outside standard directories.
-⚠️  PLUGIN SECURITY WARNING: Plugin command targets internal network address
-```
+
+`PLUGIN_COMMAND_ALLOWLIST` is advisory: a command that does not match it is logged with a warning but still accepted. Its entries are comma-separated substrings, not wildcards.
 
 ### Plugin Process Environment
 
@@ -442,31 +444,6 @@ export PLUGIN_ENV_PASSTHROUGH="GITHUB_RAG_*"
 The pass-through applies to every plugin the host starts, so name only the variables your plugins need. Avoid passing host credentials such as database URLs or encryption keys; the host logs a warning when the pass-through matches one. A bare `*` entry is ignored. Proxy variables are passed by default, so don't put proxy credentials in them unless plugins may use that proxy too. A plugin that needs configuration should normally receive it through its plugin config rather than the environment.
 
 `grpc://` plugins run as their own processes, outside the host, so this does not apply to them.
-
-### Production Security
-
-For production deployments:
-
-1. **Disable Internal Network Access**:
-   ```bash
-   export ALLOW_INTERNAL_NETWORK_ACCESS=false
-   export PLUGIN_BLOCK_INTERNAL_URLS=true
-   ```
-
-2. **Use Allowlist**:
-   ```bash
-   export PLUGIN_COMMAND_ALLOWLIST="/usr/local/plugins/*,grpc://plugins.prod.svc/*"
-   ```
-
-3. **Use OCI with Signed Images**:
-   - Sign images with Cosign or Notary
-   - Verify signatures before deployment
-   - Use content trust
-
-4. **Principle of Least Privilege**:
-   - Run plugins with minimal permissions
-   - Use read-only filesystems where possible
-   - Implement network policies in Kubernetes
 
 ## Troubleshooting
 

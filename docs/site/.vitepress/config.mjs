@@ -83,6 +83,7 @@ export default defineConfig({
           { text: 'AI Studio Agent Plugins', link: '/docs/plugins-studio-agent' },
           { text: 'Manifests & Permissions', link: '/docs/plugins-manifests' },
           { text: 'Deployment Options', link: '/docs/plugins-deployment' },
+          { text: 'Security Model', link: '/docs/plugins-security' },
           { text: 'Resource Provider Plugins', link: '/docs/plugins-resource-types' },
           { text: 'SDK Reference', link: '/docs/plugins-sdk' },
           { text: 'SDK Changes in v2.1', link: '/docs/plugins-sdk-changes-v2.1' },

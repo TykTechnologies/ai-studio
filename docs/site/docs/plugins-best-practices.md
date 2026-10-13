@@ -357,6 +357,10 @@ if !ok {
 apiKey := os.Getenv("PLUGIN_API_KEY")
 ```
 
+Plugin configuration reaches your plugin as plain strings, exactly as stored: AI Studio does **not** resolve `$SECRET/` or `$ENV/` references in plugin config, and anyone who can read the plugin's configuration can read a value stored there. Never log configuration values or return them in errors. See [Plugin Security Model](./plugins-security.md#plugin-configuration-and-secrets).
+
+Plugins receive only an allowlisted set of host environment variables. A variable such as `PLUGIN_API_KEY` reaches your plugin only if the operator lists it in `PLUGIN_ENV_PASSTHROUGH`, so document every variable your plugin reads. See [Plugin process environment](./plugins-security.md#plugin-process-environment).
+
 ### Sanitize Logs
 
 Don't log sensitive data:
