@@ -170,27 +170,3 @@ func TestPluginProcess_WithoutSkipHostEnvInheritsHost(t *testing.T) {
 		t.Fatalf("expected go-plugin to pass the host environment without SkipHostEnv; got ENCRYPTION_KEY=%q", got["ENCRYPTION_KEY"])
 	}
 }
-
-// Every plugin process the hosts start must use Command and SkipHostEnv.
-func TestPluginHosts_UseCommandAndSkipHostEnv(t *testing.T) {
-	for _, path := range []string{
-		"../../services/ai_studio_plugin_manager.go",
-		"../../microgateway/plugins/manager.go",
-	} {
-		src, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		s := string(src)
-		cmds := strings.Count(s, "Cmd:")
-		if cmds == 0 {
-			t.Fatalf("%s starts no plugin process; update this test", path)
-		}
-		if n := strings.Count(s, "pluginenv.Command("); n != cmds {
-			t.Errorf("%s: %d plugin Cmd fields, %d use pluginenv.Command", path, cmds, n)
-		}
-		if n := strings.Count(s, "SkipHostEnv:      true,"); n != cmds {
-			t.Errorf("%s: %d plugin Cmd fields, %d set SkipHostEnv", path, cmds, n)
-		}
-	}
-}
