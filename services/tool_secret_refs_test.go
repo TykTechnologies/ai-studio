@@ -68,8 +68,10 @@ func TestCallToolOperationResolvesSecretAuthKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "$SECRET/UPSTREAM_KEY", loaded.AuthKey, "API responses keep the reference")
 
-	// An $ENV/ reference is resolved at the call too, and kept when loaded.
+	// An $ENV/ reference the operator allows is resolved at the call too,
+	// and kept when loaded.
 	t.Setenv("UPSTREAM_ENV_KEY", "env-key")
+	t.Setenv(secrets.EnvRefAllowlistVar, "UPSTREAM_ENV_KEY")
 	envTool, err := svc.CreateTool("Env keyed", "d", models.ToolTypeREST, base64.StdEncoding.EncodeToString([]byte(spec)), 0, "apiKey", "$ENV/UPSTREAM_ENV_KEY")
 	require.NoError(t, err)
 	_, err = svc.CallToolOperation(envTool.ID, "sendData", nil, map[string]interface{}{}, nil)
