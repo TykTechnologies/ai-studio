@@ -397,6 +397,12 @@ AI_STUDIO_OCI_CACHE_DIR=/var/cache/ai-studio/plugins
 OCI_PLUGINS_CACHE_DIR=/var/cache/microgateway/plugins
 ```
 
+The SHA-256 of each fetched binary is recorded in the cache metadata, and a cached plugin is checked against it every time it loads. If the binary on disk has changed, the cached copy is not used and the plugin is fetched from the registry again (signature verification runs again too). If that fetch fails, the plugin does not load.
+
+Some entries have no recorded hash: entries cached by releases before 2.3.0, or entries whose metadata is missing. These load as unverified when signatures are optional. When signatures are required (the default; `OCI_PLUGINS_REQUIRE_SIGNATURE` on the microgateway), these entries, and entries cached while signatures were optional, are fetched and verified again instead. After an upgrade, each OCI plugin is therefore fetched once more on its first load, so the registry must be reachable at that point.
+
+The check catches a binary that was corrupted or replaced on disk. It does not protect against an attacker who can rewrite both the binary and its metadata, so keep the cache directory writable only by the service user.
+
 ## Security Considerations
 
 ### Command Validation

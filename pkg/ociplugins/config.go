@@ -99,6 +99,16 @@ type PluginMetadata struct {
 	Size         int64            `json:"size"`
 	LastAccessed time.Time        `json:"last_accessed"`
 	Version      string           `json:"version"` // From plugin config
+	// BinarySHA256 is the hex SHA-256 of the executable as fetched. Loading
+	// from the cache checks the file against it.
+	BinarySHA256 string `json:"binary_sha256,omitempty"`
+	// SignatureChecked records that the fetch ran the signature check
+	// (signatures were required) and it passed. An entry cached without it
+	// is fetched again once signatures are required.
+	SignatureChecked bool `json:"signature_checked,omitempty"`
+	// SignatureKey is the public key ID the signature was checked with
+	// ("" for the default key).
+	SignatureKey string `json:"signature_key,omitempty"`
 }
 
 // PluginConfig represents the configuration metadata stored in the OCI artifact

@@ -3,12 +3,16 @@ package ociplugins
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/rs/zerolog/log"
 )
 
@@ -20,11 +24,17 @@ type SecurityService interface {
 	VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error
 }
 
+// pluginPuller pulls a plugin's manifest, config and binary from a registry.
+// ORASFetcher implements it; tests substitute a fake.
+type pluginPuller interface {
+	Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error)
+}
+
 // OCIPluginClient handles OCI-based plugin operations
 type OCIPluginClient struct {
 	config          *OCIConfig
 	storage         *ContentStorage
-	fetcher         *ORASFetcher
+	fetcher         pluginPuller
 	verifier        *SignatureVerifier  // Deprecated: use securityService instead
 	securityService SecurityService     // Enterprise security service (optional)
 
@@ -108,7 +118,16 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 			Str("architecture", params.Architecture).
 			Msg("Plugin found in cache")
 
-		return c.getLocalPlugin(ref, params)
+		local, err := c.getLocalPlugin(ref, params)
+		if err == nil {
+			return local, nil
+		}
+		// Fetch it again: the pull re-verifies the signature and the store
+		// replaces the cached file.
+		log.Warn().
+			Err(err).
+			Str("reference", ref.FullReference()).
+			Msg("Cached OCI plugin failed its integrity check, fetching it again")
 	}
 
 	// Fetch the plugin manifest and layers
@@ -126,17 +145,19 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		cacheRef = &resolved
 	}
 
-	// Verify signature if required
+	// Verify signature if required. Verify the digest that was pulled
+	// (cacheRef), not the tag: a tag moved between the pull and the check
+	// would otherwise get a signed image verified and an unsigned one stored.
 	if c.config.RequireSignature {
 		var err error
 
 		// Use enterprise security service if available, otherwise fall back to built-in verifier
 		if c.securityService != nil {
 			log.Debug().Msg("Using enterprise security service for signature verification")
-			err = c.securityService.VerifySignature(ctx, ref, params.PublicKey)
+			err = c.securityService.VerifySignature(ctx, cacheRef, params.PublicKey)
 		} else {
 			log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
-			err = c.verifier.Verify(ctx, ref, params.PublicKey)
+			err = c.verifier.Verify(ctx, cacheRef, params.PublicKey)
 		}
 
 		if err != nil {
@@ -179,6 +200,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 
 	// Track whether signature was actually verified
 	signatureVerified := c.config.RequireSignature && params.PublicKey != ""
+	binarySum := sha256.Sum256(binaryData)
 
 	metadata := &PluginMetadata{
 		Reference:    cacheRef,
@@ -189,6 +211,11 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		Size:         int64(len(binaryData)),
 		LastAccessed: fetchTime,
 		Version:      version,
+		BinarySHA256: hex.EncodeToString(binarySum[:]),
+		// The signature check above returns early on failure, so reaching
+		// here with signatures required means it ran and passed.
+		SignatureChecked: c.config.RequireSignature,
+		SignatureKey:     params.PublicKey,
 	}
 
 	if err := c.storage.StoreMetadata(cacheRef.Digest, params.Architecture, metadata); err != nil {
@@ -229,42 +256,83 @@ func (c *OCIPluginClient) GetPlugin(ref *OCIReference, params *OCIPluginParams) 
 	return c.getLocalPlugin(ref, params)
 }
 
-// getLocalPlugin creates a LocalPlugin instance for a cached plugin
+// getLocalPlugin returns a cached plugin after checking the executable
+// against the SHA-256 recorded when it was fetched. A mismatch is refused
+// (ErrCacheCorrupted); FetchPlugin then fetches the plugin again. An entry
+// with no recorded hash (no metadata, or cached by an older release) cannot
+// be checked: it is reported unverified, and refused when signatures are
+// required. So is an entry cached while signatures were not required, or
+// verified with a different public key than the one now asked for.
 func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	execPath := c.storage.GetExecutablePath(ref.Digest, params.Architecture)
 
-	// Load metadata from cache if available
-	if c.storage.HasMetadata(ref.Digest, params.Architecture) {
-		metadata, err := c.storage.LoadMetadata(ref.Digest, params.Architecture)
+	metadata, err := c.storage.LoadMetadata(ref.Digest, params.Architecture)
+	if err != nil || metadata.BinarySHA256 == "" {
+		reason := "no recorded binary hash"
 		if err != nil {
-			log.Warn().Err(err).Msg("Failed to load cached metadata, using defaults")
-		} else {
-			// Update last accessed time
-			if err := c.storage.UpdateLastAccessed(ref.Digest, params.Architecture); err != nil {
-				log.Warn().Err(err).Msg("Failed to update last accessed time")
-			}
-
-			return &LocalPlugin{
-				Reference:      ref,
-				Params:         params,
-				ExecutablePath: execPath,
-				CacheDir:       c.config.CacheDir,
-				Verified:       metadata.Verified,
-				FetchTime:      metadata.FetchTime,
-				Config:         metadata.Config,
-			}, nil
+			reason = fmt.Sprintf("no readable metadata: %v", err)
 		}
+		if c.config.RequireSignature {
+			return nil, &ErrCacheCorrupted{Path: execPath, Reason: reason + "; signatures are required, so the plugin must be fetched and verified again"}
+		}
+		log.Warn().
+			Str("reference", ref.FullReference()).
+			Str("reason", reason).
+			Msg("Cached OCI plugin cannot be integrity-checked; loading it as unverified")
+		local := &LocalPlugin{
+			Reference:      ref,
+			Params:         params,
+			ExecutablePath: execPath,
+			CacheDir:       c.config.CacheDir,
+			Verified:       false,
+			FetchTime:      time.Now(), // Unknown fetch time
+		}
+		if metadata != nil {
+			local.FetchTime, local.Config = metadata.FetchTime, metadata.Config
+		}
+		return local, nil
 	}
 
-	// Fallback to basic info if metadata not available
+	if err := checkFileSHA256(execPath, metadata.BinarySHA256); err != nil {
+		return nil, &ErrCacheCorrupted{Path: execPath, Reason: err.Error()}
+	}
+	if c.config.RequireSignature && !metadata.SignatureChecked {
+		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "cached without signature verification, which is now required"}
+	}
+	if c.config.RequireSignature && metadata.SignatureKey != params.PublicKey {
+		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "signature was verified with a different public key"}
+	}
+
+	if err := c.storage.UpdateLastAccessed(ref.Digest, params.Architecture); err != nil {
+		log.Warn().Err(err).Msg("Failed to update last accessed time")
+	}
+
 	return &LocalPlugin{
 		Reference:      ref,
 		Params:         params,
 		ExecutablePath: execPath,
 		CacheDir:       c.config.CacheDir,
-		Verified:       true, // Assume verified if in cache
-		FetchTime:      time.Now(), // Unknown fetch time
+		Verified:       metadata.Verified,
+		FetchTime:      metadata.FetchTime,
+		Config:         metadata.Config,
 	}, nil
+}
+
+// checkFileSHA256 reports an error unless the file's SHA-256 is wantHex.
+func checkFileSHA256(path, wantHex string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("cannot read executable: %w", err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("cannot read executable: %w", err)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != wantHex {
+		return fmt.Errorf("executable SHA-256 %s does not match the %s recorded at fetch time", got, wantHex)
+	}
+	return nil
 }
 
 // SetActivePlugin creates a symlink to mark a plugin as the active version
