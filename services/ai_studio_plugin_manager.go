@@ -561,13 +561,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 			})
 		}()
 
-		// Wait for server to be ready before continuing (with timeout)
-		select {
-		case <-serverReady:
-			log.Debug().Uint32("broker_id", brokerID).Msg("Long-lived brokered server ready for plugin")
-		case <-time.After(500 * time.Millisecond):
-			log.Warn().Uint32("broker_id", brokerID).Msg("Long-lived brokered server setup timeout - proceeding anyway")
-		}
+		waitBrokeredServer(serverReady, brokerID, plugin.ID, "plugin services")
 
 		serviceBrokerID = brokerID
 		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
@@ -1685,6 +1679,29 @@ func (m *AIStudioPluginManager) createConfigOnlyLocalPluginClient(command string
 	}), nil
 }
 
+// brokeredServerReadyTimeout bounds the wait for a plugin's brokered service
+// server (management API and events) to be registered on the broker.
+var brokeredServerReadyTimeout = 5 * time.Second
+
+// waitBrokeredServer waits until the brokered server that serves a plugin's
+// calls back into Studio is registered (ready is closed when it is), so the
+// plugin's first service call does not race its setup. It waits at most
+// brokeredServerReadyTimeout. On timeout it logs at Error and returns, and
+// the caller carries on: the server is still being set up in the background,
+// and until it is, the plugin's service calls fail with gRPC Unavailable
+// rather than hang. Refusing to start the plugin would turn a slow broker
+// into an outage.
+func waitBrokeredServer(ready <-chan struct{}, brokerID uint32, pluginID uint, purpose string) {
+	select {
+	case <-ready:
+		log.Debug().Uint32("broker_id", brokerID).Uint("plugin_id", pluginID).Str("purpose", purpose).Msg("Brokered server ready")
+	case <-time.After(brokeredServerReadyTimeout):
+		log.Error().Uint32("broker_id", brokerID).Uint("plugin_id", pluginID).Str("purpose", purpose).
+			Dur("waited", brokeredServerReadyTimeout).
+			Msg("Brokered server not ready in time; continuing, and the plugin's service calls fail until it is")
+	}
+}
+
 // GetLoadedPlugin returns a loaded plugin by ID
 func (m *AIStudioPluginManager) GetLoadedPlugin(pluginID uint) (*LoadedAIStudioPlugin, bool) {
 	m.mu.RLock()
@@ -2121,13 +2138,7 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 				})
 			}()
 
-			// Wait for server to be ready (with timeout)
-			select {
-			case <-serverReady:
-				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for scheduled task")
-			case <-time.After(100 * time.Millisecond):
-				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
-			}
+			waitBrokeredServer(serverReady, brokerID, pluginID, "scheduled task")
 
 			serviceBrokerID = brokerID
 		}
@@ -2257,13 +2268,7 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 				})
 			}()
 
-			// Wait for server to be ready (with timeout)
-			select {
-			case <-serverReady:
-				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for edge payload")
-			case <-time.After(100 * time.Millisecond):
-				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
-			}
+			waitBrokeredServer(serverReady, brokerID, pluginID, "edge payload")
 
 			serviceBrokerID = brokerID
 		}
