@@ -23,10 +23,10 @@ describe('pubClient 401 handling', () => {
     expect(window.location.href).toBe('http://localhost/register');
   });
 
-  test('an expired session on an app page goes to the login page', async () => {
+  test('an expired session on an app page goes to the login page, which returns there', async () => {
     at('/portal/dashboard');
     await expect(onError(unauthorized)).rejects.toBe(unauthorized);
-    expect(window.location.href).toBe('/login');
+    expect(window.location.href).toBe('/login?next=%2Fportal%2Fdashboard');
   });
 
   test('other errors do not redirect', async () => {

@@ -25,7 +25,7 @@ export const DEPENDENT_GROUPS = [
 // catalogues, everything else in LLM catalogues.
 const CATALOGUE_PATH_BY_RESOURCE = {
   tools: "catalogs/tools",
-  datasources: "catalogs/data",
+  datasources: "catalogs/datasources",
 };
 
 /**

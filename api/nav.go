@@ -101,7 +101,7 @@ func adminNav(in navInputs) []NavItem {
 	if f("feature_groups") && (f("feature_portal") || f("feature_chat")) {
 		out = append(out, group("catalogs", "Catalogs", "rectangle-history",
 			when(f("feature_portal"), page("catalog-llms", "LLM catalogs", "/admin/catalogs/llms", r("catalogues"))),
-			[]NavItem{page("catalog-data", "Data catalogs", "/admin/catalogs/data", r("data-catalogues"))},
+			[]NavItem{page("catalog-data", "Data catalogs", "/admin/catalogs/datasources", r("data-catalogues"))},
 			when(f("feature_chat"), page("catalog-tools", "Tool catalogs", "/admin/catalogs/tools", r("tool-catalogues"))),
 		))
 	}
@@ -124,7 +124,7 @@ func adminNav(in navInputs) []NavItem {
 			when(in.enterprise, page("filters", "Filters", "/admin/filters", r("filters"))),
 		),
 	)
-	// Apps have exactly one home: under "AI Portal" with the portal on, or
+	// Apps have exactly one home: under "Portal administration" with the portal on, or
 	// under "Apps & credentials" in gateway-only mode (no portal, no chat).
 	if f("feature_gateway") && !f("feature_portal") && !f("feature_chat") {
 		out = append(out, group("apps-credentials", "Apps & credentials", "grid-2-plus",
@@ -132,7 +132,7 @@ func adminNav(in navInputs) []NavItem {
 	}
 	if f("feature_portal") {
 		out = append(out,
-			group("ai-portal", "AI Portal", "display",
+			group("ai-portal", "Portal administration", "display",
 				[]NavItem{
 					page("portal-apps", "Apps", "/admin/apps", r("apps")),
 					page("edge-gateways", "Edge Gateways", "/admin/edge-gateways", r("edges")),
@@ -171,7 +171,7 @@ func adminNav(in navInputs) []NavItem {
 		),
 	)
 	if f("feature_chat") {
-		out = append(out, group("chat", "Chat", "message-lines", []NavItem{
+		out = append(out, group("chat", "Chat administration", "message-lines", []NavItem{
 			page("chats", "Chats", "/admin/chats", r("chats")),
 			page("agents", "Agents", "/admin/agents", r("agents")),
 			page("llm-settings", "Model call settings", "/admin/llm-settings", r("llm-settings")),

@@ -115,7 +115,7 @@ describe("groupsForDependents", () => {
   it("points a tool's or data source's catalogues at the matching catalogue pages", () => {
     const deps = { ...empty, catalogues: [{ id: 3, name: "C" }], total: 1 };
     expect(groupsForDependents(deps, { resourcePath: "tools" })[0].items[0].href).toBe("/admin/catalogs/tools/3");
-    expect(groupsForDependents(deps, { resourcePath: "datasources" })[0].items[0].href).toBe("/admin/catalogs/data/3");
+    expect(groupsForDependents(deps, { resourcePath: "datasources" })[0].items[0].href).toBe("/admin/catalogs/datasources/3");
     expect(groupsForDependents(deps, { resourcePath: "llms" })[0].items[0].href).toBe("/admin/catalogs/llms/3");
   });
 

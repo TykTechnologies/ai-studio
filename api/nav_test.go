@@ -51,9 +51,29 @@ func TestAdminNavGroupOrder(t *testing.T) {
 	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), allowAll)
 	assert.Equal(t, []string{
 		"Overview", "Analytics", "Access", "Catalogs", "LLM management",
-		"Context management", "AI Portal", "Community", "Governance",
-		"Settings", "Chat", "Plugins",
+		"Context management", "Portal administration", "Community", "Governance",
+		"Settings", "Chat administration", "Plugins",
 	}, labels(nav))
+}
+
+// Every entry in the admin drawer has its own accessible name, and none
+// repeats a console tab (TopNavigation: "Chat", "AI Portal",
+// "Administration"), so screen-reader users and role/name locators can tell
+// a drawer group from the surface it administers (#514 F3).
+func TestAdminNavLabelsAreUnique(t *testing.T) {
+	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), allowAll)
+	seen := map[string]string{"Chat": "a console tab", "AI Portal": "a console tab", "Administration": "a console tab"}
+	var walk func(items []NavItem)
+	walk = func(items []NavItem) {
+		for _, it := range items {
+			if prev, dup := seen[it.Text]; dup {
+				t.Errorf("nav label %q (%s) repeats %s", it.Text, it.ID, prev)
+			}
+			seen[it.Text] = it.ID
+			walk(it.Items)
+		}
+	}
+	walk(nav)
 }
 
 // Plugin sections sit after Governance (after Community in CE, where there
@@ -104,9 +124,9 @@ func TestAdminNavEditionsAndModes(t *testing.T) {
 
 	gatewayOnly := labels(filterNav(adminNav(navInputs{features: features(map[string]bool{"feature_gateway": true, "feature_groups": true})}), allowAll))
 	assert.Contains(t, gatewayOnly, "Apps & credentials")
-	assert.NotContains(t, gatewayOnly, "AI Portal")
+	assert.NotContains(t, gatewayOnly, "Portal administration")
 	assert.NotContains(t, gatewayOnly, "Catalogs")
-	assert.NotContains(t, gatewayOnly, "Chat")
+	assert.NotContains(t, gatewayOnly, "Chat administration")
 	assert.Equal(t, indexOf(gatewayOnly, "Context management")+1, indexOf(gatewayOnly, "Apps & credentials"))
 
 	idp := filterNav(adminNav(navInputs{features: features(allFeatures()), identityProviders: true}), allowAll)
@@ -120,7 +140,7 @@ func TestFilterNavByPermission(t *testing.T) {
 	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), func(it NavItem) bool {
 		return it.Permission == "" || granted[it.Permission]
 	})
-	assert.Equal(t, []string{"Overview", "LLM management", "AI Portal"}, labels(nav))
+	assert.Equal(t, []string{"Overview", "LLM management", "Portal administration"}, labels(nav))
 	assert.Equal(t, []string{"LLM providers"}, labels(find(nav, "llm-management").Items))
 	assert.Equal(t, []string{"Edge Gateways"}, labels(find(nav, "ai-portal").Items))
 

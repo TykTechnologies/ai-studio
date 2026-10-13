@@ -39,10 +39,51 @@ export const hostSignInURL = (loc = window.location) => {
   return url.split(RETURN_TO_PLACEHOLDER).join(encodeURIComponent(back));
 };
 
+// RETURN_PARAM is the query parameter on Studio's /login that names the page
+// to open after signing in.
+export const RETURN_PARAM = 'next';
+
+// safeReturnPath accepts a return address only when it is a console route on
+// this origin: a single leading slash (no "//host" or "/\host", which
+// browsers treat as another origin), no control characters, and not a
+// sign-in or password page. Anything else yields null, so /login?next= can
+// never send a user off-site.
+export const safeReturnPath = (raw) => {
+  if (typeof raw !== 'string' || raw.length > 2048) {
+    return null;
+  }
+  // eslint-disable-next-line no-control-regex
+  if (!raw.startsWith('/') || raw.startsWith('//') || /[\u0000-\u001f\u007f\\]/.test(raw)) {
+    return null;
+  }
+  const pathOnly = raw.split(/[?#]/)[0];
+  if (pathOnly === '/' || isPublicPath(pathOnly)) {
+    return null;
+  }
+  return raw;
+};
+
+// returnPathFrom is the route (without the base path) plus query and hash of
+// loc, or null when there is nothing worth coming back to.
+const returnPathFrom = (loc) =>
+  safeReturnPath(`${stripBase(loc.pathname)}${loc.search || ''}${loc.hash || ''}`);
+
+// studioLoginPath is Studio's login route (without the base path) for a
+// visitor at loc, carrying that page as ?next= so signing in returns there.
+export const studioLoginPath = (loc = window.location) => {
+  const back = returnPathFrom(loc);
+  return back ? `/login?${RETURN_PARAM}=${encodeURIComponent(back)}` : '/login';
+};
+
+// requestedReturnPath is the safe ?next= page in a login URL's query string,
+// or null.
+export const requestedReturnPath = (search = window.location.search) =>
+  safeReturnPath(new URLSearchParams(search).get(RETURN_PARAM));
+
 // loginLocation is where a signed-out user goes: the host application's
 // sign-in page when it authenticates users, else Studio's own.
 export const loginLocation = () =>
-  (isHostAuth() && hostLoginURL() && hostSignInURL()) || withBase('/login');
+  (isHostAuth() && hostLoginURL() && hostSignInURL()) || withBase(studioLoginPath());
 
 // redirectToLogin sends the browser to the login page after a 401, unless the
 // current page is already a public one.

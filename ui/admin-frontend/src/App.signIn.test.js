@@ -40,7 +40,15 @@ jest.mock('./layouts/MainLayout', () => {
 jest.mock('./routes/AdminRoutes', () => () => <div>admin console</div>);
 jest.mock('./routes/PortalRoutes', () => () => <div>portal</div>);
 jest.mock('./routes/ChatRoutes', () => () => <div>chat</div>);
-jest.mock('./portal/pages/Login', () => () => <div>studio login</div>);
+jest.mock('./portal/pages/Login', () => () => {
+  const { useLocation } = jest.requireActual('react-router-dom');
+  return (
+    <>
+      <div>studio login</div>
+      <div data-testid="login-search">{useLocation().search}</div>
+    </>
+  );
+});
 jest.mock('./portal/pages/Register', () => () => <div>register form</div>);
 jest.mock('./portal/pages/ForgotPassword', () => () => <div>forgot password form</div>);
 jest.mock('./portal/pages/ResetPassword', () => () => <div>reset password form</div>);
@@ -64,7 +72,7 @@ const signedInAdmin = () => {
 };
 
 // The browser is at the route under the base path, and the router at the
-// route.
+// route (both with the query and hash).
 const open = (route, { base = '', search = '', hash = '' } = {}) => {
   delete window.location;
   window.location = {
@@ -75,7 +83,7 @@ const open = (route, { base = '', search = '', hash = '' } = {}) => {
     assign: jest.fn(),
   };
   return render(
-    <MemoryRouter initialEntries={[route]}>
+    <MemoryRouter initialEntries={[`${route}${search}${hash}`]}>
       <App />
     </MemoryRouter>,
   );
@@ -99,6 +107,32 @@ describe('standalone (Studio signs users in)', () => {
     open('/admin/llms');
     expect(await screen.findByText('studio login')).toBeInTheDocument();
     expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  test('the login page carries the deep link, so signing in returns to it (#255)', async () => {
+    signedOut();
+    open('/admin/apps/222', { search: '?tab=keys' });
+    expect(await screen.findByText('studio login')).toBeInTheDocument();
+    expect(screen.getByTestId('login-search')).toHaveTextContent('?next=%2Fadmin%2Fapps%2F222%3Ftab%3Dkeys');
+  });
+
+  test('an unknown route still goes to the login page with its address', async () => {
+    signedOut();
+    open('/somewhere/else');
+    expect(await screen.findByText('studio login')).toBeInTheDocument();
+    expect(screen.getByTestId('login-search')).toHaveTextContent('?next=%2Fsomewhere%2Felse');
+  });
+
+  test('a signed-in user opening /login?next= goes to that page', async () => {
+    signedInAdmin();
+    open('/login', { search: '?next=%2Fportal%2Fapps' });
+    expect(await screen.findByText('portal')).toBeInTheDocument();
+  });
+
+  test('a signed-in user opening /login with an off-site ?next= goes home', async () => {
+    signedInAdmin();
+    open('/login', { search: '?next=%2F%2Fevil.example%2Fportal' });
+    expect(await screen.findByText('admin console')).toBeInTheDocument();
   });
 
   test.each([

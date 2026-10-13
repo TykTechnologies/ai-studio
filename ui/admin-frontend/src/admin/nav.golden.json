@@ -59,7 +59,7 @@
         {
           "id": "catalog-data",
           "text": "Data catalogs",
-          "path": "/admin/catalogs/data",
+          "path": "/admin/catalogs/datasources",
           "permission": "data-catalogues:read"
         },
         {
@@ -141,7 +141,7 @@
     },
     {
       "id": "ai-portal",
-      "text": "AI Portal",
+      "text": "Portal administration",
       "icon": "display",
       "items": [
         {
@@ -253,7 +253,7 @@
     },
     {
       "id": "chat",
-      "text": "Chat",
+      "text": "Chat administration",
       "icon": "message-lines",
       "items": [
         {

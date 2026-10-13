@@ -1,4 +1,12 @@
-import { hostSignInURL, isPublicPath, loginLocation, redirectToLogin } from './authRedirect';
+import {
+  hostSignInURL,
+  isPublicPath,
+  loginLocation,
+  redirectToLogin,
+  requestedReturnPath,
+  safeReturnPath,
+  studioLoginPath,
+} from './authRedirect';
 
 describe('isPublicPath', () => {
   test.each([
@@ -45,10 +53,63 @@ describe('redirectToLogin', () => {
     expect(window.location.href).toBe('http://localhost/login');
   });
 
-  test('sends an expired session on an app page to the login page', () => {
+  test('sends an expired session on an app page to the login page, then back', () => {
     at('/admin/apps');
     expect(redirectToLogin()).toBe(true);
-    expect(window.location.href).toBe('/login');
+    expect(window.location.href).toBe('/login?next=%2Fadmin%2Fapps');
+  });
+});
+
+describe('Studio sign-in return address (?next=)', () => {
+  afterEach(() => {
+    delete window.__TYK_AI_STUDIO__;
+  });
+
+  test.each([
+    '/admin/apps/222',
+    '/admin/filters/new',
+    '/portal/catalog/tools/3?tab=docs',
+    '/admin/llms/3#models',
+    '/chat/7?continue_id=abc',
+  ])('accepts the console route %s', (path) => {
+    expect(safeReturnPath(path)).toBe(path);
+  });
+
+  test.each([
+    ['nothing', null],
+    ['an empty string', ''],
+    ['the root', '/'],
+    ['a relative path', 'admin/apps'],
+    ['a protocol-relative URL', '//evil.example/admin'],
+    ['a backslash host', '/\\evil.example'],
+    ['a backslash later on', '/admin\\..\\x'],
+    ['an absolute URL', 'https://evil.example/admin'],
+    // eslint-disable-next-line no-script-url
+    ['a script URL', 'javascript:alert(1)'],
+    ['a control character', '/admin\n/apps'],
+    ['the login page', '/login?next=/admin'],
+    ['a password page', '/reset-password?token=x'],
+    ['an oversized value', `/admin/${'a'.repeat(2100)}`],
+  ])('rejects %s', (_, raw) => {
+    expect(safeReturnPath(raw)).toBeNull();
+  });
+
+  test('studioLoginPath carries the route, query and hash without the base path', () => {
+    window.__TYK_AI_STUDIO__ = { basePath: '/ai-studio' };
+    expect(studioLoginPath({ pathname: '/ai-studio/admin/llms/3', search: '?tab=keys', hash: '#top' })).toBe(
+      '/login?next=%2Fadmin%2Fllms%2F3%3Ftab%3Dkeys%23top',
+    );
+  });
+
+  test('studioLoginPath has no return address for the root or a sign-in page', () => {
+    expect(studioLoginPath({ pathname: '/', search: '', hash: '' })).toBe('/login');
+    expect(studioLoginPath({ pathname: '/register', search: '', hash: '' })).toBe('/login');
+  });
+
+  test('requestedReturnPath reads a safe ?next= and drops an unsafe one', () => {
+    expect(requestedReturnPath('?next=%2Fadmin%2Fapps%2F1')).toBe('/admin/apps/1');
+    expect(requestedReturnPath('?next=%2F%2Fevil.example')).toBeNull();
+    expect(requestedReturnPath('')).toBeNull();
   });
 });
 

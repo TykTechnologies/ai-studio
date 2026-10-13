@@ -46,7 +46,7 @@ For more details, see the [LLM Management](./llm-management.md) documentation.
 
 If you are running a Microgateway (hub-spoke deployment), you need to push the updated configuration after adding your API keys:
 
-1.  Navigate to **AI Portal → Edge Gateways** in the sidebar.
+1.  Navigate to **Portal administration → Edge Gateways** in the sidebar.
 2.  Verify your edge gateway shows as **Connected**.
 3.  Click **Push Configuration** to sync the latest settings.
 

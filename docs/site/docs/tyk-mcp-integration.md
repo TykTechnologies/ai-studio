@@ -355,7 +355,7 @@ transactional nor idempotent:
 
 ## Access report
 
-AI Portal → MCP credentials has two tabs: the **minted keys** ledger (App,
+Portal administration → MCP credentials has two tabs: the **minted keys** ledger (App,
 connection, key hint, status, applied and external policies, drift, expiry,
 with rotate, suspend, resume, revoke and apply-change actions) and the
 **access report**, one row per App and MCP server the App holds a key for,
