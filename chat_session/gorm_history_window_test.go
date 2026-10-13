@@ -33,6 +33,19 @@ func TestHistoryWindowIsTheNewestMessages(t *testing.T) {
 	assert.Equal(t, "msg 15", msgs[1].Parts[0].(llms.TextContent).Text, "oldest message of the window")
 	assert.Equal(t, "msg 24", msgs[10].Parts[0].(llms.TextContent).Text, "the newest message is sent")
 
+	// The default window (100) on a session of 120 messages ends with the
+	// newest one.
+	def := NewGormChatMessageHistory(db, "default-limit", 1, 1, "system prompt")
+	for i := 0; i < 120; i++ {
+		require.NoError(t, def.AddUserMessage(ctx, fmt.Sprintf("msg %d", i)))
+	}
+	msgs, err = def.Messages(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 101)
+	assert.Equal(t, llms.ChatMessageTypeSystem, msgs[0].Role)
+	assert.Equal(t, "msg 20", msgs[1].Parts[0].(llms.TextContent).Text)
+	assert.Equal(t, "msg 119", msgs[100].Parts[0].(llms.TextContent).Text)
+
 	// A short session is returned whole, once.
 	short := NewGormChatMessageHistory(db, "short-session", 1, 1, "system prompt", WithLimit(10))
 	require.NoError(t, short.AddUserMessage(ctx, "only"))
