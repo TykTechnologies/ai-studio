@@ -341,7 +341,7 @@ Studio plugins can register **scheduled tasks** — periodic calls from the host
 
 Plugins run as separate processes, communicating with the main platform via gRPC. This provides:
 
-- **Security**: Plugin crashes don't affect the main platform
+- **Fault isolation**: Plugin crashes don't affect the main platform. Process isolation is not a sandbox, though: plugins run with the host's privileges and can make arbitrary network connections. See the [Plugin Security Model](./plugins-security.md).
 - **Language Flexibility**: While the gRPC protocol theoretically supports any language, **only Go plugins have been tested** in production. If you plan to write plugins in another language, expect to do additional integration work.
 - **Resource Management**: Plugins can be restarted independently
 - **Version Independence**: Update plugins without platform restarts
