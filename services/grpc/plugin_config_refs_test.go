@@ -32,12 +32,16 @@ func TestUpdatePluginConfigSecretReferences(t *testing.T) {
 		Config: map[string]interface{}{"vault_token": "$SECRET/VAULT_TOKEN"}}
 	require.NoError(t, db.Create(plugin).Error)
 	server := NewPluginManagementServer(service.PluginService)
-	ctx := context.Background()
+	// The plugin updates its own config (other plugins' configs are refused
+	// before any reference check)
+	ctx := SetPluginIDInContext(context.Background(), plugin.ID)
 
 	_, err = server.UpdatePluginConfig(ctx, &pb.UpdatePluginConfigRequest{
 		PluginId: uint32(plugin.ID), ConfigJson: `{"vault_token":"$SECRET/VAULT_TOKEN","stolen":"$SECRET/OTHER"}`})
 	require.Error(t, err)
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	assert.Contains(t, err.Error(), "secret references", "refused for the new reference, not for the caller")
+	assert.Contains(t, err.Error(), "stolen")
 
 	// The plugin saves its resolved config: the reference survives
 	_, err = server.UpdatePluginConfig(ctx, &pb.UpdatePluginConfigRequest{
