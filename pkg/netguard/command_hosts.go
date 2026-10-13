@@ -9,10 +9,12 @@ import (
 )
 
 // CommandTargetsInternalHost reports whether a plugin command names an
-// internal address: a loopback, private, link-local, unique-local or
-// unspecified IP (IPv4-mapped IPv6 included), or localhost. It looks at the
-// host of every URL in the command (grpc://10.0.0.1:50051), at host:port
-// tokens and --flag=host:port values, and at bare IP literals.
+// internal address: a loopback, private, link-local, unique-local, shared
+// (CGNAT, 100.64.0.0/10) or unspecified IP (IPv4-mapped IPv6 included), or
+// localhost. It looks at the host of every URL in the command
+// (grpc://10.0.0.1:50051), at host:port tokens, and at bare IP literals.
+// Flag values (--upstream=grpc://10.0.0.1), quoted values and comma-separated
+// lists are unpacked first.
 //
 // URL hosts are what a plugin dials, so there the legacy IPv4 spellings that
 // inet_aton and many dialers accept are decoded too: decimal (2130706433),
@@ -22,39 +24,84 @@ import (
 //
 // It does no DNS resolution: a hostname that resolves to an internal address
 // is not detected here (the plugin security service resolves and checks URL
-// hosts when the API validates the command).
+// hosts when the API validates the command). Translated IPv6 forms (NAT64,
+// IPv4-compatible, 6to4) are not decoded.
 func CommandTargetsInternalHost(command string) bool {
 	for _, token := range strings.Fields(command) {
-		if strings.Contains(token, "://") {
-			if u, err := url.Parse(token); err == nil && IsInternalHost(u.Hostname()) {
+		for _, value := range commandValues(token) {
+			if valueTargetsInternalHost(value) {
 				return true
 			}
-			continue
-		}
-		// --addr=127.0.0.1:50051 names the address after the '='.
-		if i := strings.IndexByte(token, '='); i >= 0 {
-			token = token[i+1:]
-		}
-		if host, _, err := net.SplitHostPort(token); err == nil {
-			token = host
-		}
-		if isLocalhost(token) {
-			return true
-		}
-		if addr, err := netip.ParseAddr(strings.Trim(token, "[]")); err == nil && isInternalAddr(addr) {
-			return true
 		}
 	}
 	return false
 }
 
+// commandValues unpacks a command token into the values that may name a
+// host: the part after a flag's '=' (unless the '=' belongs to a URL's
+// query), split on commas, with surrounding quotes removed.
+func commandValues(token string) []string {
+	token = unquote(token)
+	if eq := strings.IndexByte(token, '='); eq >= 0 {
+		if scheme := strings.Index(token, "://"); scheme < 0 || eq < scheme {
+			token = unquote(token[eq+1:])
+		}
+	}
+	values := strings.Split(token, ",")
+	for i, v := range values {
+		values[i] = unquote(v)
+	}
+	return values
+}
+
+func unquote(s string) string {
+	return strings.Trim(s, `"'`)
+}
+
+func valueTargetsInternalHost(value string) bool {
+	if i := strings.Index(value, "://"); i >= 0 {
+		return IsInternalHost(urlHost(value, value[i+3:]))
+	}
+	if host, _, err := net.SplitHostPort(value); err == nil {
+		value = host
+	}
+	if isLocalhost(value) {
+		return true
+	}
+	addr, err := netip.ParseAddr(strings.Trim(value, "[]"))
+	return err == nil && isInternalAddr(addr)
+}
+
+// urlHost returns the host of a URL. When the URL does not parse (a bad
+// escape in the path, say), the host is read from the authority directly, so
+// a malformed URL cannot hide an internal host.
+func urlHost(rawURL, afterScheme string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		return u.Hostname()
+	}
+	authority := afterScheme
+	if i := strings.IndexAny(authority, "/?#"); i >= 0 {
+		authority = authority[:i]
+	}
+	if i := strings.LastIndexByte(authority, '@'); i >= 0 {
+		authority = authority[i+1:]
+	}
+	if host, _, err := net.SplitHostPort(authority); err == nil {
+		return host
+	}
+	return authority
+}
+
 // IsInternalHost reports whether a host literal (no DNS lookup) is localhost
-// or an internal IP address, including IPv4-mapped IPv6 forms and the legacy
-// IPv4 spellings described on CommandTargetsInternalHost.
+// or an internal IP address, including IPv4-mapped IPv6 forms, a trailing
+// dot, and the legacy IPv4 spellings described on CommandTargetsInternalHost.
 func IsInternalHost(host string) bool {
-	host = strings.Trim(host, "[]")
+	host = strings.TrimSuffix(strings.Trim(host, "[]"), ".")
 	if isLocalhost(host) {
 		return true
+	}
+	if i := strings.Index(host, "%25"); i >= 0 {
+		host = host[:i] // URL-escaped IPv6 zone
 	}
 	if addr, err := netip.ParseAddr(host); err == nil {
 		return isInternalAddr(addr)
@@ -72,11 +119,17 @@ func isLocalhost(host string) bool {
 	return host == "localhost" || strings.HasSuffix(host, ".localhost")
 }
 
+// sharedAddressSpace is 100.64.0.0/10 (RFC 6598).
+var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+
 // isInternalAddr classifies an address, unwrapping IPv4-mapped IPv6 first.
 func isInternalAddr(addr netip.Addr) bool {
 	addr = addr.WithZone("").Unmap()
 	if addr.Is4() && addr.As4()[0] == 0 {
 		return true // 0.0.0.0/8 "this network" reaches the local host
+	}
+	if sharedAddressSpace.Contains(addr) {
+		return true // CGNAT; also some cloud metadata endpoints (100.100.100.200)
 	}
 	return addr.IsLoopback() || addr.IsPrivate() || addr.IsUnspecified() ||
 		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() ||
