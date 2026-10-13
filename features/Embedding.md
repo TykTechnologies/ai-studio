@@ -74,7 +74,8 @@ before `DATABASE_URL`.
 
 Deliberately still environment-only: the network and plugin security knobs
 (`ALLOW_INTERNAL_NETWORK_ACCESS`, `PLUGIN_COMMAND_ALLOWLIST`,
-`PLUGIN_BLOCK_INTERNAL_URLS`, the plugin allowed directories, `pkg/netguard`),
+`PLUGIN_BLOCK_INTERNAL_URLS`, `PLUGIN_ENV_PASSTHROUGH` (`pkg/pluginenv`), the
+plugin allowed directories, `pkg/netguard`),
 the filter-script switch `FILTER_SCRIPT_ALLOW_OS`, OCI registry credentials
 (`OCI_PLUGINS_REGISTRY_*`, which reference other variables by name), and
 `$ENV/` secret references.

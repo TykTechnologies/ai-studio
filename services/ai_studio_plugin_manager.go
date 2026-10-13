@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"mime"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
@@ -1570,7 +1570,8 @@ func (m *AIStudioPluginManager) createOCIPluginClient(command string) (*goplugin
 	return goplugin.NewClient(&goplugin.ClientConfig{
 		HandshakeConfig:  m.handshakeConfig,
 		Plugins:          m.pluginMap,
-		Cmd:              exec.Command(localPlugin.ExecutablePath),
+		Cmd:              pluginenv.Command(localPlugin.ExecutablePath),
+		SkipHostEnv:      true,
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
 		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
@@ -1596,7 +1597,8 @@ func (m *AIStudioPluginManager) createLocalPluginClient(command string) (*goplug
 	return goplugin.NewClient(&goplugin.ClientConfig{
 		HandshakeConfig:  m.handshakeConfig,
 		Plugins:          m.pluginMap,
-		Cmd:              exec.Command(cmdPath),
+		Cmd:              pluginenv.Command(cmdPath),
+		SkipHostEnv:      true,
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
 		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
@@ -1668,7 +1670,8 @@ func (m *AIStudioPluginManager) createConfigOnlyOCIPluginClient(command string) 
 		Plugins: map[string]goplugin.Plugin{
 			"config": &ConfigOnlyGRPC{},
 		},
-		Cmd:              exec.Command(localPlugin.ExecutablePath),
+		Cmd:              pluginenv.Command(localPlugin.ExecutablePath),
+		SkipHostEnv:      true,
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
 		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
@@ -1697,7 +1700,8 @@ func (m *AIStudioPluginManager) createConfigOnlyLocalPluginClient(command string
 		Plugins: map[string]goplugin.Plugin{
 			"config": &ConfigOnlyGRPC{},
 		},
-		Cmd:              exec.Command(cmdPath),
+		Cmd:              pluginenv.Command(cmdPath),
+		SkipHostEnv:      true,
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
 		Logger:           logger.NewHCLogAdapter("plugin"),
 	}), nil
