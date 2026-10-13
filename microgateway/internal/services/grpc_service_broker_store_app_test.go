@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -101,7 +100,7 @@ func TestStoreApp_CreateNew(t *testing.T) {
 		UpdatedAt:     now,
 	}
 
-	resp, err := server.StoreApp(context.Background(), req)
+	resp, err := server.StoreApp(boundTo(1), req)
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 
@@ -142,7 +141,7 @@ func TestStoreApp_UpdateExisting(t *testing.T) {
 	createTestLLM(t, db, 2, "llm-2")
 	createTestLLM(t, db, 3, "llm-3")
 
-	ctx := context.Background()
+	ctx := boundTo(1)
 	pluginCtx := &pb.PluginContext{PluginId: 1, MethodScope: "apps.write"}
 
 	// Create initial app with LLM 1 and 2
@@ -194,7 +193,7 @@ func TestStoreApp_EmptyAssociations(t *testing.T) {
 	defer database.Close(db)
 
 	// Create app with no associations
-	resp, err := server.StoreApp(context.Background(), &pb.StoreAppRequest{
+	resp, err := server.StoreApp(boundTo(1), &pb.StoreAppRequest{
 		Context:  &pb.PluginContext{PluginId: 1, MethodScope: "apps.write"},
 		AppId:    300,
 		Name:     "No Associations",
@@ -217,7 +216,7 @@ func TestStoreApp_EmptyAssociations(t *testing.T) {
 func TestStoreApp_MissingAppID(t *testing.T) {
 	_, server := setupStoreAppTestDB(t)
 
-	_, err := server.StoreApp(context.Background(), &pb.StoreAppRequest{
+	_, err := server.StoreApp(boundTo(1), &pb.StoreAppRequest{
 		Context: &pb.PluginContext{PluginId: 1, MethodScope: "apps.write"},
 		AppId:   0, // Missing
 		Name:    "Bad Request",
@@ -230,7 +229,7 @@ func TestStoreApp_BudgetStartDate(t *testing.T) {
 	db, server := setupStoreAppTestDB(t)
 	defer database.Close(db)
 
-	resp, err := server.StoreApp(context.Background(), &pb.StoreAppRequest{
+	resp, err := server.StoreApp(boundTo(1), &pb.StoreAppRequest{
 		Context:         &pb.PluginContext{PluginId: 1, MethodScope: "apps.write"},
 		AppId:           400,
 		Name:            "Budget App",
@@ -254,7 +253,7 @@ func TestStoreApp_MetadataJSON(t *testing.T) {
 
 	metadata := `{"oauth2_provider_id":"auth0","oauth2_tenant_id":"https://example.auth0.com/","oauth2_client_id":"abc123","auto_provisioned":true}`
 
-	resp, err := server.StoreApp(context.Background(), &pb.StoreAppRequest{
+	resp, err := server.StoreApp(boundTo(1), &pb.StoreAppRequest{
 		Context:  &pb.PluginContext{PluginId: 1, MethodScope: "apps.write"},
 		AppId:    500,
 		Name:     "Metadata App",
@@ -278,7 +277,7 @@ func TestStoreApp_ClearsOldAssociationsOnUpdate(t *testing.T) {
 	createTestTool(t, db, 1, "tool-a")
 	createTestDatasource(t, db, 1, "ds-a")
 
-	ctx := context.Background()
+	ctx := boundTo(1)
 	pluginCtx := &pb.PluginContext{PluginId: 1, MethodScope: "apps.write"}
 
 	// Create with associations

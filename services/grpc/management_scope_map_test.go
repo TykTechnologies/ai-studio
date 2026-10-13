@@ -7,9 +7,10 @@ import (
 )
 
 // Every RPC of the management service a plugin can reach over its broker
-// must have a scope: the broker's interceptor refuses unmapped methods, so a
-// new RPC without a mapping fails here instead of failing for plugins (or,
-// worse, being reachable without a scope).
+// must have a scope, or be listed in scopeFreeMethods on purpose: the
+// broker's interceptor refuses unmapped methods, so a new RPC without a
+// mapping fails here instead of failing for plugins (or, worse, being
+// reachable without a scope).
 func TestEveryManagementRPCHasAScope(t *testing.T) {
 	desc := pb.AIStudioManagementService_ServiceDesc
 	prefix := "/" + desc.ServiceName + "/"
@@ -24,7 +25,7 @@ func TestEveryManagementRPCHasAScope(t *testing.T) {
 		t.Fatal("service descriptor lists no methods")
 	}
 	for _, name := range names {
-		if extractScopeFromMethod(prefix+name) == "" {
+		if extractScopeFromMethod(prefix+name) == "" && !scopeFreeMethods[prefix+name] {
 			t.Errorf("%s has no scope mapping in extractScopeFromMethod", name)
 		}
 	}

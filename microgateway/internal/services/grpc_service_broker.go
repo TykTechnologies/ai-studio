@@ -75,9 +75,15 @@ func (s *MicrogatewayManagementServer) validatePluginScope(ctx context.Context, 
 	}
 
 	pluginID := pluginCtx.PluginId
-	// On a plugin's brokered server the request must name that plugin: one
-	// plugin cannot borrow another's identity and scopes.
-	if bound, ok := ctx.Value(plugins.BoundPluginIDKey).(uint32); ok && bound != pluginID {
+	// The request must name the plugin the brokered server serves: one plugin
+	// cannot borrow another's identity and scopes. A call without that
+	// binding (not through a plugin's broker) is refused.
+	bound, ok := ctx.Value(plugins.BoundPluginIDKey).(uint32)
+	if !ok {
+		log.Warn().Uint32("claimed_plugin_id", pluginID).Msg("Plugin service call without a broker binding")
+		return nil, status.Errorf(codes.PermissionDenied, "plugin service calls must come through the plugin's broker")
+	}
+	if bound != pluginID {
 		log.Warn().Uint32("bound_plugin_id", bound).Uint32("claimed_plugin_id", pluginID).Msg("Plugin context names another plugin")
 		return nil, status.Errorf(codes.PermissionDenied, "plugin context does not match the calling plugin")
 	}

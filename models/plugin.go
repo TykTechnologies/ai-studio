@@ -596,7 +596,4 @@ const (
 
 	// App governance scope: suspend/reactivate Apps and flag them, never edit them
 	ServiceScopeAppsLifecycle = "apps.lifecycle"
-
-	// License status (GetLicenseInfo), for plugins that gate enterprise features
-	ServiceScopeLicenseRead = "license.read"
 )

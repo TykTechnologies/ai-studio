@@ -1351,7 +1351,7 @@ func (s *AIStudioManagementServer) CreateSchedule(ctx context.Context, req *pb.C
 }
 
 // GetLicenseInfo returns license information for plugins to check enterprise
-// features. On a plugin's broker it requires the license.read scope.
+// features. It needs no scope (scopeFreeMethods), only the broker's plugin ID.
 func (s *AIStudioManagementServer) GetLicenseInfo(ctx context.Context, req *pb.GetLicenseInfoRequest) (*pb.GetLicenseInfoResponse, error) {
 	// Get licensing service from main service
 	licensingSvc := s.service.LicensingService

@@ -21,10 +21,6 @@ func TestValidatePluginScope_RequestMustNameTheBrokersPlugin(t *testing.T) {
 	require.NoError(t, db.Create(&database.Plugin{ID: 2, Name: "weak", Command: "/bin/weak", HookType: "auth", IsActive: true,
 		ServiceScopes: database.JSON(`[]`)}).Error)
 
-	boundTo := func(id uint32) context.Context {
-		return context.WithValue(context.Background(), plugins.BoundPluginIDKey, id)
-	}
-
 	// Plugin 2 (no scopes) claims to be plugin 1.
 	_, err := server.ListApps(boundTo(2), &pb.ListAppsRequest{Context: &pb.PluginContext{PluginId: 1}})
 	require.Error(t, err)
@@ -33,4 +29,14 @@ func TestValidatePluginScope_RequestMustNameTheBrokersPlugin(t *testing.T) {
 	// Plugin 1 naming itself passes.
 	_, err = server.ListApps(boundTo(1), &pb.ListAppsRequest{Context: &pb.PluginContext{PluginId: 1}})
 	require.NoError(t, err)
+
+	// A call that did not come through a plugin's broker is refused.
+	_, err = server.ListApps(context.Background(), &pb.ListAppsRequest{Context: &pb.PluginContext{PluginId: 1}})
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+}
+
+// boundTo is the context a plugin's brokered server gives its calls.
+func boundTo(id uint32) context.Context {
+	return context.WithValue(context.Background(), plugins.BoundPluginIDKey, id)
 }

@@ -74,12 +74,16 @@ func (s *authorizedServerStream) Context() context.Context { return s.ctx }
 
 // authorizePluginCall checks that the plugin whose ID the broker put in ctx
 // may call fullMethod: it exists, its service access is approved, and it holds
-// the method's scope. A method with no scope mapping is refused. It returns
-// ctx with the plugin added.
+// the method's scope. A method with no scope mapping is refused, unless it is
+// one of scopeFreeMethods (which still need the broker's plugin ID). It
+// returns ctx with the plugin added.
 func authorizePluginCall(ctx context.Context, db *gorm.DB, fullMethod string) (context.Context, error) {
 	pluginID := GetPluginIDFromContext(ctx)
 	if pluginID == 0 {
 		return nil, status.Errorf(codes.Unauthenticated, "plugin authentication required")
+	}
+	if scopeFreeMethods[fullMethod] {
+		return ctx, nil
 	}
 
 	requiredScope := extractScopeFromMethod(fullMethod)
@@ -143,6 +147,15 @@ func authorizePluginCall(ctx context.Context, db *gorm.DB, fullMethod string) (c
 var selfMethods = map[string]bool{
 	managementServicePrefix + "GetPlugin":          true,
 	managementServicePrefix + "UpdatePluginConfig": true,
+}
+
+// scopeFreeMethods are management methods any plugin on a broker may call
+// without a scope (the call still needs the broker's plugin ID).
+var scopeFreeMethods = map[string]bool{
+	// License status. Not sensitive, and enterprise plugins check it on their
+	// first session, before an admin has approved their scopes; a plugin's
+	// own license check is unaffected.
+	managementServicePrefix + "GetLicenseInfo": true,
 }
 
 // isSelfCall reports whether req is a selfMethods call naming the calling
@@ -305,7 +318,6 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/CreateNotification":          models.ServiceScopeNotificationsWrite,
 		"/ai_studio_management.AIStudioManagementService/RegisterResourceTypes":       models.ServiceScopeResourceTypesManage,
 		"/ai_studio_management.AIStudioManagementService/RegisterPermissionResources": models.ServiceScopeRBACRegister,
-		"/ai_studio_management.AIStudioManagementService/GetLicenseInfo":              models.ServiceScopeLicenseRead,
 	}
 
 	return scopeMap[fullMethod]

@@ -66,7 +66,7 @@ func requireCode(t *testing.T, want codes.Code, err error, what string) {
 }
 
 // A plugin with no approved scopes gets nothing from the management service
-// beyond its own configuration.
+// beyond its own configuration and the license status.
 func TestBroker_PluginWithoutScopesIsRefused(t *testing.T) {
 	f := newBrokerFixture(t, true)
 	ctx := context.Background()
@@ -82,18 +82,18 @@ func TestBroker_PluginWithoutScopesIsRefused(t *testing.T) {
 	require.NoError(t, f.db.First(&other, f.other.ID).Error)
 	assert.Equal(t, "other-secret", other.Config["api_key"], "another plugin's config was changed")
 
-	// Its own configuration needs no scope; the license status needs license.read.
+	// Another plugin's details need plugins.read, even without its config.
+	_, err = f.client.GetPlugin(ctx, &pb.GetPluginRequest{PluginId: uint32(f.other.ID)})
+	requireCode(t, codes.PermissionDenied, err, "GetPlugin on another plugin")
+
+	// Its own configuration and the license status need no scope.
 	_, err = f.client.UpdatePluginConfig(ctx, &pb.UpdatePluginConfigRequest{PluginId: uint32(f.caller.ID), ConfigJson: `{"mine":"updated"}`})
 	require.NoError(t, err, "UpdatePluginConfig on itself")
 	got, err := f.client.GetPlugin(ctx, &pb.GetPluginRequest{PluginId: uint32(f.caller.ID)})
 	require.NoError(t, err, "GetPlugin on itself")
 	assert.Contains(t, got.Plugin.ConfigJson, "updated")
 	_, err = f.client.GetLicenseInfo(ctx, &pb.GetLicenseInfoRequest{})
-	requireCode(t, codes.PermissionDenied, err, "GetLicenseInfo without license.read")
-
-	licensed := newBrokerFixture(t, true, models.ServiceScopeLicenseRead)
-	_, err = licensed.client.GetLicenseInfo(ctx, &pb.GetLicenseInfoRequest{})
-	require.NoError(t, err, "GetLicenseInfo with license.read")
+	require.NoError(t, err, "GetLicenseInfo")
 }
 
 // Without approved service access, scoped calls are refused even when the

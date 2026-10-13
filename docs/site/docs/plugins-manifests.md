@@ -361,11 +361,9 @@ Studio checks every service API call against the plugin's approved scopes. A cal
 |-------|-------------|------------|
 | `notifications.write` | Raise in-app notifications for admins or a user | CreateNotification |
 
-### License Scopes
+### License status
 
-| Scope | Description | Operations |
-|-------|-------------|------------|
-| `license.read` | Read the license status, to gate the plugin's own enterprise features | GetLicenseInfo |
+`GetLicenseInfo` needs no scope: any plugin can read the license status to gate its own enterprise features.
 
 ### Resource Type Scopes
 
