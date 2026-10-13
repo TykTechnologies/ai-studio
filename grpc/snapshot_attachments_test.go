@@ -1,10 +1,12 @@
 package grpc
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +39,23 @@ func TestSnapshotDeletedToolFilterKeepsTheTool(t *testing.T) {
 		}
 	}
 	assert.Empty(t, snap.OmittedEntries)
+}
+
+// A snapshot whose plugin attachments cannot be read is not sent: every LLM
+// would go out without its plugins. A registering edge then gets no initial
+// configuration (it keeps what it has) rather than an empty one.
+func TestSnapshotFailsWhenAttachmentsCannotBeRead(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	createTestLLMs(db, "")
+	require.NoError(t, db.Exec("DROP TABLE llm_plugins").Error)
+
+	_, err := server.getConfigurationSnapshot("")
+	require.Error(t, err)
+
+	resp, err := server.RegisterEdge(context.Background(), &pb.EdgeRegistrationRequest{EdgeId: "edge-x", EdgeNamespace: "", Version: "1"})
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+	assert.Nil(t, resp.InitialConfig, "no empty configuration that would retire the edge's own")
 }
 
 // A global LLM running a plugin filed under namespace "eu", and a global
