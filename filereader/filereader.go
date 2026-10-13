@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -57,20 +58,18 @@ var (
 	pdftotextOnce sync.Once
 	pdftotextBin  string
 
-	// Seams for tests.
+	// Seam for tests.
 	lookPath = exec.LookPath
-	statFile = os.Stat
 )
 
-// pdftotextPath returns the pdftotext binary to use (PATH first, then
-// ./pdftotext), or "" to use the built-in Go parser. The choice is logged
-// once.
+// pdftotextPath returns the pdftotext binary on PATH, or "" to use the
+// built-in Go parser. The choice is logged once. A pdftotext in the working
+// directory is deliberately not used: wherever that directory is writable it
+// would let anyone who can drop a file there run code on every PDF upload.
 func pdftotextPath() string {
 	pdftotextOnce.Do(func() {
 		if path, err := lookPath("pdftotext"); err == nil {
 			pdftotextBin = path
-		} else if _, err := statFile("./pdftotext"); err == nil {
-			pdftotextBin = "./pdftotext"
 		}
 		if pdftotextBin == "" {
 			log.Println("PDF text extraction uses the built-in Go parser (pdftotext not found on PATH)")
@@ -118,6 +117,7 @@ func ExtractTextFromPDFUsingPopplerWithOptions(fileName string, timeout time.Dur
 
 	// Create the pdftotext command with context using the found path
 	cmd := exec.CommandContext(ctx, pdftotextPath, "-layout", "-nopgbrk", tempInput.Name(), tempFile.Name())
+	cmd.Env = pdftotextEnv()
 
 	// Capture both stdout and stderr
 	var stderr bytes.Buffer
@@ -181,4 +181,20 @@ func ExtractMSFormats(fileName string, data []byte) (string, error) {
 	}
 
 	return txt, nil
+}
+
+// pdftotextEnvAllow is the host environment pdftotext gets. It parses
+// uploaded files, so it sees only what it needs to run (PATH, a temp dir,
+// locale), not the host's configuration and credentials.
+var pdftotextEnvAllow = []string{"PATH", "TMPDIR", "LANG", "TZ"}
+
+func pdftotextEnv() []string {
+	env := []string{}
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, "LC_") || slices.Contains(pdftotextEnvAllow, name) {
+			env = append(env, kv)
+		}
+	}
+	return env
 }
