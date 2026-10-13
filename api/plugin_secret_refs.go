@@ -1,9 +1,6 @@
 package api
 
 import (
-	"net/http"
-
-	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -14,12 +11,5 @@ import (
 // that can read the plugin's config) the secret's value. It writes the 403
 // and returns false when refused.
 func requireSecretReadForReferences(c *gin.Context, old, updated map[string]interface{}) bool {
-	if len(services.NewSecretReferences(old, updated)) == 0 {
-		return true
-	}
-	if authz.Can(c, authz.Read("secrets")) {
-		return true
-	}
-	c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Read("secrets")))
-	return false
+	return requireSecretReadForKeys(c, services.NewSecretReferences(old, updated))
 }
