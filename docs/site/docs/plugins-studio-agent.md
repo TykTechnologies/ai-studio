@@ -1109,7 +1109,7 @@ Agent plugins should implement the `SessionAware` interface to warm up the Servi
 func (p *MyAgentPlugin) OnSessionReady(ctx plugin_sdk.Context) {
     // Warm up Service API connection
     if ai_studio_sdk.IsInitialized() {
-        _, _ = ai_studio_sdk.GetPluginsCount(context.Background())
+        _, _ = ai_studio_sdk.GetLicenseInfo(context.Background()) // needs no service scope
     }
 }
 

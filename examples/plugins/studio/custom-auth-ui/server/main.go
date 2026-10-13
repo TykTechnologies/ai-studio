@@ -123,7 +123,8 @@ func (p *CustomAuthUIPlugin) OnSessionReady(ctx plugin_sdk.Context) {
 	// This establishes the broker connection early, avoiding timeout errors on first RPC call.
 	if ai_studio_sdk.IsInitialized() {
 		log.Printf("%s: Warming up Service API connection...", PluginName)
-		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+		// GetLicenseInfo needs no service scope, unlike ListPlugins (plugins.read).
+		_, err := ai_studio_sdk.GetLicenseInfo(context.Background())
 		if err != nil {
 			log.Printf("%s: Service API warmup failed: %v (this may be OK if not in Studio runtime)", PluginName, err)
 		} else {

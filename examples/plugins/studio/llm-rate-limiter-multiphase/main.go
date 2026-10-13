@@ -143,7 +143,8 @@ func (p *LLMRateLimiterPlugin) OnSessionReady(ctx plugin_sdk.Context) {
 		// Studio runtime: Use AI Studio SDK
 		if ai_studio_sdk.IsInitialized() {
 			log.Printf("%s: Warming up Studio Service API connection...", PluginName)
-			_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+			// GetLicenseInfo needs no service scope, unlike ListPlugins (plugins.read).
+			_, err := ai_studio_sdk.GetLicenseInfo(context.Background())
 			if err != nil {
 				log.Printf("%s: Studio Service API warmup failed: %v", PluginName, err)
 			} else {

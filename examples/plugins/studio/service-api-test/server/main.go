@@ -60,7 +60,8 @@ func (p *ServiceAPITestPlugin) OnSessionReady(ctx plugin_sdk.Context) {
 	if ai_studio_sdk.IsInitialized() {
 		log.Printf("🧪 %s: Warming up service API connection...", PluginName)
 		// Make a lightweight API call to establish the connection
-		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+		// GetLicenseInfo needs no service scope, unlike ListPlugins (plugins.read).
+		_, err := ai_studio_sdk.GetLicenseInfo(context.Background())
 		if err != nil {
 			log.Printf("🧪 %s: Service API warmup failed: %v (this is expected if the SDK dial fails)", PluginName, err)
 		} else {

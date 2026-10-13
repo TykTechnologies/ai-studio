@@ -922,7 +922,7 @@ func (p *MyPlugin) OnSessionReady(ctx plugin_sdk.Context) {
     // This "warms up" the connection so subsequent RPC calls don't need to dial.
     if ai_studio_sdk.IsInitialized() {
         // Make a lightweight API call to establish the connection
-        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        _, err := ai_studio_sdk.GetLicenseInfo(context.Background()) // needs no service scope
         if err != nil {
             log.Printf("Service API warmup failed: %v", err)
         } else {
@@ -982,7 +982,7 @@ func (p *MyServicePlugin) OnSessionReady(ctx plugin_sdk.Context) {
 
     // 1. Warm up Service API connection
     if ai_studio_sdk.IsInitialized() {
-        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        _, err := ai_studio_sdk.GetLicenseInfo(context.Background()) // needs no service scope
         if err != nil {
             log.Printf("Service API warmup failed: %v", err)
         } else {

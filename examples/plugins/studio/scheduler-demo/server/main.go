@@ -51,7 +51,8 @@ func (p *SchedulerDemoPlugin) OnSessionReady(ctx plugin_sdk.Context) {
 		// Studio runtime: Use AI Studio SDK
 		if ai_studio_sdk.IsInitialized() {
 			log.Printf("scheduler-demo: Warming up Studio Service API connection...")
-			_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+			// GetLicenseInfo needs no service scope, unlike ListPlugins (plugins.read).
+			_, err := ai_studio_sdk.GetLicenseInfo(context.Background())
 			if err != nil {
 				log.Printf("scheduler-demo: Studio Service API warmup failed: %v", err)
 			} else {

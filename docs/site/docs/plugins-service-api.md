@@ -72,7 +72,7 @@ func (p *MyPlugin) OnSessionReady(ctx plugin_sdk.Context) {
     // Eagerly establish the broker connection by making a lightweight API call.
     // This ensures the connection is ready before any RPC calls come in.
     if ai_studio_sdk.IsInitialized() {
-        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        _, err := ai_studio_sdk.GetLicenseInfo(context.Background()) // needs no service scope
         if err != nil {
             log.Printf("Service API warmup failed: %v", err)
         } else {
@@ -1189,6 +1189,8 @@ log.Printf("Plugin: %s - Hook: %s", plugin.Name, plugin.HookType)
 ```
 
 ### Get Plugins Count
+
+Calls `ListPlugins`, so the plugin needs the `plugins.read` service scope.
 
 ```go
 func GetPluginsCount(ctx context.Context) (int64, error)
