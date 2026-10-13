@@ -46,6 +46,10 @@ func (a *API) createLLM(c *gin.Context) {
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeLLM, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
+	if !requireSecretReadForCredentials(c, nil, llmCredentialFields(input.Data.Attributes.APIKey,
+		input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)) {
+		return
+	}
 
 	// Creating a provider already active is the publish action on llms, and
 	// needs every "required to publish" metadata field.
@@ -228,6 +232,11 @@ func (a *API) updateLLM(c *gin.Context) {
 	// values rather than pointers, meant an omitted field arrived as its zero
 	// value and was written -- so {"filters":[3]} wiped the provider.
 	mergeLLMPatch(&input, thisLLM, llmPatchAttributeKeys(rawBody))
+	if !requireSecretReadForCredentials(c,
+		llmCredentialFields(thisLLM.APIKey, thisLLM.APIEndpoint, thisLLM.Metadata),
+		llmCredentialFields(input.Data.Attributes.APIKey, input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)) {
+		return
+	}
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}

@@ -71,6 +71,7 @@ func guardrailTestBody(filterID uint, config map[string]interface{}) FilterTestI
 func TestFilterTestEndpoint_SecretReferencesOnlyReachTheSavedEndpoint(t *testing.T) {
 	api, _ := setupTestAPI(t)
 	t.Setenv("GUARD_TEST_CLASSIFIER_KEY", "the-real-key")
+	t.Setenv("AI_STUDIO_ENV_REF_ALLOWLIST", "GUARD_TEST_CLASSIFIER_KEY") // $ENV/ resolves only listed names
 
 	saved := newRecordingClassifier(t)
 	attacker := newRecordingClassifier(t)

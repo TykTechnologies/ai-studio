@@ -31,6 +31,12 @@ func GetSecretReference(name string) string {
 	return fmt.Sprintf("$SECRET/%s", name)
 }
 
+// GetValue resolves a $SECRET/NAME or $ENV/NAME reference; any other value
+// is returned as is. With preserveRef, references are returned unchanged
+// (for API responses, and for edits that save the value back). $ENV/NAME
+// resolves only when EnvRefAllowed(NAME): the operator lists it in
+// AI_STUDIO_ENV_REF_ALLOWLIST. Otherwise the reference is returned
+// unchanged, so the variable's value never leaves the process.
 func GetValue(reference string, preserveRef bool) string {
 	if !strings.HasPrefix(reference, "$") {
 		return reference
@@ -49,6 +55,9 @@ func GetValue(reference string, preserveRef bool) string {
 
 	switch loc {
 	case "$ENV":
+		if preserveRef || !EnvRefAllowed(name) {
+			return reference
+		}
 		return os.Getenv(name)
 	case "$SECRET":
 		// If we're already dealing with a secret reference and preserveRef is true

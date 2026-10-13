@@ -42,10 +42,13 @@ The Secrets Management system aims to:
     ```
     $ENV/VARIABLE_NAME
     ```
-    Replace `VARIABLE_NAME` with an environment variable name (e.g., `$ENV/MY_API_KEY`). This retrieves the value directly from the server's environment variables at runtime. This is useful for:
-    - Kubernetes secrets mounted as environment variables
-    - Docker Compose environment configurations
-    - CI/CD pipelines where secrets are injected via environment
+    Replace `VARIABLE_NAME` with an environment variable name (e.g., `$ENV/MY_API_KEY`). This reads the value from AI Studio's environment at runtime, **but only for names the operator lists** in `AI_STUDIO_ENV_REF_ALLOWLIST`, a comma-separated list that is empty by default. AI Studio's environment also holds its own secrets, such as the encryption key and the database URL. An `$ENV/` reference to a name that isn't listed is never resolved: it stays as written, and nothing is sent in its place. List only the variables you inject for this purpose, for example Kubernetes secrets mounted as environment variables, or values provided by a vault agent or CI/CD pipeline. The list can't include itself.
+
+    Store credentials in the secret store (`$SECRET/`) unless an external tool provides them through the environment.
+
+*   **Who may write a reference:** Adding a `$SECRET/` or `$ENV/` reference to an LLM (API key, endpoint or metadata), a tool's auth key, a datasource's connection fields or an embedder needs read access to secrets (`secrets:read`). This also applies to changing one. The value is resolved and sent to the endpoint the writer configures. Editing an object and keeping its stored references needs nothing extra. Contributor submissions and plugins may not set references at all: they are refused with `400` and `InvalidArgument`.
+
+*   **Edge gateways** never resolve references themselves. AI Studio resolves what the policy allows into the configuration it pushes. If AI Studio refuses a reference in a key or token, edges receive the placeholder `refused-credential-reference` instead. The provider rejects it, and the edge never substitutes a key from its own environment. A refused endpoint or connection string reaches edges as a bare `$ENV/`, which resolves to nothing.
 
 *   **Runtime Resolution:** When a configuration uses a field containing a secret reference (e.g., `$SECRET/MY_KEY`):
     1.  The configuration itself stores the `$SECRET/MY_KEY` string, *not* the actual secret value.

@@ -19,8 +19,21 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
+	config.TestMode = false
 	authService := apitest.SetupTestAuthService(db, service)
+	authService.Config.TestMode = false
 	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+
+	// Writing $SECRET/ references needs secrets read: an administrator.
+	admin := models.NewUser()
+	admin.Email = "admin@tyk.io"
+	admin.Name = "Admin"
+	admin.Password = "hash"
+	admin.IsAdmin = true
+	admin.EmailVerified = true
+	if err := admin.Create(db); err != nil {
+		t.Fatal(err)
+	}
 
 	// Initialize secrets package with DB reference
 	secrets.SetDBRef(db)
@@ -64,10 +77,10 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 		},
 	}
 
-	w := apitest.PerformRequest(a.Router(), "POST", "/api/v1/secrets", secretInput1)
+	w := apitest.PerformAuthRequest(a.Router(), "POST", "/api/v1/secrets", secretInput1, admin.APIKey)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
-	w = apitest.PerformRequest(a.Router(), "POST", "/api/v1/secrets", secretInput2)
+	w = apitest.PerformAuthRequest(a.Router(), "POST", "/api/v1/secrets", secretInput2, admin.APIKey)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	// Create a datasource that references these secrets
@@ -141,7 +154,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 		},
 	}
 
-	w = apitest.PerformRequest(a.Router(), "POST", "/api/v1/datasources", createDatasourceInput)
+	w = apitest.PerformAuthRequest(a.Router(), "POST", "/api/v1/datasources", createDatasourceInput, admin.APIKey)
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var response map[string]DatasourceResponse
@@ -156,7 +169,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	dsID := response["data"].ID
 
 	// Test Get Datasource - verify secret references are redacted in API response
-	w = apitest.PerformRequest(a.Router(), "GET", fmt.Sprintf("/api/v1/datasources/%s", dsID), nil)
+	w = apitest.PerformAuthRequest(a.Router(), "GET", fmt.Sprintf("/api/v1/datasources/%s", dsID), nil, admin.APIKey)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var getDSResponse map[string]DatasourceResponse
@@ -171,7 +184,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	updateDSInput := createDatasourceInput
 	updateDSInput.Data.Attributes.Name = "Updated Test Datasource"
 
-	w = apitest.PerformRequest(a.Router(), "PATCH", fmt.Sprintf("/api/v1/datasources/%s", dsID), updateDSInput)
+	w = apitest.PerformAuthRequest(a.Router(), "PATCH", fmt.Sprintf("/api/v1/datasources/%s", dsID), updateDSInput, admin.APIKey)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var updateResponse map[string]DatasourceResponse
@@ -183,7 +196,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	assert.True(t, updateResponse["data"].Attributes.HasEmbedAPIKey)
 
 	// Test Search Datasources - verify secret references are redacted in API response
-	w = apitest.PerformRequest(a.Router(), "GET", "/api/v1/datasources/search?query=Test", nil)
+	w = apitest.PerformAuthRequest(a.Router(), "GET", "/api/v1/datasources/search?query=Test", nil, admin.APIKey)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var searchResponse map[string][]DatasourceResponse

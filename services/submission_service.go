@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	neturl "net/url"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // Input length limits for submission fields
@@ -78,6 +80,10 @@ func validateSubmissionInput(
 		return err
 	}
 
+	if err := refuseSubmissionReferences(resourcePayload); err != nil {
+		return err
+	}
+
 	// Resource payload size (configurable via MAX_RESOURCE_PAYLOAD_SIZE env var)
 	if resourcePayload != nil {
 		payloadBytes, err := json.Marshal(resourcePayload)
@@ -93,6 +99,45 @@ func validateSubmissionInput(
 		}
 	}
 
+	return nil
+}
+
+// ErrSubmissionReference refuses a submission whose payload holds a $SECRET/
+// or $ENV/ reference.
+var ErrSubmissionReference = errors.New("submissions may not contain $SECRET/ or $ENV/ references")
+
+// refuseSubmissionReferences refuses a payload holding a $SECRET/ or $ENV/
+// reference anywhere. Once approved, the resource would resolve it and send
+// the value to the endpoint the contributor submitted: credentials go in as
+// plain values, and an administrator can move them to the secret store.
+func refuseSubmissionReferences(payload map[string]interface{}) error {
+	var walk func(v interface{}) bool
+	walk = func(v interface{}) bool {
+		switch x := v.(type) {
+		case string:
+			return secrets.IsReference(x)
+		case map[string]interface{}:
+			for _, e := range x {
+				if walk(e) {
+					return true
+				}
+			}
+		case models.JSONMap:
+			return walk(map[string]interface{}(x))
+		case []interface{}:
+			for _, e := range x {
+				if walk(e) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for k, v := range payload {
+		if walk(v) {
+			return fmt.Errorf("%w (field %s)", ErrSubmissionReference, k)
+		}
+	}
 	return nil
 }
 
@@ -415,6 +460,11 @@ func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, fi
 
 	if submission.Status != models.SubmissionStatusInReview && submission.Status != models.SubmissionStatusSubmitted {
 		return nil, fmt.Errorf("can only approve submissions in '%s' or '%s' status", models.SubmissionStatusInReview, models.SubmissionStatusSubmitted)
+	}
+
+	// Submissions saved before references were refused are checked again.
+	if err := refuseSubmissionReferences(submission.ResourcePayload); err != nil {
+		return nil, err
 	}
 
 	if submission.ResourceType == models.SubmissionResourceTypeMCPServer {

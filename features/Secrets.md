@@ -92,7 +92,7 @@ graph LR
 *   **Encryption:** AES-GCM using `TYK_AI_SECRET_KEY`. Encryption occurs on create/update, decryption on retrieval via `GetValue` (when `preserveRef` is false).
 *   **Reference Format & Resolution:**
     *   `$SECRET/VarName`: Resolved by looking up `VarName` in the `secrets` table, decrypting the value.
-    *   `$ENV/VarName`: Resolved using `os.Getenv(VarName)`.
+    *   `$ENV/VarName`: Resolved using `os.Getenv(VarName)`, only when `VarName` is listed in `AI_STUDIO_ENV_REF_ALLOWLIST` (empty by default; `secrets.EnvRefAllowed`, `secrets/refpolicy.go`). `GetValue` applies this itself, so every resolve path follows it; `preserveRef` keeps `$ENV/` references as well as `$SECRET/` ones. Writing a new or changed reference needs `secrets:read` (`api.requireSecretReadForCredentials`), submissions and plugin gRPC writes refuse them, snapshot fields go through `secrets.ForEdge` (endpoints, connection strings: a refused reference becomes a bare `$ENV/`) or `secrets.ForEdgeCredential` (keys, tokens, metadata, guardrail connections: it becomes the non-empty `secrets.RefusedCredential`, so no vendor client substitutes its own environment's key), and edges call `secrets.DisableEnvRefs()` at startup.
     *   `secrets.GetValue(reference, preserveRef)`: Central function for resolution. `preserveRef=true` returns the reference string itself, `preserveRef=false` returns the actual resolved value.
     *   API responses for secrets generally use `preserveRef=true` (showing `$SECRET/VarName`).
     *   Internal consumers (like providers) use `preserveRef=false` to get the actual secret.

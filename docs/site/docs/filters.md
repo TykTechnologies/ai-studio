@@ -665,7 +665,7 @@ Anyone who can create or edit a filter then controls the host. Leave it unset. N
 
 `tyk.makeHTTPRequest` follows the same outbound policy as LLM upstreams: only `http` and `https`, the `LLM_UPSTREAM_ALLOWED_HOSTS` allowlist when set, and internal-address blocking at dial time when `LLM_UPSTREAM_BLOCK_INTERNAL=true` (with `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` for in-cluster classifiers). Redirects are checked against the same policy.
 
-`tyk.llm` resolves the target LLM's credential the way the gateway does, so an LLM whose key is stored as a `$SECRET/...` or `$ENV/...` reference works from a script.
+`tyk.llm` resolves the target LLM's credential the way the gateway does, so an LLM whose key is stored as a `$SECRET/...` reference, or as an `$ENV/...` reference to a variable listed in `AI_STUDIO_ENV_REF_ALLOWLIST`, works from a script.
 
 Scripts are compiled once and cached; each execution runs on its own copy, so runs never share state. The script's `input` is passed to the cached program at run time. The script-scoped context is also tied to the request or chat session that triggered the filter, so a caller that disconnects does not leave a script running.
 
