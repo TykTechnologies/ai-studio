@@ -405,6 +405,38 @@ func TestGuardrailRunner_ResolvesConnectionReferences(t *testing.T) {
 	}
 }
 
+// $ENV/ in a connection only resolves variables set for guardrails. A saved
+// filter naming AI Studio's own settings (TYK_AI_SECRET_KEY, DATABASE_URL)
+// never builds a provider with them, nor with the literal reference: the
+// filter errors and its fail mode applies.
+func TestGuardrailRunner_DoesNotResolveStudioEnv(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "studio-encryption-key")
+	built := false
+	guardrails.RegisterSpec(guardrails.Spec{
+		Name: "fake_env", DisplayName: "fake_env",
+		Detectors:        []guardrails.DetectorSpec{{Name: "secrets"}},
+		ConnectionFields: []guardrails.ConnectionField{{Name: "api_key", Secret: true}},
+	})
+	guardrails.RegisterFactory("fake_env", func(cfg guardrails.Config) (guardrails.Provider, error) {
+		built = true
+		return &fakeProvider{}, nil
+	})
+	f := guardrailFilter("env", false, models.JSONMap{
+		"provider":   "fake_env",
+		"detectors":  []any{map[string]any{"name": "secrets"}},
+		"on_detect":  guardrails.ActionBlock,
+		"fail_mode":  "closed",
+		"connection": map[string]any{"api_key": "$ENV/TYK_AI_SECRET_KEY", "endpoint": "http://x"},
+	})
+	out, err := NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "x", Messages: []llms.MessageContent{userMsg("x")}}, nil)
+	if built {
+		t.Fatal("provider built with a connection naming TYK_AI_SECRET_KEY")
+	}
+	if err == nil && (out == nil || !out.Block) {
+		t.Errorf("fail-closed guardrail with an unresolved reference passed: out=%+v err=%v", out, err)
+	}
+}
+
 func TestGuardrailRunner_MisconfiguredFilterErrors(t *testing.T) {
 	f := guardrailFilter("bad", false, models.JSONMap{"provider": "no_such_provider", "detectors": []any{map[string]any{"name": "x"}}, "on_detect": "block"})
 	if _, err := NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "x"}, nil); err == nil {

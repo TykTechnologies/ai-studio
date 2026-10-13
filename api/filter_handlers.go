@@ -58,6 +58,10 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
+	if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
+		return
+	}
+
 	filter, err := a.service.CreateFilterFromSpec(filterSpecFromInput(input))
 	if err != nil {
 		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
@@ -258,6 +262,14 @@ func (a *API) updateFilter(c *gin.Context) {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Bad Request", msg}}})
+		return
+	}
+
+	if existing, err := a.service.GetFilterByID(uint(id)); err == nil {
+		if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
+			return
+		}
+	} else if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
 		return
 	}
 
