@@ -747,13 +747,17 @@ type ModelPriceInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			ModelName    string  `json:"model_name"`
-			Vendor       string  `json:"vendor"`
-			CPT          float64 `json:"cpt"`
-			CPIT         float64 `json:"cpit"`
+			ModelName string `json:"model_name"`
+			Vendor    string `json:"vendor"`
+			// Price per OUTPUT (completion) token, in currency units per single token (not per million). Values above 0.01 are rejected as a likely per-million figure.
+			CPT float64 `json:"cpt"`
+			// Price per INPUT (prompt) token, in currency units per single token (not per million). Values above 0.01 are rejected as a likely per-million figure.
+			CPIT float64 `json:"cpit"`
+			// Price per token written to the provider's prompt cache, per single token. Values above 0.01 are rejected.
 			CacheWritePT float64 `json:"cache_write_pt"`
-			CacheReadPT  float64 `json:"cache_read_pt"`
-			Currency     string  `json:"currency"`
+			// Price per token read from the provider's prompt cache, per single token. Values above 0.01 are rejected.
+			CacheReadPT float64 `json:"cache_read_pt"`
+			Currency    string  `json:"currency"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -764,13 +768,17 @@ type ModelPriceResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		ModelName    string  `json:"model_name"`
-		Vendor       string  `json:"vendor"`
-		CPT          float64 `json:"cpt"`
-		CPIT         float64 `json:"cpit"`
+		ModelName string `json:"model_name"`
+		Vendor    string `json:"vendor"`
+		// Price per OUTPUT (completion) token, in currency units per single token (not per million).
+		CPT float64 `json:"cpt"`
+		// Price per INPUT (prompt) token, in currency units per single token (not per million).
+		CPIT float64 `json:"cpit"`
+		// Price per token written to the provider's prompt cache, per single token.
 		CacheWritePT float64 `json:"cache_write_pt"`
-		CacheReadPT  float64 `json:"cache_read_pt"`
-		Currency     string  `json:"currency"`
+		// Price per token read from the provider's prompt cache, per single token.
+		CacheReadPT float64 `json:"cache_read_pt"`
+		Currency    string  `json:"currency"`
 	} `json:"attributes"`
 }
 

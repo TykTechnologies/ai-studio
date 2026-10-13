@@ -30564,15 +30564,19 @@ const docTemplate = `{
                             "type": "object",
                             "properties": {
                                 "cache_read_pt": {
+                                    "description": "Price per token read from the provider's prompt cache, per single token. Values above 0.01 are rejected.",
                                     "type": "number"
                                 },
                                 "cache_write_pt": {
+                                    "description": "Price per token written to the provider's prompt cache, per single token. Values above 0.01 are rejected.",
                                     "type": "number"
                                 },
                                 "cpit": {
+                                    "description": "Price per INPUT (prompt) token, in currency units per single token (not per million). Values above 0.01 are rejected as a likely per-million figure.",
                                     "type": "number"
                                 },
                                 "cpt": {
+                                    "description": "Price per OUTPUT (completion) token, in currency units per single token (not per million). Values above 0.01 are rejected as a likely per-million figure.",
                                     "type": "number"
                                 },
                                 "currency": {
@@ -30601,15 +30605,19 @@ const docTemplate = `{
                     "type": "object",
                     "properties": {
                         "cache_read_pt": {
+                            "description": "Price per token read from the provider's prompt cache, per single token.",
                             "type": "number"
                         },
                         "cache_write_pt": {
+                            "description": "Price per token written to the provider's prompt cache, per single token.",
                             "type": "number"
                         },
                         "cpit": {
+                            "description": "Price per INPUT (prompt) token, in currency units per single token (not per million).",
                             "type": "number"
                         },
                         "cpt": {
+                            "description": "Price per OUTPUT (completion) token, in currency units per single token (not per million).",
                             "type": "number"
                         },
                         "currency": {
