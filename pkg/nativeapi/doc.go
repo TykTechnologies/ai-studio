@@ -1,8 +1,8 @@
 // Package nativeapi is the contract between LLM vendors and the native proxy
 // routes (/llm/rest|stream|call/{slug}/...) for SDK-specific endpoints that do
-// not fit the single synchronous "POST with a top-level model" shape: Anthropic
-// Message Batches today, and later OpenAI Files/Batches, Responses IDs and
-// count_tokens.
+// not fit the single synchronous "POST with a top-level model" shape:
+// Anthropic Message Batches and count_tokens, OpenAI Responses ownership and
+// OpenAI Batches and Files.
 //
 // The package is deliberately small and dependency-free: it imports only the
 // standard library and models, never proxy, switches or vendors. Vendor code is
@@ -43,7 +43,15 @@
 //     allow-list query parameters and headers, ErrorShape for vendor-shaped
 //     errors.
 //
-//  5. Test the Spec with NewMatcher (it validates the Spec) and add proxy
+//  5. For calls that stay on the synchronous chain but hand out or name
+//     resource IDs (OpenAI's POST /v1/responses), declare a ChainHook: its
+//     RequestRefs are verified and unwrapped before the filters run, its
+//     ResponseIDs are wrapped in the JSON response and in the EventObject of
+//     every server-sent event, and a created object its async type tracks
+//     (AsyncSpec.Tracked) is ledgered. The vendor's usage analysis must then
+//     skip that object.
+//
+//  6. Test the Spec with NewMatcher (it validates the Spec) and add proxy
 //     harness tests for the end-to-end behaviour.
 //
 // # Signed resource IDs
@@ -53,11 +61,15 @@
 //	<vendor_id>.t1k<kid>.<mac>
 //
 // where mac is a truncated HMAC-SHA256 over the length-prefixed resource type,
-// vendor ID, LLM ID and App ID, keyed by HKDF(vendor credential,
-// "tyk-native-resource/v1"), and kid identifies the key so a rotated key can be
-// told apart from a forgery in logs. Any replica, edge or the hub verifies an
-// ID statelessly. Callers must answer every verification failure with the same
-// 404 so the check is not an oracle.
+// vendor ID, LLM ID and App ID, and kid identifies the key. CodecForLLM keys it
+// with HKDF(the LLM's hub-generated signing secret,
+// "tyk-native-resource/secret/v1") and still accepts the LLM's previous key (a
+// rotated secret, or the vendor-credential key HKDF(credential,
+// "tyk-native-resource/v1") that signed IDs before secrets existed) until its
+// grace period ends; an LLM without a secret signs with the vendor-credential
+// key. Any replica, edge or the hub verifies an ID statelessly. Callers must
+// answer every verification failure with the same 404 so the check is not an
+// oracle.
 //
 // # JSONL results
 //

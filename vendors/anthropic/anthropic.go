@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/httputil"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/anthropic"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
@@ -172,8 +173,20 @@ func (v *Anthropic) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, s
 	return llm, app, aggregate, nil
 }
 
+// Workspace and user-profile headers. The workspace is the LLM's to pin
+// (models.LLM.VendorWorkspaceID); a client never picks it.
+const (
+	headerWorkspaceID   = "anthropic-workspace-id"
+	headerUserProfileID = "anthropic-user-profile-id"
+)
+
 func (v *Anthropic) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 	r.Header.Set("x-api-key", llm.APIKey)
+	r.Header.Del(headerWorkspaceID)
+	r.Header.Del(headerUserProfileID)
+	if llm.VendorWorkspaceID != "" {
+		r.Header.Set(headerWorkspaceID, llm.VendorWorkspaceID)
+	}
 	return nil
 }
 
@@ -244,8 +257,39 @@ func isVersionSegment(seg string) bool {
 	return true
 }
 
+// HTTPDoer is the HTTP client the langchaingo Anthropic driver calls.
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// workspaceDoer sets the LLM's pinned workspace on every driver request.
+type workspaceDoer struct {
+	next      HTTPDoer
+	workspace string
+}
+
+func (d workspaceDoer) Do(r *http.Request) (*http.Response, error) {
+	r.Header.Del(headerUserProfileID)
+	r.Header.Set(headerWorkspaceID, d.workspace)
+	return d.next.Do(r)
+}
+
+// PinWorkspace returns client wrapped so that the langchaingo driver's calls
+// (chat sessions, the translation bridges, semantic routing) run in llm's
+// pinned workspace, as the proxy's calls do (ProxySetAuthHeader). Without a
+// pin it returns client unchanged.
+func PinWorkspace(client HTTPDoer, llm *models.LLM) HTTPDoer {
+	if llm == nil || llm.VendorWorkspaceID == "" {
+		return client
+	}
+	return workspaceDoer{next: client, workspace: llm.VendorWorkspaceID}
+}
+
 func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]anthropic.Option, 0)
+	if connDef.VendorWorkspaceID != "" {
+		opts = append(opts, anthropic.WithHTTPClient(PinWorkspace(httputil.DefaultClient, connDef)))
+	}
 	if baseURL := DriverBaseURL(connDef.APIEndpoint); baseURL != "" {
 		opts = append(opts, anthropic.WithBaseURL(baseURL))
 	}

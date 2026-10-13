@@ -44,6 +44,14 @@ func (r *MessageExtractorRegistry) Extract(vendor string, req *http.Request, bod
 	return extractor.ExtractMessages(req, body)
 }
 
+// FailsClosed reports whether a request the format's extractor cannot read
+// is refused when the LLM has request filters, instead of being screened as
+// an empty prompt.
+func (r *MessageExtractorRegistry) FailsClosed(vendor string) bool {
+	fc, ok := r.extractors[strings.ToLower(vendor)].(interface{ failClosed() bool })
+	return ok && fc.failClosed()
+}
+
 // OpenAIMessageExtractor extracts messages from OpenAI-format requests
 type OpenAIMessageExtractor struct{}
 

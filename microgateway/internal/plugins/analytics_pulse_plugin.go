@@ -374,6 +374,9 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		RequestKind:            req.RequestKind,
 		DecisionQuestions:      req.DecisionQuestions,
 		DecisionRefusals:       req.DecisionRefusals,
+
+		// Vendor service tier the usage was billed at
+		ServiceTier:            req.ServiceTier,
 	}
 
 	// Store metadata for pulse transmission
@@ -882,6 +885,7 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			RequestKind:       event.RequestKind,
 			DecisionQuestions: uint32(event.DecisionQuestions),
 			DecisionRefusals:  uint32(event.DecisionRefusals),
+			ServiceTier:       event.ServiceTier,
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

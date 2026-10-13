@@ -1001,11 +1001,19 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Failover:      string(llm.Failover),
 			AuthMechanism: llm.AuthMechanism,
 			AuthConfig:    string(llm.AuthConfig),
+
+			ResourceSigningSecretEncrypted:     llm.ResourceSigningSecretEncrypted,
+			ResourceSigningSecretPrevEncrypted: llm.ResourceSigningSecretPrevEncrypted,
+			VendorWorkspaceId:                  llm.VendorWorkspaceID,
+			PriceMultipliers:                   string(llm.PriceMultipliers),
 			
 			// Embedded relationship data
 			AppIds:    appIDs,    // Which apps can access this LLM
 			FilterIds: filterIDs, // Which filters apply to this LLM
 			PluginIds: pluginIDs, // Which plugins apply to this LLM
+		}
+		if llm.ResourceSigningPrevExpiresAt != nil {
+			snapshot.Llms[i].ResourceSigningPrevExpiresAt = timestamppb.New(*llm.ResourceSigningPrevExpiresAt)
 		}
 
 		log.Debug().

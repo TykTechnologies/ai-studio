@@ -385,6 +385,14 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			RateLimitRPM:    int(pbLLM.RateLimitRpm),
 			Namespace:       pbLLM.Namespace,
 			DontLogBodies:   pbLLM.DontLogBodies,
+
+			ResourceSigningSecretEncrypted:     pbLLM.ResourceSigningSecretEncrypted,
+			ResourceSigningSecretPrevEncrypted: pbLLM.ResourceSigningSecretPrevEncrypted,
+			VendorWorkspaceID:                  pbLLM.VendorWorkspaceId,
+		}
+		if pbLLM.ResourceSigningPrevExpiresAt != nil {
+			t := pbLLM.ResourceSigningPrevExpiresAt.AsTime()
+			llm.ResourceSigningPrevExpiresAt = &t
 		}
 
 		// Handle JSON fields with proper conversion
@@ -399,6 +407,9 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 		}
 		if pbLLM.Failover != "" {
 			llm.Failover = database.JSON(pbLLM.Failover)
+		}
+		if pbLLM.PriceMultipliers != "" {
+			llm.PriceMultipliers = database.JSON(pbLLM.PriceMultipliers)
 		}
 		if pbLLM.AuthConfig != "" {
 			llm.AuthConfig = database.JSON(pbLLM.AuthConfig)

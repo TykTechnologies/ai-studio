@@ -175,6 +175,8 @@ func (f *fakeBatchAPI) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"claude-luna",` +
 			`"content":[{"type":"text","text":"hi"}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":3}}`))
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/count_tokens":
+		_, _ = w.Write([]byte(`{"input_tokens":42}`))
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages/batches":
 		f.mu.Lock()
 		id := "msgbatch_N" + strconv.Itoa(len(f.batches)+1)
@@ -382,16 +384,26 @@ func (h *nativeHarness) do(key, method, path, body string, headers ...string) (*
 	return resp, out
 }
 
-// wrap mints the ID an App would have been handed for a batch on llm.
+// wrap mints the ID an App would have been handed for a batch on llm, with
+// the LLM's current signing key.
 func (h *nativeHarness) wrap(llm *models.LLM, app *models.App, vendorID string) string {
 	h.t.Helper()
-	return wrapBatchID(h.t, llm.APIKey, llm.ID, app.ID, vendorID)
+	codec, err := nativeapi.CodecForLLM(llm, time.Now())
+	require.NoError(h.t, err)
+	return wrapBatchIDWith(h.t, codec, llm.ID, app.ID, vendorID)
 }
 
+// wrapBatchID mints an ID under the key derived from a vendor credential, as
+// LLMs without a signing secret (and every ID minted before them) do.
 func wrapBatchID(t *testing.T, key string, llmID, appID uint, vendorID string) string {
 	t.Helper()
 	codec, err := nativeapi.NewCodec(key)
 	require.NoError(t, err)
+	return wrapBatchIDWith(t, codec, llmID, appID, vendorID)
+}
+
+func wrapBatchIDWith(t *testing.T, codec *nativeapi.Codec, llmID, appID uint, vendorID string) string {
+	t.Helper()
 	rt, ok := (&anthropicVendor.Anthropic{}).NativeAPI().Resource(anthropicVendor.ResourceMessageBatch)
 	require.True(t, ok)
 	id, err := codec.Wrap(rt, vendorID, nativeapi.Scope{LLMID: llmID, AppID: appID})

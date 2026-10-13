@@ -33,6 +33,8 @@ type NativeResourceStore interface {
 	// GetByOwner returns the row of vendorID if it was created by appID on
 	// llmID, else ErrNativeResourceNotFound.
 	GetByOwner(ctx context.Context, llmID, appID uint, resourceType, vendorID string) (*models.NativeResource, error)
+	// Get returns the row with id, else ErrNativeResourceNotFound.
+	Get(ctx context.Context, id uint) (*models.NativeResource, error)
 	// List returns an App's rows of one type on one LLM, newest first, one
 	// keyset page at a time.
 	List(ctx context.Context, q NativeResourceListQuery) ([]models.NativeResource, error)
@@ -155,6 +157,18 @@ func (st *gormNativeResourceStore) GetByOwner(ctx context.Context, llmID, appID 
 	err := st.read.WithContext(ctx).
 		Where("llm_id = ? AND resource_type = ? AND vendor_resource_id = ? AND app_id = ?", llmID, resourceType, vendorID, appID).
 		Take(&r).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNativeResourceNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (st *gormNativeResourceStore) Get(ctx context.Context, id uint) (*models.NativeResource, error) {
+	var r models.NativeResource
+	err := st.read.WithContext(ctx).Where("id = ?", id).Take(&r).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNativeResourceNotFound
 	}

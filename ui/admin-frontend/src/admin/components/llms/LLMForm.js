@@ -71,6 +71,13 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import LLMFailoverSection, { validateFailover } from "./LLMFailoverSection";
 import { listAll } from "../../utils/listAll";
 import BudgetField from "../common/BudgetField";
+import LLMPriceMultipliersField, {
+  rowsFromPriceMultipliers,
+  validatePriceMultipliers,
+} from "./LLMPriceMultipliersField";
+
+// Mirrors the server's vendor_workspace_id rule.
+const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -98,11 +105,17 @@ const LLMForm = () => {
     plugins: [], // Added for plugin assignment
     dont_log_bodies: false, // When true, request/response bodies are not stored in logs
     failover: null, // Ordered waterfall of {llm_id, model} fallbacks; null = none
+    vendor_workspace_id: "", // Anthropic only: pins every call to this workspace
   });
   const [vendors, setVendors] = useState([]);
   // Every other LLM, for the failover picker (id, name, allowed models...).
   const [availableLLMs, setAvailableLLMs] = useState([]);
   const [failoverErrors, setFailoverErrors] = useState({});
+  // Price multiplier overrides, edited as {tier, value} rows and sent as
+  // attributes.price_multipliers (a map, or null for none).
+  const [priceMultiplierRows, setPriceMultiplierRows] = useState([]);
+  const [priceMultiplierErrors, setPriceMultiplierErrors] = useState({});
+  const [priceMultiplierServerError, setPriceMultiplierServerError] = useState("");
   // Governed metadata (Enterprise): values live beside the object and are
   // sent as attributes.governed_metadata; 422 field errors map back here.
   const [governedMetadata, setGovernedMetadata] = useState({});
@@ -281,8 +294,10 @@ const LLMForm = () => {
         plugins: pluginsData.map((plugin) => plugin.id.toString()),
         dont_log_bodies: llmData.dont_log_bodies || false,
         failover: llmData.failover?.targets?.length ? llmData.failover : null,
+        vendor_workspace_id: llmData.vendor_workspace_id || "",
       });
       setOriginalName(llmData.name);
+      setPriceMultiplierRows(rowsFromPriceMultipliers(llmData.price_multipliers));
       setGovernedMetadata(llmResponse.data.data.governed_metadata || {});
 
       // Extract AWS Bedrock credentials from metadata if vendor is bedrock
@@ -394,12 +409,20 @@ const LLMForm = () => {
     if (!llm.vendor.trim()) newErrors.vendor = "Vendor is required";
     if (!isValidPrivacyScore(llm.privacy_score))
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
+    if (llm.vendor === "anthropic" && llm.vendor_workspace_id && !WORKSPACE_ID_PATTERN.test(llm.vendor_workspace_id))
+      newErrors.vendor_workspace_id = "Anthropic workspace ID must be 1-128 letters, digits, '_' or '-'";
     // Mirror the server's waterfall rules so a bad rung is named here first.
     const llmsById = Object.fromEntries(availableLLMs.map((l) => [String(l.id), l]));
     const nextFailoverErrors = validateFailover(llm.failover, llmsById, llm);
     setFailoverErrors(nextFailoverErrors);
     if (Object.keys(nextFailoverErrors).length > 0) {
       newErrors.failover = "Fix the failover targets";
+    }
+    const { rowErrors: nextPriceErrors } = validatePriceMultipliers(priceMultiplierRows);
+    setPriceMultiplierErrors(nextPriceErrors);
+    setPriceMultiplierServerError("");
+    if (Object.keys(nextPriceErrors).length > 0) {
+      newErrors.price_multipliers = "Fix the price multipliers";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -447,6 +470,10 @@ const LLMForm = () => {
           filters: llm.filters.map((filterId) => parseInt(filterId, 10)),
           metadata: metadata,
           governed_metadata: governedMetadata,
+          // Only Anthropic uses the pin; switching vendor away clears it.
+          vendor_workspace_id: llm.vendor === "anthropic" ? llm.vendor_workspace_id : "",
+          // The whole map replaces the stored one; null removes every override.
+          price_multipliers: validatePriceMultipliers(priceMultiplierRows).map,
           // An empty waterfall is sent as null so a PATCH clears it.
           failover: llm.failover?.targets?.length
             ? {
@@ -502,6 +529,16 @@ const LLMForm = () => {
       const detail = error.response?.data?.errors?.[0]?.detail;
       if (error.response?.status === 400 && detail && detail.startsWith("failover")) {
         setFailoverErrors({ _: detail });
+        setSnackbar({ open: true, message: detail, severity: "error" });
+        return;
+      }
+      if (error.response?.status === 400 && detail && detail.startsWith("price_multipliers")) {
+        setPriceMultiplierServerError(detail);
+        setSnackbar({ open: true, message: detail, severity: "error" });
+        return;
+      }
+      if (error.response?.status === 400 && detail && detail.startsWith("vendor_workspace_id")) {
+        setErrors((prev) => ({ ...prev, vendor_workspace_id: detail }));
         setSnackbar({ open: true, message: detail, severity: "error" });
         return;
       }
@@ -747,6 +784,23 @@ const LLMForm = () => {
                         }}
                       />
                     </Grid>
+                    {llm.vendor === "anthropic" && (
+                      <Grid item xs={12}>
+                        <TextField
+                          fullWidth
+                          label="Anthropic workspace ID"
+                          name="vendor_workspace_id"
+                          value={llm.vendor_workspace_id || ""}
+                          onChange={handleChange}
+                          placeholder="wrkspc_01..."
+                          error={!!errors.vendor_workspace_id}
+                          helperText={
+                            errors.vendor_workspace_id ||
+                            "Optional. Pins every call for this LLM (gateway calls, batches and Chat sessions) to this workspace; client-supplied workspace headers are ignored. Leave empty to use the API key's default workspace."
+                          }
+                        />
+                      </Grid>
+                    )}
                   </Grid>
                 </>
               )}
@@ -779,6 +833,15 @@ const LLMForm = () => {
                   />
                 </Grid>
               </Grid>
+            </Grid>
+            <Grid item xs={12}>
+              <LLMPriceMultipliersField
+                vendor={llm.vendor}
+                rows={priceMultiplierRows}
+                onChange={setPriceMultiplierRows}
+                rowErrors={priceMultiplierErrors}
+                serverError={priceMultiplierServerError}
+              />
             </Grid>
             <Grid item xs={12}>
               {/* One privacy control everywhere (UX review M4): a named level

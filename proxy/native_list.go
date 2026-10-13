@@ -26,12 +26,20 @@ import (
 // A delete reaches the vendor only once this node's ledger shows the
 // resource settled, so deleting it cannot be used to dodge its accounting:
 // on the creating node an unsettled resource is accounted first; any other
-// node refuses (it cannot account a resource it did not create).
+// node refuses (it cannot account a resource it did not create). A type that
+// tracks only some of its objects (AsyncSpec.Tracked: OpenAI ledgers only
+// background responses) is deletable without a ledger row when the vendor's
+// object is one it does not track.
 
-const (
-	nativeDeleteNotOwnedMsg  = "this batch can only be deleted through the gateway that created it, once its usage has been accounted"
-	nativeDeleteUnsettledMsg = "this batch cannot be deleted until it has ended and its usage has been accounted; retry once it has ended"
-)
+// nativeDeleteNotOwnedMsg and nativeDeleteUnsettledMsg are the 409 answers
+// for a resource of type rt.
+func nativeDeleteNotOwnedMsg(rt nativeapi.ResourceType) string {
+	return "this " + nativeNoun(rt.Name) + " can only be deleted through the gateway that created it, once its usage has been accounted"
+}
+
+func nativeDeleteUnsettledMsg(rt nativeapi.ResourceType) string {
+	return "this " + nativeNoun(rt.Name) + " cannot be deleted until it has ended and its usage has been accounted; retry once it has ended"
+}
 
 // listedResource is the resource type a listing operation pages through.
 func (c *nativeCall) listedResource() (nativeapi.ResourceType, bool) {
@@ -198,7 +206,9 @@ func (c *nativeCall) serveDelete(w http.ResponseWriter, path string, body []byte
 	ctx := context.WithoutCancel(c.r.Context())
 	row, err := c.store.GetByOwner(ctx, c.nr.llm.ID, c.app.ID, rt.Name, c.vendorID)
 	if errors.Is(err, services.ErrNativeResourceNotFound) {
-		c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteNotOwnedMsg)
+		if c.untrackedAtVendor(w, ctx, rt) {
+			c.forward(w, path, body)
+		}
 		return
 	}
 	if err != nil {
@@ -208,7 +218,7 @@ func (c *nativeCall) serveDelete(w http.ResponseWriter, path string, body []byte
 	}
 	if !models.NativeAccountingTerminal(row.AccountingState) {
 		if rt.Async == nil {
-			c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteUnsettledMsg)
+			c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteUnsettledMsg(rt))
 			return
 		}
 		c.accountBeforeDelete(ctx, row)
@@ -224,9 +234,13 @@ func (c *nativeCall) serveDelete(w http.ResponseWriter, path string, body []byte
 			return
 		}
 		if !models.NativeAccountingTerminal(row.AccountingState) {
-			c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteUnsettledMsg)
+			c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteUnsettledMsg(rt))
 			return
 		}
+	}
+
+	if row.ParentID != nil && !c.parentSettled(w, ctx, rt, *row.ParentID) {
+		return
 	}
 
 	c.forward(w, path, body)
@@ -244,6 +258,61 @@ func (c *nativeCall) serveDelete(w http.ResponseWriter, path string, body []byte
 		}
 	}
 	slog.Warn("native delete: ledger row not removed", "row", row.ID, "error", err)
+}
+
+// parentSettled reports whether the parent of a child resource (the batch
+// an output file belongs to) is accounted, accounting it first if it ended:
+// deleting the output file of an unaccounted batch would leave its usage
+// unreadable. A parent no longer in the ledger was settled and swept.
+// Otherwise it has answered the client.
+func (c *nativeCall) parentSettled(w http.ResponseWriter, ctx context.Context, rt nativeapi.ResourceType, parentID uint) bool {
+	for attempt := 0; ; attempt++ {
+		parent, err := c.store.Get(ctx, parentID)
+		if errors.Is(err, services.ErrNativeResourceNotFound) {
+			return true
+		}
+		if err != nil {
+			c.fail(w, http.StatusServiceUnavailable, nativeErrAPI, "the gateway could not read its resource ledger")
+			return false
+		}
+		if models.NativeAccountingTerminal(parent.AccountingState) {
+			return true
+		}
+		if attempt > 0 {
+			c.fail(w, http.StatusConflict, nativeErrInvalidRequest, fmt.Sprintf(
+				"this %s cannot be deleted until the %s it belongs to has ended and its usage has been accounted; retry once it has ended",
+				nativeNoun(rt.Name), nativeNoun(parent.ResourceType)))
+			return false
+		}
+		c.accountBeforeDelete(ctx, parent)
+	}
+}
+
+// untrackedAtVendor reports, for a resource this node has no ledger row of,
+// whether it may be deleted anyway: its type tracks only some objects and the
+// vendor's object is not one of them (a response created without
+// background), or the vendor no longer knows it (the delete then gets the
+// vendor's own 404). Otherwise it has answered the client.
+func (c *nativeCall) untrackedAtVendor(w http.ResponseWriter, ctx context.Context, rt nativeapi.ResourceType) bool {
+	if rt.Async == nil || rt.Async.Tracked == nil || rt.Async.Poll == nil {
+		c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteNotOwnedMsg(rt))
+		return false
+	}
+	status, obj, err := c.p.nativeFetch(ctx, c.nr.llm, rt.Async.Poll(c.vendorID))
+	switch {
+	case err != nil:
+		c.fail(w, upstreamTransportStatus(err), nativeErrAPI, "failed to make upstream request")
+		return false
+	case status == http.StatusNotFound:
+		return true
+	case status < 200 || status >= 300:
+		c.fail(w, http.StatusBadGateway, nativeErrAPI, fmt.Sprintf("upstream answered %d", status))
+		return false
+	case rt.Async.IsTracked(obj):
+		c.fail(w, http.StatusConflict, nativeErrInvalidRequest, nativeDeleteNotOwnedMsg(rt))
+		return false
+	}
+	return true
 }
 
 // accountBeforeDelete tries to settle row (on its creating node) before a

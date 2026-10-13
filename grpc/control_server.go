@@ -1186,6 +1186,10 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			kind := models.RequestKind(event.RequestKind)
 			proxyLogs[i].RequestKind = kind
 			chatRecords[i].RequestKind = kind
+			// Vendor service tier (batch, priority...): the cost already has
+			// the tier's multiplier; the tier lets analytics break it down.
+			proxyLogs[i].ServiceTier = event.ServiceTier
+			chatRecords[i].ServiceTier = event.ServiceTier
 			if kind == models.DecisionRequest {
 				chatRecords[i].Choices = int(event.Choices)
 				chatRecords[i].DecisionQuestions = int(event.DecisionQuestions)
@@ -1600,6 +1604,23 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			continue
 		}
 
+		// The native API resource signing keys travel encrypted the same way.
+		signing := llm.ResourceSigningKeys()
+		encryptedSigningSecret, err := s.encryptForMicrogateway(signing.Secret)
+		if err != nil {
+			logger.Log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt LLM resource signing secret - excluding LLM from snapshot")
+			continue
+		}
+		encryptedSigningPrev, err := s.encryptForMicrogateway(signing.Previous)
+		if err != nil {
+			logger.Log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt LLM resource signing secret - excluding LLM from snapshot")
+			continue
+		}
+		var signingPrevExpiresAt *timestamppb.Timestamp
+		if signing.Previous != "" && signing.PreviousExpiresAt != nil {
+			signingPrevExpiresAt = timestamppb.New(*signing.PreviousExpiresAt)
+		}
+
 		// Resolve secret references in metadata and serialize to JSON string
 		var metadataJSON string
 		if llm.Metadata != nil {
@@ -1621,6 +1642,15 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if len(llm.AllowedModels) > 0 {
 			if allowedModelsBytes, err := json.Marshal(llm.AllowedModels); err == nil {
 				allowedModelsJSON = string(allowedModelsBytes)
+			}
+		}
+
+		// Price multiplier overrides: the edge prices its own usage, so it
+		// needs them. Empty when none, like the waterfall.
+		var priceMultipliersJSON string
+		if len(llm.PriceMultipliers) > 0 {
+			if b, err := json.Marshal(llm.PriceMultipliers); err == nil {
+				priceMultipliersJSON = string(b)
 			}
 		}
 
@@ -1653,6 +1683,11 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Failover:         failoverJSON,
 			Namespace:        llm.Namespace,
 			DontLogBodies:    llm.DontLogBodies,
+			ResourceSigningSecretEncrypted:     encryptedSigningSecret,
+			ResourceSigningSecretPrevEncrypted: encryptedSigningPrev,
+			ResourceSigningPrevExpiresAt:       signingPrevExpiresAt,
+			VendorWorkspaceId:                  llm.VendorWorkspaceID,
+			PriceMultipliers:                   priceMultipliersJSON,
 			FilterIds:        filterIDs,
 			PluginIds:        llmPluginOrder[llm.ID],
 			CreatedAt:        timestamppb.New(llm.CreatedAt),

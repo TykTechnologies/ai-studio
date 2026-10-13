@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 )
@@ -144,7 +143,30 @@ var nativeSpec = nativeapi.Spec{
 			Upstream:     nativeapi.UpstreamSpec{HeaderAllow: nativeHeaderAllow, QueryAllow: nativeQueryAllow},
 			ErrorShape:   NativeError,
 		},
+		{
+			// Claude Code counts tokens before most turns. The body is one
+			// Messages request: its model is checked against the allow-list
+			// and the request filters run on it, then it is forwarded and
+			// logged without a chat record (counting is free).
+			Name:       "anthropic.messages.count_tokens",
+			Method:     http.MethodPost,
+			Path:       "/v1/messages/count_tokens",
+			Ledger:     nativeapi.LedgerNone,
+			Budget:     true,
+			Admit:      &nativeapi.AdmitSpec{Split: splitCountTokens, Join: joinSingle},
+			Upstream:   nativeapi.UpstreamSpec{HeaderAllow: nativeHeaderAllow, QueryAllow: nativeQueryAllow},
+			ErrorShape: NativeError,
+		},
 	},
+	ChainHooks: &nativeapi.ChainHooks{Hooks: []nativeapi.ChainHook{{
+		// The synchronous Messages call: a body with duplicate keys at any
+		// depth is refused before the model check and the filters read it.
+		Name:       "anthropic.messages",
+		Method:     http.MethodPost,
+		Path:       "/v1/messages",
+		CheckBody:  checkMessagesKeys,
+		ErrorShape: NativeError,
+	}}},
 }
 
 // NativeAPI implements nativeapi.Provider: Anthropic's Message Batches API on
@@ -227,6 +249,41 @@ func NativeError(status int, typ, msg string) []byte {
 	return b
 }
 
+// messagesFoldPaths are the objects of a Messages request the gateway decodes
+// into Go structs, whose fields encoding/json matches case-insensitively:
+// the request (the filter extractor, the stream check), each message, and
+// tool_choice. Case variants of a key are refused there; everywhere else
+// (tool schemas, tool_use inputs, metadata) only exact duplicates are.
+var messagesFoldPaths = []string{"", "messages[]", "tool_choice"}
+
+// checkMessagesKeys refuses a Messages request with duplicate keys the
+// gateway and Anthropic could read differently (nativeapi.CheckJSONKeys).
+func checkMessagesKeys(body []byte) error {
+	return nativeapi.CheckJSONKeys(body, messagesFoldPaths...)
+}
+
+// errCountTokensBody is a count_tokens body that is not a well-formed
+// Messages request.
+var errCountTokensBody = errors.New("invalid count_tokens body")
+
+// splitCountTokens admits a count_tokens body as one item: a Messages request
+// with a model and no duplicate keys at any depth.
+func splitCountTokens(body []byte) ([]nativeapi.Item, error) {
+	model, err := messagesModel(body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errCountTokensBody, err)
+	}
+	return []nativeapi.Item{{Format: "anthropic", Model: model, Body: body}}, nil
+}
+
+// joinSingle is the body of a single-item operation after the filters.
+func joinSingle(_ []byte, items []nativeapi.Item) ([]byte, error) {
+	if len(items) != 1 {
+		return nil, fmt.Errorf("%d items for a single-body request", len(items))
+	}
+	return items[0].Body, nil
+}
+
 // batchItemSpan is one request of a batch create body: its custom_id, the
 // model its params ask for, and where its params object sits in the body.
 type batchItemSpan struct {
@@ -281,10 +338,19 @@ func joinBatch(original []byte, items []nativeapi.Item) ([]byte, error) {
 
 // batchItemSpans parses a create body. Duplicate keys are refused wherever
 // the gateway reads a value the vendor also reads (requests, custom_id,
-// params, and the params' own top-level keys such as model and messages):
-// JSON parsers disagree on which duplicate wins, so a duplicate could show
-// the gateway's checks one model or prompt and the vendor another.
+// params, and everything inside params, at any depth): JSON parsers disagree
+// on which duplicate wins, so a duplicate could show the gateway's checks or
+// filters one model or prompt and the vendor another. Every error wraps
+// errBatchBody once.
 func batchItemSpans(body []byte) ([]batchItemSpan, error) {
+	spans, err := parseBatch(body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errBatchBody, err)
+	}
+	return spans, nil
+}
+
+func parseBatch(body []byte) ([]batchItemSpan, error) {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	if err := expectDelim(dec, '{'); err != nil {
 		return nil, err
@@ -300,7 +366,7 @@ func batchItemSpans(body []byte) ([]batchItemSpan, error) {
 		if key != "requests" {
 			var skip json.RawMessage
 			if err := dec.Decode(&skip); err != nil {
-				return nil, fmt.Errorf("%w: %v", errBatchBody, err)
+				return nil, err
 			}
 			continue
 		}
@@ -311,12 +377,12 @@ func batchItemSpans(body []byte) ([]batchItemSpan, error) {
 		for dec.More() {
 			var el json.RawMessage
 			if err := dec.Decode(&el); err != nil {
-				return nil, fmt.Errorf("%w: %v", errBatchBody, err)
+				return nil, err
 			}
 			end := int(dec.InputOffset())
 			sp, err := batchItem(el, end-len(el))
 			if err != nil {
-				return nil, fmt.Errorf("%w: request %d: %v", errBatchBody, len(spans), err)
+				return nil, fmt.Errorf("request %d: %w", len(spans), err)
 			}
 			spans = append(spans, sp)
 		}
@@ -328,10 +394,10 @@ func batchItemSpans(body []byte) ([]batchItemSpan, error) {
 		return nil, err
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return nil, fmt.Errorf("%w: trailing data", errBatchBody)
+		return nil, errors.New("trailing data")
 	}
 	if !seenRequests || len(spans) == 0 {
-		return nil, fmt.Errorf("%w: requests must be a non-empty array", errBatchBody)
+		return nil, errors.New("requests must be a non-empty array")
 	}
 	return spans, nil
 }
@@ -377,32 +443,44 @@ func batchItem(el json.RawMessage, off int) (batchItemSpan, error) {
 	return sp, nil
 }
 
-// paramsModel returns the model of a params object, refusing duplicate
-// top-level keys.
+// paramsModel returns the model of a params object, refusing duplicate keys
+// at any depth (a message with two "content" keys as much as two "model"s).
 func paramsModel(params json.RawMessage) (string, error) {
-	dec := json.NewDecoder(bytes.NewReader(params))
-	if err := expectDelim(dec, '{'); err != nil {
-		return "", errors.New("params must be an object")
+	model, err := messagesModel(params)
+	if err != nil {
+		return "", fmt.Errorf("params: %w", err)
 	}
-	seen := map[string]bool{}
+	return model, nil
+}
+
+// messagesModel returns the model of a Messages request object, refusing
+// duplicate keys at any depth.
+func messagesModel(body []byte) (string, error) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	if err := expectDelim(dec, '{'); err != nil {
+		return "", errors.New("must be an object")
+	}
+	if err := checkMessagesKeys(body); err != nil {
+		return "", err
+	}
 	model := ""
 	for dec.More() {
-		key, err := objectKey(dec, seen)
+		tok, err := dec.Token()
 		if err != nil {
-			return "", fmt.Errorf("params: %w", err)
+			return "", err
 		}
 		var v json.RawMessage
 		if err := dec.Decode(&v); err != nil {
 			return "", err
 		}
-		if key == "model" {
+		if tok == "model" {
 			if err := json.Unmarshal(v, &model); err != nil {
-				return "", errors.New("params.model must be a string")
+				return "", errors.New("model must be a string")
 			}
 		}
 	}
 	if model == "" {
-		return "", errors.New("params.model is required")
+		return "", errors.New("model is required")
 	}
 	return model, nil
 }
@@ -410,10 +488,10 @@ func paramsModel(params json.RawMessage) (string, error) {
 func expectDelim(dec *json.Decoder, want json.Delim) error {
 	tok, err := dec.Token()
 	if err != nil {
-		return fmt.Errorf("%w: %v", errBatchBody, err)
+		return err
 	}
 	if d, ok := tok.(json.Delim); !ok || d != want {
-		return fmt.Errorf("%w: expected %q", errBatchBody, want)
+		return fmt.Errorf("expected %q", want)
 	}
 	return nil
 }
@@ -421,11 +499,11 @@ func expectDelim(dec *json.Decoder, want json.Delim) error {
 func objectKey(dec *json.Decoder, seen map[string]bool) (string, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errBatchBody, err)
+		return "", err
 	}
 	key, ok := tok.(string)
 	if !ok {
-		return "", fmt.Errorf("%w: expected an object key", errBatchBody)
+		return "", errors.New("expected an object key")
 	}
 	// Go's encoding/json (the gateway's filter extractors) matches keys case
 	// insensitively, under Unicode simple folding, with the last match
@@ -434,7 +512,7 @@ func objectKey(dec *json.Decoder, seen map[string]bool) (string, error) {
 	// the filters y and the vendor x.
 	folded := foldKey(key)
 	if seen[folded] {
-		return "", fmt.Errorf("%w: duplicate key %q", errBatchBody, key)
+		return "", fmt.Errorf("%w %q", nativeapi.ErrDuplicateKey, key)
 	}
 	seen[folded] = true
 	return key, nil
@@ -442,19 +520,7 @@ func objectKey(dec *json.Decoder, seen map[string]bool) (string, error) {
 
 // foldKey maps key to a canonical form under Unicode simple case folding, so
 // foldKey(a) == foldKey(b) exactly when strings.EqualFold(a, b).
-func foldKey(key string) string {
-	var b strings.Builder
-	for _, r := range key {
-		min := r
-		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
-			if f < min {
-				min = f
-			}
-		}
-		b.WriteRune(min)
-	}
-	return b.String()
-}
+func foldKey(key string) string { return nativeapi.FoldKey(key) }
 
 // BatchPriceMultiplier is the share of the list price Anthropic bills batch
 // usage at.

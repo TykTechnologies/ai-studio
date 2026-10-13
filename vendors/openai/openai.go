@@ -98,6 +98,15 @@ func (v *OpenAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode in
 		}
 		return llm, app, dr, nil
 	}
+	// Responses API calls; a nil usage (a background response, an error,
+	// input_tokens) is logged without a chat record.
+	if kind := responsesPathKind(r.URL.Path); kind != "" {
+		u, err := analyzeResponsesBody(kind, statusCode, body)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to unmarshal responses API reply: %w", err)
+		}
+		return llm, app, u, nil
+	}
 	// embedding replies have the same usage section
 	if strings.Contains(strings.ToLower(r.URL.Path), OpenAICompletionsEndpoint) ||
 		strings.Contains(strings.ToLower(r.URL.Path), OpenAIEmbeddingsEndpoint) ||
@@ -108,15 +117,22 @@ func (v *OpenAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode in
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to unmarshal llm rest response: %w", err)
 		}
+		var tier serviceTierProbe
+		_ = json.Unmarshal(body, &tier)
 
-		return llm, app, response, nil
+		return llm, app, withServiceTier(response, tier.ServiceTier), nil
 	}
 
 	return nil, nil, nil, fmt.Errorf("[analyse response] unknown completions endpoint: %s", llm.Vendor)
 }
 
 func (v *OpenAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
+	if responsesPathKind(r.URL.Path) != "" {
+		u, err := analyzeResponsesStream(statusCode, resps)
+		return llm, app, u, err
+	}
 	aggregate := &responses.GenericResponse{}
+	serviceTier := ""
 	strBody := string(resps)
 	parts := strings.Split(strBody, "\n")
 
@@ -127,6 +143,13 @@ func (v *OpenAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, stat
 			err := json.Unmarshal([]byte(pBody), tempResp)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to unmarshal streaming chunk %v (%s)", err, pBody)
+			}
+
+			if strings.Contains(pBody, `"service_tier"`) {
+				var tier serviceTierProbe
+				if json.Unmarshal([]byte(pBody), &tier) == nil && tier.ServiceTier != "" {
+					serviceTier = tier.ServiceTier
+				}
 			}
 
 			aggregate.Choices += tempResp.GetChoiceCount()
@@ -145,7 +168,7 @@ func (v *OpenAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, stat
 		}
 	}
 
-	return llm, app, aggregate, nil
+	return llm, app, withServiceTier(aggregate, serviceTier), nil
 }
 
 func (v *OpenAI) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {

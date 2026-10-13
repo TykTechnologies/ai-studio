@@ -384,6 +384,8 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	messageExtractorRegistry.Register(&OllamaMessageExtractor{})
 	messageExtractorRegistry.Register(&OpenAIDecisionsMessageExtractor{})
 	messageExtractorRegistry.Register(&SystemOneMessageExtractor{})
+	messageExtractorRegistry.Register(&OpenAIResponsesMessageExtractor{})
+	messageExtractorRegistry.Register(&OpenAIInputMessageExtractor{})
 	p.messageExtractorRegistry = messageExtractorRegistry
 
 	// Initialize message reconstructor registry for message modification
@@ -395,6 +397,8 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	messageReconstructorRegistry.Register(&OllamaMessageReconstructor{})
 	messageReconstructorRegistry.Register(&OpenAIDecisionsMessageReconstructor{})
 	messageReconstructorRegistry.Register(&SystemOneMessageReconstructor{})
+	messageReconstructorRegistry.Register(&OpenAIResponsesMessageReconstructor{})
+	messageReconstructorRegistry.Register(&OpenAIInputMessageReconstructor{})
 	p.messageReconstructorRegistry = messageReconstructorRegistry
 
 	return p
@@ -990,6 +994,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "app context invalid", nil, false)
 		return
 	}
+	// A native chain hook (OpenAI POST /v1/responses) verifies the resource
+	// IDs the request names and wraps the ones the response hands out.
+	chain := p.nativeChainFor(r, llm, app)
+	if chain != nil && !chain.prepare(w, r) {
+		respStatus = chain.c.status
+		status, body := chain.c.status, chain.c.respBody
+		p.goAnalyze(func() { p.analyzeResponse(llm, app, status, body, reqBody, r) })
+		return
+	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
@@ -1060,6 +1073,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		req.Header.Del("Authorization")
 		// The loopback failover marker is ours alone; never show it to a vendor.
 		stripFailoverHeaders(req.Header)
+		if chain.rewritesResponse() {
+			// The transport asks for gzip itself and decompresses, so the
+			// response IDs can be rewritten.
+			req.Header.Del("Accept-Encoding")
+		}
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
@@ -1073,6 +1091,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// ModifyResponse runs on this goroutine, before the deferred duration
 		// observation, so recording the upstream status here is race-free.
 		ModifyResponse: func(resp *http.Response) error {
+			chain.rewriteResponse(resp)
 			respStatus = resp.StatusCode
 			return nil
 		},
@@ -1731,6 +1750,16 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "app context invalid for streaming", nil, false)
 		return
 	}
+	// See the non-streaming handler.
+	chain := p.nativeChainFor(r, llm, app)
+	if chain != nil && !chain.prepare(w, r) {
+		respStatus = chain.c.status
+		status, body := chain.c.status, chain.c.respBody
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, r, status, body, reqBody, nil, time.Now(), "")
+		})
+		return
+	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
@@ -1808,6 +1837,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	upstreamReq.Header = r.Header.Clone()
 	// The loopback failover marker is ours alone; never show it to a vendor.
 	stripFailoverHeaders(upstreamReq.Header)
+	if chain.rewritesResponse() {
+		upstreamReq.Header.Del("Accept-Encoding") // see the REST director
+	}
 	upstreamReq.Host = upstreamURL.Host
 	// Continue the trace into the upstream, as the non-streaming director does.
 	tracing.InjectOutgoing(upstreamReq.Context(), upstreamReq.Header)
@@ -1834,6 +1866,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer resp.Body.Close()
+	chain.rewriteResponse(resp)
 
 	for k, v := range resp.Header {
 		w.Header()[k] = v
@@ -2172,6 +2205,11 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	if df := decisionFilterFormat(r.URL.Path); df != "" {
 		format = df
 	}
+	// A native chain hook names the body's shape when it is not the
+	// vendor's chat shape (OpenAI's Responses API).
+	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
+		format = hook.FilterFormat
+	}
 	bodyBytes, err = p.runRequestFilters(llm, r, bodyBytes, format, modelName)
 	if err != nil {
 		return err
@@ -2251,6 +2289,10 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 	// Extract messages using the message extractor registry
 	messages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes)
 	if err != nil {
+		if p.messageExtractorRegistry.FailsClosed(format) {
+			// Screening an empty prompt would let the whole request through.
+			return nil, fmt.Errorf("Policy error: the request could not be read for screening: %v", err)
+		}
 		slog.Warn("Failed to extract messages for filter", "vendor", llm.Vendor, "format", format, "error", err)
 		messages = []llms.MessageContent{} // Continue with empty messages
 	}

@@ -91,6 +91,10 @@ type AnalyticsData struct {
 	RequestKind       string `json:"request_kind,omitempty"`
 	DecisionQuestions int    `json:"decision_questions,omitempty"`
 	DecisionRefusals  int    `json:"decision_refusals,omitempty"`
+
+	// ServiceTier is the vendor service tier the usage was billed at
+	// ("batch", "priority"...); empty for list-price traffic.
+	ServiceTier string `json:"service_tier,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information

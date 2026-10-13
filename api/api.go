@@ -684,6 +684,8 @@ func (a *API) setupRoutes() error {
 	v1.GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
 	v1.GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
 	v1.GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
+	v1.GET("/llms/:id/resource-signing-key", authz.Read("llms"), a.getLLMResourceSigningKey)
+	v1.POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
 	// Bulk actions resolve their permission from the body: publish for
 	// activate/deactivate, delete for delete (bulk_handlers.go).
 	v1.HandleFn("POST", "/llms/bulk", bulkActionPermission("llms"), a.bulkLLMs)
@@ -1098,6 +1100,7 @@ func (a *API) setupRoutes() error {
 	v1.GET("/analytics/app-interactions-over-time", authz.Read("analytics"), a.getAppInteractionsOverTime)
 	v1.GET("/analytics/apps-for-model", authz.Read("analytics"), a.getAppsForModel)
 	v1.GET("/analytics/decisions", authz.Read("analytics"), a.getDecisionUsage)
+	v1.GET("/analytics/service-tier-usage", authz.Read("analytics"), a.getServiceTierUsage)
 
 	v1.GET("/analytics/proxy-logs-for-app", authz.Read("proxy-logs"), a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", authz.Read("proxy-logs"), a.getProxyLogsForLLM)

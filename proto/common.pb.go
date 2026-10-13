@@ -226,8 +226,19 @@ type LLMConfig struct {
 	DontLogBodies    bool     `protobuf:"varint,24,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"`       // When true, suppress request/response body logging
 	GovernedMetadata string   `protobuf:"bytes,25,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
 	Failover         string   `protobuf:"bytes,26,opt,name=failover,proto3" json:"failover,omitempty"`                                         // JSON LLMFailover waterfall ({"targets":[{"llm_id":..,"model":".."}],"triggers":{..}}); empty when none
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Resource signing keys for native API resource IDs (pkg/nativeapi),
+	// encrypted like api_key_encrypted. The previous key is still accepted
+	// until resource_signing_prev_expires_at; its plaintext "vendor-credential"
+	// stands for the key derived from the vendor credential. Empty when the
+	// hub has no secret for the LLM: the edge then signs with the
+	// vendor-credential key.
+	ResourceSigningSecretEncrypted     string                 `protobuf:"bytes,27,opt,name=resource_signing_secret_encrypted,json=resourceSigningSecretEncrypted,proto3" json:"resource_signing_secret_encrypted,omitempty"`
+	ResourceSigningSecretPrevEncrypted string                 `protobuf:"bytes,28,opt,name=resource_signing_secret_prev_encrypted,json=resourceSigningSecretPrevEncrypted,proto3" json:"resource_signing_secret_prev_encrypted,omitempty"`
+	ResourceSigningPrevExpiresAt       *timestamppb.Timestamp `protobuf:"bytes,29,opt,name=resource_signing_prev_expires_at,json=resourceSigningPrevExpiresAt,proto3" json:"resource_signing_prev_expires_at,omitempty"`
+	VendorWorkspaceId                  string                 `protobuf:"bytes,30,opt,name=vendor_workspace_id,json=vendorWorkspaceId,proto3" json:"vendor_workspace_id,omitempty"` // Pinned vendor workspace (Anthropic: anthropic-workspace-id); empty when none
+	PriceMultipliers                   string                 `protobuf:"bytes,31,opt,name=price_multipliers,json=priceMultipliers,proto3" json:"price_multipliers,omitempty"`      // JSON object of per-service-tier price multiplier overrides ({"batch":0.4}); empty when none
+	unknownFields                      protoimpl.UnknownFields
+	sizeCache                          protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
@@ -438,6 +449,41 @@ func (x *LLMConfig) GetGovernedMetadata() string {
 func (x *LLMConfig) GetFailover() string {
 	if x != nil {
 		return x.Failover
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetResourceSigningSecretEncrypted() string {
+	if x != nil {
+		return x.ResourceSigningSecretEncrypted
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetResourceSigningSecretPrevEncrypted() string {
+	if x != nil {
+		return x.ResourceSigningSecretPrevEncrypted
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetResourceSigningPrevExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ResourceSigningPrevExpiresAt
+	}
+	return nil
+}
+
+func (x *LLMConfig) GetVendorWorkspaceId() string {
+	if x != nil {
+		return x.VendorWorkspaceId
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetPriceMultipliers() string {
+	if x != nil {
+		return x.PriceMultipliers
 	}
 	return ""
 }
@@ -2814,7 +2860,7 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\x82\a\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe2\t\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2849,7 +2895,12 @@ const file_proto_common_proto_rawDesc = "" +
 	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\x12&\n" +
 	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\x12+\n" +
 	"\x11governed_metadata\x18\x19 \x01(\tR\x10governedMetadata\x12\x1a\n" +
-	"\bfailover\x18\x1a \x01(\tR\bfailover\"\x9b\a\n" +
+	"\bfailover\x18\x1a \x01(\tR\bfailover\x12I\n" +
+	"!resource_signing_secret_encrypted\x18\x1b \x01(\tR\x1eresourceSigningSecretEncrypted\x12R\n" +
+	"&resource_signing_secret_prev_encrypted\x18\x1c \x01(\tR\"resourceSigningSecretPrevEncrypted\x12b\n" +
+	" resource_signing_prev_expires_at\x18\x1d \x01(\v2\x1a.google.protobuf.TimestampR\x1cresourceSigningPrevExpiresAt\x12.\n" +
+	"\x13vendor_workspace_id\x18\x1e \x01(\tR\x11vendorWorkspaceId\x12+\n" +
+	"\x11price_multipliers\x18\x1f \x01(\tR\x10priceMultipliers\"\x9b\a\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -3202,57 +3253,58 @@ var file_proto_common_proto_goTypes = []any{
 var file_proto_common_proto_depIdxs = []int32{
 	24, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
 	24, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 2: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 3: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
-	21, // 4: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
-	24, // 5: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 6: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 7: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 8: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 9: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 10: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 11: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 12: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 13: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
-	24, // 14: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 15: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 16: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 17: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	12, // 18: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
-	13, // 19: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
-	24, // 20: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 21: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 22: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 23: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 24: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 25: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 26: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
-	24, // 27: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 28: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 29: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
-	4,  // 30: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
-	6,  // 31: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
-	7,  // 32: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
-	8,  // 33: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
-	24, // 34: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	9,  // 35: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
-	14, // 36: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
-	15, // 37: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
-	16, // 38: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
-	17, // 39: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
-	10, // 40: microgateway.ConfigurationSnapshot.semantic_routers:type_name -> microgateway.SemanticRouterConfig
-	0,  // 41: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
-	1,  // 42: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
-	24, // 43: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 44: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
-	24, // 45: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
-	23, // 46: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
-	22, // 47: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
-	48, // [48:48] is the sub-list for method output_type
-	48, // [48:48] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	24, // 2: microgateway.LLMConfig.resource_signing_prev_expires_at:type_name -> google.protobuf.Timestamp
+	24, // 3: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 4: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 5: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
+	24, // 6: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 7: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 8: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 9: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 10: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 11: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 12: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 13: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 14: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
+	24, // 15: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 16: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 17: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 18: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 19: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
+	13, // 20: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
+	24, // 21: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 22: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 23: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 24: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 25: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 26: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 27: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
+	24, // 28: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	24, // 29: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 30: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
+	4,  // 31: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
+	6,  // 32: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
+	7,  // 33: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
+	8,  // 34: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
+	24, // 35: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	9,  // 36: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
+	14, // 37: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
+	15, // 38: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
+	16, // 39: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
+	17, // 40: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
+	10, // 41: microgateway.ConfigurationSnapshot.semantic_routers:type_name -> microgateway.SemanticRouterConfig
+	0,  // 42: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
+	1,  // 43: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
+	24, // 44: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
+	2,  // 45: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
+	24, // 46: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
+	23, // 47: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
+	22, // 48: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
+	49, // [49:49] is the sub-list for method output_type
+	49, // [49:49] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_proto_init() }

@@ -70,6 +70,10 @@ type LLMChatRecord struct {
 	// questions are Choices.
 	DecisionQuestions int
 	DecisionRefusals  int
+	// ServiceTier is the vendor service tier the usage was billed at, when
+	// the response said (IPriceAdjustedResponse: "batch", "priority",
+	// "flex"...); empty for list-price traffic and older rows (NULL).
+	ServiceTier string `gorm:"size:32"`
 }
 
 // LLMChatLogEntry for storing extra logs
@@ -269,4 +273,7 @@ type ProxyLog struct {
 	ActingAgent string `gorm:"size:255"`
 	// RequestKind is the model class of the call ("" generative, "decision").
 	RequestKind RequestKind `gorm:"size:16;default:'';index"`
+	// ServiceTier is the vendor service tier of the call's usage, as on its
+	// chat record.
+	ServiceTier string `gorm:"size:32"`
 }

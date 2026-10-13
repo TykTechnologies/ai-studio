@@ -67,6 +67,18 @@ type LLM struct {
 	// Body logging control - when true, request/response bodies are NOT stored in proxy logs
 	DontLogBodies   bool           `gorm:"default:false" json:"dont_log_bodies"`
 
+	// Native API resource signing keys as synced from the hub, encrypted like
+	// APIKeyEncrypted (see models.LLM). Empty when the hub sent none: the
+	// edge then signs with the vendor-credential key.
+	ResourceSigningSecretEncrypted     string     `json:"-"`
+	ResourceSigningSecretPrevEncrypted string     `json:"-"`
+	ResourceSigningPrevExpiresAt       *time.Time `json:"-"`
+	// VendorWorkspaceID is the hub LLM's pinned vendor workspace.
+	VendorWorkspaceID string `json:"vendor_workspace_id"`
+	// PriceMultipliers is the hub LLM's per-tier price multiplier overrides
+	// (models.LLMPriceMultipliers JSON); NULL when it has none.
+	PriceMultipliers JSON `gorm:"type:json" json:"price_multipliers"`
+
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`
 	Filters []Filter        `gorm:"many2many:llm_filters;"`
@@ -242,6 +254,10 @@ type AnalyticsEvent struct {
 	RequestKind       string `gorm:"size:16;default:'';index:idx_analytics_request_kind"`
 	DecisionQuestions int
 	DecisionRefusals  int
+
+	// ServiceTier is the vendor service tier the usage was billed at
+	// ("batch", "priority"...), as on the hub's LLMChatRecord.
+	ServiceTier string `gorm:"size:32"`
 
 	// Timestamps
 	TimeStamp      time.Time      `gorm:"index:idx_analytics_timestamp"` // Match LLMChatRecord field name

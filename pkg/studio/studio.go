@@ -327,6 +327,13 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := ensureDefaults(s.db, opts.SkipLLMDefaults, conf.SkipFilterDefaults); err != nil {
 		return nil, fmt.Errorf("studio: seed defaults: %w", err)
 	}
+	// LLMs created before native API resource signing secrets get one; the
+	// IDs they already handed out stay valid for the grace period.
+	if n, err := models.BackfillLLMResourceSigningSecrets(s.db, models.DefaultResourceSigningGrace, time.Now()); err != nil {
+		return nil, fmt.Errorf("studio: generate LLM resource signing secrets: %w", err)
+	} else if n > 0 {
+		logger.Infof("Generated native API resource signing secrets for %d LLM(s)", n)
+	}
 	s.background.Add(1)
 	safe.Go("legacy secret re-encryption", func() {
 		defer s.background.Done()

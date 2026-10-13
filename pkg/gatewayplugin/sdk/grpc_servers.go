@@ -281,6 +281,7 @@ func (s *DataCollectionGRPCServer) HandleAnalytics(ctx context.Context, req *pb.
 		ToolCalls:              int(req.ToolCalls),
 		Choices:                int(req.Choices),
 		RequestID:              req.RequestId,
+		ServiceTier:            req.ServiceTier,
 	}
 	
 	pluginCtx := convertPBPluginContext(req.Context)

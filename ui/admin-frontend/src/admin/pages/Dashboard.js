@@ -50,6 +50,7 @@ import IconButton from "@mui/material/IconButton";
 import { listAll } from "../utils/listAll";
 import TeamCostsTable from "../components/dashboard/TeamCostsTable";
 import DecisionUsagePanel from "../components/dashboard/DecisionUsagePanel";
+import ServiceTierUsagePanel from "../components/dashboard/ServiceTierUsagePanel";
 
 ChartJS.register(
   CategoryScale,
@@ -740,6 +741,7 @@ const Dashboard = () => {
                 )}
                 <TeamCostsTable startDate={startDate} endDate={endDate} />
                 <DecisionUsagePanel startDate={startDate} endDate={endDate} />
+                <ServiceTierUsagePanel startDate={startDate} endDate={endDate} />
               </Grid>
             </Grid>
           </Box>

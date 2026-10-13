@@ -30,6 +30,7 @@ import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { CredentialStatusNotice } from "./CredentialStatusIndicator";
+import ResourceSigningKeySection, { NATIVE_RESOURCE_VENDORS } from "./ResourceSigningKeySection";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import DownloadIcon from "@mui/icons-material/Download";
 import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
@@ -627,6 +628,20 @@ const LLMDetails = () => {
                 })}
               </FieldValue>
             </Grid>
+            {Object.keys(llm.attributes.price_multipliers || {}).length > 0 && (
+              <>
+                <Grid item xs={3}>
+                  <FieldLabel>Price Multipliers:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <FieldValue>
+                    {Object.entries(llm.attributes.price_multipliers)
+                      .map(([tier, value]) => `${tier} ×${value}`)
+                      .join(", ")}
+                  </FieldValue>
+                </Grid>
+              </>
+            )}
           </Grid>
         </Section>
 
@@ -693,8 +708,24 @@ const LLMDetails = () => {
                 />
               </Box>
             </Grid>
+            {llm.attributes.vendor === "anthropic" && (
+              <>
+                <Grid item xs={3}>
+                  <FieldLabel>Workspace:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <FieldValue>
+                    {llm.attributes.vendor_workspace_id || "API key's default workspace"}
+                  </FieldValue>
+                </Grid>
+              </>
+            )}
           </Grid>
         </Section>
+
+        {NATIVE_RESOURCE_VENDORS.includes(llm.attributes.vendor) && (
+          <ResourceSigningKeySection llmId={id} />
+        )}
 
         <Section title="Model Configuration">
           <Typography variant="body2" color="text.secondary" paragraph>
