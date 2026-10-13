@@ -100,7 +100,7 @@ describe("LLMForm validation and layout", () => {
     expect(screen.getByLabelText("API Endpoint")).toBeVisible();
     expect(screen.getByLabelText("API Key")).toBeVisible();
     expect(
-      screen.getByText("Enter the key, or reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME."),
+      screen.getByText("Enter the key, or reference a stored secret as $SECRET/name (environment variables as $ENV/NAME only when your operator allows them)."),
     ).toBeInTheDocument();
     // The switch lives in the collapsed Portal Display accordion.
     fireEvent.click(screen.getByRole("button", { name: "Portal Display Information" }));

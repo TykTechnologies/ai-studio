@@ -171,7 +171,7 @@ const URL_FIELD_HELP =
 
 const connectionFieldHelp = (f) => {
   if (f.secret) {
-    return `${f.description || ""} Reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME.`.trim();
+    return `${f.description || ""} Reference a stored secret as $SECRET/name (environment variables as $ENV/NAME only when your operator allows them).`.trim();
   }
   if (isUrlField(f)) {
     return `${f.description || ""} ${URL_FIELD_HELP}`.trim();
