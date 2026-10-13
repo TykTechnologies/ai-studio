@@ -125,8 +125,8 @@ func (h *GormChatMessageHistory) CheckIfSessionExists(ctx context.Context) (bool
 
 // Messages returns the session's newest Limit messages, oldest first. When
 // the session holds more, its first message is kept in front if it is the
-// system prompt. The window may start mid-turn; PreflightTokenLengthCheck
-// drops tool results whose call is outside it.
+// system prompt. Tool results at the start of a window that begins
+// mid-session are dropped: their call is outside it.
 func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.MessageContent, error) {
 	var chatMessages []models.CMessage
 	result := h.DB.WithContext(ctx).
@@ -161,6 +161,11 @@ func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.MessageCo
 			return nil, err
 		}
 		if err == nil && first.ID != chatMessages[0].ID {
+			// The window starts mid-session, so possibly mid-turn: tool
+			// results at its start answer a call outside it.
+			for len(messages) > 0 && messages[0].Role == llms.ChatMessageTypeTool {
+				messages = messages[1:]
+			}
 			mc := llms.MessageContent{}
 			if err := json.Unmarshal([]byte(first.Content), &mc); err != nil {
 				return nil, err

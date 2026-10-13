@@ -46,6 +46,32 @@ func TestHistoryWindowIsTheNewestMessages(t *testing.T) {
 	assert.Equal(t, "msg 20", msgs[1].Parts[0].(llms.TextContent).Text)
 	assert.Equal(t, "msg 119", msgs[100].Parts[0].(llms.TextContent).Text)
 
+	// No system prompt, and a window that starts on tool results: they are
+	// dropped (their call is outside the window), and nothing is put in
+	// front.
+	tools := NewGormChatMessageHistory(db, "tool-session", 1, 1, "", WithLimit(10))
+	require.NoError(t, tools.AddUserMessage(ctx, "q0"))
+	for i := 1; i <= 3; i++ {
+		require.NoError(t, tools.AddAIToolCall(ctx, llms.ToolCall{ID: fmt.Sprintf("c%d", i), Type: "function",
+			FunctionCall: &llms.FunctionCall{Name: "lookup", Arguments: "{}"}}))
+		require.NoError(t, tools.AddToolMessage(ctx, llms.ToolCallResponse{ToolCallID: fmt.Sprintf("c%d", i), Name: "lookup", Content: "a"}))
+		require.NoError(t, tools.AddToolMessage(ctx, llms.ToolCallResponse{ToolCallID: fmt.Sprintf("c%d", i), Name: "lookup", Content: "b"}))
+		require.NoError(t, tools.AddUserMessage(ctx, fmt.Sprintf("q%d", i)))
+	}
+	msgs, err = tools.Messages(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "UCTTUCTTU", roles(msgs), "the window started TUCTTUCTTU")
+
+	// A session of exactly the limit, system prompt included, has it once.
+	exact := NewGormChatMessageHistory(db, "exact-session", 1, 1, "system prompt", WithLimit(10))
+	for i := 0; i < 9; i++ {
+		require.NoError(t, exact.AddUserMessage(ctx, fmt.Sprintf("m%d", i)))
+	}
+	msgs, err = exact.Messages(ctx)
+	require.NoError(t, err)
+	assert.Len(t, msgs, 10)
+	assert.Equal(t, "SUUUUUUUUU", roles(msgs))
+
 	// A short session is returned whole, once.
 	short := NewGormChatMessageHistory(db, "short-session", 1, 1, "system prompt", WithLimit(10))
 	require.NoError(t, short.AddUserMessage(ctx, "only"))
