@@ -1614,7 +1614,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Edges never resolve references themselves (and released ones
 		// would resolve $ENV/ against their own environment): what the
 		// policy refuses goes out as a bare "$ENV/" (secrets.ForEdge).
-		resolvedAPIKey := secrets.ForEdge(secrets.ResolveRef(llm.APIKey))
+		resolvedAPIKey := secrets.ForEdgeCredential(secrets.ResolveRef(llm.APIKey))
 		resolvedEndpoint := secrets.ForEdge(secrets.ResolveRef(llm.APIEndpoint))
 
 		// Encrypt API key using microgateway's encryption format
@@ -1649,7 +1649,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			resolvedMetadata := make(models.JSONMap, len(llm.Metadata))
 			for k, v := range llm.Metadata {
 				if strVal, ok := v.(string); ok {
-					resolvedMetadata[k] = secrets.ForEdge(secrets.ResolveRef(strVal))
+					// Metadata carries credentials too (Bedrock keys), which
+					// vendor clients replace with their own when empty.
+					resolvedMetadata[k] = secrets.ForEdgeCredential(secrets.ResolveRef(strVal))
 				} else {
 					resolvedMetadata[k] = v
 				}
@@ -1927,7 +1929,11 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if r, ok := resolvedRefs[v]; ok {
 			return r
 		}
-		r := secrets.ForEdge(secrets.ResolveRef(v))
+		// Connection references are mostly provider keys, which a provider
+		// client would replace with its own environment's when empty; a
+		// refused one goes out as a dud key (an endpoint then fails to
+		// parse, and the guardrail applies its fail mode).
+		r := secrets.ForEdgeCredential(secrets.ResolveRef(v))
 		resolvedRefs[v] = r
 		return r
 	}
@@ -2301,7 +2307,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	governedTools := s.loadGovernedMetadata(models.GovernedObjectTypeTool)
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
-		resolvedAuthKey := secrets.ForEdge(secrets.ResolveRef(tool.AuthKey))
+		resolvedAuthKey := secrets.ForEdgeCredential(secrets.ResolveRef(tool.AuthKey))
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
@@ -2401,7 +2407,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnString = encrypted
 		}
 
-		resolvedConnAPIKey := secrets.ForEdge(secrets.ResolveRef(ds.DBConnAPIKey))
+		resolvedConnAPIKey := secrets.ForEdgeCredential(secrets.ResolveRef(ds.DBConnAPIKey))
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
@@ -2423,7 +2429,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		}
 		embed.URL = secrets.ForEdge(embed.URL)
-		resolvedEmbedAPIKey := secrets.ForEdge(embed.APIKey)
+		resolvedEmbedAPIKey := secrets.ForEdgeCredential(embed.APIKey)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)

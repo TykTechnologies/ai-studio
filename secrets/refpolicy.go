@@ -74,6 +74,25 @@ func ForEdge(resolved string) string {
 	return resolved
 }
 
+// RefusedCredential is what an edge gets for a credential (an API key or
+// token) whose reference the hub refused or could not resolve: a value that
+// is neither empty nor a reference. Vendor clients fall back to their own
+// environment when the key is empty (an OpenAI client reads
+// OPENAI_API_KEY, AWS clients their default credential chain), and a
+// released edge resolves the bare "$ENV/" ForEdge sends to empty; this
+// value is sent instead, as a key, and the provider refuses it.
+const RefusedCredential = "refused-credential-reference"
+
+// ForEdgeCredential is ForEdge for a credential field: a value that is still
+// a reference goes out as RefusedCredential. Use ForEdge for fields where an
+// empty value has no fallback (endpoints, connection strings).
+func ForEdgeCredential(resolved string) string {
+	if IsReference(resolved) {
+		return RefusedCredential
+	}
+	return resolved
+}
+
 // NewReferences lists the keys of updated whose value is a $SECRET/ or $ENV/
 // reference that old does not already hold under the same key (new, changed
 // or moved). Writing those needs the right to read secrets, since the value

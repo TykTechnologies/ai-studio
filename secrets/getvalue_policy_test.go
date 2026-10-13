@@ -2,6 +2,29 @@ package secrets
 
 import "testing"
 
+// A refused credential reaches edges as a dud key that is neither empty
+// (vendor clients fill an empty key from their own environment) nor a
+// reference (released edges resolve $ENV/ themselves).
+func TestForEdgeCredential(t *testing.T) {
+	for in, want := range map[string]string{
+		"$ENV/OPENAI_API_KEY": RefusedCredential,
+		"$SECRET/MISSING":     RefusedCredential,
+		"$ENV/":               RefusedCredential,
+		"sk-resolved":         "sk-resolved",
+		"":                    "",
+	} {
+		if got := ForEdgeCredential(in); got != want {
+			t.Errorf("ForEdgeCredential(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if RefusedCredential == "" || IsReference(RefusedCredential) {
+		t.Fatal("the placeholder must be a non-empty, non-reference value")
+	}
+	if got := GetValue(RefusedCredential, false); got != RefusedCredential {
+		t.Errorf("an edge resolving the placeholder got %q", got)
+	}
+}
+
 // GetValue applies the policy itself, so no caller can resolve an $ENV/
 // name the operator has not listed; references are kept with preserveRef.
 func TestGetValueEnvPolicy(t *testing.T) {

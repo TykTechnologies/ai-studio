@@ -16,8 +16,9 @@ import (
 // References in snapshot fields are resolved on the hub under the policy:
 // an $ENV/ name the operator has not listed never reaches an edge, as its
 // value or as the name (released edges would resolve the name against
-// their own environment); it goes out as a bare "$ENV/". A listed name
-// goes out resolved.
+// their own environment). A credential goes out as a dud key, never empty
+// (a vendor client would replace an empty key with its own environment's);
+// an endpoint goes out as a bare "$ENV/". A listed name goes out resolved.
 func TestSnapshotNeverCarriesUnlistedEnvValues(t *testing.T) {
 	server, db := setupTestServer(t, nil)
 	key := os.Getenv("MICROGATEWAY_ENCRYPTION_KEY")
@@ -48,14 +49,14 @@ func TestSnapshotNeverCarriesUnlistedEnvValues(t *testing.T) {
 		}
 		gotLLM = true
 		assert.Equal(t, "$ENV/", l.Endpoint)
-		assert.Equal(t, "$ENV/", decryptLikeMicrogateway(t, key, l.ApiKeyEncrypted))
-		assert.Contains(t, l.Metadata, `"region":"$ENV/"`)
+		assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, key, l.ApiKeyEncrypted))
+		assert.Contains(t, l.Metadata, `"region":"`+secrets.RefusedCredential+`"`)
 		assert.Contains(t, l.Metadata, `"vault":"https://vault.example"`, "an allowlisted name is resolved")
 	}
 	require.True(t, gotLLM)
 	for _, tc := range snap.Tools {
 		if tc.Id == uint32(tool.ID) {
-			assert.Equal(t, "$ENV/", decryptLikeMicrogateway(t, key, tc.AuthKeyEncrypted))
+			assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, key, tc.AuthKeyEncrypted))
 		}
 	}
 }
