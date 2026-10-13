@@ -629,7 +629,9 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	// edge's stream (the edge reconnects and its pushes are retried), not
 	// the process.
 	recvPanicked := make(chan struct{})
+	recvDone := make(chan struct{})
 	go func() {
+		defer close(recvDone)
 		defer safe.RecoverWith("edge stream receive", func() { close(recvPanicked) })
 		for {
 			msg, err := stream.Recv()
@@ -890,6 +892,20 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 	case <-recvPanicked:
 		logger.Log.Error().Str("edge_id", edgeID).Msg("Ending the edge's stream after a panic handling its messages; the edge reconnects")
 		streamErr = errRecovered
+	}
+
+	// When the stream has ended, let the receive loop finish the message it
+	// is handling first: a heartbeat (or the registration) handled after the
+	// release below would claim the dead stream again and leave the edge
+	// "connected" until the stale sweep. Recv fails as soon as the stream's
+	// context is done, so this is quick; on shutdown the stream may still be
+	// open, so it is not waited for.
+	if stream.Context().Err() != nil {
+		select {
+		case <-recvDone:
+		case <-time.After(5 * time.Second):
+			logger.Log.Warn().Str("edge_id", edgeID).Msg("Edge stream's receive loop did not finish; recording the stream's end anyway")
+		}
 	}
 
 	// Cleanup when stream closes
