@@ -420,6 +420,29 @@ Example warnings:
 ⚠️  PLUGIN SECURITY WARNING: Plugin command targets internal network address
 ```
 
+### Plugin Process Environment
+
+AI Studio and the Microgateway start each `file://` and `oci://` plugin with an explicit environment. Plugins do not inherit the host process's environment variables. A plugin receives only:
+
+- process basics and locale: `PATH`, `HOME`, `USER`, `TMPDIR`, `TZ`, `LANG`, `LC_*`
+- TLS trust and proxies: `SSL_CERT_FILE`, `SSL_CERT_DIR`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` (and their lower-case forms)
+- Go runtime tuning: `GOMAXPROCS`, `GOMEMLIMIT`, `GOGC`, `GODEBUG`, `GOTRACEBACK`
+- settings the plugin SDK and shipped plugins read: `PLUGIN_RUNTIME`, `GATEWAY_MODE`, `MICROGATEWAY_MODE`, `EDGE_ID`
+- any variables named in `PLUGIN_ENV_PASSTHROUGH`, set on the host
+
+`PLUGIN_ENV_PASSTHROUGH` is a comma-separated list of variable names. An entry ending in `*` matches every variable with that prefix:
+
+```bash
+# Pass the GitHub RAG plugin's settings through to plugins
+export PLUGIN_ENV_PASSTHROUGH="GITHUB_RAG_*"
+```
+
+`ALLOW_INTERNAL_NETWORK_ACCESS` is not passed by default. A plugin that honours it for its own checks (such as the GitHub RAG ingest plugin) only sees it when you add it to `PLUGIN_ENV_PASSTHROUGH`.
+
+The pass-through applies to every plugin the host starts, so name only the variables your plugins need. Avoid passing host credentials such as database URLs or encryption keys; the host logs a warning when the pass-through matches one. A bare `*` entry is ignored. Proxy variables are passed by default, so don't put proxy credentials in them unless plugins may use that proxy too. A plugin that needs configuration should normally receive it through its plugin config rather than the environment.
+
+`grpc://` plugins run as their own processes, outside the host, so this does not apply to them.
+
 ### Production Security
 
 For production deployments:

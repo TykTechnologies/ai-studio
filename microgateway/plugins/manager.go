@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -21,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
@@ -1032,7 +1032,8 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 		return plugin.NewClient(&plugin.ClientConfig{
 			HandshakeConfig:  pm.handshakeConfig,
 			Plugins:          pm.pluginMap,
-			Cmd:              exec.Command(cmdPath),
+			Cmd:              pluginenv.Command(cmdPath),
+			SkipHostEnv:      true,
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			Logger:           pluginLogger(),
 			SyncStdout:       os.Stdout, // Forward plugin stdout to microgateway
@@ -1106,7 +1107,8 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 	return plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  pm.handshakeConfig,
 		Plugins:          pm.pluginMap,
-		Cmd:              exec.Command(localPlugin.ExecutablePath),
+		Cmd:              pluginenv.Command(localPlugin.ExecutablePath),
+		SkipHostEnv:      true,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		Logger:           pluginLogger(),
 		SyncStdout:       os.Stdout, // Forward plugin stdout to microgateway
