@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -122,7 +123,7 @@ func TestApproveUpdateSubmission_Tool(t *testing.T) {
 		user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted,
 		models.JSONMap{
 			"name": "Weather API", "description": "Get weather",
-			"tool_type": "REST", "oas_spec": "dGVzdA==",
+			"tool_type": "REST", "oas_spec": base64.StdEncoding.EncodeToString([]byte(validOASSpec)),
 		}, nil, 2, "", "contact@test.com", "", "", nil, "", "",
 	)
 	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 2, nil, "")

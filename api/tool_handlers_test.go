@@ -17,6 +17,12 @@ func testOASSpec(spec string) string {
 	return base64.StdEncoding.EncodeToString([]byte(spec))
 }
 
+// testToolSpec is a usable base64 OpenAPI spec for tools whose spec content
+// does not matter to the test (create and update validate it).
+var testToolSpec = testOASSpec(`{"openapi":"3.0.0","info":{"title":"Test API","version":"1"},` +
+	`"servers":[{"url":"https://api.example.com"}],` +
+	`"paths":{"/items":{"get":{"operationId":"listItems","responses":{"200":{"description":"OK"}}}}}}`)
+
 func TestToolEndpoints(t *testing.T) {
 	api, _ := setupTestAPI(t)
 
@@ -59,7 +65,7 @@ func TestToolEndpoints(t *testing.T) {
 				Name:         "Test Tool",
 				Description:  "A test tool",
 				ToolType:     models.ToolTypeREST,
-				OASSpec:      testOASSpec(`{"openapi": "3.0.0"}`),
+				OASSpec:      testToolSpec,
 				PrivacyScore: 8,
 				Operations:   []string{"operation1", "operation2"},
 			},
@@ -119,7 +125,7 @@ func TestToolEndpoints(t *testing.T) {
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
 				ToolType:     models.ToolTypeREST,
-				OASSpec:      testOASSpec(`{"openapi": "3.0.1"}`),
+				OASSpec:      testToolSpec,
 				PrivacyScore: 9,
 				Operations:   []string{"operation1", "operation2", "operation3"},
 			},
@@ -210,7 +216,7 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					Name:     name,
 					AuthKey:  authKey,
 					ToolType: models.ToolTypeREST,
-					OASSpec:  testOASSpec(`{"openapi": "3.0.0"}`),
+					OASSpec:  testToolSpec,
 				},
 			},
 		}
@@ -310,7 +316,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
 				ToolType:     models.ToolTypeREST,
-				OASSpec:      testOASSpec(`{"openapi": "3.0.1"}`),
+				OASSpec:      testToolSpec,
 				PrivacyScore: 9,
 				Operations:   []string{"operation1", "operation2", "operation3"},
 			},

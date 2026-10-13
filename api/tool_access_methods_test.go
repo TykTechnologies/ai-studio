@@ -24,7 +24,7 @@ func toolAccessPayload(name, toolType string, rest, mcp *bool) map[string]interf
 		"name":          name,
 		"description":   "A tool",
 		"tool_type":     toolType,
-		"oas_spec":      testOASSpec(`{"openapi": "3.0.0"}`),
+		"oas_spec":      testToolSpec,
 		"privacy_score": 1,
 		"operations":    []string{"getThing"},
 	}
@@ -137,7 +137,7 @@ func TestPortal_ChatOnlyToolIsNotShown(t *testing.T) {
 	require.NoError(t, service.AddToolToToolCatalogue(exposed.ID, toolCat.ID))
 	require.NoError(t, db.Model(&models.Tool{}).Where("id = ?", exposed.ID).Update("rest_access_disabled", true).Error)
 
-	chatOnly, err := service.CreateTool("Chat Only Tool", "Description", models.ToolTypeREST, testOASSpec(`{"openapi": "3.0.0"}`), 1, "", "")
+	chatOnly, err := service.CreateTool("Chat Only Tool", "Description", models.ToolTypeREST, testToolSpec, 1, "", "")
 	require.NoError(t, err)
 	require.NoError(t, service.AddToolToToolCatalogue(chatOnly.ID, toolCat.ID))
 

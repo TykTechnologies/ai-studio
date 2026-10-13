@@ -32444,7 +32444,7 @@ const docTemplate = `{
                                     "type": "string"
                                 },
                                 "oas_spec": {
-                                    "description": "OASSpec must be the base64 encoding of the UTF-8 OpenAPI\ndocument. Raw JSON or YAML is rejected with a 400.",
+                                    "description": "OASSpec must be the base64 encoding of a UTF-8 OpenAPI 3.x\ndocument with a servers entry (and a supported auth scheme if it\ndeclares any). Anything else, raw JSON or YAML included, is rejected\nwith a 400.",
                                     "type": "string"
                                 },
                                 "operations": {

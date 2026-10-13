@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
@@ -81,7 +80,7 @@ func (a *API) createTool(c *gin.Context) {
 		}
 	}
 
-	if err := validateOASSpecEncoding(input.Data.Attributes.OASSpec); err != nil {
+	if err := services.ValidateToolOASSpec(input.Data.Attributes.OASSpec); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -174,21 +173,6 @@ func (a *API) createTool(c *gin.Context) {
 	c.JSON(http.StatusCreated, dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
 }
 
-// validateOASSpecEncoding checks that an oas_spec attribute is the base64 the
-// rest of the platform expects. The field is typed as a string, so raw JSON or
-// YAML binds happily and is stored as-is; the failure then surfaces much later
-// and far away, as "illegal base64 data" from /spec-operations or from a tool
-// call. Catching it here names the actual problem.
-func validateOASSpecEncoding(spec string) error {
-	if spec == "" {
-		return nil
-	}
-	if _, err := base64.StdEncoding.DecodeString(spec); err != nil {
-		return fmt.Errorf("oas_spec must be base64-encoded (got %v)", err)
-	}
-	return nil
-}
-
 // @Summary Get a tool by ID
 // @Description Get details of a tool by its ID
 // @Tags tools
@@ -273,7 +257,7 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 
-	if err := validateOASSpecEncoding(input.Data.Attributes.OASSpec); err != nil {
+	if err := services.ValidateToolOASSpec(input.Data.Attributes.OASSpec); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -1513,6 +1497,17 @@ func (a *API) listToolSpecOperations(c *gin.Context) {
 	}
 
 	operations, err := a.service.ListToolOperationsFromSpec(uint(toolID))
+	if errors.Is(err, services.ErrInvalidToolSpec) {
+		// A spec stored before create/update validated it: the tool needs a
+		// new spec, which is not a server fault.
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unprocessable Entity", Detail: err.Error()}},
+		})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

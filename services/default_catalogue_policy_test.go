@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -66,7 +67,7 @@ func TestCreateTool_DefaultCatalogueIsEditionAware(t *testing.T) {
 	db := setupTestDB(t)
 	service := NewService(db)
 
-	tool, err := service.CreateTool("Edition Tool", "Description", models.ToolTypeREST, "spec", 8, "apiKey", "secret")
+	tool, err := service.CreateTool("Edition Tool", "Description", models.ToolTypeREST, base64.StdEncoding.EncodeToString([]byte(validOASSpec)), 8, "apiKey", "secret")
 	require.NoError(t, err)
 
 	var count int64

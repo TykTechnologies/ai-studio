@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -49,6 +50,9 @@ type ToolCreateOptions struct {
 // plugin gRPC), so this is the one place the access-method default for new
 // tools is applied.
 func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string, opts ToolCreateOptions) (*models.Tool, error) {
+	if err := ValidateToolOASSpec(oasSpec); err != nil {
+		return nil, err
+	}
 	restEnabled, mcpEnabled := models.DefaultToolRESTAccessEnabled, models.DefaultToolMCPAccessEnabled
 	if opts.RESTAccessEnabled != nil {
 		restEnabled = *opts.RESTAccessEnabled
@@ -166,6 +170,9 @@ func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType
 
 // UpdateTool updates an existing tool with validity checks
 func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
+	if err := ValidateToolOASSpec(oasSpec); err != nil {
+		return nil, err
+	}
 	tool, err := s.GetToolByID(id)
 	if err != nil {
 		return nil, err
@@ -676,6 +683,29 @@ var (
 	clientCacheMu sync.RWMutex
 )
 
+// ErrInvalidToolSpec marks a tool's oas_spec that is not base64 of an OpenAPI
+// 3 document the tool client can use.
+var ErrInvalidToolSpec = errors.New("invalid OpenAPI specification")
+
+// ValidateToolOASSpec checks that an oas_spec is base64 of an OpenAPI 3
+// document the tool client accepts (version 3.x, a servers entry, a supported
+// auth scheme when schemes are declared). It applies the same parse the tool
+// uses at call time and in ListToolOperationsFromSpec, so a stored tool can
+// always list its operations. An empty spec is allowed (non-REST tools).
+func ValidateToolOASSpec(spec string) error {
+	if spec == "" {
+		return nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(spec)
+	if err != nil {
+		return fmt.Errorf("%w: oas_spec must be base64-encoded (%v)", ErrInvalidToolSpec, err)
+	}
+	if _, err := universalclient.NewClient(decoded, ""); err != nil {
+		return fmt.Errorf("%w: oas_spec does not decode to a usable OpenAPI 3 document: %v", ErrInvalidToolSpec, err)
+	}
+	return nil
+}
+
 // ListToolOperationsFromSpec retrieves all operations from the tool's OpenAPI spec
 func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
 	tool, err := s.GetToolByID(toolID)
@@ -701,12 +731,12 @@ func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
 	// Cache miss or expired - parse the spec
 	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+		return nil, fmt.Errorf("%w: failed to decode Base64 OpenAPI spec: %v", ErrInvalidToolSpec, err)
 	}
 
 	client, err := universalclient.NewClient(decodedSpec, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse OpenAPI spec: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse OpenAPI spec: %v", ErrInvalidToolSpec, err)
 	}
 
 	operations, err := client.ListOperations()

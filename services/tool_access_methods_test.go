@@ -14,7 +14,7 @@ import (
 func TestCreateTool_NewToolIsChatOnly(t *testing.T) {
 	service := NewService(setupTestDBForTools(t))
 
-	tool, err := service.CreateTool("Fresh Tool", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "")
+	tool, err := service.CreateTool("Fresh Tool", "Description", models.ToolTypeREST, testToolSpec, 1, "", "")
 	require.NoError(t, err)
 
 	stored, err := service.GetToolByID(tool.ID)
@@ -30,7 +30,7 @@ func TestCreateToolWithOptions_CreatesTheToolFullyConfigured(t *testing.T) {
 	service := NewService(setupTestDBForTools(t))
 	on, off := true, false
 
-	tool, err := service.CreateToolWithOptions(service.DB, "Configured", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "",
+	tool, err := service.CreateToolWithOptions(service.DB, "Configured", "Description", models.ToolTypeREST, testToolSpec, 1, "", "",
 		ToolCreateOptions{Operations: []string{"getThing", "listThings"}, Namespace: "team-a", Active: &off, MCPAccessEnabled: &on})
 	require.NoError(t, err)
 
@@ -44,7 +44,7 @@ func TestCreateToolWithOptions_CreatesTheToolFullyConfigured(t *testing.T) {
 	assert.True(t, stored.MCPAccessEnabled())
 
 	// No options at all: active, chat only, nothing whitelisted.
-	plain, err := service.CreateToolWithOptions(service.DB, "Plain", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "", ToolCreateOptions{})
+	plain, err := service.CreateToolWithOptions(service.DB, "Plain", "Description", models.ToolTypeREST, testToolSpec, 1, "", "", ToolCreateOptions{})
 	require.NoError(t, err)
 	stored, err = service.GetToolByID(plain.ID)
 	require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestTool_AllowsOperation(t *testing.T) {
 func TestGetToolBySlug_SkipsInactiveTool(t *testing.T) {
 	service := NewService(setupTestDBForTools(t))
 
-	tool, err := service.CreateTool("Sleeping Tool", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "")
+	tool, err := service.CreateTool("Sleeping Tool", "Description", models.ToolTypeREST, testToolSpec, 1, "", "")
 	require.NoError(t, err)
 
 	_, err = service.GetToolBySlug("sleeping-tool")
@@ -111,9 +111,9 @@ func TestApp_ChatOnlyToolCannotBeBound(t *testing.T) {
 	user, err := service.CreateUser(UserDTO{Email: "binder@example.com", Name: "binder", Password: "password123"})
 	require.NoError(t, err)
 
-	chatOnly, err := service.CreateTool("Chat Only", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "")
+	chatOnly, err := service.CreateTool("Chat Only", "Description", models.ToolTypeREST, testToolSpec, 1, "", "")
 	require.NoError(t, err)
-	exposed, err := service.CreateTool("Exposed", "Description", models.ToolTypeREST, "OAS Spec", 1, "", "")
+	exposed, err := service.CreateTool("Exposed", "Description", models.ToolTypeREST, testToolSpec, 1, "", "")
 	require.NoError(t, err)
 	require.NoError(t, service.DB.Model(&models.Tool{}).Where("id = ?", exposed.ID).
 		Update("mcp_access_disabled", false).Error)

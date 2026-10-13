@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -9,6 +10,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
+
+
+// testToolSpec is a usable base64 OpenAPI spec for tools whose spec content
+// does not matter to the test (create and update validate it).
+var testToolSpec = base64.StdEncoding.EncodeToString([]byte(validOASSpec))
 
 func setupTestDBForTools(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -20,12 +26,34 @@ func setupTestDBForTools(t *testing.T) *gorm.DB {
 	return db
 }
 
+// Every creator of a tool (admin API, submission approval, plugin gRPC) goes
+// through the service, so the service refuses a spec the tool could never
+// use; otherwise spec-operations fails for the stored tool forever.
+func TestCreateAndUpdateTool_RejectUnusableSpec(t *testing.T) {
+	service := NewService(setupTestDB(t))
+	for name, spec := range map[string]string{
+		"raw JSON":       `{"openapi":"3.0.0"}`,
+		"base64 of text": base64.StdEncoding.EncodeToString([]byte("test")),
+	} {
+		_, err := service.CreateTool("Bad "+name, "d", models.ToolTypeREST, spec, 1, "", "")
+		assert.ErrorIs(t, err, ErrInvalidToolSpec, "create with %s", name)
+	}
+
+	tool, err := service.CreateTool("Good", "d", models.ToolTypeREST, testToolSpec, 1, "", "")
+	assert.NoError(t, err)
+	_, err = service.UpdateTool(tool.ID, "Good", "d", models.ToolTypeREST, "not base64!", 1, "", "")
+	assert.ErrorIs(t, err, ErrInvalidToolSpec)
+	ops, err := service.ListToolOperationsFromSpec(tool.ID)
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"listUsers", "createUser"}, ops)
+}
+
 func TestToolService(t *testing.T) {
 	db := setupTestDBForTools(t)
 	service := NewService(db)
 
 	// Test CreateTool
-	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
+	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, testToolSpec, 8, "apiKey", "secret")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.NotZero(t, tool.ID)
@@ -40,7 +68,7 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, tool.PrivacyScore, fetchedTool.PrivacyScore)
 
 	// Test UpdateTool
-	updatedTool, err := service.UpdateTool(tool.ID, "Updated Tool", "Updated Description", models.ToolTypeREST, "Updated OAS Spec", 9, "updatedApiKey", "updatedSecret")
+	updatedTool, err := service.UpdateTool(tool.ID, "Updated Tool", "Updated Description", models.ToolTypeREST, testToolSpec, 9, "updatedApiKey", "updatedSecret")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, updatedTool.ID)
 	assert.Equal(t, "Updated Tool", updatedTool.Name)
@@ -124,7 +152,7 @@ func TestToolServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test UpdateTool with non-existent ID
-	_, err = service.UpdateTool(9999, "Non-existent Tool", "Description", models.ToolTypeREST, "OAS Spec", 8, "authKey", "authValue")
+	_, err = service.UpdateTool(9999, "Non-existent Tool", "Description", models.ToolTypeREST, testToolSpec, 8, "authKey", "authValue")
 	assert.Error(t, err)
 
 	// Test GetToolByName with non-existent name
@@ -153,9 +181,9 @@ func TestToolService_MultipleTool(t *testing.T) {
 	service := NewService(db)
 
 	// Create multiple tools
-	tool1, _ := service.CreateTool("Tool 1", "Description 1", models.ToolTypeREST, "OAS Spec 1", 7, "authKey", "authValue")
-	tool2, _ := service.CreateTool("Tool 2", "Description 2", models.ToolTypeREST, "OAS Spec 2", 8, "authKey", "authValue")
-	tool3, _ := service.CreateTool("Tool 3", "Description 3", "GraphQL", "OAS Spec 3", 9, "authKey", "authValue")
+	tool1, _ := service.CreateTool("Tool 1", "Description 1", models.ToolTypeREST, testToolSpec, 7, "authKey", "authValue")
+	tool2, _ := service.CreateTool("Tool 2", "Description 2", models.ToolTypeREST, testToolSpec, 8, "authKey", "authValue")
+	tool3, _ := service.CreateTool("Tool 3", "Description 3", "GraphQL", testToolSpec, 9, "authKey", "authValue")
 
 	// Test GetAllTools
 	allTools, _, _, err := service.GetAllTools(10, 1, true)
@@ -218,7 +246,7 @@ func TestToolService_GetToolBySlug(t *testing.T) {
 	service := NewService(db)
 
 	// Create a tool
-	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
+	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, testToolSpec, 8, "apiKey", "secret")
 	assert.NoError(t, err)
 
 	// Look up by slug
@@ -267,7 +295,7 @@ func TestToolService_GetToolBySlug_WithVersionNumber(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			// Create the tool
-			tool, err := service.CreateTool(tc.toolName, "Test description", models.ToolTypeREST, "OAS Spec", 5, "apiKey", "secret")
+			tool, err := service.CreateTool(tc.toolName, "Test description", models.ToolTypeREST, testToolSpec, 5, "apiKey", "secret")
 			assert.NoError(t, err)
 
 			// Verify the stored slug matches what we expect
@@ -311,7 +339,7 @@ func TestToolService_GetToolBySlug_AfterNameUpdate(t *testing.T) {
 	service := NewService(db)
 
 	// Create a tool
-	tool, err := service.CreateTool("Original Name", "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
+	tool, err := service.CreateTool("Original Name", "Description", models.ToolTypeREST, testToolSpec, 8, "apiKey", "secret")
 	assert.NoError(t, err)
 	assert.Equal(t, "original-name", tool.Slug)
 
@@ -321,7 +349,7 @@ func TestToolService_GetToolBySlug_AfterNameUpdate(t *testing.T) {
 	assert.Equal(t, tool.ID, fetchedTool.ID)
 
 	// Update the tool name
-	updatedTool, err := service.UpdateTool(tool.ID, "New Name v2.0", "Updated Description", models.ToolTypeREST, "Updated OAS Spec", 9, "apiKey", "secret")
+	updatedTool, err := service.UpdateTool(tool.ID, "New Name v2.0", "Updated Description", models.ToolTypeREST, testToolSpec, 9, "apiKey", "secret")
 	assert.NoError(t, err)
 	assert.Equal(t, "new-name-v2-0", updatedTool.Slug)
 
