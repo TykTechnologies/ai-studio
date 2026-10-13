@@ -7,11 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/google/uuid"
@@ -468,57 +466,6 @@ func (p *Proxy) getAppFromContext(r *http.Request, llm *models.LLM) (*models.App
 	return nil, fmt.Errorf("app context not found - authentication required")
 }
 
-// countToolCalls counts total tool calls across all choices
-func countToolCalls(resp *llms.ContentResponse) int {
-	if resp == nil {
-		return 0
-	}
-	count := 0
-	for _, choice := range resp.Choices {
-		count += len(choice.ToolCalls)
-	}
-	return count
-}
-
-// recordTranslatorAnalytics records analytics and proxy logs for /ai/ endpoint requests
-func (p *Proxy) recordTranslatorAnalytics(
-	llm *models.LLM,
-	app *models.App,
-	statusCode int,
-	respBody []byte,
-	reqBody []byte,
-	r *http.Request,
-	contentResp *llms.ContentResponse,
-	timestamp time.Time,
-) {
-	const maxBodySize = 65535 // Maximum size for TEXT column (64KB)
-
-	// 1. Record proxy log
-	proxyLog := &models.ProxyLog{
-		AppID:        app.ID,
-		UserID:       app.UserID,
-		TimeStamp:    timestamp,
-		LLMID:        llm.ID,
-		Vendor:       string(llm.Vendor),
-		RequestBody:  truncateString(string(reqBody), maxBodySize),
-		ResponseBody: truncateString(string(respBody), maxBodySize),
-		ResponseCode: statusCode,
-	}
-	if llm.DontLogBodies {
-		proxyLog.RequestBody = ""
-		proxyLog.ResponseBody = ""
-	}
-	// 2. Chat analytics (if successful), recorded with the proxy log
-	var rec *models.LLMChatRecord
-	if statusCode == http.StatusOK && contentResp != nil {
-		rec = translatorChatRecord(p.gatewayService, llm, app, contentResp, r, timestamp)
-	}
-	analytics.RecordExchange(r.Context(), proxyLog, rec)
-	if rec != nil {
-		analyzeTranslatorBudget(p.gatewayService, llm, app, rec)
-	}
-}
-
 // handleChatCompletionStream handles streaming chat completion requests with OpenAI-compatible SSE format
 // NOTE: This is a PURE BRIDGE HANDLER - NO AUTH runs here
 // Auth, plugins, budget checking, analytics all happen on the internal /llm/call/ hop
@@ -809,65 +756,3 @@ func (p *Proxy) sendStreamError(w http.ResponseWriter, flusher http.Flusher, mes
 	flusher.Flush()
 }
 
-// translatorChatRecord builds the chat record for an /ai/ endpoint request
-func translatorChatRecord(
-	service services.ServiceInterface,
-	llm *models.LLM,
-	app *models.App,
-	contentResp *llms.ContentResponse,
-	r *http.Request,
-	timestamp time.Time,
-) *models.LLMChatRecord {
-	// Extract token counts
-	var promptTokens, responseTokens, totalTokens int
-	for _, choice := range contentResp.Choices {
-		tt, pt, rt := switches.GetTokenCounts(choice, llm.Vendor)
-		totalTokens += tt
-		promptTokens += pt
-		responseTokens += rt
-	}
-
-	// Get model name from context or request
-	model := ""
-	if modelFromCtx := r.Context().Value("model_name"); modelFromCtx != nil {
-		if modelStr, ok := modelFromCtx.(string); ok {
-			model = modelStr
-		}
-	}
-
-	// Get pricing information
-	var cpt, cpit float64
-	var currency string = "USD"
-	price, err := service.GetModelPriceByModelNameAndVendor(model, string(llm.Vendor))
-	if err == nil && price != nil {
-		cpt = price.CPT
-		cpit = price.CPIT
-		currency = price.Currency
-	}
-
-	// Record analytics
-	rec := &models.LLMChatRecord{
-		LLMID:           llm.ID,
-		Name:            model,
-		Vendor:          string(llm.Vendor),
-		PromptTokens:    promptTokens,
-		ResponseTokens:  responseTokens,
-		TotalTokens:     totalTokens,
-		TimeStamp:       timestamp,
-		Choices:         len(contentResp.Choices),
-		ToolCalls:       countToolCalls(contentResp),
-		AppID:           app.ID,
-		UserID:          app.UserID,
-		Cost:            ((cpt * float64(responseTokens)) + (cpit * float64(promptTokens))) * 10000,
-		Currency:        currency,
-		InteractionType: models.ProxyInteraction,
-	}
-
-	return rec
-}
-
-// analyzeTranslatorBudget counts an /ai/ request's cost and runs the budget
-// analysis once its chat record is recorded.
-func analyzeTranslatorBudget(service services.ServiceInterface, llm *models.LLM, app *models.App, rec *models.LLMChatRecord) {
-	analyzeBudget(budgetServiceOf(service), llm, app, rec)
-}
