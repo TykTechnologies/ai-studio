@@ -67,4 +67,17 @@ func TestCallToolOperationResolvesSecretAuthKey(t *testing.T) {
 	loaded, err := svc.GetToolByID(tool.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "$SECRET/UPSTREAM_KEY", loaded.AuthKey, "API responses keep the reference")
+
+	// An $ENV/ reference is resolved at the call too, and kept when loaded.
+	t.Setenv("UPSTREAM_ENV_KEY", "env-key")
+	envTool, err := svc.CreateTool("Env keyed", "d", models.ToolTypeREST, base64.StdEncoding.EncodeToString([]byte(spec)), 0, "apiKey", "$ENV/UPSTREAM_ENV_KEY")
+	require.NoError(t, err)
+	_, err = svc.CallToolOperation(envTool.ID, "sendData", nil, map[string]interface{}{}, nil)
+	require.NoError(t, err)
+	mu.Lock()
+	assert.Equal(t, "env-key", keys[len(keys)-1])
+	mu.Unlock()
+	loaded, err = svc.GetToolByID(envTool.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "$ENV/UPSTREAM_ENV_KEY", loaded.AuthKey)
 }
