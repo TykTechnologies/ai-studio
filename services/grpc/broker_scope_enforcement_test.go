@@ -163,3 +163,14 @@ func TestManagementScopeInterceptor_PassesOtherServices(t *testing.T) {
 		func(ctx context.Context, req interface{}) (interface{}, error) { return nil, nil })
 	assert.Equal(t, codes.Internal, status.Code(err), "an unmapped management method must be refused")
 }
+
+// Scope-free methods still need the broker's plugin ID: without one, the
+// license status is refused like any scoped method.
+func TestManagementScopeInterceptor_ScopeFreeNeedsAPluginID(t *testing.T) {
+	unary, _ := ManagementScopeInterceptors(nil)
+	for _, method := range []string{"GetLicenseInfo", "CreateLLM"} {
+		_, err := unary(context.Background(), &pb.GetLicenseInfoRequest{}, &grpc.UnaryServerInfo{FullMethod: managementServicePrefix + method},
+			func(ctx context.Context, req interface{}) (interface{}, error) { return nil, nil })
+		assert.Equal(t, codes.Unauthenticated, status.Code(err), "%s without a plugin ID", method)
+	}
+}
