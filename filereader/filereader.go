@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"log"
@@ -49,18 +50,41 @@ func Read(name string, fileData []byte) (string, error) {
 	return "", fmt.Errorf("unsupported file type: %s", ext)
 }
 
-func ExtractTextFromPDFUsingPopplerWithOptions(fileName string, timeout time.Duration, data []byte) (string, error) {
-	// First check if pdftotext is in PATH
-	pdftotextPath, err := exec.LookPath("pdftotext")
-	if err != nil {
-		// If not in PATH, check the local directory
-		localPdftotext := "./pdftotext"
-		if _, err := os.Stat(localPdftotext); err == nil {
-			pdftotextPath = localPdftotext
-		} else {
-			log.Println("WARNING: pdftotext not found in PATH or local directory, falling back to pdf package")
-			return ExtractPDFText(fileName, data)
+// The pdftotext lookup runs once per process: the binary does not appear or
+// vanish between uploads, and looking it up per PDF logged a warning for
+// every upload on images without it (the release images ship without it).
+var (
+	pdftotextOnce sync.Once
+	pdftotextBin  string
+
+	// Seams for tests.
+	lookPath = exec.LookPath
+	statFile = os.Stat
+)
+
+// pdftotextPath returns the pdftotext binary to use (PATH first, then
+// ./pdftotext), or "" to use the built-in Go parser. The choice is logged
+// once.
+func pdftotextPath() string {
+	pdftotextOnce.Do(func() {
+		if path, err := lookPath("pdftotext"); err == nil {
+			pdftotextBin = path
+		} else if _, err := statFile("./pdftotext"); err == nil {
+			pdftotextBin = "./pdftotext"
 		}
+		if pdftotextBin == "" {
+			log.Println("PDF text extraction uses the built-in Go parser (pdftotext not found on PATH)")
+		} else {
+			log.Printf("PDF text extraction uses %s", pdftotextBin)
+		}
+	})
+	return pdftotextBin
+}
+
+func ExtractTextFromPDFUsingPopplerWithOptions(fileName string, timeout time.Duration, data []byte) (string, error) {
+	pdftotextPath := pdftotextPath()
+	if pdftotextPath == "" {
+		return ExtractPDFText(fileName, data)
 	}
 
 	// write data to pdfPath
