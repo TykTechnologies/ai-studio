@@ -40,7 +40,7 @@ if !input.is_chunk || len(check_text) >= min_buffer_length {
     matched_pattern := ""
 
     for pattern in forbidden_patterns {
-        if text.contains(text.to_lower(check_text), pattern) {
+        if text.contains(text.to_lower(check_text), text.to_lower(pattern)) {
             should_block = true
             matched_pattern = pattern
             break
