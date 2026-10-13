@@ -616,9 +616,15 @@ func TestNativeWorkers_UseConfiguredTimings(t *testing.T) {
 	// quickly; the package defaults are untouched.
 	stop := h.proxy.StartNativeWorkers(context.Background(), nil)
 	defer stop()
+	// The worker sets NextPollAt only after the vendor's GET returns, so
+	// wait for the row, not just the GET. (ledgerRow uses require, which
+	// must not run on Eventually's goroutine.)
 	require.Eventually(t, func() bool {
-		return len(h.vendor.callsTo(http.MethodGet, "/v1/messages/batches/msgbatch_C2")) > 0
-	}, 2*time.Second, 5*time.Millisecond)
-	require.NotNil(t, h.ledgerRow(r2.ID).NextPollAt)
+		if len(h.vendor.callsTo(http.MethodGet, "/v1/messages/batches/msgbatch_C2")) == 0 {
+			return false
+		}
+		var row models.NativeResource
+		return h.db.First(&row, r2.ID).Error == nil && row.NextPollAt != nil
+	}, 5*time.Second, 5*time.Millisecond, "the second row was polled and its next poll scheduled")
 	assert.Equal(t, 30*time.Second, nativeReconcileInterval)
 }
