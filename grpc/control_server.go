@@ -25,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
+	"github.com/TykTechnologies/midsommar/v2/pkg/snapshotguard"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -508,17 +509,16 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	// Get initial configuration using normalized namespace
 	initialConfig, err := s.getConfigurationSnapshot(namespace)
 	if err != nil {
-		logger.Log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to get initial configuration")
-		initialConfig = &pb.ConfigurationSnapshot{
-			Version: "0",
-			Llms:    []*pb.LLMConfig{},
-			Apps:    []*pb.AppConfig{},
-		}
+		// No initial configuration rather than an empty one: an edge applies
+		// what it is sent, and an empty snapshot would retire its whole
+		// configuration. It keeps what it has and gets the next snapshot.
+		logger.Log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to get initial configuration; the edge keeps its current configuration")
+		initialConfig = nil
 	}
 
 	// Update edge sync status - since the edge is receiving the latest config at registration,
 	// it should be marked as in_sync to avoid false "pending" status before first heartbeat
-	if initialConfig.Checksum != "" {
+	if initialConfig != nil && initialConfig.Checksum != "" {
 		now := time.Now()
 		edgeInstance.SyncStatus = models.EdgeSyncStatusInSync
 		edgeInstance.LoadedChecksum = initialConfig.Checksum
@@ -1547,7 +1547,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Taken before any row is read: an edge keeps Apps created after it,
 	// which it learnt of from token validation (see EdgeSyncService).
 	takenAt := time.Now()
-	llmPluginOrder, endpointAuthPlugins := s.snapshotPluginAttachments(namespace)
+	llmPluginOrder, endpointAuthPlugins, err := s.snapshotPluginAttachments()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read plugin attachments: %w", err)
+	}
 	snapshot := &pb.ConfigurationSnapshot{
 		Version:      fmt.Sprintf("%d", takenAt.Unix()),
 		SnapshotTime: timestamppb.New(takenAt),
@@ -1899,7 +1902,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	if err := llmFilterQuery.Order("llm_filters.llm_id ASC, llm_filters.filter_id ASC").Find(&llmFilterAssociations).Error; err != nil {
-		logger.Log.Warn().Err(err).Msg("Failed to query llm_filters associations for filters")
+		// The edge attaches filters from these lists too: a snapshot without
+		// them is not sent.
+		return nil, fmt.Errorf("failed to read LLM filter attachments: %w", err)
 	}
 
 	// Build map of filter_id -> []llm_id for efficient lookup
@@ -2018,7 +2023,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if err := s.db.Where("plugin_id IN ? AND is_active = ?", pluginIDs, true).
 			Order("plugin_id ASC, order_index ASC").
 			Find(&allLLMPlugins).Error; err != nil {
-			logger.Log.Warn().Err(err).Msg("Failed to preload LLM plugin associations")
+			// The edge attaches plugins to LLMs from these lists: a snapshot
+			// without them would run every LLM without its plugins.
+			return nil, fmt.Errorf("failed to read LLM plugin attachments: %w", err)
 		}
 	}
 
@@ -2244,11 +2251,16 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		for _, tool := range tools {
 			toolIDs = append(toolIDs, tool.ID)
 		}
+		// A deleted filter is soft-deleted and keeps its tool_filters rows;
+		// it no longer filters anything, so it is not listed (edges leave
+		// out a tool whose listed filter they do not get).
 		if err := s.db.Table("tool_filters").
-			Select("tool_id, filter_id").
-			Where("tool_id IN ?", toolIDs).
+			Select("tool_filters.tool_id, tool_filters.filter_id").
+			Joins("JOIN filters ON filters.id = tool_filters.filter_id AND filters.deleted_at IS NULL").
+			Where("tool_filters.tool_id IN ?", toolIDs).
 			Find(&toolFilterAssociations).Error; err != nil {
-			logger.Log.Warn().Err(err).Msg("Failed to query tool_filters associations")
+			// Tools would go out without their filters.
+			return nil, fmt.Errorf("failed to read tool filter attachments: %w", err)
 		}
 	}
 
@@ -2539,6 +2551,20 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("access_token_count", len(snapshot.AccessTokens)).
 		Msg("Generated configuration snapshot for edge")
 
+	// Entries an edge cannot store (a key edges keep unique, such as a tool
+	// or LLM slug, used twice: rows written before the hub refused that) are
+	// left out here, so that edges of any version apply the rest; edges that
+	// know omitted_entries report them back. The lowest ID keeps the key.
+	if clean, left := snapshotguard.Sanitize(snapshot); len(left) > 0 {
+		snapshot = clean
+		snapshot.OmittedEntries = snapshotguard.Strings(left)
+		for _, line := range snapshot.OmittedEntries {
+			if omittedEntryLogDue(namespace + "\x00" + line) {
+				logger.Log.Warn().Str("namespace", namespace).Msg("Configuration snapshot for edges: " + line + "; rename it so edges can load it")
+			}
+		}
+	}
+
 	// Compute checksum for the snapshot
 	checksum, err := ComputeSnapshotChecksum(snapshot)
 	if err != nil {
@@ -2560,6 +2586,19 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	return snapshot, nil
+}
+
+// omittedEntryLogged is when each left-out snapshot entry was last logged.
+// Snapshots are rebuilt on every edge fetch; an entry is logged once an hour.
+var omittedEntryLogged sync.Map // namespace + line -> time.Time
+
+func omittedEntryLogDue(key string) bool {
+	now := time.Now()
+	if last, ok := omittedEntryLogged.Load(key); ok && now.Sub(last.(time.Time)) < time.Hour {
+		return false
+	}
+	omittedEntryLogged.Store(key, now)
+	return true
 }
 
 // updateNamespaceSyncStatus updates the sync status for a namespace in the database.

@@ -2423,8 +2423,12 @@ type ConfigurationSnapshot struct {
 	OauthClients    []*OAuthClientConfig    `protobuf:"bytes,13,rep,name=oauth_clients,json=oauthClients,proto3" json:"oauth_clients,omitempty"`
 	AccessTokens    []*AccessTokenConfig    `protobuf:"bytes,14,rep,name=access_tokens,json=accessTokens,proto3" json:"access_tokens,omitempty"`
 	SemanticRouters []*SemanticRouterConfig `protobuf:"bytes,15,rep,name=semantic_routers,json=semanticRouters,proto3" json:"semantic_routers,omitempty"` // Enterprise: Semantic routers
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Entries the hub left out of this snapshot because an edge could not
+	// store them (a key edges keep unique, such as a tool slug, used twice),
+	// one line each. Edges report them with their own (pkg/snapshotguard).
+	OmittedEntries []string `protobuf:"bytes,16,rep,name=omitted_entries,json=omittedEntries,proto3" json:"omitted_entries,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ConfigurationSnapshot) Reset() {
@@ -2558,6 +2562,13 @@ func (x *ConfigurationSnapshot) GetAccessTokens() []*AccessTokenConfig {
 func (x *ConfigurationSnapshot) GetSemanticRouters() []*SemanticRouterConfig {
 	if x != nil {
 		return x.SemanticRouters
+	}
+	return nil
+}
+
+func (x *ConfigurationSnapshot) GetOmittedEntries() []string {
+	if x != nil {
+		return x.OmittedEntries
 	}
 	return nil
 }
@@ -3132,7 +3143,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"token_hash\x18\t \x01(\tR\ttokenHash\x12\x15\n" +
 	"\x06app_id\x18\n" +
-	" \x01(\rR\x05appId\"\xd1\x06\n" +
+	" \x01(\rR\x05appId\"\xfa\x06\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
@@ -3149,7 +3160,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\vdatasources\x18\f \x03(\v2\x1e.microgateway.DatasourceConfigR\vdatasources\x12D\n" +
 	"\roauth_clients\x18\r \x03(\v2\x1f.microgateway.OAuthClientConfigR\foauthClients\x12D\n" +
 	"\raccess_tokens\x18\x0e \x03(\v2\x1f.microgateway.AccessTokenConfigR\faccessTokens\x12M\n" +
-	"\x10semantic_routers\x18\x0f \x03(\v2\".microgateway.SemanticRouterConfigR\x0fsemanticRouters\"\xb5\x04\n" +
+	"\x10semantic_routers\x18\x0f \x03(\v2\".microgateway.SemanticRouterConfigR\x0fsemanticRouters\x12'\n" +
+	"\x0fomitted_entries\x18\x10 \x03(\tR\x0eomittedEntries\"\xb5\x04\n" +
 	"\x13ConfigurationChange\x12M\n" +
 	"\vchange_type\x18\x01 \x01(\x0e2,.microgateway.ConfigurationChange.ChangeTypeR\n" +
 	"changeType\x12M\n" +

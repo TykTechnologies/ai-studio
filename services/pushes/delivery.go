@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -288,6 +289,13 @@ func (c *Coordinator) HandleReloadResponse(resp *pb.ConfigurationReloadResponse)
 	switch resp.Phase {
 	case pb.ReloadPhase_READY:
 		status, warning, expected, loaded := c.verify(cmd)
+		if len(resp.SkippedEntries) > 0 {
+			// Applied without entries the edge could not store (a key it
+			// keeps unique used twice): the rest of the configuration is
+			// live, and the edge shows as not in sync until they are fixed.
+			status = models.PushCommandSucceededWarning
+			warning = skippedWarning(resp.SkippedEntries)
+		}
 		c.finish(cmd.ID, func(cur models.EdgePushCommand, now time.Time) map[string]interface{} {
 			return map[string]interface{}{
 				"status":            status,
@@ -330,6 +338,26 @@ func (c *Coordinator) HandleReloadResponse(resp *pb.ConfigurationReloadResponse)
 			logger.Warnf("Edge pushes: recording %s's progress on %s failed: %v", resp.EdgeId, resp.OperationId, err)
 		}
 	}
+}
+
+// skippedWarning describes the entries an edge left out of a configuration.
+func skippedWarning(skipped []string) string {
+	const shown = 10
+	list := skipped
+	more := ""
+	if len(list) > shown {
+		more = fmt.Sprintf("; and %d more (see the edge log)", len(list)-shown)
+		list = list[:shown]
+	}
+	return fmt.Sprintf("the edge applied the configuration without %d %s it could not store: %s%s",
+		len(skipped), plural(len(skipped), "entry", "entries"), strings.Join(list, "; "), more)
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // finish settles command id, unless it has been settled meanwhile.

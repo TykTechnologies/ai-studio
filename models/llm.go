@@ -87,6 +87,15 @@ func (l *LLM) Get(db *gorm.DB, id uint) error {
 	return withFilterOrder(db, db.Preload("Filters").Preload("Plugins").First(l, id).Error, l)
 }
 
+// BeforeSave refuses a name whose slug another LLM already has
+// (*SlugConflictError), when the LLM itself is created or saved.
+func (l *LLM) BeforeSave(tx *gorm.DB) error {
+	if dest, ok := tx.Statement.Dest.(*LLM); !ok || dest != l {
+		return nil
+	}
+	return checkLLMSlug(hookDB(tx), l)
+}
+
 func (l *LLM) Create(db *gorm.DB) error {
 	tx := db.Begin()
 	defer func() {

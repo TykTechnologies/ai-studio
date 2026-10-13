@@ -1,7 +1,8 @@
 package grpc
 
 import (
-	"github.com/TykTechnologies/midsommar/v2/logger"
+	"fmt"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
@@ -13,26 +14,22 @@ type endpointKey struct {
 
 // snapshotPluginAttachments reads, for the configuration snapshot, the order
 // each LLM runs its plugins in and the auth plugin lists of the other
-// endpoints, keeping only the plugins in sent (the active plugins the edge
-// receives). A deactivated auth plugin so drops off an endpoint, as it drops
-// off an LLM, and the endpoint goes back to app keys.
+// endpoints, keeping every active plugin. A deactivated plugin drops off an
+// LLM, and a deactivated auth plugin off an endpoint, which goes back to app
+// keys. An active plugin the snapshot does not send (one filed under another
+// namespace) stays listed: edges leave out the LLM or endpoint that needs
+// it (pkg/snapshotguard) rather than run it without the plugin.
 //
-// A failed read leaves the snapshot without them, as a failed plugin preload
-// does: the edge then keeps LLM plugins in the order it gets them and
-// authenticates every other endpoint with app keys, as it did before these
-// lists existed.
-func (s *ControlServer) snapshotPluginAttachments(namespace string) (map[uint][]uint32, map[endpointKey][]uint32) {
-	// The same plugin set the snapshot sends further down.
+// A failed read fails the snapshot: without these lists every LLM would go
+// out without its plugins and every endpoint without its auth plugins, and
+// edges could not tell. Edges keep their previous configuration instead.
+func (s *ControlServer) snapshotPluginAttachments() (map[uint][]uint32, map[endpointKey][]uint32, error) {
+	// Every active plugin, whichever namespace it is filed under: the
+	// snapshot sends only this namespace's and the global ones.
 	sent := make(map[uint]bool)
 	var sentIDs []uint
-	q := s.db.Model(&models.Plugin{}).Where("is_active = ?", true)
-	if namespace == "" {
-		q = q.Where("namespace = ''")
-	} else {
-		q = q.Where("(namespace = '' OR namespace = ?)", namespace)
-	}
-	if err := q.Pluck("id", &sentIDs).Error; err != nil {
-		logger.Log.Warn().Err(err).Msg("Failed to read plugins for configuration snapshot attachments")
+	if err := s.db.Model(&models.Plugin{}).Where("is_active = ?", true).Pluck("id", &sentIDs).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to read plugins: %w", err)
 	}
 	for _, id := range sentIDs {
 		sent[id] = true
@@ -41,7 +38,7 @@ func (s *ControlServer) snapshotPluginAttachments(namespace string) (map[uint][]
 	llmOrder := make(map[uint][]uint32)
 	var llmPlugins []models.LLMPlugin
 	if err := s.db.Where("is_active = ?", true).Order("llm_id ASC, order_index ASC").Find(&llmPlugins).Error; err != nil {
-		logger.Log.Warn().Err(err).Msg("Failed to read LLM plugin order for configuration snapshot")
+		return nil, nil, fmt.Errorf("failed to read LLM plugins: %w", err)
 	}
 	for _, lp := range llmPlugins {
 		if !sent[lp.PluginID] {
@@ -53,7 +50,7 @@ func (s *ControlServer) snapshotPluginAttachments(namespace string) (map[uint][]
 	endpointAuth := make(map[endpointKey][]uint32)
 	rows, err := models.GetAllEndpointAuthPlugins(s.db)
 	if err != nil {
-		logger.Log.Warn().Err(err).Msg("Failed to read endpoint auth plugins for configuration snapshot")
+		return nil, nil, fmt.Errorf("failed to read endpoint auth plugins: %w", err)
 	}
 	for _, row := range rows {
 		if !sent[row.PluginID] {
@@ -62,5 +59,5 @@ func (s *ControlServer) snapshotPluginAttachments(namespace string) (map[uint][]
 		k := endpointKey{row.ObjectType, row.ObjectID}
 		endpointAuth[k] = append(endpointAuth[k], uint32(row.PluginID))
 	}
-	return llmOrder, endpointAuth
+	return llmOrder, endpointAuth, nil
 }

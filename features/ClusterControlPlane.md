@@ -178,8 +178,11 @@ alone.
   the edge the message names). Each phase is recorded and resets the answer
   timeout. READY is verified against the expected checksum; FAILED is
   terminal (an edge-side failure such as a rejected snapshot is not retried
-  automatically; the user sees the edge's message). Late, duplicate and
-  unknown reports change nothing.
+  automatically; the user sees the edge's message). READY carrying
+  `skipped_entries` (entries the edge could not store, see
+  `pkg/snapshotguard`) settles as `succeeded_with_warning` with the
+  entries as the warning. Late, duplicate and unknown reports change
+  nothing.
 - When a stream closes, the commands in flight on that session go back to
   `pending` at once, for whichever replica the edge reconnects to. A
   replica that stops ends its edge streams itself (so the edges reconnect

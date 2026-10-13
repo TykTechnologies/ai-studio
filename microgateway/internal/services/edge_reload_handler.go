@@ -120,7 +120,8 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 	// Phase 3: UPDATING - Apply configuration with safe SQLite update
 	h.sendStatus(req.OperationId, pb.ReloadPhase_UPDATING, true, "Updating local SQLite database", h.currentVersion, newVersion)
 
-	if err := h.safeUpdateSQLite(newConfig); err != nil {
+	report, err := h.safeUpdateSQLite(newConfig)
+	if err != nil {
 		h.sendStatus(req.OperationId, pb.ReloadPhase_FAILED, false, fmt.Sprintf("Failed to update SQLite: %v", err), h.currentVersion, "")
 		return
 	}
@@ -149,9 +150,18 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 	// Phase 4: UPDATED - Configuration applied to SQLite
 	h.sendStatus(req.OperationId, pb.ReloadPhase_UPDATED, true, "Local SQLite database updated successfully", h.currentVersion, newVersion)
 
-	// Phase 5: READY - Edge operational with new configuration
+	// Phase 5: READY - Edge operational with new configuration. Entries
+	// it could not store were left out; the hub records them on the push.
 	h.currentVersion = newVersion
-	h.sendStatus(req.OperationId, pb.ReloadPhase_READY, true, "Edge ready with new configuration", h.currentVersion, newVersion)
+	if len(report.Skipped) > 0 {
+		noun := "entries"
+		if len(report.Skipped) == 1 {
+			noun = "entry"
+		}
+		h.sendReady(req.OperationId, fmt.Sprintf("Edge ready with new configuration, except %d %s it could not store", len(report.Skipped), noun), newVersion, report.Skipped)
+	} else {
+		h.sendStatus(req.OperationId, pb.ReloadPhase_READY, true, "Edge ready with new configuration", h.currentVersion, newVersion)
+	}
 
 	log.Info().
 		Str("operation_id", req.OperationId).
@@ -165,7 +175,7 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 // (A separate copy-and-restore of the tables used to run on failure; its
 // restore deleted every App and LLM outside any transaction, which foreign
 // keys refuse on Postgres, and left the edge half-restored.)
-func (h *EdgeReloadHandler) safeUpdateSQLite(newConfig *pb.ConfigurationSnapshot) error {
+func (h *EdgeReloadHandler) safeUpdateSQLite(newConfig *pb.ConfigurationSnapshot) (*SyncReport, error) {
 	log.Info().
 		Str("version", newConfig.Version).
 		Int("llm_count", len(newConfig.Llms)).
@@ -175,18 +185,35 @@ func (h *EdgeReloadHandler) safeUpdateSQLite(newConfig *pb.ConfigurationSnapshot
 		Int("model_price_count", len(newConfig.ModelPrices)).
 		Msg("Starting configuration update")
 
-	if err := h.syncService.SyncConfiguration(newConfig); err != nil {
+	report, err := h.syncService.SyncConfigurationReport(newConfig)
+	if err != nil {
 		log.Error().Err(err).Msg("Configuration sync failed; the previous configuration is unchanged")
-		return fmt.Errorf("configuration sync failed, rolled back: %w", err)
+		return nil, fmt.Errorf("configuration sync failed, rolled back: %w", err)
 	}
 
-	log.Info().Str("version", newConfig.Version).Msg("Configuration update completed")
-	return nil
+	log.Info().Str("version", newConfig.Version).Int("skipped", len(report.Skipped)).Msg("Configuration update completed")
+	return report, nil
+}
+
+// sendReady reports READY for a configuration applied without the skipped
+// entries.
+func (h *EdgeReloadHandler) sendReady(operationID, message, version string, skipped []string) {
+	h.send(&pb.ConfigurationReloadResponse{
+		OperationId:         operationID,
+		EdgeId:              h.edgeID,
+		Phase:               pb.ReloadPhase_READY,
+		Success:             true,
+		Message:             message,
+		ConfigVersionBefore: version,
+		ConfigVersionAfter:  version,
+		Timestamp:           timestamppb.Now(),
+		SkippedEntries:      skipped,
+	})
 }
 
 // sendStatus sends a reload status update to the control server
 func (h *EdgeReloadHandler) sendStatus(operationID string, phase pb.ReloadPhase, success bool, message string, versionBefore string, versionAfter string) {
-	response := &pb.ConfigurationReloadResponse{
+	h.send(&pb.ConfigurationReloadResponse{
 		OperationId:          operationID,
 		EdgeId:               h.edgeID,
 		Phase:                phase,
@@ -195,13 +222,16 @@ func (h *EdgeReloadHandler) sendStatus(operationID string, phase pb.ReloadPhase,
 		ConfigVersionBefore:  versionBefore,
 		ConfigVersionAfter:   versionAfter,
 		Timestamp:            timestamppb.Now(),
-	}
+	})
+}
 
+func (h *EdgeReloadHandler) send(response *pb.ConfigurationReloadResponse) {
 	log.Info().
-		Str("operation_id", operationID).
-		Str("phase", phase.String()).
-		Bool("success", success).
-		Str("message", message).
+		Str("operation_id", response.OperationId).
+		Str("phase", response.Phase.String()).
+		Bool("success", response.Success).
+		Str("message", response.Message).
+		Strs("skipped", response.SkippedEntries).
 		Msg("Sending reload status update to control")
 
 	if h.sendStatusUpdate != nil {

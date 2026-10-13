@@ -3,13 +3,16 @@ package services
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/pkg/snapshotguard"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/proto"
@@ -27,7 +30,69 @@ type EdgeSyncService struct {
 // snapshot last applied. A reload hands the same pulled snapshot to both the
 // config callback and the reload handler; the second application is skipped.
 // The whole snapshot is hashed: the hub's checksum leaves out Apps.
-var appliedSnapshots sync.Map // appliedKey -> [sha256.Size]byte
+var appliedSnapshots sync.Map // appliedKey -> appliedSnapshot
+
+// appliedSnapshot is the fingerprint of an applied snapshot and the entries
+// its application left out.
+type appliedSnapshot struct {
+	fingerprint [sha256.Size]byte
+	skipped     []string
+}
+
+// SyncReport describes an applied snapshot.
+type SyncReport struct {
+	// Skipped lists, one line each, the entries left out of the snapshot,
+	// by the hub (ConfigurationSnapshot.omitted_entries) or by this edge
+	// (pkg/snapshotguard), because an edge cannot store them. Everything
+	// else was applied.
+	Skipped []string
+}
+
+// reportedConfigs holds, per database and namespace, the configuration the
+// edge tells the hub it runs, in heartbeats: the checksum of the last
+// snapshot it applied, not of the last one it received. A snapshot applied
+// without some of its entries reports a checksum of its own, so the hub
+// shows the edge as not in sync with it.
+var reportedConfigs sync.Map // appliedKey -> reportedConfig
+
+type reportedConfig struct {
+	checksum, version string
+}
+
+// ReportedConfig returns the checksum and version of the configuration this
+// edge last applied to its database. ok is false until a sync has been
+// attempted; a sync that failed leaves the previous values (empty when none
+// has succeeded yet).
+func (s *EdgeSyncService) ReportedConfig() (checksum, version string, ok bool) {
+	v, ok := reportedConfigs.Load(appliedKey{config: s.db.Config, namespace: s.namespace})
+	if !ok {
+		return "", "", false
+	}
+	r := v.(reportedConfig)
+	return r.checksum, r.version, true
+}
+
+func (s *EdgeSyncService) recordSyncAttempt() {
+	reportedConfigs.LoadOrStore(appliedKey{config: s.db.Config, namespace: s.namespace}, reportedConfig{})
+}
+
+func (s *EdgeSyncService) recordAppliedConfig(config *pb.ConfigurationSnapshot, skipped []string) {
+	reportedConfigs.Store(appliedKey{config: s.db.Config, namespace: s.namespace}, reportedConfig{
+		checksum: appliedChecksum(config.Checksum, skipped),
+		version:  config.Version,
+	})
+}
+
+// appliedChecksum is the hub's checksum when the whole snapshot was applied.
+// Otherwise it is a checksum of the hub's and of what was left out, of the
+// same length (the hub stores 64 characters), which never equals the hub's.
+func appliedChecksum(hubChecksum string, skipped []string) string {
+	if hubChecksum == "" || len(skipped) == 0 {
+		return hubChecksum
+	}
+	sum := sha256.Sum256([]byte(hubChecksum + "\x00partial\x00" + strings.Join(skipped, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
 
 // snapshotFingerprint hashes the whole snapshot; ok is false when it cannot
 // be serialized, and then the snapshot is always applied.
@@ -115,20 +180,51 @@ func NewEdgeSyncService(db *gorm.DB, namespace string) *EdgeSyncService {
 
 // SyncConfiguration syncs flattened configuration to local SQLite with join table recreation
 func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) error {
+	_, err := s.SyncConfigurationReport(config)
+	return err
+}
+
+// SyncConfigurationReport is SyncConfiguration, and also reports the entries
+// left out. An entry the edge cannot store (one that repeats a key the edge
+// keeps unique, such as a tool slug) is left out on its own, with what
+// refers to it, and logged; the rest of the snapshot is applied.
+func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot) (*SyncReport, error) {
 	log.Debug().
-		Str("version", config.Version).
+		Str("version", raw.Version).
 		Str("namespace", s.namespace).
-		Int("llm_count", len(config.Llms)).
-		Int("app_count", len(config.Apps)).
+		Int("llm_count", len(raw.Llms)).
+		Int("app_count", len(raw.Apps)).
 		Msg("Starting configuration sync to local SQLite")
 
 	key := appliedKey{config: s.db.Config, namespace: s.namespace}
-	fingerprint, fingerprinted := snapshotFingerprint(config)
-	if applied, ok := appliedSnapshots.Load(key); ok && fingerprinted && applied.([sha256.Size]byte) == fingerprint {
-		log.Debug().Str("version", config.Version).Msg("Configuration snapshot already applied, skipping")
-		return nil
+	fingerprint, fingerprinted := snapshotFingerprint(raw)
+	if applied, ok := appliedSnapshots.Load(key); ok && fingerprinted && applied.(appliedSnapshot).fingerprint == fingerprint {
+		log.Debug().Str("version", raw.Version).Msg("Configuration snapshot already applied, skipping")
+		return &SyncReport{Skipped: applied.(appliedSnapshot).skipped}, nil
 	}
+	s.recordSyncAttempt()
 
+	config, left := snapshotguard.Sanitize(raw)
+	skipped := append(append([]string(nil), raw.OmittedEntries...), snapshotguard.Strings(left)...)
+
+	if err := s.apply(config); err != nil {
+		return nil, err
+	}
+	for _, line := range skipped {
+		log.Error().Str("version", config.Version).Str("namespace", s.namespace).
+			Msg("Configuration entry not applied: " + line)
+	}
+	s.recordAppliedConfig(raw, skipped)
+	if fingerprinted {
+		appliedSnapshots.Store(key, appliedSnapshot{fingerprint: fingerprint, skipped: skipped})
+	} else {
+		appliedSnapshots.Delete(key)
+	}
+	return &SyncReport{Skipped: skipped}, nil
+}
+
+// apply writes a snapshot that the edge can store in one transaction.
+func (s *EdgeSyncService) apply(config *pb.ConfigurationSnapshot) error {
 	// Start transaction for atomic sync
 	tx := s.db.Begin()
 	if tx.Error != nil {
@@ -227,11 +323,6 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		for _, r := range raised {
 			ledger.Reconcile(r.appID, r.start, r.cost)
 		}
-	}
-	if fingerprinted {
-		appliedSnapshots.Store(key, fingerprint)
-	} else {
-		appliedSnapshots.Delete(key)
 	}
 
 	log.Debug().

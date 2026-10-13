@@ -204,6 +204,9 @@ func (s *LLMManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRe
 			Str("name", req.GetName()).
 			Str("vendor", req.GetVendor()).
 			Msg("Failed to create LLM via gRPC")
+		if errors.Is(err, models.ErrSlugConflict) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to create LLM: %v", err)
 	}
 
@@ -264,6 +267,9 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 		}
 		log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to update LLM via gRPC")
+		if errors.Is(err, models.ErrSlugConflict) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to update LLM: %v", err)
 	}
 

@@ -1460,8 +1460,11 @@ type ConfigurationReloadResponse struct {
 	ConfigVersionBefore string                 `protobuf:"bytes,6,opt,name=config_version_before,json=configVersionBefore,proto3" json:"config_version_before,omitempty"` // Config version before reload
 	ConfigVersionAfter  string                 `protobuf:"bytes,7,opt,name=config_version_after,json=configVersionAfter,proto3" json:"config_version_after,omitempty"`    // Config version after reload (if successful)
 	Timestamp           *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                                  // When this status was reported
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// READY only: entries the edge could not store and left out, one line
+	// each (pkg/snapshotguard). The rest of the configuration is applied.
+	SkippedEntries []string `protobuf:"bytes,9,rep,name=skipped_entries,json=skippedEntries,proto3" json:"skipped_entries,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ConfigurationReloadResponse) Reset() {
@@ -1546,6 +1549,13 @@ func (x *ConfigurationReloadResponse) GetConfigVersionAfter() string {
 func (x *ConfigurationReloadResponse) GetTimestamp() *timestamppb.Timestamp {
 	if x != nil {
 		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *ConfigurationReloadResponse) GetSkippedEntries() []string {
+	if x != nil {
+		return x.SkippedEntries
 	}
 	return nil
 }
@@ -3209,7 +3219,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\ftarget_edges\x18\x03 \x03(\tR\vtargetEdges\x12!\n" +
 	"\finitiated_by\x18\x04 \x01(\tR\vinitiatedBy\x12'\n" +
 	"\x0ftimeout_seconds\x18\x05 \x01(\x03R\x0etimeoutSeconds\x12=\n" +
-	"\finitiated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vinitiatedAt\"\xde\x02\n" +
+	"\finitiated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vinitiatedAt\"\x87\x03\n" +
 	"\x1bConfigurationReloadResponse\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12\x17\n" +
 	"\aedge_id\x18\x02 \x01(\tR\x06edgeId\x12/\n" +
@@ -3218,7 +3228,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\amessage\x18\x05 \x01(\tR\amessage\x122\n" +
 	"\x15config_version_before\x18\x06 \x01(\tR\x13configVersionBefore\x120\n" +
 	"\x14config_version_after\x18\a \x01(\tR\x12configVersionAfter\x128\n" +
-	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x81\x06\n" +
+	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12'\n" +
+	"\x0fskipped_entries\x18\t \x03(\tR\x0eskippedEntries\"\x81\x06\n" +
 	"\x0eAnalyticsPulse\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12%\n" +
 	"\x0eedge_namespace\x18\x02 \x01(\tR\redgeNamespace\x12C\n" +

@@ -75,9 +75,15 @@ func setupTestServer(t *testing.T, config *Config) (*ControlServer, *gorm.DB) {
 
 // createTestLLMs creates test LLM data
 func createTestLLMs(db *gorm.DB, namespace string) []models.LLM {
+	// LLM names are unique by slug across namespaces, so the namespace is
+	// part of the name.
+	suffix := ""
+	if namespace != "" {
+		suffix = " " + namespace
+	}
 	llms := []models.LLM{
 		{
-			Name:         "Test OpenAI",
+			Name:         "Test OpenAI" + suffix,
 			Vendor:       models.OPENAI,
 			APIKey:       "test-key-1",
 			APIEndpoint:  "https://api.openai.com/v1",
@@ -86,7 +92,7 @@ func createTestLLMs(db *gorm.DB, namespace string) []models.LLM {
 			Namespace:    namespace,
 		},
 		{
-			Name:         "Test Anthropic",
+			Name:         "Test Anthropic" + suffix,
 			Vendor:       models.ANTHROPIC,
 			APIKey:       "test-key-2",
 			APIEndpoint:  "https://api.anthropic.com/v1",

@@ -329,9 +329,34 @@ Edges send analytics and spend to the control plane in the analytics pulse, whic
 - Check the edge logs for `Failed to send analytics pulse`.
 - Edges built before 2026-09-27 kept sending the pulse over their first connection to the control plane. After any AI Studio restart that connection was closed, so no further analytics arrived until the edge was restarted, and a graceful edge shutdown dropped what the pulse had buffered. Upgrade the edge, or restart it after each AI Studio restart.
 
+### Configuration Entries an Edge Cannot Store
+
+Edges keep some keys unique: LLM and tool slugs, model price model and vendor pairs, router slugs per namespace, OAuth client IDs and access token hashes. When a snapshot repeats one of those keys, the edge leaves out each entry that repeats it, keeping the one with the lowest ID. It also drops the references other entries hold to what it left out. For example, an App's grant to a left-out tool is dropped instead of reaching the tool that kept the slug. The rest of the configuration is applied. Filters are never left out, and an LLM that is kept keeps all of its filters and plugins.
+
+Attachments that an edge does not receive are handled the same way. An edge receives the filters and plugins of its own namespace and the global ones, and nothing filed under another namespace. So:
+
+- An LLM or tool attached to a filter or plugin that the edge does not receive is left out, and never serves without it. For example, a global LLM using a filter or plugin filed under another namespace is left out on that namespace's edges.
+- An endpoint (tool, datasource, router or plugin endpoint) whose auth plugin the edge does not receive is left out, instead of falling back to App keys.
+- A plugin left out because of this takes the LLMs that run it along.
+- Deactivating or deleting a filter or plugin detaches it, as before. It does not leave anything out.
+
+To fix such an entry, file the filter or plugin under the global namespace or the LLM's namespace, or detach it.
+
+From 2.3, AI Studio refuses a tool or LLM name whose slug another tool or LLM already has (see [Tools](./tools.md) and [LLM Management](./llm-management.md)). Duplicates stored by earlier versions are not changed. Instead:
+
+- AI Studio leaves them out of every snapshot and logs `Configuration snapshot for edges: tool 3 left out: slug "page-fetcher" is already used by tool 2`, at most once an hour per entry.
+- The edge logs `Configuration entry not applied: …` for each entry left out, whether AI Studio or the edge left it out.
+- The edge reports a checksum of its own for a configuration applied without entries, so it shows as **Pending** until the duplicate is renamed.
+- A push to it ends `succeeded_with_warning`, and its `warning` lists the entries.
+
+Rename the duplicate, then push again.
+
+An edge also reports, in its heartbeats, the configuration it applied rather than the last one it received, so a snapshot it failed to apply no longer shows as in sync.
+
 ### Edge Shows "Pending" After Push
 
 - Wait a few seconds for the heartbeat cycle to complete
+- Check the push's `warning` and the edge log for entries it could not store (see above)
 - Check if the edge is connected (not disconnected)
 - Verify the edge gateway logs for configuration load errors
 - Check if the edge has sufficient permissions to fetch configuration
