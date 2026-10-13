@@ -35,9 +35,17 @@ jest.mock('react-router-dom', () => ({
 // Mock the components used in Overview
 jest.mock('../components/common/BasicCard', () => ({
   __esModule: true,
-  default: ({ children, primaryAction, secondaryAction }) => (
+  default: ({ children, primaryAction, secondaryAction, prerequisite }) => (
     <div data-testid="basic-card">
       {children}
+      {prerequisite && (
+        <div data-testid="card-prerequisite">
+          {prerequisite.text}
+          {prerequisite.links.map((l) => (
+            <a key={l.to} href={l.to}>{l.label}</a>
+          ))}
+        </div>
+      )}
       {primaryAction && (
         <button 
           data-testid="primary-action" 
@@ -429,6 +437,32 @@ describe('Overview Component', () => {
       
       getDocsLinkFn(key);
       expect(mockGetDocsLink).toHaveBeenCalledWith('llm_providers');
+    });
+  });
+
+  // #505 I3: a card whose feature needs something set up first says so and
+  // links to where it is set up.
+  describe('card prerequisites', () => {
+    const allFeatures = { features: { feature_chat: true, feature_gateway: true, feature_portal: true } };
+    const prereqs = () => screen.getAllByTestId('card-prerequisite').map((el) => el.textContent);
+
+    test('the provider, data source, app and chat cards state what they need', () => {
+      renderWithProviders(<Overview />, { features: allFeatures, hasLLMs: true });
+      const lines = prereqs();
+      expect(lines).toHaveLength(4);
+      expect(lines.some((t) => /API key, best stored as a secret/.test(t))).toBe(true);
+      expect(lines.some((t) => /an embedder/.test(t))).toBe(true);
+      expect(screen.getByRole('link', { name: 'Add an embedder' })).toHaveAttribute('href', '/admin/embedders');
+      expect(screen.getByRole('link', { name: 'Store a key' })).toHaveAttribute('href', '/admin/secrets');
+      expect(screen.getAllByRole('link', { name: 'Set up a provider' })).toHaveLength(2);
+      expect(screen.getByRole('link', { name: 'Set up call settings' })).toHaveAttribute('href', '/admin/llm-settings');
+    });
+
+    test('links to pages the user cannot open are left out, the text stays', () => {
+      mockCan.mockImplementation((perm) => perm !== 'embedders:read');
+      renderWithProviders(<Overview />, { features: allFeatures, hasLLMs: true });
+      expect(screen.queryByRole('link', { name: 'Add an embedder' })).not.toBeInTheDocument();
+      expect(prereqs().some((t) => /an embedder/.test(t))).toBe(true);
     });
   });
 });

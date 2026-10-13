@@ -18,6 +18,7 @@ import CustomSelect from '../../common/CustomSelect';
 import CustomSelectBadge from '../../common/CustomSelectBadge';
 import Icon from '../../../../components/common/Icon';
 import RadioSelectionGroup from '../../common/RadioSelectionGroup';
+import CredentialSetupNotice from './CredentialSetupNotice';
 import { getChatVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
 import { PRIVACY_LEVEL_SCORES, PRIVACY_LEVEL_OPTIONS, PRIVACY_BADGE_CONFIGS, privacyLevelKeyForScore } from './utils';
 import { withBase } from "../../../../runtimeConfig";
@@ -271,6 +272,10 @@ const ConfigureAIStep = () => {
                           {option.label}
                         </Box>
                       )}
+                    />
+                    <CredentialSetupNotice
+                      llms={availableLLMs.filter((llm) => llm.id === selectedLlmId)}
+                      sx={{ mt: 2 }}
                     />
                   </Box>
                 );

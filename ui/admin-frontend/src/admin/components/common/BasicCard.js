@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, styled, Button } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
+import { Box, styled, Button, Link, Typography } from '@mui/material';
 import { SecondaryOutlineButton } from '../../styles/sharedStyles';
 
 const CardContainer = styled(Box)(({ theme }) => ({
@@ -47,10 +48,31 @@ const SecondaryActionButton = styled(SecondaryOutlineButton)(({ theme }) => ({
   padding: '2px 8px',
 }));
 
-const BasicCard = ({ children, primaryAction, secondaryAction }) => {
+const PrerequisiteLine = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(0, 2, 1.5),
+}));
+
+// prerequisite: { text, links: [{ label, to }] } -- what the feature needs
+// before its call to action can succeed, with links to where it is set up.
+const BasicCard = ({ children, primaryAction, secondaryAction, prerequisite }) => {
   return (
     <CardContainer>
       <CardContent>{children}</CardContent>
+      {prerequisite && (
+        <PrerequisiteLine data-testid="card-prerequisite">
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+            <strong>Needs:</strong> {prerequisite.text}
+            {(prerequisite.links || []).map((link, i) => (
+              <React.Fragment key={link.to}>
+                {i === 0 ? ' ' : ' · '}
+                <Link component={RouterLink} to={link.to}>
+                  {link.label}
+                </Link>
+              </React.Fragment>
+            ))}
+          </Typography>
+        </PrerequisiteLine>
+      )}
       <CardActions>
         {secondaryAction && (
           <SecondaryActionButton

@@ -247,6 +247,8 @@ AI Studio pre-populates OpenAI and Anthropic LLM vendors on first startup with p
 3. Click on **`OPENAI_KEY`** and edit it to add your OpenAI API key
 4. Click on **`ANTHROPIC_KEY`** and edit it to add your Anthropic API key
 
+Until you do, both providers are active but every call through them fails, because their secrets are empty. The provider list marks them with a warning. The **Quick start** wizard on the Overview page names each empty secret and links to it.
+
 ### 2. Push Configuration to the Microgateway
 
 The Microgateway needs to receive the updated configuration from AI Studio:
