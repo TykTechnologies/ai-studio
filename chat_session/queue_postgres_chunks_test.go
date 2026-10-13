@@ -81,6 +81,31 @@ func TestNotifyReassembler_DropsStalePartials(t *testing.T) {
 	}
 }
 
+// A session holds at most maxPartialNotifies reassemblies; a new one drops
+// the oldest, and storage follows the chunks that arrived, not the claimed
+// total.
+func TestNotifyReassembler_CapsConcurrentPartials(t *testing.T) {
+	var r notifyReassembler
+	start := time.Now()
+	for i := 0; i < maxPartialNotifies+5; i++ {
+		payload := fmt.Sprintf(`{"chunk_id":"m%d","chunk_seq":0,"chunk_total":%d,"chunk_data":"eA=="}`, i, maxNotifyChunks)
+		if _, _, err := r.add(payload, start.Add(time.Duration(i)*time.Millisecond)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(r.partial) != maxPartialNotifies {
+		t.Fatalf("reassembler holds %d partial messages, want %d", len(r.partial), maxPartialNotifies)
+	}
+	if _, ok := r.partial["m0"]; ok {
+		t.Error("the oldest partial message was not the one dropped")
+	}
+	for id, p := range r.partial {
+		if len(p.parts) != 1 {
+			t.Errorf("partial %s stores %d parts for one received chunk", id, len(p.parts))
+		}
+	}
+}
+
 func TestNotifyReassembler_RejectsBadChunks(t *testing.T) {
 	var r notifyReassembler
 	for _, payload := range []string{

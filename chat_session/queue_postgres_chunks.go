@@ -30,6 +30,9 @@ const (
 	maxNotifyChunks = 10000
 	// partialNotifyTTL drops a reassembly whose remaining chunks never came.
 	partialNotifyTTL = 2 * time.Minute
+	// maxPartialNotifies bounds the split messages one session reassembles at
+	// once; the oldest is dropped to make room.
+	maxPartialNotifies = 32
 )
 
 // notifyChunk is one part of a split message. ChunkID is the first field, so
@@ -107,9 +110,9 @@ type notifyReassembler struct {
 }
 
 type partialNotify struct {
-	parts    []string
-	received int
-	started  time.Time
+	total   int
+	parts   map[int]string // filled as chunks arrive, so memory follows what came
+	started time.Time
 }
 
 // add takes a notification payload. It returns the whole message and true
@@ -139,24 +142,40 @@ func (r *notifyReassembler) add(payload string, now time.Time) (string, bool, er
 	}
 	p := r.partial[c.ChunkID]
 	if p == nil {
-		p = &partialNotify{parts: make([]string, c.Total), started: now}
+		if len(r.partial) >= maxPartialNotifies {
+			r.dropOldest()
+		}
+		p = &partialNotify{total: c.Total, parts: map[int]string{}, started: now}
 		r.partial[c.ChunkID] = p
 	}
-	if len(p.parts) != c.Total {
+	if p.total != c.Total {
 		delete(r.partial, c.ChunkID)
 		return "", false, fmt.Errorf("notification chunk %s changed its total", c.ChunkID)
 	}
-	if p.parts[c.Seq] == "" {
-		p.parts[c.Seq] = c.Data
-		p.received++
-	}
-	if p.received < c.Total {
+	p.parts[c.Seq] = c.Data
+	if len(p.parts) < p.total {
 		return "", false, nil
 	}
 	delete(r.partial, c.ChunkID)
-	msg, err := base64.StdEncoding.DecodeString(strings.Join(p.parts, ""))
+	var joined strings.Builder
+	for i := 0; i < p.total; i++ {
+		joined.WriteString(p.parts[i])
+	}
+	msg, err := base64.StdEncoding.DecodeString(joined.String())
 	if err != nil {
 		return "", false, fmt.Errorf("failed to decode notification chunks: %w", err)
 	}
 	return string(msg), true, nil
+}
+
+// dropOldest removes the reassembly that started first. The caller holds mu.
+func (r *notifyReassembler) dropOldest() {
+	oldestID := ""
+	var oldest time.Time
+	for id, p := range r.partial {
+		if oldestID == "" || p.started.Before(oldest) {
+			oldestID, oldest = id, p.started
+		}
+	}
+	delete(r.partial, oldestID)
 }
