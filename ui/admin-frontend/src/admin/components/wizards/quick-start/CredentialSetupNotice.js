@@ -4,6 +4,8 @@ import apiClient from '../../../utils/apiClient';
 import { listAll } from '../../../utils/listAll';
 import { withBase } from '../../../../runtimeConfig';
 import { CREDENTIAL_UNRESOLVED, CREDENTIAL_UNSET } from '../../llms/CredentialStatusIndicator';
+import { usePermissions } from '../../../context/PermissionsContext';
+import { P } from '../../../rbac/permissions';
 
 /**
  * A fresh instance seeds active OpenAI and Anthropic providers whose keys
@@ -54,17 +56,28 @@ const useSecretIds = (names) => {
   return ids;
 };
 
-// Links open in a new tab so the quick start keeps its place.
-const NewTabLink = ({ href, children, ...rest }) => (
-  <Link href={withBase(href)} target="_blank" rel="noopener noreferrer" {...rest}>
-    {children}
-  </Link>
-);
+// Links open in a new tab so the quick start keeps its place. Without an
+// href (the user cannot open the target) the text stays, unlinked.
+const NewTabLink = ({ href, children }) =>
+  href ? (
+    <Link href={withBase(href)} target="_blank" rel="noopener noreferrer">
+      {children}
+    </Link>
+  ) : (
+    <strong>{children}</strong>
+  );
 
 const CredentialSetupNotice = ({ llms, sx }) => {
   const broken = providersNeedingCredentials(llms);
   const secretNames = [...new Set(broken.map((p) => p.secret).filter(Boolean))];
-  const secretIds = useSecretIds(secretNames);
+  const { can } = usePermissions();
+  const canEditSecrets = can(P.SECRETS_WRITE);
+  // Only look secret ids up for someone who can open the edit page.
+  const secretIds = useSecretIds(canEditSecrets ? secretNames : []);
+  const secretHref = (name) => {
+    if (canEditSecrets && secretIds[name]) return `/admin/secrets/edit/${secretIds[name]}`;
+    return can(P.SECRETS_READ) ? '/admin/secrets' : null;
+  };
 
   if (broken.length === 0) {
     return null;
@@ -84,15 +97,18 @@ const CredentialSetupNotice = ({ llms, sx }) => {
               {p.secret ? (
                 <>
                   <strong>{p.name}</strong> uses the secret{' '}
-                  <NewTabLink href={secretIds[p.secret] ? `/admin/secrets/edit/${secretIds[p.secret]}` : '/admin/secrets'}>
-                    {p.secret}
-                  </NewTabLink>
+                  <NewTabLink href={secretHref(p.secret)}>{p.secret}</NewTabLink>
                   , which has no value. Set it to your API key.
                 </>
               ) : (
                 <>
-                  <strong>{p.name}</strong> has no API key.{' '}
-                  <NewTabLink href={`/admin/llms/edit/${p.id}`}>Add one</NewTabLink>.
+                  <strong>{p.name}</strong> has no API key.
+                  {can(P.LLMS_WRITE) && (
+                    <>
+                      {' '}
+                      <NewTabLink href={`/admin/llms/edit/${p.id}`}>Add one</NewTabLink>.
+                    </>
+                  )}
                 </>
               )}
             </Typography>

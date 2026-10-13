@@ -10,6 +10,11 @@ jest.mock('../../../utils/listAll', () => ({
 
 const { listAll } = require('../../../utils/listAll');
 
+let mockGranted = () => true;
+jest.mock('../../../context/PermissionsContext', () => ({
+  usePermissions: () => ({ can: (perm) => mockGranted(perm) }),
+}));
+
 const llm = (id, name, status, ref, active = true) => ({
   id,
   attributes: { name, active, credential_status: status, credential_ref: ref },
@@ -46,6 +51,7 @@ describe('providersNeedingCredentials', () => {
 
 describe('CredentialSetupNotice', () => {
   beforeEach(() => {
+    mockGranted = () => true;
     listAll.mockResolvedValue({
       data: { data: [{ id: '11', attributes: { var_name: 'OPENAI_KEY' } }, { id: '12', attributes: { var_name: 'OTHER' } }] },
     });
@@ -73,5 +79,19 @@ describe('CredentialSetupNotice', () => {
     const { container } = render(<CredentialSetupNotice llms={[llm('4', 'Vault', 'secret', 'OK_KEY')]} />);
     expect(container).toBeEmptyDOMElement();
     expect(listAll).not.toHaveBeenCalled();
+  });
+
+  test('without secrets:write it links the list, without secrets:read it names the secret unlinked', () => {
+    mockGranted = (perm) => perm === 'secrets:read';
+    const { unmount } = render(<CredentialSetupNotice llms={seeded} />);
+    expect(screen.getByRole('link', { name: 'OPENAI_KEY' })).toHaveAttribute('href', '/admin/secrets');
+    expect(listAll).not.toHaveBeenCalled();
+    unmount();
+
+    mockGranted = () => false;
+    render(<CredentialSetupNotice llms={[...seeded, llm('3', 'Bare', 'unset')]} />);
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.getByText('OPENAI_KEY')).toBeInTheDocument();
+    expect(screen.queryByText('Add one')).not.toBeInTheDocument();
   });
 });
