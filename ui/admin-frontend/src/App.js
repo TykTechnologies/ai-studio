@@ -38,6 +38,7 @@ import { EditionProvider } from "./admin/context/EditionContext";
 import { SyncStatusProvider } from "./admin/context/SyncStatusContext";
 import { PermissionsProvider } from "./admin/context/PermissionsContext";
 import { setIdentity, clearIdentity } from "./admin/utils/identityStore";
+import { installMultiSelectClickThrough } from "./admin/utils/multiSelectClickThrough";
 
 // Lazy loaded routes for code splitting
 const AdminRoutes = React.lazy(() => import("./routes/AdminRoutes"));
@@ -126,6 +127,10 @@ function App() {
   const handleCloseBanner = () => {
     setShowSuccessBanner(false);
   };
+
+  // A click outside an open multi-select closes it and still reaches its
+  // target, app-wide (#502 E6).
+  useEffect(() => installMultiSelectClickThrough(), []);
 
   useEffect(() => {
     const initialize = async () => {

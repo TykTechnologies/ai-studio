@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Switch, FormControlLabel, Link as MuiLink } from "@mui/material";
 import apiClient from "../../utils/apiClient";
+import focusFirstInvalid from "../../utils/focusFirstInvalid";
 import {
   TextField,
   Box,
@@ -254,7 +255,10 @@ const UserForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm() || !isFormValid()) return;
+    if (!validateForm() || !isFormValid()) {
+      focusFirstInvalid(e.currentTarget);
+      return;
+    }
     if (removesOwnAdminRole && !confirmSelfDemotion) {
       setConfirmSelfDemotion(true);
       return;

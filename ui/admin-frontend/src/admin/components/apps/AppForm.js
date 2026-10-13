@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
+import focusFirstInvalid from "../../utils/focusFirstInvalid";
 import { formatPrivacyLevel } from "../common/privacy/privacyLevels";
 import {
   TextField,
@@ -376,7 +377,10 @@ const AppForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      focusFirstInvalid(e.currentTarget);
+      return;
+    }
 
     // Parse metadata JSON
     let parsedMetadata = {};
