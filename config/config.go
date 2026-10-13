@@ -65,6 +65,7 @@ type AppConf struct {
 	NativeMaxBodyBytes         int64 // NATIVE_API_MAX_BODY_BYTES (64 MiB, at most 256 MiB)
 	NativeMaxConcurrentCreates int   // NATIVE_API_MAX_CONCURRENT_CREATES (4)
 	NativeMaxFilteredItems     int   // NATIVE_API_MAX_FILTERED_ITEMS (10000)
+	NativeMaxGuardrailCalls    int   // NATIVE_API_MAX_GUARDRAIL_CALLS (10000)
 	NativeMaxInProgressPerApp  int   // NATIVE_API_MAX_IN_PROGRESS_PER_APP (0: no cap)
 	// Native resource reconciler timings (batches nobody downloads); zero
 	// keeps the gateway's default. Durations are Go durations ("45s").
@@ -236,22 +237,33 @@ type AppConf struct {
 	// SkipFilterDefaults skips creating the example filters in an
 	// Enterprise database (SKIP_FILTER_DEFAULTS).
 	SkipFilterDefaults bool
-	// FilterLimits are the Enterprise filter-script limits, by their
-	// environment variable names (see FilterLimitNames). A name missing
-	// here falls back to the environment. The switch that lets scripts use
-	// the operating system (FILTER_SCRIPT_ALLOW_OS) is a security setting
-	// and is read from the environment only.
+	// FilterLimits are the tuning limits of filters (Enterprise filter
+	// scripts and the helpers they call, guardrails' verdict cache and local
+	// scanning), by their environment variable names (see FilterLimitNames
+	// and FilterLimit). A name missing here falls back to the environment.
+	// The switch that lets scripts use the operating system
+	// (FILTER_SCRIPT_ALLOW_OS) is a security setting and is read from the
+	// environment only.
 	FilterLimits map[string]string
 }
 
-// FilterLimitNames are the tuning limits of Enterprise filter scripts and
-// the helpers they call, which AppConf.FilterLimits may set.
+// FilterLimitNames are the tuning limits AppConf.FilterLimits may set:
+// those of Enterprise filter scripts and the helpers they call, and those of
+// guardrails (scripting).
 var FilterLimitNames = []string{
 	"FILTER_SCRIPT_TIMEOUT",
 	"FILTER_SCRIPT_MAX_ALLOCS",
 	"FILTER_HTTP_TIMEOUT",
 	"FILTER_HTTP_MAX_RESPONSE_BYTES",
 	"FILTER_LLM_TIMEOUT",
+	"GUARDRAIL_VERDICT_CACHE_ENTRIES",
+	"GUARDRAIL_VERDICT_CACHE_MAX_BYTES",
+	"GUARDRAIL_VERDICT_CACHE_TTL",
+	"GUARDRAIL_LOCAL_SCAN_SLOTS",
+	"GUARDRAIL_LOCAL_SCAN_SMALL_SLOTS",
+	"GUARDRAIL_LOCAL_SCAN_QUEUE_BYTES",
+	"GUARDRAIL_LOCAL_MAX_SCAN_BYTES",
+	"GUARDRAIL_LOCAL_SCAN_MS_PER_MIB",
 }
 
 // Installed returns the configuration installed with Set (or loaded by
@@ -590,6 +602,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	})
 	conf.NativeMaxConcurrentCreates = int(nativeLimit("NATIVE_API_MAX_CONCURRENT_CREATES"))
 	conf.NativeMaxFilteredItems = int(nativeLimit("NATIVE_API_MAX_FILTERED_ITEMS"))
+	conf.NativeMaxGuardrailCalls = int(nativeLimit("NATIVE_API_MAX_GUARDRAIL_CALLS"))
 	conf.NativeMaxInProgressPerApp = int(nativeLimit("NATIVE_API_MAX_IN_PROGRESS_PER_APP"))
 	// Reconciler timings: non-negative Go durations and counts; 0 or unset
 	// keeps the default.

@@ -182,7 +182,11 @@ func (v *OpenAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamin
 		return err
 	}
 
-	var req responses.OpenAIRequest
+	// Only stream is read: decoding messages here would reject shapes the
+	// API accepts (array content with image and text parts).
+	var req struct {
+		Stream bool `json:"stream"`
+	}
 	if err := json.Unmarshal(b, &req); err != nil {
 		return err
 	}

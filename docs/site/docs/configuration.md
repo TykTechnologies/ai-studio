@@ -144,6 +144,7 @@ SDK features served as native API operations on `/llm/call/{llmSlug}/...`, such 
 *   Body limit of a batch create in bytes (`NATIVE_API_MAX_BODY_BYTES`): default `67108864` (64 MiB), at most 256 MiB
 *   Batch creates admitted at once (`NATIVE_API_MAX_CONCURRENT_CREATES`): default `4`; further creates wait
 *   Requests per batch when the LLM has filters (`NATIVE_API_MAX_FILTERED_ITEMS`): default `10000`
+*   Remote guardrail provider calls one batch create or upload may make (`NATIVE_API_MAX_GUARDRAIL_CALLS`): default `10000`; a batch that needs more is refused with HTTP 400
 *   In-progress batches per App and LLM (`NATIVE_API_MAX_IN_PROGRESS_PER_APP`): default `0`, no cap
 
 Batches nobody downloads are accounted by a background reconciler on the gateway that created them. Its timings take Go durations (`45s`, `5m`):

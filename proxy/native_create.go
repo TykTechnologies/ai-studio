@@ -3,22 +3,28 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"mime"
 	"net/http"
 	"reflect"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -33,6 +39,9 @@ const (
 	nativeHardMaxBody          = config.NativeMaxBodyBytesLimit
 	nativeDefaultCreates       = 4
 	nativeDefaultFilteredItems = 10000
+	// nativeDefaultGuardrailCalls bounds the remote guardrail provider calls
+	// one native create may make across its items.
+	nativeDefaultGuardrailCalls = 10000
 	// nativeFilterWorkers bounds the items filtered at once per create.
 	nativeFilterWorkers = 8
 	// nativeLedgerAttempts is how often a ledger insert is tried before the
@@ -59,6 +68,13 @@ func (c *Config) nativeMaxFilteredItems() int {
 		return nativeDefaultFilteredItems
 	}
 	return c.NativeMaxFilteredItems
+}
+
+func (c *Config) nativeMaxGuardrailCalls() int {
+	if c == nil || c.NativeMaxGuardrailCalls <= 0 {
+		return nativeDefaultGuardrailCalls
+	}
+	return c.NativeMaxGuardrailCalls
 }
 
 func (c *Config) nativeMaxInProgressPerApp() int {
@@ -193,6 +209,11 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 		return nil, false
 	}
 
+	// One budget of remote guardrail calls for all the items: without it a
+	// batch could make the per-request budget in billed vendor calls once
+	// per item. Spending it refuses the create (400 naming the limit), never
+	// admits part of the batch.
+	r := c.r.WithContext(guardrails.WithCallBudget(c.r.Context(), c.p.config.nativeMaxGuardrailCalls()))
 	outs := make([][]byte, len(items))
 	errs := make([]error, len(items))
 	var (
@@ -228,7 +249,16 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 				if it.Key != "" {
 					extra = map[string]interface{}{"custom_id": it.Key, "batch_index": int64(i)}
 				}
-				out, err := c.p.runRequestFiltersWith(runners, c.nr.llm, c.r, it.Body, it.Format, it.Model, extra)
+				var out []byte
+				var err error
+				// These workers are not HTTP handler goroutines: a panic
+				// in an item's filters would end the process, so it
+				// refuses the item instead.
+				if safe.CallRedacted("native item filters", func() {
+					out, err = c.p.runRequestFiltersWith(runners, c.nr.llm, r, it.Body, it.Format, it.Model, extra)
+				}) {
+					out, err = nil, errItemFiltersFailed
+				}
 				outs[i], errs[i] = out, err
 				if err != nil {
 					mu.Lock()
@@ -240,6 +270,15 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 	}
 	wg.Wait()
 
+	// The guardrail call budget is the whole create's, not an item's.
+	for _, err := range errs {
+		if errors.Is(err, guardrails.ErrCallBudget) {
+			metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
+			c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest,
+				fmt.Sprintf("this LLM screens every request with a guardrail: screening this batch needs more than the %d guardrail provider calls one upload may make here (NATIVE_API_MAX_GUARDRAIL_CALLS)", c.p.config.nativeMaxGuardrailCalls()))
+			return nil, false
+		}
+	}
 	// Report the first refused item in body order, whichever worker saw it.
 	for i, err := range errs {
 		if err != nil {
@@ -296,6 +335,119 @@ func (c *nativeCall) recordCreated(w http.ResponseWriter, raw, wrapped []byte) b
 // errNativeCreatedUnexpected is a created object the gateway cannot read.
 var errNativeCreatedUnexpected = errors.New("unexpected created object")
 
+// errItemFiltersFailed refuses an item whose request filters panicked. It
+// carries nothing of the panic.
+var errItemFiltersFailed = errors.New("Policy error: the request could not be screened")
+
+// nativeScreeningNone is the screening digest of an LLM without request
+// filters: its content was not screened.
+const nativeScreeningNone = "none"
+
+// nativeScreeningVersion prefixes every screening digest. Bump it whenever
+// what a filter screens changes without the filter being edited (the
+// built-in pattern library, the segmenter or the scan pipeline in a
+// release): files uploaded before then are then refused and uploaded again.
+const nativeScreeningVersion = "native-screening-v2"
+
+// requestFilterDigest identifies llm's request filters as they screen
+// content: each one's ID, kind, script and config, in the order they run;
+// nativeScreeningNone when there are none, "" when a config cannot be read
+// (never matches). It hashes content rather than UpdatedAt, whose precision
+// differs between a saved object and one read back, so the same filters
+// give the same digest across restarts and replicas. A guardrail's
+// connection block is reduced to its field names: an edge receives it with
+// secrets resolved, and neither a rotated key nor a hash of one belongs in
+// the digest, which identifies a policy and is stored unkeyed. It is never
+// returned to a client.
+func requestFilterDigest(llm *models.LLM) string {
+	h := sha256.New()
+	h.Write([]byte(nativeScreeningVersion))
+	n := 0
+	for _, f := range llm.Filters {
+		if f.ResponseFilter {
+			continue
+		}
+		n++
+		kind := f.Kind
+		if kind == "" {
+			kind = models.FilterKindScript
+		}
+		cfg, err := json.Marshal(screeningConfig(f.Config))
+		if err != nil {
+			return ""
+		}
+		fmt.Fprintf(h, "|%d|%s|%d:", f.ID, kind, len(f.Script))
+		h.Write(f.Script)
+		fmt.Fprintf(h, "|%d:", len(cfg))
+		h.Write(cfg)
+	}
+	if n == 0 {
+		return nativeScreeningNone
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// screeningConfig is cfg with the values of its connection block left out:
+// the field names stay (which connection fields a filter sets), the values
+// (keys, endpoints, references or their resolved secrets) do not.
+func screeningConfig(cfg models.JSONMap) models.JSONMap {
+	conn, ok := cfg["connection"]
+	if !ok {
+		return cfg
+	}
+	out := maps.Clone(cfg)
+	var names []string
+	switch c := conn.(type) {
+	case map[string]any:
+		names = slices.Sorted(maps.Keys(c))
+	case models.JSONMap:
+		names = slices.Sorted(maps.Keys(c))
+	case map[string]string:
+		names = slices.Sorted(maps.Keys(c))
+	}
+	out["connection"] = names
+	return out
+}
+
+var (
+	// errNativeScreenedElsewhere refuses a reference to content screened
+	// under other request filters than the LLM's current ones (or not
+	// screened by this gateway at all).
+	errNativeScreenedElsewhere = errors.New("referenced content screened under other request filters")
+	// errNativeScreeningUnchecked is a ledger read that failed.
+	errNativeScreeningUnchecked = errors.New("screening of referenced content could not be checked")
+)
+
+// nativeScreenedElsewhereMsg names neither the filters nor the content.
+const nativeScreenedElsewhereMsg = "the input file was screened under a different request policy than this LLM now applies (or by another gateway); upload it again through this gateway"
+
+// checkScreened verifies that the content of the resource vendorID (type
+// rt), which this call runs at the vendor, was screened by the LLM's
+// current request filters. An LLM without request filters runs anything
+// its App may reference. A row without a digest (written before the gateway
+// recorded one, or a resource nothing screened such as a batch output file)
+// and a resource this node has no row of count as screened elsewhere.
+func (c *nativeCall) checkScreened(rt nativeapi.ResourceType, vendorID string) error {
+	current := requestFilterDigest(c.nr.llm)
+	switch current {
+	case nativeScreeningNone:
+		return nil
+	case "":
+		return errNativeScreenedElsewhere
+	}
+	row, err := c.store.GetByOwner(c.r.Context(), c.nr.llm.ID, c.app.ID, rt.Name, vendorID)
+	switch {
+	case errors.Is(err, services.ErrNativeResourceNotFound):
+		return errNativeScreenedElsewhere
+	case err != nil:
+		slog.Error("native resource screening check failed", "llm_id", c.nr.llm.ID, "app_id", c.app.ID, "type", rt.Name, "error", err)
+		return errNativeScreeningUnchecked
+	case row.ScreeningDigest != current:
+		return errNativeScreenedElsewhere
+	}
+	return nil
+}
+
 // ledgerCreated writes the ledger row of a resource of type rt the vendor
 // just created (raw as the vendor sent it, wrapped as the client gets it).
 // If the row cannot be written the resource is cancelled upstream and the
@@ -318,6 +470,11 @@ func (c *nativeCall) ledgerCreated(rt nativeapi.ResourceType, raw, wrapped []byt
 	}
 	if id := authidentity.From(c.r.Context()); id != nil {
 		row.OnBehalfOf, row.ActingAgent = id.OnBehalfOf(), id.ActingAgent()
+	}
+	if c.op.Admit != nil {
+		// admit screened the content with the filters of this same LLM
+		// snapshot.
+		row.ScreeningDigest = requestFilterDigest(c.nr.llm)
 	}
 	if rt.Async != nil {
 		row.AccountingState = models.NativeAccountingPending

@@ -35,12 +35,34 @@ type ScriptInput struct {
 	// as one more chunk.
 	IsFinal bool `json:"is_final"`
 
+	// Format names the wire shape of RawInput on a proxy request: the
+	// request filter format (openai, anthropic, google_ai, ...). Guardrails
+	// use it to segment the body block by block and rewrite it in place
+	// (guardrails/segments). On a chat tool result it is FormatToolResult
+	// (scripting); empty on other chat, tool and response inputs.
+	Format string `json:"format,omitempty"`
+
+	// MessageTools names, for each entry of Messages that is a tool result,
+	// the tool and the call it answers, where the format's extractor knows
+	// them: the OpenAI Responses API, whose tool outputs reach filters as
+	// messages. Same length as Messages when set, nil otherwise. Guardrails
+	// pass it to tool-aware providers and name the tools in compliance
+	// events and quarantine placeholders. Not script-visible.
+	MessageTools []MessageTool `json:"-"`
+
 	// Ctx, when set, bounds the execution: the script is aborted when the
 	// context is cancelled, in addition to the FILTER_SCRIPT_TIMEOUT limit.
 	// Call sites pass the request or session context so a caller that has
 	// gone away does not leave a script running on its behalf. Never
 	// serialised; it is not part of the script-visible input.
 	Ctx context.Context `json:"-"`
+}
+
+// MessageTool is the tool behind one tool-result message: its name and the
+// id of the call it answers. Zero for a message that is not a tool result.
+type MessageTool struct {
+	Name   string
+	CallID string
 }
 
 // ComplianceEventOutput represents a compliance event reported by a filter script.

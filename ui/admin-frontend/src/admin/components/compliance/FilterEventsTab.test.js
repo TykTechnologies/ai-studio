@@ -225,3 +225,45 @@ describe("FilterEventsTab", () => {
     expect(screen.getByText(/account_number/)).toBeInTheDocument();
   });
 });
+
+// 4uc.8: a guardrail event names where the flagged text came from.
+describe("FilterEventsTab: event source", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const event = (id, metadata) => ({
+    id,
+    timestamp: "2026-10-13T10:30:00Z",
+    app_id: 42,
+    app_name: "Agent App",
+    filter_name: "Prompt injection heuristics (log)",
+    filter_scope: "proxy_request",
+    event_type: "guardrail.injection.ignore_instructions",
+    severity: "warning",
+    description: "guardrail detected",
+    metadata,
+  });
+
+  test("shows the tool name for a tool-result event, the role for a user message, and - for old events", async () => {
+    apiClient.get.mockResolvedValue(
+      buildResponse({
+        events: [
+          event(1, { action: "quarantine", roles: ["tool"], kinds: ["tool_result"], tool_names: ["fetch_url", "read_file"] }),
+          event(2, { action: "block", roles: ["user"], kinds: ["text"] }),
+          event(3, {}),
+        ],
+        total_count: 3,
+        by_severity: { warning: 3 },
+        by_type: { "guardrail.injection.ignore_instructions": 3 },
+      })
+    );
+
+    renderTab();
+
+    expect(await screen.findByTestId("event-source-1")).toHaveTextContent("Tool result from fetch_url, read_file");
+    expect(screen.getByTestId("event-source-2")).toHaveTextContent("User message");
+    expect(screen.getByTestId("event-source-3")).toHaveTextContent("-");
+    expect(screen.getByText("Source")).toBeInTheDocument();
+  });
+});

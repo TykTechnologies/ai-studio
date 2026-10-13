@@ -102,3 +102,43 @@ func TestCache_DoDoesNotCacheFailures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ok", v)
 }
+
+func TestCache_WeightedBound(t *testing.T) {
+	c := NewWeighted[string](10, 10, func(_ string, v string) int64 { return int64(len(v)) })
+	c.Add("a", "1234")
+	c.Add("b", "1234")
+	require.Equal(t, int64(8), c.Weight())
+
+	// Over the weight bound: the least recently used entry goes, even though
+	// the entry count is well within its bound.
+	c.Add("c", "1234")
+	assert.Equal(t, 2, c.Len())
+	assert.Equal(t, int64(8), c.Weight())
+	_, ok := c.Get("a")
+	assert.False(t, ok)
+
+	// Replacing a value re-weighs it.
+	c.Add("b", "1")
+	assert.Equal(t, int64(5), c.Weight())
+
+	// A value heavier than the whole bound is not stored and evicts nothing.
+	c.Add("huge", "12345678901")
+	_, ok = c.Get("huge")
+	assert.False(t, ok)
+	assert.Equal(t, 2, c.Len())
+
+	c.Remove("b")
+	assert.Equal(t, int64(4), c.Weight())
+	c.Reset()
+	assert.Equal(t, int64(0), c.Weight())
+	assert.Equal(t, 0, c.Len())
+}
+
+func TestCache_WeightedReplaceWithHeavyValueDropsOld(t *testing.T) {
+	c := NewWeighted[string](10, 5, func(_ string, v string) int64 { return int64(len(v)) })
+	c.Add("a", "12")
+	c.Add("a", "123456")
+	_, ok := c.Get("a")
+	assert.False(t, ok, "an oversized replacement must not leave the stale value behind")
+	assert.Equal(t, int64(0), c.Weight())
+}

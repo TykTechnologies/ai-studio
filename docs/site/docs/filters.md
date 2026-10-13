@@ -353,7 +353,27 @@ for msg in input.messages {
 output := {block: false, messages: modified, message: ""}
 ```
 
+A script that returns `messages` has the request body rebuilt from them, as plain `{role, content}` messages: tool calls and tool results (Anthropic `tool_use` / `tool_result`, OpenAI `tool_calls` / `tool_call_id`, Google `functionCall` / `functionResponse`), images and `cache_control` are not carried over. On tool-using requests, return a `payload` instead. Guardrail filters are not affected: they rewrite only the redacted strings and keep the rest of the body.
+
 ---
+
+#### **Tool results and segments**
+
+`input.messages` comes from a simplified view of the request: for Anthropic and Google requests it has no tool results. On LLM requests a script can read `input.segments` instead: each message's text and each tool result, as guardrails read them, with `index`, `role` (`system`, `user`, `assistant`, `tool`), `kind` (`text` or `tool_result`), `tool_name` and `text`. It is a copy; to change the request, use `tyk.quarantine_segment(input, index, placeholder)`, which returns the body with that whole segment replaced and every other field kept, and set it as the output `payload`. `input.segments` is filled only for scripts that mention it, as reading the body costs a parse; it is empty outside LLM requests. `input.segments_readable` is false when the body could not be read (not JSON, or keys that parsers read differently): a script that screens tool results should block then, and should block when `tyk.quarantine_segment` returns an error for a flagged segment, as the template does. Guardrail filters are the recommended way to screen tool results; they also read JSON escapes in tool output.
+
+```tengo
+tyk := import("tyk")
+body := input.raw_input
+for seg in input.segments {
+    if seg.kind == "tool_result" && len(tyk.detect(seg.text, ["injection"])) > 0 {
+        out := tyk.quarantine_segment({raw_input: body, format: input.format}, seg.index, "")
+        if !is_error(out) { body = out }
+    }
+}
+output := {block: false, payload: body}
+```
+
+Chat request filters also see a user's answer to a client tool card, as they see a typed message.
 
 #### **Accessing Message Context**
 

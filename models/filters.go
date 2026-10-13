@@ -72,6 +72,18 @@ func DefaultFilters() []Filter {
 			Config:      builtin("log", "injection"),
 		},
 		{
+			// Added in v2.3: existing installs get it on their next start,
+			// unattached like the others.
+			Name:        "Prompt injection in tool results (quarantine)",
+			Description: "Replaces a tool result (a fetched page, a file, an MCP or API response) that matches the indirect prompt-injection heuristics with a placeholder, so the agent loop continues without it; a matching user message is only recorded. Built-in pattern library; pair with a classifier provider for precision.",
+			Kind:        FilterKindGuardrail,
+			Config: func() JSONMap {
+				c := builtin("log", "injection")
+				c["tool_results"] = map[string]any{"scan": true, "on_detect": "quarantine"}
+				return c
+			}(),
+		},
+		{
 			Name:           "Credential leakage in responses (block)",
 			Description:    "Stops an LLM response that contains an API key, token or private key, and records the event. Built-in pattern library.",
 			Kind:           FilterKindGuardrail,
@@ -96,14 +108,15 @@ func GetOrCreateDefaultFilters(db *gorm.DB) error {
 			continue
 		}
 		filter := f
-		cfg, err := guardrails.ParseConfig(filter.Config)
+		parsed, err := guardrails.ParseConfig(filter.Config)
 		if err != nil {
 			return err
 		}
-		if cfg, err = guardrails.Normalize(cfg, filter.ResponseFilter); err != nil {
+		cfg, err := guardrails.Normalize(parsed, filter.ResponseFilter)
+		if err != nil {
 			return err
 		}
-		if filter.Config, err = cfg.ToMap(); err != nil {
+		if filter.Config, err = guardrails.ForStorage(parsed, cfg).ToMap(); err != nil {
 			return err
 		}
 		if err := db.Create(&filter).Error; err != nil {

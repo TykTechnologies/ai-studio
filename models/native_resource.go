@@ -62,6 +62,14 @@ type NativeResource struct {
 	// ParentID is the row of the resource this one was derived from (an
 	// output file of a batch), if any.
 	ParentID *uint `gorm:"index"`
+	// ScreeningDigest identifies the request filters that screened the
+	// resource's content when an admitting operation created it (a batch
+	// input file): "none" when the LLM had none. An operation that later
+	// runs that content (a batch create) is refused unless the LLM's
+	// request filters still have this digest. Empty on rows written before
+	// the column existed and on resources nothing screened. Never returned
+	// to clients.
+	ScreeningDigest string `gorm:"size:64"`
 
 	// State is the vendor's processing state as the extension reports it
 	// (in_progress, canceling, ended).

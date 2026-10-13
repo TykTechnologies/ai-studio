@@ -16,6 +16,8 @@ package guardrails
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -27,13 +29,58 @@ const (
 	DirectionResponse Direction = "response"
 )
 
+// Segment roles.
+const (
+	RoleSystem    = "system"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleTool      = "tool"
+)
+
+// Segment kinds. A tool result is the output of a tool the client ran and
+// sent back to the model: in OpenAI a role "tool" message, in Anthropic a
+// tool_result block inside a user message, in Google a functionResponse
+// part. It is the main channel for indirect prompt injection.
+const (
+	KindText       = "text"
+	KindToolResult = "tool_result"
+)
+
 // Segment is one piece of text a provider classifies: a message, a response
-// buffer, a tool call envelope. Index is the position in Input.Segments and is
-// how findings and rewrites refer back to it.
+// buffer, a tool call envelope, one block of a request. Index is the position
+// in Input.Segments and is how findings and rewrites refer back to it.
 type Segment struct {
 	Index int    `json:"index"`
 	Role  string `json:"role"` // system, user, assistant, tool
 	Text  string `json:"text"`
+	// Kind is KindText or KindToolResult; empty means text.
+	Kind string `json:"kind,omitempty"`
+	// ToolName and ToolCallID identify the call a tool result answers, when
+	// the request names them.
+	ToolName   string `json:"tool_name,omitempty"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+}
+
+// IsToolResult reports text a tool produced, as opposed to the client's
+// own user or system text.
+func (s Segment) IsToolResult() bool {
+	return s.Kind == KindToolResult || s.Role == RoleTool
+}
+
+// ForProvider is what a provider with caps is sent of s, at index with
+// text (s's text, or a piece of it): its role and text, and for a tool
+// result its tool metadata when the provider handles tool results
+// (Capabilities.ToolSegments). A provider that does not is sent a tool
+// result as user text, a role every provider accepts; its findings still
+// come back onto the tool result by index.
+func (s Segment) ForProvider(index int, text string, caps Capabilities) Segment {
+	if !s.IsToolResult() {
+		return Segment{Index: index, Role: s.Role, Text: text}
+	}
+	if !caps.ToolSegments {
+		return Segment{Index: index, Role: RoleUser, Text: text}
+	}
+	return Segment{Index: index, Role: RoleTool, Text: text, Kind: KindToolResult, ToolName: s.ToolName, ToolCallID: s.ToolCallID}
 }
 
 // RedactionSpec asks a provider that can rewrite text to do so.
@@ -108,9 +155,41 @@ type Capabilities struct {
 	// runner splits longer segments.
 	MaxChars int
 	// Local reports an in-process provider with no network cost, which the
-	// runner evaluates more often when streaming.
+	// runner evaluates more often when streaming, scans in full at any size
+	// and runs outside the remote budgets (Budget).
 	Local bool
+	// MaxCallChars is the most text, in characters over all segments, one
+	// call accepts; 0 means unbounded. The runner packs pieces into calls
+	// that stay within it, so a provider that pays per segment and would
+	// rather work in parallel sets it to MaxChars.
+	MaxCallChars int
+	// Contextual reports a provider whose verdict on one segment depends on
+	// the other segments sent with it (a conversation-aware classifier).
+	// The runner then never answers a segment from the verdict cache, since
+	// that would send the provider the rest of the request without it.
+	Contextual bool
+	// Version changes when the provider's verdict for unchanged input and
+	// config may change (a new model, a new pattern set). It is part of the
+	// verdict cache key.
+	Version string
+	// SegmentPerCall reports a provider that makes a request of its own for
+	// every segment it is sent. The runner then sends each segment in calls
+	// of its own, so the requests run in parallel within the time budget,
+	// each under the call timeout, rather than one after another under one.
+	// A run of several such calls is never small, so a failure there leaves
+	// its segments unscanned rather than to the fail mode.
+	SegmentPerCall bool
+	// ToolSegments reports a provider that handles tool results as such:
+	// it is sent segments with role tool and their Kind, ToolName and
+	// ToolCallID. A provider without it is sent a tool result as role user
+	// with no tool metadata, a role every provider accepts, and its
+	// findings are mapped back onto the tool result.
+	ToolSegments bool
 }
+
+// DefaultCallChars is the call size the runner uses for a remote provider
+// that declares no MaxCallChars, so a large request becomes several calls.
+const DefaultCallChars = 32 << 10
 
 // Provider classifies text.
 type Provider interface {
@@ -132,3 +211,69 @@ var ErrUnknownProvider = errors.New("unknown guardrail provider")
 // mistake) from anything else with errors.Is rather than by reading the
 // message. Its text is the prefix the messages have always carried.
 var ErrInvalidConfig = errors.New("guardrail config")
+
+// ErrInputRejected marks a provider error caused by the text it was sent
+// (too long, an encoding its validator refuses) rather than by the
+// provider's availability. Whoever wrote the text can cause it at will, so
+// the runner treats the text as unscanned and never applies the fail mode
+// to it: under fail open that would let the text through unscreened.
+// Providers wrap such errors with it, or return a StatusError, which
+// matches it for 400, 413 and 422.
+var ErrInputRejected = errors.New("guardrail provider rejected the input")
+
+// ErrProviderPanic is a provider call that panicked. The runner recovers it
+// in the call's goroutine so the process survives. Like ErrInputRejected it
+// may have been provoked by the text, so on the request side the call's text
+// is treated as unscanned, never let through by the fail mode.
+var ErrProviderPanic = errors.New("guardrail provider panicked")
+
+// ErrProviderSuspended is a call the runner did not make because the
+// filter's provider has repeatedly failed to answer within its timeout (see
+// the call breaker in scripting). It is an operational failure, like a
+// timeout.
+var ErrProviderSuspended = errors.New("guardrail provider calls suspended after repeated hangs")
+
+// StatusError is a non-2xx HTTP answer from a provider. It carries the
+// status only: a provider's error body may echo the text it was sent, which
+// must not reach logs or compliance events.
+type StatusError struct {
+	Status int
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("provider returned HTTP %d", e.Status)
+}
+
+// Is makes a 400, 413 or 422 match ErrInputRejected.
+func (e *StatusError) Is(target error) bool {
+	if target != ErrInputRejected {
+		return false
+	}
+	switch e.Status {
+	case http.StatusBadRequest, http.StatusRequestEntityTooLarge, http.StatusUnprocessableEntity:
+		return true
+	}
+	return false
+}
+
+// ErrorClass names the kind of a provider error for logs, metrics and
+// compliance events, which never carry the error text itself:
+// input_rejected, panic, timeout, canceled, http_<status> or error.
+func ErrorClass(err error) string {
+	var se *StatusError
+	switch {
+	case errors.Is(err, ErrInputRejected):
+		return "input_rejected"
+	case errors.Is(err, ErrProviderPanic):
+		return "panic"
+	case errors.Is(err, ErrProviderSuspended):
+		return "suspended"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.As(err, &se):
+		return fmt.Sprintf("http_%d", se.Status)
+	}
+	return "error"
+}

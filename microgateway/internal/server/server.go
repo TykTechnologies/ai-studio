@@ -164,6 +164,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 			NativeMaxBodyBytes:         cfg.Gateway.NativeMaxBodyBytes,
 			NativeMaxConcurrentCreates: cfg.Gateway.NativeMaxConcurrentCreates,
 			NativeMaxFilteredItems:     cfg.Gateway.NativeMaxFilteredItems,
+			NativeMaxGuardrailCalls:    cfg.Gateway.NativeMaxGuardrailCalls,
 			NativeMaxInProgressPerApp:  cfg.Gateway.NativeMaxInProgressPerApp,
 
 			NativeReconcileInterval: cfg.Gateway.NativeReconcileInterval,

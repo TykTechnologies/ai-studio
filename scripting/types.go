@@ -11,4 +11,6 @@ type (
 	ComplianceEventOutput = engine.ComplianceEventOutput
 	// ScriptOutput represents the result of script execution
 	ScriptOutput = engine.ScriptOutput
+	// MessageTool is the tool behind one tool-result message.
+	MessageTool = engine.MessageTool
 )

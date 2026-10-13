@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -71,6 +72,10 @@ type ChatSession struct {
 	streamBuffer        string // Accumulated response text for streaming response filters
 	streamChunkIndex    int    // Current chunk index for streaming response filters
 	streamFilterBlocked bool   // Indicates if streaming was blocked by a filter
+	// toolResultBlocked is set during a reply's tool calls when a chat
+	// guardrail blocked a tool result: the turn stops after the results are
+	// stored (see screenToolResult).
+	toolResultBlocked bool
 
 	// Lifecycle and v2 event support (see events.go).
 	outputMode    OutputMode
@@ -402,7 +407,14 @@ func (cs *ChatSession) Start() error {
 					return
 				}
 				cs.beginRun(msg.RunID)
-				if !cs.processUserMessage(msg) {
+				dispatched := false
+				// A panic in a turn (a filter, a tool, a parser fed by
+				// tool output) ends that turn, not the session or the
+				// process.
+				if safe.CallRedacted("chat session turn", func() { dispatched = cs.processUserMessage(msg) }) {
+					cs.sendError(errTurnFailed)
+				}
+				if !dispatched {
 					// Nothing was dispatched to the LLM, so no response will
 					// arrive on the queue: the turn is over now.
 					cs.finishRun(FinishError)
@@ -413,7 +425,11 @@ func (cs *ChatSession) Start() error {
 					return
 				}
 				// handle any response from the LLM
-				continued, err := cs.HandleLLMResponse(resp)
+				var continued bool
+				var err error
+				if safe.CallRedacted("chat session response", func() { continued, err = cs.HandleLLMResponse(resp) }) {
+					err = errTurnFailed
+				}
 				if err != nil {
 					cs.sendError(fmt.Errorf("error handling LLM response: %v", err))
 					cs.finishRun(FinishError)
@@ -456,73 +472,19 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 	}
 
 	// Run chat REQUEST filters on user message before RAG search (exclude response filters)
-	filteredMessage := msg.Payload
-	filterBlocked := false
-
-	// Filter to only request filters (ResponseFilter = false)
-	requestFilters := []*models.Filter{}
-	for _, filter := range cs.filters {
-		if !filter.ResponseFilter {
-			requestFilters = append(requestFilters, filter)
-		}
-	}
-
-	slog.Info("Chat request filters check", "filter_count", len(requestFilters))
-
-	for _, filter := range requestFilters {
-		slog.Info("Running chat request filter", "filter_name", filter.Name)
-		sr := scripting.NewFilterRunner(filter)
-
-		// Create MessageContent for user message
-		messages := []llms.MessageContent{
-			{
-				Role:  llms.ChatMessageTypeHuman,
-				Parts: []llms.ContentPart{llms.TextPart(filteredMessage)},
-			},
-		}
-
-		scriptInput := &scripting.ScriptInput{
-			RawInput:   filteredMessage,
-			Messages:   messages,
-			VendorName: string(cs.chatRef.LLM.Vendor),
-			ModelName:  cs.chatRef.LLMSettings.ModelName,
-			Context: map[string]interface{}{
-				"session_id": cs.ID(),
-				"user_id":    int64(cs.userID),
-				"chat_id":    int64(cs.chatRef.ID),
-			},
-			IsChat: true,
-			Ctx:    cs.ctx,
-		}
-
-		output, err := sr.RunScript(scriptInput, cs.service)
-		if err != nil {
-			cs.sendError(fmt.Errorf("filter error: %v", err))
-			filterBlocked = true
-			break
-		}
-
-		// Record any compliance events reported by the script
-		scripting.RecordComplianceEvents(cs.ctx, output, filter.Name, "chat_request", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
-
-		if output.Block {
-			blockMsg := output.Message
-			if blockMsg == "" {
-				blockMsg = "content blocked by policy"
-			}
-			cs.sendError(fmt.Errorf("blocked by filter '%s': %s", filter.Name, blockMsg))
-			filterBlocked = true
-			break
-		}
-
-		// Apply modifications for next filter and RAG search
-		if output.Payload != "" && output.Payload != filteredMessage {
-			filteredMessage = output.Payload
-		}
-	}
+	filteredMessage, stop := cs.runRequestFilters(cs.ctx, msg.Payload, filterPass{role: llms.ChatMessageTypeHuman})
 
 	// Skip RAG and LLM if filter blocked the message
-	if filterBlocked {
+	if stop != nil {
+		if stop.err != nil {
+			cs.sendError(fmt.Errorf("filter error: %v", stop.err))
+			return false
+		}
+		blockMsg := stop.out.Message
+		if blockMsg == "" {
+			blockMsg = "content blocked by policy"
+		}
+		cs.sendError(fmt.Errorf("blocked by filter '%s': %s", stop.filter.Name, blockMsg))
 		return false
 	}
 
@@ -1084,6 +1046,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 	}
 
 	content := ""
+	cs.toolResultBlocked = false
 	for _, reply := range resp.Choices {
 		if reply.Content != "" {
 			content = reply.Content
@@ -1183,6 +1146,14 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 		if err != nil {
 			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
 			return false, err
+		}
+
+		if cs.toolResultBlocked {
+			// The history holds a policy notice in place of the blocked
+			// result, so the conversation stays valid; the model is not
+			// called again this turn.
+			cs.sendError(errToolResultBlocked)
+			return false, nil
 		}
 
 		if !cs.callModelAfterTools() {
@@ -1780,7 +1751,15 @@ func (cs *ChatSession) executeRESTToolCall(ctx context.Context, t llms.ToolCall,
 			slog.Info("[TOOL-CALL]", "[ERROR]", err)
 		}
 
+		// The error can quote the tool backend's response, so it is a tool
+		// result like any other.
 		errMsg := fmt.Sprintf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
+		if screened, blocked := cs.screenToolResult(ctx, t.FunctionCall.Name, t.ID, errMsg); blocked {
+			cs.toolResultBlocked = true
+			errMsg = scripting.ToolBlockedMessage
+		} else {
+			errMsg = screened
+		}
 		cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
 		return
 	}
@@ -1820,6 +1799,16 @@ func (cs *ChatSession) executeRESTToolCall(ctx context.Context, t llms.ToolCall,
 		return
 	}
 	asStr = filtered
+
+	// Then the chat's own guardrails, before the client, the model or the
+	// stored history sees the output.
+	screened, blocked := cs.screenToolResult(ctx, t.FunctionCall.Name, t.ID, asStr)
+	if blocked {
+		cs.toolResultBlocked = true
+		cs.handleToolError(scripting.ToolBlockedMessage, t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+	asStr = screened
 
 	toolResp := llms.ToolCallResponse{
 		ToolCallID: t.ID,

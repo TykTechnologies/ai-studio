@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -15,6 +18,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import apiClient from "../../utils/apiClient";
 
 // The stored shape of a guardrail filter's config. Everything the server
@@ -53,6 +57,15 @@ const ACTIONS = [
     responseHelp: "Responses cannot be rewritten: the finding is recorded and the response reaches the client unchanged.",
   },
   {
+    // Normalize rejects quarantine on response filters (tool output filters
+    // included): a response cannot go on without the text it was flagged for.
+    value: "quarantine",
+    label: "Quarantine",
+    requestOnly: true,
+    help:
+      "Replace each flagged message or tool result with a placeholder, let the request continue, and record a compliance event.",
+  },
+  {
     value: "log",
     label: "Log only",
     help: "Let it through and record a compliance event.",
@@ -60,12 +73,91 @@ const ACTIONS = [
   },
 ];
 
+// What each action does to a flagged tool result.
+const TOOL_ACTION_HELP = {
+  quarantine: "The whole tool result is replaced with the placeholder and the request continues. Its tool call id is kept.",
+  block:
+    "The request is blocked. The client resends the tool result on its next turn and is blocked again, so the agent stops.",
+  redact:
+    "The matched text inside the tool result is rewritten. Findings with no location in the text (such as a prompt attack) are logged only.",
+  log: "The tool result goes through unchanged and a compliance event is recorded.",
+};
+
+export const actionsFor =(responseFilter) => ACTIONS.filter((a) => !(responseFilter && a.requestOnly));
+
+export const actionLabel = (value) => (ACTIONS.find((a) => a.value === value) || {}).label || value;
+
+// The action a flagged tool result gets (guardrails.Config.ActionFor): the
+// tool_results override, else the filter's action with block turned into
+// quarantine, because a client resends a tool result every turn and blocking
+// on it would stop an agent for good.
+export const effectiveToolAction = (config) => {
+  const override = config.tool_results && config.tool_results.on_detect;
+  if (override) return override;
+  return config.on_detect === "block" ? "quarantine" : config.on_detect;
+};
+
+// A missing tool_results.scan means scan: stored filters from before tool
+// results were scanned do scan them.
+export const scansToolResults = (config) => !(config.tool_results && config.tool_results.scan === false);
+
+export const DEFAULT_QUARANTINE_PLACEHOLDER = "[content removed by policy: {{detector}} detected in {{source}}]";
+
+// Budget defaults and bounds (guardrails/config.go). Budgets apply to request
+// filters with a remote provider only.
+export const BUDGET_DEFAULTS = {
+  max_scan_chars: 262144,
+  max_pieces: 256,
+  single_call_chars: 32768,
+};
+const MAX_BUDGET_SCAN_CHARS = 16 << 20;
+const MAX_BUDGET_PIECES = 10000;
+const MAX_BUDGET_TIME_MS = 300000;
+const DEFAULT_TIMEOUT_MS = 2000;
+
+const defaultBudgetTimeMs = (timeoutMs) => Math.max(timeoutMs, Math.min(4 * timeoutMs, MAX_BUDGET_TIME_MS));
+
+// budgetErrors mirrors Budget.normalize so a bad value is named before the
+// server rejects the save. It returns a map of field to message, empty when
+// the budget is valid.
+export const budgetErrors = (config) => {
+  const budget = (config && config.budget) || {};
+  const timeout = (config && config.timeout_ms) || DEFAULT_TIMEOUT_MS;
+  const errs = {};
+  const set = (v) => v !== undefined && v !== null && v !== "";
+  if (set(budget.max_scan_chars) && (budget.max_scan_chars < 1 || budget.max_scan_chars > MAX_BUDGET_SCAN_CHARS)) {
+    errs.max_scan_chars = `Between 1 and ${MAX_BUDGET_SCAN_CHARS}`;
+  }
+  if (set(budget.max_pieces) && (budget.max_pieces < 1 || budget.max_pieces > MAX_BUDGET_PIECES)) {
+    errs.max_pieces = `Between 1 and ${MAX_BUDGET_PIECES}`;
+  }
+  const maxTime = Math.max(MAX_BUDGET_TIME_MS, timeout);
+  if (set(budget.time_ms) && (budget.time_ms < timeout || budget.time_ms > maxTime)) {
+    errs.time_ms = `Between the timeout (${timeout}) and ${maxTime}`;
+  }
+  const maxScan = set(budget.max_scan_chars) ? budget.max_scan_chars : BUDGET_DEFAULTS.max_scan_chars;
+  if (set(budget.single_call_chars) && (budget.single_call_chars < 1 || budget.single_call_chars > maxScan)) {
+    errs.single_call_chars = `Between 1 and the max characters per segment (${maxScan})`;
+  }
+  return errs;
+};
+
+// withoutEmpty drops keys whose value is undefined, so a setting the admin
+// cleared is absent from the saved config and the server default applies.
+const withoutEmpty = (obj) => {
+  const out = {};
+  Object.entries(obj || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== "") out[k] = v;
+  });
+  return out;
+};
+
 const SCOPES = [
   { value: "", label: "All user messages (default)" },
-  { value: "last_user", label: "Last user message only" },
+  { value: "last_user", label: "User text of the current turn" },
   { value: "all_user", label: "All user messages" },
   { value: "system_and_user", label: "System and user messages" },
-  { value: "all_messages", label: "Every message, including assistant and tool turns" },
+  { value: "all_messages", label: "Every message, including assistant turns" },
 ];
 
 // A connection field that names a URL is dialled by the gateway, not the
@@ -151,10 +243,38 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
     update({ provider: e.target.value, detectors: [], connection: {}, exclude: [] });
   };
 
+  // tool_results, quarantine, budget and cache carry only what the admin set:
+  // a key left out takes the server default, and a stored filter without
+  // tool_results scans tool results, so a cleared setting is removed rather
+  // than written as its default.
+  const setToolResults = (patch) => {
+    const next = withoutEmpty({ ...(config.tool_results || {}), ...patch });
+    if (next.scan === true) delete next.scan;
+    update({ tool_results: Object.keys(next).length ? next : undefined });
+  };
+
+  const setQuarantinePlaceholder = (placeholder) => {
+    const next = withoutEmpty({ ...(config.quarantine || {}), placeholder });
+    update({ quarantine: Object.keys(next).length ? next : undefined });
+  };
+
+  const setBudget = (field, raw) => {
+    const next = withoutEmpty({ ...(config.budget || {}), [field]: raw === "" ? undefined : Number(raw) });
+    update({ budget: Object.keys(next).length ? next : undefined });
+  };
+
   const catalogueDetectors = spec ? spec.detectors : [];
   const customDetectors = config.detectors.filter((d) => !catalogueDetectors.some((c) => c.name === d.name));
   const redactUnsupported = spec && !spec.redacts;
   const selectedAction = ACTIONS.find((a) => a.value === config.on_detect) || {};
+  const scanTools = scansToolResults(config);
+  const toolAction = effectiveToolAction(config);
+  const toolOverride = (config.tool_results && config.tool_results.on_detect) || "";
+  const showQuarantine = config.on_detect === "quarantine" || (scanTools && toolAction === "quarantine");
+  const remoteProvider = spec && !spec.local;
+  const budget = config.budget || {};
+  const budgetErr = budgetErrors(config);
+  const timeoutMs = config.timeout_ms || DEFAULT_TIMEOUT_MS;
 
   return (
     <Box>
@@ -200,7 +320,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
               onChange={(e) => update({ on_detect: e.target.value })}
               inputProps={{ "data-testid": "guardrail-action" }}
             >
-              {ACTIONS.map((a) => (
+              {actionsFor(responseFilter).map((a) => (
                 <MenuItem key={a.value} value={a.value} disabled={a.value === "redact" && redactUnsupported}>
                   {(responseFilter && a.responseLabel) || a.label}
                   {a.value === "redact" && redactUnsupported ? " (provider cannot redact)" : ""}
@@ -334,7 +454,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
           )}
         </Grid>
 
-        {config.on_detect === "redact" && !responseFilter && (
+        {(config.on_detect === "redact" || (scanTools && toolOverride === "redact")) && !responseFilter && (
           <>
             <Grid item xs={12} md={4}>
               <FormControl fullWidth>
@@ -384,8 +504,97 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                   </MenuItem>
                 ))}
               </Select>
-              <FormHelperText>Applies to LLM requests. Chat messages and tool calls always inspect the whole text.</FormHelperText>
+              <FormHelperText>
+                Applies to LLM requests. The current turn is everything since the model last spoke. Tool results are
+                inspected across the whole history whatever you choose here, unless tool-result scanning is off. Chat
+                messages and tool calls always inspect the whole text.
+              </FormHelperText>
             </FormControl>
+          </Grid>
+        )}
+
+        {!responseFilter && (
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" gutterBottom>
+              Tool results
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Tool output (a fetched web page, a file, an MCP or API response) is the main way instructions reach a
+              model without the user typing them. Clients resend tool results on every turn, so blocking a request for
+              one stops an agent for good: a Block filter quarantines a flagged tool result instead, unless you choose
+              Block below.
+            </Typography>
+            <Grid container spacing={2} alignItems="flex-start">
+              <Grid item xs={12} md={4}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={scanTools}
+                      onChange={(e) => setToolResults({ scan: e.target.checked })}
+                      inputProps={{ "data-testid": "guardrail-tool-results-scan" }}
+                    />
+                  }
+                  label="Scan tool results"
+                />
+                <FormHelperText>
+                  On by default, including for filters saved before tool results were scanned. Off, tool results are
+                  inspected only under "Every message".
+                </FormHelperText>
+              </Grid>
+              <Grid item xs={12} md={8}>
+                <FormControl fullWidth disabled={!scanTools}>
+                  <InputLabel id="guardrail-tool-action-label" shrink>
+                    Action on tool results
+                  </InputLabel>
+                  <Select
+                    labelId="guardrail-tool-action-label"
+                    label="Action on tool results"
+                    displayEmpty
+                    notched
+                    value={toolOverride}
+                    onChange={(e) => setToolResults({ on_detect: e.target.value })}
+                    inputProps={{ "data-testid": "guardrail-tool-action" }}
+                  >
+                    <MenuItem value="">
+                      {config.on_detect === "block"
+                        ? "Quarantine (default for Block filters)"
+                        : `Same as the filter (${actionLabel(config.on_detect)})`}
+                    </MenuItem>
+                    {ACTIONS.map((a) => (
+                      <MenuItem key={a.value} value={a.value} disabled={a.value === "redact" && redactUnsupported}>
+                        {a.label}
+                        {a.value === "redact" && redactUnsupported ? " (provider cannot redact)" : ""}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>{TOOL_ACTION_HELP[toolAction]}</FormHelperText>
+                </FormControl>
+              </Grid>
+              {scanTools && remoteProvider && (
+                <Grid item xs={12}>
+                  <Alert severity="info" data-testid="guardrail-tool-results-remote">
+                    This provider runs outside the gateway, so tool output is sent to it, and that can include file
+                    contents, database rows or credentials an agent read. Turn scanning off if that data must not leave.
+                  </Alert>
+                </Grid>
+              )}
+            </Grid>
+          </Grid>
+        )}
+
+        {showQuarantine && !responseFilter && (
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Quarantine placeholder"
+              value={(config.quarantine && config.quarantine.placeholder) || ""}
+              onChange={(e) => setQuarantinePlaceholder(e.target.value)}
+              placeholder={DEFAULT_QUARANTINE_PLACEHOLDER}
+              // The placeholder is the server default; an unshrunk label hides it.
+              InputLabelProps={{ shrink: true }}
+              helperText="Replaces a quarantined message or tool result. {{detector}} and {{category}} are what flagged it, {{source}} where it came from (tool result from read_file, user message), {{tool_name}} the tool. Leave empty for the default."
+              inputProps={{ maxLength: 1000, "data-testid": "guardrail-quarantine-placeholder" }}
+            />
           </Grid>
         )}
 
@@ -450,6 +659,93 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             helperText="Shown to the caller when the guardrail blocks. Findings are never included."
           />
         </Grid>
+
+        {!responseFilter && (
+          <Grid item xs={12}>
+            {errors.budget && <FormHelperText error>{errors.budget}</FormHelperText>}
+            <Accordion
+              disableGutters
+              variant="outlined"
+              defaultExpanded={!!config.budget || config.cache === false || Object.keys(budgetErr).length > 0}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreIcon />} aria-controls="guardrail-advanced-content">
+                <Typography variant="subtitle2">Advanced: verdict cache and budgets</Typography>
+              </AccordionSummary>
+              <AccordionDetails id="guardrail-advanced-content">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={config.cache !== false}
+                      onChange={(e) => update({ cache: e.target.checked ? undefined : false })}
+                      inputProps={{ "data-testid": "guardrail-cache" }}
+                    />
+                  }
+                  label="Reuse verdicts for text already scanned"
+                />
+                <FormHelperText sx={{ mb: 2 }}>
+                  History an agent resends is answered from the cache, so the provider sees each message and tool
+                  result once. Turn this off for a provider whose verdict depends on more than the text, such as an HTTP
+                  classifier that reads the request metadata.
+                </FormHelperText>
+                {remoteProvider ? (
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">
+                        Budgets bound what one request spends on this provider. Text beyond a budget is never treated as
+                        clean: it is flagged as unscanned and the filter's action applies. Empty uses the default.
+                      </Typography>
+                    </Grid>
+                    {[
+                      {
+                        field: "max_scan_chars",
+                        label: "Max characters per segment",
+                        placeholder: String(BUDGET_DEFAULTS.max_scan_chars),
+                        help: "Most characters of one message or tool result sent for scanning.",
+                      },
+                      {
+                        field: "max_pieces",
+                        label: "Max provider pieces per request",
+                        placeholder: String(BUDGET_DEFAULTS.max_pieces),
+                        help: "Segments, or parts of long ones, sent per request. Cached verdicts do not count.",
+                      },
+                      {
+                        field: "time_ms",
+                        label: "Time budget (ms)",
+                        placeholder: String(defaultBudgetTimeMs(timeoutMs)),
+                        help: "Wall time for all of one request's provider calls. At least the timeout; default 4 × timeout.",
+                      },
+                      {
+                        field: "single_call_chars",
+                        label: "Fail mode applies up to (characters)",
+                        placeholder: String(Math.min(BUDGET_DEFAULTS.single_call_chars, budget.max_scan_chars || BUDGET_DEFAULTS.max_scan_chars)),
+                        help: "Largest request whose provider failure the fail mode decides. Above it, text whose call failed is flagged as unscanned.",
+                      },
+                    ].map((b) => (
+                      <Grid item xs={12} md={6} key={b.field}>
+                        <TextField
+                          fullWidth
+                          type="number"
+                          label={b.label}
+                          value={budget[b.field] ?? ""}
+                          onChange={(e) => setBudget(b.field, e.target.value)}
+                          placeholder={b.placeholder}
+                          InputLabelProps={{ shrink: true }}
+                          error={!!budgetErr[b.field]}
+                          helperText={budgetErr[b.field] || b.help}
+                          inputProps={{ min: 1, "data-testid": `guardrail-budget-${b.field}` }}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    This provider runs in-process and scans every segment in full, so request budgets do not apply.
+                  </Typography>
+                )}
+              </AccordionDetails>
+            </Accordion>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );

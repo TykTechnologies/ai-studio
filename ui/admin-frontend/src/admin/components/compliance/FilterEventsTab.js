@@ -29,6 +29,7 @@ import { MemoizedLineChart } from "../common/MemoizedChart";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import apiClient from "../../utils/apiClient";
+import { eventSourceLabel } from "./eventSource";
 
 const SEVERITY_COLORS = {
   critical: "error",
@@ -215,6 +216,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
               <StyledTableHeaderCell>Application</StyledTableHeaderCell>
               <StyledTableHeaderCell>Filter</StyledTableHeaderCell>
               <StyledTableHeaderCell>Scope</StyledTableHeaderCell>
+              <StyledTableHeaderCell>Source</StyledTableHeaderCell>
               <StyledTableHeaderCell>Event Type</StyledTableHeaderCell>
               <StyledTableHeaderCell>Severity</StyledTableHeaderCell>
               <StyledTableHeaderCell>Description</StyledTableHeaderCell>
@@ -223,7 +225,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
           <TableBody>
             {loading ? (
               <StyledTableRow>
-                <StyledTableCell colSpan={8} align="center">
+                <StyledTableCell colSpan={9} align="center">
                   <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                     <CircularProgress size={24} />
                   </Box>
@@ -274,6 +276,9 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                           {e.filter_scope}
                         </Typography>
                       </StyledTableCell>
+                      <StyledTableCell data-testid={`event-source-${e.id}`}>
+                        <Typography variant="body2">{eventSourceLabel(e.metadata) || "-"}</Typography>
+                      </StyledTableCell>
                       <StyledTableCell>
                         <Chip
                           label={e.event_type}
@@ -306,7 +311,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                     </StyledTableRow>
                     {hasMeta && (
                       <TableRow>
-                        <StyledTableCell colSpan={8} sx={{ py: 0, px: 0 }}>
+                        <StyledTableCell colSpan={9} sx={{ py: 0, px: 0 }}>
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
                               <Typography variant="caption" color="text.secondary">
@@ -335,7 +340,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
               })
             ) : (
               <StyledTableRow>
-                <StyledTableCell colSpan={8} align="center">
+                <StyledTableCell colSpan={9} align="center">
                   <Typography color="text.secondary">
                     No filter events recorded in the selected period.
                   </Typography>

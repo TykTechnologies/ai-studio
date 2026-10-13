@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -12,20 +13,40 @@ import (
 )
 
 // fakeProvider flags every segment containing "SECRET" and, when asked,
-// rewrites it. It records the input it was given.
+// rewrites it. It records the input it was given. A run can make several
+// calls at once (one per trust class at least), so lastIn is only
+// meaningful after a run of one call; seen covers them all.
 type fakeProvider struct {
 	caps    guardrails.Capabilities
 	err     error
-	lastIn  guardrails.Input
-	calls   int
 	verdict func(in guardrails.Input) guardrails.Verdict
+
+	mu     sync.Mutex
+	lastIn guardrails.Input
+	ins    []guardrails.Input
+	calls  int
 }
 
 func (f *fakeProvider) Capabilities() guardrails.Capabilities { return f.caps }
 
+// seen is every segment the provider was sent, across its calls in the order
+// they were made.
+func (f *fakeProvider) seen() []guardrails.Segment {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []guardrails.Segment
+	for _, in := range f.ins {
+		out = append(out, in.Segments...)
+	}
+	return out
+}
+
 func (f *fakeProvider) Classify(ctx context.Context, in guardrails.Input) (guardrails.Verdict, error) {
+	f.mu.Lock()
 	f.calls++
 	f.lastIn = in
+	f.ins = append(f.ins, in)
+	f.mu.Unlock()
 	if f.err != nil {
 		return guardrails.Verdict{}, f.err
 	}
@@ -52,8 +73,9 @@ func (f *fakeProvider) Classify(ctx context.Context, in guardrails.Input) (guard
 }
 
 // installFake registers a provider spec + factory under a unique name and
-// returns the config map that selects it.
-func installFake(t *testing.T, name string, p *fakeProvider, onDetect string) models.JSONMap {
+// returns the config map that selects it. Names are reused with fakes that
+// answer differently, so the config keeps verdicts out of the verdict cache.
+func installFake(t testing.TB, name string, p *fakeProvider, onDetect string) models.JSONMap {
 	t.Helper()
 	guardrails.RegisterSpec(guardrails.Spec{
 		Name: name, DisplayName: name, Redacts: true,
@@ -64,6 +86,7 @@ func installFake(t *testing.T, name string, p *fakeProvider, onDetect string) mo
 		"provider":  name,
 		"detectors": []any{map[string]any{"name": "secrets"}},
 		"on_detect": onDetect,
+		"cache":     false,
 	}
 }
 
@@ -313,8 +336,13 @@ func TestGuardrailRunner_SplitsLongSegmentsAndMergesRewrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunScript() error = %v", err)
 	}
-	if len(p.lastIn.Segments) != 3 {
-		t.Fatalf("provider saw %d pieces, want 3", len(p.lastIn.Segments))
+	if len(p.ins) != 2 || len(p.ins[0].Segments) != 3 {
+		t.Fatalf("provider saw %d calls, want the 3 pieces and then the seams", len(p.ins))
+	}
+	// The seams across the 2 cuts are checked on the redacted text, without
+	// a rewrite of their own.
+	if len(p.ins[1].Segments) != 2 || p.ins[1].Redact != nil {
+		t.Errorf("seam call = %+v, want 2 seams and no redaction", p.ins[1])
 	}
 	if out.Payload != "aaaaaaaa[REDACTED]bbbbbbbb" {
 		t.Errorf("RunScript() Payload = %q, want the pieces reassembled with the rewrite", out.Payload)

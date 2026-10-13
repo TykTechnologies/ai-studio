@@ -598,6 +598,7 @@ func New(opts Options) (_ *Studio, err error) {
 		NativeMaxBodyBytes:         conf.NativeMaxBodyBytes,
 		NativeMaxConcurrentCreates: conf.NativeMaxConcurrentCreates,
 		NativeMaxFilteredItems:     conf.NativeMaxFilteredItems,
+		NativeMaxGuardrailCalls:    conf.NativeMaxGuardrailCalls,
 		NativeMaxInProgressPerApp:  conf.NativeMaxInProgressPerApp,
 
 		NativeReconcileInterval: conf.NativeReconcileInterval,

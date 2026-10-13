@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
@@ -38,6 +39,10 @@ type responsesSlot struct {
 	role llms.ChatMessageType
 	text string
 	set  func(string)
+	// tool names the tool behind a tool result.
+	tool scripting.MessageTool
+	// owner is the object holding the text, for an item's text fields.
+	owner map[string]any
 }
 
 // responsesTextPartTypes are the content part types whose "text" is prompt
@@ -102,12 +107,23 @@ func responsesSlots(body []byte) (map[string]any, []responsesSlot, error) {
 	case string:
 		slots = append(slots, responsesSlot{role: llms.ChatMessageTypeHuman, text: in, set: func(s string) { obj["input"] = s }})
 	case []any:
+		// Tool outputs carry only the call's id; the call names the tool.
+		names := map[string]string{}
+		for _, el := range in {
+			if item, ok := el.(map[string]any); ok {
+				id, _ := item["call_id"].(string)
+				name, _ := item["name"].(string)
+				if id != "" && name != "" {
+					names[id] = name
+				}
+			}
+		}
 		for i, el := range in {
 			item, ok := el.(map[string]any)
 			if !ok {
 				return nil, nil, fmt.Errorf("input[%d] must be an object", i)
 			}
-			s, err := responsesItemSlots(item)
+			s, err := responsesItemSlots(item, names)
 			if err != nil {
 				return nil, nil, fmt.Errorf("input[%d]: %w", i, err)
 			}
@@ -119,8 +135,9 @@ func responsesSlots(body []byte) (map[string]any, []responsesSlot, error) {
 	return obj, slots, nil
 }
 
-// responsesItemSlots lists the prompt texts of one input item.
-func responsesItemSlots(item map[string]any) ([]responsesSlot, error) {
+// responsesItemSlots lists the prompt texts of one input item. names maps
+// the request's tool call ids to the names of the tools called.
+func responsesItemSlots(item map[string]any, names map[string]string) ([]responsesSlot, error) {
 	typ, _ := item["type"].(string)
 	if _, ok := item["type"]; ok && typ == "" {
 		return nil, errors.New("type must be a string")
@@ -142,17 +159,27 @@ func responsesItemSlots(item map[string]any) ([]responsesSlot, error) {
 		}
 	case strings.HasSuffix(typ, "_call_output"):
 		// A tool result is untrusted input to the model.
+		id, _ := item["call_id"].(string)
+		tool := scripting.MessageTool{Name: names[id], CallID: id}
+		var slots []responsesSlot
 		switch out := item["output"].(type) {
 		case nil:
 			return nil, nil
 		case string:
-			return []responsesSlot{{role: llms.ChatMessageTypeTool, text: out, set: func(s string) { item["output"] = s }}}, nil
+			slots = []responsesSlot{{role: llms.ChatMessageTypeTool, text: out, set: func(s string) { item["output"] = s }}}
 		case []any:
-			return responsesPartSlots(out, llms.ChatMessageTypeTool)
+			var err error
+			if slots, err = responsesPartSlots(out, llms.ChatMessageTypeTool); err != nil {
+				return nil, err
+			}
 		default:
 			b, _ := json.Marshal(out)
-			return []responsesSlot{{role: llms.ChatMessageTypeTool, text: string(b), set: func(s string) { item["output"] = s }}}, nil
+			slots = []responsesSlot{{role: llms.ChatMessageTypeTool, text: string(b), set: func(s string) { item["output"] = s }}}
 		}
+		for i := range slots {
+			slots[i].tool = tool
+		}
+		return slots, nil
 	case typ == "function_call" || typ == "custom_tool_call":
 		field := "arguments"
 		if typ == "custom_tool_call" {
@@ -183,9 +210,32 @@ func responsesItemSlots(item map[string]any) ([]responsesSlot, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f.path, err)
 		}
+		if f.role == llms.ChatMessageTypeTool {
+			for i := range s {
+				s[i].tool = serverToolResult(typ, item, s[i].owner)
+			}
+		}
 		slots = append(slots, s...)
 	}
 	return slots, nil
+}
+
+// serverToolResult names the tool behind a tool-result text of a built-in
+// or MCP tool item: an MCP call's tool, a tool an MCP server lists (owner is
+// the listed tool), or the built-in tool (file_search_call: file_search).
+// The call id is the item's id.
+func serverToolResult(typ string, item, owner map[string]any) scripting.MessageTool {
+	id, _ := item["id"].(string)
+	var name string
+	switch typ {
+	case "mcp_call":
+		name, _ = item["name"].(string)
+	case "mcp_list_tools":
+		name, _ = owner["name"].(string)
+	default:
+		name = strings.TrimSuffix(typ, "_call")
+	}
+	return scripting.MessageTool{Name: name, CallID: id}
 }
 
 // responsesTextField is a text-bearing field of an input item. path is
@@ -251,7 +301,7 @@ func responsesFieldSlots(obj map[string]any, path []string, role llms.ChatMessag
 			if !ok {
 				return nil, fmt.Errorf("%s must be a string", key)
 			}
-			return []responsesSlot{{role: role, text: str, set: func(s string) { obj[key] = s }}}, nil
+			return []responsesSlot{{role: role, text: str, set: func(s string) { obj[key] = s }, owner: obj}}, nil
 		}
 		child, ok := v.(map[string]any)
 		if !ok {
@@ -270,7 +320,7 @@ func responsesFieldSlots(obj map[string]any, path []string, role llms.ChatMessag
 			if !ok {
 				return nil, fmt.Errorf("%s[%d] must be a string", key, i)
 			}
-			slots = append(slots, responsesSlot{role: role, text: str, set: func(s string) { arr[i] = s }})
+			slots = append(slots, responsesSlot{role: role, text: str, set: func(s string) { arr[i] = s }, owner: obj})
 			continue
 		}
 		child, ok := el.(map[string]any)
@@ -399,6 +449,20 @@ func (e *OpenAIResponsesMessageExtractor) ExtractMessages(_ *http.Request, body 
 		out[i] = llms.MessageContent{Role: s.role, Parts: []llms.ContentPart{llms.TextPart(s.text)}}
 	}
 	return out, nil
+}
+
+// messageTools names the tool behind each message ExtractMessages returns;
+// nil when the body cannot be read.
+func (e *OpenAIResponsesMessageExtractor) messageTools(body []byte) []scripting.MessageTool {
+	_, slots, err := responsesSlots(body)
+	if err != nil {
+		return nil
+	}
+	out := make([]scripting.MessageTool, len(slots))
+	for i, s := range slots {
+		out[i] = s.tool
+	}
+	return out
 }
 
 // OpenAIResponsesMessageReconstructor writes filter edits back into a

@@ -41,7 +41,8 @@ const (
 	// 10: native API extensions follow-ups: llms resource_signing_*,
 	//     vendor_workspace_id and price_multipliers, llm_chat_records and
 	//     proxy_logs service_tier (nullable, additive).
-	SchemaVersion          = 10
+	// 11: native_resources.screening_digest (nullable, additive).
+	SchemaVersion          = 11
 	MinReaderSchemaVersion = 1
 )
 

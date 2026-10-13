@@ -376,6 +376,7 @@ TABLE native_resources
   column `resource_type` text NOT NULL
   column `vendor_resource_id` text NOT NULL
   column `parent_id` integer
+  column `screening_digest` text
   column `state` text
   column `snapshot` text
   column `ended_at` datetime

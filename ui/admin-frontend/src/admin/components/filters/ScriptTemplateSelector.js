@@ -80,6 +80,54 @@ output := {
 }`,
     },
     {
+      // Copied verbatim from ScanToolResultsTemplate in
+      // scripting/script_segments_ent_test.go, which runs it in every format.
+      // input.segments is empty unless the test panel reads the raw input as
+      // a request format.
+      id: "library-scan-tool-results",
+      name: "Built-in library: scan tool results",
+      description: "Starting point for custom tool-result screening with input.segments, tyk.detect and tyk.quarantine_segment; guardrail filters are the recommended way",
+      script: `// Quarantine tool results that carry prompt injection, using the built-in
+// pattern library. input.segments lists the request's messages and tool
+// results; tyk.quarantine_segment replaces one of them in the request body.
+// A request that cannot be read into segments, or a flagged tool result
+// that cannot be quarantined, is blocked rather than let through.
+// Guardrail filters cover more (decoded JSON escapes, every provider) and
+// are the recommended way to screen tool results; this template is a
+// starting point for custom logic.
+
+tyk := import("tyk")
+
+body := input.raw_input
+quarantined := 0
+failed := input.format != "" && !input.segments_readable
+for seg in input.segments {
+    if seg.kind == "tool_result" && len(tyk.detect(seg.text, ["injection"])) > 0 {
+        out := tyk.quarantine_segment({raw_input: body, format: input.format}, seg.index, "")
+        if is_error(out) {
+            failed = true
+        } else {
+            body = out
+            quarantined += 1
+        }
+    }
+}
+
+output := {
+    block: failed,
+    payload: body,
+    message: failed ? "Request blocked: a tool result could not be screened" : "",
+    compliance_events: quarantined > 0 ? [
+        {
+            event_type: "tool_result_quarantined",
+            severity: "warning",
+            description: "Quarantined tool results carrying prompt injection",
+            metadata: {count: quarantined}
+        }
+    ] : []
+}`,
+    },
+    {
       id: "pii-redaction",
       name: "PII Redaction",
       description: "Redact emails, phone numbers, and SSN using regex patterns",

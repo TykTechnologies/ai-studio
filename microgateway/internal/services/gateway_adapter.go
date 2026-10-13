@@ -668,16 +668,18 @@ func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
 }
 
 // Filters are materialised onto the LLM on every request, so the guardrail
-// config JSON the hub sent is parsed once per filter version and reused
-// from a bounded least-recently-used cache; concurrent first requests share
-// one parse. The map is read-only downstream (the runner marshals it back
-// out); a new UpdatedAt from the hub is a new entry.
+// config JSON the hub sent is parsed once per distinct text and reused from
+// a bounded least-recently-used cache; concurrent first requests share one
+// parse. The map is read-only downstream (the runner marshals it back out).
+// The key is the text's digest, not the filter's version: the hub resolves
+// secret references into the text on every snapshot, so a rotated secret
+// changes the text without changing the filter's UpdatedAt.
 const parsedConfigsMax = 1024
 
 var parsedConfigs = lrucache.New[map[string]any](parsedConfigsMax)
 
 func parsedGuardrailConfig(dbFilter *database.Filter) map[string]any {
-	key := fmt.Sprintf("%d@%d:%d", dbFilter.ID, dbFilter.UpdatedAt.UnixNano(), len(dbFilter.Config))
+	key := guardrails.CacheDigest([]byte(dbFilter.Config))
 	cfg, err := parsedConfigs.Do(key, func() (map[string]any, error) {
 		return guardrails.ConfigFromJSON(dbFilter.Config)
 	})

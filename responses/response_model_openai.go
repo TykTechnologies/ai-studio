@@ -2,18 +2,6 @@ package responses
 
 import "github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 
-type OpenAIRequest struct {
-	Model    string `json:"model"`
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
-	Stream        bool `json:"stream"`
-	StreamOptions struct {
-		IncludeUsage bool `json:"include_usage"`
-	} `json:"stream_options"`
-}
-
 type AnthropicRequest struct {
 	Model     string `json:"model"`
 	Messages  []any  `json:"messages"`

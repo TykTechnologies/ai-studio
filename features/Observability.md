@@ -123,6 +123,11 @@ conventions, so they keep their own names:
 | `aistudio_native_request_duration_seconds` | histogram | `vendor`, `operation`, `status_code` |
 | `aistudio_native_results_bytes_total` | counter | `vendor`, `operation` |
 | `aistudio_native_reconcile_outcomes_total` | counter | `vendor`, `resource_type`, `outcome` (`accounted`, `settled`, `not_ended`, `unaccountable`, `lost`, `failed`) |
+| `aistudio_guardrail_latency_seconds` | histogram | `provider`, `outcome` (`clean`, `flagged`, `error`), `action`, `segment_kind` (`text`, `tool_result`, `mixed`); one sample per provider call |
+| `aistudio_guardrail_errors_total` | counter | `provider`, `fail_mode` (`open`, `closed`, `unscanned`) |
+| `aistudio_guardrail_segments_total` | counter | `provider`, `segment_kind`, `result` (`scanned`, `cached`, `unscanned`) |
+| `aistudio_guardrail_cache_total` | counter | `provider`, `outcome` (`hit`, `miss`) |
+| `aistudio_guardrail_calls_abandoned_total` | counter | `provider`; a provider call given up on after `timeout_ms` + 100ms (its goroutine still running) |
 
 The `aistudio_native_*` series cover the native API extensions
 ([NativeAPIExtensions.md](NativeAPIExtensions.md)): `operation` is the
