@@ -102,45 +102,52 @@ func (s *Service) GetAvailableEmbedders() ([]VendorDriverInfo, error) {
 	return embedders, nil
 }
 
-// GetAvailableVectorStores returns available vector store implementations
+// GetAvailableVectorStores returns the vector stores datasources can use in
+// this build. The list must match data_session.AVAILABLE_VECTOR_STORES (the
+// stores the datasource code implements); a test fails if they drift.
 func (s *Service) GetAvailableVectorStores() ([]VendorDriverInfo, error) {
-	// Vector stores are typically configured via datasources in this system
-	// Return the commonly supported vector store types
 	vectorStores := []VendorDriverInfo{
 		{
-			Name:        "chroma",
-			Vendor:      "chroma",
-			Version:     "1.0.0",
-			Description: "Open source vector database with local and remote deployment options",
+			Name:              "chroma",
+			Vendor:            "chroma",
+			Version:           "1.0.0",
+			Description:       "Open source vector database with local and remote deployment options",
 			SupportedFeatures: []string{"vector-search", "metadata-filtering", "persistence", "collection-management"},
 		},
 		{
-			Name:        "pinecone",
-			Vendor:      "pinecone",
-			Version:     "1.0.0",
-			Description: "Managed vector database service with real-time indexing",
+			Name:              "pgvector",
+			Vendor:            "pgvector",
+			Version:           "1.0.0",
+			Description:       "Vector search in PostgreSQL with the pgvector extension",
+			SupportedFeatures: []string{"vector-search", "metadata-filtering", "sql", "self-hosted"},
+		},
+		{
+			Name:              "pinecone",
+			Vendor:            "pinecone",
+			Version:           "1.0.0",
+			Description:       "Managed vector database service with real-time indexing",
 			SupportedFeatures: []string{"vector-search", "real-time-indexing", "managed-service", "high-performance"},
 		},
 		{
-			Name:        "weaviate",
-			Vendor:      "weaviate",
-			Version:     "1.0.0",
-			Description: "Open source vector search engine with GraphQL API",
-			SupportedFeatures: []string{"vector-search", "hybrid-search", "graphql-api", "schema-management"},
+			Name:              "redis",
+			Vendor:            "redis",
+			Version:           "1.0.0",
+			Description:       "Vector search in Redis with the search module",
+			SupportedFeatures: []string{"vector-search", "metadata-filtering", "in-memory", "self-hosted"},
 		},
 		{
-			Name:        "qdrant",
-			Vendor:      "qdrant",
-			Version:     "1.0.0",
-			Description: "High-performance vector database with rich filtering capabilities",
+			Name:              "qdrant",
+			Vendor:            "qdrant",
+			Version:           "1.0.0",
+			Description:       "High-performance vector database with rich filtering capabilities",
 			SupportedFeatures: []string{"vector-search", "rich-filtering", "clustering", "quantization"},
 		},
 		{
-			Name:        "milvus",
-			Vendor:      "milvus",
-			Version:     "1.0.0",
-			Description: "Scalable vector database for AI applications",
-			SupportedFeatures: []string{"vector-search", "scalability", "cloud-native", "multi-tenancy"},
+			Name:              "weaviate",
+			Vendor:            "weaviate",
+			Version:           "1.0.0",
+			Description:       "Open source vector search engine with GraphQL API",
+			SupportedFeatures: []string{"vector-search", "hybrid-search", "graphql-api", "schema-management"},
 		},
 	}
 

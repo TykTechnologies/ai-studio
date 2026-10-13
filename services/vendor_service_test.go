@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -81,19 +82,15 @@ func TestGetAvailableVectorStores(t *testing.T) {
 		assert.NotEmpty(t, store.SupportedFeatures, "Vector store should have supported features")
 	}
 
-	// Check for expected vector stores
-	storeNames := make(map[string]bool)
+	// The list is exactly the stores the datasource code implements in this
+	// build: offering one it does not (milvus) fails at use, and leaving one
+	// out (pgvector, redis) hides it.
+	var got, want []string
 	for _, store := range vectorStores {
-		storeNames[store.Name] = true
+		got = append(got, store.Vendor)
 	}
-
-	// Should include common vector stores
-	expectedStores := []string{"chroma", "pinecone", "weaviate", "qdrant", "milvus"}
-	foundCount := 0
-	for _, expected := range expectedStores {
-		if storeNames[expected] {
-			foundCount++
-		}
+	for _, v := range data_session.AVAILABLE_VECTOR_STORES {
+		want = append(want, string(v))
 	}
-	assert.GreaterOrEqual(t, foundCount, 3, "Should have at least 3 common vector stores")
+	assert.ElementsMatch(t, want, got, "GetAvailableVectorStores drifted from data_session.AVAILABLE_VECTOR_STORES")
 }
