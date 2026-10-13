@@ -65,3 +65,48 @@ func TestStreamEndAfterAHeartbeatLeavesTheEdgeDisconnected(t *testing.T) {
 		require.Empty(t, row.StreamSessionID, "iteration %d", i)
 	}
 }
+
+// cancelOnRegistration ends the stream at the moment its registration is
+// received: the server is still claiming the stream while it closes.
+type cancelOnRegistration struct {
+	*fakeEdgeStream
+}
+
+func (s cancelOnRegistration) Recv() (*pb.EdgeMessage, error) {
+	m, err := s.fakeEdgeStream.Recv()
+	if err == nil && m.GetRegistration() != nil {
+		s.cancel()
+	}
+	return m, err
+}
+
+// The same for a stream that closes while its registration is handled: the
+// claim must not outlive the stream, in the database or in the replica's
+// own view of its streams.
+func TestStreamEndDuringRegistrationLeavesTheEdgeDisconnected(t *testing.T) {
+	db := setupTestDB(t)
+	server := replicaServer(t, db, "node-a")
+	const edgeID = "edge-race-reg"
+	registerEdge(t, server, edgeID, "default")
+
+	for i := 0; i < 25; i++ {
+		stream := newFakeEdgeStream()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_ = server.SubscribeToChanges(cancelOnRegistration{stream})
+		}()
+		stream.in <- &pb.EdgeMessage{Message: &pb.EdgeMessage_Registration{Registration: &pb.EdgeRegistrationRequest{EdgeId: edgeID, EdgeNamespace: "default", Version: "test"}}}
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("stream handler did not return")
+		}
+
+		row := streamEdgeRow(t, db, edgeID)
+		require.Equal(t, models.EdgeStatusDisconnected, row.Status, "iteration %d: the edge was claimed by a stream that had closed (owner %q, session %q)", i, row.OwnerNodeID, row.StreamSessionID)
+		require.Empty(t, row.StreamSessionID, "iteration %d", i)
+		_, local := server.LocalStreams()[edgeID]
+		require.False(t, local, "iteration %d: the replica still lists the closed stream", i)
+	}
+}
