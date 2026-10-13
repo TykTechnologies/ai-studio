@@ -4,7 +4,7 @@ import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../admin/utils/testTheme";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import SubmissionDetail from "./SubmissionDetail";
+import SubmissionDetail, { catalogEntryPath } from "./SubmissionDetail";
 
 jest.mock("../../admin/utils/pubClient", () => ({
   __esModule: true,
@@ -209,6 +209,62 @@ describe("SubmissionDetail", () => {
       expect(
         screen.getByText("Failed to load submission details")
       ).toBeInTheDocument();
+    });
+  });
+
+  // #512 C4a: "View in Catalog" opened the dashboard for every submission.
+  describe("View in Catalog", () => {
+    it("links an approved data source to its catalogue entry", async () => {
+      pubClient.get.mockResolvedValueOnce({ data: { data: mockSubmission } });
+      renderWithRoute();
+      const link = await screen.findByRole("link", { name: "View in Catalog" });
+      expect(link).toHaveAttribute("href", "/portal/catalog/datasources/42");
+    });
+
+    it("is absent until the submission is approved", async () => {
+      pubClient.get.mockResolvedValueOnce({
+        data: { data: { ...mockSubmission, status: "in_review", resource_id: null } },
+      });
+      renderWithRoute();
+      await screen.findByText("Timeline");
+      expect(screen.queryByText("View in Catalog")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("catalogEntryPath", () => {
+    const approved = (extra) => ({ status: "approved", ...extra });
+
+    it.each([
+      ["tool", approved({ resource_type: "tool", resource_id: 5 }), "/portal/catalog/tools/5"],
+      ["data source", approved({ resource_type: "datasource", resource_id: 6 }), "/portal/catalog/datasources/6"],
+      ["MCP server", approved({ resource_type: "mcp_server", resource_id: 3 }), "/portal/catalog/mcp-servers/3"],
+      [
+        "plugin resource",
+        approved({
+          resource_type: "plugin",
+          plugin_instance_id: "agent 9/f",
+          plugin_resource_type: { plugin_id: 7, slug: "agents" },
+        }),
+        "/portal/catalog/resources/7/agents/agent%209%2Ff",
+      ],
+      [
+        "approved update",
+        approved({ resource_type: "tool", resource_id: null, is_update: true, target_resource_id: 9 }),
+        "/portal/catalog/tools/9",
+      ],
+    ])("opens the %s it created", (_, submission, path) => {
+      expect(catalogEntryPath(submission)).toBe(path);
+    });
+
+    it.each([
+      ["a draft", { status: "draft", resource_type: "tool", resource_id: 5 }],
+      ["a rejected one", { status: "rejected", resource_type: "tool", resource_id: 5 }],
+      ["an approved one with no resource yet", approved({ resource_type: "tool", resource_id: null })],
+      ["a plugin resource without its type", approved({ resource_type: "plugin", plugin_instance_id: "x" })],
+      ["an unknown type", approved({ resource_type: "widget", resource_id: 1 })],
+      ["nothing", null],
+    ])("has no target for %s", (_, submission) => {
+      expect(catalogEntryPath(submission)).toBeNull();
     });
   });
 });
