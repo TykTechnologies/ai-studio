@@ -1,0 +1,97 @@
+package plugin_sdk
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+
+	"google.golang.org/grpc"
+
+	pb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
+)
+
+// recordingEventClient records published topics in order.
+type recordingEventClient struct {
+	pb.PluginEventServiceClient
+	mu     sync.Mutex
+	topics []string
+}
+
+func (c *recordingEventClient) Publish(_ context.Context, in *pb.PublishRequest, _ ...grpc.CallOption) (*pb.PublishResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.topics = append(c.topics, in.Topic)
+	return &pb.PublishResponse{Success: true}, nil
+}
+
+// lateBroker is a connect func that fails until ready is set.
+type lateBroker struct {
+	ready  bool
+	client *recordingEventClient
+}
+
+func (b *lateBroker) connect() (pb.PluginEventServiceClient, error) {
+	if !b.ready {
+		return nil, errors.New("broker not ready")
+	}
+	return b.client, nil
+}
+
+// Events published before the broker is ready are held and sent, in order,
+// once it is; the service is not stuck on a stub after the first failure.
+func TestLazyEventService_BuffersUntilBrokerIsReady(t *testing.T) {
+	broker := &lateBroker{client: &recordingEventClient{}}
+	svc := &lazyEventService{pluginID: "7", connect: broker.connect}
+	ctx := context.Background()
+
+	for _, topic := range []string{"a", "b", "c"} {
+		if err := svc.Publish(ctx, topic, map[string]string{"k": topic}, DirLocal); err != nil {
+			t.Fatalf("Publish(%s) before the broker is ready: %v", topic, err)
+		}
+	}
+	if _, err := svc.Subscribe("x", func(Event) {}); err == nil {
+		t.Error("Subscribe succeeded before the broker was ready")
+	}
+	if len(broker.client.topics) != 0 {
+		t.Fatalf("events reached the host before the broker was ready: %v", broker.client.topics)
+	}
+
+	broker.ready = true
+	svc.mu.Lock()
+	svc.nextConnect = svc.nextConnect.AddDate(-1, 0, 0) // skip the retry wait
+	svc.mu.Unlock()
+	if err := svc.Publish(ctx, "d", "payload", DirLocal); err != nil {
+		t.Fatalf("Publish after the broker is ready: %v", err)
+	}
+
+	want := []string{"a", "b", "c", "d"}
+	got := broker.client.topics
+	if len(got) != len(want) {
+		t.Fatalf("host received %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("host received %v, want %v in order", got, want)
+		}
+	}
+}
+
+// Past the buffer, Publish reports the drop instead of returning nil.
+func TestLazyEventService_OverflowIsReported(t *testing.T) {
+	broker := &lateBroker{client: &recordingEventClient{}}
+	svc := &lazyEventService{pluginID: "7", connect: broker.connect}
+	ctx := context.Background()
+
+	for i := 0; i < maxPendingEvents; i++ {
+		if err := svc.Publish(ctx, "busy", i, DirUp); err != nil {
+			t.Fatalf("Publish %d within the buffer: %v", i, err)
+		}
+	}
+	if err := svc.Publish(ctx, "busy", "one too many", DirUp); !errors.Is(err, errEventDropped) {
+		t.Fatalf("Publish beyond the buffer = %v, want errEventDropped", err)
+	}
+	if _, warned := svc.dropWarned["busy"]; !warned {
+		t.Error("the drop was not logged for its topic")
+	}
+}
