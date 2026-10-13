@@ -123,17 +123,23 @@ func (h *GormChatMessageHistory) CheckIfSessionExists(ctx context.Context) (bool
 	return true, &record, nil
 }
 
-// Messages returns all messages stored
+// Messages returns the session's newest Limit messages, oldest first. When
+// the session holds more, its first message is kept in front if it is the
+// system prompt. The window may start mid-turn; PreflightTokenLengthCheck
+// drops tool results whose call is outside it.
 func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.MessageContent, error) {
 	var chatMessages []models.CMessage
 	result := h.DB.WithContext(ctx).
 		Where("session = ?", h.Session).
-		Order("created_at ASC").
+		Order("created_at DESC").Order("id DESC").
 		Limit(h.Limit).
 		Find(&chatMessages)
 
 	if result.Error != nil {
 		return nil, result.Error
+	}
+	for i, j := 0, len(chatMessages)-1; i < j; i, j = i+1, j-1 {
+		chatMessages[i], chatMessages[j] = chatMessages[j], chatMessages[i]
 	}
 
 	var messages []llms.MessageContent
@@ -145,6 +151,24 @@ func (h *GormChatMessageHistory) Messages(ctx context.Context) ([]llms.MessageCo
 		}
 
 		messages = append(messages, mc)
+	}
+
+	if h.Limit > 0 && len(chatMessages) == h.Limit {
+		var first models.CMessage
+		err := h.DB.WithContext(ctx).Where("session = ?", h.Session).
+			Order("created_at ASC").Order("id ASC").Take(&first).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if err == nil && first.ID != chatMessages[0].ID {
+			mc := llms.MessageContent{}
+			if err := json.Unmarshal([]byte(first.Content), &mc); err != nil {
+				return nil, err
+			}
+			if mc.Role == llms.ChatMessageTypeSystem {
+				messages = append([]llms.MessageContent{mc}, messages...)
+			}
+		}
 	}
 
 	return messages, nil
