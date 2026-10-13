@@ -130,6 +130,8 @@ describe("GuardrailConfigForm", () => {
     render(<Harness initial={{ ...emptyGuardrailConfig(), on_detect: "redact" }} responseFilter />);
     await screen.findByTestId("guardrail-detector-secrets");
     expect(screen.getByTestId("guardrail-response-redact-warning")).toHaveTextContent(/does not change responses/i);
+    // Nothing is rewritten on a response, so there is no style to choose.
+    expect(screen.queryByLabelText(/redaction style/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/messages to inspect/i)).not.toBeInTheDocument();
   });
 
