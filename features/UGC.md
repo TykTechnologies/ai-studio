@@ -178,7 +178,7 @@ On approval the platform calls the plugin's `CreateResourceInstance` with a subm
 1. **Submit** — Submitter fills form, accepts attestations, submits
 2. **Admin notification** — Admins are notified of new submission (`NotificationService.NotifyDirect`, in-app and email; the title names the resource type, e.g. "New Agent submission for review")
 3. **Review** — Admin claims submission, reviews payload, tests connectivity
-4. **Decision** — Admin approves (sets privacy score + catalogues), rejects (with feedback), or requests changes
+4. **Decision** — Admin approves (sets privacy score + catalogues), rejects (with feedback), or requests changes. In Enterprise builds the Approve dialog for a tool or data source has a catalogue multi-select of the matching type (tool catalogues or data catalogues, loaded with `listAll`). Default is preselected, and the selection is sent as `assigned_catalogues: {"ids": [...]}`; clearing it approves without publishing to any catalogue. Community Edition shows no picker, because every new tool and data source joins Default by policy. Update submissions (`is_update`) get no picker and send no `assigned_catalogues`: the existing resource keeps its catalogues and its active state.
 5. **Resource creation** — On approval, the actual Datasource/Tool is created from the payload
 6. **Community badge** — Resource is flagged with `CommunitySubmitted = true`
 7. **Submitter notification** — Submitter is notified of the decision

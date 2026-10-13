@@ -43,6 +43,16 @@ import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import { getResourceTypeLabel } from "../components/submissions/resourceTypeLabel";
 import PluginPayloadView from "../components/submissions/PluginPayloadView";
 import MCPSubmissionSummary from "../../portal/components/MCPSubmissionSummary";
+import { listAll } from "../utils/listAll";
+import useSystemFeatures from "../hooks/useSystemFeatures";
+
+// Catalogue endpoint per submitted resource type: the reviewer picks where an
+// approved tool or data source is published (#504).
+const CATALOGUE_ENDPOINTS = {
+  tool: { path: "/tool-catalogues", label: "Tool catalogs" },
+  datasource: { path: "/data-catalogues", label: "Data catalogs" },
+};
+const DEFAULT_CATALOGUE_NAME = "Default";
 
 const SubmissionReview = () => {
   const { id } = useParams();
@@ -64,6 +74,11 @@ const SubmissionReview = () => {
   const [mcpTagOptions, setMcpTagOptions] = useState([]);
   const [mcpGatewayTags, setMcpGatewayTags] = useState(null);
   const [mcpPublish, setMcpPublish] = useState(false);
+  // Tool and data source submissions: the catalogues to publish into.
+  // Null until loaded; preselects Default, which is what approval did before.
+  const [catalogueOptions, setCatalogueOptions] = useState(null);
+  const [chosenCatalogues, setChosenCatalogues] = useState([]);
+  const { features } = useSystemFeatures();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [changesDialogOpen, setChangesDialogOpen] = useState(false);
   const [finalPrivacyScore, setFinalPrivacyScore] = useState(0);
@@ -165,6 +180,31 @@ const SubmissionReview = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [approveDialogOpen, isMCPSubmission, mcpConnectionId]);
 
+  // Catalogues exist to manage only with groups (Enterprise); Community
+  // Edition always publishes into Default, so it shows no picker. An update
+  // submission changes a resource that already exists (and may be live) and
+  // keeps its catalogues, so it gets no picker and sends none either.
+  const catalogueEndpoint =
+    features?.feature_groups && !submission?.is_update ? CATALOGUE_ENDPOINTS[submission?.resource_type] : undefined;
+
+  useEffect(() => {
+    if (!approveDialogOpen || !catalogueEndpoint || catalogueOptions !== null) return;
+    let cancelled = false;
+    listAll(apiClient, catalogueEndpoint.path)
+      .then((res) => {
+        if (cancelled) return;
+        const options = (res.data?.data || []).map((c) => ({ id: Number(c.id), name: c.attributes?.name || `#${c.id}` }));
+        setCatalogueOptions(options);
+        setChosenCatalogues(options.filter((o) => o.name === DEFAULT_CATALOGUE_NAME));
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogueOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [approveDialogOpen, catalogueEndpoint, catalogueOptions]);
+
   const handleApprove = async () => {
     const isPluginSubmission = submission?.resource_type === "plugin";
     try {
@@ -180,6 +220,7 @@ const SubmissionReview = () => {
             // Plugin resources use group access, not catalogues; the API
             // field is a JSON object, so send an empty object rather than an array.
             ...(isPluginSubmission ? { assigned_catalogues: {} } : {}),
+            ...(catalogueEndpoint ? { assigned_catalogues: { ids: chosenCatalogues.map((c) => c.id) } } : {}),
           },
         },
       });
@@ -189,11 +230,17 @@ const SubmissionReview = () => {
           snackbar: {
             // Say what approval actually did: it publishes into Default, and the
             // resource is not live until an administrator activates it.
-            message: isPluginSubmission
+            message: submission?.is_update
+              ? "Submission approved. The changes were applied to the existing resource; its catalogs and active state are unchanged."
+              : isPluginSubmission
               ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's team settings."
               : isMCPSubmission
                 ? "Submission approved. Open the MCP server under Context management: on a full-mode connection the proxy now exists on the Tyk Dashboard, otherwise the handoff package is ready for the platform team."
-                : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
+                : catalogueEndpoint
+                  ? chosenCatalogues.length > 0
+                    ? `Submission approved. The resource was created, added to ${chosenCatalogues.map((c) => c.name).join(", ")}, and is inactive until you activate it.`
+                    : "Submission approved. The resource was created in no catalog (add it to one to publish it) and is inactive until you activate it."
+                  : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
             severity: "success",
           },
         },
@@ -855,6 +902,36 @@ const SubmissionReview = () => {
                 label="Publish to the portal right away (full-mode connections only)"
               />
             </Box>
+          )}
+          {catalogueEndpoint && (
+            <Autocomplete
+              multiple
+              size="small"
+              sx={{ mt: 2 }}
+              loading={catalogueOptions === null}
+              options={catalogueOptions || []}
+              value={chosenCatalogues}
+              onChange={(_, v) => setChosenCatalogues(v)}
+              getOptionLabel={(o) => o.name}
+              isOptionEqualToValue={(o, v) => o.id === v.id}
+              disableCloseOnSelect
+              renderTags={(value, getTagProps) =>
+                value.map((c, index) => <Chip {...getTagProps({ index })} key={c.id} size="small" label={c.name} />)
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={`Publish to ${catalogueEndpoint.label.toLowerCase()}`}
+                  helperText={
+                    chosenCatalogues.length === 0
+                      ? "Nothing selected: the resource is approved without being published to any catalog."
+                      : `Every team that has ${chosenCatalogues.map((c) => c.name).join(", ")} can use the resource once it is active. Remove a catalog to keep it out.`
+                  }
+                  FormHelperTextProps={{ "data-testid": "approve-catalogues-consequence" }}
+                  inputProps={{ ...params.inputProps, "data-testid": "approve-catalogues" }}
+                />
+              )}
+            />
           )}
           <TextField
             fullWidth
