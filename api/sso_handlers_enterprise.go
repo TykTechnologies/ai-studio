@@ -5,8 +5,10 @@ package api
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	tykerrors "github.com/TykTechnologies/tyk-identity-broker/error"
 
@@ -161,11 +163,17 @@ func (a *API) handleSSO(c *gin.Context) {
 	c.Redirect(http.StatusFound, a.publicPath("/"))
 }
 
+// SSOAuthMiddleware admits the identity broker's calls to the nonce
+// endpoint: their Authorization header must be the shared secret
+// (TYK_AI_SECRET_KEY). With no secret set, every call is refused.
 func (a *API) SSOAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorizationHeader := c.GetHeader("Authorization")
-
-		if authorizationHeader != a.config.TIBAPISecret {
+		if a.config.TIBAPISecret == "" {
+			ssoSecretUnsetOnce.Do(func() {
+				logger.Log.Error().Msg("SSO login refused: TYK_AI_SECRET_KEY is not set, and the identity broker authenticates its nonce requests with it")
+			})
+		}
+		if !ssoSecretMatches(a.config.TIBAPISecret, c.GetHeader("Authorization")) {
 			helpers.SendErrorResponse(c, helpers.NewUnauthorizedError("Not authorized"))
 			c.Abort()
 			return
@@ -174,6 +182,8 @@ func (a *API) SSOAuthMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+var ssoSecretUnsetOnce sync.Once
 
 // @Summary Create a nonce token for SSO authentication
 // @Description Create a nonce token that can be used for SSO authentication

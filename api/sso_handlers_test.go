@@ -179,10 +179,27 @@ func TestSSOAuthMiddleware(t *testing.T) {
 	})
 
 	t.Run("Valid authorization header", func(t *testing.T) {
+		require.NotEmpty(t, api.config.TIBAPISecret)
 		req, _ := http.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", api.config.TIBAPISecret)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	// With TYK_AI_SECRET_KEY unset, nothing is admitted.
+	t.Run("Unset secret refuses every call", func(t *testing.T) {
+		saved := api.config.TIBAPISecret
+		api.config.TIBAPISecret = ""
+		t.Cleanup(func() { api.config.TIBAPISecret = saved })
+
+		w := performRequest(r, "GET", "/test", nil)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+		req, _ := http.NewRequest("GET", "/test", nil)
+		req.Header.Set("Authorization", "")
+		w = httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }

@@ -28,6 +28,8 @@ TIB enables Tyk AI Studio to integrate with IdPs supporting standard protocols, 
 
 ## Configuration (Admin)
 
+SSO needs `TYK_AI_SECRET_KEY` to be set. The identity broker authenticates its internal call to `POST /api/sso`, which issues the one-time login nonce, with that key. If the key is not set, AI Studio refuses every SSO login. It logs a warning at startup when TIB is enabled without it, and an error on the first refused login.
+
 Administrators configure SSO providers within the Tyk AI Studio administration interface (likely via TIB's configuration settings exposed through Tyk AI Studio):
 
 1.  **Select Protocol:** Choose the appropriate protocol (OIDC, SAML, etc.).
