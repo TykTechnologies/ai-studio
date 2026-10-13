@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -74,6 +75,45 @@ func TestLazyEventService_BuffersUntilBrokerIsReady(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("host received %v, want %v in order", got, want)
 		}
+	}
+}
+
+// A slow connection attempt does not stall other publishers: they buffer
+// and return, and everything is delivered in order once it connects.
+func TestLazyEventService_SlowConnectDoesNotBlockPublishers(t *testing.T) {
+	client := &recordingEventClient{}
+	release := make(chan struct{})
+	entered := make(chan struct{})
+	svc := &lazyEventService{pluginID: "7", connect: func() (pb.PluginEventServiceClient, error) {
+		close(entered)
+		<-release
+		return client, nil
+	}}
+	ctx := context.Background()
+
+	first := make(chan error, 1)
+	go func() { first <- svc.Publish(ctx, "first", 1, DirLocal) }()
+	<-entered // the first publisher is now dialling
+
+	done := make(chan error, 1)
+	go func() { done <- svc.Publish(ctx, "second", 2, DirLocal) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("second Publish: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a publisher was blocked by another's connection attempt")
+	}
+
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatalf("first Publish: %v", err)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if len(client.topics) != 2 || client.topics[0] != "first" || client.topics[1] != "second" {
+		t.Fatalf("host received %v, want [first second]", client.topics)
 	}
 }
 

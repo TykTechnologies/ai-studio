@@ -423,8 +423,13 @@ type pendingEvent struct {
 // lazyEventService wraps an EventService and initializes it on first use,
 // because the gRPC broker connection does not exist yet when the service
 // broker is created during plugin startup. Until the connection can be made,
-// every call retries it; publishes are buffered (see maxPendingEvents) and
-// subscriptions return an error the caller can retry.
+// publishes are buffered (see maxPendingEvents) and subscriptions return an
+// error the caller can retry.
+//
+// Connecting and sending the buffer happen outside mu, in one goroutine at a
+// time (busy); other publishers meanwhile append to the buffer and return,
+// so a slow dial or flush never stalls them. While the buffer is not empty,
+// new events join it rather than overtake it, which keeps them in order.
 type lazyEventService struct {
 	runtime  RuntimeType
 	pluginID string
@@ -434,47 +439,62 @@ type lazyEventService struct {
 	mu          sync.Mutex
 	inner       EventService // nil until the broker connection exists
 	pending     []pendingEvent
+	busy        bool // a goroutine is connecting or sending the buffer
 	dropWarned  map[string]time.Time
 	nextConnect time.Time // no connection attempt before this
 }
 
-// ready returns the underlying event service, connecting it (and sending any
-// buffered events) if the broker is now available, or nil if it is not.
-// The caller holds mu.
-func (l *lazyEventService) ready() EventService {
-	if l.inner != nil {
-		return l.inner
+// drain connects the event service if it is not connected (at most once per
+// connectRetryInterval) and sends the buffered events in order. It returns
+// at once if another goroutine is already doing so.
+func (l *lazyEventService) drain() {
+	l.mu.Lock()
+	if l.busy {
+		l.mu.Unlock()
+		return
 	}
-	now := time.Now()
-	if now.Before(l.nextConnect) {
-		return nil
-	}
-	connect := l.connect
-	if connect == nil {
-		connect = getEventServiceClient
-	}
-	client, err := connect()
-	if err != nil {
-		l.nextConnect = now.Add(connectRetryInterval)
-		log.Debug().Err(err).Str("plugin_id", l.pluginID).Msg("Event service not ready yet")
-		return nil
-	}
-	l.inner = newEventService(client, l.pluginID)
-	log.Debug().Str("plugin_id", l.pluginID).Msg("Event service initialized")
-	l.flushPending()
-	return l.inner
-}
-
-// flushPending sends the buffered events in order. The caller holds mu.
-func (l *lazyEventService) flushPending() {
-	for _, ev := range l.pending {
-		ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
-		if err := l.inner.PublishRaw(ctx, ev.topic, ev.payload, ev.dir); err != nil {
-			log.Error().Err(err).Str("plugin_id", l.pluginID).Str("topic", ev.topic).Msg("Failed to send an event buffered while the event service was starting")
+	if l.inner == nil {
+		now := time.Now()
+		if now.Before(l.nextConnect) {
+			l.mu.Unlock()
+			return
 		}
-		cancel()
+		l.busy = true
+		l.mu.Unlock()
+
+		connect := l.connect
+		if connect == nil {
+			connect = getEventServiceClient
+		}
+		client, err := connect()
+
+		l.mu.Lock()
+		if err != nil {
+			l.nextConnect = now.Add(connectRetryInterval)
+			l.busy = false
+			l.mu.Unlock()
+			log.Debug().Err(err).Str("plugin_id", l.pluginID).Msg("Event service not ready yet")
+			return
+		}
+		l.inner = newEventService(client, l.pluginID)
+		log.Debug().Str("plugin_id", l.pluginID).Msg("Event service initialized")
 	}
-	l.pending = nil
+	l.busy = true
+	for len(l.pending) > 0 {
+		batch, inner := l.pending, l.inner
+		l.pending = nil
+		l.mu.Unlock()
+		for _, ev := range batch {
+			ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
+			if err := inner.PublishRaw(ctx, ev.topic, ev.payload, ev.dir); err != nil {
+				log.Error().Err(err).Str("plugin_id", l.pluginID).Str("topic", ev.topic).Msg("Failed to send an event buffered while the event service was starting")
+			}
+			cancel()
+		}
+		l.mu.Lock()
+	}
+	l.busy = false
+	l.mu.Unlock()
 }
 
 func (l *lazyEventService) Publish(ctx context.Context, topic string, payload interface{}, dir Direction) error {
@@ -487,18 +507,20 @@ func (l *lazyEventService) Publish(ctx context.Context, topic string, payload in
 
 func (l *lazyEventService) PublishRaw(ctx context.Context, topic string, payload []byte, dir Direction) error {
 	l.mu.Lock()
-	inner := l.ready()
-	if inner == nil {
-		defer l.mu.Unlock()
-		if len(l.pending) >= maxPendingEvents {
-			l.warnDropped(topic)
-			return errEventDropped
-		}
-		l.pending = append(l.pending, pendingEvent{topic: topic, payload: append([]byte(nil), payload...), dir: dir})
-		return nil
+	if l.inner != nil && !l.busy && len(l.pending) == 0 {
+		inner := l.inner
+		l.mu.Unlock()
+		return inner.PublishRaw(ctx, topic, payload, dir)
 	}
+	if len(l.pending) >= maxPendingEvents {
+		l.warnDropped(topic)
+		l.mu.Unlock()
+		return errEventDropped
+	}
+	l.pending = append(l.pending, pendingEvent{topic: topic, payload: append([]byte(nil), payload...), dir: dir})
 	l.mu.Unlock()
-	return inner.PublishRaw(ctx, topic, payload, dir)
+	l.drain()
+	return nil
 }
 
 // warnDropped logs a dropped event, once per topic per dropWarnInterval.
@@ -519,12 +541,13 @@ func (l *lazyEventService) warnDropped(topic string) {
 // service returns the connected event service, or an error while the broker
 // is not ready (the caller may retry).
 func (l *lazyEventService) service() (EventService, error) {
+	l.drain()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if inner := l.ready(); inner != nil {
-		return inner, nil
+	if l.inner == nil {
+		return nil, fmt.Errorf("event service not ready yet")
 	}
-	return nil, fmt.Errorf("event service not ready yet")
+	return l.inner, nil
 }
 
 func (l *lazyEventService) Subscribe(topic string, handler EventHandler) (string, error) {
