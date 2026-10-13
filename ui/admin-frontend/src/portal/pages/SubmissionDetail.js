@@ -22,6 +22,34 @@ import StatusChip from "../../admin/components/submissions/StatusChip";
 import { ResourceTypeChip } from "../../admin/components/submissions/resourceTypeLabel";
 import PluginPayloadView from "../../admin/components/submissions/PluginPayloadView";
 
+/**
+ * The portal catalogue entry of the resource an approved submission created
+ * (or updated), or null when there is none to open: not approved yet, or the
+ * ids needed for the route are missing. "View in Catalog" used to send every
+ * submission to the dashboard (#512 C4a).
+ */
+export const catalogEntryPath = (submission) => {
+  if (!submission || submission.status !== "approved") return null;
+  const resourceId = submission.resource_id || (submission.is_update ? submission.target_resource_id : null);
+  switch (submission.resource_type) {
+    case "tool":
+      return resourceId ? `/portal/catalog/tools/${resourceId}` : null;
+    case "datasource":
+      return resourceId ? `/portal/catalog/datasources/${resourceId}` : null;
+    case "mcp_server":
+      return resourceId ? `/portal/catalog/mcp-servers/${resourceId}` : null;
+    case "plugin": {
+      const type = submission.plugin_resource_type;
+      if (!type?.plugin_id || !type?.slug || !submission.plugin_instance_id) return null;
+      return `/portal/catalog/resources/${type.plugin_id}/${encodeURIComponent(type.slug)}/${encodeURIComponent(
+        submission.plugin_instance_id
+      )}`;
+    }
+    default:
+      return null;
+  }
+};
+
 const SubmissionDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -63,6 +91,7 @@ const SubmissionDetail = () => {
   const canEdit =
     submission.status === "draft" ||
     submission.status === "changes_requested";
+  const catalogPath = catalogEntryPath(submission);
 
   return (
     <Container maxWidth={false} sx={{ px: 3, py: 3, width: "100%" }}>
@@ -340,10 +369,8 @@ const SubmissionDetail = () => {
               : "Edit Draft"}
           </PrimaryButton>
         )}
-        {submission.status === "approved" && submission.resource_id && (
-          <PrimaryOutlineButton
-            onClick={() => navigate("/portal/dashboard")}
-          >
+        {catalogPath && (
+          <PrimaryOutlineButton component={Link} to={catalogPath}>
             View in Catalog
           </PrimaryOutlineButton>
         )}
