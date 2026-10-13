@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, configure } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter } from "react-router-dom";
@@ -9,6 +9,10 @@ import SemanticRouterForm from "./SemanticRouterForm";
 import { useEdition } from "../../context/EditionContext";
 import { PermissionsProvider } from "../../context/PermissionsContext";
 import { clearIdentity } from "../../utils/identityStore";
+
+// Role queries skip the visibility check (getComputedStyle on every element
+// of this large form), which made them the slow part of the create-flow tests.
+configure({ defaultHidden: true });
 
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
@@ -108,10 +112,15 @@ const renderForm = () =>
     </ThemeProvider>,
   );
 
-// Opens an MUI Select by its label and clicks an option.
+// Opens an MUI Select by its label and clicks an option. With defaultHidden
+// a menu still closing is found too, so pick the listbox this select opened
+// (it is labelled by the select's label).
 const choose = (label, option, container = document.body) => {
-  fireEvent.mouseDown(within(container).getByRole("combobox", { name: label }));
-  fireEvent.click(within(screen.getByRole("listbox")).getByText(option));
+  const select = within(container).getByLabelText(label, { selector: "[role=combobox]" });
+  fireEvent.mouseDown(select);
+  const labels = (select.getAttribute("aria-labelledby") || "").split(" ");
+  const listbox = screen.getAllByRole("listbox").find((lb) => labels.includes(lb.getAttribute("aria-labelledby")));
+  fireEvent.click(within(listbox).getByText(option));
 };
 
 describe("SemanticRouterForm", () => {
@@ -180,53 +189,51 @@ describe("SemanticRouterForm", () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it("picks an embedder and submits the full config", async () => {
+  // The full create flow is split in two (an LLM route with the embedder and
+  // catalogue, then a model-router route with keywords, examples and a
+  // threshold): each half re-renders the large form far fewer times, so it
+  // stays well inside Jest's timeout on a loaded CI runner.
+  const startCreate = async () => {
     renderForm();
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/llms", expect.anything()));
     await screen.findAllByTestId("relationship-picker");
-
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Smart" } });
-
-    // Route 1: simple, on an LLM
-    fireEvent.click(screen.getByRole("button", { name: "Add Route" }));
-    const simple = screen.getByTestId("route-card-0");
-    fireEvent.change(within(simple).getByLabelText(/^Route name/), { target: { value: "simple" } });
-    await waitFor(() => expect(within(simple).getByRole("combobox", { name: "LLM provider" })).toBeInTheDocument());
-    choose("LLM provider", "OpenAI (openai)", simple);
-    fireEvent.change(within(simple).getByLabelText(/^Model/), { target: { value: "gpt-4o-mini" } });
-
-    // Route 2: complex, through a model router, with a regex keyword and examples
-    fireEvent.click(screen.getByRole("button", { name: "Add Route" }));
-    const complex = screen.getByTestId("route-card-1");
-    fireEvent.change(within(complex).getByLabelText(/^Route name/), { target: { value: "complex" } });
-    fireEvent.click(within(complex).getByRole("button", { name: "Model Router" }));
-    choose("Model router", "Cheap pool", complex);
-    fireEvent.change(within(complex).getByLabelText(/Model alias/), { target: { value: "cheap" } });
-    const keyword = screen.getByLabelText("Keyword for route 2");
-    fireEvent.change(keyword, { target: { value: "prove" } });
-    fireEvent.keyDown(keyword, { key: "Enter" });
-    fireEvent.click(within(screen.getByTestId("route-1-keywords")).getByRole("checkbox"));
-    fireEvent.change(screen.getByLabelText("Example prompts for route 2"), {
-      target: { value: "derive the formula\n\n  prove that x  " },
-    });
-    fireEvent.change(within(complex).getByLabelText(/^Threshold/), { target: { value: "0.8" } });
-
-    choose("Default route", "simple");
-
-    // The embedding stage uses an embedder (picked, or created inline).
+  };
+  const pickEmbedder = async () => {
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/embedders", expect.anything()));
-    expect(screen.getByRole("button", { name: "New embedder" })).toBeInTheDocument();
+    expect(screen.getByText("New embedder")).toBeInTheDocument();
     choose("Embedder", "OpenAI small");
-
-    const catalogPicker = screen.getAllByTestId("relationship-picker").find((el) => el.dataset.itemLabel === "catalog");
-    fireEvent.click(within(catalogPicker).getByTestId("relationship-picker-add"));
-
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  };
+  // Backstop only: each half takes ~0.4-0.6 s alone and ~1.2-1.7 s with the
+  // whole suite running locally; slower CI runners get headroom.
+  const CREATE_FLOW_TIMEOUT_MS = 15000;
+  const submitted = async () => {
+    fireEvent.click(screen.getByText("Create"));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalled());
     const [url, body] = apiClient.post.mock.calls[0];
     expect(url).toBe("/semantic-routers");
     expect(body.data.type).toBe("semantic-routers");
-    const attrs = body.data.attributes;
+    return body.data.attributes;
+  };
+
+  it("picks an embedder and submits the full config", async () => {
+    await startCreate();
+
+    // An LLM route
+    fireEvent.click(screen.getByText("Add Route"));
+    const simple = screen.getByTestId("route-card-0");
+    fireEvent.change(within(simple).getByLabelText(/^Route name/), { target: { value: "simple" } });
+    choose("LLM provider", "OpenAI (openai)", simple);
+    fireEvent.change(within(simple).getByLabelText(/^Model/), { target: { value: "gpt-4o-mini" } });
+    choose("Default route", "simple");
+
+    // The embedding stage uses an embedder (picked, or created inline).
+    await pickEmbedder();
+
+    const catalogPicker = screen.getAllByTestId("relationship-picker").find((el) => el.dataset.itemLabel === "catalog");
+    fireEvent.click(within(catalogPicker).getByTestId("relationship-picker-add"));
+
+    const attrs = await submitted();
     expect(attrs).toEqual(expect.objectContaining({ name: "Smart", slug: "smart", active: false }));
     expect(attrs.settings).toEqual({
       mode: "enforce",
@@ -246,6 +253,38 @@ describe("SemanticRouterForm", () => {
         utterances: [],
         target: { type: "llm", llm_id: 1, model: "gpt-4o-mini" },
       },
+    ]);
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith("/semantic-routers/9/catalogues", { catalogue_ids: [2] }));
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/semantic-routers", {
+        state: { snackbar: { message: "Semantic Router created successfully", severity: "success" } },
+      }),
+    );
+  }, CREATE_FLOW_TIMEOUT_MS);
+
+  it("submits a model-router route with a regex keyword, examples and a threshold", async () => {
+    await startCreate();
+
+    fireEvent.click(screen.getByText("Add Route"));
+    const complex = screen.getByTestId("route-card-0");
+    fireEvent.change(within(complex).getByLabelText(/^Route name/), { target: { value: "complex" } });
+    fireEvent.click(within(complex).getByText("Model Router"));
+    choose("Model router", "Cheap pool", complex);
+    fireEvent.change(within(complex).getByLabelText(/Model alias/), { target: { value: "cheap" } });
+    const keyword = screen.getByLabelText("Keyword for route 1");
+    fireEvent.change(keyword, { target: { value: "prove" } });
+    fireEvent.keyDown(keyword, { key: "Enter" });
+    fireEvent.click(within(screen.getByTestId("route-0-keywords")).getByRole("checkbox"));
+    fireEvent.change(screen.getByLabelText("Example prompts for route 1"), {
+      target: { value: "derive the formula\n\n  prove that x  " },
+    });
+    fireEvent.change(within(complex).getByLabelText(/^Threshold/), { target: { value: "0.8" } });
+    choose("Default route", "complex");
+    // Examples need an embedder.
+    await pickEmbedder();
+
+    const attrs = await submitted();
+    expect(attrs.routes).toEqual([
       {
         name: "complex",
         description: "",
@@ -256,13 +295,7 @@ describe("SemanticRouterForm", () => {
         target: { type: "model_router", model_router_id: 4, model: "cheap" },
       },
     ]);
-    await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith("/semantic-routers/9/catalogues", { catalogue_ids: [2] }));
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith("/admin/semantic-routers", {
-        state: { snackbar: { message: "Semantic Router created successfully", severity: "success" } },
-      }),
-    );
-  });
+  }, CREATE_FLOW_TIMEOUT_MS);
 
   it("loads an existing router and PATCHes it back unchanged", async () => {
     mockParams = { id: "5" };
