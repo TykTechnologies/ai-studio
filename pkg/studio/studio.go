@@ -499,11 +499,17 @@ func New(opts Options) (_ *Studio, err error) {
 	// Rows recorded before email framing was stripped at write time still
 	// read "Subject: ... Dear Administrator ..." in the bell. Rewrite them
 	// once, off the startup path; a second run finds nothing to change.
+	// Stop cancels it and waits, like the secret re-encryption: it logs
+	// through the process-wide logger, which the next Studio or control
+	// plane in the process replaces.
+	s.background.Add(1)
 	safe.Go("notification body backfill", func() {
-		changed, err := notificationService.BackfillLegacyBodies()
-		if err != nil {
+		defer s.background.Done()
+		changed, err := backfillNotificationBodies(backgroundCtx, notificationService)
+		switch {
+		case err != nil && backgroundCtx.Err() == nil:
 			logger.Warnf("Notification body backfill stopped after %d rows: %v", changed, err)
-		} else if changed > 0 {
+		case changed > 0:
 			logger.Infof("Rewrote %d legacy notification bodies", changed)
 		}
 	})

@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 )
 
@@ -138,6 +139,12 @@ func linkToolCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *model
 
 // reencryptSecrets is reencryptLegacySecrets; tests replace it.
 var reencryptSecrets = reencryptLegacySecrets
+
+// backfillNotificationBodies runs the notification body backfill; tests
+// replace it.
+var backfillNotificationBodies = func(ctx context.Context, ns *services.NotificationService) (int64, error) {
+	return ns.BackfillLegacyBodies(ctx)
+}
 
 // reencryptLegacySecrets upgrades legacy-format encrypted secrets to
 // authenticated encryption. Studio runs it in the background so scrypt's

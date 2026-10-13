@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -265,14 +266,15 @@ func hasEmailFraming(content string) bool {
 // "Subject: ... Dear Administrator ...". It pages through the table in id
 // order and matches in Go, which works the same on SQLite and Postgres, and
 // is idempotent: a rewritten body no longer matches. Returns the number of
-// rows changed.
-func (s *NotificationService) BackfillLegacyBodies() (int64, error) {
+// rows changed. Cancelling ctx stops it between queries.
+func (s *NotificationService) BackfillLegacyBodies(ctx context.Context) (int64, error) {
 	const pageSize = 500
+	db := s.db.WithContext(ctx)
 	var changed int64
 	var lastID uint
 	for {
 		var page []models.Notification
-		if err := s.db.Model(&models.Notification{}).Select("id", "content").
+		if err := db.Model(&models.Notification{}).Select("id", "content").
 			Where("id > ?", lastID).Order("id").Limit(pageSize).Find(&page).Error; err != nil {
 			return changed, fmt.Errorf("error scanning notifications: %w", err)
 		}
@@ -290,7 +292,7 @@ func (s *NotificationService) BackfillLegacyBodies() (int64, error) {
 			if clean == "" || clean == n.Content {
 				continue
 			}
-			if err := s.db.Model(&models.Notification{}).Where("id = ?", n.ID).Update("content", clean).Error; err != nil {
+			if err := db.Model(&models.Notification{}).Where("id = ?", n.ID).Update("content", clean).Error; err != nil {
 				return changed, fmt.Errorf("error rewriting notification %d: %w", n.ID, err)
 			}
 			changed++

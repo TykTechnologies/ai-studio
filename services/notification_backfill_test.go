@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -31,7 +32,7 @@ func TestBackfillLegacyBodies(t *testing.T) {
 	}
 	require.NoError(t, db.Create(clean).Error)
 
-	changed, err := ns.BackfillLegacyBodies()
+	changed, err := ns.BackfillLegacyBodies(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), changed)
 
@@ -46,7 +47,7 @@ func TestBackfillLegacyBodies(t *testing.T) {
 	assert.Equal(t, "Your export is ready.", content("legacy_2"))
 	assert.Equal(t, clean.Content, content("clean_1"), "a row without email framing is untouched")
 
-	changed, err = ns.BackfillLegacyBodies()
+	changed, err = ns.BackfillLegacyBodies(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), changed, "the backfill is idempotent")
 }
