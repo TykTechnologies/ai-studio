@@ -68,6 +68,16 @@ func TestChatV2(t *gotest.T) {
 	gin.SetMode(gin.TestMode)
 
 	db := apitest.SetupTestDB(t)
+	// One connection. Every pooled connection to ":memory:" is a separate,
+	// empty database: the v2 run's background goroutines (the chat title,
+	// the turn writes while a stream is still open) got a fresh connection
+	// and failed with "no such table", so a regenerate's replacement reply
+	// was written nowhere and the old row stayed.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
