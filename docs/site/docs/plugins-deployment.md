@@ -404,7 +404,7 @@ OCI_PLUGINS_CACHE_DIR=/var/cache/microgateway/plugins
 The platform validates plugin commands for security:
 
 1. **Absolute Paths**: `file://` commands must use absolute paths
-2. **Internal Network Block**: By default, `grpc://` commands cannot target internal IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x, localhost)
+2. **Internal Network Block**: By default, `grpc://` commands cannot target internal IPs (10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x, link-local, IPv6 loopback/unique-local, localhost). Hosts are parsed rather than substring-matched, so IPv4-mapped IPv6 (`[::ffff:127.0.0.1]`) and decimal, hex or octal IPv4 spellings in a URL (`grpc://2130706433:50051`) are caught too. A plugin service also flags internal addresses in a command's `host:port` arguments: it warns, or refuses the command when `PLUGIN_BLOCK_INTERNAL_URLS=true`
 3. **Allowlist**: Configure allowed commands via `PLUGIN_COMMAND_ALLOWLIST`
 
 Example warnings:

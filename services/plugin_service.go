@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -546,18 +547,14 @@ func (s *PluginService) validatePluginCommand(command string) error {
 			Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command uses absolute path outside standard directories. This may pose a security risk in production environments.")
 	}
 
-	// Check for internal network access (gRPC URLs)
-	if strings.HasPrefix(command, "grpc://") || strings.Contains(command, ":") {
-		// Extract potential URLs for validation
-		if s.containsInternalIP(command) {
-			if blockInternalURLs {
-				return fmt.Errorf("plugin command targets internal network address: %s", command)
-			} else {
-				log.Warn().
-					Str("command", command).
-					Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command may target internal network address (127.x.x.x, 192.168.x.x, 10.x.x.x). Set PLUGIN_BLOCK_INTERNAL_URLS=true to block this in production.")
-			}
+	// Check for internal network access (gRPC URLs, host:port arguments)
+	if netguard.CommandTargetsInternalHost(command) {
+		if blockInternalURLs {
+			return fmt.Errorf("plugin command targets internal network address: %s", command)
 		}
+		log.Warn().
+			Str("command", command).
+			Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command may target an internal network address (loopback, private, link-local). Set PLUGIN_BLOCK_INTERNAL_URLS=true to block this in production.")
 	}
 
 	// Check against allowlist if configured
@@ -583,23 +580,6 @@ func (s *PluginService) validatePluginCommand(command string) error {
 	}
 
 	return nil
-}
-
-// containsInternalIP checks if a command string contains internal IP addresses
-func (s *PluginService) containsInternalIP(command string) bool {
-	internalPatterns := []string{
-		"127.", "localhost", "::1",          // Loopback
-		"192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", // Private networks
-		"172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-		"172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
-	}
-
-	for _, pattern := range internalPatterns {
-		if strings.Contains(command, pattern) {
-			return true
-		}
-	}
-	return false
 }
 
 // OCI Plugin Management Methods
