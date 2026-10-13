@@ -3,7 +3,12 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
-import GuardrailConfigForm, { emptyGuardrailConfig } from "./GuardrailConfigForm";
+import GuardrailConfigForm, {
+  budgetErrors,
+  effectiveToolAction,
+  emptyGuardrailConfig,
+  scansToolResults,
+} from "./GuardrailConfigForm";
 
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
@@ -160,5 +165,200 @@ describe("GuardrailConfigForm", () => {
     );
     const keyHelp = screen.getByTestId("guardrail-connection-api_key").closest(".MuiFormControl-root");
     expect(keyHelp).not.toHaveTextContent("Resolved from the gateway's network");
+  });
+});
+
+// 4uc.8: tool-result scanning, quarantine, the verdict cache and budgets.
+describe("GuardrailConfigForm: tool results", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  const lastConfig = (onChange) => onChange.mock.calls[onChange.mock.calls.length - 1][0];
+
+  it("scans tool results on a new filter and quarantines them under Block, without writing tool_results", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} />);
+    await screen.findByTestId("guardrail-detector-secrets");
+
+    expect(screen.getByTestId("guardrail-tool-results-scan")).toBeChecked();
+    expect(screen.getByText("Quarantine (default for Block filters)")).toBeInTheDocument();
+    expect(screen.getByText(/The whole tool result is replaced with the placeholder/)).toBeInTheDocument();
+    // Quarantine is in play, so its placeholder can be set.
+    expect(screen.getByTestId("guardrail-quarantine-placeholder")).toHaveAttribute(
+      "placeholder",
+      "[content removed by policy: {{detector}} detected in {{source}}]"
+    );
+
+    // An unrelated change leaves the server default (absent means scan) alone.
+    fireEvent.click(screen.getByTestId("guardrail-detector-secrets"));
+    expect(lastConfig(onChange).tool_results).toBeUndefined();
+    expect(lastConfig(onChange).quarantine).toBeUndefined();
+  });
+
+  it("treats a stored config without tool_results as scanning", async () => {
+    render(<Harness initial={{ provider: "builtin", detectors: [{ name: "secrets" }], on_detect: "log" }} />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    expect(screen.getByTestId("guardrail-tool-results-scan")).toBeChecked();
+    expect(screen.getByText("Same as the filter (Log only)")).toBeInTheDocument();
+    // Log has no quarantine anywhere: no placeholder to set.
+    expect(screen.queryByTestId("guardrail-quarantine-placeholder")).not.toBeInTheDocument();
+  });
+
+  it("writes scan false when turned off, and removes tool_results when turned back on", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} />);
+    const scan = await screen.findByTestId("guardrail-tool-results-scan");
+
+    fireEvent.click(scan);
+    expect(lastConfig(onChange).tool_results).toEqual({ scan: false });
+    expect(screen.getByTestId("guardrail-tool-action")).toBeDisabled();
+
+    fireEvent.click(scan);
+    expect(lastConfig(onChange).tool_results).toBeUndefined();
+  });
+
+  it("sets and clears a tool-result action override", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} />);
+    await screen.findByTestId("guardrail-detector-secrets");
+
+    fireEvent.change(screen.getByTestId("guardrail-tool-action"), { target: { value: "block" } });
+    expect(lastConfig(onChange).tool_results).toEqual({ on_detect: "block" });
+    expect(screen.getByText(/The client resends the tool result on its next turn/)).toBeInTheDocument();
+    // Nothing is quarantined any more.
+    expect(screen.queryByTestId("guardrail-quarantine-placeholder")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("guardrail-tool-action"), { target: { value: "" } });
+    expect(lastConfig(onChange).tool_results).toBeUndefined();
+  });
+
+  it("sets the quarantine placeholder, and removes it when cleared so the default applies", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} />);
+    const placeholder = await screen.findByTestId("guardrail-quarantine-placeholder");
+
+    fireEvent.change(placeholder, { target: { value: "[removed from {{source}}]" } });
+    expect(lastConfig(onChange).quarantine).toEqual({ placeholder: "[removed from {{source}}]" });
+
+    // The server rejects an empty placeholder; clearing the field drops the key.
+    fireEvent.change(placeholder, { target: { value: "" } });
+    expect(lastConfig(onChange).quarantine).toBeUndefined();
+  });
+
+  it("offers Quarantine as the filter's action on a request filter", async () => {
+    render(<Harness initial={emptyGuardrailConfig()} />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    fireEvent.mouseDown(screen.getByLabelText(/on detection/i));
+    expect(await screen.findByRole("option", { name: "Quarantine" })).toBeInTheDocument();
+  });
+
+  it("offers no quarantine, tool-result, cache or budget settings on a response filter", async () => {
+    render(<Harness initial={emptyGuardrailConfig()} responseFilter />);
+    await screen.findByTestId("guardrail-detector-secrets");
+
+    fireEvent.mouseDown(screen.getByLabelText(/on detection/i));
+    await screen.findByRole("option", { name: "Block" });
+    expect(screen.queryByRole("option", { name: "Quarantine" })).not.toBeInTheDocument();
+
+    expect(screen.queryByTestId("guardrail-tool-results-scan")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guardrail-tool-action")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guardrail-quarantine-placeholder")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guardrail-cache")).not.toBeInTheDocument();
+  });
+
+  it("disables Redact as the tool-result action for a provider that cannot rewrite", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety" }} />);
+    await screen.findByTestId("guardrail-connection-endpoint");
+    fireEvent.mouseDown(screen.getByLabelText(/action on tool results/i));
+    const redact = await screen.findByRole("option", { name: /redact/i });
+    expect(redact).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("warns that a remote provider receives tool output, and offers budgets for it", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety" }} />);
+    await screen.findByTestId("guardrail-connection-endpoint");
+    expect(screen.getByTestId("guardrail-tool-results-remote")).toHaveTextContent(/tool output is sent to it/);
+    expect(screen.getByTestId("guardrail-budget-max_scan_chars")).toBeInTheDocument();
+    expect(screen.getByTestId("guardrail-budget-time_ms")).toHaveAttribute("placeholder", "8000");
+  });
+
+  it("offers the cache but no budgets for the in-process library", async () => {
+    render(<Harness initial={emptyGuardrailConfig()} />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    expect(screen.queryByTestId("guardrail-tool-results-remote")).not.toBeInTheDocument();
+    expect(screen.getByTestId("guardrail-cache")).toBeInTheDocument();
+    expect(screen.queryByTestId("guardrail-budget-max_scan_chars")).not.toBeInTheDocument();
+  });
+
+  it("writes cache false only when turned off", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} />);
+    const cache = await screen.findByTestId("guardrail-cache");
+    expect(cache).toBeChecked();
+    fireEvent.click(cache);
+    expect(lastConfig(onChange).cache).toBe(false);
+    fireEvent.click(cache);
+    expect(lastConfig(onChange).cache).toBeUndefined();
+  });
+
+  it("writes budget values the admin sets, drops cleared ones and names one out of range", async () => {
+    const onChange = jest.fn();
+    render(
+      <Harness
+        initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety", timeout_ms: 5000 }}
+        onChange={onChange}
+      />
+    );
+    const timeBudget = await screen.findByTestId("guardrail-budget-time_ms");
+
+    fireEvent.change(timeBudget, { target: { value: "3000" } });
+    expect(lastConfig(onChange).budget).toEqual({ time_ms: 3000 });
+    expect(screen.getByText("Between the timeout (5000) and 300000")).toBeInTheDocument();
+
+    fireEvent.change(timeBudget, { target: { value: "" } });
+    expect(lastConfig(onChange).budget).toBeUndefined();
+  });
+});
+
+// 4uc.60: the defaults are shown as placeholders, which MUI hides under an
+// unshrunk label until the field has focus.
+describe("GuardrailConfigForm: defaults are visible", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  const labelOf = (testId) =>
+    screen.getByTestId(testId).closest(".MuiFormControl-root").querySelector("label");
+
+  it("keeps the labels of the quarantine placeholder and budget fields shrunk", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety" }} />);
+    await screen.findByTestId("guardrail-connection-endpoint");
+    ["guardrail-quarantine-placeholder", "guardrail-budget-max_scan_chars", "guardrail-budget-time_ms"].forEach((id) =>
+      expect(labelOf(id)).toHaveAttribute("data-shrink", "true")
+    );
+  });
+});
+
+describe("guardrail config helpers", () => {
+  it("maps block to quarantine for tool results unless overridden", () => {
+    expect(effectiveToolAction({ on_detect: "block" })).toBe("quarantine");
+    expect(effectiveToolAction({ on_detect: "redact" })).toBe("redact");
+    expect(effectiveToolAction({ on_detect: "block", tool_results: { on_detect: "block" } })).toBe("block");
+  });
+
+  it("scans unless scan is explicitly false", () => {
+    expect(scansToolResults({})).toBe(true);
+    expect(scansToolResults({ tool_results: {} })).toBe(true);
+    expect(scansToolResults({ tool_results: { scan: false } })).toBe(false);
+  });
+
+  it("checks single_call_chars against max_scan_chars", () => {
+    expect(budgetErrors({ budget: { max_scan_chars: 1000, single_call_chars: 2000 } })).toHaveProperty(
+      "single_call_chars"
+    );
+    expect(budgetErrors({ budget: { single_call_chars: 32768 } })).toEqual({});
   });
 });

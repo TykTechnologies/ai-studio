@@ -1,0 +1,310 @@
+{
+  "fixtures": [
+    {
+      "name": "anthropic_tool_result_string",
+      "format": "anthropic",
+      "status": "in_scope",
+      "description": "System string, one tool_use, tool_result content as a plain string carrying the injection.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/system", "contains": "research assistant"},
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "Summarise"},
+        {"role": "assistant", "kind": "text", "path": "/messages/1/content/0/text", "contains": "fetch the article"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content", "tool_name": "fetch_url", "tool_call_id": "toolu_01A09q90qw90lq917835lq9", "contains": "[canary:A1]", "injection": true, "last_user": true}
+      ],
+      "preserve": ["/messages/1/content/1", "/messages/2/content/0/tool_use_id", "/messages/2/content/0/type"]
+    },
+    {
+      "name": "anthropic_tool_result_blocks_image",
+      "format": "anthropic",
+      "status": "in_scope",
+      "description": "System as blocks with cache_control; tool_result content as a block array: text (injection), image (base64 over 200 chars, trips injection.base64_blob if wrongly segmented), text (PII); is_error false and cache_control on the tool_result.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/system/0/text", "contains": "coding agent"},
+        {"role": "user", "kind": "text", "path": "/messages/0/content/0/text", "contains": "README.md"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content/0/text", "tool_name": "read_file", "tool_call_id": "toolu_02BlocksImage00000000001", "contains": "[canary:A2]", "injection": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content/2/text", "tool_name": "read_file", "tool_call_id": "toolu_02BlocksImage00000000001", "contains": "jane.doe@example.com", "pii": true, "last_user": true}
+      ],
+      "not_segments": ["/messages/2/content/0/content/1/source/data"],
+      "preserve": ["/messages/1/content/0", "/messages/2/content/0/tool_use_id", "/messages/2/content/0/cache_control", "/messages/2/content/0/is_error", "/messages/2/content/0/content/1", "/system/0/cache_control", "/tools/0/cache_control"]
+    },
+    {
+      "name": "anthropic_parallel_tool_results",
+      "format": "anthropic",
+      "status": "in_scope",
+      "description": "Three parallel tool_use blocks; one user message carries three tool_results (string, two-text-block array with the injection in the second block, is_error true with PII) followed by a typed text block.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "Weather in Oslo"},
+        {"role": "assistant", "kind": "text", "path": "/messages/1/content/0/text", "contains": "three lookups"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content", "tool_name": "get_weather", "tool_call_id": "toolu_03Parallel0000000000000A", "contains": "light rain", "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/1/content/0/text", "tool_name": "search_docs", "tool_call_id": "toolu_03Parallel0000000000000B", "contains": "VPN setup", "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/1/content/1/text", "tool_name": "search_docs", "tool_call_id": "toolu_03Parallel0000000000000B", "contains": "[canary:A3]", "injection": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/2/content", "tool_name": "lookup_user", "tool_call_id": "toolu_03Parallel0000000000000C", "contains": "jane.doe@example.com", "pii": true, "is_error": true, "last_user": true},
+        {"role": "user", "kind": "text", "path": "/messages/2/content/3/text", "contains": "short summary", "last_user": true}
+      ],
+      "preserve": ["/messages/1/content/1", "/messages/1/content/2", "/messages/1/content/3", "/messages/2/content/0/tool_use_id", "/messages/2/content/1/tool_use_id", "/messages/2/content/2/tool_use_id", "/messages/2/content/2/is_error"]
+    },
+    {
+      "name": "anthropic_agent_loop",
+      "format": "anthropic",
+      "status": "in_scope",
+      "description": "Two-turn agent loop. The injection is in the first (history) tool_result, PII in the current one. last_user must select only the second tool_result; all_user selects both plus the typed user text.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/system", "contains": "support agent"},
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "T-1001"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content", "tool_name": "fetch_ticket", "tool_call_id": "toolu_04Loop000000000000Turn1", "contains": "[canary:A4-history]", "injection": true},
+        {"role": "assistant", "kind": "text", "path": "/messages/3/content/0/text", "contains": "fetching the record"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/4/content/0/content", "tool_name": "fetch_customer", "tool_call_id": "toolu_04Loop000000000000Turn2", "contains": "[marker:A4-current]", "pii": true, "last_user": true}
+      ],
+      "preserve": ["/messages/1/content/0", "/messages/2/content/0/tool_use_id", "/messages/3/content/1", "/messages/4/content/0/tool_use_id"]
+    },
+    {
+      "name": "anthropic_tool_result_nested_documents",
+      "format": "anthropic",
+      "status": "in_scope",
+      "description": "Tool output nested below the first content level: a search_result block (text in content[].text) and a document block with a text source (text in source.data). Plus three empty tool_results: content key absent, empty string, empty array; each must survive a rewrite exactly as sent.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "refund policy"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content/0/content/0/text", "tool_name": "kb_search", "tool_call_id": "toolu_05Nested00000000000Srch", "contains": "within 14 days", "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/content/0/content/1/text", "tool_name": "kb_search", "tool_call_id": "toolu_05Nested00000000000Srch", "contains": "[canary:A5-search]", "injection": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/1/content/0/source/data", "tool_name": "load_doc", "tool_call_id": "toolu_05Nested00000000000Load", "contains": "[canary:A5-document]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/messages/2/content/0/content/0/title", "/messages/2/content/0/content/0/source", "/messages/2/content/1/content/0/title", "/messages/2/content/3/content"],
+      "preserve": ["/messages/1", "/messages/2/content/0/tool_use_id", "/messages/2/content/1/tool_use_id", "/messages/2/content/2", "/messages/2/content/3", "/messages/2/content/4", "/messages/2/content/0/content/0/citations", "/messages/2/content/1/content/0/source/type", "/messages/2/content/1/content/0/source/media_type"],
+      "notes": "Segmenters that only read type:text blocks one level down miss both canaries. A document block with source.type base64 (PDF) is binary and must not be segmented."
+    },
+    {
+      "name": "anthropic_server_tool_results",
+      "format": "anthropic",
+      "status": "in_scope",
+      "description": "Server-executed tool results inside the ASSISTANT turn, resent in history: web_fetch_tool_result (text in content.content.source.data), mcp_tool_result (MCP connector; content[].text) and web_search_tool_result (result titles are text; encrypted_content is opaque). Each carries an injection.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "blog.example"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/1/content/1/content/content/source/data", "tool_name": "web_fetch", "tool_call_id": "srvtoolu_06Server0000000Fetch", "contains": "[canary:A6-webfetch]", "injection": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/1/content/3/content/0/text", "tool_name": "find_contact", "tool_call_id": "mcptoolu_06Server000000Crm1", "contains": "[canary:A6-mcp]", "injection": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/1/content/5/content/1/title", "tool_name": "web_search", "tool_call_id": "srvtoolu_06Server000000Search", "contains": "[canary:A6-search]", "injection": true},
+        {"role": "assistant", "kind": "text", "path": "/messages/1/content/6/text", "contains": "about gardening"},
+        {"role": "user", "kind": "text", "path": "/messages/2/content", "contains": "draft a reply", "last_user": true}
+      ],
+      "optional_segments": ["/messages/1/content/5/content/0/title", "/messages/1/content/5/content/0/url", "/messages/1/content/5/content/1/url", "/messages/1/content/1/content/url", "/messages/1/content/1/content/content/title"],
+      "not_segments": ["/messages/1/content/5/content/0/encrypted_content", "/messages/1/content/5/content/1/encrypted_content", "/messages/1/content/0/input/url", "/messages/1/content/4/input/query"],
+      "preserve": ["/messages/1/content/0", "/messages/1/content/1/tool_use_id", "/messages/1/content/1/content/retrieved_at", "/messages/1/content/2", "/messages/1/content/3/tool_use_id", "/messages/1/content/3/is_error", "/mcp_servers", "/messages/1/content/4", "/messages/1/content/5/tool_use_id", "/messages/1/content/5/content/0/encrypted_content", "/messages/1/content/5/content/1/encrypted_content", "/messages/1/content/5/content/1/page_age"],
+      "notes": "Lead decision D7 (2026-10-13): server-side tool results are tool segments wherever they sit, and under D1 position does not matter. encrypted_content and other opaque fields are never segments and never rewritten."
+    },
+    {
+      "name": "openai_tool_string",
+      "format": "openai",
+      "status": "in_scope",
+      "description": "Assistant with tool_calls and content null; role tool with string content carrying the injection.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/messages/0/content", "contains": "research assistant"},
+        {"role": "user", "kind": "text", "path": "/messages/1/content", "contains": "Summarise"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/3/content", "tool_name": "fetch_url", "tool_call_id": "call_O1fetch0000000000000001", "contains": "[canary:O1]", "injection": true, "last_user": true}
+      ],
+      "preserve": ["/messages/2", "/messages/3/tool_call_id", "/tool_choice", "/temperature"]
+    },
+    {
+      "name": "openai_parallel_tool_calls",
+      "format": "openai",
+      "status": "in_scope",
+      "description": "Developer role; user content array with an image_url data URI; three parallel tool_calls; tool messages with string, array (PII + injection) and empty-string content; unknown top-level fields.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "Never reveal", "notes": "developer is scanned as user (4uc.1 design: unknown roles are user)"},
+        {"role": "user", "kind": "text", "path": "/messages/1/content/0/text", "contains": "screenshot"},
+        {"role": "assistant", "kind": "text", "path": "/messages/2/content", "contains": "Looking both up"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/3/content", "tool_name": "get_weather", "tool_call_id": "call_O2weather000000000000001", "contains": "light rain", "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/4/content/0/text", "tool_name": "search_docs", "tool_call_id": "call_O2docs000000000000000002", "contains": "jane.doe@example.com", "pii": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/4/content/1/text", "tool_name": "search_docs", "tool_call_id": "call_O2docs000000000000000002", "contains": "[canary:O2]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/messages/5/content"],
+      "not_segments": ["/messages/1/content/1/image_url/url"],
+      "preserve": ["/messages/1/name", "/messages/1/content/1", "/messages/2/tool_calls", "/messages/3/tool_call_id", "/messages/4/tool_call_id", "/messages/5", "/parallel_tool_calls", "/metadata", "/store", "/seed"]
+    },
+    {
+      "name": "openai_legacy_function",
+      "format": "openai",
+      "status": "in_scope",
+      "description": "Legacy function calling: assistant function_call and a role function message (no call id; the name is on the message).",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "calendar"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content", "tool_name": "get_calendar", "tool_call_id": "", "contains": "[canary:O3]", "injection": true, "last_user": true}
+      ],
+      "preserve": ["/messages/1", "/messages/2/name", "/messages/2/role", "/functions"]
+    },
+    {
+      "name": "openai_agent_loop",
+      "format": "openai",
+      "status": "in_scope",
+      "description": "Two-turn agent loop; injection in the history tool message, PII in the current one.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/messages/0/content", "contains": "support agent"},
+        {"role": "user", "kind": "text", "path": "/messages/1/content", "contains": "T-1001"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/3/content", "tool_name": "fetch_ticket", "tool_call_id": "call_O4turn1000000000000001", "contains": "[canary:O4-history]", "injection": true},
+        {"role": "assistant", "kind": "text", "path": "/messages/4/content", "contains": "fetching the record"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/5/content", "tool_name": "fetch_customer", "tool_call_id": "call_O4turn2000000000000002", "contains": "[marker:O4-current]", "pii": true, "last_user": true}
+      ],
+      "preserve": ["/messages/2/tool_calls", "/messages/3/tool_call_id", "/messages/4/tool_calls", "/messages/5/tool_call_id"]
+    },
+    {
+      "name": "ollama_native_chat",
+      "format": "ollama",
+      "status": "in_scope",
+      "description": "Ollama /api/chat shape: tool_calls without ids, arguments as an object, role tool with tool_name instead of tool_call_id.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/messages/0/content", "contains": "weather in Oslo"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content", "tool_name": "get_weather", "tool_call_id": "", "contains": "[canary:L1]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/messages/1/content"],
+      "preserve": ["/messages/1", "/messages/2/tool_name", "/stream"]
+    },
+    {
+      "name": "openai_responses_function_call_output",
+      "format": "openai_responses",
+      "status": "in_scope",
+      "description": "Responses API input items: user message, function_call, function_call_output with string output carrying the injection. Bead 4uc.9 (blocked on PR #737); format name is a placeholder.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/instructions", "contains": "research assistant"},
+        {"role": "user", "kind": "text", "path": "/input/0/content/0/text", "contains": "Summarise"},
+        {"role": "tool", "kind": "tool_result", "path": "/input/2/output", "tool_name": "fetch_url", "tool_call_id": "call_R1fetch0000000000000001", "contains": "[canary:R1]", "injection": true, "last_user": true}
+      ],
+      "preserve": ["/input/1", "/input/2/call_id", "/input/2/type", "/tools/0/strict"]
+    },
+    {
+      "name": "openai_responses_mixed_outputs",
+      "format": "openai_responses",
+      "status": "in_scope",
+      "description": "Responses API: string-content developer and user messages, an encrypted reasoning item, function_call_output with an array output (input_text injection + input_image), custom_tool_call_output (PII), and an mcp_call item whose output carries an injection.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/input/0/content", "contains": "Answer briefly", "notes": "developer is scanned as user (4uc.1 design)"},
+        {"role": "user", "kind": "text", "path": "/input/1/content", "contains": "Check the build"},
+        {"role": "tool", "kind": "tool_result", "path": "/input/4/output/0/text", "tool_name": "read_build_log", "tool_call_id": "call_R2build0000000000000001", "contains": "[canary:R2-array]", "injection": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/input/6/output", "tool_name": "grammar_check", "tool_call_id": "call_R2gram00000000000000001", "contains": "[marker:R2-custom]", "pii": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/input/7/output", "tool_name": "find_contact", "tool_call_id": "mcp_R2crm000000000000000001", "contains": "[canary:R2-mcp]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/input/3/arguments", "/input/5/input", "/input/7/arguments"],
+      "not_segments": ["/input/2/encrypted_content", "/input/4/output/1/image_url"],
+      "preserve": ["/input/2", "/input/3", "/input/4/call_id", "/input/4/output/1", "/input/5", "/input/6/call_id", "/input/7/id", "/input/7/error", "/include", "/reasoning"],
+      "notes": "mcp_call output is a tool segment (D7). Model-generated arguments (function_call arguments, custom_tool_call input, mcp_call arguments) are optional: the #737 extractor reads them as assistant text; they are never tool segments."
+    },
+    {
+      "name": "google_function_response",
+      "format": "google_ai",
+      "status": "in_scope",
+      "description": "Gemini: functionCall with id and a thoughtSignature on the part; functionResponse whose response nests objects, arrays, numbers, booleans and null. The injection is one string leaf deep inside response.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/systemInstruction/parts/0/text", "contains": "research assistant"},
+        {"role": "user", "kind": "text", "path": "/contents/0/parts/0/text", "contains": "cycle lane"},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/0/functionResponse/response/output/results/0/snippet", "tool_name": "web_search", "tool_call_id": "fc-G1-search-1", "contains": "7-2", "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/0/functionResponse/response/output/results/1/snippet", "tool_name": "web_search", "tool_call_id": "fc-G1-search-1", "contains": "[canary:G1]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/contents/2/parts/0/functionResponse/response/output/results/0/title", "/contents/2/parts/0/functionResponse/response/output/results/0/url", "/contents/2/parts/0/functionResponse/response/output/results/1/title", "/contents/2/parts/0/functionResponse/response/output/results/1/url", "/contents/2/parts/0/functionResponse/response/output/results/1/tags/0", "/contents/2/parts/0/functionResponse/response/output/results/1/tags/1"],
+      "not_segments": ["/contents/1/parts/0/thoughtSignature", "/contents/1/parts/0/functionCall/args/query"],
+      "preserve": ["/contents/1/parts/0", "/contents/2/parts/0/functionResponse/id", "/contents/2/parts/0/functionResponse/name", "/contents/2/parts/0/functionResponse/response/output/total", "/contents/2/parts/0/functionResponse/response/output/truncated", "/contents/2/parts/0/functionResponse/response/output/results/0/score", "/contents/2/parts/0/functionResponse/response/output/results/1/author", "/generationConfig"]
+    },
+    {
+      "name": "google_parallel_function_responses",
+      "format": "google_ai",
+      "status": "in_scope",
+      "description": "Gemini: user text plus inlineData image; two parallel functionCalls without ids; two functionResponse parts in one content; nested docs array with PII in one body and the injection in another; numeric and boolean leaves.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/contents/0/parts/0/text", "contains": "Weather in Oslo"},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/0/functionResponse/response/conditions", "tool_name": "get_weather", "tool_call_id": "", "contains": "light rain", "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/1/functionResponse/response/content/docs/0/body", "tool_name": "search_docs", "tool_call_id": "", "contains": "jane.doe@example.com", "pii": true, "last_user": true},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/1/functionResponse/response/content/docs/1/body", "tool_name": "search_docs", "tool_call_id": "", "contains": "[canary:G2]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/contents/2/parts/1/functionResponse/response/content/docs/1/meta/path/0", "/contents/2/parts/1/functionResponse/response/content/docs/1/meta/path/1", "/contents/2/parts/1/functionResponse/response/content/docs/1/meta/path/2"],
+      "not_segments": ["/contents/0/parts/1/inlineData/data"],
+      "preserve": ["/contents/0/parts/1", "/contents/1", "/contents/2/parts/0/functionResponse/name", "/contents/2/parts/0/functionResponse/response/temp_c", "/contents/2/parts/0/functionResponse/response/alerts", "/contents/2/parts/1/functionResponse/name", "/contents/2/parts/1/functionResponse/response/content/docs/0/id", "/contents/2/parts/1/functionResponse/response/content/docs/0/meta"]
+    },
+    {
+      "name": "vertex_function_role",
+      "format": "vertex",
+      "status": "in_scope",
+      "description": "Vertex style: functionResponse sent in a content with role function, and snake_case system_instruction / function_declarations (proto JSON accepts both spellings).",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/system_instruction/parts/0/text", "contains": "calendar assistant"},
+        {"role": "user", "kind": "text", "path": "/contents/0/parts/0/text", "contains": "calendar"},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/0/functionResponse/response/content", "tool_name": "get_calendar", "tool_call_id": "", "contains": "[canary:V1]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/contents/2/parts/0/functionResponse/response/name"],
+      "preserve": ["/contents/1", "/contents/2/role", "/contents/2/parts/0/functionResponse/name", "/tools"],
+      "notes": "The current extractor reads only camelCase systemInstruction."
+    },
+    {
+      "name": "google_agent_loop",
+      "format": "google_ai",
+      "status": "in_scope",
+      "description": "Two-turn Gemini agent loop; injection in the history functionResponse, PII in the current one.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/systemInstruction/parts/0/text", "contains": "support agent"},
+        {"role": "user", "kind": "text", "path": "/contents/0/parts/0/text", "contains": "T-1001"},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/2/parts/0/functionResponse/response/output", "tool_name": "fetch_ticket", "tool_call_id": "", "contains": "[canary:G4-history]", "injection": true},
+        {"role": "assistant", "kind": "text", "path": "/contents/3/parts/0/text", "contains": "fetching the record"},
+        {"role": "tool", "kind": "tool_result", "path": "/contents/4/parts/0/functionResponse/response/output", "tool_name": "fetch_customer", "tool_call_id": "", "contains": "[marker:G4-current]", "pii": true, "last_user": true}
+      ],
+      "preserve": ["/contents/1", "/contents/3/parts/1", "/contents/2/parts/0/functionResponse/name", "/contents/4/parts/0/functionResponse/name"]
+    },
+    {
+      "name": "bedrock_converse_tool_result",
+      "format": "bedrock",
+      "status": "in_scope",
+      "description": "Bedrock Converse body on the native /llm/ path (4uc.14): system blocks, user text, assistant toolUse, and a user toolResult whose content holds a text block (the canary) and a json block.",
+      "segments": [
+        {"role": "system", "kind": "text", "path": "/system/0/text", "contains": "research assistant"},
+        {"role": "user", "kind": "text", "path": "/messages/0/content/0/text", "contains": "Summarise"},
+        {"role": "tool", "kind": "tool_result", "path": "/messages/2/content/0/toolResult/content/0/text", "tool_name": "fetch_url", "tool_call_id": "tooluse_B1fetch000000000001", "contains": "[canary:B1]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/messages/2/content/0/toolResult/content/1/json/source"],
+      "not_segments": ["/messages/1/content/0/toolUse/input/url", "/messages/2/content/0/toolResult/toolUseId", "/messages/2/content/0/toolResult/status"],
+      "preserve": ["/messages/1", "/messages/2/content/0/toolResult/toolUseId", "/messages/2/content/0/toolResult/status", "/messages/2/content/0/toolResult/content/1", "/toolConfig"]
+    },
+    {
+      "name": "anthropic_batch_tool_result",
+      "format": "anthropic_batch",
+      "status": "in_scope",
+      "description": "Anthropic Message Batches create body: a clean item and an item whose tool_result carries the injection. Filters run per item (params) via pkg/nativeapi; bead 4uc.9.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/requests/0/params/messages/0/content", "contains": "Say hello"},
+        {"role": "user", "kind": "text", "path": "/requests/1/params/messages/0/content", "contains": "Summarise"},
+        {"role": "tool", "kind": "tool_result", "path": "/requests/1/params/messages/2/content/0/content/0/text", "tool_name": "fetch_url", "tool_call_id": "toolu_07Batch00000000000000001", "contains": "[canary:BATCH1]", "injection": true, "last_user": true}
+      ],
+      "preserve": ["/requests/0", "/requests/1/custom_id", "/requests/1/params/messages/1", "/requests/1/params/messages/2/content/0/tool_use_id"]
+    },
+    {
+      "name": "openai_responses_server_tools",
+      "format": "openai_responses",
+      "status": "in_scope",
+      "description": "Responses API server-side tool items resent as input: mcp_list_tools with a poisoned tool description (MCP tool poisoning), file_search_call results[].text, code_interpreter_call outputs[].logs (PII and an injection), an assistant output_text message, then a new user turn.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/input/0/content/0/text", "contains": "brief me on Sam"},
+        {"role": "tool", "kind": "tool_result", "path": "/input/1/tools/0/description", "tool_name": "find_contact", "tool_call_id": "mcpl_R3list0000000000000001", "contains": "Find a contact"},
+        {"role": "tool", "kind": "tool_result", "path": "/input/1/tools/1/description", "tool_name": "export_all", "tool_call_id": "mcpl_R3list0000000000000001", "contains": "[canary:R3-tooldesc]", "injection": true},
+        {"role": "tool", "kind": "tool_result", "path": "/input/2/results/0/text", "tool_name": "file_search", "tool_call_id": "fs_R3files000000000000001", "contains": "prefers email"},
+        {"role": "tool", "kind": "tool_result", "path": "/input/2/results/1/text", "tool_name": "file_search", "tool_call_id": "fs_R3files000000000000001", "contains": "[canary:R3-filesearch]", "injection": true},
+        {"role": "tool", "kind": "tool_result", "path": "/input/3/outputs/0/logs", "tool_name": "code_interpreter", "tool_call_id": "ci_R3code00000000000000001", "contains": "[canary:R3-code]", "injection": true, "pii": true},
+        {"role": "assistant", "kind": "text", "path": "/input/4/content/0/text", "contains": "Sam prefers email"},
+        {"role": "user", "kind": "text", "path": "/input/5/content", "contains": "Draft the email", "last_user": true}
+      ],
+      "optional_segments": ["/input/2/queries/0", "/input/3/code"],
+      "not_segments": ["/input/2/results/0/file_id", "/input/3/container_id"],
+      "preserve": ["/input/1/id", "/input/1/tools/0/input_schema", "/input/2/id", "/input/2/results/0/score", "/input/2/results/1/file_id", "/input/3/id", "/input/3/code", "/input/4", "/tools"],
+      "notes": "tool_name / tool_call_id here are proposals: the item id as the call id, the listed tool or the built-in tool type as the name. The #737 extractor already reads every canary leaf as tool text."
+    },
+    {
+      "name": "openai_batch_input",
+      "file": "openai_batch_input.jsonl",
+      "format": "openai_batch_jsonl",
+      "status": "in_scope",
+      "description": "OpenAI Batch input file (JSONL, uploaded through the Files API): a clean chat line, a /v1/responses line whose function_call_output carries the injection, and a chat line whose tool message carries it. Filters run per line; a quarantine must rewrite only the poisoned lines and leave every other byte of the file intact. Pointers start with the line index.",
+      "segments": [
+        {"role": "user", "kind": "text", "path": "/0/body/messages/0/content", "contains": "Say hello"},
+        {"role": "user", "kind": "text", "path": "/1/body/input/0/content/0/text", "contains": "Summarise"},
+        {"role": "tool", "kind": "tool_result", "path": "/1/body/input/2/output", "tool_name": "fetch_url", "tool_call_id": "call_BJ1fetch00000000000001", "contains": "[canary:BJ-responses]", "injection": true, "last_user": true},
+        {"role": "user", "kind": "text", "path": "/2/body/messages/0/content", "contains": "Weather in Oslo"},
+        {"role": "tool", "kind": "tool_result", "path": "/2/body/messages/2/content", "tool_name": "get_weather", "tool_call_id": "call_BJ2weather00000000001", "contains": "[canary:BJ-chat]", "injection": true, "last_user": true}
+      ],
+      "optional_segments": ["/1/body/input/1/arguments"],
+      "not_segments": ["/0/custom_id", "/1/url", "/2/method"],
+      "preserve": ["/0", "/1/custom_id", "/1/url", "/1/body/input/1", "/1/body/input/2/call_id", "/2/custom_id", "/2/body/messages/1", "/2/body/messages/2/tool_call_id"]
+    }
+  ]
+}

@@ -1,10 +1,16 @@
 package safe
 
 import (
+	"bytes"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/rs/zerolog"
 )
 
 func fastBackoff(t *testing.T) {
@@ -60,6 +66,29 @@ func TestRecoverWithCallsThenOnlyAfterPanic(t *testing.T) {
 	run(true)
 	if called.Load() != 1 {
 		t.Fatalf("then ran %d times after one panic, want 1", called.Load())
+	}
+}
+
+// CallRedacted keeps the panic value out of the error log: it may carry
+// text that must not be logged.
+func TestCallRedactedLogsTypeNotValue(t *testing.T) {
+	prev := *logger.Current()
+	t.Cleanup(func() { logger.Use(prev) })
+	var buf bytes.Buffer
+	logger.Use(zerolog.New(&buf).Level(zerolog.ErrorLevel))
+
+	if !CallRedacted("test redacted", func() { panic(fmt.Errorf("bad segment %q", "CANARY-TEXT")) }) {
+		t.Fatal("CallRedacted did not report the panic")
+	}
+	out := buf.String()
+	if strings.Contains(out, "CANARY") {
+		t.Errorf("the error log carries the panic value: %s", out)
+	}
+	if !strings.Contains(out, `"panic_type":"*errors.errorString"`) {
+		t.Errorf("the error log does not name the panic's type: %s", out)
+	}
+	if CallRedacted("test redacted", func() {}) {
+		t.Error("CallRedacted reported a panic for a function that returned")
 	}
 }
 

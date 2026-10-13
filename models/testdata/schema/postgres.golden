@@ -1159,6 +1159,7 @@ TABLE native_resources
   column resource_type character varying(varchar) nullable=NO len=128
   column vendor_resource_id character varying(varchar) nullable=NO len=255
   column parent_id bigint(int8) nullable=YES precision=64 scale=0
+  column screening_digest character varying(varchar) nullable=YES len=64
   column state character varying(varchar) nullable=YES len=32
   column snapshot text(text) nullable=YES
   column ended_at timestamp with time zone(timestamptz) nullable=YES

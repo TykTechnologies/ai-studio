@@ -106,7 +106,11 @@ A `Spec` holds:
     A `Child` response ID names a resource derived from the operation's async
     resource (see [OpenAI Batches and Files](#openai-batches-and-files)).
     An `ObjectID` ref's field holds the ID or an object whose `id` holds it
-    (OpenAI's `conversation`).
+    (OpenAI's `conversation`). A `Screened` request ref names a resource
+    whose content an `Admit` op screened when it was created and that this
+    operation runs at the vendor (OpenAI's `input_file_id`): it is refused
+    unless the LLM's request filters still match the ones that screened it
+    (see [OpenAI Batches and Files](#openai-batches-and-files)).
   - `Transform` rewrites vendor URLs. The gateway never follows them.
   - `Results` handles JSONL downloads: `View` and `Blocked` per line.
   - `List` describes a ledger-served listing.
@@ -297,6 +301,7 @@ row.
 |---|---|
 | `vendor`, `llm_id`, `app_id`, `user_id`, `on_behalf_of`, `acting_agent` | Owner and identity of the creating request (stamped on usage recorded later) |
 | `resource_type`, `vendor_resource_id`, `parent_id` | The resource; unique `(llm_id, resource_type, vendor_resource_id)` |
+| `screening_digest` | On a resource an `Admit` op created: the digest of the request filters that screened it (`none` without filters). Schema version 11; never returned to clients |
 | `state`, `snapshot`, `ended_at`, `results_expire_at` | Last vendor view (snapshot is the wrapped object, served by list) |
 | `accounting_state`, `claim_token`, `claimed_at`, `accounted_at` | Accounting: `none`, `pending`, `claimed`, `accounted`, `unaccountable`, `lost` |
 | `next_poll_at`, `poll_failures` | Reconciler scheduling; index `(accounting_state, next_poll_at)` |
@@ -634,14 +639,44 @@ The extension lives in `vendors/openai/batches.go` and has two resources:
 
 | Operation | Method and path | Behaviour |
 |---|---|---|
-| files.create | `POST /v1/files` | A `Multipart` `Admit` op (`splitBatchFile`). The body must open with the Content-Type's boundary and end at its closing boundary (no epilogue). Parsing fails closed on anything another multipart parser could read differently: every part carries exactly the plain `Content-Disposition: form-data; name="..."` (plus `; filename="..."` on the file part only; no quoted-pair escapes, no RFC 2231 `name*`/`filename*`, no repeated parameters) and at most a `Content-Type` besides; names are allow-listed (`file`, `purpose`, `expires_after[anchor]`, `expires_after[seconds]`) and unique. Exactly one `file` part and one `purpose` field, and `purpose` must be `batch`. Every non-blank line is a request: `custom_id`, `method: POST`, a `url` among `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/responses` and `/v1/moderations`, and a `body` with a `model` (optional on `/v1/moderations`, where a missing one is checked as `omni-moderation-latest`). Exact duplicate keys are refused at any depth, case variants where the gateway decodes structs (`batchLineFoldPaths`). Each line's model is checked against the allowed models (403 naming the `custom_id`) and the request filters run on its body (format `openai`). A filter's rewrite replaces only that line (compacted onto one line) and the upload is re-encoded with the same boundary. The file is written to the ledger (no accounting) and its ID wrapped. |
+| files.create | `POST /v1/files` | A `Multipart` `Admit` op (`splitBatchFile`). The body must open with the Content-Type's boundary and end at its closing boundary (no epilogue). Parsing fails closed on anything another multipart parser could read differently: every part carries exactly the plain `Content-Disposition: form-data; name="..."` (plus `; filename="..."` on the file part only; no quoted-pair escapes, no RFC 2231 `name*`/`filename*`, no repeated parameters) and at most a `Content-Type` besides; names are allow-listed (`file`, `purpose`, `expires_after[anchor]`, `expires_after[seconds]`) and unique. Exactly one `file` part and one `purpose` field, and `purpose` must be `batch`. Every non-blank line is a request: `custom_id`, `method: POST`, a `url` among `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/responses` and `/v1/moderations`, and a `body` with a `model` (optional on `/v1/moderations`, where a missing one is checked as `omni-moderation-latest`). Exact duplicate keys are refused at any depth, case variants where the gateway decodes structs (`batchLineFoldPaths`). Each line's model is checked against the allowed models (403 naming the `custom_id`) and the request filters run on its body (format `openai`). A filter's rewrite replaces only that line (compacted onto one line) and the upload is re-encoded with the same boundary. The file is written to the ledger (no accounting) with the digest of the request filters that screened it, and its ID wrapped. |
 | files.list | `GET /v1/files` | Served from the ledger: the App's uploaded files and the output and error files of its batches on this node. `limit` 1–1000 (default 1000), `after`. `purpose` and `order` are ignored. |
 | files.retrieve | `GET /v1/files/{id}` | Forwarded, ID wrapped, ledger snapshot refreshed. |
 | files.delete | `DELETE /v1/files/{id}` | Needs this node's ledger row (409 otherwise). An output or error file waits for its batch: an ended, unaccounted batch is accounted first, and the delete is refused (409) while it is not. |
 | files.content | `GET /v1/files/{id}/content` | A `Results` op: streamed line by line, response filters run on each 200 result's body, a blocked line becomes a 400 result for the same `custom_id`. Not accounted here (the path names a file, not the batch): the reconciler accounts the batch. |
-| batches.create | `POST /v1/batches` | `input_file_id` verified and unwrapped (404 for another App's file or a raw ID). Budget pre-check and in-progress cap. The batch is written to the ledger (pending) and its ID and file IDs wrapped. |
+| batches.create | `POST /v1/batches` | `input_file_id` verified and unwrapped (404 for another App's file or a raw ID). On an LLM with request filters the file must have been screened by those same filters (see below; 400 otherwise). Budget pre-check and in-progress cap. The batch is written to the ledger (pending) and its ID and file IDs wrapped. |
 | batches.list | `GET /v1/batches` | Served from the ledger; `limit` 1–100 (default 20), `after`. |
 | batches.retrieve, batches.cancel | `GET /v1/batches/{id}`, `POST /v1/batches/{id}/cancel` | Forwarded, IDs wrapped, snapshot refreshed. |
+
+**Screening at create time.** A batch's lines are screened once, when the
+file is uploaded; the create only names the file. So that a file screened
+under an older policy (or none) cannot run after an admin attaches or
+tightens a filter, the upload records `requestFilterDigest` of the LLM's
+request filters on the file's ledger row (`screening_digest`): a SHA-256 over
+`nativeScreeningVersion` and each request filter's ID, kind, script and
+config in run order, or `none` when the LLM has none. It hashes content
+rather than `UpdatedAt`, so the same filters give the same digest across
+restarts and replicas, and a save that changes nothing does not invalidate
+files. A guardrail's `connection` block counts by its field names only
+(`screeningConfig`, midsommar-clean-4uc.63): an edge receives it with
+`$SECRET/` references resolved, so hashing the values would store an unkeyed
+hash of secrets and refuse every file after a key rotation. A rotated key or
+a moved endpoint therefore keeps files usable; a changed detector, threshold,
+action, scope, `tool_results`, budget or script does not. Bump
+`nativeScreeningVersion` whenever what a filter screens changes without the
+filter being edited (built-in patterns, the segmenter, the scan pipeline in a
+release), so files screened before are uploaded again. The digest identifies
+a policy, holds no content or secret and is never returned, logged or
+exported. `input_file_id` is a `Screened` ref: when the
+LLM has request filters, batches.create looks up the file's row and refuses
+the create with 400 "the input file was screened under a different request
+policy than this LLM now applies (or by another gateway); upload it again
+through this gateway" when the digest differs, is empty (a row written before
+schema version 11, or an output file, which nothing screened) or the node has
+no row for the file. The message names no filter. A ledger read that fails is
+a 503. An LLM without request filters runs any file its App may reference.
+Re-screening by downloading the file at create time was the alternative; it
+costs a download and a full screening per create.
 
 **Child resources.** `output_file_id` and `error_file_id` are `Child`
 response IDs. Whenever the node that holds the batch's ledger row sees them
@@ -673,6 +708,7 @@ downloadable for 30 days from the batch's creation (`results_expire_at`).
 | `NATIVE_API_MAX_BODY_BYTES` | `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB) | Create body limit; a larger value is capped at 256 MiB (`config.NativeMaxBodyBytesLimit`) when the config is loaded, with a warning |
 | `NATIVE_API_MAX_CONCURRENT_CREATES` | same | `4` | Creates admitted at once (bodies are held in memory); others wait |
 | `NATIVE_API_MAX_FILTERED_ITEMS` | same | `10000` | Max requests per batch when the LLM has request filters |
+| `NATIVE_API_MAX_GUARDRAIL_CALLS` | same | `10000` | Max remote guardrail provider calls one create may make across its items (`guardrails.WithCallBudget` in admit); cached verdicts and local providers (the built-in library) do not count; spending it refuses the create with 400 naming the limit, never admits part of it |
 | `NATIVE_API_MAX_IN_PROGRESS_PER_APP` | same | `0` (no cap) | Max in-progress batches per App and LLM, as this node's ledger counts them |
 | `NATIVE_API_RECONCILE_INTERVAL` | same | `30s` | How often the reconciler looks for due ledger rows (Go duration) |
 | `NATIVE_API_RECONCILE_BATCH` | same | `50` | Ledger rows one reconciler pass takes |
@@ -763,7 +799,9 @@ See [Observability.md](Observability.md).
   scoped by the ledger.
 - **No filter bypass:** every batch item passes the model allow-list and
   request filters, and every results line passes the response filters. Results
-  are refused where response body plugins would be skipped.
+  are refused where response body plugins would be skipped. A batch input
+  file screened at upload runs only while the LLM's request filters are the
+  ones that screened it.
 - **Responses ownership:** an OpenAI response ID names only the App and LLM
   it was handed to, so `previous_response_id`, retrieve, cancel, input items
   and delete refuse every other App's responses with the same 404.
@@ -822,7 +860,14 @@ See [Observability.md](Observability.md).
   - Only `purpose=batch` uploads are accepted. Other purposes never worked
     through the gateway (the legacy chain wants a JSON body with a model).
   - Files, like batches, are per node: an edge lists and deletes only the
-    files created or produced through it.
+    files created or produced through it. On an LLM with request filters a
+    batch must also be created through the node that received its upload
+    (another edge has no screening record of the file and refuses it).
+  - **Upgrade to 2.3.0:** batch input files uploaded before the upgrade
+    carry no screening digest, so on an LLM with request filters a batch
+    created from one is refused (400) and the file must be uploaded again.
+    The same happens to a file whenever the LLM's request filters change
+    between its upload and the batch create.
   - Results downloads are not accounted at download time; the batch is
     accounted by the reconciler within one poll interval of ending.
   - `OpenAI-Organization` and `OpenAI-Project` are not forwarded on any

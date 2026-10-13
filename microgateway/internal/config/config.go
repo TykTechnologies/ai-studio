@@ -106,6 +106,7 @@ type GatewayConfig struct {
 	NativeMaxBodyBytes         int64 `env:"NATIVE_API_MAX_BODY_BYTES" envDefault:"0"`          // 0: 64 MiB, at most 256 MiB
 	NativeMaxConcurrentCreates int   `env:"NATIVE_API_MAX_CONCURRENT_CREATES" envDefault:"0"`  // 0: 4
 	NativeMaxFilteredItems     int   `env:"NATIVE_API_MAX_FILTERED_ITEMS" envDefault:"0"`      // 0: 10000
+	NativeMaxGuardrailCalls    int   `env:"NATIVE_API_MAX_GUARDRAIL_CALLS" envDefault:"0"`     // 0: 10000
 	NativeMaxInProgressPerApp  int   `env:"NATIVE_API_MAX_IN_PROGRESS_PER_APP" envDefault:"0"` // 0: no cap
 	// Native resource reconciler timings (Go durations, counts); zero keeps
 	// the gateway's default.

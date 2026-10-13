@@ -88,6 +88,7 @@ type Config struct {
 	NativeMaxBodyBytes         int64
 	NativeMaxConcurrentCreates int
 	NativeMaxFilteredItems     int
+	NativeMaxGuardrailCalls    int
 	NativeMaxInProgressPerApp  int
 
 	// Native resource reconciler timings; zero keeps the default. See the
@@ -176,6 +177,7 @@ func NewWithAnalytics(
 		NativeMaxBodyBytes:         config.NativeMaxBodyBytes,
 		NativeMaxConcurrentCreates: config.NativeMaxConcurrentCreates,
 		NativeMaxFilteredItems:     config.NativeMaxFilteredItems,
+		NativeMaxGuardrailCalls:    config.NativeMaxGuardrailCalls,
 		NativeMaxInProgressPerApp:  config.NativeMaxInProgressPerApp,
 
 		NativeReconcileInterval: config.NativeReconcileInterval,

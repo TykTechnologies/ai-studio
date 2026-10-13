@@ -226,6 +226,7 @@ A dedicated tab for compliance events with:
 - Severity totals (info / warning / critical) with a stacked timeline chart.
 - Severity and event-type filters (event-type dropdown is populated from observed values in the window).
 - Pagination over the event list.
+- A **Source** column naming where a guardrail's flagged text came from: `User message`, `System prompt`, or `Tool result from <tool>`, or a plain `Tool result` when no tool name was recorded (from the event's `roles`, `kinds` and `tool_names` metadata). Events recorded before tool results were scanned show their roles only. Events without these keys (most script-filter events) show `-`.
 - Expandable rows showing the raw `metadata` JSON.
 - CSV export wired to `GET /compliance/events`.
 

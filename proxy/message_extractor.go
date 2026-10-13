@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
@@ -42,6 +43,19 @@ func (r *MessageExtractorRegistry) Extract(vendor string, req *http.Request, bod
 		return nil, fmt.Errorf("no message extractor for vendor: %s", vendor)
 	}
 	return extractor.ExtractMessages(req, body)
+}
+
+// MessageTools names the tool behind each message Extract returns, for
+// formats whose extractor knows them (scripting.ScriptInput.MessageTools);
+// nil for the others.
+func (r *MessageExtractorRegistry) MessageTools(vendor string, body []byte) []scripting.MessageTool {
+	mt, ok := r.extractors[strings.ToLower(vendor)].(interface {
+		messageTools(body []byte) []scripting.MessageTool
+	})
+	if !ok {
+		return nil
+	}
+	return mt.messageTools(body)
 }
 
 // FailsClosed reports whether a request the format's extractor cannot read

@@ -20,8 +20,13 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  DEFAULT_QUARANTINE_PLACEHOLDER,
+  effectiveToolAction,
+  scansToolResults,
+} from "./GuardrailConfigForm";
 
-const ACTION_LABELS = { block: "Block", redact: "Redact", log: "Log only" };
+const ACTION_LABELS = { block: "Block", redact: "Redact", quarantine: "Quarantine", log: "Log only" };
 
 // Connection values are references ($SECRET/name, $ENV/NAME) or plain
 // endpoints. A value that is neither is a credential typed in directly, and
@@ -130,6 +135,27 @@ const FilterDetails = () => {
               {config.on_detect === "redact" && !attrs.response_filter && config.redaction &&
                 row("Redaction", `${config.redaction.style || "placeholder"}${config.redaction.placeholder ? ` (${config.redaction.placeholder})` : ""}`)}
               {!attrs.response_filter && row("Messages inspected", config.scope || "all_user")}
+              {!attrs.response_filter &&
+                row("Tool results", scansToolResults(config) ? "Scanned across the whole history" : "Not scanned (only under all_messages)")}
+              {!attrs.response_filter && scansToolResults(config) &&
+                row(
+                  "Action on tool results",
+                  `${ACTION_LABELS[effectiveToolAction(config)] || effectiveToolAction(config)}${
+                    config.tool_results?.on_detect ? "" : " (default)"
+                  }`
+                )}
+              {!attrs.response_filter &&
+                (config.on_detect === "quarantine" || (scansToolResults(config) && effectiveToolAction(config) === "quarantine")) &&
+                row("Quarantine placeholder", config.quarantine?.placeholder || DEFAULT_QUARANTINE_PLACEHOLDER)}
+              {!attrs.response_filter && config.cache === false && row("Verdict cache", "Off")}
+              {!attrs.response_filter && config.provider !== "builtin" && config.budget &&
+                Object.keys(config.budget).length > 0 &&
+                row(
+                  "Budgets",
+                  Object.entries(config.budget)
+                    .map(([k, v]) => `${k} ${v}`)
+                    .join(", ")
+                )}
               {row("If the provider fails", config.fail_mode === "open" ? "Let it through" : config.fail_mode === "closed" ? "Block" : "Default")}
               {row("Timeout", `${config.timeout_ms || 2000} ms`)}
               {attrs.response_filter && config.stream?.evaluate_every_chars > 0 &&

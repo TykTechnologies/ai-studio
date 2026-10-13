@@ -35,10 +35,31 @@ import "prismjs/components/prism-javascript";
 import "prismjs/themes/prism-tomorrow.css";
 import ScriptTemplateSelector from "./ScriptTemplateSelector";
 import ScriptTestPanel from "./ScriptTestPanel";
-import GuardrailConfigForm, { emptyGuardrailConfig } from "./GuardrailConfigForm";
+import GuardrailConfigForm, { emptyGuardrailConfig, budgetErrors } from "./GuardrailConfigForm";
 
 export const FILTER_KIND_SCRIPT = "script";
 export const FILTER_KIND_GUARDRAIL = "guardrail";
+
+// responseSafeConfig replaces quarantine, which Normalize rejects on response
+// filters, with block, both as the filter's action and as the tool-result
+// override.
+const responseSafeConfig = (config) => {
+  const next = { ...config };
+  if (next.on_detect === "quarantine") next.on_detect = "block";
+  if (next.tool_results && next.tool_results.on_detect === "quarantine") {
+    const { on_detect, ...rest } = next.tool_results;
+    next.tool_results = Object.keys(rest).length ? rest : undefined;
+  }
+  return next;
+};
+
+// requestOnlyKeysDropped leaves out the settings a response filter ignores
+// (tool results, quarantine, budgets, the verdict cache), so they are not
+// stored on it. The form keeps them in state in case the box is unticked.
+const requestOnlyKeysDropped = (config) => {
+  const { tool_results, quarantine, budget, cache, ...rest } = responseSafeConfig(config);
+  return rest;
+};
 
 const FilterForm = () => {
   const [filter, setFilter] = useState({
@@ -115,7 +136,13 @@ const FilterForm = () => {
 
   const handleCheckboxChange = (e) => {
     const { name, checked } = e.target;
-    setFilter({ ...filter, [name]: checked });
+    const next = { ...filter, [name]: checked };
+    // Quarantine applies to requests only, and the response form does not
+    // offer it, so a guardrail turned into a response filter blocks instead.
+    if (name === "response_filter" && checked && filter.kind === FILTER_KIND_GUARDRAIL && filter.config) {
+      next.config = responseSafeConfig(filter.config);
+    }
+    setFilter(next);
   };
 
   const handleKindChange = (e, kind) => {
@@ -153,6 +180,9 @@ const FilterForm = () => {
       const config = filter.config || {};
       if (!config.provider) newErrors.provider = "Choose a provider";
       if (!config.detectors || config.detectors.length === 0) newErrors.detectors = "Enable at least one detector";
+      if (!filter.response_filter && Object.keys(budgetErrors(config)).length > 0) {
+        newErrors.budget = "Fix the budget values under Advanced";
+      }
     } else if (!filter.script.trim()) {
       newErrors.script = "Script is required";
     }
@@ -174,7 +204,7 @@ const FilterForm = () => {
       script: isGuardrail ? "" : btoa(filter.script), // Encode to base64
     };
     if (isGuardrail) {
-      attributes.config = config;
+      attributes.config = filter.response_filter ? requestOnlyKeysDropped(config) : config;
     }
     const filterData = {
       data: {
@@ -302,7 +332,9 @@ const FilterForm = () => {
                   label="Is this a Response Filter?"
                 />
                 <FormHelperText sx={{ ml: 4, mt: 0 }}>
-                  Response filters run on LLM responses only (not tools). They can only block responses, not modify them. Streaming responses will be interrupted if blocked.
+                  On an LLM, a response filter runs on the model's response and can only block it; a streaming response
+                  is interrupted when blocked. On a tool, it runs on the tool's output, which a script may rewrite and a
+                  guardrail can block or log. Request filters run on what is sent to the LLM or the tool.
                 </FormHelperText>
               </Box>
             </Grid>

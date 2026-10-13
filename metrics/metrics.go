@@ -31,6 +31,9 @@ var (
 	complianceEventsTotal otelmetric.Int64Counter
 	failoverTotal         otelmetric.Int64Counter
 	guardrailErrorsTotal  otelmetric.Int64Counter
+	guardrailSegmentsTotal otelmetric.Int64Counter
+	guardrailCacheTotal    otelmetric.Int64Counter
+	guardrailAbandonedTotal otelmetric.Int64Counter
 	goroutinePanicsTotal  otelmetric.Int64Counter
 	decisionQuestionsTotal otelmetric.Int64Counter
 
@@ -146,6 +149,27 @@ func registerInstruments(meter otelmetric.Meter) {
 	)
 	if err != nil {
 		panic("failed to create guardrailErrorsTotal counter: " + err.Error())
+	}
+
+	guardrailSegmentsTotal, err = meter.Int64Counter("aistudio_guardrail_segments_total",
+		otelmetric.WithDescription("Request segments a guardrail screened, by provider, segment kind and result (scanned, cached, unscanned)"),
+	)
+	if err != nil {
+		panic("failed to create guardrailSegmentsTotal counter: " + err.Error())
+	}
+
+	guardrailCacheTotal, err = meter.Int64Counter("aistudio_guardrail_cache_total",
+		otelmetric.WithDescription("Guardrail verdict cache lookups, by provider and outcome (hit or miss)"),
+	)
+	if err != nil {
+		panic("failed to create guardrailCacheTotal counter: " + err.Error())
+	}
+
+	guardrailAbandonedTotal, err = meter.Int64Counter("aistudio_guardrail_calls_abandoned_total",
+		otelmetric.WithDescription("Guardrail provider calls given up on after their timeout because the provider did not return, by provider"),
+	)
+	if err != nil {
+		panic("failed to create guardrailAbandonedTotal counter: " + err.Error())
 	}
 
 	goroutinePanicsTotal, err = meter.Int64Counter("aistudio_goroutine_panics_total",
@@ -341,9 +365,10 @@ func RecordComplianceEvent(ctx context.Context, eventType, severity, filterName 
 }
 
 // RecordGuardrail records one guardrail provider call. outcome is "flagged",
-// "clean" or "error" and action the filter's configured action, so the
-// series stays bounded.
-func RecordGuardrail(ctx context.Context, provider, outcome, action string, durationSeconds float64) {
+// "clean" or "error", action the filter's configured action and
+// segmentKind the kind of text in the call ("text", "tool_result" or
+// "mixed"), so the series stays bounded.
+func RecordGuardrail(ctx context.Context, provider, outcome, action, segmentKind string, durationSeconds float64) {
 	if !initialized.Load() {
 		return
 	}
@@ -352,7 +377,50 @@ func RecordGuardrail(ctx context.Context, provider, outcome, action string, dura
 			attribute.String("provider", provider),
 			attribute.String("outcome", outcome),
 			attribute.String("action", action),
+			attribute.String("segment_kind", segmentKind),
 		),
+	)
+}
+
+// RecordGuardrailSegments counts request segments a guardrail screened.
+// result is "scanned" (sent to the provider), "cached" (answered by the
+// verdict cache) or "unscanned" (over a budget, or its call failed).
+func RecordGuardrailSegments(ctx context.Context, provider, segmentKind, result string, n int64) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailSegmentsTotal.Add(ctx, n,
+		otelmetric.WithAttributes(
+			attribute.String("provider", provider),
+			attribute.String("segment_kind", segmentKind),
+			attribute.String("result", result),
+		),
+	)
+}
+
+// RecordGuardrailCache counts a verdict cache lookup; outcome is "hit" or
+// "miss".
+func RecordGuardrailCache(ctx context.Context, provider, outcome string) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailCacheTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(
+			attribute.String("provider", provider),
+			attribute.String("outcome", outcome),
+		),
+	)
+}
+
+// RecordGuardrailAbandoned counts a guardrail provider call the runner gave
+// up on because it did not return after its timeout; its goroutine is still
+// running. A steady rate means a provider that ignores its context.
+func RecordGuardrailAbandoned(ctx context.Context, provider string) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailAbandonedTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(attribute.String("provider", provider)),
 	)
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/guardrails/segments"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
@@ -240,6 +241,10 @@ type Config struct {
 	// NativeMaxFilteredItems caps the items of a native create when the LLM
 	// has request filters, each of which runs on every item. Zero: 10000.
 	NativeMaxFilteredItems int
+	// NativeMaxGuardrailCalls caps the remote guardrail provider calls one
+	// native create makes across its items; spending it refuses the create.
+	// Cached verdicts and local providers do not count. Zero: 10000.
+	NativeMaxGuardrailCalls int
 	// NativeMaxInProgressPerApp caps the batches an App may have in progress
 	// on one LLM, as this node's ledger counts them. Zero: no cap.
 	NativeMaxInProgressPerApp int
@@ -2286,6 +2291,15 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 		return bodyBytes, nil
 	}
 
+	// A JSON body with a repeated key reads differently to different parsers
+	// (Go keeps the last copy, a vendor may keep the first), so no filter can
+	// know which copy the vendor reads. Every entry point that screens a body
+	// (the pass-through, the Bedrock bridges, native API items, the edge)
+	// comes through here.
+	if err := segments.CheckKeys(bodyBytes); errors.Is(err, segments.ErrDuplicateKey) {
+		return nil, fmt.Errorf("Policy error: the request could not be read for screening: %v", err)
+	}
+
 	// Extract messages using the message extractor registry
 	messages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes)
 	if err != nil {
@@ -2321,7 +2335,11 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 		ModelName:  modelName,
 		Context:    scriptCtx,
 		IsChat:     false,
+		Format:     format,
 		Ctx:        r.Context(),
+	}
+	if len(messages) > 0 {
+		scriptInput.MessageTools = p.messageExtractorRegistry.MessageTools(format, bodyBytes)
 	}
 
 	// Run REQUEST filters in chain
@@ -2329,7 +2347,7 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 		filter := rf.filter
 		output, err := rf.runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
-			return nil, fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
+			return nil, fmt.Errorf("script error in filter '%s': %w", filter.Name, err)
 		}
 
 		// Record any compliance events reported by the script
@@ -2358,6 +2376,7 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 			// Re-extract messages from reconstructed payload for next filter
 			if newMessages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes); err == nil {
 				scriptInput.Messages = newMessages
+				scriptInput.MessageTools = p.messageExtractorRegistry.MessageTools(format, bodyBytes)
 			}
 		} else if output.Payload != "" && output.Payload != scriptInput.RawInput {
 			scriptInput.RawInput = output.Payload
@@ -2366,6 +2385,7 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 			// Re-extract messages from modified payload for next filter
 			if newMessages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes); err == nil {
 				scriptInput.Messages = newMessages
+				scriptInput.MessageTools = p.messageExtractorRegistry.MessageTools(format, bodyBytes)
 			}
 		}
 	}

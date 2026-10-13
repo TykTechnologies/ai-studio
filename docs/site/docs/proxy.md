@@ -165,6 +165,7 @@ Limitations:
 | Batch create body limit (bytes) | `NATIVE_API_MAX_BODY_BYTES` | `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB; at most 256 MiB) |
 | Batch creates admitted at once | `NATIVE_API_MAX_CONCURRENT_CREATES` | same | `4` |
 | Max requests per batch when the LLM has filters | `NATIVE_API_MAX_FILTERED_ITEMS` | same | `10000` |
+| Max remote guardrail provider calls per batch create or upload | `NATIVE_API_MAX_GUARDRAIL_CALLS` | same | `10000` |
 | Max in-progress batches per App and LLM | `NATIVE_API_MAX_IN_PROGRESS_PER_APP` | same | `0` (no cap) |
 | Reconciler pass interval | `NATIVE_API_RECONCILE_INTERVAL` | same | `30s` |
 | Batches per reconciler pass | `NATIVE_API_RECONCILE_BATCH` | same | `50` |
@@ -200,10 +201,11 @@ For OpenAI LLMs the filters also read the text of `/v1/embeddings`, `/v1/complet
 For OpenAI LLMs the [Batch API](https://platform.openai.com/docs/guides/batch) works on the native endpoint: `client.files.create(file=..., purpose="batch")`, `client.batches.create`, `retrieve`, `list` and `cancel`, and `client.files.content`, `retrieve`, `list` and `delete`. It is governed like Anthropic batches:
 
 *   **Every request in the uploaded file is checked** when the file is uploaded: its `body.model` must be allowed (otherwise 403, naming the `custom_id`), and the LLM's filters run on its body. A request a filter refuses rejects the upload. A line with a duplicate key, an unsupported `url` or a method other than `POST` is refused (400). Only `purpose="batch"` uploads are accepted, in the plain multipart form the OpenAI SDKs send; unusual multipart encodings are refused (400), and so is a file name containing a backslash or a double quote (rename the file).
+*   **A batch runs only under the filters that checked its file.** Because the file's requests are checked at upload, a batch create on an LLM with filters is refused (`400`, asking you to upload the file again) when the LLM's request filters have changed since the upload, for example when a guardrail was attached or edited. The same applies to files uploaded before AI Studio 2.3.0 and, on edge gateways, to a batch created through a different edge from the one that received the upload. Upload the file again and create the batch from the new file ID.
 *   **Files and batches belong to an App.** File and batch IDs are signed for the App and LLM, so a batch can only be created from the App's own uploaded file, and another App gets `404` for both. Listings show only the calling App's files and batches.
 *   **Usage is recorded once, at the batch rate** (half the list price), by the gateway that created the batch, after it ends. An output file cannot be deleted until its batch's usage has been accounted (`409`).
 
-Limitations: uploads are limited to `NATIVE_API_MAX_BODY_BYTES` (64 MiB by default, up to 256 MiB) and, when the LLM has filters, to `NATIVE_API_MAX_FILTERED_ITEMS` requests (10,000 by default). On edge gateways, files and batches are listed and deleted only through the edge that created them. The `purpose` and `order` parameters of `files.list` are ignored.
+Limitations: uploads are limited to `NATIVE_API_MAX_BODY_BYTES` (64 MiB by default, up to 256 MiB) and, when the LLM has filters, to `NATIVE_API_MAX_FILTERED_ITEMS` requests (10,000 by default). On edge gateways, files and batches are listed and deleted only through the edge that created them, and on an LLM with filters a batch must be created through the edge that received its file. The `purpose` and `order` parameters of `files.list` are ignored.
 
 The operations are counted in the `aistudio_native_*` metrics (see [Observability](./observability.md#governance-metrics)).
 

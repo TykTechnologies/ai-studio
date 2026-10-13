@@ -170,7 +170,7 @@ var batchOperations = []nativeapi.Operation{
 		Path:        "/v1/batches",
 		Ledger:      nativeapi.LedgerCreate,
 		Budget:      true,
-		RequestRefs: []nativeapi.BodyRef{{Path: "input_file_id", Resource: ResourceFile}},
+		RequestRefs: []nativeapi.BodyRef{{Path: "input_file_id", Resource: ResourceFile, Screened: true}},
 		ResponseIDs: batchFileIDs,
 		Upstream:    nativeapi.UpstreamSpec{HeaderAllow: nativeHeaderAllow},
 		ErrorShape:  NativeError,

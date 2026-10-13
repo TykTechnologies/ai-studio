@@ -119,6 +119,8 @@ func TestConfigNativeLimits(t *testing.T) {
 	assert.EqualValues(t, 256<<20, (&Config{NativeMaxBodyBytes: 1 << 40}).nativeMaxBodyBytes())
 	assert.Equal(t, 4, c.nativeMaxConcurrentCreates())
 	assert.Equal(t, 10000, c.nativeMaxFilteredItems())
+	assert.Equal(t, 10000, c.nativeMaxGuardrailCalls())
+	assert.Equal(t, 7, (&Config{NativeMaxGuardrailCalls: 7}).nativeMaxGuardrailCalls())
 	assert.Equal(t, 0, c.nativeMaxInProgressPerApp())
 }
 

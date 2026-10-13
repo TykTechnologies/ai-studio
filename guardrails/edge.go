@@ -23,6 +23,15 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string) (string,
 			cfg.Connection[k] = resolve(v)
 		}
 	}
+	// An edge older than this hub rejects an action it does not know. Send
+	// it block instead, the strongest action every edge applies, and the
+	// real action where only newer edges look. New keys elsewhere in the
+	// config (quarantine, tool_results, budgets) are ignored by old edges,
+	// which then behave as they always have.
+	if !legacyActions[cfg.OnDetect] {
+		cfg.OnDetectExt = cfg.OnDetect
+		cfg.OnDetect = ActionBlock
+	}
 	b, err := json.Marshal(cfg)
 	if err != nil {
 		return "", err

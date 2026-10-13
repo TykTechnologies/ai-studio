@@ -39,15 +39,15 @@ func (spec FilterSpec) validate() (string, models.JSONMap, error) {
 		}
 		return kind, nil, nil
 	case models.FilterKindGuardrail:
-		cfg, err := guardrails.ParseConfig(spec.Config)
+		parsed, err := guardrails.ParseConfig(spec.Config)
 		if err != nil {
 			return "", nil, err
 		}
-		cfg, err = guardrails.Normalize(cfg, spec.ResponseFilter)
+		cfg, err := guardrails.Normalize(parsed, spec.ResponseFilter)
 		if err != nil {
 			return "", nil, err
 		}
-		stored, err := cfg.ToMap()
+		stored, err := guardrails.ForStorage(parsed, cfg).ToMap()
 		if err != nil {
 			return "", nil, err
 		}

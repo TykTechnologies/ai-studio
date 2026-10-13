@@ -13,7 +13,9 @@
 //   - Go starts a one-shot goroutine that does so.
 //   - Call runs a function in the current goroutine and reports whether it
 //     panicked, for per-item work (a handler, one event) whose loop should
-//     carry on with the next item.
+//     carry on with the next item. CallRedacted does so without putting the
+//     panic value in the error log, for code handling data that must not
+//     be logged.
 //   - Loop supervises a long-lived loop: it runs the loop again, after a
 //     backoff, when it panics.
 package safe
@@ -68,6 +70,21 @@ func Call(name string, fn func()) (panicked bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			report(name, r)
+			panicked = true
+		}
+	}()
+	fn()
+	return false
+}
+
+// CallRedacted is Call for code whose panic value may carry data that must
+// not reach the error log, such as text a guardrail was screening: the
+// panic's type and stack are logged at error level, its value at debug
+// level only.
+func CallRedacted(name string, fn func()) (panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ReportRedacted(name, r)
 			panicked = true
 		}
 	}()
@@ -147,5 +164,21 @@ func report(name string, r interface{}) {
 		Str("panic", fmt.Sprint(r)).
 		Str("stack", string(debug.Stack())).
 		Msg("Recovered from a panic; the process keeps running")
+	metrics.RecordGoroutinePanic(context.Background(), name)
+}
+
+// ReportRedacted reports a panic the caller recovered itself (a deferred
+// recover that also shapes a result) the way CallRedacted does: type and
+// stack at error level, the value at debug only, counted like every
+// recovered panic.
+func ReportRedacted(name string, r interface{}) {
+	panics.Add(1)
+	log := logger.Current()
+	log.Error().
+		Str("goroutine", name).
+		Str("panic_type", fmt.Sprintf("%T", r)).
+		Str("stack", string(debug.Stack())).
+		Msg("Recovered from a panic; the process keeps running")
+	log.Debug().Str("goroutine", name).Str("panic", fmt.Sprint(r)).Msg("Recovered panic value")
 	metrics.RecordGoroutinePanic(context.Background(), name)
 }

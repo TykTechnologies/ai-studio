@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
@@ -178,19 +179,35 @@ func (cs *ChatSession) resumeWithToolResults(results []models.ToolResult) bool {
 
 	toolResult := st.partial
 	toolResult.Role = llms.ChatMessageTypeTool
+	anyBlocked := false
 	for _, p := range st.pending {
 		r, ok := byID[p.id]
 		// The answer is validated against the card's shape and stored in a
 		// labelled envelope so the model reads it as user input, not as a
 		// trusted tool response (see client_results.go).
 		content, _ := wrapClientResult(p, r, ok)
+		// The user's answer is user input like a typed message, so the
+		// chat's script request filters see it as one; it reaches the model
+		// as a tool result, so the chat's guardrails screen it as one.
+		screened, blocked := cs.runScriptRequestFilters(cs.ctx, content)
+		if !blocked {
+			screened, blocked = cs.screenToolResult(cs.ctx, p.name, p.id, screened)
+		}
+		if blocked {
+			screened = scripting.ToolBlockedMessage
+			anyBlocked = true
+		}
 		// No tool-result event here: the client supplied the answer and
 		// already holds it; the resumed stream carries only what follows.
-		toolResult.Parts = append(toolResult.Parts, llms.ToolCallResponse{ToolCallID: p.id, Name: p.name, Content: content})
+		toolResult.Parts = append(toolResult.Parts, llms.ToolCallResponse{ToolCallID: p.id, Name: p.name, Content: screened})
 	}
 
 	if err := cs.chatHistory.AddMessage(context.Background(), toolResult); err != nil {
 		cs.sendError(fmt.Errorf("error adding tool results to history: %v", err))
+		return false
+	}
+	if anyBlocked {
+		cs.sendError(errToolResultBlocked)
 		return false
 	}
 	return cs.callModelAfterTools()

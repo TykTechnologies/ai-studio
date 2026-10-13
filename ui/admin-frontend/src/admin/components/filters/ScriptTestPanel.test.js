@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
-import ScriptTestPanel from "./ScriptTestPanel";
+import ScriptTestPanel, { TOOL_RESULT_SAMPLES } from "./ScriptTestPanel";
 
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
@@ -153,5 +153,100 @@ describe("ScriptTestPanel", () => {
       });
       expect(screen.queryByText(/Save the filter first/)).not.toBeInTheDocument();
     });
+  });
+});
+
+// 4uc.8: a guardrail reads a vendor request body block by block when the
+// panel names its format, and the result names the tool a finding came from.
+describe("ScriptTestPanel: tool results in a guardrail test", () => {
+  const guardrail = { provider: "builtin", detectors: [{ name: "injection" }], on_detect: "block" };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.post.mockResolvedValue({ data: { success: true, output: {} } });
+  });
+
+  it("sends no format by default, as before", async () => {
+    const { container } = renderPanel({ kind: "guardrail", config: guardrail, filterType: "request" });
+    const sent = await runTest(container);
+    expect(sent.input.format).toBeUndefined();
+  });
+
+  it("inserts an Anthropic tool-result sample and sends it with its format", async () => {
+    const { container } = renderPanel({ kind: "guardrail", config: guardrail, filterType: "request" });
+    fireEvent.change(screen.getByTestId("test-panel-format"), { target: { name: "format", value: "anthropic" } });
+    fireEvent.click(screen.getByTestId("test-panel-tool-sample"));
+
+    const sent = await runTest(container);
+    expect(sent.input.format).toBe("anthropic");
+    expect(sent.input.vendor_name).toBe("anthropic");
+    const body = JSON.parse(sent.input.raw_input);
+    expect(body.messages[2].content[0]).toMatchObject({ type: "tool_result", tool_use_id: "toolu_1" });
+  });
+
+  it("defaults the sample to the OpenAI format", async () => {
+    const { container } = renderPanel({ kind: "guardrail", config: guardrail, filterType: "request" });
+    fireEvent.click(screen.getByTestId("test-panel-tool-sample"));
+    const sent = await runTest(container);
+    expect(sent.input.format).toBe("openai");
+    expect(JSON.parse(sent.input.raw_input).messages[2]).toMatchObject({ role: "tool", tool_call_id: "call_1" });
+  });
+
+  it("has a tool-result sample for every format it offers", () => {
+    ["openai", "anthropic", "google_ai", "vertex", "ollama", "bedrock"].forEach((f) =>
+      expect(TOOL_RESULT_SAMPLES[f]).toBeDefined()
+    );
+  });
+
+  it("names the tool a finding came from and shows the quarantined body", async () => {
+    const rewritten = JSON.stringify({
+      messages: [{ role: "tool", tool_call_id: "call_1", content: "[content removed by policy]" }],
+    });
+    apiClient.post.mockResolvedValue({
+      data: {
+        success: true,
+        output: {
+          block: false,
+          payload: rewritten,
+          compliance_events: [
+            {
+              event_type: "guardrail.injection.ignore_instructions",
+              severity: "warning",
+              description: "guardrail \"test-filter\" (builtin): injection detected (1) in tool; action quarantine",
+              metadata: { action: "quarantine", roles: ["tool"], kinds: ["tool_result"], tool_names: ["fetch_url"] },
+            },
+          ],
+        },
+      },
+    });
+    const { container } = renderPanel({ kind: "guardrail", config: guardrail, filterType: "request" });
+    fireEvent.click(screen.getByTestId("test-panel-tool-sample"));
+    await runTest(container);
+
+    expect(await screen.findByText(/\(source: Tool result from fetch_url\)/)).toBeInTheDocument();
+    expect(screen.getByTestId("test-panel-rewritten-body")).toHaveTextContent("[content removed by policy]");
+  });
+
+  it("offers no body format on a response filter", () => {
+    renderPanel({ kind: "guardrail", config: guardrail, filterType: "response" });
+    expect(screen.queryByTestId("test-panel-format")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("test-panel-tool-sample")).not.toBeInTheDocument();
+  });
+
+  // 4uc.11: input.segments is built from raw_input and format, so a script
+  // (the scan-tool-results template) needs the format too.
+  it("sends the format for a script request filter", async () => {
+    const { container } = renderPanel({ filterType: "request" });
+    fireEvent.change(screen.getByTestId("test-panel-format"), { target: { name: "format", value: "google_ai" } });
+    fireEvent.click(screen.getByTestId("test-panel-tool-sample"));
+    const sent = await runTest(container);
+    expect(sent.kind).toBe("script");
+    expect(sent.input.format).toBe("google_ai");
+    expect(JSON.parse(sent.input.raw_input).contents[2].parts[0].functionResponse.name).toBe("fetch_url");
+  });
+
+  it("offers no body format to a script response filter", () => {
+    renderPanel({ filterType: "response" });
+    expect(screen.queryByTestId("test-panel-format")).not.toBeInTheDocument();
   });
 });

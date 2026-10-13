@@ -10,18 +10,26 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// Cache holds up to max values. The zero value is not usable; call New.
+// Cache holds up to max values. The zero value is not usable; call New or
+// NewWeighted.
 type Cache[V any] struct {
 	mu    sync.Mutex
 	max   int
 	order *list.List // front is most recently used
 	items map[string]*list.Element
 	group singleflight.Group
+
+	// weigh, when set, is the cost of a value; the entries held then also
+	// stay within maxWeight in total.
+	weigh     func(key string, v V) int64
+	maxWeight int64
+	weight    int64
 }
 
 type entry[V any] struct {
-	key   string
-	value V
+	key    string
+	value  V
+	weight int64
 }
 
 // New returns a cache that keeps at most max entries.
@@ -30,6 +38,16 @@ func New[V any](max int) *Cache[V] {
 		max = 1
 	}
 	return &Cache[V]{max: max, order: list.New(), items: make(map[string]*list.Element)}
+}
+
+// NewWeighted returns a cache that keeps at most max entries whose weights,
+// as weigh reports them, add up to at most maxWeight. A value heavier than
+// maxWeight on its own is not stored.
+func NewWeighted[V any](max int, maxWeight int64, weigh func(key string, v V) int64) *Cache[V] {
+	c := New[V](max)
+	c.weigh = weigh
+	c.maxWeight = maxWeight
+	return c
 }
 
 // Get returns the value for key and marks it recently used.
@@ -48,18 +66,22 @@ func (c *Cache[V]) Get(key string) (V, bool) {
 // Add stores v under key, replacing any previous value, and drops the least
 // recently used entries until the cache is within capacity.
 func (c *Cache[V]) Add(key string, v V) {
+	var w int64
+	if c.weigh != nil {
+		w = c.weigh(key, v)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[key]; ok {
-		el.Value.(*entry[V]).value = v
-		c.order.MoveToFront(el)
+		c.removeElement(el)
+	}
+	if c.weigh != nil && w > c.maxWeight {
 		return
 	}
-	c.items[key] = c.order.PushFront(&entry[V]{key: key, value: v})
-	for c.order.Len() > c.max {
-		oldest := c.order.Back()
-		c.order.Remove(oldest)
-		delete(c.items, oldest.Value.(*entry[V]).key)
+	c.items[key] = c.order.PushFront(&entry[V]{key: key, value: v, weight: w})
+	c.weight += w
+	for c.order.Len() > c.max || (c.weigh != nil && c.weight > c.maxWeight) {
+		c.removeElement(c.order.Back())
 	}
 }
 
@@ -68,9 +90,16 @@ func (c *Cache[V]) Remove(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[key]; ok {
-		c.order.Remove(el)
-		delete(c.items, key)
+		c.removeElement(el)
 	}
+}
+
+// removeElement drops one entry; the caller holds mu.
+func (c *Cache[V]) removeElement(el *list.Element) {
+	e := el.Value.(*entry[V])
+	c.order.Remove(el)
+	delete(c.items, e.key)
+	c.weight -= e.weight
 }
 
 // Len is the number of entries held.
@@ -86,6 +115,15 @@ func (c *Cache[V]) Reset() {
 	defer c.mu.Unlock()
 	c.order.Init()
 	c.items = make(map[string]*list.Element)
+	c.weight = 0
+}
+
+// Weight is the total weight of the entries held (0 for a cache made with
+// New).
+func (c *Cache[V]) Weight() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.weight
 }
 
 // Do returns the value for key, building and storing it with build when it

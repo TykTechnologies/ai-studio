@@ -522,12 +522,26 @@ func (c *nativeCall) requestBody(w http.ResponseWriter) ([]byte, bool) {
 	for _, ref := range c.op.RequestRefs {
 		rt, _ := spec.Resource(ref.Resource)
 		if err := rewriteRef(obj, ref, func(wrapped string) (string, error) {
-			if v, ok := c.unwrapID(rt, wrapped); ok {
-				return v, nil
+			v, ok := c.unwrapID(rt, wrapped)
+			if !ok {
+				return "", errNativeRef
 			}
-			return "", errNativeRef
+			if ref.Screened {
+				if err := c.checkScreened(rt, v); err != nil {
+					return "", err
+				}
+			}
+			return v, nil
 		}); err != nil {
-			c.fail(w, http.StatusNotFound, nativeErrNotFound, nativeNotFoundMsg)
+			switch {
+			case errors.Is(err, errNativeScreenedElsewhere):
+				metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
+				c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, nativeScreenedElsewhereMsg)
+			case errors.Is(err, errNativeScreeningUnchecked):
+				c.fail(w, http.StatusServiceUnavailable, nativeErrAPI, "the input file could not be checked; retry shortly")
+			default:
+				c.fail(w, http.StatusNotFound, nativeErrNotFound, nativeNotFoundMsg)
+			}
 			return nil, false
 		}
 	}

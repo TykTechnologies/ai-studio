@@ -342,6 +342,12 @@ type BodyRef struct {
 	// ObjectID marks a field that holds the ID itself or an object whose
 	// "id" holds it (OpenAI's conversation: "conv_..." or {"id": ...}).
 	ObjectID bool
+	// Screened marks, in RequestRefs, a reference to a resource whose
+	// content the gateway screened when an admitting operation created it
+	// (a batch input file) and that this operation runs at the vendor. The
+	// gateway refuses the reference unless the LLM's request filters are
+	// still the ones that screened it.
+	Screened bool
 }
 
 // TransformEnv is what a Transform may use.
