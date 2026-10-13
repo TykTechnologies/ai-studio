@@ -226,6 +226,20 @@ describe('Login Component', () => {
       await waitFor(() => expect(window.location.href).not.toBe(''));
     };
 
+    test('an account with no features gets the error, not the requested route', async () => {
+      window.location.search = '?next=%2Fadmin%2Fapps%2F222';
+      pubClient.get.mockImplementation((url) =>
+        Promise.resolve(url === '/common/me' ? { data: { attributes: { ui_options: {} } } } : { data: {} }),
+      );
+      pubClient.post.mockResolvedValue({ data: { message: 'Login successful' } });
+      render(<Login />, { wrapper: Wrapper });
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'a@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+      expect(await screen.findByText("Your account doesn't have access to any features.")).toBeInTheDocument();
+      expect(window.location.href).toBe('');
+    });
+
     test('opens the requested console route', async () => {
       window.location.search = '?next=%2Fadmin%2Fapps%2F222%3Ftab%3Dkeys';
       await signIn();

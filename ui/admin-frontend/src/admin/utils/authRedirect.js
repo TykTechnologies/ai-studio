@@ -57,9 +57,10 @@ export const safeReturnPath = (raw) => {
     return null;
   }
   // Compare the path the browser will actually open: "/admin/../login" is
-  // /login once dot segments are resolved.
+  // /login once dot segments are resolved, and "/.//host" is "//host" (still
+  // this origin when assigned as is, but refused rather than relied upon).
   const pathOnly = new URL(raw, 'http://studio.invalid').pathname;
-  if (pathOnly === '/' || isPublicPath(pathOnly)) {
+  if (pathOnly === '/' || pathOnly.startsWith('//') || isPublicPath(pathOnly)) {
     return null;
   }
   return raw;

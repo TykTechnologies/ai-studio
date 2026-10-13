@@ -89,6 +89,8 @@ describe('Studio sign-in return address (?next=)', () => {
     ['a control character', '/admin\n/apps'],
     ['the login page', '/login?next=/admin'],
     ['the login page behind dot segments', '/admin/../login'],
+    ['a protocol-relative URL behind a dot segment', '/.//evil.example'],
+    ['a protocol-relative URL behind dot-dot', '/a/..//evil.example/x'],
     ['the root behind dot segments', '/admin/..'],
     ['a password page', '/reset-password?token=x'],
     ['an oversized value', `/admin/${'a'.repeat(2100)}`],
@@ -150,5 +152,17 @@ describe('host sign-in return address', () => {
   test("Studio's own sign-in is unchanged", () => {
     window.__TYK_AI_STUDIO__ = { basePath: '/ai-studio', loginURL: '/login?next={return_to}' };
     expect(loginLocation()).toBe('/ai-studio/login');
+  });
+
+  test("Studio's own sign-in under a base path carries the deep page without the base", () => {
+    const original = window.location;
+    delete window.location;
+    window.location = { pathname: '/ai-studio/admin/apps/1', search: '', hash: '' };
+    try {
+      window.__TYK_AI_STUDIO__ = { basePath: '/ai-studio' };
+      expect(loginLocation()).toBe('/ai-studio/login?next=%2Fadmin%2Fapps%2F1');
+    } finally {
+      window.location = original;
+    }
   });
 });
