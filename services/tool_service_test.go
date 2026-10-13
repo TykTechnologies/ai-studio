@@ -29,6 +29,26 @@ func setupTestDBForTools(t *testing.T) *gorm.DB {
 // Every creator of a tool (admin API, submission approval, plugin gRPC) goes
 // through the service, so the service refuses a spec the tool could never
 // use; otherwise spec-operations fails for the stored tool forever.
+// A tool stored with a bad spec before validation existed can still be
+// renamed or deactivated through the service (the plugin gRPC path): only a
+// changed spec is checked.
+func TestUpdateTool_LegacyBadSpecCanBeRenamed(t *testing.T) {
+	db := setupTestDB(t)
+	service := NewService(db)
+	garbage := base64.StdEncoding.EncodeToString([]byte("test"))
+	legacy := &models.Tool{Name: "Legacy", ToolType: models.ToolTypeREST, OASSpec: garbage, PrivacyScore: 1}
+	assert.NoError(t, db.Create(legacy).Error)
+
+	renamed, err := service.UpdateTool(legacy.ID, "Legacy renamed", "d", models.ToolTypeREST, garbage, 1, "", "")
+	assert.NoError(t, err, "renaming with the spec unchanged")
+	if assert.NotNil(t, renamed) {
+		assert.Equal(t, "Legacy renamed", renamed.Name)
+	}
+
+	_, err = service.UpdateTool(legacy.ID, "Legacy renamed", "d", models.ToolTypeREST, base64.StdEncoding.EncodeToString([]byte("other")), 1, "", "")
+	assert.ErrorIs(t, err, ErrInvalidToolSpec, "changing to another bad spec")
+}
+
 func TestCreateAndUpdateTool_RejectUnusableSpec(t *testing.T) {
 	service := NewService(setupTestDB(t))
 	for name, spec := range map[string]string{
