@@ -780,11 +780,11 @@ output := {
 
 ## Filters and Proxy Logs
 
-The proxy log stores the request body as it left the request filters. This applies on the embedded gateway and on edge gateways (the edge pulses the same record to AI Studio). If a filter redacts a prompt, the redacted version reaches both the vendor and the log, and the original is not stored.
+When request bodies are logged, the proxy log stores the body as it left the request filters. This applies on the embedded gateway, and on edge gateways that store bodies (`ANALYTICS_STORE_REQUESTS`/`ANALYTICS_STORE_RESPONSES`, both off by default; the edge pulses the same record to AI Studio). If a filter redacts a prompt, the redacted version reaches both the vendor and the log, and the original is not stored.
 
-There is one exception: when a filter **blocks** a request, the log keeps the body that was refused, so an administrator can see what was blocked. Nothing is sent to the vendor. If that body contains personal data the filter was written to stop, the personal data is in the log.
+There is one exception: when a filter **blocks** a request, the log keeps the unredacted original body, exactly as the caller sent it, so an administrator can see what was blocked. Redactions made by earlier filters are not applied to it either. Nothing is sent to the vendor. If that body contains personal data the filter was written to stop, the personal data is in the log.
 
-To keep request and response bodies out of the proxy log for an LLM entirely, turn on **Disable Request/Response Body Logging** on the LLM (`dont_log_bodies`). On edge gateways, `ANALYTICS_STORE_REQUESTS` and `ANALYTICS_STORE_RESPONSES` control whether bodies are kept at all.
+To keep request and response bodies out of the proxy log for an LLM entirely, turn on **Disable Request/Response Body Logging** on the LLM (`dont_log_bodies`). On edge gateways, bodies are kept only when `ANALYTICS_STORE_REQUESTS` and `ANALYTICS_STORE_RESPONSES` are turned on.
 
 ---
 
