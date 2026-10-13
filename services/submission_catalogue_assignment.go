@@ -121,6 +121,13 @@ func assertCataloguesFound(requested, found []uint, kind string) error {
 	return nil
 }
 
+// AssignedCatalogueIDs is the catalogue ids an approval's assigned_catalogues
+// names, normalised as approval reads them, so a caller can authorise
+// exactly what approval will write.
+func AssignedCatalogueIDs(assigned models.JSONMap) []uint {
+	return catalogueIDsFrom(assigned)
+}
+
 // catalogueIDsFrom normalises the stored catalogue list. It is a JSONMap, so
 // after a round trip through JSON the ids arrive as float64 rather than uint,
 // and older rows may carry the list under a key rather than as a bare array.

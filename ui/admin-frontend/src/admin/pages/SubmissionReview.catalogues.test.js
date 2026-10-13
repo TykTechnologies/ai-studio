@@ -10,6 +10,11 @@ import SubmissionReview from "./SubmissionReview";
 // approved tool or data source joins, sent as assigned_catalogues.
 
 let mockFeatures = { feature_groups: true };
+// Catalogue write permission decides whether the picker is offered (#2ml.50).
+let mockGranted = () => true;
+jest.mock("../context/PermissionsContext", () => ({
+  usePermissions: () => ({ can: (perm) => mockGranted(perm) }),
+}));
 jest.mock("../hooks/useSystemFeatures", () => () => ({ features: mockFeatures }));
 jest.mock("../utils/apiClient", () => ({
   __esModule: true,
@@ -76,6 +81,7 @@ describe("Approve dialog: catalogue picker (#504)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFeatures = { feature_groups: true };
+    mockGranted = () => true;
     apiClient.get.mockImplementation((url) =>
       Promise.resolve(url === "/submissions/1" ? { data: { data: submission("tool") } } : { data: { data: [] } })
     );
@@ -168,5 +174,18 @@ describe("Approve dialog: catalogue picker (#504)", () => {
     const attrs = await confirmApprove(dialog);
     expect(attrs).not.toHaveProperty("assigned_catalogues");
     expect(mockNavigate.mock.calls[0][1].state.snackbar.message).toMatch(/applied to the existing resource/);
+  });
+
+  // The API refuses assigned_catalogues without write on that catalogue
+  // type, so a reviewer without it gets no picker and sends none.
+  it("offers no picker to a reviewer without tool-catalogues:write", async () => {
+    mockGranted = (perm) => perm !== "tool-catalogues:write";
+    renderReview();
+    const dialog = await openApproveDialog();
+    expect(within(dialog).queryByTestId("approve-catalogues")).not.toBeInTheDocument();
+    expect(listAll).not.toHaveBeenCalledWith(apiClient, "/tool-catalogues");
+
+    const attrs = await confirmApprove(dialog);
+    expect(attrs).not.toHaveProperty("assigned_catalogues");
   });
 });

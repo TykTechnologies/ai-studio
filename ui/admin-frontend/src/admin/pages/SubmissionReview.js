@@ -46,12 +46,14 @@ import PluginPayloadView from "../components/submissions/PluginPayloadView";
 import MCPSubmissionSummary from "../../portal/components/MCPSubmissionSummary";
 import { listAll } from "../utils/listAll";
 import useSystemFeatures from "../hooks/useSystemFeatures";
+import { usePermissions } from "../context/PermissionsContext";
+import { P } from "../rbac/permissions";
 
 // Catalogue endpoint per submitted resource type: the reviewer picks where an
 // approved tool or data source is published (#504).
 const CATALOGUE_ENDPOINTS = {
-  tool: { path: "/tool-catalogues", label: "Tool catalogs" },
-  datasource: { path: "/data-catalogues", label: "Data catalogs" },
+  tool: { path: "/tool-catalogues", label: "Tool catalogs", permission: P.TOOL_CATALOGUES_WRITE },
+  datasource: { path: "/data-catalogues", label: "Data catalogs", permission: P.DATA_CATALOGUES_WRITE },
 };
 const DEFAULT_CATALOGUE_NAME = "Default";
 
@@ -80,6 +82,7 @@ const SubmissionReview = () => {
   const [catalogueOptions, setCatalogueOptions] = useState(null);
   const [chosenCatalogues, setChosenCatalogues] = useState([]);
   const { features } = useSystemFeatures();
+  const { can } = usePermissions();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [changesDialogOpen, setChangesDialogOpen] = useState(false);
   const [finalPrivacyScore, setFinalPrivacyScore] = useState(0);
@@ -185,8 +188,11 @@ const SubmissionReview = () => {
   // Edition always publishes into Default, so it shows no picker. An update
   // submission changes a resource that already exists (and may be live) and
   // keeps its catalogues, so it gets no picker and sends none either.
-  const catalogueEndpoint =
+  // Assigning catalogues needs write on that catalogue type, as the API
+  // enforces; a reviewer without it approves without the picker.
+  const candidateEndpoint =
     features?.feature_groups && !submission?.is_update ? CATALOGUE_ENDPOINTS[submission?.resource_type] : undefined;
+  const catalogueEndpoint = candidateEndpoint && can(candidateEndpoint.permission) ? candidateEndpoint : undefined;
 
   useEffect(() => {
     if (!approveDialogOpen || !catalogueEndpoint || catalogueOptions !== null) return;
