@@ -15,17 +15,17 @@ import (
 
 // withPdftotextLookup resets the once-only lookup and replaces its seams for
 // one test, capturing the log.
-func withPdftotextLookup(t *testing.T, look func(string) (string, error), stat func(string) (os.FileInfo, error)) *bytes.Buffer {
+func withPdftotextLookup(t *testing.T, look func(string) (string, error)) *bytes.Buffer {
 	t.Helper()
-	origLook, origStat := lookPath, statFile
+	origLook := lookPath
 	origWriter, origFlags := log.Writer(), log.Flags()
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
 	log.SetFlags(0)
-	lookPath, statFile = look, stat
+	lookPath = look
 	pdftotextOnce, pdftotextBin = sync.Once{}, ""
 	t.Cleanup(func() {
-		lookPath, statFile = origLook, origStat
+		lookPath = origLook
 		log.SetOutput(origWriter)
 		log.SetFlags(origFlags)
 		pdftotextOnce, pdftotextBin = sync.Once{}, ""
@@ -33,13 +33,12 @@ func withPdftotextLookup(t *testing.T, look func(string) (string, error), stat f
 	return &logs
 }
 
-func notFound(string) (string, error)    { return "", errors.New("not found") }
-func noFile(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+func notFound(string) (string, error) { return "", errors.New("not found") }
 
 // Without pdftotext every PDF goes to the Go parser, and the choice is logged
 // once rather than per upload.
 func TestPDF_GoParserFallbackLoggedOnce(t *testing.T) {
-	logs := withPdftotextLookup(t, notFound, noFile)
+	logs := withPdftotextLookup(t, notFound)
 	data, err := os.ReadFile("testdata/sample.pdf")
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +74,7 @@ func TestPDF_PdftotextUsedWhenOnPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	lookups := 0
-	logs := withPdftotextLookup(t, func(string) (string, error) { lookups++; return fake, nil }, noFile)
+	logs := withPdftotextLookup(t, func(string) (string, error) { lookups++; return fake, nil })
 
 	for i := 0; i < 2; i++ {
 		text, err := ExtractTextFromPDFUsingPopplerWithOptions("x.pdf", 10*time.Second, []byte("%PDF-1.4"))
@@ -94,16 +93,42 @@ func TestPDF_PdftotextUsedWhenOnPath(t *testing.T) {
 	}
 }
 
-// ./pdftotext is used when it is not on PATH but present in the working
-// directory.
-func TestPDF_LocalPdftotextFallback(t *testing.T) {
-	withPdftotextLookup(t, notFound, func(name string) (os.FileInfo, error) {
-		if name == "./pdftotext" {
-			return nil, nil
-		}
-		return nil, os.ErrNotExist
-	})
-	if got := pdftotextPath(); got != "./pdftotext" {
-		t.Errorf("pdftotextPath() = %q, want ./pdftotext", got)
+// A pdftotext in the working directory is not used: only PATH counts.
+func TestPDF_WorkingDirectoryPdftotextIsIgnored(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pdftotext"), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	withPdftotextLookup(t, notFound)
+	if got := pdftotextPath(); got != "" {
+		t.Errorf("pdftotextPath() = %q, want the built-in parser", got)
+	}
+}
+
+// pdftotext parses uploaded files, so it does not get the host's secrets.
+func TestPDF_PdftotextGetsMinimalEnvironment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as a fake pdftotext")
+	}
+	t.Setenv("ENCRYPTION_KEY", "host-secret")
+	t.Setenv("LC_ALL", "C")
+	fake := filepath.Join(t.TempDir(), "pdftotext")
+	// Write the environment to <out>, the last argument.
+	script := "#!/bin/sh\nfor last; do :; done\nenv > \"$last\"\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	withPdftotextLookup(t, func(string) (string, error) { return fake, nil })
+
+	env, err := ExtractTextFromPDFUsingPopplerWithOptions("x.pdf", 10*time.Second, []byte("%PDF-1.4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(env, "ENCRYPTION_KEY") {
+		t.Errorf("pdftotext saw ENCRYPTION_KEY:\n%s", env)
+	}
+	if !strings.Contains(env, "LC_ALL=C") || !strings.Contains(env, "PATH=") {
+		t.Errorf("pdftotext is missing PATH or locale:\n%s", env)
 	}
 }
