@@ -98,6 +98,38 @@ CSRF tokens are signed with a key generated when Studio starts, so a restart inv
 
 To serve AI Studio under a path such as `https://example.com/ai-studio` instead of at the root of its own host name, set `BASE_PATH=/ai-studio` and include the prefix in `SITE_URL` (`SITE_URL=https://example.com/ai-studio`). The admin interface, portal, chat and API are then served under the prefix, and session and CSRF cookies are scoped to it. A reverse proxy in front of Studio may forward requests with or without the prefix; both work. OAuth clients that discover the authorization server from its issuer URL look for the metadata at `/.well-known/oauth-authorization-server/ai-studio` on the host root, so route that path to Studio's `/ai-studio/.well-known/oauth-authorization-server`. The OAuth consent redirect and the endpoints in that metadata are built from the origin of `SITE_URL` (`AUTH_SERVER_URL`) plus `BASE_PATH`, so a path in `SITE_URL` without `BASE_PATH` does not move them.
 
+### Endpoint URLs shown in the portal
+
+AI Studio builds the tool and datasource URLs that the portal and admin pages show from two settings:
+
+*   `TOOL_DISPLAY_URL`: the base of every tool endpoint shown. A tool is shown at `{TOOL_DISPLAY_URL}/tools/{slug}` (REST) and `{TOOL_DISPLAY_URL}/tools/{slug}/mcp` (MCP).
+*   `DATASOURCE_DISPLAY_URL`: the base of the datasource endpoints shown.
+
+Each one falls back to `PROXY_URL` when it is not set. Studio only displays these URLs; it never calls them. So set each one to the address your developers' clients will actually reach:
+
+*   **The edge gateway (Microgateway)**, in a hub-and-spoke deployment where developers call the edge:
+
+    ```bash
+    TOOL_DISPLAY_URL=http://edge-gateway.internal:9091
+    DATASOURCE_DISPLAY_URL=http://edge-gateway.internal:9091
+    ```
+
+*   **The embedded gateway**, when developers call AI Studio's own gateway (port `9090` by default):
+
+    ```bash
+    TOOL_DISPLAY_URL=http://ai-studio.internal:9090
+    DATASOURCE_DISPLAY_URL=http://ai-studio.internal:9090
+    ```
+
+*   **Your own DNS name or load balancer** in front of one or more gateways, the usual choice in production:
+
+    ```bash
+    TOOL_DISPLAY_URL=https://ai-gateway.example.com
+    DATASOURCE_DISPLAY_URL=https://ai-gateway.example.com
+    ```
+
+Both the embedded gateway and edge gateways serve the same tool REST and MCP endpoints. Choose the address by where your clients should connect, not by which gateway runs the tool.
+
 ### Unified Endpoint (Main Ingress)
 The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) sits at `/v1` by default. Move it when embedding the gateway in a host that already owns `/v1`, or remove it entirely; the per-LLM endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected either way.
 
