@@ -68,6 +68,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
 import { useEdition } from "../../context/EditionContext";
 import { getAppStatus } from "../../../utils/appStatus";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
 
 ChartJS.register(
   CategoryScale,
@@ -636,15 +638,28 @@ const AppDetails = () => {
 
   return (
     <>
+      {/* Edit sits in the header, as on the other detail pages: below the
+          log browser it was a long scroll away (#236). */}
       <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">App details</Typography>
-        <SecondaryLinkButton
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/apps")}
-          color="inherit"
-        >
-          Back to apps
-        </SecondaryLinkButton>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <SecondaryLinkButton
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate("/admin/apps")}
+            color="inherit"
+          >
+            Back to apps
+          </SecondaryLinkButton>
+          <Can permission={P.APPS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/apps/edit/${id}`)}
+            >
+              Edit app
+            </PrimaryButton>
+          </Can>
+        </Box>
       </TitleBox>
       <ContentBox>
         <Section title="Token Usage">
@@ -1057,20 +1072,6 @@ const AppDetails = () => {
           />
         </Section>
 
-        <Box
-          mt={4}
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/apps/edit/${id}`)}
-          >
-            Edit app
-          </PrimaryButton>
-        </Box>
       </ContentBox>
       <Snackbar
         open={snackbar.open}
