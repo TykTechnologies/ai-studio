@@ -320,6 +320,16 @@ QUEUE_BUFFER_SIZE=200                        # Local channel buffer size (defaul
   `POSTGRES_QUEUE_RECONNECT_INTERVAL` and backing off up to that interval times
   `POSTGRES_QUEUE_MAX_RECONNECT_RETRIES`, then re-issues every LISTEN.
   Notifications sent while it is disconnected are lost (a warning is logged).
+- **Large messages**: Postgres refuses a NOTIFY payload of 8000 bytes or more,
+  so before 2.3 a long chat response or stream chunk failed with
+  `payload string too long (SQLSTATE 22023)`. A queue message larger than
+  7000 bytes is now base64-encoded and split into chunks of 6000 characters.
+  The chunks are sent in one transaction, so Postgres delivers them together
+  and in order, or not at all, and the receiving session reassembles them
+  before routing (`queue_postgres_chunks.go`). Nothing is written to a table,
+  so there is nothing to clean up. A reassembly whose remaining chunks never
+  arrive is dropped after two minutes. The in-memory and NATS queues have no
+  such limit and are unchanged.
 
 #### Channel Naming Convention
 PostgreSQL queues use a structured channel naming convention:

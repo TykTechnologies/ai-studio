@@ -25,6 +25,7 @@ type OptimizedPostgreSQLQueue struct {
 	// The process-wide LISTEN connection and this session's channels on it
 	listener      *sharedListener
 	subscriptions []channelSubscription
+	reassembler   notifyReassembler // joins messages split across notifications
 
 	// Local channels for backward compatibility
 	messagesChan     chan *ChatResponse
@@ -141,7 +142,11 @@ func (psq *OptimizedPostgreSQLQueue) startConsumers() error {
 
 // handleNotification routes a notification to this session's local channels
 func (psq *OptimizedPostgreSQLQueue) handleNotification(payload string) {
-	if err := routePostgreSQLNotification(payload, psq.sessionID, psq.messagesChan, psq.streamChan, psq.errorsChan, psq.llmResponsesChan); err != nil {
+	msg, complete, err := psq.reassembler.add(payload, time.Now())
+	if err == nil && complete {
+		err = routePostgreSQLNotification(msg, psq.sessionID, psq.messagesChan, psq.streamChan, psq.errorsChan, psq.llmResponsesChan)
+	}
+	if err != nil {
 		slog.Error("failed to handle notification",
 			"session_id", psq.sessionID,
 			"error", err)
@@ -221,16 +226,11 @@ func (psq *OptimizedPostgreSQLQueue) publishToPostgreSQL(ctx context.Context, me
 	// Send NOTIFY command with timeout
 	channel := psq.getChannelName(messageType)
 
-	// Use the existing connection pool instead of creating new transactions,
-	// bounded so an exhausted pool cannot block the caller forever
+	// Use the existing connection pool, bounded so an exhausted pool cannot
+	// block the caller forever
 	ctx, cancel := withQueueDeadline(ctx, psq.config)
 	defer cancel()
-	_, err = psq.sqlDB.ExecContext(ctx, "SELECT pg_notify($1, $2)", channel, string(msgBytes))
-	if err != nil {
-		return fmt.Errorf("failed to notify: %w", err)
-	}
-
-	return nil
+	return notifyPostgreSQL(ctx, psq.sqlDB, channel, msgBytes)
 }
 
 // ConsumeMessages returns the local channel for ChatResponse messages
