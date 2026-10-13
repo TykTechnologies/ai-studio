@@ -75,6 +75,7 @@ func TestCredentialReferencesNeedSecretsRead(t *testing.T) {
 		}
 		w := performRequest(editor, "POST", tc.path, body)
 		assert.Equal(t, http.StatusForbidden, w.Code, "%s without secrets read: %s", tc.path, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"permission":"secrets:read"`, "the UI names the missing permission from this")
 	}
 
 	// With secrets read, the same writes go through.
@@ -104,6 +105,13 @@ func TestCredentialReferencesNeedSecretsRead(t *testing.T) {
 	require.NoError(t, db.First(&stored, tool.ID).Error)
 	assert.Equal(t, "$SECRET/TOOL_KEY", stored.AuthKey)
 
+	// Echoing the stored reference itself (not the placeholder) is a keep too.
+	toolEdit["data"].(map[string]interface{})["attributes"].(map[string]interface{})["auth_key"] = "$SECRET/TOOL_KEY"
+	w = performRequest(editor, "PATCH", fmt.Sprintf("/tools/%d", tool.ID), toolEdit)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NoError(t, db.First(&stored, tool.ID).Error)
+	assert.Equal(t, "$SECRET/TOOL_KEY", stored.AuthKey)
+
 	// Changing a reference is refused.
 	w = performRequest(editor, "PATCH", fmt.Sprintf("/llms/%d", llm.ID), map[string]interface{}{"data": map[string]interface{}{
 		"type": "LLM", "attributes": map[string]interface{}{"api_key": "$SECRET/OTHER_KEY"}}})
@@ -111,4 +119,36 @@ func TestCredentialReferencesNeedSecretsRead(t *testing.T) {
 	toolEdit["data"].(map[string]interface{})["attributes"].(map[string]interface{})["auth_key"] = "$ENV/TYK_AI_SECRET_KEY"
 	w = performRequest(editor, "PATCH", fmt.Sprintf("/tools/%d", tool.ID), toolEdit)
 	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	// Datasources and embedders: an editor keeps a stored reference but may
+	// not change it; a secrets reader may.
+	w = performRequest(reader, "POST", "/datasources", dsRefBody("ref-ds", "$ENV/DB_KEY"))
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var ds models.Datasource
+	require.NoError(t, db.Where("name = ?", "ref-ds").First(&ds).Error)
+	w = performRequest(editor, "PATCH", fmt.Sprintf("/datasources/%d", ds.ID), dsRefBody("ref-ds", "$ENV/DB_KEY"))
+	require.Equal(t, http.StatusOK, w.Code, "keeping the stored reference: %s", w.Body.String())
+	w = performRequest(editor, "PATCH", fmt.Sprintf("/datasources/%d", ds.ID), dsRefBody("ref-ds", "$SECRET/OTHER_KEY"))
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = performRequest(reader, "PATCH", fmt.Sprintf("/datasources/%d", ds.ID), dsRefBody("ref-ds", "$SECRET/OTHER_KEY"))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NoError(t, db.First(&ds, ds.ID).Error)
+	assert.Equal(t, "$SECRET/OTHER_KEY", ds.DBConnAPIKey)
+
+	embAttrs := func(key string) map[string]interface{} {
+		return embedderBody(map[string]interface{}{"name": "ref-emb", "vendor": "openai",
+			"endpoint": "https://api.openai.com/v1", "api_key": key, "model": "m", "privacy_score": 10})
+	}
+	w = performRequest(reader, "POST", "/embedders", embAttrs("$SECRET/EMB_KEY"))
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var emb models.Embedder
+	require.NoError(t, db.Where("name = ?", "ref-emb").First(&emb).Error)
+	w = performRequest(editor, "PATCH", fmt.Sprintf("/embedders/%d", emb.ID), embAttrs("$SECRET/EMB_KEY"))
+	require.Equal(t, http.StatusOK, w.Code, "keeping the stored reference: %s", w.Body.String())
+	w = performRequest(editor, "PATCH", fmt.Sprintf("/embedders/%d", emb.ID), embAttrs("$ENV/TYK_AI_SECRET_KEY"))
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = performRequest(reader, "PATCH", fmt.Sprintf("/embedders/%d", emb.ID), embAttrs("$SECRET/OTHER_EMB_KEY"))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NoError(t, db.First(&emb, emb.ID).Error)
+	assert.Equal(t, "$SECRET/OTHER_EMB_KEY", emb.APIKey)
 }

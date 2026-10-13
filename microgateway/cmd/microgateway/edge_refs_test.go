@@ -22,6 +22,13 @@ func TestEdgeIgnoresEnvReferencesInSnapshotFields(t *testing.T) {
 	assert.Equal(t, "edge-own-secret", secrets.GetValue("$ENV/MICROGATEWAY_ENCRYPTION_KEY", false),
 		"before the edge policy, the allowlist applies")
 
+	// A standalone gateway has no hub to resolve for it: its allowlist applies.
+	for _, mode := range []string{"", "standalone"} {
+		applyEdgeReferencePolicy(&config.Config{HubSpoke: config.HubSpokeConfig{Mode: mode}})
+		assert.Equal(t, "edge-own-secret", secrets.GetValue("$ENV/MICROGATEWAY_ENCRYPTION_KEY", false),
+			"mode %q turned the allowlist off", mode)
+	}
+
 	applyEdgeReferencePolicy(&config.Config{HubSpoke: config.HubSpokeConfig{Mode: "edge"}})
 
 	for _, v := range []string{"$ENV/MICROGATEWAY_ENCRYPTION_KEY", "$ENV/"} {

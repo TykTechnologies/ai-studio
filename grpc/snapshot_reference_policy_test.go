@@ -34,6 +34,19 @@ func TestSnapshotNeverCarriesUnlistedEnvValues(t *testing.T) {
 	require.NoError(t, raw.Create(llm).Error)
 	tool := &models.Tool{Name: "Probe tool", Slug: "probe-tool", ToolType: models.ToolTypeREST, Active: true, AuthKey: "$ENV/TYK_AI_SECRET_KEY"}
 	require.NoError(t, raw.Create(tool).Error)
+	embedder := &models.Embedder{Name: "Probe embedder", Vendor: models.OPENAI, ModelName: "m",
+		Endpoint: "$ENV/TYK_AI_SECRET_KEY", APIKey: "$ENV/TYK_AI_SECRET_KEY"}
+	require.NoError(t, raw.Create(embedder).Error)
+	ds := &models.Datasource{Name: "Probe datasource", Active: true, DBSourceType: "pinecone",
+		DBConnString: "$ENV/TYK_AI_SECRET_KEY", DBConnAPIKey: "$ENV/TYK_AI_SECRET_KEY", EmbedderID: &embedder.ID}
+	require.NoError(t, raw.Create(ds).Error)
+	guardrail := &models.Filter{Name: "Probe guardrail", Kind: models.FilterKindGuardrail, Config: models.JSONMap{
+		"provider":   "azure_content_safety",
+		"connection": map[string]any{"endpoint": "$ENV/TYK_AI_SECRET_KEY", "api_key": "$ENV/TYK_AI_SECRET_KEY"},
+		"detectors":  []any{map[string]any{"name": "hate"}},
+		"on_detect":  "block",
+	}}
+	require.NoError(t, raw.Create(guardrail).Error)
 
 	snap, err := server.getConfigurationSnapshot("")
 	require.NoError(t, err)
@@ -54,9 +67,34 @@ func TestSnapshotNeverCarriesUnlistedEnvValues(t *testing.T) {
 		assert.Contains(t, l.Metadata, `"vault":"https://vault.example"`, "an allowlisted name is resolved")
 	}
 	require.True(t, gotLLM)
+	var gotTool, gotDS, gotGuardrail bool
 	for _, tc := range snap.Tools {
 		if tc.Id == uint32(tool.ID) {
+			gotTool = true
 			assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, key, tc.AuthKeyEncrypted))
 		}
 	}
+	for _, d := range snap.Datasources {
+		if d.Id != uint32(ds.ID) {
+			continue
+		}
+		gotDS = true
+		assert.Equal(t, "$ENV/", decryptLikeMicrogateway(t, key, d.DbConnStringEncrypted))
+		assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, key, d.DbConnApiKeyEncrypted))
+		assert.Equal(t, "$ENV/", d.EmbedUrl)
+		assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, key, d.EmbedApiKeyEncrypted))
+	}
+	for _, f := range snap.Filters {
+		if f.Id != uint32(guardrail.ID) {
+			continue
+		}
+		gotGuardrail = true
+		// The rendering per field is the guardrail package's (a dud key for
+		// credentials, "$ENV/" or the dud key for endpoints); no form may
+		// carry the name or the value.
+		assert.Contains(t, f.Config, `"api_key":"`+secrets.RefusedCredential+`"`)
+		assert.NotContains(t, f.Config, "TYK_AI_SECRET_KEY")
+		assert.NotContains(t, f.Config, canary)
+	}
+	assert.True(t, gotTool && gotDS && gotGuardrail, "tool %v, datasource %v, guardrail %v", gotTool, gotDS, gotGuardrail)
 }
