@@ -153,10 +153,16 @@ func NewTool() *Tool {
 	return &Tool{}
 }
 
-// BeforeSave computes the slug from the tool name before saving
+// BeforeSave computes the slug from the tool name before saving, and
+// refuses a slug another tool already has (*SlugConflictError). The check
+// runs when the tool itself is created or saved; a column update (Updates
+// with a map) goes through PrepareToolUpdates instead.
 func (t *Tool) BeforeSave(tx *gorm.DB) error {
 	t.Slug = slug.Make(t.Name)
-	return nil
+	if dest, ok := tx.Statement.Dest.(*Tool); !ok || dest != t {
+		return nil
+	}
+	return checkToolSlug(hookDB(tx), t)
 }
 
 // Create a new tool

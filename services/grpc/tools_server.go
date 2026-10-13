@@ -264,6 +264,9 @@ func (s *ToolsServer) CreateTool(ctx context.Context, req *pb.CreateToolRequest)
 			Str("name", req.GetName()).
 			Str("tool_type", req.GetToolType()).
 			Msg("Failed to create tool via gRPC")
+		if errors.Is(err, models.ErrSlugConflict) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to create tool: %v", err)
 	}
 
@@ -315,6 +318,9 @@ func (s *ToolsServer) UpdateTool(ctx context.Context, req *pb.UpdateToolRequest)
 			Uint32("tool_id", toolID).
 			Str("name", req.GetName()).
 			Msg("Failed to update tool via gRPC")
+		if errors.Is(err, models.ErrSlugConflict) {
+			return nil, status.Error(codes.AlreadyExists, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "failed to update tool: %v", err)
 	}
 

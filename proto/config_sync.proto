@@ -201,6 +201,9 @@ message ConfigurationReloadResponse {
   string config_version_before = 6; // Config version before reload
   string config_version_after = 7;  // Config version after reload (if successful)
   google.protobuf.Timestamp timestamp = 8; // When this status was reported
+  // READY only: entries the edge could not store and left out, one line
+  // each (pkg/snapshotguard). The rest of the configuration is applied.
+  repeated string skipped_entries = 9;
 }
 
 enum ReloadPhase {

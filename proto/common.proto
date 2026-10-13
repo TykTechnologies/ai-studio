@@ -333,6 +333,11 @@ message ConfigurationSnapshot {
   repeated AccessTokenConfig access_tokens = 14;
 
   repeated SemanticRouterConfig semantic_routers = 15; // Enterprise: Semantic routers
+
+  // Entries the hub left out of this snapshot because an edge could not
+  // store them (a key edges keep unique, such as a tool slug, used twice),
+  // one line each. Edges report them with their own (pkg/snapshotguard).
+  repeated string omitted_entries = 16;
 }
 
 // ConfigurationChange represents a single configuration change

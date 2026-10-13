@@ -46,6 +46,10 @@ type SimpleEdgeClient struct {
 	configMu       sync.RWMutex
 	loadedChecksum string
 	loadedVersion  string
+	// appliedSource, when set, says which configuration the edge applied to
+	// its database (services.EdgeSyncService.ReportedConfig); heartbeats
+	// report that instead of the last snapshot received.
+	appliedSource func() (checksum, version string, ok bool)
 
 	// Build information
 	version   string
@@ -254,11 +258,28 @@ func (c *SimpleEdgeClient) setLoadedConfig(snap *pb.ConfigurationSnapshot) {
 	c.loadedVersion = snap.Version
 }
 
+// SetAppliedConfigSource makes heartbeats report the configuration the edge
+// applied, as source tells it, rather than the last snapshot received: a
+// snapshot that failed to apply, or was applied without some entries, then
+// shows on the hub as not in sync.
+func (c *SimpleEdgeClient) SetAppliedConfigSource(source func() (checksum, version string, ok bool)) {
+	c.configMu.Lock()
+	defer c.configMu.Unlock()
+	c.appliedSource = source
+}
+
 // loadedConfig returns the checksum and version of the loaded snapshot.
 func (c *SimpleEdgeClient) loadedConfig() (checksum, version string) {
 	c.configMu.RLock()
-	defer c.configMu.RUnlock()
-	return c.loadedChecksum, c.loadedVersion
+	source := c.appliedSource
+	checksum, version = c.loadedChecksum, c.loadedVersion
+	c.configMu.RUnlock()
+	if source != nil {
+		if sum, ver, ok := source(); ok {
+			return sum, ver
+		}
+	}
+	return checksum, version
 }
 
 // GetEventBus returns the edge client's event bus for subscribing to events.

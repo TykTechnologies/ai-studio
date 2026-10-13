@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -38,9 +39,12 @@ func TestGovernedMetadataEnforcementOnLLMHandlers(t *testing.T) {
 		}}
 	require.NoError(t, svc.CreateSchema(schema))
 
+	// LLM names must have distinct slugs: each body names a new LLM.
+	llmN := 0
 	llmBody := func(governed interface{}) map[string]interface{} {
+		llmN++
 		attrs := map[string]interface{}{
-			"name": "gpt", "api_key": "k", "api_endpoint": "https://api.openai.com/v1", "vendor": "openai",
+			"name": fmt.Sprintf("gpt %d", llmN), "api_key": "k", "api_endpoint": "https://api.openai.com/v1", "vendor": "openai",
 			"active": false, "default_model": "gpt-4", "privacy_score": 50,
 		}
 		if governed != nil {
@@ -167,8 +171,10 @@ func TestGovernedMetadataEnforcementOnToolAndDatasource(t *testing.T) {
 		Enforcement: models.MetadataEnforcementEnforce,
 		Fields:      []models.MetadataFieldDef{{Key: "team", Label: "Team", Type: "string", Required: true}}}))
 
+	toolN := 0
 	toolBody := func(governed interface{}) map[string]interface{} {
-		attrs := map[string]interface{}{"name": "weather", "tool_type": "REST", "description": "d", "privacy_score": 10, "oas_spec": testToolSpec}
+		toolN++
+		attrs := map[string]interface{}{"name": fmt.Sprintf("weather %d", toolN), "tool_type": "REST", "description": "d", "privacy_score": 10, "oas_spec": testToolSpec}
 		if governed != nil {
 			attrs["governed_metadata"] = governed
 		}

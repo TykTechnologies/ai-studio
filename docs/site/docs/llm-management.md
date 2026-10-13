@@ -28,7 +28,7 @@ Administrators can configure connections to different LLM providers through the 
     *   **Allowed Models:** Specify the exact model names from the vendor that can be used via this configuration (e.g., `gpt-4-turbo`, `claude-3-opus-20240229`).
     *   **Default Model:** The model used if a request doesn't specify one.
 
-5.  **LLM Slug:** A unique identifier (auto-generated from the LLM name) used in API paths to target this specific LLM configuration. The proxy endpoints use this slug:
+5.  **LLM Slug:** A unique identifier (auto-generated from the LLM name) used in API paths to target this specific LLM configuration. Two LLMs cannot share a slug, in any namespace. A name that differs from another LLM's only in case, spaces or punctuation is refused (`400` from the admin API, `AlreadyExists` from the plugin service API). The proxy endpoints use this slug:
     *   `/llm/call/{llmSlug}/...` - Unified endpoint (handles both streaming and non-streaming)
     *   `/llm/rest/{llmSlug}/...` - REST-only requests
     *   `/llm/stream/{llmSlug}/...` - Streaming-only requests

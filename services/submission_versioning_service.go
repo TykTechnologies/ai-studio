@@ -246,6 +246,9 @@ func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Su
 	case models.SubmissionResourceTypeDatasource:
 		return s.applyDatasourceUpdates(tx, targetID, updates, privacyScore)
 	case models.SubmissionResourceTypeTool:
+		if err := models.PrepareToolUpdates(tx, targetID, updates); err != nil {
+			return err
+		}
 		return tx.Model(&models.Tool{}).Where("id = ?", targetID).Updates(updates).Error
 	}
 	return nil
@@ -521,6 +524,9 @@ func embedderInputFromUpdates(updates map[string]interface{}) (EmbedderInput, bo
 func (s *Service) applyToolUpdate(id uint, payload models.JSONMap, privacyScore int) error {
 	updates := payloadToUpdatesMap(payload)
 	updates["privacy_score"] = privacyScore
+	if err := models.PrepareToolUpdates(s.DB, id, updates); err != nil {
+		return err
+	}
 	return s.DB.Model(&models.Tool{}).Where("id = ?", id).Updates(updates).Error
 }
 

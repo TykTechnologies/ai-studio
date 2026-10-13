@@ -159,6 +159,9 @@ func (a *API) createTool(c *gin.Context) {
 			MCPAccessEnabled:  input.Data.Attributes.MCPAccessEnabled,
 		},
 	)
+	if respondToolSlugConflict(c, err) {
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -333,6 +336,9 @@ func (a *API) updateTool(c *gin.Context) {
 
 	// Save changes
 	if err := tool.Update(a.config.DB); err != nil {
+		if respondToolSlugConflict(c, err) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -1607,4 +1613,19 @@ func (a *API) callToolOperation(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// respondToolSlugConflict answers 409 for a tool name whose slug another tool
+// already has (models.SlugConflictError) and reports whether it did.
+func respondToolSlugConflict(c *gin.Context, err error) bool {
+	if !errors.Is(err, models.ErrSlugConflict) {
+		return false
+	}
+	c.JSON(http.StatusConflict, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Conflict", Detail: err.Error()}},
+	})
+	return true
 }

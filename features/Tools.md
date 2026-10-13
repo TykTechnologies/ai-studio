@@ -21,6 +21,8 @@ The Midsommar Tool System provides a framework for integrating external services
 * **Chat Room Owner:** Configures default tools for chat rooms and manages tool usage within conversations.
 * **End User:** Uses tools within chat sessions to accomplish tasks, receives tool-enhanced responses from LLMs.
 
+**Slug uniqueness:** A tool's slug (`slug.Make(name)`) addresses it on every gateway, and edges store it under a unique index. `models.Tool.BeforeSave` refuses a slug another live tool has (`*models.SlugConflictError`, `errors.Is(err, models.ErrSlugConflict)`), in any namespace. Column updates that rename a tool (submission update approval and rollback, which use an `Updates` map and run no slug hook) go through `models.PrepareToolUpdates`, which also writes the new slug. The admin API answers `409`, submission approval `400`, and the plugin service API `AlreadyExists`. LLMs get the same check on their derived slug (`models.LLM.BeforeSave`). A row whose slug is unchanged is not re-checked, so duplicates stored before 2.3 stay editable. The hub leaves them out of edge snapshots (`pkg/snapshotguard`, lowest ID kept, listed in `omitted_entries`). Edges run the same guard before applying a snapshot, and report what was left out on the push (`skipped_entries`) and through a checksum of their own in heartbeats.
+
 **2. Architecture & Data Flow**
 
 **Complete System Architecture:**

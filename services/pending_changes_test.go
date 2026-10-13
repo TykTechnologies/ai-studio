@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -261,7 +262,7 @@ func TestPendingChanges_CapsPerSourceAndKeepsTotal(t *testing.T) {
 
 	const extra = 5
 	for i := 0; i < 200+extra; i++ {
-		llm := &models.LLM{Name: "llm", Namespace: "edge-1"}
+		llm := &models.LLM{Name: fmt.Sprintf("llm %d", i), Namespace: "edge-1"}
 		require.NoError(t, db.Create(llm).Error)
 		// Older ids changed earlier; the newest id is the newest change.
 		at := push.Add(time.Duration(i+1) * time.Second)

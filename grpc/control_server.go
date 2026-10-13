@@ -25,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
+	"github.com/TykTechnologies/midsommar/v2/pkg/snapshotguard"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -2244,9 +2245,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		for _, tool := range tools {
 			toolIDs = append(toolIDs, tool.ID)
 		}
+		// A deleted filter is soft-deleted and keeps its tool_filters rows;
+		// it no longer filters anything, so it is not listed (edges leave
+		// out a tool whose listed filter they do not get).
 		if err := s.db.Table("tool_filters").
-			Select("tool_id, filter_id").
-			Where("tool_id IN ?", toolIDs).
+			Select("tool_filters.tool_id, tool_filters.filter_id").
+			Joins("JOIN filters ON filters.id = tool_filters.filter_id AND filters.deleted_at IS NULL").
+			Where("tool_filters.tool_id IN ?", toolIDs).
 			Find(&toolFilterAssociations).Error; err != nil {
 			logger.Log.Warn().Err(err).Msg("Failed to query tool_filters associations")
 		}
@@ -2539,6 +2544,20 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("access_token_count", len(snapshot.AccessTokens)).
 		Msg("Generated configuration snapshot for edge")
 
+	// Entries an edge cannot store (a key edges keep unique, such as a tool
+	// or LLM slug, used twice: rows written before the hub refused that) are
+	// left out here, so that edges of any version apply the rest; edges that
+	// know omitted_entries report them back. The lowest ID keeps the key.
+	if clean, left := snapshotguard.Sanitize(snapshot); len(left) > 0 {
+		snapshot = clean
+		snapshot.OmittedEntries = snapshotguard.Strings(left)
+		for _, line := range snapshot.OmittedEntries {
+			if omittedEntryLogDue(namespace + "\x00" + line) {
+				logger.Log.Warn().Str("namespace", namespace).Msg("Configuration snapshot for edges: " + line + "; rename it so edges can load it")
+			}
+		}
+	}
+
 	// Compute checksum for the snapshot
 	checksum, err := ComputeSnapshotChecksum(snapshot)
 	if err != nil {
@@ -2560,6 +2579,19 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	return snapshot, nil
+}
+
+// omittedEntryLogged is when each left-out snapshot entry was last logged.
+// Snapshots are rebuilt on every edge fetch; an entry is logged once an hour.
+var omittedEntryLogged sync.Map // namespace + line -> time.Time
+
+func omittedEntryLogDue(key string) bool {
+	now := time.Now()
+	if last, ok := omittedEntryLogged.Load(key); ok && now.Sub(last.(time.Time)) < time.Hour {
+		return false
+	}
+	omittedEntryLogged.Store(key, now)
+	return true
 }
 
 // updateNamespaceSyncStatus updates the sync status for a namespace in the database.

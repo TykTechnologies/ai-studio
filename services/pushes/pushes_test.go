@@ -419,6 +419,28 @@ func TestReadyWithStaleChecksumIsAWarning(t *testing.T) {
 	})
 }
 
+// READY with entries the edge could not store: the push succeeded with a
+// warning that names them, even when the checksums match.
+func TestReadyWithSkippedEntriesIsAWarning(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		a := newReplica(t, db, "node-a", Options{})
+		addEdge(t, db, "edge-1", "default", models.EdgeStatusConnected, "node-a")
+		a.streams.open("edge-1", "s")
+		op := push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}}).Operation.OperationID
+		a.c.dispatch()
+		setChecksums(t, db, "default", "same", map[string]string{"edge-1": "same"})
+		skipped := []string{`tool 3 left out: slug "page-fetcher" is already used by tool 2`}
+		a.c.HandleReloadResponse(&pb.ConfigurationReloadResponse{OperationId: op, EdgeId: "edge-1",
+			Phase: pb.ReloadPhase_READY, Success: true, SkippedEntries: skipped})
+
+		cmd := command(t, db, op, "edge-1")
+		assert.Equal(t, models.PushCommandSucceededWarning, cmd.Status)
+		assert.Contains(t, cmd.Warning, "without 1 entry it could not store")
+		assert.Contains(t, cmd.Warning, skipped[0])
+		assert.Equal(t, models.PushOperationSucceededWarning, operation(t, db, op).Status)
+	})
+}
+
 // An edge that never answers is retried up to the attempt limit, then
 // failed with the history of every attempt. A progress report resets the
 // answer timeout.

@@ -241,6 +241,11 @@ func main() {
 
 				grpcProvider.SetEdgeClient(edgeClient)
 
+				// Heartbeats report the configuration applied to SQLite: a
+				// snapshot that failed, or was applied without entries the
+				// edge could not store, shows on the hub as not in sync.
+				edgeClient.SetAppliedConfigSource(services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace).ReportedConfig)
+
 				// If edge client already has configuration, sync it to SQLite
 				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {
 					log.Debug().
