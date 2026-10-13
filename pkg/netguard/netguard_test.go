@@ -1,6 +1,7 @@
 package netguard
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,11 @@ func TestIsInternalIP(t *testing.T) {
 		"fd12:3456::1",
 		"fe80::1",
 		"0.0.0.0",
+		"0.1.2.3",         // "this network"
+		"100.64.0.1",      // shared address space (CGNAT)
+		"100.100.100.200", // Alibaba Cloud metadata endpoint
+		"100.127.255.254",
+		"::ffff:100.100.100.200",
 	}
 	for _, s := range internal {
 		if !IsInternalIP(net.ParseIP(s)) {
@@ -45,11 +51,44 @@ func TestIsInternalIP(t *testing.T) {
 		"1.1.1.1",
 		"172.32.0.1", // just outside 172.16/12
 		"11.0.0.1",
+		"100.63.255.255", // just below 100.64/10
+		"100.128.0.1",    // just above 100.64/10
 		"2606:4700:4700::1111",
 	}
 	for _, s := range external {
 		if IsInternalIP(net.ParseIP(s)) {
 			t.Errorf("expected %s to be classified external", s)
+		}
+	}
+}
+
+func TestHostIsInternal(t *testing.T) {
+	lookup := func(host string) ([]net.IP, error) {
+		switch host {
+		case "public.example.com":
+			return []net.IP{net.ParseIP("93.184.216.34")}, nil
+		case "mixed.example.com":
+			return []net.IP{net.ParseIP("93.184.216.34"), net.ParseIP("10.0.0.7")}, nil
+		case "cgnat.example.com":
+			return []net.IP{net.ParseIP("100.100.100.200")}, nil
+		}
+		return nil, fmt.Errorf("no such host %q", host)
+	}
+	for host, want := range map[string]bool{
+		"localhost":            true,
+		"Plugin.LOCALHOST.":    true,
+		"10.1.2.3":             true,
+		"[::1]":                true,
+		"100.100.100.200":      true,
+		"mixed.example.com":    true, // any internal address taints the host
+		"cgnat.example.com":    true,
+		"unresolvable.invalid": true, // resolution failure counts as internal
+		"public.example.com":   false,
+		"8.8.8.8":              false,
+		"2606:4700:4700::1111": false,
+	} {
+		if got := HostIsInternal(host, lookup); got != want {
+			t.Errorf("HostIsInternal(%q) = %v, want %v", host, got, want)
 		}
 	}
 }
