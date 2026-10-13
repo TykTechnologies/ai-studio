@@ -1385,29 +1385,83 @@ type CallParams struct {
 	Parameters map[string][]string    `json:"parameters"`
 }
 
+// PreflightTokenLengthCheck trims the oldest history until the estimate fits
+// LLMSettings.MaxLength (0 or less means no limit). The first message (the
+// system prompt) is kept, and so is the latest turn: the latest user message
+// and everything after it. History goes a turn at a
+// time: an assistant message that calls tools goes together with the tool
+// results that answer it, because a tool result without its call, or a call
+// without its results, is refused by every vendor.
 func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []llms.MessageContent {
 	maxInputTokens := cs.chatRef.LLMSettings.MaxLength
 	removed := 0
-	for {
-		tokenLength := cs.estimateTokenLength(msgs)
-		slog.Info("preflight token count", "estiamte", tokenLength)
-		if tokenLength <= maxInputTokens {
-			break
-		}
-
-		// Keep the first message (system prompt) and remove the second message if we have enough messages
-		if len(msgs) >= 3 {
-			msgs = append(msgs[:1], msgs[2:]...)
-			removed++
-		} else {
-			// Not enough messages to remove while keeping system prompt
-			break
+	if maxInputTokens > 0 {
+		for {
+			tokenLength := cs.estimateTokenLength(msgs)
+			if tokenLength <= maxInputTokens {
+				break
+			}
+			// The oldest turn after the system prompt. It may not reach the
+			// turn being answered: the latest user message and everything
+			// after it (or, with no user message, the last message).
+			n := oldestTurnLength(msgs, 1)
+			if n == 0 || 1+n > latestTurnStart(msgs) {
+				break
+			}
+			msgs = append(msgs[:1], msgs[1+n:]...)
+			removed += n
 		}
 	}
-
-	fmt.Println("REMOVED", removed, "messages to stay within token limit")
-
+	// Tool results whose call is gone (history trimmed before this, or a
+	// window that starts mid-turn) are dropped too.
+	for len(msgs) > 2 && msgs[1].Role == llms.ChatMessageTypeTool && !callsTools(msgs[0]) {
+		msgs = append(msgs[:1], msgs[2:]...)
+		removed++
+	}
+	if removed > 0 {
+		slog.Info("chat history trimmed to fit the model's input length", "session_id", cs.id, "removed_messages", removed, "max_length", maxInputTokens)
+	}
 	return msgs
+}
+
+// latestTurnStart is the index of the latest user message, which with what
+// follows it is the turn being answered, or of the last message when there
+// is no user message after the first.
+func latestTurnStart(msgs []llms.MessageContent) int {
+	for i := len(msgs) - 1; i >= 1; i-- {
+		if msgs[i].Role == llms.ChatMessageTypeHuman {
+			return i
+		}
+	}
+	return len(msgs) - 1
+}
+
+// oldestTurnLength is the number of messages, from index i, that make up one
+// turn: an assistant message that calls tools with the tool results after
+// it, a run of tool results, or a single message.
+func oldestTurnLength(msgs []llms.MessageContent, i int) int {
+	if i >= len(msgs) {
+		return 0
+	}
+	n := 1
+	if msgs[i].Role == llms.ChatMessageTypeTool || callsTools(msgs[i]) {
+		for i+n < len(msgs) && msgs[i+n].Role == llms.ChatMessageTypeTool {
+			n++
+		}
+	}
+	return n
+}
+
+func callsTools(m llms.MessageContent) bool {
+	if m.Role != llms.ChatMessageTypeAI {
+		return false
+	}
+	for _, p := range m.Parts {
+		if _, ok := p.(llms.ToolCall); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (cs *ChatSession) estimateTokenLength(msgs []llms.MessageContent) int {
@@ -1422,15 +1476,17 @@ func (cs *ChatSession) estimateTokenLength(msgs []llms.MessageContent) int {
 	total := 0
 	for _, m := range msgs {
 		for _, p := range m.Parts {
-			switch p.(type) {
+			switch part := p.(type) {
 			case llms.TextContent:
-				text := p.(llms.TextContent).Text
-				token := tke.Encode(text, nil, nil)
-				total += len(token)
+				total += len(tke.Encode(part.Text, nil, nil))
 			case llms.ToolCallResponse:
-				text := p.(llms.ToolCallResponse).Content
-				token := tke.Encode(text, nil, nil)
-				total += len(token)
+				total += len(tke.Encode(part.Content, nil, nil))
+			case llms.ToolCall:
+				// The call's name and arguments are sent too.
+				if part.FunctionCall != nil {
+					total += len(tke.Encode(part.FunctionCall.Name, nil, nil))
+					total += len(tke.Encode(part.FunctionCall.Arguments, nil, nil))
+				}
 			}
 		}
 	}
