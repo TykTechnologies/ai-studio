@@ -1677,13 +1677,15 @@ func (cs *ChatSession) executeRESTToolCall(ctx context.Context, t llms.ToolCall,
 	defer span.End()
 
 	opts := make([]universalclient.ClientOption, 0)
-	if toolDef.AuthKey != "" {
+	// The tool is loaded with its secret references kept (they are what API
+	// responses show); the call resolves them, here and only here.
+	if authKey := secrets.GetValue(toolDef.AuthKey, false); authKey != "" {
 		schemaName := toolDef.AuthSchemaName
 		if toolDef.AuthSchemaName == "" {
 			schemaName = "apiKey"
 		}
 
-		opts = append(opts, universalclient.WithAuth(schemaName, toolDef.AuthKey))
+		opts = append(opts, universalclient.WithAuth(schemaName, authKey))
 	}
 
 	opts = append(opts, universalclient.WithResponseFormat(universalclient.ResponseFormatJSON))

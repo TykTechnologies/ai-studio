@@ -856,8 +856,10 @@ func (s *Service) CallToolOperation(toolID uint, operationID string, params map[
 		return nil, err
 	}
 
-	// Use cached client for better performance
-	client, err := s.getCachedUniversalClient(tool, tool.AuthSchemaName, tool.AuthKey)
+	// The tool is loaded with its secret references kept (they are what API
+	// responses show); the call resolves them. The client cache is keyed by
+	// a hash of the resolved key, so a rotated secret gets a new client.
+	client, err := s.getCachedUniversalClient(tool, tool.AuthSchemaName, secrets.GetValue(tool.AuthKey, false))
 	if err != nil {
 		return nil, err
 	}
