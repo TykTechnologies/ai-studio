@@ -437,6 +437,43 @@ func TestGuardrailRunner_DoesNotResolveStudioEnv(t *testing.T) {
 	}
 }
 
+// At the edge, a credential the hub could not resolve arrives as the dud key
+// secrets.RefusedCredential (and an endpoint as a bare "$ENV/"). The runner
+// treats both as unresolved: no provider is built, so no client is called
+// with the dud key or falls back to credentials from the edge's environment.
+func TestGuardrailRunner_RefusedCredentialNeverReachesProvider(t *testing.T) {
+	built := false
+	guardrails.RegisterSpec(guardrails.Spec{
+		Name: "fake_dud", DisplayName: "fake_dud",
+		Detectors:        []guardrails.DetectorSpec{{Name: "secrets"}},
+		ConnectionFields: []guardrails.ConnectionField{{Name: "api_key", Secret: true}, {Name: "endpoint"}},
+	})
+	guardrails.RegisterFactory("fake_dud", func(cfg guardrails.Config) (guardrails.Provider, error) {
+		built = true
+		return &fakeProvider{}, nil
+	})
+	for name, conn := range map[string]map[string]any{
+		"dud key":       {"api_key": secrets.RefusedCredential, "endpoint": "http://x"},
+		"bare endpoint": {"api_key": "k", "endpoint": "$ENV/"},
+	} {
+		built = false
+		f := guardrailFilter("dud-"+strings.ReplaceAll(name, " ", "-"), false, models.JSONMap{
+			"provider":   "fake_dud",
+			"detectors":  []any{map[string]any{"name": "secrets"}},
+			"on_detect":  guardrails.ActionBlock,
+			"fail_mode":  "closed",
+			"connection": conn,
+		})
+		out, err := NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "x", Messages: []llms.MessageContent{userMsg("x")}}, nil)
+		if built {
+			t.Errorf("%s: provider built", name)
+		}
+		if err == nil && (out == nil || !out.Block) {
+			t.Errorf("%s: fail-closed guardrail passed: out=%+v err=%v", name, out, err)
+		}
+	}
+}
+
 func TestGuardrailRunner_MisconfiguredFilterErrors(t *testing.T) {
 	f := guardrailFilter("bad", false, models.JSONMap{"provider": "no_such_provider", "detectors": []any{map[string]any{"name": "x"}}, "on_detect": "block"})
 	if _, err := NewFilterRunner(f).RunScript(&ScriptInput{RawInput: "x"}, nil); err == nil {

@@ -28,7 +28,7 @@ func TestControlServer_SnapshotGuardrailEnvReferences(t *testing.T) {
 			"detectors": []any{map[string]any{"name": "prompt_attack"}},
 			"on_detect": "block",
 			"connection": map[string]any{
-				"endpoint": "https://classifier.example/v1",
+				"endpoint": "$ENV/CLASSIFIER_ENDPOINT_UNLISTED",
 				"api_key":  "$ENV/TYK_AI_SECRET_KEY",
 				"token":    "$ENV/GUARDRAIL_SNAPSHOT_KEY",
 				"key2":     "$ENV/CLASSIFIER_SNAPSHOT_KEY",
@@ -49,7 +49,11 @@ func TestControlServer_SnapshotGuardrailEnvReferences(t *testing.T) {
 		// A refused name never ships: edges before 2.3 resolve $ENV/ against
 		// their own environment. A bare "$ENV/" resolves to empty there.
 		assert.NotContains(t, f.Config, "TYK_AI_SECRET_KEY", "a refused reference name reached the snapshot")
-		assert.Contains(t, f.Config, `"api_key":"$ENV/"`, "a refused reference ships as a bare $ENV/")
+		// A secret field ships a dud key: a provider client could otherwise
+		// fill an empty key from its own environment. A non-secret field
+		// (the endpoint) ships a bare "$ENV/", empty on released edges.
+		assert.Contains(t, f.Config, `"api_key":"`+secrets.RefusedCredential+`"`, "a refused credential ships as the dud key")
+		assert.Contains(t, f.Config, `"endpoint":"$ENV/"`, "a refused endpoint ships as a bare $ENV/")
 		assert.NotContains(t, f.Config, "unlisted-prefixed-value", "a GUARDRAIL_ prefix is not an exemption")
 		assert.NotContains(t, f.Config, "GUARDRAIL_SNAPSHOT_KEY")
 		assert.Contains(t, f.Config, "listed-key-value", "an allowlisted variable resolves")

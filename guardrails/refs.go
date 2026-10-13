@@ -13,8 +13,12 @@ func ResolveConnectionValue(v string) string {
 	return secrets.ResolveRef(v)
 }
 
-// IsReference reports whether v is still a $SECRET/ or $ENV/ reference.
-func IsReference(v string) bool { return secrets.IsReference(v) }
+// IsReference reports whether v is still a $SECRET/ or $ENV/ reference, or
+// the dud key the hub sends an edge for a credential it could not resolve
+// (secrets.RefusedCredential): either way the provider must not be called.
+func IsReference(v string) bool {
+	return secrets.IsReference(v) || v == secrets.RefusedCredential
+}
 
 // NewConnectionReferences lists the connection keys of updated (as
 // "connection.<key>") holding a $SECRET/ or $ENV/ reference old does not hold

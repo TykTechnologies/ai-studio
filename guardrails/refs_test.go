@@ -41,3 +41,26 @@ func TestNewConnectionReferences(t *testing.T) {
 		t.Errorf("unchanged references reported: %v", got)
 	}
 }
+
+// What an edge gets for a connection value the hub left unresolved: a dud key
+// for a secret (or undeclared) field, so no provider client falls back to
+// credentials from the edge's own environment; a bare "$ENV/" for other
+// fields. Resolved values pass through.
+func TestEdgeConnectionValue(t *testing.T) {
+	cases := []struct{ provider, field, in, want string }{
+		{ProviderHTTP, "api_key", "$ENV/X", secrets.RefusedCredential},
+		{ProviderHTTP, "endpoint", "$ENV/X", "$ENV/"},
+		{ProviderHTTP, "undeclared", "$SECRET/Y", secrets.RefusedCredential},
+		{"no_such_provider", "endpoint", "$ENV/X", secrets.RefusedCredential},
+		{ProviderHTTP, "api_key", "resolved-key", "resolved-key"},
+		{ProviderHTTP, "endpoint", "https://x", "https://x"},
+	}
+	for _, c := range cases {
+		if got := EdgeConnectionValue(c.provider, c.field, c.in); got != c.want {
+			t.Errorf("EdgeConnectionValue(%s, %s, %q) = %q, want %q", c.provider, c.field, c.in, got, c.want)
+		}
+	}
+	if !IsReference(secrets.RefusedCredential) {
+		t.Error("the dud key must count as unresolved, so the runner never calls the provider with it")
+	}
+}

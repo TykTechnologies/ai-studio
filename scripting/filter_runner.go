@@ -205,7 +205,7 @@ func (g *guardrailRunner) prepare() (*preparedGuardrail, error) {
 		if len(unresolved) > 0 {
 			sort.Strings(unresolved)
 			partial = &preparedGuardrail{cfg: cfg}
-			return nil, fmt.Errorf("guardrail '%s': %s not resolved (unknown secret, or an $ENV/ variable not listed in %s)", g.filter.Name, strings.Join(unresolved, ", "), secrets.EnvRefAllowlistVar)
+			return nil, fmt.Errorf("guardrail '%s': %s not resolved (an unknown secret, an $ENV/ variable not listed in %s, or a reference the hub could not resolve)", g.filter.Name, strings.Join(unresolved, ", "), secrets.EnvRefAllowlistVar)
 		}
 
 		provider, err := guardrails.NewProvider(cfg)
