@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -487,7 +488,7 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 		// The template applies to datasources only — tools should not be blocked
 		draft, err := svc.CreateSubmission(
 			user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "Tool No Attestation", "oas_spec": "dGVzdA=="},
+			models.JSONMap{"name": "Tool No Attestation", "oas_spec": base64.StdEncoding.EncodeToString([]byte(validOASSpec))},
 			nil, 5, "", "", "", "", nil, "", "",
 		)
 		require.NoError(t, err)

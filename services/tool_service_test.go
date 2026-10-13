@@ -46,6 +46,29 @@ func TestCreateAndUpdateTool_RejectUnusableSpec(t *testing.T) {
 	ops, err := service.ListToolOperationsFromSpec(tool.ID)
 	assert.NoError(t, err)
 	assert.ElementsMatch(t, []string{"listUsers", "createUser"}, ops)
+
+	// CLIENT tools hold a client tool definition, not an OpenAPI document.
+	clientSpec := base64.StdEncoding.EncodeToString([]byte(`{"ui":{"kind":"present","title":"Present"}}`))
+	client, err := service.CreateTool("Client", "d", models.ToolTypeClient, clientSpec, 1, "", "")
+	assert.NoError(t, err)
+	_, err = service.UpdateTool(client.ID, "Client renamed", "d", models.ToolTypeClient, clientSpec, 1, "", "")
+	assert.NoError(t, err)
+}
+
+// A tool submission with an unusable spec is refused when it is submitted,
+// not later when an admin approves it.
+func TestSubmitSubmission_RejectsUnusableToolSpec(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := NewService(db)
+	user := createSubmissionTestUser(t, service, "spec-submitter@test.com")
+
+	sub, err := service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusDraft,
+		models.JSONMap{"name": "Bad Spec Tool", "tool_type": models.ToolTypeREST, "oas_spec": base64.StdEncoding.EncodeToString([]byte("test"))},
+		nil, 1, "", "contact@test.com", "", "", nil, "", "")
+	assert.NoError(t, err)
+
+	_, err = service.SubmitSubmission(sub.ID, user.ID)
+	assert.ErrorIs(t, err, ErrInvalidToolSpec)
 }
 
 func TestToolService(t *testing.T) {

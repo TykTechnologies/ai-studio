@@ -50,7 +50,7 @@ type ToolCreateOptions struct {
 // plugin gRPC), so this is the one place the access-method default for new
 // tools is applied.
 func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string, opts ToolCreateOptions) (*models.Tool, error) {
-	if err := ValidateToolOASSpec(oasSpec); err != nil {
+	if err := ValidateToolOASSpec(toolType, oasSpec); err != nil {
 		return nil, err
 	}
 	restEnabled, mcpEnabled := models.DefaultToolRESTAccessEnabled, models.DefaultToolMCPAccessEnabled
@@ -170,12 +170,16 @@ func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType
 
 // UpdateTool updates an existing tool with validity checks
 func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
-	if err := ValidateToolOASSpec(oasSpec); err != nil {
-		return nil, err
-	}
 	tool, err := s.GetToolByID(id)
 	if err != nil {
 		return nil, err
+	}
+	// Only a changed spec (or type) is checked, so a tool stored with a bad
+	// spec before validation existed can still be renamed or deactivated.
+	if oasSpec != tool.OASSpec || toolType != tool.ToolType {
+		if err := ValidateToolOASSpec(toolType, oasSpec); err != nil {
+			return nil, err
+		}
 	}
 
 	tool.Name = name
@@ -687,13 +691,14 @@ var (
 // 3 document the tool client can use.
 var ErrInvalidToolSpec = errors.New("invalid OpenAPI specification")
 
-// ValidateToolOASSpec checks that an oas_spec is base64 of an OpenAPI 3
+// ValidateToolOASSpec checks that a tool's oas_spec is base64 of an OpenAPI 3
 // document the tool client accepts (version 3.x, a servers entry, a supported
 // auth scheme when schemes are declared). It applies the same parse the tool
 // uses at call time and in ListToolOperationsFromSpec, so a stored tool can
-// always list its operations. An empty spec is allowed (non-REST tools).
-func ValidateToolOASSpec(spec string) error {
-	if spec == "" {
+// always list its operations. CLIENT tools keep a client tool definition in
+// the field instead, and an empty spec is allowed.
+func ValidateToolOASSpec(toolType, spec string) error {
+	if spec == "" || toolType == models.ToolTypeClient {
 		return nil
 	}
 	decoded, err := base64.StdEncoding.DecodeString(spec)

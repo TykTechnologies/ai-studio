@@ -80,7 +80,7 @@ func (a *API) createTool(c *gin.Context) {
 		}
 	}
 
-	if err := services.ValidateToolOASSpec(input.Data.Attributes.OASSpec); err != nil {
+	if err := services.ValidateToolOASSpec(input.Data.Attributes.ToolType, input.Data.Attributes.OASSpec); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -257,14 +257,18 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 
-	if err := services.ValidateToolOASSpec(input.Data.Attributes.OASSpec); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: err.Error()}},
-		})
-		return
+	// Only a changed spec (or type) is checked, so a tool stored with a bad
+	// spec before validation existed can still be renamed or deactivated.
+	if input.Data.Attributes.OASSpec != tool.OASSpec || input.Data.Attributes.ToolType != tool.ToolType {
+		if err := services.ValidateToolOASSpec(input.Data.Attributes.ToolType, input.Data.Attributes.OASSpec); err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return

@@ -36,6 +36,49 @@ func TestToolSpec_APIRejectsGarbageAndFlagsStoredOnes(t *testing.T) {
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("spec-operations for a stored garbage spec: %d %s, want 422", w.Code, w.Body.String())
 	}
+
+	// The legacy tool can still be renamed: an unchanged spec is not checked.
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tools/%d", legacy.ID), toolBody("Legacy Tool renamed", models.ToolTypeREST, garbage))
+	if w.Code != http.StatusOK {
+		t.Fatalf("renaming a legacy tool without touching its spec: %d %s, want 200", w.Code, w.Body.String())
+	}
+}
+
+func toolBody(name, toolType, spec string) map[string]interface{} {
+	return map[string]interface{}{
+		"data": map[string]interface{}{"type": "tools", "attributes": map[string]interface{}{
+			"name": name, "tool_type": toolType, "oas_spec": spec, "privacy_score": 1,
+		}},
+	}
+}
+
+// CLIENT tools keep a client tool definition in oas_spec, not an OpenAPI
+// document, so the OpenAPI check does not apply to them.
+func TestToolSpec_ClientToolsAreNotOpenAPIChecked(t *testing.T) {
+	api, db := setupTestAPI(t)
+	if err := models.GetOrCreateDefaultClientTools(db); err != nil {
+		t.Fatal(err)
+	}
+	var present models.Tool
+	if err := db.Where("tool_type = ?", models.ToolTypeClient).First(&present).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/tools", toolBody("My Client Tool", models.ToolTypeClient, present.OASSpec))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create a CLIENT tool: %d %s, want 201", w.Code, w.Body.String())
+	}
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tools/%d", present.ID), toolBody("Present (renamed)", models.ToolTypeClient, present.OASSpec))
+	if w.Code != http.StatusOK {
+		t.Fatalf("rename the present tool: %d %s, want 200", w.Code, w.Body.String())
+	}
+
+	// The same definition on a REST tool is not an OpenAPI document.
+	w = performRequest(api.router, "POST", "/api/v1/tools", toolBody("Not REST", models.ToolTypeREST, present.OASSpec))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("create a REST tool with a client tool definition: %d %s, want 400", w.Code, w.Body.String())
+	}
 }
 
 func TestValidateToolOASSpec(t *testing.T) {
@@ -44,14 +87,14 @@ func TestValidateToolOASSpec(t *testing.T) {
 		`"servers":[{"url":"https://holidays.example.com"}],"paths":{}}`
 
 	t.Run("empty spec is allowed", func(t *testing.T) {
-		if err := services.ValidateToolOASSpec(""); err != nil {
+		if err := services.ValidateToolOASSpec(models.ToolTypeREST, ""); err != nil {
 			t.Fatalf("expected no error for empty spec, got %v", err)
 		}
 	})
 
 	t.Run("base64 of a UTF-8 spec is accepted", func(t *testing.T) {
 		encoded := base64.StdEncoding.EncodeToString([]byte(spec))
-		if err := services.ValidateToolOASSpec(encoded); err != nil {
+		if err := services.ValidateToolOASSpec(models.ToolTypeREST, encoded); err != nil {
 			t.Fatalf("expected base64 spec to be accepted, got %v", err)
 		}
 	})
@@ -70,7 +113,7 @@ func TestValidateToolOASSpec(t *testing.T) {
 	}
 	for name, value := range rejected {
 		t.Run(name+" is rejected", func(t *testing.T) {
-			err := services.ValidateToolOASSpec(value)
+			err := services.ValidateToolOASSpec(models.ToolTypeREST, value)
 			if !errors.Is(err, services.ErrInvalidToolSpec) {
 				t.Fatalf("ValidateToolOASSpec() error = %v, want ErrInvalidToolSpec", err)
 			}
