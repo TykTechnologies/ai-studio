@@ -452,16 +452,16 @@ describe('Overview Component', () => {
       expect(lines).toHaveLength(4);
       expect(lines.some((t) => /API key, best stored as a secret/.test(t))).toBe(true);
       expect(lines.some((t) => /an embedder/.test(t))).toBe(true);
-      expect(screen.getByRole('link', { name: 'Embedders' })).toHaveAttribute('href', '/admin/embedders');
-      expect(screen.getByRole('link', { name: 'Secrets' })).toHaveAttribute('href', '/admin/secrets');
-      expect(screen.getAllByRole('link', { name: 'LLM providers' })).toHaveLength(2);
-      expect(screen.getByRole('link', { name: 'Model call settings' })).toHaveAttribute('href', '/admin/llm-settings');
+      expect(screen.getByRole('link', { name: 'Add an embedder' })).toHaveAttribute('href', '/admin/embedders');
+      expect(screen.getByRole('link', { name: 'Store a key' })).toHaveAttribute('href', '/admin/secrets');
+      expect(screen.getAllByRole('link', { name: 'Set up a provider' })).toHaveLength(2);
+      expect(screen.getByRole('link', { name: 'Set up call settings' })).toHaveAttribute('href', '/admin/llm-settings');
     });
 
     test('links to pages the user cannot open are left out, the text stays', () => {
       mockCan.mockImplementation((perm) => perm !== 'embedders:read');
       renderWithProviders(<Overview />, { features: allFeatures, hasLLMs: true });
-      expect(screen.queryByRole('link', { name: 'Embedders' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Add an embedder' })).not.toBeInTheDocument();
       expect(prereqs().some((t) => /an embedder/.test(t))).toBe(true);
     });
   });

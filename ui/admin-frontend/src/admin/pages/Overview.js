@@ -65,6 +65,8 @@ const Overview = () => {
     can(permission) ? { label, onClick: () => navigate(path) } : undefined;
 
   // A card's prerequisite line; each link shows only to users who can open it.
+  // Link names are actions ("Set up a provider"), never a sidebar label, so
+  // no two links on the page share an accessible name.
   const needs = (text, links) => ({
     text,
     links: links.filter((l) => can(l.permission)).map(({ label, to }) => ({ label, to })),
@@ -183,7 +185,7 @@ const Overview = () => {
               <BasicCard
                 primaryAction={addAction(P.LLMS_WRITE, 'Add LLM provider', '/admin/llms/new')}
                 prerequisite={needs("your vendor's API key, best stored as a secret.", [
-                  { label: 'Secrets', to: '/admin/secrets', permission: P.SECRETS_READ },
+                  { label: 'Store a key', to: '/admin/secrets', permission: P.SECRETS_READ },
                 ])}
                 secondaryAction={{
                   label: 'Learn more',
@@ -215,7 +217,7 @@ const Overview = () => {
               <BasicCard
                 primaryAction={addAction(P.DATASOURCES_WRITE, 'Add Data source', '/admin/datasources/new')}
                 prerequisite={needs('an embedder (the embedding model that indexes documents) and a vector store.', [
-                  { label: 'Embedders', to: '/admin/embedders', permission: P.EMBEDDERS_READ },
+                  { label: 'Add an embedder', to: '/admin/embedders', permission: P.EMBEDDERS_READ },
                 ])}
                 secondaryAction={{
                   label: 'Learn more',
@@ -374,7 +376,7 @@ const Overview = () => {
                       : undefined
                   }
                   prerequisite={needs('an LLM provider with a working API key.', [
-                    { label: 'LLM providers', to: '/admin/llms', permission: P.LLMS_READ },
+                    { label: 'Set up a provider', to: '/admin/llms', permission: P.LLMS_READ },
                   ])}
                   secondaryAction={{
                     label: 'Learn more',
@@ -412,8 +414,8 @@ const Overview = () => {
                       : undefined
                   }
                   prerequisite={needs('an LLM provider with a working API key, and model call settings.', [
-                    { label: 'LLM providers', to: '/admin/llms', permission: P.LLMS_READ },
-                    { label: 'Model call settings', to: '/admin/llm-settings', permission: P.LLM_SETTINGS_READ },
+                    { label: 'Set up a provider', to: '/admin/llms', permission: P.LLMS_READ },
+                    { label: 'Set up call settings', to: '/admin/llm-settings', permission: P.LLM_SETTINGS_READ },
                   ])}
                   secondaryAction={{
                     label: 'Learn more',
