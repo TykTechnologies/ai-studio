@@ -301,16 +301,16 @@ func TestBatchAnalytics_Interface(t *testing.T) {
 		handler.RecordProxyLogsBatch(ctx, logs)
 	}, "Batch methods should not panic")
 
-	// Wait for processing
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify records were created
+	// The handler writes asynchronously. A fixed 100ms sleep failed on loaded
+	// CI runners (counts still 0), so wait until both rows are there.
 	var chatCount, proxyCount int64
-	err := db.Model(&models.LLMChatRecord{}).Count(&chatCount).Error
-	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		if db.Model(&models.LLMChatRecord{}).Count(&chatCount).Error != nil ||
+			db.Model(&models.ProxyLog{}).Count(&proxyCount).Error != nil {
+			return false
+		}
+		return chatCount >= 1 && proxyCount >= 1
+	}, 10*time.Second, 20*time.Millisecond, "batched records were not written")
 	assert.Equal(t, int64(1), chatCount)
-
-	err = db.Model(&models.ProxyLog{}).Count(&proxyCount).Error
-	require.NoError(t, err)
 	assert.Equal(t, int64(1), proxyCount)
 }

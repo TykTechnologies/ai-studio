@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"math"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,32 +22,35 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
-// setupDB now enables WAL mode + busy timeout for in-memory SQLite to reduce "database is locked" errors.
+// setupDBSeq makes each setupDB database name unique, so a test never shares a
+// database with an earlier one whose background writers are still draining.
+var setupDBSeq atomic.Int64
+
+// setupDB opens a private in-memory SQLite database for one test.
+//
+// It used to open "file::memory:?cache=shared" with 10 pooled connections:
+// one database for the whole package, and table-level locks between those
+// connections. The analytics writer, the proxy's log writes and a test's own
+// UPDATE then collided with "database table is locked" (SQLITE_LOCKED), which
+// busy_timeout does not retry, so tests failed at random under load. A named
+// database per test, on a single connection, serialises every statement
+// instead: no table lock can be contended.
 func setupDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
+	name := fmt.Sprintf("proxytest_%d", setupDBSeq.Add(1))
+	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{
 		SkipDefaultTransaction: true,
 		PrepareStmt:            true, // Enable prepared statement cache
 	})
 	require.NoError(t, err)
 
-	// Get underlying SQL DB for pragma configuration
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-
-	// Configure SQLite for better concurrent access
-	_, _ = sqlDB.Exec("PRAGMA journal_mode = WAL;")
-	_, _ = sqlDB.Exec("PRAGMA busy_timeout = 30000;") // Increased from 5s to 30s for CI
-	_, _ = sqlDB.Exec("PRAGMA synchronous = NORMAL;")
-	_, _ = sqlDB.Exec("PRAGMA cache_size = -64000;") // 64MB cache
-	_, _ = sqlDB.Exec("PRAGMA temp_store = MEMORY;")
-	_, _ = sqlDB.Exec("PRAGMA mmap_size = 30000000000;")
-	_, _ = sqlDB.Exec("PRAGMA wal_autocheckpoint = 1000;")
-	_, _ = sqlDB.Exec("PRAGMA optimize;")
-
-	// Set connection pool settings for better concurrent access
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	// One connection: statements from the test, the proxy and the analytics
+	// writer queue for it rather than contend for table locks. It must never
+	// be closed while idle, or the in-memory database goes with it.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
 
 	// Migrate main models with retry logic
 	err = models.InitModels(db)
