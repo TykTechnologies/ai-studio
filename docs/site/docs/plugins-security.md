@@ -62,7 +62,11 @@ PLUGIN_ENV_PASSTHROUGH="GITHUB_RAG_*,SSH_KNOWN_HOSTS"
 
 Plugin configuration is stored in AI Studio's database and sent to the plugin process in plaintext when the plugin starts (`Initialize`, `InitRequest.Config`). Every value is passed as a string; arrays and objects are JSON-encoded.
 
-**Secret references.** A top-level string value that is exactly `$SECRET/NAME` or `$ENV/NAME` is resolved by AI Studio before it is passed to a plugin running in AI Studio (since 2.3). `$SECRET/NAME` reads the named secret from AI Studio's secret store, and `$ENV/NAME` reads AI Studio's own environment, not the plugin's allowlisted one. The database and the configuration snapshot keep the reference. A reference inside a longer string, or inside an array or object, is not resolved, and a reference that cannot be resolved is passed through unchanged (and logged).
+**Secret references.** A top-level string value that is exactly `$SECRET/NAME` is resolved from AI Studio's secret store before it is passed to a plugin running in AI Studio (since 2.3). The database and the configuration snapshot keep the reference. A reference inside a longer string, or inside an array or object, is not resolved, and a reference that cannot be resolved is passed through unchanged (and logged).
+
+Because the plugin receives the secret's value, adding a `$SECRET/` reference to a plugin's configuration needs the right to read secrets (`secrets` read; administrators hold it). Plugins themselves cannot add references through the management API (`UpdatePluginConfig` refuses them), and a plugin that saves back the resolved value of a reference it was given keeps the reference rather than storing the secret.
+
+`$ENV/NAME` is **not** resolved by AI Studio: its own environment holds platform secrets such as the encryption key and the database URL. A plugin may resolve `$ENV/NAME` itself, against the environment it is given (the default allowlist and `PLUGIN_ENV_PASSTHROUGH`).
 
 **Edges receive plugin configuration.** The configuration snapshot that AI Studio sends to every edge gateway includes the stored configuration of every active plugin, Studio-only plugins included. A literal credential therefore reaches every edge; a reference does not. Plugins running on edges receive references unresolved.
 

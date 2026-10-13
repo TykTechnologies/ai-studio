@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -138,12 +139,28 @@ func (s *PluginManagementServer) UpdatePluginConfig(ctx context.Context, req *pb
 		return nil, status.Errorf(codes.InvalidArgument, "invalid JSON configuration: %v", err)
 	}
 
+	// Secret references in plugin config are resolved for the plugin, so a
+	// plugin must not add one (it would read any secret it names). A plugin
+	// that writes back the resolved value of a reference it was given keeps
+	// the reference, not a stored plaintext copy.
+	existing, err := s.pluginService.GetPlugin(uint(pluginID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "plugin not found: %d", pluginID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load plugin: %v", err)
+	}
+	configMap = services.RestoreSecretReferences(existing.Config, configMap)
+	if keys := services.NewSecretReferences(existing.Config, configMap); len(keys) > 0 {
+		return nil, status.Errorf(codes.PermissionDenied, "plugins may not add secret references to plugin configuration (keys: %s)", strings.Join(keys, ", "))
+	}
+
 	// Use UpdatePlugin method with config-only update
 	updateReq := &services.UpdatePluginRequest{
 		Config: configMap,
 	}
 
-	_, err := s.pluginService.UpdatePlugin(uint(pluginID), updateReq)
+	_, err = s.pluginService.UpdatePlugin(uint(pluginID), updateReq)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "plugin not found: %d", pluginID)

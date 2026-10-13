@@ -308,6 +308,10 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
+	if !requireSecretReadForReferences(c, nil, req.Config) {
+		return
+	}
+
 	plugin, err := a.service.PluginService.CreatePlugin(&req)
 	if err != nil {
 		errMsg := err.Error()
@@ -534,6 +538,10 @@ func (a *API) updatePlugin(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Not Found", Detail: "Plugin not found"}},
 		})
+		return
+	}
+
+	if !requireSecretReadForReferences(c, originalPlugin.Config, req.Config) {
 		return
 	}
 
