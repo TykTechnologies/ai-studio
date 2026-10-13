@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -39,6 +40,10 @@ func (c *Coordinator) StreamClosed(edgeID, session string) {
 	}
 }
 
+// changeAttempts bounds how often change re-reads a command that another
+// writer changed in between.
+const changeAttempts = 50
+
 // errNotApplicable: the change no longer applies to the command as it is now.
 var errNotApplicable = errors.New("change no longer applies")
 
@@ -48,7 +53,15 @@ var errNotApplicable = errors.New("change no longer applies")
 // again and repeats. It reports whether the change was made, and the
 // command as it was read for it.
 func (c *Coordinator) change(id int64, build func(cur models.EdgePushCommand) (map[string]interface{}, error)) (bool, models.EdgePushCommand, error) {
-	for i := 0; i < 10; i++ {
+	for i := 0; i < changeAttempts; i++ {
+		if i > 0 {
+			// Another writer changed the command since it was read. Back
+			// off a little, with jitter, so that a burst of writers to one
+			// command (progress reports, a READY and a stream close at
+			// once) cannot keep beating the same one: ten tries were not
+			// enough for a READY racing a dozen writers on Postgres.
+			time.Sleep(time.Duration(rand.Int64N(int64(min(i, 10)) * int64(time.Millisecond))))
+		}
 		var cur models.EdgePushCommand
 		if err := c.db.Where("id = ?", id).First(&cur).Error; err != nil {
 			return false, cur, err

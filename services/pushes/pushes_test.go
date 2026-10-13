@@ -662,6 +662,37 @@ func TestConcurrentChangesKeepEveryHistoryEntry(t *testing.T) {
 	})
 }
 
+// A settling write (READY in the test above) must not be dropped because
+// other writers to the same command kept winning the version race: with ten
+// progress reports and a stream close racing it on Postgres, READY was lost
+// after ten conflicts. change keeps retrying, with jittered backoff, well
+// past what one burst of writers can cause.
+func TestChangeSurvivesARunOfConflicts(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		a := newReplica(t, db, "node-a", Options{})
+		addEdge(t, db, "edge-1", "default", models.EdgeStatusConnected, "node-a")
+		op := push(t, a.c, Request{Scope: ScopeEdge, EdgeIDs: []string{"edge-1"}}).Operation.OperationID
+		id := command(t, db, op, "edge-1").ID
+
+		// Another writer commits between this read and this write, 15 times
+		// running.
+		const conflicts = 15
+		calls := 0
+		applied, _, err := a.c.change(id, func(cur models.EdgePushCommand) (map[string]interface{}, error) {
+			calls++
+			if calls <= conflicts {
+				require.NoError(t, db.Model(&models.EdgePushCommand{}).Where("id = ?", id).
+					Update("version", gorm.Expr("version + 1")).Error)
+			}
+			return map[string]interface{}{"message": "settled"}, nil
+		})
+		require.NoError(t, err, "a run of conflicts made the change give up")
+		assert.True(t, applied)
+		assert.Equal(t, conflicts+1, calls)
+		assert.Equal(t, "settled", command(t, db, op, "edge-1").Message)
+	})
+}
+
 // A replica whose view of its streams is a moment old claims a push for a
 // stream that has just closed: nothing is sent, and no attempt is used.
 func TestSendOnAStreamThatJustClosedUsesNoAttempt(t *testing.T) {
