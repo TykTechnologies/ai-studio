@@ -121,8 +121,13 @@ const FilterDetails = () => {
                 </Box>
               )}
               {config.exclude && config.exclude.length > 0 && row("Excluded patterns", config.exclude.join(", "))}
-              {row("On detection", ACTION_LABELS[config.on_detect] || config.on_detect)}
-              {config.on_detect === "redact" && config.redaction &&
+              {row(
+                "On detection",
+                attrs.response_filter && config.on_detect === "redact"
+                  ? "Redact (logs only on responses: the response is not changed)"
+                  : ACTION_LABELS[config.on_detect] || config.on_detect
+              )}
+              {config.on_detect === "redact" && !attrs.response_filter && config.redaction &&
                 row("Redaction", `${config.redaction.style || "placeholder"}${config.redaction.placeholder ? ` (${config.redaction.placeholder})` : ""}`)}
               {!attrs.response_filter && row("Messages inspected", config.scope || "all_user")}
               {row("If the provider fails", config.fail_mode === "open" ? "Let it through" : config.fail_mode === "closed" ? "Block" : "Default")}

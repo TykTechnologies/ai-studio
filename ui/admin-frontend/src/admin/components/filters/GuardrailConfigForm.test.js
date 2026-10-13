@@ -129,7 +129,7 @@ describe("GuardrailConfigForm", () => {
   it("explains that redact degrades to log on a response filter", async () => {
     render(<Harness initial={{ ...emptyGuardrailConfig(), on_detect: "redact" }} responseFilter />);
     await screen.findByTestId("guardrail-detector-secrets");
-    expect(screen.getByText(/responses are block-only/i)).toBeInTheDocument();
+    expect(screen.getByTestId("guardrail-response-redact-warning")).toHaveTextContent(/does not change responses/i);
     expect(screen.queryByLabelText(/messages to inspect/i)).not.toBeInTheDocument();
   });
 

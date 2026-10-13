@@ -33,10 +33,31 @@ export const emptyGuardrailConfig = () => ({
   block_message: "",
 });
 
+// Each action's label and help per direction. On a response filter (LLM
+// responses and tool results) the gateway cannot rewrite text, so redact is
+// recorded as a log there (scripting/filter_runner.go); the label says so up
+// front instead of only after it is picked.
 const ACTIONS = [
-  { value: "block", label: "Block", help: "Refuse the request (or stop the response) and record a compliance event." },
-  { value: "redact", label: "Redact", help: "Rewrite the matched text before it reaches the vendor, and record a compliance event." },
-  { value: "log", label: "Log only", help: "Let it through and record a compliance event." },
+  {
+    value: "block",
+    label: "Block",
+    help: "Refuse the request and record a compliance event.",
+    responseHelp: "Stop the response and record a compliance event.",
+  },
+  {
+    value: "redact",
+    label: "Redact",
+    responseLabel: "Redact (logs only on responses)",
+    help:
+      "Rewrite the matched text before it reaches the vendor, and record a compliance event. A finding the provider cannot rewrite (such as a prompt attack) is only logged.",
+    responseHelp: "Responses cannot be rewritten: the finding is recorded and the response reaches the client unchanged.",
+  },
+  {
+    value: "log",
+    label: "Log only",
+    help: "Let it through and record a compliance event.",
+    responseHelp: "Let it through and record a compliance event.",
+  },
 ];
 
 const SCOPES = [
@@ -133,6 +154,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
   const catalogueDetectors = spec ? spec.detectors : [];
   const customDetectors = config.detectors.filter((d) => !catalogueDetectors.some((c) => c.name === d.name));
   const redactUnsupported = spec && !spec.redacts;
+  const selectedAction = ACTIONS.find((a) => a.value === config.on_detect) || {};
 
   return (
     <Box>
@@ -180,16 +202,17 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             >
               {ACTIONS.map((a) => (
                 <MenuItem key={a.value} value={a.value} disabled={a.value === "redact" && redactUnsupported}>
-                  {a.label}
+                  {(responseFilter && a.responseLabel) || a.label}
                   {a.value === "redact" && redactUnsupported ? " (provider cannot redact)" : ""}
                 </MenuItem>
               ))}
             </Select>
-            <FormHelperText>{(ACTIONS.find((a) => a.value === config.on_detect) || {}).help}</FormHelperText>
+            <FormHelperText>{responseFilter ? selectedAction.responseHelp : selectedAction.help}</FormHelperText>
           </FormControl>
           {config.on_detect === "redact" && responseFilter && (
-            <Alert severity="info" sx={{ mt: 1 }}>
-              LLM responses are block-only. On a response filter, redact records the finding and lets the response through.
+            <Alert severity="warning" sx={{ mt: 1 }} data-testid="guardrail-response-redact-warning">
+              Redact does not change responses. On a response filter, a detection is recorded as a compliance event and
+              the response (or tool result) reaches the client unchanged. Choose Block to stop it.
             </Alert>
           )}
         </Grid>
