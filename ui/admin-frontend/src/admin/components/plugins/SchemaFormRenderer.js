@@ -3,6 +3,60 @@ import { Box, Alert, Typography } from '@mui/material';
 import { Form } from '@rjsf/mui';
 import validator from '@rjsf/validator-ajv8';
 
+// A secret field: format "password", or writeOnly (the server never sends the
+// value back). It must render masked whatever else applies to it.
+export const isSecretProperty = (property) =>
+  Boolean(property) && (property.format === 'password' || property.writeOnly === true);
+
+// Per-field uiSchema for an object schema's properties, recursing into nested
+// objects. Secret fields always get the password widget: the long-description
+// textarea rule used to override format "password" and show secrets in clear.
+export const fieldUiSchemas = (schema) => {
+  const properties = schema?.properties;
+  if (!properties) return {};
+  return Object.keys(properties).reduce((acc, key) => {
+    const property = properties[key] || {};
+
+    if (isSecretProperty(property)) {
+      acc[key] = { "ui:widget": "password" };
+      return acc;
+    }
+
+    // URL fields get better input validation
+    if (property.format === 'uri') {
+      acc[key] = {
+        "ui:help": property.examples ? `Examples: ${property.examples.join(', ')}` : undefined,
+      };
+    }
+
+    // Numeric fields get better input controls
+    if (property.type === 'number' || property.type === 'integer') {
+      acc[key] = {
+        "ui:widget": "updown",
+      };
+    }
+
+    // Long descriptions become textareas
+    if (property.type === 'string' && property.description && property.description.length > 100) {
+      acc[key] = {
+        "ui:widget": "textarea",
+        "ui:options": {
+          rows: 3,
+        },
+      };
+    }
+
+    // Nested objects get the same treatment, so a secret inside one is
+    // masked too.
+    if (property.type === 'object' && property.properties) {
+      const nested = fieldUiSchemas(property);
+      if (Object.keys(nested).length > 0) acc[key] = { ...(acc[key] || {}), ...nested };
+    }
+
+    return acc;
+  }, {});
+};
+
 const SchemaFormRenderer = ({
   schema,
   formData,
@@ -22,35 +76,7 @@ const SchemaFormRenderer = ({
       "label": true,      // Show labels
     },
     // Customize specific field types for better UX
-    ...(schema?.properties && Object.keys(schema.properties).reduce((acc, key) => {
-      const property = schema.properties[key];
-
-      // URL fields get better input validation
-      if (property.format === 'uri') {
-        acc[key] = {
-          "ui:help": property.examples ? `Examples: ${property.examples.join(', ')}` : undefined,
-        };
-      }
-
-      // Numeric fields get better input controls
-      if (property.type === 'number' || property.type === 'integer') {
-        acc[key] = {
-          "ui:widget": "updown",
-        };
-      }
-
-      // Long descriptions become textareas
-      if (property.type === 'string' && property.description && property.description.length > 100) {
-        acc[key] = {
-          "ui:widget": "textarea",
-          "ui:options": {
-            rows: 3,
-          },
-        };
-      }
-
-      return acc;
-    }, {}))
+    ...fieldUiSchemas(schema),
   };
 
   const handleFormChange = ({ formData: newFormData }) => {
