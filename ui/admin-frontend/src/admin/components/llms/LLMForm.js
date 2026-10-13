@@ -1,5 +1,6 @@
 import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
 import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
+import { slugConflictDetail, focusNameField } from "../../utils/slugConflict";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import focusFirstInvalid from "../../utils/focusFirstInvalid";
@@ -544,6 +545,14 @@ const LLMForm = () => {
       if (error.response?.status === 400 && detail && detail.startsWith("vendor_workspace_id")) {
         setErrors((prev) => ({ ...prev, vendor_workspace_id: detail }));
         setSnackbar({ open: true, message: detail, severity: "error" });
+        return;
+      }
+      const slugConflict = slugConflictDetail(error);
+      if (slugConflict) {
+        // Another LLM already has this name's slug: say so on the Name field.
+        setErrors((prev) => ({ ...prev, name: slugConflict }));
+        setSnackbar({ open: true, message: slugConflict, severity: "error" });
+        focusNameField();
         return;
       }
       console.error("Error saving LLM", error);
