@@ -32,7 +32,7 @@ if !input.is_chunk || len(response_text) >= min_evaluation_length {
     detected_pattern := ""
 
     for pattern in harmful_patterns {
-        if text.contains(text.to_lower(response_text), pattern) {
+        if text.contains(text.to_lower(response_text), text.to_lower(pattern)) {
             is_harmful = true
             detected_pattern = pattern
             break

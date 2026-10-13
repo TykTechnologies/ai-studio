@@ -128,6 +128,8 @@ jobs:
             esac
             case "$f" in
               .github/*) frontend=true ;;
+              # Filter script templates are run by scripting/filter_templates_test.go.
+              ui/admin-frontend/src/admin/components/filters/ScriptTemplateSelector.js) go=true ;;
             esac
           done <<< "$files"
           echo "go=$go" >> "$GITHUB_OUTPUT"
