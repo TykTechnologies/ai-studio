@@ -83,15 +83,15 @@ const DataCatalogList = () => {
   };
 
   const handleEdit = (id) => {
-    navigate(`/admin/catalogs/data/edit/${id}`);
+    navigate(`/admin/catalogs/datasources/edit/${id}`);
   };
 
   const handleAddDataCatalog = () => {
-    navigate("/admin/catalogs/data/new");
+    navigate("/admin/catalogs/datasources/new");
   };
 
   const handleCatalogClick = (catalog) => {
-    navigate(`/admin/catalogs/data/${catalog.id}`);
+    navigate(`/admin/catalogs/datasources/${catalog.id}`);
   };
 
   const columns = useMemo(() => [

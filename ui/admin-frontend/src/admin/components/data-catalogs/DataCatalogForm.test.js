@@ -86,7 +86,7 @@ describe("DataCatalogForm unsaved changes", () => {
     expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(mockNavigate).toHaveBeenCalledWith("/admin/catalogs/data");
+    expect(mockNavigate).toHaveBeenCalledWith("/admin/catalogs/datasources");
   });
 
   it("loading an existing catalog with its members is not a change; a picker change is", async () => {
@@ -113,7 +113,7 @@ describe("DataCatalogForm unsaved changes", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /create catalog/i }));
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith("/admin/catalogs/data", expect.anything())
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/catalogs/datasources", expect.anything())
     );
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
   });

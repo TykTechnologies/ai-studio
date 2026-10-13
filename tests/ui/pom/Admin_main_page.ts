@@ -50,9 +50,9 @@ export class AdminMainPage {
         this.UserGroupsLink = this.page.getByRole('link', { name: 'Teams' });
         this.FiltersMiddlewareLink = this.page.getByRole('link', { name: 'Filters' });
         this.SecretsLink = this.page.getByRole('link', { name: 'Secrets' });
-        this.AiPortalButton = this.page.getByRole('button', { name: 'AI Portal', exact: true });
+        this.AiPortalButton = this.page.getByRole('button', { name: 'Portal administration', exact: true });
         this.AppsLink = this.page.getByRole('link', { name: 'Apps' });
-        this.ChatButton = this.page.getByRole('button', { name: 'Chat', exact: true });
+        this.ChatButton = this.page.getByRole('button', { name: 'Chat administration', exact: true });
         this.CatalogsButton = this.page.getByRole('button', { name: 'Catalogs', exact: true });
         this.ModelCallSettingsLink = this.page.getByRole('link', { name: 'Model call settings' });
         this.BannerButton = this.page.getByRole('banner').getByRole('button').filter({ hasText: /^$/ });

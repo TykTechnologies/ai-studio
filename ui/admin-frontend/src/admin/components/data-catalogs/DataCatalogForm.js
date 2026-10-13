@@ -57,7 +57,7 @@ const DataCatalogForm = () => {
     { ready: !loading }
   );
   const confirmNavigation = useConfirmNavigation();
-  const handleCancel = () => confirmNavigation(() => navigate("/admin/catalogs/data"));
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/catalogs/datasources"));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -130,7 +130,7 @@ const DataCatalogForm = () => {
       await updateTags(catalogId, desiredTags);
 
       markSaved();
-      navigate("/admin/catalogs/data", {
+      navigate("/admin/catalogs/datasources", {
         state: { snackbar: { message: `Data catalog ${id ? "updated" : "created"} successfully`, severity: "success" } },
       });
     } catch (error) {
@@ -207,7 +207,7 @@ const DataCatalogForm = () => {
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/admin/catalogs/data"
+          to="/admin/catalogs/datasources"
           color="inherit"
         >
           Back to catalogs

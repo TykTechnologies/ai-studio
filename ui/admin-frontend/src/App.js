@@ -5,11 +5,12 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import CssBaseline from "@mui/material/CssBaseline";
 import CircularProgress from "@mui/material/CircularProgress";
 import { basePath, hostLoginURL, isHostAuth, stripBase, withBase } from "./runtimeConfig";
-import { hostSignInURL } from "./admin/utils/authRedirect";
+import { hostSignInURL, requestedReturnPath, studioLoginPath } from "./admin/utils/authRedirect";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import SuccessBanner from "./admin/components/common/SuccessBanner";
@@ -51,13 +52,24 @@ const ToolDocumentationPage = React.lazy(() => import("./portal/pages/ToolDocume
 
 // Sends a signed-out visitor to sign in: to the host application's sign-in
 // page when it authenticates users (with the page they asked for, when the
-// login URL takes it), else to Studio's login route.
+// login URL takes it), else to Studio's login route with the page they asked
+// for as ?next=, so signing in lands there instead of on the dashboard.
 const SignInRedirect = () => {
+  const location = useLocation();
   if (isHostAuth() && hostLoginURL()) {
     window.location.assign(hostSignInURL());
     return <CircularProgress />;
   }
-  return <Navigate to="/login" replace />;
+  return <Navigate to={studioLoginPath(location)} replace />;
+};
+
+// Where a signed-in user who opens /login goes: the page named by ?next=
+// when it is a safe console route, else their home surface.
+const SignedInLoginRedirect = ({ entitlements }) => {
+  const location = useLocation();
+  const home =
+    entitlements?.is_full_admin || entitlements?.has_admin_access ? "/admin" : "/portal/dashboard";
+  return <Navigate to={requestedReturnPath(location.search) || home} replace />;
 };
 
 // Component to redirect OAuth requests to backend
@@ -248,16 +260,7 @@ function App() {
               path="/login"
               element={
                 isAuthenticated ? (
-                  <Navigate
-                    to={
-                      entitlements?.is_full_admin
-                        ? "/admin"
-                        : entitlements?.has_admin_access
-                          ? "/admin"
-                          : "/portal/dashboard"
-                    }
-                    replace
-                  />
+                  <SignedInLoginRedirect entitlements={entitlements} />
                 ) : (
                   <Suspense fallback={<RouteLoadingFallback />}>
                     <Login />
@@ -390,14 +393,7 @@ function App() {
             <Route
               path="*"
               element={
-                <Navigate
-                  to={
-                    isAuthenticated
-                      ? "/admin"
-                      : "/login"
-                  }
-                  replace
-                />
+                isAuthenticated ? <Navigate to="/admin" replace /> : <SignInRedirect />
               }
             />
           </Routes>

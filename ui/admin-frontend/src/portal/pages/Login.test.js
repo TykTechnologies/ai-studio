@@ -205,6 +205,60 @@ describe('Login Component', () => {
     expect(window.location.href).toBe('/portal/dashboard');
   });
 
+  describe('return to the page that asked for sign-in (?next=)', () => {
+    afterEach(() => {
+      delete window.location.search;
+    });
+
+    const signIn = async () => {
+      pubClient.get.mockImplementation((url) =>
+        Promise.resolve(
+          url === '/common/me'
+            ? { data: { attributes: { has_admin_access: true, ui_options: {} } } }
+            : { data: { tibEnabled: false } },
+        ),
+      );
+      pubClient.post.mockResolvedValue({ data: { message: 'Login successful' } });
+      render(<Login />, { wrapper: Wrapper });
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'a@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+      await waitFor(() => expect(window.location.href).not.toBe(''));
+    };
+
+    test('an account with no features gets the error, not the requested route', async () => {
+      window.location.search = '?next=%2Fadmin%2Fapps%2F222';
+      pubClient.get.mockImplementation((url) =>
+        Promise.resolve(url === '/common/me' ? { data: { attributes: { ui_options: {} } } } : { data: {} }),
+      );
+      pubClient.post.mockResolvedValue({ data: { message: 'Login successful' } });
+      render(<Login />, { wrapper: Wrapper });
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'a@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+      expect(await screen.findByText("Your account doesn't have access to any features.")).toBeInTheDocument();
+      expect(window.location.href).toBe('');
+    });
+
+    test('opens the requested console route', async () => {
+      window.location.search = '?next=%2Fadmin%2Fapps%2F222%3Ftab%3Dkeys';
+      await signIn();
+      expect(window.location.href).toBe('/admin/apps/222?tab=keys');
+    });
+
+    test.each([
+      ['another origin', '?next=%2F%2Fevil.example%2Fadmin'],
+      ['a backslash origin', '?next=%2F%5Cevil.example'],
+      ['an absolute URL', '?next=https%3A%2F%2Fevil.example'],
+      ['a script URL', '?next=javascript%3Aalert(1)'],
+      ['the login page', '?next=%2Flogin'],
+    ])('ignores %s and goes home', async (_, search) => {
+      window.location.search = search;
+      await signIn();
+      expect(window.location.href).toBe('/admin');
+    });
+  });
+
   test('redirects to chat dashboard when user has chat access only', async () => {
     // Mock SSO config response
     pubClient.get.mockImplementation((url) => {

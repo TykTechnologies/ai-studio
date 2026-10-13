@@ -251,7 +251,7 @@ AI Studio pre-populates OpenAI and Anthropic LLM vendors on first startup with p
 
 The Microgateway needs to receive the updated configuration from AI Studio:
 
-1. Navigate to **AI Portal → Edge Gateways** in the sidebar
+1. Navigate to **Portal administration → Edge Gateways** in the sidebar
 2. Verify your edge gateway (`edge-1`) shows as **Connected**
 3. Click **Push Configuration** to sync the latest settings to the Microgateway
 

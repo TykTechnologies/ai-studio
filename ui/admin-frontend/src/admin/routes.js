@@ -1,5 +1,6 @@
 import React from "react";
 import { Navigate, useParams } from "react-router-dom";
+import PrefixRedirect from "./components/common/PrefixRedirect";
 import Users from "./pages/Users";
 import UserDetails from "./components/users/UserDetails";
 import UserForm from "./components/users/UserForm";
@@ -265,10 +266,13 @@ const catalogRoutes = [
   { path: "catalogs/llms/:id", element: <CatalogueDetails />, permission: P.CATALOGUES_READ },
   { path: "catalogs/llms/edit/:id", element: <CatalogueForm />, permission: P.CATALOGUES_WRITE },
   { path: "catalogs/llms/new", element: <CatalogueForm />, permission: P.CATALOGUES_WRITE },
-  { path: "catalogs/data", element: <DataCatalogList />, permission: P.DATA_CATALOGUES_READ },
-  { path: "catalogs/data/:id", element: <DataCatalogDetail />, permission: P.DATA_CATALOGUES_READ },
-  { path: "catalogs/data/edit/:id", element: <DataCatalogForm />, permission: P.DATA_CATALOGUES_WRITE },
-  { path: "catalogs/data/new", element: <DataCatalogForm />, permission: P.DATA_CATALOGUES_WRITE },
+  { path: "catalogs/datasources", element: <DataCatalogList />, permission: P.DATA_CATALOGUES_READ },
+  { path: "catalogs/datasources/:id", element: <DataCatalogDetail />, permission: P.DATA_CATALOGUES_READ },
+  { path: "catalogs/datasources/edit/:id", element: <DataCatalogForm />, permission: P.DATA_CATALOGUES_WRITE },
+  { path: "catalogs/datasources/new", element: <DataCatalogForm />, permission: P.DATA_CATALOGUES_WRITE },
+  // Data catalogs lived under "catalogs/data" while the other catalog types
+  // used their resource name; old links and bookmarks keep working.
+  { path: "catalogs/data/*", element: <PrefixRedirect to="catalogs/datasources" /> },
   { path: "catalogs/tools", element: <ToolCatalogueList />, permission: P.TOOL_CATALOGUES_READ },
   { path: "catalogs/tools/:id", element: <ToolCatalogueDetails />, permission: P.TOOL_CATALOGUES_READ },
   { path: "catalogs/tools/edit/:id", element: <ToolCatalogueForm />, permission: P.TOOL_CATALOGUES_WRITE },

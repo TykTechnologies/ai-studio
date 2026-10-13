@@ -59,7 +59,7 @@ const DataCatalogDetail = () => {
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
-          to="/admin/catalogs/data"
+          to="/admin/catalogs/datasources"
           color="inherit"
         >
           Back to catalogs
@@ -140,7 +140,7 @@ const DataCatalogDetail = () => {
           <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/catalogs/data/edit/${id}`)}
+            onClick={() => navigate(`/admin/catalogs/datasources/edit/${id}`)}
           >
             Edit catalog
           </PrimaryButton>

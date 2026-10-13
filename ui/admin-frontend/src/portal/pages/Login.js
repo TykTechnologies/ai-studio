@@ -4,7 +4,7 @@ import { Link as RouterLink } from "react-router-dom";
 import pubClient from "../../admin/utils/pubClient";
 import AuthLayout from "./AuthLayout";
 import { hostLoginURL, isHostAuth, withBase } from "../../runtimeConfig";
-import { hostSignInURL } from "../../admin/utils/authRedirect";
+import { hostSignInURL, requestedReturnPath } from "../../admin/utils/authRedirect";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 import {
   StyledTextField,
@@ -60,17 +60,21 @@ const Login = () => {
 
         // Determine which dashboard to show based on permissions. Anyone
         // holding an administrative role lands on the administration surface.
-        if (is_admin) {
-          window.location.href = withBase("/admin");
-        } else if (has_admin_access) {
-          window.location.href = withBase("/admin");
+        let home = null;
+        if (is_admin || has_admin_access) {
+          home = "/admin";
         } else if (ui_options?.show_portal) {
-          window.location.href = withBase("/portal/dashboard");
+          home = "/portal/dashboard";
         } else if (ui_options?.show_chat) {
-          window.location.href = withBase("/chat/dashboard");
-        } else {
-          setError("Your account doesn't have access to any features.");
+          home = "/chat/dashboard";
         }
+        if (!home) {
+          setError("Your account doesn't have access to any features.");
+          return;
+        }
+        // A deep link that sent the visitor here (/login?next=...) wins over
+        // the home surface; the route guards still apply once it loads.
+        window.location.href = withBase(requestedReturnPath() || home);
       }
     } catch (err) {
       console.error("Login error:", err);

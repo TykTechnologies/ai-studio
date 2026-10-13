@@ -301,7 +301,7 @@ AI Studio pre-populates OpenAI and Anthropic LLM configurations on first startup
 
 ### 2. Push Configuration to the Microgateway
 
-1. Navigate to **AI Portal → Edge Gateways** in the sidebar
+1. Navigate to **Portal administration → Edge Gateways** in the sidebar
 2. Verify your edge gateway (`edge-1`) shows as **Connected**
 3. Click **Push Configuration** to sync the latest settings to the Microgateway
 
