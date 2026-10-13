@@ -4,6 +4,15 @@
   --studio-header-height: 64px;
 }
 
+/* When the browser (required-field validation) or focusFirstInvalid scrolls
+   a form field into view, keep it clear of the sticky top bar and page
+   header instead of tucking it underneath them (#502 E8). */
+.MuiFormControl-root,
+.MuiInputBase-input,
+.MuiSelect-nativeInput {
+  scroll-margin-top: calc(var(--studio-header-height) + 120px);
+}
+
 @font-face {
   font-family: Inter-Bold;
   src: url('./common/fonts/Inter-Bold.woff2') format('woff2'),

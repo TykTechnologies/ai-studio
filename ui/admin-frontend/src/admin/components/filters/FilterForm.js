@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import apiClient from "../../utils/apiClient";
+import focusFirstInvalid from "../../utils/focusFirstInvalid";
 import {
   TextField,
   Box,
@@ -161,7 +162,10 @@ const FilterForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      focusFirstInvalid(e.currentTarget);
+      return;
+    }
 
     const { config, ...rest } = filter;
     const attributes = {

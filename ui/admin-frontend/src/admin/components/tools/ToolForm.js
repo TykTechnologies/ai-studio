@@ -2,6 +2,7 @@ import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadat
 import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import apiClient from "../../utils/apiClient";
+import focusFirstInvalid from "../../utils/focusFirstInvalid";
 import {
   TextField,
   Button,
@@ -626,7 +627,10 @@ const ToolForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      focusFirstInvalid(e.currentTarget);
+      return;
+    }
 
     const toolData = {
       data: {

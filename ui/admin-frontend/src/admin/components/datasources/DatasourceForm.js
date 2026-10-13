@@ -2,6 +2,7 @@ import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadat
 import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
+import focusFirstInvalid from "../../utils/focusFirstInvalid";
 import {
   TextField,
   Button,
@@ -322,31 +323,11 @@ const DatasourceForm = () => {
   const confirmNavigation = useConfirmNavigation();
   const handleCancel = () => confirmNavigation(() => navigate("/admin/datasources"));
 
-  // Fields in the order they appear, so a failed submit scrolls to the first
-  // thing the user actually needs to fix. Without this the submit button sits
-  // below the fold and a validation failure looks like a button that does
-  // nothing at all.
-  const FIELD_ORDER = [
-    "name",
-    "user_id",
-    "db_source_type",
-    "embedder_id",
-    "privacy_score",
-  ];
-
-  const focusFirstError = (fieldErrors) => {
-    const firstField = FIELD_ORDER.find((field) => fieldErrors[field]);
-    if (!firstField) return;
-    document
-      .getElementById(`datasource-field-${firstField}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const fieldErrors = validateForm();
     if (Object.keys(fieldErrors).length > 0) {
-      focusFirstError(fieldErrors);
+      focusFirstInvalid(e.currentTarget);
       return;
     }
 
