@@ -8,7 +8,7 @@ import { installMultiSelectClickThrough } from "./multiSelectClickThrough";
 // still reaches what was clicked, instead of being swallowed by the menu's
 // invisible backdrop.
 
-const Page = ({ multiple, onOutside }) => {
+const Page = ({ multiple, onOutside, onDelete = () => {} }) => {
   const [value, setValue] = useState(multiple ? [] : "");
   return (
     <>
@@ -27,6 +27,9 @@ const Page = ({ multiple, onOutside }) => {
       </FormControl>
       <button type="button" onClick={onOutside}>
         Outside
+      </button>
+      <button type="button" data-destructive="true" onClick={onDelete}>
+        Delete
       </button>
     </>
   );
@@ -66,6 +69,18 @@ describe("installMultiSelectClickThrough", () => {
     clickBackdropOver(screen.getByRole("button", { name: "Outside", hidden: true }));
     await waitFor(() => expect(onOutside).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+  });
+
+  it("never replays a dismissing click onto a destructive control", async () => {
+    const onDelete = jest.fn();
+    render(<Page multiple onDelete={onDelete} />);
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Teams" }));
+    await screen.findByRole("listbox");
+    clickBackdropOver(screen.getByRole("button", { name: "Delete", hidden: true }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(onDelete).not.toHaveBeenCalled();
   });
 
   it("leaves single-select menus to MUI", async () => {

@@ -31,6 +31,11 @@ const elementBeneath = (root, x, y) => {
   return el && !root.contains(el) ? el : null;
 };
 
+// A dismissing click is not replayed onto a destructive control: closing a
+// menu must never also delete something (some deletes have no confirm).
+const DESTRUCTIVE = '.MuiButton-colorError, .MuiIconButton-colorError, [data-destructive="true"]';
+const isDestructive = (el) => Boolean(el.closest(DESTRUCTIVE));
+
 const replay = (el, { clientX, clientY, button }) => {
   const init = { bubbles: true, cancelable: true, view: window, clientX, clientY, button };
   // MUI Select openers react to mousedown, buttons and links to click.
@@ -45,7 +50,7 @@ export const installMultiSelectClickThrough = (doc = document) => {
     const root = isMultiSelectBackdrop(event.target);
     if (!root) return;
     const beneath = elementBeneath(root, event.clientX, event.clientY);
-    if (!beneath) return;
+    if (!beneath || isDestructive(beneath)) return;
     const { clientX, clientY, button } = event;
     // Let MUI close the menu first (it handles the backdrop click). Wait for
     // the menu to leave the DOM, because on its way out it hands focus back
