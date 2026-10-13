@@ -501,29 +501,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Convert config values to strings for gRPC transport
-	// For complex types (arrays, objects), JSON-encode them so plugins can parse them
-	configMap := make(map[string]string)
-	for k, v := range plugin.Config {
-		switch val := v.(type) {
-		case string:
-			configMap[k] = val
-		case int, int64, uint, uint64, float64, bool:
-			configMap[k] = fmt.Sprintf("%v", val)
-		default:
-			// Complex types (arrays, maps) - JSON encode
-			jsonBytes, err := json.Marshal(val)
-			if err != nil {
-				log.Warn().
-					Str("key", k).
-					Err(err).
-					Msg("Failed to JSON encode config value, using string representation")
-				configMap[k] = fmt.Sprintf("%v", val)
-			} else {
-				configMap[k] = string(jsonBytes)
-			}
-		}
-	}
+	configMap := pluginInitConfig(plugin.Config)
 
 	// Add plugin ID to config
 	configMap["plugin_id"] = fmt.Sprintf("%d", plugin.ID)

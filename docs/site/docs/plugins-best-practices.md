@@ -357,7 +357,7 @@ if !ok {
 apiKey := os.Getenv("PLUGIN_API_KEY")
 ```
 
-Plugin configuration reaches your plugin as plain strings, exactly as stored: AI Studio does **not** resolve `$SECRET/` or `$ENV/` references in plugin config, and anyone who can read the plugin's configuration can read a value stored there. Never log configuration values or return them in errors. See [Plugin Security Model](./plugins-security.md#plugin-configuration-and-secrets).
+Plugin configuration reaches your plugin as plain strings. Since AI Studio 2.3, a top-level string that is exactly a `$SECRET/NAME` reference is resolved for plugins running in AI Studio (not on edges, where references arrive unresolved; adding one needs secrets read access). `$ENV/NAME` is not resolved by AI Studio; resolve it in your plugin against its own environment if you support it. Anything else arrives exactly as stored, and anyone who can read the plugin's configuration can read a value stored there. Recommend `$SECRET/` references for credential fields, and mark them `"format": "password"` in your config schema. Never log configuration values or return them in errors. See [Plugin Security Model](./plugins-security.md#plugin-configuration-and-secrets).
 
 Plugins receive only an allowlisted set of host environment variables. A variable such as `PLUGIN_API_KEY` reaches your plugin only if the operator lists it in `PLUGIN_ENV_PASSTHROUGH`, so document every variable your plugin reads. See [Plugin process environment](./plugins-security.md#plugin-process-environment).
 
