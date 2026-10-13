@@ -628,10 +628,20 @@ Filter scripts run on the goroutine that is serving the request, so every script
 |---|---|---|
 | `FILTER_SCRIPT_TIMEOUT` | `5s` | Wall time for one script execution. The script is aborted and the filter reports `script timed out`. Request-side filters then fail closed, response-side filters fail open, exactly as for any other script error. `0` disables the bound. A bare integer is read as seconds. |
 | `FILTER_SCRIPT_MAX_ALLOCS` | `10000000` | Objects one execution may allocate in the script VM. `0` disables the bound. |
-| `FILTER_SCRIPT_ALLOW_OS` | `false` | Exposes Tengo's `os` module (environment variables, file system, process execution) to scripts. Off by default: a filter has no reason to read the process environment, which holds the secrets master key. Set to `true` only for scripts written against the old behaviour. |
+| `FILTER_SCRIPT_ALLOW_OS` | `false` | **Dangerous.** Exposes Tengo's `os` module (environment variables, file system, process execution) to scripts. See the warning below. |
 | `FILTER_HTTP_TIMEOUT` | `10s` | End-to-end time for one `tyk.makeHTTPRequest` call. |
 | `FILTER_HTTP_MAX_RESPONSE_BYTES` | `1048576` | Largest response body `tyk.makeHTTPRequest` will return. A larger body is an error, never a truncation, so a script never parses half a document. |
 | `FILTER_LLM_TIMEOUT` | `30s` | Time for one `tyk.llm` call. |
+
+::: danger FILTER_SCRIPT_ALLOW_OS
+With `FILTER_SCRIPT_ALLOW_OS` on, every filter script can:
+
+- read the environment of the process that runs it, including `TYK_AI_SECRET_KEY` (the key that encrypts stored secrets) and database credentials;
+- read and write files;
+- run programs on the host, on AI Studio and on every edge gateway that runs the filter.
+
+Anyone who can create or edit a filter then controls the host. Leave it unset. None of the shipped configurations (quick start, development environment, Docker and package examples) set it. When it is on, AI Studio and the microgateway log a `SECURITY WARNING` at startup. Accepted values are `1`, `true`, `yes` and `on`; anything else leaves it off.
+:::
 
 `tyk.makeHTTPRequest` follows the same outbound policy as LLM upstreams: only `http` and `https`, the `LLM_UPSTREAM_ALLOWED_HOSTS` allowlist when set, and internal-address blocking at dial time when `LLM_UPSTREAM_BLOCK_INTERNAL=true` (with `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` for in-cluster classifiers). Redirects are checked against the same policy.
 
