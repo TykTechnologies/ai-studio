@@ -58,3 +58,88 @@ func TestApproveSubmission_DatasourceJoinsOnlyTheChosenCatalogues(t *testing.T) 
 	assert.EqualValues(t, 1, member(alsoChosen.ID))
 	assert.EqualValues(t, 0, member(leftOut.ID), "a catalogue the reviewer did not pick must not get the resource")
 }
+
+// The same for a tool, which goes through tool catalogues.
+func TestApproveSubmission_ToolJoinsOnlyTheChosenCatalogues(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := NewService(db)
+
+	submitter := createSubmissionTestUser(t, service, "picker-tool-contributor@test.com")
+	reviewer := createSubmissionTestAdmin(t, service, "picker-tool-reviewer@test.com")
+
+	chosen, err := service.CreateToolCatalogue("Community tools", "", "", "")
+	require.NoError(t, err)
+	leftOut, err := service.CreateToolCatalogue("Finance tools", "", "", "")
+	require.NoError(t, err)
+
+	submission, err := service.CreateSubmission(
+		submitter.ID,
+		models.SubmissionResourceTypeTool,
+		models.SubmissionStatusSubmitted,
+		models.JSONMap{"name": "Weather", "tool_type": "REST"},
+		nil, 0, "public data",
+		"picker-tool-contributor@test.com", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	approved, err := service.ApproveSubmission(
+		submission.ID, reviewer.ID, 0,
+		models.JSONMap{"ids": []interface{}{float64(chosen.ID)}},
+		"",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, approved.ResourceID)
+
+	member := func(catalogueID uint) int64 {
+		var n int64
+		require.NoError(t, db.Table("tool_catalogue_tools").
+			Where("tool_catalogue_id = ? AND tool_id = ?", catalogueID, *approved.ResourceID).
+			Count(&n).Error)
+		return n
+	}
+	assert.EqualValues(t, 1, member(chosen.ID))
+	assert.EqualValues(t, 0, member(leftOut.ID), "a catalogue the reviewer did not pick must not get the tool")
+}
+
+// An empty picker posts {"ids": []}. That must mean "no catalogue": under
+// group filtering (Enterprise) the tool is in none at all; in Community
+// Edition only the policy's Default.
+func TestApproveSubmission_EmptyPickerPublishesNowhere(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := NewService(db)
+
+	submitter := createSubmissionTestUser(t, service, "picker-empty-contributor@test.com")
+	reviewer := createSubmissionTestAdmin(t, service, "picker-empty-reviewer@test.com")
+
+	other, err := service.CreateToolCatalogue("Community tools", "", "", "")
+	require.NoError(t, err)
+
+	submission, err := service.CreateSubmission(
+		submitter.ID,
+		models.SubmissionResourceTypeTool,
+		models.SubmissionStatusSubmitted,
+		models.JSONMap{"name": "Unpublished", "tool_type": "REST"},
+		nil, 0, "public data",
+		"picker-empty-contributor@test.com", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	approved, err := service.ApproveSubmission(
+		submission.ID, reviewer.ID, 0, models.JSONMap{"ids": []interface{}{}}, "",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, approved.ResourceID)
+
+	var inOther, total int64
+	require.NoError(t, db.Table("tool_catalogue_tools").
+		Where("tool_catalogue_id = ? AND tool_id = ?", other.ID, *approved.ResourceID).Count(&inOther).Error)
+	require.NoError(t, db.Table("tool_catalogue_tools").
+		Where("tool_id = ?", *approved.ResourceID).Count(&total).Error)
+	assert.EqualValues(t, 0, inOther)
+
+	if autoAddToDefaultCatalogue() {
+		assert.EqualValues(t, 1, total, "Community Edition: only the Default catalogue, by policy")
+	} else {
+		assert.EqualValues(t, 0, total, "Enterprise: an empty picker publishes the tool to no catalogue")
+	}
+}

@@ -88,6 +88,10 @@ describe("Approve dialog: catalogue picker (#504)", () => {
     const dialog = await openApproveDialog();
     expect(await within(dialog).findByRole("button", { name: "Default" })).toBeInTheDocument();
     expect(listAll).toHaveBeenCalledWith(apiClient, "/tool-catalogues");
+    // The consequence of the preselection is spelled out before Approve.
+    expect(within(dialog).getByTestId("approve-catalogues-consequence")).toHaveTextContent(
+      "Every team that has Default can use the resource once it is active"
+    );
 
     const attrs = await confirmApprove(dialog);
     expect(attrs.assigned_catalogues).toEqual({ ids: [1] });
@@ -112,6 +116,9 @@ describe("Approve dialog: catalogue picker (#504)", () => {
     const chip = await within(dialog).findByRole("button", { name: "Default" });
     fireEvent.keyDown(chip, { key: "Backspace" });
     await waitFor(() => expect(within(dialog).queryByRole("button", { name: "Default" })).not.toBeInTheDocument());
+    expect(within(dialog).getByTestId("approve-catalogues-consequence")).toHaveTextContent(
+      "approved without being published to any catalog"
+    );
 
     const attrs = await confirmApprove(dialog);
     expect(attrs.assigned_catalogues).toEqual({ ids: [] });

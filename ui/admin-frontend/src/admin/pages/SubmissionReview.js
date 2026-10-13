@@ -917,7 +917,12 @@ const SubmissionReview = () => {
                 <TextField
                   {...params}
                   label={`Publish to ${catalogueEndpoint.label.toLowerCase()}`}
-                  helperText="The approved resource joins these catalogs; teams that have them can use it once it is active. Leave empty to publish it later."
+                  helperText={
+                    chosenCatalogues.length === 0
+                      ? "Nothing selected: the resource is approved without being published to any catalog."
+                      : `Every team that has ${chosenCatalogues.map((c) => c.name).join(", ")} can use the resource once it is active. Remove a catalog to keep it out.`
+                  }
+                  FormHelperTextProps={{ "data-testid": "approve-catalogues-consequence" }}
                   inputProps={{ ...params.inputProps, "data-testid": "approve-catalogues" }}
                 />
               )}
