@@ -439,7 +439,7 @@ curl -X POST http://localhost:3000/api/v1/plugins \
 
 ### Available UI Slots
 
-- `sidebar.section`: Add sidebar section with nested items
+- `sidebar.section`: Add sidebar section with nested items. Studio appends one more item to every section, linking to the plugin's own page in Studio (`/admin/plugins/:id`). It is labelled **Configuration**, or **Plugin settings** if one of your items already uses the title "Configuration".
 - `sidebar.link`: Add individual sidebar link
 - `settings.section`: Add settings page section
 - `app.detail.tab`: Add tab to app detail page
