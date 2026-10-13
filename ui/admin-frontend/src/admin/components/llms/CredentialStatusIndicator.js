@@ -61,6 +61,17 @@ export const credentialPresentation = (status, reference, origin) => {
           "This provider has no API key configured. Calls through it will fail.",
       };
     case CREDENTIAL_SECRET:
+      if (origin === CREDENTIAL_SOURCE_ENV) {
+        return {
+          severity: "ok",
+          icon: KeyIcon,
+          color: "success.main",
+          label: reference ? `Key from environment: ${reference}` : "Key from environment",
+          detail: reference
+            ? `The API key is read from the server's environment variable ${reference}. Changing it needs the variable updated where the server runs.`
+            : "The API key is read from an environment variable of the server.",
+        };
+      }
       return {
         severity: "ok",
         icon: LockIcon,

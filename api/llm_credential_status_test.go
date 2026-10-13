@@ -1,9 +1,12 @@
 package api
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // A brand-new instance bootstraps OPENAI_KEY and ANTHROPIC_KEY with empty
@@ -49,4 +52,30 @@ func TestCredentialSource(t *testing.T) {
 	assert.Equal(t, CredentialSourceEnv, credentialSource("$ENV/OPENAI_API_KEY"))
 	assert.Equal(t, "", credentialSource("sk-inline"))
 	assert.Equal(t, "", credentialSource(""))
+}
+
+// Both serialisers (single provider and list) carry credential_source, and
+// it is omitted for an inline key.
+func TestSerializeLLMCarriesCredentialSource(t *testing.T) {
+	a := &API{}
+	env := &models.LLM{Name: "env", APIKey: "$ENV/DEFINITELY_NOT_SET_ANYWHERE"}
+	secret := &models.LLM{Name: "secret", APIKey: "$SECRET/SOME_SECRET"}
+	inline := &models.LLM{Name: "inline", APIKey: "sk-inline"}
+
+	assert.Equal(t, CredentialSourceEnv, a.serializeLLM(env).Attributes.CredentialSource)
+	assert.Equal(t, CredentialSourceSecret, a.serializeLLM(secret).Attributes.CredentialSource)
+	assert.Equal(t, "", a.serializeLLM(inline).Attributes.CredentialSource)
+
+	list := a.serializeLLMs(models.LLMs{*env, *secret, *inline})
+	require.Len(t, list, 3)
+	assert.Equal(t, CredentialSourceEnv, list[0].Attributes.CredentialSource)
+	assert.Equal(t, CredentialSourceSecret, list[1].Attributes.CredentialSource)
+	assert.Equal(t, "", list[2].Attributes.CredentialSource)
+
+	body, err := json.Marshal(list[2])
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "credential_source", "omitted for an inline key")
+	body, err = json.Marshal(list[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"credential_source":"env"`)
 }

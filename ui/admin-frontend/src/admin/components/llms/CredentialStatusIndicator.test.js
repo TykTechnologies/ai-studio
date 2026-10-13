@@ -31,6 +31,15 @@ describe("credentialPresentation", () => {
     expect(secret.detail).toContain("points at the secret OPENAI_KEY");
   });
 
+  it("describes a resolved $ENV/ key as coming from the environment, not the vault", () => {
+    const env = credentialPresentation("secret", "OPENAI_API_KEY", "env");
+    expect(env.severity).toBe("ok");
+    expect(env.label).toBe("Key from environment: OPENAI_API_KEY");
+    expect(env.detail).toContain("environment variable OPENAI_API_KEY");
+    expect(env.label + env.detail).not.toMatch(/vault|secret/i);
+    expect(credentialPresentation("secret", "OPENAI_KEY", "secret").label).toBe("Key from vault: OPENAI_KEY");
+  });
+
   it("shows the environment wording on the detail notice", () => {
     renderWithTheme(<CredentialStatusNotice status="unresolved" reference="OPENAI_API_KEY" origin="env" />);
     expect(screen.getByText(/environment variable OPENAI_API_KEY/)).toBeInTheDocument();
