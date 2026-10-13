@@ -15,19 +15,21 @@ import { P } from '../../../rbac/permissions';
  * fill in with a link to it.
  */
 
-// Active providers whose credential cannot be used, as
-// { id, name, secret } (secret is null for a provider with no key at all).
+// Active providers whose credential cannot be used, as { id, name, secret,
+// envVar }: secret names an empty stored secret, envVar an environment
+// variable that is not set (credential_source "env"); both are null for a
+// provider with no key at all.
 export const providersNeedingCredentials = (llms = []) =>
   llms
     .filter((llm) => llm?.attributes?.active)
     .filter((llm) =>
       [CREDENTIAL_UNRESOLVED, CREDENTIAL_UNSET].includes(llm.attributes.credential_status)
     )
-    .map((llm) => ({
-      id: llm.id,
-      name: llm.attributes.name,
-      secret: llm.attributes.credential_status === CREDENTIAL_UNRESOLVED ? llm.attributes.credential_ref || null : null,
-    }));
+    .map((llm) => {
+      const ref = llm.attributes.credential_status === CREDENTIAL_UNRESOLVED ? llm.attributes.credential_ref || null : null;
+      const fromEnv = llm.attributes.credential_source === "env";
+      return { id: llm.id, name: llm.attributes.name, secret: fromEnv ? null : ref, envVar: fromEnv ? ref : null };
+    });
 
 // Maps each named secret to its id, from one bounded listing of the secrets.
 // Names that cannot be found, or a caller without secrets:read, leave the
@@ -94,7 +96,12 @@ const CredentialSetupNotice = ({ llms, sx }) => {
         {broken.map((p) => (
           <li key={p.id}>
             <Typography variant="bodyMediumDefault" component="span">
-              {p.secret ? (
+              {p.envVar ? (
+                <>
+                  <strong>{p.name}</strong> reads its key from the environment variable <strong>{p.envVar}</strong>,
+                  which is not set on the server. Set it and restart, or switch the provider to a secret.
+                </>
+              ) : p.secret ? (
                 <>
                   <strong>{p.name}</strong> uses the secret{' '}
                   <NewTabLink href={secretHref(p.secret)}>{p.secret}</NewTabLink>

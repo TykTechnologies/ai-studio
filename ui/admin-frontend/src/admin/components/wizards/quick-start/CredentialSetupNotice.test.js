@@ -38,10 +38,15 @@ describe('providersNeedingCredentials', () => {
         llm('6', 'Off', 'unresolved', 'OFF_KEY', false),
       ])
     ).toEqual([
-      { id: '1', name: 'OpenAI', secret: 'OPENAI_KEY' },
-      { id: '2', name: 'Anthropic', secret: 'ANTHROPIC_KEY' },
-      { id: '3', name: 'No key', secret: null },
+      { id: '1', name: 'OpenAI', secret: 'OPENAI_KEY', envVar: null },
+      { id: '2', name: 'Anthropic', secret: 'ANTHROPIC_KEY', envVar: null },
+      { id: '3', name: 'No key', secret: null, envVar: null },
     ]);
+  });
+
+  test('separates an unset environment variable from an empty secret', () => {
+    const env = { id: '7', attributes: { name: 'Env', active: true, credential_status: 'unresolved', credential_ref: 'OPENAI_API_KEY', credential_source: 'env' } };
+    expect(providersNeedingCredentials([env])).toEqual([{ id: '7', name: 'Env', secret: null, envVar: 'OPENAI_API_KEY' }]);
   });
 
   test('copes with no providers', () => {
@@ -93,5 +98,15 @@ describe('CredentialSetupNotice', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.getByText('OPENAI_KEY')).toBeInTheDocument();
     expect(screen.queryByText('Add one')).not.toBeInTheDocument();
+  });
+
+  test('words an unset environment variable as such, with no secrets link or lookup', () => {
+    const env = { id: '7', attributes: { name: 'Env', active: true, credential_status: 'unresolved', credential_ref: 'OPENAI_API_KEY', credential_source: 'env' } };
+    render(<CredentialSetupNotice llms={[env]} />);
+    expect(screen.getByTestId('quickstart-credential-notice')).toHaveTextContent(
+      'reads its key from the environment variable OPENAI_API_KEY, which is not set on the server'
+    );
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(listAll).not.toHaveBeenCalled();
   });
 });
