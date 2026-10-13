@@ -47,12 +47,44 @@ jobs:
           cache: "npm"
           cache-dependency-path: "**/package-lock.json"
 
-      - name: Build Frontend
+      # The suite drives the React dev server (frontend service, :3000), not
+      # the UI embedded in the Go binary, so the binary only needs something
+      # to embed. The public/ assets give it index.html and the logos the
+      # backend serves itself (/logos, the default branding logo). The
+      # production build is checked by ci-test.yml's Frontend Tests job; it
+      # took 2 to 3 minutes here.
+      - name: Create frontend embed placeholder
         run: |
-          cd ui/admin-frontend
-          npm ci --ignore-scripts
-          npm rebuild
-          CI=false npm run build
+          mkdir -p ui/admin-frontend/build
+          cp -R ui/admin-frontend/public/. ui/admin-frontend/build/
+
+      # The studio container compiles the enterprise binary and the
+      # asset-catalog plugin on start. Cold, that took about 4 minutes of
+      # "Wait for AI Studio" (issue #147). Its Go module and build caches are
+      # bind-mounted from here (STUDIO_GOMODCACHE / STUDIO_GOCACHE in
+      # tests/compose.yml), and so is the frontend container's npm cache.
+      # Pull requests only restore; pushes to main save, like ci-test.yml.
+      # Release tags and the nightly Release Gate stay cold.
+      - name: Prepare container caches
+        run: |
+          mkdir -p "$RUNNER_TEMP/studio-gomod" "$RUNNER_TEMP/studio-gobuild" "$RUNNER_TEMP/frontend-npm"
+          echo "STUDIO_GOMODCACHE=$RUNNER_TEMP/studio-gomod" >> "$GITHUB_ENV"
+          echo "STUDIO_GOCACHE=$RUNNER_TEMP/studio-gobuild" >> "$GITHUB_ENV"
+          echo "FRONTEND_NPM_CACHE=$RUNNER_TEMP/frontend-npm" >> "$GITHUB_ENV"
+
+      - name: Restore container caches
+        id: container-cache
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/studio-gomod
+            ${{ runner.temp }}/studio-gobuild
+            ${{ runner.temp }}/frontend-npm
+          key: ${{ runner.os }}-ui-e2e-containers-${{ hashFiles('go.sum', 'enterprise/go.sum', 'ui/admin-frontend/package-lock.json') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-ui-e2e-containers-${{ hashFiles('go.sum', 'enterprise/go.sum', 'ui/admin-frontend/package-lock.json') }}-
+            ${{ runner.os }}-ui-e2e-containers-
 
       - name: Create docs placeholder
         run: |
@@ -87,12 +119,19 @@ jobs:
       - name: Wait for AI Studio
         run: |
           echo "Waiting for AI Studio backend to start..."
+          started=$(date +%s)
           attempts=0
           max_attempts=60
-          # Check backend directly on port 8081 (exposed from container's 8080)
-          # Go backend serves both API and pre-built frontend (SKIP_FRONTEND_DEV=true)
+          # Check the backend directly on port 8081 (the container's 8080).
+          # An authenticated endpoint answers 401 once the API is up.
           while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/common/api/v1/notifications/unread/count)" != "401" ]; do
             attempts=$((attempts+1))
+            # A failed build exits the container; don't wait out the timeout.
+            if [ -n "$(docker compose -f tests/compose.yml ps -q --status exited studio)" ]; then
+              echo "The studio container exited before the API came up."
+              docker compose -f tests/compose.yml logs --tail=200 studio
+              exit 1
+            fi
             echo "Attempt $attempts/$max_attempts - Waiting for AI Studio backend..."
             if [ $attempts -ge $max_attempts ]; then
               echo "Timed out after $max_attempts attempts. AI Studio failed to start."
@@ -104,7 +143,7 @@ jobs:
             fi
             sleep 5
           done
-          echo "AI Studio backend is ready!"
+          echo "AI Studio backend is ready (waited $(( $(date +%s) - started ))s)"
 
           # The Playwright suite drives the React dev server on :3000
           # (tests/ui/config.ts default), so wait for that to compile too.
@@ -120,7 +159,7 @@ jobs:
             fi
             sleep 5
           done
-          echo "Frontend is ready!"
+          echo "Frontend is ready (waited $(( $(date +%s) - started ))s in total)"
 
       - name: Debug UI Response
         run: |
@@ -143,6 +182,19 @@ jobs:
           DEBUG: pw:api
           PWDEBUG: 0
         run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000
+
+      # Saved even when a test failed: the caches only hold build inputs.
+      - name: Save container caches
+        if: ${{ !cancelled() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request') }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ runner.temp }}/studio-gomod
+            ${{ runner.temp }}/studio-gobuild
+            ${{ runner.temp }}/frontend-npm
+          # The restore step's key: the container's go mod tidy writes a
+          # gitignored plugin go.sum, so hashing again here could differ.
+          key: ${{ steps.container-cache.outputs.cache-primary-key }}
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
