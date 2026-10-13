@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/filterscript"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/joho/godotenv"
@@ -102,6 +103,9 @@ func main() {
 
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	pathcheck.Log(log.Logger, "microgateway", pathcheck.Check(config.StartupPaths(cfg, *envFile)))
+	if filterscript.OSModuleAllowed() {
+		log.Error().Msg(filterscript.OSModuleWarning)
+	}
 
 	// Connect to database
 	dbConfig := database.DatabaseConfig{

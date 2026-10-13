@@ -35,6 +35,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/grpc"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/filterscript"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
@@ -290,6 +291,9 @@ func New(opts Options) (_ *Studio, err error) {
 	metrics.SetLegacyNames(!conf.MetricsNoLegacyNames)
 	corsutil.SetAllowedOrigins(conf.CORSAllowedOrigins)
 	secrets.WarnIfEncryptionUnconfigured()
+	if filterscript.OSModuleAllowed() {
+		logger.Log.Error().Msg(filterscript.OSModuleWarning)
+	}
 
 	backgroundCtx, cancel := context.WithCancel(context.Background())
 	s.cancelBackground = cancel
