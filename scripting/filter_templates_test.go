@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -128,10 +129,25 @@ func TestPatternTemplate_MatchesIgnoringCase(t *testing.T) {
 	}
 }
 
-func TestLLMCheckTemplate_FailsClosed(t *testing.T) {
-	answer := func(obj tengo.Object) tengo.CallableFunc {
-		return func(...tengo.Object) (tengo.Object, error) { return obj, nil }
+// checkerReply stubs tyk.llm. A *tengo.Error reply models a failed call the
+// way the enterprise helper reports it: as an error value when the settings
+// carry return_errors: true, and otherwise by raising, which aborts the
+// script (and makes runTemplate fail the test).
+func checkerReply(reply tengo.Object) tengo.CallableFunc {
+	return func(args ...tengo.Object) (tengo.Object, error) {
+		failure, failed := reply.(*tengo.Error)
+		if !failed {
+			return reply, nil
+		}
+		if settings, ok := args[1].(*tengo.Map); ok && settings.Value["return_errors"] == tengo.TrueValue {
+			return failure, nil
+		}
+		return nil, errors.New(failure.String())
 	}
+}
+
+func TestLLMCheckTemplate_FailsClosed(t *testing.T) {
+	answer := checkerReply
 
 	for name, script := range llmCheckScripts(t) {
 		for _, tc := range []struct {
