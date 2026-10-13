@@ -33,6 +33,10 @@ export const SyncStatusProvider = ({ children }) => {
   // is unavailable so consumers can fall back to edge counts.
   const [pendingChanges, setPendingChanges] = useState(null);
   const pollRef = useRef(null);
+  // Set right after a save that left edges out of date; PushReminderToast
+  // shows it. { id } so two saves in a row re-open the toast.
+  const [pushReminder, setPushReminder] = useState(null);
+  const dismissPushReminder = useCallback(() => setPushReminder(null), []);
 
   // The identity store is populated by App.js before any provider mounts.
   const isAdmin = () => hasPermissionNow(P.EDGES_READ);
@@ -156,7 +160,21 @@ export const SyncStatusProvider = ({ children }) => {
   // Let the API client refresh sync status right after a save that the edge
   // gateways care about, so the pending banner appears while the user is still
   // looking at the thing they just saved.
-  useEffect(() => registerSyncStatusRefresh(refreshSyncStatus), [refreshSyncStatus]);
+  //
+  // When that change was a save and edges are now out of date, also raise a
+  // push reminder (#506): the banner alone is easy to miss while looking at
+  // the form. Pending namespaces only exist where edges are registered, so
+  // has_pending already implies "edges exist and need a push".
+  useEffect(
+    () =>
+      registerSyncStatusRefresh(async ({ saved = false } = {}) => {
+        const status = await refreshSyncStatus();
+        if (saved && status?.has_pending) {
+          setPushReminder({ id: Date.now() });
+        }
+      }),
+    [refreshSyncStatus]
+  );
 
   // Calculate derived values
   const hasPendingSync = syncStatus?.has_pending || false;
@@ -195,6 +213,8 @@ export const SyncStatusProvider = ({ children }) => {
         getLastPushAt,
         refreshSyncStatus,
         notifyConfigPushed,
+        pushReminder,
+        dismissPushReminder,
       }}
     >
       {children}

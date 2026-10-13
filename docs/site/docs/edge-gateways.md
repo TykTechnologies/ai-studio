@@ -118,6 +118,10 @@ When any edge gateways are out of sync, a warning banner appears at the top of t
 - Automatically disappears when all edges are synchronized
 - After a push, refreshes at once and then every 3 seconds (for up to 30 seconds) until the edges have acknowledged
 
+### Push reminder after saving
+
+When you save something the edges use (an LLM provider, filter, tool, data source, app, catalogue, plugin configuration or a gateway-visible metadata field) and some edge is now out of date, a toast appears at the bottom right: **Saved, not live on edge gateways yet**. Its **Push Configuration** button opens the same push modal. The toast does not appear when no edge gateway is registered or every edge is already in sync. Running a filter test, or a plugin's own calls, doesn't trigger it.
+
 ## Pushing Configuration
 
 Configuration changes are pushed to edge gateways on-demand (not automatically) to ensure administrators maintain control over when changes are deployed.
