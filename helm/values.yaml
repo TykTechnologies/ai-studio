@@ -122,6 +122,7 @@ config:
   siteUrl: "http://localhost:8080"
   fromEmail: "noreply@example.com"
   devMode: "false"
+  logLevel: "info"  # LOG_LEVEL: trace, debug, info, warn, error
   databaseType: "postgres"
   filterSignupDomains: ""
   databaseUrl: ""

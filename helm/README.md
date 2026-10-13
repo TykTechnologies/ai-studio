@@ -24,6 +24,7 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `config.siteUrl` | Site URL | `"http://localhost:3000"` |
 | `config.fromEmail` | From email address | `"noreply@tyk.io"` |
 | `config.devMode` | Enable development mode | `"false"` |
+| `config.logLevel` | AI Studio log level (`LOG_LEVEL`): `trace`, `debug`, `info`, `warn`, `error` | `"info"` |
 | `config.filterSignupDomains` | Restrict signup to specific domains | `""` |
 
 ### Database Configuration

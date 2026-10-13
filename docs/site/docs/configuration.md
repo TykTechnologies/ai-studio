@@ -70,6 +70,7 @@ Remember that fundamental system parameters are typically set via environment va
 *   Base URL (`SITE_URL`)
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
+*   Log Level (`LOG_LEVEL`: `trace`, `debug`, `info`, `warn`, `error`; default `info`)
 
 ### Sharing a Postgres database
 Studio's table names are unprefixed and include common ones such as `users`, `roles` and `audit_records`. To run Studio in a database another application also uses, set `DATABASE_SCHEMA` to a lower-case schema name: Studio creates the schema if it does not exist (the database user needs the `CREATE` privilege on the database for that, or create the schema beforehand) and keeps all of its tables there, whatever `search_path` the database defaults to. A `DATABASE_URL` that sets a different `search_path` is refused.

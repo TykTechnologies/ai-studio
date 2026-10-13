@@ -16,6 +16,7 @@ data:
   SITE_URL: {{ .Values.config.siteUrl | quote }}
   FROM_EMAIL: {{ .Values.config.fromEmail | quote }}
   DEVMODE: {{ .Values.config.devMode | quote }}
+  LOG_LEVEL: {{ default "info" .Values.config.logLevel | quote }}
   DATABASE_TYPE: {{ .Values.config.databaseType | quote }}
   {{- if .Values.config.filterSignupDomains }}
   FILTER_SIGNUP_DOMAINS: {{ .Values.config.filterSignupDomains | quote }}

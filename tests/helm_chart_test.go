@@ -332,3 +332,36 @@ func TestReadOnlyRootHasWritableTmp(t *testing.T) {
 		t.Error("readOnlyRootFilesystem is set but /tmp is not writable; SQLite temp files would fail")
 	}
 }
+
+// studioConfig returns the data of AI Studio's ConfigMap in a rendered chart.
+func studioConfig(t *testing.T, rendered string) map[string]any {
+	t.Helper()
+	dec := yaml.NewDecoder(strings.NewReader(rendered))
+	for {
+		var doc map[string]any
+		if err := dec.Decode(&doc); err != nil {
+			break
+		}
+		if doc["kind"] != "ConfigMap" {
+			continue
+		}
+		meta, _ := doc["metadata"].(map[string]any)
+		if meta["name"] == "test-midsommar-config" {
+			data, _ := doc["data"].(map[string]any)
+			return data
+		}
+	}
+	t.Fatal("AI Studio ConfigMap test-midsommar-config not found in the rendered chart")
+	return nil
+}
+
+// TestStudioLogLevel: AI Studio reads LOG_LEVEL (#223). The chart sets it from
+// config.logLevel, defaulting to info, so raising it to debug is one value.
+func TestStudioLogLevel(t *testing.T) {
+	if got := studioConfig(t, helmTemplate(t))["LOG_LEVEL"]; got != "info" {
+		t.Errorf("default LOG_LEVEL = %v, want info", got)
+	}
+	if got := studioConfig(t, helmTemplate(t, "--set", "config.logLevel=debug"))["LOG_LEVEL"]; got != "debug" {
+		t.Errorf("LOG_LEVEL with config.logLevel=debug = %v, want debug", got)
+	}
+}
