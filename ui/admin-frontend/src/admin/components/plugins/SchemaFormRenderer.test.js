@@ -133,15 +133,25 @@ describe("SchemaFormRenderer secret fields", () => {
       ui = fieldUiSchemas(tree);
     }).not.toThrow();
     expect(ui.root.token).toEqual({ "ui:widget": "password" });
-    expect(ui.root.child.token).toEqual({ "ui:widget": "password" });
-    // The recursion stops at the depth cap instead of overflowing the stack.
-    let level = ui.root;
-    let depth = 0;
-    while (level.child) {
-      level = level.child;
-      depth += 1;
-    }
-    expect(depth).toBeLessThanOrEqual(9);
+    // The definition is walked once; the self-reference is not expanded again.
+    expect(ui.root.child).toBeUndefined();
+  });
+
+  it("stays fast when every property of a definition refers back to it", () => {
+    const fanout = 12;
+    const properties = { secret: { type: "string", writeOnly: true, title: "Secret" } };
+    for (let i = 0; i < fanout; i += 1) properties[`n${i}`] = { $ref: "#/definitions/node" };
+    const wide = {
+      type: "object",
+      definitions: { node: { type: "object", properties } },
+      properties: { root: { $ref: "#/definitions/node" }, list: { type: "array", items: { $ref: "#/definitions/node" } } },
+    };
+    const started = Date.now();
+    const ui = fieldUiSchemas(wide);
+    // Exponential before (fan-out 8 took ~7 s); linear now.
+    expect(Date.now() - started).toBeLessThan(200);
+    expect(ui.root.secret).toEqual({ "ui:widget": "password" });
+    expect(ui.list.items.secret).toEqual({ "ui:widget": "password" });
   });
 
   it("gives up on a $ref cycle or an unresolvable ref instead of looping", () => {

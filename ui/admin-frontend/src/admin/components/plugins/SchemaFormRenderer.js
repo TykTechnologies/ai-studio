@@ -14,35 +14,49 @@ export const isSecretProperty = (property) =>
 // Unresolvable or remote refs, and ref chains longer than a few hops (or
 // cycles), leave the property as it is.
 const MAX_REF_HOPS = 8;
-export const resolveRef = (property, root) => {
+// resolveRefTrail is resolveRef that also returns the refs it followed.
+const resolveRefTrail = (property, root) => {
+  const refs = [];
   let current = property;
   for (let hop = 0; hop < MAX_REF_HOPS && current && typeof current.$ref === 'string'; hop += 1) {
-    if (!current.$ref.startsWith('#/')) return current;
+    if (!current.$ref.startsWith('#/')) return { schema: current, refs };
     const target = current.$ref
       .slice(2)
       .split('/')
       .map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
       .reduce((node, part) => (node && typeof node === 'object' ? node[part] : undefined), root);
-    if (!target) return current;
+    if (!target) return { schema: current, refs };
+    refs.push(current.$ref);
     const { $ref, ...siblings } = current;
     current = { ...target, ...siblings };
   }
-  return current;
+  return { schema: current, refs };
 };
+export const resolveRef = (property, root) => resolveRefTrail(property, root).schema;
 
 // Per-field uiSchema for an object schema's properties, recursing into nested
 // objects, array items and local $refs. Secret fields always get the password
 // widget: the long-description textarea rule used to override format
-// "password" and show secrets in clear. Nesting is capped at MAX_DEPTH levels:
-// a self-referencing definition (Node.child -> #/definitions/Node) would
-// otherwise recurse forever and crash the page.
+// "password" and show secrets in clear.
+//
+// A recursive definition (Node.child -> #/definitions/Node) is walked once:
+// a $ref already followed on the current path is not expanded again, which
+// keeps the cost linear in the schema size even when every property of a
+// definition refers back to it. Deeper copies still mask format "password"
+// natively in RJSF. MAX_DEPTH is a backstop for deep non-recursive schemas.
 const MAX_DEPTH = 8;
-export const fieldUiSchemas = (schema, root = schema, depth = 0) => {
+export const fieldUiSchemas = (schema, root = schema, depth = 0, path = new Set()) => {
   if (depth > MAX_DEPTH) return {};
-  const properties = resolveRef(schema, root)?.properties;
+  const self = resolveRefTrail(schema, root);
+  const onPath = new Set([...path, ...self.refs]);
+  const properties = self.schema?.properties;
   if (!properties) return {};
+  // Expands a child schema unless it refers back to a definition on the path.
+  const expand = (trail) =>
+    trail.refs.some((ref) => onPath.has(ref)) ? {} : fieldUiSchemas(trail.schema, root, depth + 1, new Set([...onPath, ...trail.refs]));
   return Object.keys(properties).reduce((acc, key) => {
-    const property = resolveRef(properties[key] || {}, root);
+    const trail = resolveRefTrail(properties[key] || {}, root);
+    const property = trail.schema;
 
     if (isSecretProperty(property)) {
       acc[key] = { "ui:widget": "password" };
@@ -76,17 +90,17 @@ export const fieldUiSchemas = (schema, root = schema, depth = 0) => {
     // Nested objects get the same treatment, so a secret inside one is
     // masked too.
     if (property.type === 'object' && property.properties) {
-      const nested = fieldUiSchemas(property, root, depth + 1);
+      const nested = expand(trail);
       if (Object.keys(nested).length > 0) acc[key] = { ...(acc[key] || {}), ...nested };
     }
 
     // Arrays: RJSF reads the item uiSchema from the key's "items", for an
     // array of secret strings and for secrets inside array-of-object items.
     if (property.type === 'array' && property.items && !Array.isArray(property.items)) {
-      const itemSchema = resolveRef(property.items, root);
-      const items = isSecretProperty(itemSchema)
+      const itemTrail = resolveRefTrail(property.items, root);
+      const items = isSecretProperty(itemTrail.schema)
         ? { "ui:widget": "password" }
-        : fieldUiSchemas(itemSchema, root, depth + 1);
+        : expand(itemTrail);
       if (Object.keys(items).length > 0) acc[key] = { ...(acc[key] || {}), items };
     }
 
