@@ -611,7 +611,7 @@ func (p *{{.StructName}}Plugin) OnSessionReady(ctx plugin_sdk.Context) {
 	log.Printf("%s: Session ready, warming up Service API connection", PluginName)
 
 	if ai_studio_sdk.IsInitialized() {
-		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+		_, err := ai_studio_sdk.GetLicenseInfo(context.Background()) // needs no service scope
 		if err != nil {
 			log.Printf("%s: Service API warmup failed: %v", PluginName, err)
 		} else {
