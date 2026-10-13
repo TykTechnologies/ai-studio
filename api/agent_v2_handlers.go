@@ -182,8 +182,8 @@ func (a *API) createAgentSessionV2(c *gin.Context) {
 		return
 	}
 	var serviceBrokerID uint32
-	if brokered, ok := pluginClient.(interface{ SetupServiceBroker() (uint32, error) }); ok {
-		serviceBrokerID, err = brokered.SetupServiceBroker()
+	if brokered, ok := pluginClient.(interface{ SetupServiceBroker(uint) (uint32, error) }); ok {
+		serviceBrokerID, err = brokered.SetupServiceBroker(agentConfig.PluginID)
 		if err != nil {
 			slog.Error("Failed to setup service broker", "error", err, "plugin_id", agentConfig.PluginID)
 			jsonError(c, http.StatusServiceUnavailable, "Agent unavailable", "Failed to setup service broker")

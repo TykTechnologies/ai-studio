@@ -63,16 +63,29 @@ type MicrogatewayPluginClient struct {
 	pluginStub pb.PluginServiceClient
 }
 
-// SetupServiceBroker creates a long-lived brokered server for microgateway services
-// Returns the broker ID that the plugin can use to dial back to host services
-func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface{}) (uint32, error) {
-	return c.SetupServiceBrokerWithEvents(managementServer, nil)
+// SetupServiceBroker creates a long-lived brokered server for microgateway
+// services, serving plugin pluginID. Returns the broker ID that the plugin can
+// use to dial back to host services.
+func (c *MicrogatewayPluginClient) SetupServiceBroker(pluginID uint, managementServer interface{}) (uint32, error) {
+	return c.SetupServiceBrokerWithEvents(pluginID, managementServer, nil)
+}
+
+// BoundPluginIDKey is the context key under which a plugin's brokered server
+// records the plugin it serves. The management server refuses a request whose
+// plugin context names a different plugin.
+const BoundPluginIDKey = "microgateway:plugin:id"
+
+// boundPluginIDInterceptor records the served plugin's ID on every call.
+func boundPluginIDInterceptor(pluginID uint) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		return handler(context.WithValue(ctx, BoundPluginIDKey, uint32(pluginID)), req)
+	}
 }
 
 // SetupServiceBrokerWithEvents creates a long-lived brokered server for microgateway services
-// including the plugin event service for pub/sub.
+// including the plugin event service for pub/sub, serving plugin pluginID.
 // Returns the broker ID that the plugin can use to dial back to host services.
-func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(managementServer interface{}, eventServer interface{}) (uint32, error) {
+func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(pluginID uint, managementServer interface{}, eventServer interface{}) (uint32, error) {
 	if c.broker == nil {
 		return 0, fmt.Errorf("broker not available")
 	}
@@ -109,7 +122,7 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(managementServer
 	// The go-plugin broker handles synchronization internally - the plugin
 	// will wait for connection info when it calls Dial().
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		s := grpc.NewServer(opts...)
+		s := grpc.NewServer(append(opts, grpc.UnaryInterceptor(boundPluginIDInterceptor(pluginID)))...)
 
 		// Register microgateway management services on brokered server
 		mgmtpb.RegisterMicrogatewayManagementServiceServer(s, mgmtServer)

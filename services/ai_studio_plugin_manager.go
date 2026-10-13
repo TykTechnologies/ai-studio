@@ -208,9 +208,11 @@ type AIStudioPluginClient struct {
 	eventServer *PluginEventServer // Reference to plugin event server for pub/sub
 }
 
-// SetupServiceBroker creates a long-lived brokered server for AI Studio services
-// Returns the broker ID that the plugin can use to dial back to host services
-func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
+// SetupServiceBroker creates a long-lived brokered server for AI Studio services,
+// serving plugin pluginID: its calls carry that ID and are checked against its
+// approved scopes. Returns the broker ID that the plugin can use to dial back
+// to host services.
+func (c *AIStudioPluginClient) SetupServiceBroker(pluginID uint) (uint32, error) {
 	if c.broker == nil || c.service == nil {
 		return 0, fmt.Errorf("broker or service not available")
 	}
@@ -228,7 +230,7 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 
 	// Start brokered server with AI Studio management services
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		s := grpc.NewServer(opts...)
+		s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, c.service)...)
 
 		// Register AI Studio management services on brokered server
 		// Use factory function to avoid circular import (set by grpc package)
@@ -525,17 +527,9 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		// Start broker server in background - this stays alive for the plugin's lifetime
 		go func() {
 			clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-				// Create server with plugin ID context for authentication
-				// Use inline interceptor to avoid import cycle with services/grpc
-				pluginIDInterceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-					// Inject plugin ID into context using the exported constant
-					ctx = context.WithValue(ctx, "midsommar:plugin:id", pluginID)
-					return handler(ctx, req)
-				}
-
-				// Add interceptor to options
-				opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
-				s := grpc.NewServer(opts...)
+				// The plugin's calls carry its ID and are checked against its
+				// approved scopes.
+				s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, m.service)...)
 
 				// Register AI Studio management service server using factory function
 				if NewAIStudioManagementServerFunc != nil {
@@ -2106,11 +2100,9 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 			serverReady := make(chan struct{})
 			go func() {
 				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// Inject plugin ID into context
-					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
-					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
-
-					s := grpc.NewServer(opts...)
+					// The plugin's calls carry its ID and are checked against its
+					// approved scopes.
+					s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, clientWrapper.service)...)
 
 					// Register AI Studio management services
 					if NewAIStudioManagementServerFunc != nil {
@@ -2236,11 +2228,9 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 			serverReady := make(chan struct{})
 			go func() {
 				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// Inject plugin ID into context
-					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
-					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
-
-					s := grpc.NewServer(opts...)
+					// The plugin's calls carry its ID and are checked against its
+					// approved scopes.
+					s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, clientWrapper.service)...)
 
 					// Register AI Studio management services
 					if NewAIStudioManagementServerFunc != nil {

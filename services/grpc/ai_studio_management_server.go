@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,6 +30,9 @@ import (
 func init() {
 	services.NewAIStudioManagementServerFunc = func(svc *services.Service) interface{} {
 		return NewAIStudioManagementServer(svc)
+	}
+	services.PluginScopeInterceptorsFunc = func(svc *services.Service) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
+		return ManagementScopeInterceptors(svc.GetDB())
 	}
 }
 
@@ -1041,10 +1045,16 @@ func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.
 func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIStudioManagementService_CallLLMServer) error {
 	ctx := stream.Context()
 
-	// Extract plugin ID from request context and add to gRPC context for validation
-	// This is needed because streaming RPCs don't go through the unary interceptor
-	if req.GetContext() != nil && req.GetContext().GetPluginId() != 0 {
-		ctx = SetPluginIDInContext(ctx, uint(req.GetContext().GetPluginId()))
+	// The broker's stream interceptor puts the calling plugin's ID in the
+	// context. A plugin ID in the request must match it: it cannot name
+	// another plugin. Without a broker (no ID in the context) the request's ID
+	// is used, as before.
+	if reqID := uint(req.GetContext().GetPluginId()); reqID != 0 {
+		if callerID := GetPluginIDFromContext(ctx); callerID == 0 {
+			ctx = SetPluginIDInContext(ctx, reqID)
+		} else if callerID != reqID {
+			return status.Errorf(codes.PermissionDenied, "plugin context does not match the calling plugin")
+		}
 	}
 
 	// Validate plugin has llms.proxy scope
@@ -1340,8 +1350,8 @@ func (s *AIStudioManagementServer) CreateSchedule(ctx context.Context, req *pb.C
 	return s.schedulerServer.CreateSchedule(ctx, req)
 }
 
-// GetLicenseInfo returns license information for plugins to check enterprise features
-// This is a special RPC that doesn't require scope validation - all plugins can check license status
+// GetLicenseInfo returns license information for plugins to check enterprise
+// features. It needs no scope (scopeFreeMethods), only the broker's plugin ID.
 func (s *AIStudioManagementServer) GetLicenseInfo(ctx context.Context, req *pb.GetLicenseInfoRequest) (*pb.GetLicenseInfoResponse, error) {
 	// Get licensing service from main service
 	licensingSvc := s.service.LicensingService
