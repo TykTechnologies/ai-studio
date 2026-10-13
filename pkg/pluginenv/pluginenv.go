@@ -49,7 +49,7 @@ var DefaultAllowlist = []string{
 var hostSecrets = []string{
 	"ENCRYPTION_KEY", "MICROGATEWAY_ENCRYPTION_KEY", "DATABASE_URL",
 	"TYK_AI_SECRET_KEY", "TYK_AI_LICENSE", "EDGE_AUTH_TOKEN", "GRPC_AUTH_TOKEN",
-	"JWT_SECRET", "*_API_KEY",
+	"JWT_SECRET", "*_API_KEY", "*_AI_KEY", "*_SECRET", "*_TOKEN", "*_PASSWORD",
 }
 
 // Environ returns the host variables a plugin may see, in KEY=value form:
