@@ -104,3 +104,27 @@ func TestApproveSubmission_AssignedCataloguesNeedCatalogueWrite(t *testing.T) {
 		assert.EqualValues(t, 0, inCatalogue(sub))
 	})
 }
+
+// The permission each resource type needs to assign catalogues, including
+// the fail-closed default for plugin resources (and anything unknown).
+func TestCanAssignCatalogues(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	can := func(resourceType string, perms ...authz.Permission) bool {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		set := authz.NewSet(perms...)
+		authz.WithContext(c, authz.NewContext(7, false, func() (authz.Set, error) { return set, nil }))
+		return canAssignCatalogues(c, resourceType)
+	}
+	toolW, dataW, llmW := authz.Write("tool-catalogues"), authz.Write("data-catalogues"), authz.Write("catalogues")
+
+	assert.True(t, can(models.SubmissionResourceTypeTool, toolW))
+	assert.True(t, can(models.SubmissionResourceTypeMCPServer, toolW))
+	assert.False(t, can(models.SubmissionResourceTypeTool, dataW, llmW))
+
+	assert.True(t, can(models.SubmissionResourceTypeDatasource, dataW))
+	assert.False(t, can(models.SubmissionResourceTypeDatasource, toolW, llmW))
+
+	assert.False(t, can(models.SubmissionResourceTypePlugin, toolW, dataW), "a plugin resource needs every catalogue write")
+	assert.True(t, can(models.SubmissionResourceTypePlugin, toolW, dataW, llmW))
+	assert.False(t, can("something-new", toolW, dataW))
+}
