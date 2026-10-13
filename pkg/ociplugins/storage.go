@@ -180,10 +180,9 @@ func (s *ContentStorage) StoreExecutable(digest, arch string, data []byte) (stri
 		return "", err
 	}
 
-	// Check if already exists
-	if _, err := os.Stat(execPath); err == nil {
-		return execPath, nil // Already exists
-	}
+	// Always write and rename, even over an existing file: a refetch after a
+	// failed integrity check must replace the cached binary, not keep it.
+	// Rename is atomic, and a running plugin keeps its old inode.
 
 	// Write to temporary file first
 	tempFile, err := os.CreateTemp(s.getTempDir(), "exec-*.tmp")
