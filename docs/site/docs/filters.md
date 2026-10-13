@@ -551,7 +551,7 @@ if is_error(result) {
 }
 ```
 
-The default stays as it is because existing scripts don't check for an error value.
+The default stays as it is because existing scripts don't check for an error value. The error value carries the upstream error text, which can include provider details: put it in a compliance event (seen by admins), not in `output.message`, which reaches the end user.
 
 **Example - Use LLM for PII Detection:**
 ```tengo
