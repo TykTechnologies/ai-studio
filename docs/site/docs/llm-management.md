@@ -22,6 +22,7 @@ Administrators can configure connections to different LLM providers through the 
     *   **Name:** A user-friendly name for this configuration (e.g., "OpenAI GPT-4 Turbo").
     *   **Vendor:** Select the LLM vendor. Supported vendors: `openai`, `anthropic`, `vertex` (Google Vertex AI), `google_ai`, `huggingface`, `ollama`.
     *   **API Key/Credentials:** Securely provide the necessary authentication credentials. Use the **Secrets Management** system (`$SECRET/YourSecretName`) for best practice.
+        AI Studio and the Microgateway never read a vendor key, base URL or host from their own environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `OLLAMA_HOST` and the like). A provider that needs a key and has none is refused rather than filled in from the host. The same applies to embedders and to Pinecone and Chroma data sources. Vertex AI is unchanged: it authenticates with the host's Google Cloud credentials.
     *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for self-hosted models or custom endpoints).
 
 4.  **Model Selection:**

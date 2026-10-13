@@ -14,10 +14,11 @@ func TestNew(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "with token from env",
+			// Tyk: the environment is never a token source.
+			name:     "token in env is ignored",
 			envToken: "test-token",
 			opts:     []Option{},
-			wantErr:  false,
+			wantErr:  true,
 		},
 		{
 			name:     "with token option",
@@ -35,6 +36,7 @@ func TestNew(t *testing.T) {
 			name:     "with all options",
 			envToken: "test-token",
 			opts: []Option{
+				WithToken("test-token"),
 				WithModel("claude-3-opus-20240229"),
 				WithBaseURL("https://api.example.com"),
 				WithAnthropicBetaHeader("max-tokens-3-5-sonnet-2024-07-15"),

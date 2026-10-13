@@ -14,7 +14,7 @@ Most people never need to open the Embedders page: when you configure a data sou
 
 **API compatibility** is the client AI Studio uses, not who serves the model. A Hugging Face model served through an OpenAI-compatible endpoint uses `openai`. The choices are the vendors whose drivers support embeddings: OpenAI, Ollama, Google AI, Vertex and Hugging Face. For Vertex, the endpoint is `project:location`.
 
-API keys can be [Secrets](./secrets.md) references (`$SECRET/NAME`), as on LLM providers.
+API keys can be [Secrets](./secrets.md) references (`$SECRET/NAME`), as on LLM providers. An embedder that needs a key and has none is refused; the key is never read from the host environment.
 
 ## Rules that protect your data
 

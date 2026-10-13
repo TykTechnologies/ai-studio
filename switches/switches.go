@@ -142,9 +142,9 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		if LLMConfig.APIEndpoint != "" {
 			opts = append(opts, openai.WithBaseURL(LLMConfig.APIEndpoint))
 		}
-		if LLMConfig.APIKey != "" {
-			opts = append(opts, openai.WithToken(LLMConfig.APIKey))
-		}
+		// Always passed, even when empty: the client must refuse an empty key,
+		// never fill it from the host environment.
+		opts = append(opts, openai.WithToken(LLMConfig.APIKey))
 		if settings != nil && settings.ModelName != "" {
 			opts = append(opts, openai.WithModel(settings.ModelName))
 		}
@@ -157,9 +157,7 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		if LLMConfig.APIEndpoint != "" {
 			opts = append(opts, anthropic.WithBaseURL(anthropicVendor.DriverBaseURL(LLMConfig.APIEndpoint)))
 		}
-		if LLMConfig.APIKey != "" {
-			opts = append(opts, anthropic.WithToken(LLMConfig.APIKey))
-		}
+		opts = append(opts, anthropic.WithToken(LLMConfig.APIKey))
 		if settings != nil && settings.ModelName != "" {
 			opts = append(opts, anthropic.WithModel(settings.ModelName))
 		}
@@ -189,9 +187,7 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		if LLMConfig.APIEndpoint != "" {
 			opts = append(opts, withEndpoint(LLMConfig.APIEndpoint))
 		}
-		if LLMConfig.APIKey != "" {
-			opts = append(opts, googleai.WithAPIKey(LLMConfig.APIKey))
-		}
+		opts = append(opts, googleai.WithAPIKey(LLMConfig.APIKey))
 		if settings != nil && settings.ModelName != "" {
 			opts = append(opts, googleai.WithDefaultModel(settings.ModelName))
 		}

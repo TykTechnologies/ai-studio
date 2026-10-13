@@ -4,12 +4,17 @@ package googleai
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/callbacks"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/google/generative-ai-go/genai"
 )
+
+// ErrMissingAPIKey is returned by New when no API key or credentials are
+// given. Tyk: the client never falls back to the environment.
+var ErrMissingAPIKey = errors.New("googleai: missing the API key")
 
 // GoogleAI is a type that represents a Google AI API client.
 type GoogleAI struct {
@@ -30,7 +35,9 @@ func New(ctx context.Context, opts ...Option) (*GoogleAI, error) {
 	for _, opt := range opts {
 		opt(&clientOptions)
 	}
-	clientOptions.EnsureAuthPresent()
+	if !clientOptions.EnsureAuthPresent() {
+		return nil, ErrMissingAPIKey
+	}
 
 	gi := &GoogleAI{
 		opts:  clientOptions,

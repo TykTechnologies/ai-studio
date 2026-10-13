@@ -2,7 +2,6 @@ package googleai
 
 import (
 	"net/http"
-	"os"
 	"reflect"
 
 	"cloud.google.com/go/vertexai/genai"
@@ -42,13 +41,15 @@ func DefaultOptions() Options {
 	}
 }
 
-// EnsureAuthPresent attempts to ensure that the client has authentication information. If it does not, it will attempt to use the GOOGLE_API_KEY environment variable.
-func (o *Options) EnsureAuthPresent() {
-	if !hasAuthOptions(o.ClientOptions) {
-		if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
-			WithAPIKey(key)(o)
-		}
-	}
+// EnsureAuthPresent reports whether the client has authentication
+// information.
+//
+// Tyk: upstream fills a missing key from the GOOGLE_API_KEY environment
+// variable here; the fork never reads credentials from the environment, and
+// New refuses a client without them rather than let the SDK fall back to the
+// host's Application Default Credentials.
+func (o *Options) EnsureAuthPresent() bool {
+	return hasAuthOptions(o.ClientOptions)
 }
 
 type Option func(*Options)

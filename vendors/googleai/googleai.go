@@ -220,9 +220,9 @@ func (v *GoogleAI) DecisionEndpoint() string {
 
 func setupGoogleDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]googleai.Option, 0)
-	if connDef.APIKey != "" {
-		opts = append(opts, googleai.WithAPIKey(connDef.APIKey))
-	}
+	// Always passed, even when empty: the client must refuse an empty key,
+	// never fill it from the host environment.
+	opts = append(opts, googleai.WithAPIKey(connDef.APIKey))
 
 	if llmSettings != nil {
 		opts = append(opts, googleai.WithDefaultModel(llmSettings.ModelName))
@@ -238,9 +238,7 @@ func setupGoogleDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 
 func setupGoogleAIEmbedClient(spec *models.EmbedderSpec) (embeddings.EmbedderClient, error) {
 	var opts = make([]googleai.Option, 0)
-	if spec.APIKey != "" {
-		opts = append(opts, googleai.WithAPIKey(spec.APIKey))
-	}
+	opts = append(opts, googleai.WithAPIKey(spec.APIKey))
 
 	opts = append(opts, googleai.WithDefaultEmbeddingModel(spec.Model))
 

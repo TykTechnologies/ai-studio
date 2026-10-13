@@ -4,6 +4,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/anthropic/internal/anthropicclient"
 )
 
+// Tyk: kept for tests that prove the variable is ignored.
 const (
 	tokenEnvVarName = "ANTHROPIC_API_KEY" //nolint:gosec
 )
@@ -26,8 +27,8 @@ type options struct {
 
 type Option func(*options)
 
-// WithToken passes the Anthropic API token to the client. If not set, the token
-// is read from the ANTHROPIC_API_KEY environment variable.
+// WithToken passes the Anthropic API token to the client. It must be set.
+// Tyk: upstream falls back to the ANTHROPIC_API_KEY environment variable.
 func WithToken(token string) Option {
 	return func(opts *options) {
 		opts.token = token

@@ -62,9 +62,9 @@ func (v *OpenAI) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImp
 	var err error
 
 	opts := []openai.Option{}
-	if spec.APIKey != "" {
-		opts = append(opts, openai.WithToken(spec.APIKey))
-	}
+	// Always passed, even when empty: the client must refuse an empty key,
+	// never fill it from the host environment.
+	opts = append(opts, openai.WithToken(spec.APIKey))
 	if spec.Endpoint != "" {
 		opts = append(opts, openai.WithBaseURL(spec.Endpoint))
 	}
@@ -233,9 +233,7 @@ func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 		opts = append(opts, openai.WithBaseURL(connDef.APIEndpoint))
 	}
 
-	if connDef.APIKey != "" {
-		opts = append(opts, openai.WithToken(connDef.APIKey))
-	}
+	opts = append(opts, openai.WithToken(connDef.APIKey))
 
 	if llmSettings != nil {
 		opts = append(opts, openai.WithModel(llmSettings.ModelName))

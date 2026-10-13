@@ -5,7 +5,6 @@ package chroma
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	lcembeddings "github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	chromav2 "github.com/amikos-tech/chroma-go/pkg/api/v2"
@@ -64,9 +63,8 @@ func WithIncludes(includes []chromav2.Include) Option {
 	}
 }
 
-// WithOpenAIAPIKey is an option for setting the OpenAI api key. If the option is not set
-// the api key is read from the OPENAI_API_KEY environment variable. If the
-// variable is not present, an error will be returned.
+// WithOpenAIAPIKey is an option for setting the OpenAI api key. Either it or
+// an embedder must be set. Tyk: upstream falls back to OPENAI_API_KEY.
 func WithOpenAIAPIKey(openAiAPIKey string) Option {
 	return func(p *Store) {
 		p.openaiAPIKey = openAiAPIKey
@@ -82,24 +80,19 @@ func WithOpenAIOrganization(openAiOrganization string) Option {
 
 func applyClientOptions(opts ...Option) (Store, error) {
 	o := &Store{
-		nameSpace:          DefaultNameSpace,
-		nameSpaceKey:       DefaultNameSpaceKey,
-		distanceFunction:   DefaultDistanceFunc,
-		openaiAPIKey:       os.Getenv(OpenAIAPIKeyEnvVarName),
-		openaiOrganization: os.Getenv(OpenAIOrgIDEnvVarName),
+		nameSpace:        DefaultNameSpace,
+		nameSpaceKey:     DefaultNameSpaceKey,
+		distanceFunction: DefaultDistanceFunc,
+		// Tyk: no OPENAI_API_KEY / OPENAI_ORGANIZATION defaults.
 	}
 
 	for _, opt := range opts {
 		opt(o)
 	}
 
+	// Tyk: no CHROMA_URL fallback; the URL must be passed.
 	if o.chromaURL == "" {
-		o.chromaURL = os.Getenv(ChromaURLKeyEnvVarName)
-		if o.chromaURL == "" {
-			return Store{}, fmt.Errorf(
-				"%w: missing chroma URL. Pass it as an option or set the %s environment variable",
-				ErrInvalidOptions, ChromaURLKeyEnvVarName)
-		}
+		return Store{}, fmt.Errorf("%w: missing chroma URL", ErrInvalidOptions)
 	}
 
 	// a embedder or an openai api key must be provided
