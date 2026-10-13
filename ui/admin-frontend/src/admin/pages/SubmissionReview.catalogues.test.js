@@ -148,4 +148,24 @@ describe("Approve dialog: catalogue picker (#504)", () => {
     const attrs = await confirmApprove(dialog);
     expect(attrs).not.toHaveProperty("assigned_catalogues");
   });
+
+  // Security review: an update changes a resource that already exists (and
+  // may be live); approving it must not add that resource to Default.
+  it("offers no picker and sends no catalogues for an update submission", async () => {
+    apiClient.get.mockImplementation((url) =>
+      Promise.resolve(
+        url === "/submissions/1"
+          ? { data: { data: { ...submission("tool"), is_update: true, target_resource_id: 12 } } }
+          : { data: { data: [] } }
+      )
+    );
+    renderReview();
+    const dialog = await openApproveDialog();
+    expect(within(dialog).queryByTestId("approve-catalogues")).not.toBeInTheDocument();
+    expect(listAll).not.toHaveBeenCalledWith(apiClient, "/tool-catalogues");
+
+    const attrs = await confirmApprove(dialog);
+    expect(attrs).not.toHaveProperty("assigned_catalogues");
+    expect(mockNavigate.mock.calls[0][1].state.snackbar.message).toMatch(/applied to the existing resource/);
+  });
 });

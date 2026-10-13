@@ -181,8 +181,11 @@ const SubmissionReview = () => {
   }, [approveDialogOpen, isMCPSubmission, mcpConnectionId]);
 
   // Catalogues exist to manage only with groups (Enterprise); Community
-  // Edition always publishes into Default, so it shows no picker.
-  const catalogueEndpoint = features?.feature_groups ? CATALOGUE_ENDPOINTS[submission?.resource_type] : undefined;
+  // Edition always publishes into Default, so it shows no picker. An update
+  // submission changes a resource that already exists (and may be live) and
+  // keeps its catalogues, so it gets no picker and sends none either.
+  const catalogueEndpoint =
+    features?.feature_groups && !submission?.is_update ? CATALOGUE_ENDPOINTS[submission?.resource_type] : undefined;
 
   useEffect(() => {
     if (!approveDialogOpen || !catalogueEndpoint || catalogueOptions !== null) return;
@@ -227,7 +230,9 @@ const SubmissionReview = () => {
           snackbar: {
             // Say what approval actually did: it publishes into Default, and the
             // resource is not live until an administrator activates it.
-            message: isPluginSubmission
+            message: submission?.is_update
+              ? "Submission approved. The changes were applied to the existing resource; its catalogs and active state are unchanged."
+              : isPluginSubmission
               ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's team settings."
               : isMCPSubmission
                 ? "Submission approved. Open the MCP server under Context management: on a full-mode connection the proxy now exists on the Tyk Dashboard, otherwise the handoff package is ready for the platform team."
