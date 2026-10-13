@@ -1,5 +1,6 @@
 import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
 import { extractGovernedMetadataErrors, governedMetadataSaveWarning } from "../../services/governedMetadataService";
+import { slugConflictDetail, focusNameField } from "../../utils/slugConflict";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import apiClient from "../../utils/apiClient";
 import focusFirstInvalid from "../../utils/focusFirstInvalid";
@@ -703,6 +704,14 @@ const ToolForm = () => {
           severity: "error",
         });
         document.getElementById(GOVERNED_METADATA_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      const slugConflict = slugConflictDetail(error);
+      if (slugConflict) {
+        // Another tool already has this name's slug: say so on the Name field.
+        setErrors((prev) => ({ ...prev, name: slugConflict }));
+        setSnackbar({ open: true, message: slugConflict, severity: "error" });
+        focusNameField();
         return;
       }
       console.error("Error saving tool", error);
