@@ -168,7 +168,7 @@ func TestGovernedMetadataEnforcementOnToolAndDatasource(t *testing.T) {
 		Fields:      []models.MetadataFieldDef{{Key: "team", Label: "Team", Type: "string", Required: true}}}))
 
 	toolBody := func(governed interface{}) map[string]interface{} {
-		attrs := map[string]interface{}{"name": "weather", "tool_type": "REST", "description": "d", "privacy_score": 10, "oas_spec": testOASSpec(`{"openapi": "3.0.0"}`)}
+		attrs := map[string]interface{}{"name": "weather", "tool_type": "REST", "description": "d", "privacy_score": 10, "oas_spec": testToolSpec}
 		if governed != nil {
 			attrs["governed_metadata"] = governed
 		}

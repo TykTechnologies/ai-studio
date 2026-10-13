@@ -202,3 +202,26 @@ export const detectFormat = (content, filename = "") => {
     }
   }
 };
+
+// fetchSpecFromURL downloads a spec in the browser. A fetch that throws
+// (rather than returning a response) almost always means the server sent no
+// CORS headers, or is unreachable from here; saying so beats a generic
+// "failed to load", which reads as a bad URL.
+export const fetchSpecFromURL = async (url, fetchImpl = fetch) => {
+  let response;
+  try {
+    response = await fetchImpl(url);
+  } catch (err) {
+    throw new Error(
+      "Your browser could not download the specification from this URL. The server may not allow " +
+        "cross-origin (CORS) requests, or it may be unreachable from your network. Download the file " +
+        "and upload it, or paste its contents, instead."
+    );
+  }
+  if (!response.ok) {
+    throw new Error(
+      `The URL returned HTTP ${response.status}. Check the URL, or upload or paste the specification instead.`
+    );
+  }
+  return response.text();
+};

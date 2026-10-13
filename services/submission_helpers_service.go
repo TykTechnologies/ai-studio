@@ -45,6 +45,10 @@ func validateResourcePayload(resourceType string, payload models.JSONMap) error 
 		if getString("oas_spec") == "" {
 			return fmt.Errorf("tool payload must include 'oas_spec'")
 		}
+		// Refuse at submit time a spec that approval would refuse later.
+		if err := ValidateToolOASSpec(getString("tool_type"), getString("oas_spec")); err != nil {
+			return err
+		}
 	}
 
 	return nil

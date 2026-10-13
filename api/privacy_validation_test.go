@@ -18,7 +18,7 @@ func TestPrivacyScoreValidation(t *testing.T) {
 
 	llm := &models.LLM{Name: "existing-llm", Vendor: models.MOCK_VENDOR, PrivacyScore: 50}
 	require.NoError(t, db.Create(llm).Error)
-	tool := &models.Tool{Name: "existing-tool", ToolType: models.ToolTypeREST, OASSpec: testOASSpec(`{"openapi": "3.0.0"}`), PrivacyScore: 50}
+	tool := &models.Tool{Name: "existing-tool", ToolType: models.ToolTypeREST, OASSpec: testToolSpec, PrivacyScore: 50}
 	require.NoError(t, db.Create(tool).Error)
 	ds := &models.Datasource{Name: "existing-ds", PrivacyScore: 50}
 	require.NoError(t, db.Create(ds).Error)
@@ -37,10 +37,10 @@ func TestPrivacyScoreValidation(t *testing.T) {
 			return fmt.Sprintf(`{"data":{"type":"llms","attributes":{"privacy_score":%s}}}`, s)
 		}},
 		{"create tool", "POST", "/api/v1/tools", func(s string) string {
-			return fmt.Sprintf(`{"data":{"type":"tools","attributes":{"name":"new-tool-%s","tool_type":"REST","oas_spec":%q,"privacy_score":%s}}}`, s, testOASSpec(`{"openapi": "3.0.0"}`), s)
+			return fmt.Sprintf(`{"data":{"type":"tools","attributes":{"name":"new-tool-%s","tool_type":"REST","oas_spec":%q,"privacy_score":%s}}}`, s, testToolSpec, s)
 		}},
 		{"update tool", "PATCH", "/api/v1/tools/" + idStr(tool.ID), func(s string) string {
-			return fmt.Sprintf(`{"data":{"type":"tools","attributes":{"name":"existing-tool","tool_type":"REST","oas_spec":%q,"privacy_score":%s}}}`, testOASSpec(`{"openapi": "3.0.0"}`), s)
+			return fmt.Sprintf(`{"data":{"type":"tools","attributes":{"name":"existing-tool","tool_type":"REST","oas_spec":%q,"privacy_score":%s}}}`, testToolSpec, s)
 		}},
 		{"create datasource", "POST", "/api/v1/datasources", func(s string) string {
 			return fmt.Sprintf(`{"data":{"type":"datasources","attributes":{"name":"new-ds-%s","privacy_score":%s}}}`, s, s)

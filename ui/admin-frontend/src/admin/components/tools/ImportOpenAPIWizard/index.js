@@ -20,7 +20,7 @@ import DirectImportSpec from "./components/DirectImportSpec";
 import { useTykImport } from "./hooks/useTykImport";
 import { useToolCreation } from "./hooks/useToolCreation";
 import yaml from "js-yaml";
-import { detectFormat, extractOperations, extractAuthDetails, validateSpec } from "./utils/specUtils";
+import { detectFormat, extractOperations, extractAuthDetails, fetchSpecFromURL, validateSpec } from "./utils/specUtils";
 import { STEPS, STEP_SEQUENCES, STEP_LABELS, IMPORT_METHODS } from "./constants";
 
 const emptyToolConfig = () => ({
@@ -140,11 +140,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
               }
               
               // Fetch spec from URL
-              const response = await fetch(directSpec.spec);
-              if (!response.ok) {
-                throw new Error("Failed to fetch specification from URL");
-              }
-              spec = await response.text();
+              spec = await fetchSpecFromURL(directSpec.spec);
               
               // Detect format from URL and content
               const format = detectFormat(spec, directSpec.spec);

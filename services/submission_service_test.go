@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -331,7 +332,7 @@ func TestAdminApproveSubmission_Tool(t *testing.T) {
 			"name":        "Weather API",
 			"description": "Get weather data",
 			"tool_type":   "REST",
-			"oas_spec":    "dGVzdA==", // base64 of "test"
+			"oas_spec":    base64.StdEncoding.EncodeToString([]byte(validOASSpec)),
 		},
 		nil, 2, "Public API",
 		"contact@test.com", "", "", nil, "", "",

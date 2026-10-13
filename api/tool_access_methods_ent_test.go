@@ -50,7 +50,7 @@ func TestToolDocumentation_ChatOnlyToolHasNoPage(t *testing.T) {
 	api, db, service := setupTestAPIForCommonTests(t)
 	user := createTestUser(t, service)
 
-	spec := testOASSpec(`{"openapi":"3.0.0","info":{"title":"T","version":"1"},"paths":{"/thing":{"get":{"operationId":"getThing","responses":{"200":{"description":"OK"}}}}}}`)
+	spec := testOASSpec(`{"openapi":"3.0.0","info":{"title":"T","version":"1"},"servers":[{"url":"https://api.example.com"}],"paths":{"/thing":{"get":{"operationId":"getThing","responses":{"200":{"description":"OK"}}}}}}`)
 	tool, err := service.CreateTool("Docs Tool", "Description", models.ToolTypeREST, spec, 1, "", "")
 	require.NoError(t, err)
 	require.NoError(t, service.AddOperationToTool(tool.ID, "getThing"))

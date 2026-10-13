@@ -223,7 +223,7 @@ func TestGovernedMetadataHandlers_HookRejectionOnUpdate(t *testing.T) {
 		{"tool", fmt.Sprintf("/api/v1/tools/%d", tool.ID),
 			map[string]interface{}{"data": map[string]interface{}{"type": "tool", "attributes": map[string]interface{}{
 				"name": "new-tool", "tool_type": "REST", "description": "d", "privacy_score": 10,
-				"oas_spec": testOASSpec(`{"openapi": "3.0.0"}`), "governed_metadata": governed}}},
+				"oas_spec": testToolSpec, "governed_metadata": governed}}},
 			func() string { var m models.Tool; require.NoError(t, db.First(&m, tool.ID).Error); return m.Name }},
 		{"datasource", fmt.Sprintf("/api/v1/datasources/%d", ds.ID),
 			map[string]interface{}{"data": map[string]interface{}{"type": "datasource", "attributes": map[string]interface{}{
@@ -268,7 +268,7 @@ func TestGovernedMetadataEnforcement_ToolUpdateAndDatasourceDelete(t *testing.T)
 		}}))
 
 	toolBody := func(extra map[string]interface{}) map[string]interface{} {
-		attrs := map[string]interface{}{"name": "weather", "tool_type": "REST", "description": "d", "privacy_score": 10, "oas_spec": testOASSpec(`{"openapi": "3.0.0"}`)}
+		attrs := map[string]interface{}{"name": "weather", "tool_type": "REST", "description": "d", "privacy_score": 10, "oas_spec": testToolSpec}
 		for k, v := range extra {
 			attrs[k] = v
 		}

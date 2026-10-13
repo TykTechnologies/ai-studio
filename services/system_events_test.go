@@ -717,7 +717,7 @@ func TestSystemEvents_Tool_Created(t *testing.T) {
 	sub := bus.Subscribe(TopicToolCreated, collector.Handler())
 	defer bus.Unsubscribe(sub)
 
-	tool, err := service.CreateTool("Test Tool", "Tool description", "openapi", `{"openapi":"3.0.0"}`, 75, "test_schema", "api-key")
+	tool, err := service.CreateTool("Test Tool", "Tool description", "openapi", testToolSpec, 75, "test_schema", "api-key")
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -734,7 +734,7 @@ func TestSystemEvents_Tool_Created(t *testing.T) {
 func TestSystemEvents_Tool_Updated(t *testing.T) {
 	service, bus := setupServiceWithEventBus(t)
 
-	tool, err := service.CreateTool("Test Tool 2", "Tool description", "openapi", `{"openapi":"3.0.0"}`, 75, "test_schema", "api-key")
+	tool, err := service.CreateTool("Test Tool 2", "Tool description", "openapi", testToolSpec, 75, "test_schema", "api-key")
 	require.NoError(t, err)
 
 	collector := NewTestEventCollector()
@@ -742,7 +742,7 @@ func TestSystemEvents_Tool_Updated(t *testing.T) {
 	sub := bus.Subscribe(TopicToolUpdated, collector.Handler())
 	defer bus.Unsubscribe(sub)
 
-	_, err = service.UpdateTool(tool.ID, "Updated Tool", "Updated description", "openapi", `{"openapi":"3.0.1"}`, 80, "new_schema", "new-api-key")
+	_, err = service.UpdateTool(tool.ID, "Updated Tool", "Updated description", "openapi", testToolSpec, 80, "new_schema", "new-api-key")
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -759,7 +759,7 @@ func TestSystemEvents_Tool_Updated(t *testing.T) {
 func TestSystemEvents_Tool_Deleted(t *testing.T) {
 	service, bus := setupServiceWithEventBus(t)
 
-	tool, err := service.CreateTool("Test Tool 3", "Tool description", "openapi", `{"openapi":"3.0.0"}`, 75, "test_schema", "api-key")
+	tool, err := service.CreateTool("Test Tool 3", "Tool description", "openapi", testToolSpec, 75, "test_schema", "api-key")
 	require.NoError(t, err)
 
 	collector := NewTestEventCollector()
