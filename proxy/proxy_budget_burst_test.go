@@ -5,6 +5,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -77,6 +78,18 @@ func newBurstFixture(t *testing.T) *burstFixture {
 	return &burstFixture{db: db, proxy: p, srv: srv, app: app, budgetS: budgetService}
 }
 
+// burstClient bounds each request, and waitAnalyzed the analysis wait, so a
+// stuck proxy fails the test in seconds instead of running into the package
+// timeout.
+var burstClient = &http.Client{Timeout: 30 * time.Second}
+
+func (f *burstFixture) waitAnalyzed(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	require.NoError(t, f.proxy.WaitForAnalytics(ctx), "the response analysis did not finish")
+}
+
 func (f *burstFixture) send(t *testing.T) int {
 	t.Helper()
 	body := []byte(`{"model": "test-model", "prompt": "Hello"}`)
@@ -84,7 +97,7 @@ func (f *burstFixture) send(t *testing.T) int {
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer burst-token")
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := burstClient.Do(req)
 	require.NoError(t, err)
 	resp.Body.Close()
 	return resp.StatusCode
@@ -102,7 +115,7 @@ func TestEmbeddedBudget_SequentialBurstStopsAtBudget(t *testing.T) {
 		if f.send(t) == http.StatusOK {
 			served++
 		}
-		f.proxy.waitForAnalyzers() // the request's analysis has run
+		f.waitAnalyzed(t) // the request's analysis has run
 	}
 	assert.Equal(t, 4, served)
 }
@@ -118,7 +131,7 @@ func TestEmbeddedBudget_UnpacedBurstOvershootIsBounded(t *testing.T) {
 			served++
 		}
 	}
-	f.proxy.waitForAnalyzers()
+	f.waitAnalyzed(t)
 	assert.GreaterOrEqual(t, served, 4)
 	assert.LessOrEqual(t, served, 6, "a paced client can overshoot by at most the requests still being analysed")
 	assert.Equal(t, http.StatusForbidden, f.send(t), "once the budget is spent every request is refused")
