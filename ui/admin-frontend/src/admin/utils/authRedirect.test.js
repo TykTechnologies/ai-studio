@@ -88,6 +88,8 @@ describe('Studio sign-in return address (?next=)', () => {
     ['a script URL', 'javascript:alert(1)'],
     ['a control character', '/admin\n/apps'],
     ['the login page', '/login?next=/admin'],
+    ['the login page behind dot segments', '/admin/../login'],
+    ['the root behind dot segments', '/admin/..'],
     ['a password page', '/reset-password?token=x'],
     ['an oversized value', `/admin/${'a'.repeat(2100)}`],
   ])('rejects %s', (_, raw) => {

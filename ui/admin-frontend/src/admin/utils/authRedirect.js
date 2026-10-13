@@ -56,7 +56,9 @@ export const safeReturnPath = (raw) => {
   if (!raw.startsWith('/') || raw.startsWith('//') || /[\u0000-\u001f\u007f\\]/.test(raw)) {
     return null;
   }
-  const pathOnly = raw.split(/[?#]/)[0];
+  // Compare the path the browser will actually open: "/admin/../login" is
+  // /login once dot segments are resolved.
+  const pathOnly = new URL(raw, 'http://studio.invalid').pathname;
   if (pathOnly === '/' || isPublicPath(pathOnly)) {
     return null;
   }
