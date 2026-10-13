@@ -106,6 +106,9 @@ type PluginMetadata struct {
 	// (signatures were required) and it passed. An entry cached without it
 	// is fetched again once signatures are required.
 	SignatureChecked bool `json:"signature_checked,omitempty"`
+	// SignatureKey is the public key ID the signature was checked with
+	// ("" for the default key).
+	SignatureKey string `json:"signature_key,omitempty"`
 }
 
 // PluginConfig represents the configuration metadata stored in the OCI artifact

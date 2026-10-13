@@ -138,17 +138,19 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		cacheRef = &resolved
 	}
 
-	// Verify signature if required
+	// Verify signature if required. Verify the digest that was pulled
+	// (cacheRef), not the tag: a tag moved between the pull and the check
+	// would otherwise get a signed image verified and an unsigned one stored.
 	if c.config.RequireSignature {
 		var err error
 
 		// Use enterprise security service if available, otherwise fall back to built-in verifier
 		if c.securityService != nil {
 			log.Debug().Msg("Using enterprise security service for signature verification")
-			err = c.securityService.VerifySignature(ctx, ref, params.PublicKey)
+			err = c.securityService.VerifySignature(ctx, cacheRef, params.PublicKey)
 		} else {
 			log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
-			err = c.verifier.Verify(ctx, ref, params.PublicKey)
+			err = c.verifier.Verify(ctx, cacheRef, params.PublicKey)
 		}
 
 		if err != nil {
@@ -206,6 +208,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		// The signature check above returns early on failure, so reaching
 		// here with signatures required means it ran and passed.
 		SignatureChecked: c.config.RequireSignature,
+		SignatureKey:     params.PublicKey,
 	}
 
 	if err := c.storage.StoreMetadata(cacheRef.Digest, params.Architecture, metadata); err != nil {
@@ -251,7 +254,8 @@ func (c *OCIPluginClient) GetPlugin(ref *OCIReference, params *OCIPluginParams) 
 // (ErrCacheCorrupted); FetchPlugin then fetches the plugin again. An entry
 // with no recorded hash (no metadata, or cached by an older release) cannot
 // be checked: it is reported unverified, and refused when signatures are
-// required. So is an entry cached while signatures were not required.
+// required. So is an entry cached while signatures were not required, or
+// verified with a different public key than the one now asked for.
 func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	execPath := c.storage.GetExecutablePath(ref.Digest, params.Architecture)
 
@@ -287,6 +291,9 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 	}
 	if c.config.RequireSignature && !metadata.SignatureChecked {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "cached without signature verification, which is now required"}
+	}
+	if c.config.RequireSignature && metadata.SignatureKey != params.PublicKey {
+		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "signature was verified with a different public key"}
 	}
 
 	if err := c.storage.UpdateLastAccessed(ref.Digest, params.Architecture); err != nil {

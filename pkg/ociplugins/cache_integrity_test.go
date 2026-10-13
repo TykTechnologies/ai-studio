@@ -106,6 +106,21 @@ func TestGetPlugin_UnverifiedEntryRefusedWhenSignaturesRequired(t *testing.T) {
 	requireCacheCorrupted(t, err)
 }
 
+// An entry verified with one public key is not reused for a load that asks
+// for another.
+func TestGetPlugin_EntryVerifiedWithOtherKeyRefused(t *testing.T) {
+	client, ref, params := cachedPluginFixture(t, true, []byte("plugin binary"), func(m *PluginMetadata) { m.SignatureKey = "key-1" })
+
+	params.PublicKey = "key-2"
+	_, err := client.GetPlugin(ref, params)
+	requireCacheCorrupted(t, err)
+	assert.Contains(t, err.Error(), "different public key")
+
+	params.PublicKey = "key-1"
+	_, err = client.GetPlugin(ref, params)
+	require.NoError(t, err)
+}
+
 // A refetch after a failed check must replace the cached file, so storing
 // over an existing executable overwrites it.
 func TestStoreExecutable_ReplacesExistingFile(t *testing.T) {
