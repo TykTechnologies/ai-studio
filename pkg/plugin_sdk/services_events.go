@@ -405,10 +405,13 @@ const (
 	maxPendingEvents = 64
 	dropWarnInterval = time.Minute
 	flushTimeout     = 5 * time.Second
-	// connectRetryInterval spaces connection attempts: dialling a broker
-	// whose server is not up yet can block for seconds.
-	connectRetryInterval = 2 * time.Second
 )
+
+// connectRetryInterval spaces connection attempts: dialling a broker whose
+// server is not up yet can block for seconds. While events are buffered, a
+// failed attempt schedules the next one, so they are sent even if the plugin
+// publishes nothing more. A variable so tests can shorten it.
+var connectRetryInterval = 2 * time.Second
 
 // errEventDropped is returned by Publish when the event service is not ready
 // and the pending buffer is full.
@@ -441,7 +444,9 @@ type lazyEventService struct {
 	pending     []pendingEvent
 	busy        bool // a goroutine is connecting or sending the buffer
 	dropWarned  map[string]time.Time
-	nextConnect time.Time // no connection attempt before this
+	nextConnect time.Time   // no connection attempt before this
+	retry       *time.Timer // scheduled drain while events wait for the broker
+	closed      bool        // Cleanup ran; no more retries
 }
 
 // drain connects the event service if it is not connected (at most once per
@@ -456,6 +461,7 @@ func (l *lazyEventService) drain() {
 	if l.inner == nil {
 		now := time.Now()
 		if now.Before(l.nextConnect) {
+			l.scheduleRetry()
 			l.mu.Unlock()
 			return
 		}
@@ -472,6 +478,7 @@ func (l *lazyEventService) drain() {
 		if err != nil {
 			l.nextConnect = now.Add(connectRetryInterval)
 			l.busy = false
+			l.scheduleRetry()
 			l.mu.Unlock()
 			log.Debug().Err(err).Str("plugin_id", l.pluginID).Msg("Event service not ready yet")
 			return
@@ -495,6 +502,24 @@ func (l *lazyEventService) drain() {
 	}
 	l.busy = false
 	l.mu.Unlock()
+}
+
+// scheduleRetry arranges one later drain while events are buffered, so they
+// are not stranded when nothing else is published. The caller holds mu.
+func (l *lazyEventService) scheduleRetry() {
+	if l.retry != nil || l.closed || len(l.pending) == 0 {
+		return
+	}
+	wait := time.Until(l.nextConnect)
+	if wait < 0 {
+		wait = 0
+	}
+	l.retry = time.AfterFunc(wait, func() {
+		l.mu.Lock()
+		l.retry = nil
+		l.mu.Unlock()
+		l.drain()
+	})
 }
 
 func (l *lazyEventService) Publish(ctx context.Context, topic string, payload interface{}, dir Direction) error {
@@ -582,6 +607,11 @@ func (l *lazyEventService) Cleanup() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	l.closed = true
+	if l.retry != nil {
+		l.retry.Stop()
+		l.retry = nil
+	}
 	if impl, ok := l.inner.(*eventServiceImpl); ok {
 		impl.cleanup()
 	}

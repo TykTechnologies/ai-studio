@@ -78,6 +78,54 @@ func TestLazyEventService_BuffersUntilBrokerIsReady(t *testing.T) {
 	}
 }
 
+// Events published during startup reach the host once the broker is ready
+// even if the plugin publishes nothing more: a failed connect schedules the
+// next attempt.
+func TestLazyEventService_RetriesWithoutFurtherPublishes(t *testing.T) {
+	orig := connectRetryInterval
+	connectRetryInterval = 20 * time.Millisecond
+	t.Cleanup(func() { connectRetryInterval = orig })
+
+	var mu sync.Mutex
+	ready := false
+	client := &recordingEventClient{}
+	svc := &lazyEventService{pluginID: "7", connect: func() (pb.PluginEventServiceClient, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if !ready {
+			return nil, errors.New("broker not ready")
+		}
+		return client, nil
+	}}
+	t.Cleanup(svc.Cleanup)
+
+	for _, topic := range []string{"a", "b", "c"} {
+		if err := svc.Publish(context.Background(), topic, topic, DirLocal); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mu.Lock()
+	ready = true
+	mu.Unlock()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		client.mu.Lock()
+		got := append([]string(nil), client.topics...)
+		client.mu.Unlock()
+		if len(got) == 3 {
+			if got[0] != "a" || got[1] != "b" || got[2] != "c" {
+				t.Fatalf("host received %v, want [a b c]", got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("buffered events were not sent without a further publish; host received %v", got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // A slow connection attempt does not stall other publishers: they buffer
 // and return, and everything is delivered in order once it connects.
 func TestLazyEventService_SlowConnectDoesNotBlockPublishers(t *testing.T) {
