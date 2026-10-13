@@ -40,6 +40,7 @@ import {
 } from "../styles/sharedStyles";
 import StatusChip from "../components/submissions/StatusChip";
 import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
+import ProviderPrivacyWarning from "../components/common/privacy/ProviderPrivacyWarning";
 import { getResourceTypeLabel } from "../components/submissions/resourceTypeLabel";
 import PluginPayloadView from "../components/submissions/PluginPayloadView";
 import MCPSubmissionSummary from "../../portal/components/MCPSubmissionSummary";
@@ -883,6 +884,11 @@ const SubmissionReview = () => {
               sx={{ width: 96 }}
             />
           </Box>
+          {/* Tools and data sources are compared with providers; a plugin
+              resource or MCP server has its own access rules. */}
+          {["tool", "datasource"].includes(submission?.resource_type) && (
+            <ProviderPrivacyWarning score={finalPrivacyScore} sx={{ mt: 1 }} />
+          )}
           {isMCPSubmission && (
             <Box sx={{ mt: 2 }} data-testid="mcp-approve-options">
               {mcpTagOptions.length > 0 && (

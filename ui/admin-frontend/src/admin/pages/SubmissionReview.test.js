@@ -281,4 +281,26 @@ describe("SubmissionReview", () => {
       });
     });
   });
+
+  // #503: the reviewer's final score is checked against the active providers.
+  it("warns in the Approve dialog when the final score is above every active provider", async () => {
+    const toolSubmission = { ...mockSubmission, resource_type: "tool", status: "in_review" };
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/submissions/1") return Promise.resolve({ data: { data: toolSubmission } });
+      if (url === "/llms") {
+        return Promise.resolve({
+          data: { data: [{ id: "1", attributes: { name: "OpenAI", privacy_score: 50, active: true } }] },
+          headers: {},
+        });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+    renderWithRoute();
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    const score = await screen.findByLabelText("Final privacy level");
+    fireEvent.change(score, { target: { value: "80" } });
+    expect(await screen.findByTestId("provider-privacy-warning")).toHaveTextContent("Internal · 50 (OpenAI)");
+    fireEvent.change(score, { target: { value: "40" } });
+    expect(screen.queryByTestId("provider-privacy-warning")).not.toBeInTheDocument();
+  });
 });

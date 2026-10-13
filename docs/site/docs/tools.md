@@ -35,6 +35,8 @@ Tools bridge the gap between conversational AI and external functionalities. By 
     - **Restricted/PII (100)** – Personal data (e.g., names, emails, customer info).
 
     *Note: Privacy levels are stored as integer scores in the system. The values shown in parentheses are the typical score mappings.*
+
+    The tool and data source forms, the OpenAPI import wizard and the submission review's final score warn when the chosen level is above every active LLM provider, because nothing could then use the resource. The warning names the highest provider level. With no active providers yet, a neutral hint appears instead. The contributor submission form does not show provider levels.
 *   **Tool Catalogues:** Tools are grouped into logical collections called Catalogues. This simplifies management and access control.
 *   **Filters:** Optional [Filters](./filters.md) can be applied to tool interactions to pre-process requests sent to the tool or post-process responses received from it (e.g., for data sanitization).
 *   **Documentation:** Administrators can provide additional natural language documentation or instructions specifically for the LLM, guiding it on how and when to use the tool effectively.

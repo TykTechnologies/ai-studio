@@ -7,6 +7,7 @@ import {
   normalizePrivacyScore,
   privacyLevelForScore,
 } from "./privacyLevels";
+import ProviderPrivacyWarning from "./ProviderPrivacyWarning";
 
 export const PRIVACY_RULE_HELPER =
   "LLM providers can only be used with tools and data sources at or below their level.";
@@ -35,6 +36,9 @@ export default function PrivacyLevelInput({
   size = "medium",
   name = "privacy_score",
   levelSelectProps = {},
+  // Tool and data source forms: warn when the level is above every active
+  // LLM provider (admin-side only; see ProviderPrivacyWarning).
+  checkProviders = false,
 }) {
   const level = privacyLevelForScore(value);
   const levelKey = level ? level.key : "";
@@ -101,6 +105,7 @@ export default function PrivacyLevelInput({
       <FormHelperText error={error} sx={{ mx: 0 }}>
         {helperText || PRIVACY_RULE_HELPER}
       </FormHelperText>
+      {checkProviders && <ProviderPrivacyWarning score={value} sx={{ mt: 1 }} />}
     </Box>
   );
 }

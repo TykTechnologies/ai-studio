@@ -80,7 +80,8 @@ describe("Approve dialog: catalogue picker (#504)", () => {
       Promise.resolve(url === "/submissions/1" ? { data: { data: submission("tool") } } : { data: { data: [] } })
     );
     apiClient.post.mockResolvedValue({ data: { data: {} } });
-    listAll.mockResolvedValue(catalogues);
+    // /llms feeds the final-score privacy warning; no providers there.
+    listAll.mockImplementation((client, path) => Promise.resolve(path === "/llms" ? { data: { data: [] } } : catalogues));
   });
 
   it("loads tool catalogues with listAll, preselects Default and sends it by default", async () => {
@@ -143,7 +144,7 @@ describe("Approve dialog: catalogue picker (#504)", () => {
     renderReview();
     const dialog = await openApproveDialog();
     expect(within(dialog).queryByTestId("approve-catalogues")).not.toBeInTheDocument();
-    expect(listAll).not.toHaveBeenCalled();
+    expect(listAll).not.toHaveBeenCalledWith(apiClient, "/tool-catalogues");
 
     const attrs = await confirmApprove(dialog);
     expect(attrs).not.toHaveProperty("assigned_catalogues");

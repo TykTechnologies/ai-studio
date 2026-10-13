@@ -604,6 +604,7 @@ const DatasourceForm = () => {
                 onChange={(score) => setDatasource((prev) => ({ ...prev, privacy_score: score }))}
                 error={!!errors.privacy_score}
                 helperText={errors.privacy_score}
+                checkProviders
               />
             </Grid>
             <Grid item xs={12}>
