@@ -958,6 +958,8 @@ const LLMForm = () => {
                   />
                   <Typography variant="caption" color="text.secondary" display="block">
                     When enabled, request and response bodies will not be stored in proxy logs for this LLM provider.
+                    Otherwise the log stores the request as it left the request filters (a redaction is logged
+                    redacted), but a request a filter blocks is logged as it was sent.
                   </Typography>
                 </Grid>
               </Grid>
