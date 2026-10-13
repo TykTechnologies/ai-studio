@@ -128,7 +128,7 @@ Each one falls back to `PROXY_URL` when it is not set. Studio only displays thes
     DATASOURCE_DISPLAY_URL=https://ai-gateway.example.com
     ```
 
-Both the embedded gateway and edge gateways serve the same tool REST and MCP endpoints. Choose the address by where your clients should connect, not by which gateway runs the tool.
+Both the embedded gateway and edge gateways serve the same tool REST and MCP endpoints. Choose the address by where your clients should connect, not by which gateway runs the tool. Clients send their App credentials to this address, so use `https` anywhere outside a trusted network.
 
 ### Unified Endpoint (Main Ingress)
 The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) sits at `/v1` by default. Move it when embedding the gateway in a host that already owns `/v1`, or remove it entirely; the per-LLM endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected either way.
