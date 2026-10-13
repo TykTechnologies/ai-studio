@@ -5,6 +5,7 @@ import { PrimaryButton } from '../../../styles/sharedStyles';
 import { ActionsContainer } from './styles';
 import { useQuickStart } from './QuickStartContext';
 import SuccessBanner from '../../../components/common/SuccessBanner';
+import CredentialSetupNotice from './CredentialSetupNotice';
 
 import welcomeStepImage from './welcome_step.png';
 
@@ -32,6 +33,7 @@ const WelcomeStep = () => {
     currentUser,
     showLicenseBanner,
     licenseDaysLeft,
+    availableLLMs,
   } = useQuickStart();
   
   const userName = currentUser?.name || 'User';
@@ -96,6 +98,8 @@ const WelcomeStep = () => {
       <ImageContainer>
         <WelcomeImage src={welcomeStepImage} alt="Welcome to Tyk AI Studio" />
       </ImageContainer>
+
+      <CredentialSetupNotice llms={availableLLMs} sx={{ maxWidth: isMobile ? '100%' : '70%', width: '100%' }} />
       
       <Box sx={{
         mt: 2,
