@@ -149,3 +149,34 @@ describe("LLMList vendor cell accessible name", () => {
     expect(within(row).queryByRole("img", { name: /OpenAI/ })).not.toBeInTheDocument();
   });
 });
+
+// credential_source reaches the row's warning marker: an unset $ENV/ key is
+// described as an environment variable, not an empty secret.
+describe("LLMList credential source", () => {
+  it("passes credential_source to the warning tooltip", async () => {
+    clearIdentity();
+    apiClient.get.mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: "5",
+            attributes: {
+              name: "Env OpenAI",
+              vendor: "openai",
+              privacy_score: 2,
+              active: true,
+              credential_status: "unresolved",
+              credential_ref: "OPENAI_API_KEY",
+              credential_source: "env",
+            },
+          },
+        ],
+      },
+      headers: { "x-total-count": "1", "x-total-pages": "1" },
+    });
+    renderWith(["llms:read"]);
+    const row = (await screen.findByText("Env OpenAI")).closest("tr");
+    fireEvent.mouseOver(within(row).getByTitle("Credential unresolved"));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("environment variable OPENAI_API_KEY");
+  });
+});

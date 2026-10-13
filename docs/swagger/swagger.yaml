@@ -1978,6 +1978,8 @@ definitions:
             type: string
           credential_ref:
             type: string
+          credential_source:
+            type: string
           credential_status:
             type: string
           default_model:

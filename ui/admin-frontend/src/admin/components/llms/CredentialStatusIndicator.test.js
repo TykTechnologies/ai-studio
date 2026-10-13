@@ -21,6 +21,30 @@ describe("credentialPresentation", () => {
     expect(p.detail).toContain("OPENAI_KEY");
   });
 
+  it("words an unresolved $ENV/ reference as an unset environment variable, not an empty secret", () => {
+    const env = credentialPresentation("unresolved", "OPENAI_API_KEY", "env");
+    expect(env.severity).toBe("warning");
+    expect(env.detail).toContain("environment variable OPENAI_API_KEY, which is not set on the server");
+    expect(env.detail).not.toMatch(/secret/i);
+
+    const secret = credentialPresentation("unresolved", "OPENAI_KEY", "secret");
+    expect(secret.detail).toContain("points at the secret OPENAI_KEY");
+  });
+
+  it("describes a resolved $ENV/ key as coming from the environment, not the vault", () => {
+    const env = credentialPresentation("secret", "OPENAI_API_KEY", "env");
+    expect(env.severity).toBe("ok");
+    expect(env.label).toBe("Key from environment: OPENAI_API_KEY");
+    expect(env.detail).toContain("environment variable OPENAI_API_KEY");
+    expect(env.label + env.detail).not.toMatch(/vault|secret/i);
+    expect(credentialPresentation("secret", "OPENAI_KEY", "secret").label).toBe("Key from vault: OPENAI_KEY");
+  });
+
+  it("shows the environment wording on the detail notice", () => {
+    renderWithTheme(<CredentialStatusNotice status="unresolved" reference="OPENAI_API_KEY" origin="env" />);
+    expect(screen.getByText(/environment variable OPENAI_API_KEY/)).toBeInTheDocument();
+  });
+
   it("treats a missing key as a warning", () => {
     expect(credentialPresentation("unset").severity).toBe("warning");
   });

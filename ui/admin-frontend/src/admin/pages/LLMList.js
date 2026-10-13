@@ -140,6 +140,7 @@ const LLMList = () => {
           active={llm.attributes.active}
           status={llm.attributes.credential_status}
           reference={llm.attributes.credential_ref}
+          origin={llm.attributes.credential_source}
         />
       ),
     },

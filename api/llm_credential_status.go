@@ -27,6 +27,26 @@ const (
 	CredentialUnresolved = "unresolved"
 )
 
+// Where a referenced credential comes from, so the UI can say "the
+// environment variable X is not set" rather than "the secret X is empty".
+const (
+	CredentialSourceSecret = "secret"
+	CredentialSourceEnv    = "env"
+)
+
+// credentialSource is CredentialSourceSecret for a $SECRET/ reference,
+// CredentialSourceEnv for an $ENV/ reference, and "" otherwise.
+func credentialSource(apiKey string) string {
+	switch {
+	case strings.HasPrefix(apiKey, "$SECRET/"):
+		return CredentialSourceSecret
+	case strings.HasPrefix(apiKey, "$ENV/"):
+		return CredentialSourceEnv
+	default:
+		return ""
+	}
+}
+
 // credentialStatus classifies a provider's stored api_key, and names the
 // referenced secret when there is one so the UI can say which one to fill in.
 func credentialStatus(apiKey string) (status string, reference string) {

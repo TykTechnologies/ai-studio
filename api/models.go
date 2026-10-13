@@ -229,6 +229,7 @@ type LLMResponse struct {
 		HasAPIKey        bool                   `json:"has_api_key"`
 		CredentialStatus string                 `json:"credential_status"`
 		CredentialRef    string                 `json:"credential_ref,omitempty"`
+		CredentialSource string `json:"credential_source,omitempty"`
 		APIEndpoint      string                 `json:"api_endpoint"`
 		PrivacyScore     int                    `json:"privacy_score"`
 		ShortDescription string                 `json:"short_description"`

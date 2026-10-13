@@ -698,6 +698,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			HasAPIKey        bool             `json:"has_api_key"`
 			CredentialStatus string           `json:"credential_status"`
 			CredentialRef    string           `json:"credential_ref,omitempty"`
+			CredentialSource string `json:"credential_source,omitempty"`
 			APIEndpoint      string           `json:"api_endpoint"`
 			PrivacyScore     int              `json:"privacy_score"`
 			ShortDescription string           `json:"short_description"`
@@ -723,6 +724,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			HasAPIKey:        llm.APIKey != "",
 			CredentialStatus: llmCredentialStatus,
 			CredentialRef:    llmCredentialRef,
+			CredentialSource: credentialSource(llm.APIKey),
 			APIEndpoint:      llm.APIEndpoint,
 			PrivacyScore:     llm.PrivacyScore,
 			ShortDescription: llm.ShortDescription,
@@ -824,6 +826,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				HasAPIKey        bool             `json:"has_api_key"`
 				CredentialStatus string           `json:"credential_status"`
 				CredentialRef    string           `json:"credential_ref,omitempty"`
+				CredentialSource string `json:"credential_source,omitempty"`
 				APIEndpoint      string           `json:"api_endpoint"`
 				PrivacyScore     int              `json:"privacy_score"`
 				ShortDescription string           `json:"short_description"`
@@ -849,6 +852,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				HasAPIKey:        llm.APIKey != "",
 				CredentialStatus: itemCredentialStatus,
 				CredentialRef:    itemCredentialRef,
+				CredentialSource: credentialSource(llm.APIKey),
 				APIEndpoint:      llm.APIEndpoint,
 				PrivacyScore:     llm.PrivacyScore,
 				ShortDescription: llm.ShortDescription,
