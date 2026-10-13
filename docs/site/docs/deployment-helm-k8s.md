@@ -561,6 +561,12 @@ kubectl logs -l app=microgateway
 kubectl logs -l app=postgres
 ```
 
+For more detail, raise the log level. AI Studio reads `LOG_LEVEL` (`trace`, `debug`, `info`, `warn`, `error`; default `info`), which the chart sets from `config.logLevel`; the microgateway subchart has its own `microgateway.config.logLevel`:
+
+```bash
+helm upgrade midsommar ./helm --reuse-values --set config.logLevel=debug
+```
+
 ## Troubleshooting
 
 ### Check pod and ingress status
