@@ -3,19 +3,42 @@ import { Box, Alert, Typography } from '@mui/material';
 import { Form } from '@rjsf/mui';
 import validator from '@rjsf/validator-ajv8';
 
-// A secret field: format "password", or writeOnly (the server never sends the
-// value back). It must render masked whatever else applies to it.
+// A secret field: format "password", or writeOnly. It must render masked
+// whatever else applies to it. Masking is display-only: the plugin config API
+// still returns stored values to the form.
 export const isSecretProperty = (property) =>
   Boolean(property) && (property.format === 'password' || property.writeOnly === true);
 
+// Follows a local "$ref" ("#/definitions/X", "#/$defs/X") against the root
+// schema, as RJSF does, so a secret declared in a definition is still seen.
+// Unresolvable or remote refs, and ref chains longer than a few hops (or
+// cycles), leave the property as it is.
+const MAX_REF_HOPS = 8;
+export const resolveRef = (property, root) => {
+  let current = property;
+  for (let hop = 0; hop < MAX_REF_HOPS && current && typeof current.$ref === 'string'; hop += 1) {
+    if (!current.$ref.startsWith('#/')) return current;
+    const target = current.$ref
+      .slice(2)
+      .split('/')
+      .map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
+      .reduce((node, part) => (node && typeof node === 'object' ? node[part] : undefined), root);
+    if (!target) return current;
+    const { $ref, ...siblings } = current;
+    current = { ...target, ...siblings };
+  }
+  return current;
+};
+
 // Per-field uiSchema for an object schema's properties, recursing into nested
-// objects. Secret fields always get the password widget: the long-description
-// textarea rule used to override format "password" and show secrets in clear.
-export const fieldUiSchemas = (schema) => {
-  const properties = schema?.properties;
+// objects, array items and local $refs. Secret fields always get the password
+// widget: the long-description textarea rule used to override format
+// "password" and show secrets in clear.
+export const fieldUiSchemas = (schema, root = schema) => {
+  const properties = resolveRef(schema, root)?.properties;
   if (!properties) return {};
   return Object.keys(properties).reduce((acc, key) => {
-    const property = properties[key] || {};
+    const property = resolveRef(properties[key] || {}, root);
 
     if (isSecretProperty(property)) {
       acc[key] = { "ui:widget": "password" };
@@ -49,8 +72,18 @@ export const fieldUiSchemas = (schema) => {
     // Nested objects get the same treatment, so a secret inside one is
     // masked too.
     if (property.type === 'object' && property.properties) {
-      const nested = fieldUiSchemas(property);
+      const nested = fieldUiSchemas(property, root);
       if (Object.keys(nested).length > 0) acc[key] = { ...(acc[key] || {}), ...nested };
+    }
+
+    // Arrays: RJSF reads the item uiSchema from the key's "items", for an
+    // array of secret strings and for secrets inside array-of-object items.
+    if (property.type === 'array' && property.items && !Array.isArray(property.items)) {
+      const itemSchema = resolveRef(property.items, root);
+      const items = isSecretProperty(itemSchema)
+        ? { "ui:widget": "password" }
+        : fieldUiSchemas(itemSchema, root);
+      if (Object.keys(items).length > 0) acc[key] = { ...(acc[key] || {}), items };
     }
 
     return acc;

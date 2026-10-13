@@ -47,6 +47,86 @@ describe("SchemaFormRenderer secret fields", () => {
     expect(container).not.toHaveTextContent("s3cr3t-key");
   });
 
+  it("masks secrets inside array items, as strings and as object fields", () => {
+    const arraySchema = {
+      type: "object",
+      properties: {
+        tokens: { type: "array", title: "Tokens", items: { type: "string", format: "password" } },
+        repos: {
+          type: "array",
+          title: "Repositories",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", title: "Name" },
+              deploy_key: { type: "string", writeOnly: true, title: "Deploy key", description: LONG },
+            },
+          },
+        },
+      },
+    };
+    render(
+      <SchemaFormRenderer
+        schema={arraySchema}
+        formData={{ tokens: ["tok-a"], repos: [{ name: "core", deploy_key: "key-b" }] }}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByDisplayValue("tok-a")).toHaveAttribute("type", "password");
+    expect(screen.getByDisplayValue("key-b")).toHaveAttribute("type", "password");
+    expect(screen.getByDisplayValue("core")).toHaveAttribute("type", "text");
+
+    const ui = fieldUiSchemas(arraySchema);
+    expect(ui.tokens.items).toEqual({ "ui:widget": "password" });
+    expect(ui.repos.items.deploy_key).toEqual({ "ui:widget": "password" });
+  });
+
+  it("masks secrets declared through local $ref definitions", () => {
+    const refSchema = {
+      type: "object",
+      definitions: {
+        backend: {
+          type: "object",
+          properties: {
+            host: { type: "string", title: "Host" },
+            password: { $ref: "#/definitions/secret" },
+          },
+        },
+        secret: { type: "string", format: "password", title: "Password", description: LONG },
+      },
+      properties: {
+        primary: { $ref: "#/definitions/backend", title: "Primary" },
+        pool: { type: "array", title: "Pool", items: { $ref: "#/definitions/backend" } },
+      },
+    };
+    render(
+      <SchemaFormRenderer
+        schema={refSchema}
+        formData={{ primary: { host: "a", password: "pw-1" }, pool: [{ host: "b", password: "pw-2" }] }}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByDisplayValue("pw-1")).toHaveAttribute("type", "password");
+    expect(screen.getByDisplayValue("pw-2")).toHaveAttribute("type", "password");
+
+    const ui = fieldUiSchemas(refSchema);
+    expect(ui.primary.password).toEqual({ "ui:widget": "password" });
+    expect(ui.pool.items.password).toEqual({ "ui:widget": "password" });
+  });
+
+  it("gives up on a $ref cycle or an unresolvable ref instead of looping", () => {
+    const odd = {
+      type: "object",
+      definitions: { loop: { $ref: "#/definitions/loop" } },
+      properties: {
+        weird: { $ref: "#/definitions/loop" },
+        missing: { $ref: "#/definitions/nope" },
+        remote: { $ref: "https://example.com/schema.json" },
+      },
+    };
+    expect(fieldUiSchemas(odd)).toEqual({});
+  });
+
   it("builds a password widget for secrets and leaves the textarea rule for the rest", () => {
     const ui = fieldUiSchemas(schema);
     expect(ui.secret_encryption_key).toEqual({ "ui:widget": "password" });
