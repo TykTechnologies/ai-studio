@@ -673,7 +673,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 
 	conf.TIBAPISecret = getenv("TYK_AI_SECRET_KEY")
 	if conf.TIBAPISecret == "" && conf.TIBEnabled {
-		cfgLog.Info().Msg("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
+		cfgLog.Warn().Msg("TYK_AI_SECRET_KEY is not set but TIB is enabled: SSO logins are refused until it is set")
 	}
 
 	// Licensing configuration (Enterprise Edition)
