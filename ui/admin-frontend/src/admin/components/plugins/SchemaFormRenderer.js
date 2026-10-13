@@ -43,17 +43,26 @@ export const resolveRef = (property, root) => resolveRefTrail(property, root).sc
 // a $ref already followed on the current path is not expanded again, which
 // keeps the cost linear in the schema size even when every property of a
 // definition refers back to it. Deeper copies still mask format "password"
-// natively in RJSF. MAX_DEPTH is a backstop for deep non-recursive schemas.
+// natively in RJSF. Each definition's uiSchema is built once and reused
+// (memo), so a chain of definitions that each refer several times to the
+// next stays linear too. MAX_DEPTH is a backstop for deep inline schemas.
 const MAX_DEPTH = 8;
-export const fieldUiSchemas = (schema, root = schema, depth = 0, path = new Set()) => {
+export const fieldUiSchemas = (schema, root = schema, depth = 0, path = new Set(), memo = new Map()) => {
   if (depth > MAX_DEPTH) return {};
   const self = resolveRefTrail(schema, root);
   const onPath = new Set([...path, ...self.refs]);
   const properties = self.schema?.properties;
   if (!properties) return {};
-  // Expands a child schema unless it refers back to a definition on the path.
-  const expand = (trail) =>
-    trail.refs.some((ref) => onPath.has(ref)) ? {} : fieldUiSchemas(trail.schema, root, depth + 1, new Set([...onPath, ...trail.refs]));
+  // Expands a child schema, unless it refers back to a definition on the
+  // path, reusing an earlier expansion of the same definition.
+  const expand = (trail) => {
+    if (trail.refs.some((ref) => onPath.has(ref))) return {};
+    const key = trail.refs[trail.refs.length - 1];
+    if (key && memo.has(key)) return memo.get(key);
+    const built = fieldUiSchemas(trail.schema, root, depth + 1, new Set([...onPath, ...trail.refs]), memo);
+    if (key) memo.set(key, built);
+    return built;
+  };
   return Object.keys(properties).reduce((acc, key) => {
     const trail = resolveRefTrail(properties[key] || {}, root);
     const property = trail.schema;

@@ -154,6 +154,24 @@ describe("SchemaFormRenderer secret fields", () => {
     expect(ui.list.items.secret).toEqual({ "ui:widget": "password" });
   });
 
+  it("stays fast on a chain of distinct definitions that each refer many times to the next", () => {
+    // D0 -> D1 -> ... -> D7, each with 8 properties pointing at the next:
+    // acyclic, so the path check does not help; the per-definition memo does.
+    const definitions = {};
+    for (let d = 0; d < 8; d += 1) {
+      const properties = { key: { type: "string", writeOnly: true, title: "Key" } };
+      if (d < 7) for (let i = 0; i < 8; i += 1) properties[`p${i}`] = { $ref: `#/definitions/D${d + 1}` };
+      definitions[`D${d}`] = { type: "object", properties };
+    }
+    const dag = { type: "object", definitions, properties: { top: { $ref: "#/definitions/D0" } } };
+    const started = Date.now();
+    const ui = fieldUiSchemas(dag);
+    expect(Date.now() - started).toBeLessThan(200);
+    expect(ui.top.key).toEqual({ "ui:widget": "password" });
+    expect(ui.top.p0.key).toEqual({ "ui:widget": "password" });
+    expect(ui.top.p3.p5.key).toEqual({ "ui:widget": "password" });
+  });
+
   it("gives up on a $ref cycle or an unresolvable ref instead of looping", () => {
     const odd = {
       type: "object",
