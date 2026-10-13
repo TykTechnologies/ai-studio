@@ -69,10 +69,15 @@ func (s *PluginManagementServer) ListPlugins(ctx context.Context, req *pb.ListPl
 		return nil, status.Errorf(codes.Internal, "failed to list plugins: %v", err)
 	}
 
-	// Convert service response to gRPC protobuf
+	// Convert service response to gRPC protobuf. Only the caller's own
+	// configuration is included: other plugins' configs can hold credentials.
+	callerID := GetPluginIDFromContext(ctx)
 	pbPlugins := make([]*pb.PluginInfo, len(plugins))
 	for i, plugin := range plugins {
 		pbPlugins[i] = convertPluginToPB(&plugin)
+		if plugin.ID != callerID {
+			pbPlugins[i].ConfigJson = ""
+		}
 	}
 
 	// Calculate total pages
@@ -115,16 +120,22 @@ func (s *PluginManagementServer) GetPlugin(ctx context.Context, req *pb.GetPlugi
 		Str("plugin_name", plugin.Name).
 		Msg("Retrieved plugin via gRPC")
 
-	return &pb.GetPluginResponse{
-		Plugin: convertPluginToPB(plugin),
-	}, nil
+	info := convertPluginToPB(plugin)
+	if plugin.ID != GetPluginIDFromContext(ctx) {
+		info.ConfigJson = "" // only the caller's own configuration
+	}
+	return &pb.GetPluginResponse{Plugin: info}, nil
 }
 
-// UpdatePluginConfig updates the configuration for a specific plugin
+// UpdatePluginConfig updates the calling plugin's own configuration. A
+// plugin cannot change another plugin's configuration through this RPC.
 func (s *PluginManagementServer) UpdatePluginConfig(ctx context.Context, req *pb.UpdatePluginConfigRequest) (*pb.UpdatePluginConfigResponse, error) {
 	pluginID := req.GetPluginId()
 	if pluginID == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "plugin_id is required")
+	}
+	if callerID := GetPluginIDFromContext(ctx); callerID == 0 || uint(pluginID) != callerID {
+		return nil, status.Errorf(codes.PermissionDenied, "a plugin can only update its own configuration")
 	}
 
 	configJSON := req.GetConfigJson()

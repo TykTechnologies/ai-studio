@@ -246,8 +246,8 @@ func (a *API) HandleAgentSSE(c *gin.Context) {
 
 	// Setup service broker for this agent session
 	var serviceBrokerID uint32
-	if aiStudioClient, ok := pluginClient.(interface{ SetupServiceBroker() (uint32, error) }); ok {
-		serviceBrokerID, err = aiStudioClient.SetupServiceBroker()
+	if aiStudioClient, ok := pluginClient.(interface{ SetupServiceBroker(uint) (uint32, error) }); ok {
+		serviceBrokerID, err = aiStudioClient.SetupServiceBroker(agentConfig.PluginID)
 		if err != nil {
 			slog.Error("Failed to setup service broker", "error", err, "plugin_id", agentConfig.PluginID)
 			errorChunk := agent_session.AgentMessageChunk{

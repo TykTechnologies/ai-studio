@@ -2,12 +2,12 @@ package grpc
 
 import (
 	"context"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -23,81 +23,137 @@ const pluginInfoKeyString = "midsommar:plugin:info"
 // PluginAuthInterceptor creates a gRPC interceptor for plugin authentication and authorization
 func PluginAuthInterceptor(db *gorm.DB) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		// Extract plugin ID from request context (set by AI Studio plugin manager)
-		pluginID := GetPluginIDFromContext(ctx)
-		if pluginID == 0 {
-			log.Debug().Str("method", info.FullMethod).Msg("No plugin ID in context, checking metadata")
-
-			// Fallback: try to get from gRPC metadata
-			if md, ok := metadata.FromIncomingContext(ctx); ok {
-				if pluginIDs := md.Get("plugin-id"); len(pluginIDs) > 0 {
-					log.Debug().Str("plugin_id", pluginIDs[0]).Msg("Found plugin ID in metadata")
-					// Note: Would need to parse string to uint here if using metadata approach
-				}
-			}
-
-			return nil, status.Errorf(codes.Unauthenticated, "plugin authentication required")
+		ctx, err := authorizePluginCall(ctx, db, info.FullMethod)
+		if err != nil {
+			return nil, err
 		}
-
-		// Extract required scope from method info
-		requiredScope := extractScopeFromMethod(info.FullMethod)
-		if requiredScope == "" {
-			log.Warn().Str("method", info.FullMethod).Msg("No scope mapping found for method")
-			return nil, status.Errorf(codes.Internal, "no scope mapping for method")
-		}
-
-		// Block analytics functionality - not available to plugins
-		if isAnalyticsScope(requiredScope) {
-			log.Warn().
-				Str("method", info.FullMethod).
-				Str("scope", requiredScope).
-				Msg("Analytics functionality blocked for plugins")
-			return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins - analytics logic remains in REST API layer")
-		}
-
-		// Validate plugin service access authorization
-		var plugin models.Plugin
-		if err := db.First(&plugin, pluginID).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				log.Error().Uint("plugin_id", pluginID).Msg("Plugin not found during auth")
-				return nil, status.Errorf(codes.Unauthenticated, "plugin not found")
-			}
-			log.Error().Err(err).Uint("plugin_id", pluginID).Msg("Database error during plugin auth")
-			return nil, status.Errorf(codes.Internal, "authentication error")
-		}
-
-		// Check if plugin has service access authorized
-		if !plugin.HasServiceAccess() {
-			log.Warn().
-				Uint("plugin_id", pluginID).
-				Str("plugin_name", plugin.Name).
-				Msg("Plugin service access not authorized")
-			return nil, status.Errorf(codes.PermissionDenied, "service access not authorized for plugin %s", plugin.Name)
-		}
-
-		// Check scope authorization
-		if !plugin.HasServiceScope(requiredScope) {
-			log.Warn().
-				Uint("plugin_id", pluginID).
-				Str("plugin_name", plugin.Name).
-				Str("required_scope", requiredScope).
-				Strs("plugin_scopes", plugin.ServiceScopes).
-				Msg("Plugin missing required scope")
-			return nil, status.Errorf(codes.PermissionDenied, "insufficient scope: %s (plugin: %s)", requiredScope, plugin.Name)
-		}
-
-		log.Debug().
-			Uint("plugin_id", pluginID).
-			Str("plugin_name", plugin.Name).
-			Str("scope", requiredScope).
-			Str("method", info.FullMethod).
-			Msg("Plugin authenticated and authorized")
-
-		// Add plugin info to context for downstream services
-		ctx = SetPluginInContext(ctx, &plugin)
-
 		return handler(ctx, req)
 	}
+}
+
+// managementServicePrefix is the method prefix of the management service.
+const managementServicePrefix = "/ai_studio_management.AIStudioManagementService/"
+
+// ManagementScopeInterceptors check every management-service call on a
+// plugin's brokered server against the calling plugin's approved scopes (see
+// authorizePluginCall). Calls to other services on the same server, such as
+// the plugin event service, pass through.
+func ManagementScopeInterceptors(db *gorm.DB) (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
+	unary := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if !strings.HasPrefix(info.FullMethod, managementServicePrefix) {
+			return handler(ctx, req)
+		}
+		if isSelfCall(ctx, info.FullMethod, req) {
+			return handler(ctx, req)
+		}
+		ctx, err := authorizePluginCall(ctx, db, info.FullMethod)
+		if err != nil {
+			return nil, err
+		}
+		return handler(ctx, req)
+	}
+	stream := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if !strings.HasPrefix(info.FullMethod, managementServicePrefix) {
+			return handler(srv, ss)
+		}
+		ctx, err := authorizePluginCall(ss.Context(), db, info.FullMethod)
+		if err != nil {
+			return err
+		}
+		return handler(srv, &authorizedServerStream{ServerStream: ss, ctx: ctx})
+	}
+	return unary, stream
+}
+
+type authorizedServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *authorizedServerStream) Context() context.Context { return s.ctx }
+
+// authorizePluginCall checks that the plugin whose ID the broker put in ctx
+// may call fullMethod: it exists, its service access is approved, and it holds
+// the method's scope. A method with no scope mapping is refused. It returns
+// ctx with the plugin added.
+func authorizePluginCall(ctx context.Context, db *gorm.DB, fullMethod string) (context.Context, error) {
+	pluginID := GetPluginIDFromContext(ctx)
+	if pluginID == 0 {
+		return nil, status.Errorf(codes.Unauthenticated, "plugin authentication required")
+	}
+
+	requiredScope := extractScopeFromMethod(fullMethod)
+	if requiredScope == "" {
+		log.Warn().Str("method", fullMethod).Msg("No scope mapping found for method")
+		return nil, status.Errorf(codes.Internal, "no scope mapping for method")
+	}
+
+	// Block analytics functionality - not available to plugins
+	if isAnalyticsScope(requiredScope) {
+		log.Warn().
+			Str("method", fullMethod).
+			Str("scope", requiredScope).
+			Msg("Analytics functionality blocked for plugins")
+		return nil, status.Errorf(codes.Unimplemented, "analytics functionality is not available to plugins - analytics logic remains in REST API layer")
+	}
+
+	var plugin models.Plugin
+	if err := db.First(&plugin, pluginID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.Error().Uint("plugin_id", pluginID).Msg("Plugin not found during auth")
+			return nil, status.Errorf(codes.Unauthenticated, "plugin not found")
+		}
+		log.Error().Err(err).Uint("plugin_id", pluginID).Msg("Database error during plugin auth")
+		return nil, status.Errorf(codes.Internal, "authentication error")
+	}
+
+	if !plugin.HasServiceAccess() {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Msg("Plugin service access not authorized")
+		return nil, status.Errorf(codes.PermissionDenied, "service access not authorized for plugin %s", plugin.Name)
+	}
+
+	if !plugin.HasServiceScope(requiredScope) {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Str("required_scope", requiredScope).
+			Strs("plugin_scopes", plugin.ServiceScopes).
+			Msg("Plugin missing required scope")
+		return nil, status.Errorf(codes.PermissionDenied, "insufficient scope: %s (plugin: %s)", requiredScope, plugin.Name)
+	}
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", plugin.Name).
+		Str("scope", requiredScope).
+		Str("method", fullMethod).
+		Msg("Plugin authenticated and authorized")
+
+	return SetPluginInContext(ctx, &plugin), nil
+}
+
+// selfMethods are management methods a plugin may call on its own plugin ID
+// without a scope: reading and updating its own configuration. Shipped
+// plugins rely on this (they keep state in their config and push it to
+// edges). On another plugin's ID the method's scope applies, and the handler
+// refuses config updates to other plugins altogether.
+var selfMethods = map[string]bool{
+	managementServicePrefix + "GetPlugin":          true,
+	managementServicePrefix + "UpdatePluginConfig": true,
+}
+
+// isSelfCall reports whether req is a selfMethods call naming the calling
+// plugin's own ID.
+func isSelfCall(ctx context.Context, fullMethod string, req interface{}) bool {
+	if !selfMethods[fullMethod] {
+		return false
+	}
+	target, ok := req.(interface{ GetPluginId() uint32 })
+	caller := GetPluginIDFromContext(ctx)
+	return ok && caller != 0 && uint(target.GetPluginId()) == caller
 }
 
 // extractScopeFromMethod maps gRPC method names to required service scopes
@@ -238,6 +294,18 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/ListSchedules":  models.ServiceScopeSchedulerManage,
 		"/ai_studio_management.AIStudioManagementService/UpdateSchedule": models.ServiceScopeSchedulerManage,
 		"/ai_studio_management.AIStudioManagementService/DeleteSchedule": models.ServiceScopeSchedulerManage,
+
+		// Methods whose handlers also check their scope (the interceptor
+		// checks it first, so a handler that forgets is still covered).
+		"/ai_studio_management.AIStudioManagementService/CloneDatasource":             models.ServiceScopeDatasourcesWrite,
+		"/ai_studio_management.AIStudioManagementService/ExecuteTool":                 models.ServiceScopeToolsCall,
+		"/ai_studio_management.AIStudioManagementService/QueryDatasource":             models.ServiceScopeDatasourcesQuery,
+		"/ai_studio_management.AIStudioManagementService/CallLLM":                     models.ServiceScopeLLMsProxy,
+		"/ai_studio_management.AIStudioManagementService/CallDecision":                models.ServiceScopeLLMsProxy,
+		"/ai_studio_management.AIStudioManagementService/CreateNotification":          models.ServiceScopeNotificationsWrite,
+		"/ai_studio_management.AIStudioManagementService/RegisterResourceTypes":       models.ServiceScopeResourceTypesManage,
+		"/ai_studio_management.AIStudioManagementService/RegisterPermissionResources": models.ServiceScopeRBACRegister,
+		"/ai_studio_management.AIStudioManagementService/GetLicenseInfo":              models.ServiceScopeLicenseRead,
 	}
 
 	return scopeMap[fullMethod]

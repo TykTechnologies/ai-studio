@@ -384,12 +384,12 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 				Bool("has_event_server", pm.eventServer != nil).
 				Msg("Setting up service broker for plugin")
 			if pm.eventServer != nil {
-				setupBrokerID, err = clientWrapper.SetupServiceBrokerWithEvents(pm.managementServer, pm.eventServer)
+				setupBrokerID, err = clientWrapper.SetupServiceBrokerWithEvents(pluginID, pm.managementServer, pm.eventServer)
 			} else {
 				log.Warn().
 					Uint("plugin_id", pluginID).
 					Msg("eventServer is nil - plugin will NOT be able to subscribe to events")
-				setupBrokerID, err = clientWrapper.SetupServiceBroker(pm.managementServer)
+				setupBrokerID, err = clientWrapper.SetupServiceBroker(pluginID, pm.managementServer)
 			}
 			if err != nil {
 				log.Warn().

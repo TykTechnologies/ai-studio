@@ -333,8 +333,13 @@ See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
 
 | Scope | Description | Operations |
 |-------|-------------|------------|
-| `plugins.read` | Read plugin configurations | List Plugins, Get Plugin details, Get counts |
+| `plugins.read` | List other plugins and read their details (never their configuration) | List Plugins, Get Plugin details, Get counts |
+| `plugins.config` | Update plugin configuration (the calling plugin's own only) | UpdatePluginConfig |
 | `plugins.write` | Create/update plugins | Create Plugin, Update Plugin |
+
+A plugin reads and updates its **own** configuration (GetPlugin and UpdatePluginConfig with its own plugin ID) without either scope. No scope lets a plugin read or change another plugin's configuration.
+
+Studio checks every service API call against the plugin's approved scopes. A call to a method whose scope the plugin was not approved for fails with `PermissionDenied`.
 
 ### KV Storage Scopes
 
@@ -355,6 +360,12 @@ See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
 | Scope | Description | Operations |
 |-------|-------------|------------|
 | `notifications.write` | Raise in-app notifications for admins or a user | CreateNotification |
+
+### License Scopes
+
+| Scope | Description | Operations |
+|-------|-------------|------------|
+| `license.read` | Read the license status, to gate the plugin's own enterprise features | GetLicenseInfo |
 
 ### Resource Type Scopes
 
