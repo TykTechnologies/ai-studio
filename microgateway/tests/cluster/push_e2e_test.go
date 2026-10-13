@@ -53,8 +53,14 @@ func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
 		var shared *gorm.DB
 		body(t, studioDB{open: func(t *testing.T) *gorm.DB {
 			// One process, one SQLite file: the replicas share a handle.
+			// _txlock=immediate, as the microgateway's own SQLite DSN has: a
+			// transaction that reads before it writes (the LLM and tool slug
+			// checks in BeforeSave) cannot upgrade to a write once another
+			// connection has committed (SQLITE_BUSY_SNAPSHOT under WAL), and
+			// busy_timeout never retries that, so a concurrent replica or
+			// edge write failed addLLM with "database is locked".
 			once.Do(func() {
-				db, err := gorm.Open(sqlite.Open(path+"?_busy_timeout=10000&_journal_mode=WAL"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+				db, err := gorm.Open(sqlite.Open(path+"?_busy_timeout=10000&_journal_mode=WAL&_txlock=immediate"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 				require.NoError(t, err)
 				require.NoError(t, models.InitModels(db))
 				shared = db
