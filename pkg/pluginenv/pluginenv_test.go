@@ -24,8 +24,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// hostSecrets stand in for the host's own configuration.
-var hostSecrets = map[string]string{
+// hostOnlyVars stand in for the host's own configuration.
+var hostOnlyVars = map[string]string{
 	"ENCRYPTION_KEY":    "host-encryption-key",
 	"DATABASE_URL":      "postgres://user:pass@db/studio",
 	"TYK_AI_SECRET_KEY": "host-secret",
@@ -34,7 +34,7 @@ var hostSecrets = map[string]string{
 
 func setHostEnv(t *testing.T) {
 	t.Helper()
-	for k, v := range hostSecrets {
+	for k, v := range hostOnlyVars {
 		t.Setenv(k, v)
 	}
 	t.Setenv("TZ", "Europe/Berlin")
@@ -56,7 +56,7 @@ func envMap(kvs []string) map[string]string {
 
 func assertPluginEnv(t *testing.T, got map[string]string) {
 	t.Helper()
-	for k := range hostSecrets {
+	for k := range hostOnlyVars {
 		if _, ok := got[k]; ok {
 			t.Errorf("plugin environment has %s", k)
 		}
@@ -95,6 +95,22 @@ func TestEnviron_NothingPassedWithoutPassthrough(t *testing.T) {
 		if _, ok := got[k]; ok {
 			t.Errorf("plugin environment has %s without a pass-through", k)
 		}
+	}
+}
+
+// A bare "*" would pass the whole host environment, so it is ignored. A
+// named secret is the operator's explicit choice and is passed (and logged).
+func TestEnviron_PassthroughGuards(t *testing.T) {
+	setHostEnv(t)
+
+	t.Setenv(EnvPassthrough, "*")
+	if _, ok := envMap(Environ())["ENCRYPTION_KEY"]; ok {
+		t.Error(`a bare "*" pass-through passed ENCRYPTION_KEY`)
+	}
+
+	t.Setenv(EnvPassthrough, "ENCRYPTION_KEY")
+	if got := envMap(Environ())["ENCRYPTION_KEY"]; got != hostOnlyVars["ENCRYPTION_KEY"] {
+		t.Errorf("an explicitly named variable was not passed: %q", got)
 	}
 }
 
@@ -150,7 +166,7 @@ func TestPluginProcess_WithoutSkipHostEnvInheritsHost(t *testing.T) {
 	t.Setenv(EnvPassthrough, helperOutEnv)
 
 	got := startHelper(t, false)
-	if got["ENCRYPTION_KEY"] != hostSecrets["ENCRYPTION_KEY"] {
+	if got["ENCRYPTION_KEY"] != hostOnlyVars["ENCRYPTION_KEY"] {
 		t.Fatalf("expected go-plugin to pass the host environment without SkipHostEnv; got ENCRYPTION_KEY=%q", got["ENCRYPTION_KEY"])
 	}
 }
