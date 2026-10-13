@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -450,6 +451,24 @@ func (a *API) adminStartReview(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
+// canAssignCatalogues reports whether the reviewer may write the catalogues
+// an approval of this resource type would add it to: tool catalogues for
+// tools and MCP servers, data catalogues for data sources. A plugin resource
+// hands the ids to the plugin, whose meaning it decides, so it needs every
+// catalogue write permission (fail closed). Admins hold all of them.
+func canAssignCatalogues(c *gin.Context, resourceType string) bool {
+	switch resourceType {
+	case models.SubmissionResourceTypeTool, models.SubmissionResourceTypeMCPServer:
+		return authz.Can(c, authz.Write("tool-catalogues"))
+	case models.SubmissionResourceTypeDatasource:
+		return authz.Can(c, authz.Write("data-catalogues"))
+	default:
+		return authz.Can(c, authz.Write("tool-catalogues")) &&
+			authz.Can(c, authz.Write("data-catalogues")) &&
+			authz.Can(c, authz.Write("catalogues"))
+	}
+}
+
 // adminApproveSubmission handles POST /api/v1/submissions/:id/approve
 func (a *API) adminApproveSubmission(c *gin.Context) {
 	user, exists := c.Get("user")
@@ -490,6 +509,32 @@ func (a *API) adminApproveSubmission(c *gin.Context) {
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Approval writes catalogue memberships from assigned_catalogues, which
+	// editing a catalogue directly gates behind that catalogue type's write
+	// permission. Ask for the same here: submissions:write alone must not let
+	// a reviewer publish a resource into catalogues they cannot edit.
+	if len(services.AssignedCatalogueIDs(attrs.AssignedCatalogues)) > 0 {
+		pending, err := a.service.GetSubmissionByID(uint(id))
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "submission not found"}},
+			})
+			return
+		}
+		if !canAssignCatalogues(c, pending.ResourceType) {
+			c.JSON(http.StatusForbidden, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Forbidden", Detail: "assigning catalogues needs write permission on those catalogues; approve without assigned_catalogues or ask a catalogue administrator"}},
+			})
+			return
+		}
 	}
 
 	submission, err := a.service.ApproveSubmissionWithOptions(uint(id), currentUser.ID, attrs.FinalPrivacyScore, attrs.AssignedCatalogues, attrs.ReviewNotes,
