@@ -60,14 +60,16 @@ PLUGIN_ENV_PASSTHROUGH="GITHUB_RAG_*,SSH_KNOWN_HOSTS"
 
 ## Plugin configuration and secrets
 
-Plugin configuration is stored in AI Studio's database and sent to the plugin process **as is**, in plaintext, when the plugin starts (`Initialize`, `InitRequest.Config`). Every value is passed as a string; arrays and objects are JSON-encoded.
+Plugin configuration is stored in AI Studio's database and sent to the plugin process in plaintext when the plugin starts (`Initialize`, `InitRequest.Config`). Every value is passed as a string; arrays and objects are JSON-encoded.
 
-The loader does not interpret or redact these values. In particular, **`$SECRET/` and `$ENV/` references are not resolved in plugin configuration**: a value such as `$SECRET/MY_API_KEY` reaches the plugin as that literal string. (Those references are resolved by AI Studio for LLM credentials, filters and guardrail connections, not for plugins.)
+**Secret references.** A top-level string value that is exactly `$SECRET/NAME` or `$ENV/NAME` is resolved by AI Studio before it is passed to a plugin running in AI Studio (since 2.3). `$SECRET/NAME` reads the named secret from AI Studio's secret store, and `$ENV/NAME` reads AI Studio's own environment, not the plugin's allowlisted one. The database and the configuration snapshot keep the reference. A reference inside a longer string, or inside an array or object, is not resolved, and a reference that cannot be resolved is passed through unchanged (and logged).
+
+**Edges receive plugin configuration.** The configuration snapshot that AI Studio sends to every edge gateway includes the stored configuration of every active plugin, Studio-only plugins included. A literal credential therefore reaches every edge; a reference does not. Plugins running on edges receive references unresolved.
 
 What this means in practice:
 
-- Anyone who can read the plugin's configuration in AI Studio (an administrator with plugin read access, or the database) can read a credential stored in it.
-- The plugin process receives the credential in clear text. Only put a credential in a plugin's config if you would be comfortable giving that credential to the plugin's author.
+- Anyone who can read the plugin's configuration in AI Studio (an administrator with plugin read access, or the database) can read a credential stored in it literally. Store a `$SECRET/` reference instead.
+- The plugin process receives the credential in clear text, resolved or not. Only give a plugin a credential you would be comfortable giving to the plugin's author.
 - **Plugin authors**: do not log configuration values, and do not echo them in errors or UI responses. If your plugin needs a credential, document which config field holds it, keep the field optional where you can, and consider letting operators supply it from a file mounted only into your deployment.
 
 Optional hardening, such as marking config fields as secret and redacting them in transit, is tracked in [#445](https://github.com/TykTechnologies/ai-studio/issues/445).
