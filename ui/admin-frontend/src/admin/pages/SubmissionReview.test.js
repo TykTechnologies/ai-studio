@@ -6,6 +6,10 @@ import testTheme from "../utils/testTheme";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import SubmissionReview from "./SubmissionReview";
 
+// Enterprise (groups) on/off decides whether approval offers a catalogue picker.
+let mockFeatures = { feature_groups: false };
+jest.mock("../hooks/useSystemFeatures", () => () => ({ features: mockFeatures }));
+
 jest.mock("../utils/apiClient", () => ({
   __esModule: true,
   default: {
