@@ -30111,6 +30111,9 @@ const docTemplate = `{
                         "credential_ref": {
                             "type": "string"
                         },
+                        "credential_source": {
+                            "type": "string"
+                        },
                         "credential_status": {
                             "type": "string"
                         },

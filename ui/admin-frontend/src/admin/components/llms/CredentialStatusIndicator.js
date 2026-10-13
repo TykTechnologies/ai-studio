@@ -24,9 +24,24 @@ export const CREDENTIAL_INLINE = "inline";
 export const CREDENTIAL_SECRET = "secret";
 export const CREDENTIAL_UNRESOLVED = "unresolved";
 
-export const credentialPresentation = (status, reference) => {
+// Where a referenced key comes from (credential_source): a stored secret or
+// an environment variable of the server.
+export const CREDENTIAL_SOURCE_ENV = "env";
+
+export const credentialPresentation = (status, reference, origin) => {
   switch (status) {
     case CREDENTIAL_UNRESOLVED:
+      if (origin === CREDENTIAL_SOURCE_ENV) {
+        return {
+          severity: "warning",
+          icon: WarningAmberIcon,
+          color: "warning.main",
+          label: "Credential unresolved",
+          detail: reference
+            ? `This provider reads its key from the environment variable ${reference}, which is not set on the server. Calls through it will fail until it is set.`
+            : "This provider reads its key from an environment variable that is not set on the server. Calls through it will fail until it is set.",
+        };
+      }
       return {
         severity: "warning",
         icon: WarningAmberIcon,
@@ -72,8 +87,8 @@ export const credentialPresentation = (status, reference) => {
  * Compact indicator for table rows: the existing active dot, plus a warning
  * marker when the credential cannot resolve.
  */
-export const CredentialStatusDot = ({ active, status, reference }) => {
-  const presentation = credentialPresentation(status, reference);
+export const CredentialStatusDot = ({ active, status, reference, origin }) => {
+  const presentation = credentialPresentation(status, reference, origin);
   const showWarning = presentation.severity === "warning";
 
   return (
@@ -100,8 +115,8 @@ export const CredentialStatusDot = ({ active, status, reference }) => {
 /**
  * Fuller statement for the provider detail page.
  */
-export const CredentialStatusNotice = ({ status, reference }) => {
-  const presentation = credentialPresentation(status, reference);
+export const CredentialStatusNotice = ({ status, reference, origin }) => {
+  const presentation = credentialPresentation(status, reference, origin);
   const Icon = presentation.icon;
 
   return (

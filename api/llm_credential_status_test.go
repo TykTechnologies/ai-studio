@@ -41,3 +41,12 @@ func TestCredentialStatus(t *testing.T) {
 		assert.Equal(t, "DEFINITELY_NOT_SET_ANYWHERE", ref)
 	})
 }
+
+// The UI words an unresolved $ENV/ reference as an unset environment
+// variable, not an empty secret, so it needs to know which one it is.
+func TestCredentialSource(t *testing.T) {
+	assert.Equal(t, CredentialSourceSecret, credentialSource("$SECRET/OPENAI_KEY"))
+	assert.Equal(t, CredentialSourceEnv, credentialSource("$ENV/OPENAI_API_KEY"))
+	assert.Equal(t, "", credentialSource("sk-inline"))
+	assert.Equal(t, "", credentialSource(""))
+}
