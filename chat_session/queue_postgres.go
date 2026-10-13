@@ -25,6 +25,7 @@ type PostgreSQLQueue struct {
 	// The process-wide LISTEN connection and this session's channels on it
 	listener      *sharedListener
 	subscriptions []channelSubscription
+	reassembler   notifyReassembler // joins messages split across notifications
 
 	// Local channels for backward compatibility
 	messagesChan     chan *ChatResponse
@@ -167,7 +168,11 @@ func (psq *PostgreSQLQueue) startConsumers() error {
 
 // handleNotification routes a notification payload to the appropriate channel
 func (psq *PostgreSQLQueue) handleNotification(payload string) {
-	if err := routePostgreSQLNotification(payload, psq.sessionID, psq.messagesChan, psq.streamChan, psq.errorsChan, psq.llmResponsesChan); err != nil {
+	msg, complete, err := psq.reassembler.add(payload, time.Now())
+	if err == nil && complete {
+		err = routePostgreSQLNotification(msg, psq.sessionID, psq.messagesChan, psq.streamChan, psq.errorsChan, psq.llmResponsesChan)
+	}
+	if err != nil {
 		slog.Error("failed to handle notification", "session_id", psq.sessionID, "error", err)
 	}
 }
@@ -245,28 +250,11 @@ func (psq *PostgreSQLQueue) publishToPostgreSQL(ctx context.Context, messageType
 	// Send NOTIFY command with timeout
 	channel := psq.getChannelName(messageType)
 
-	// Use a transaction with timeout context; a caller without a deadline
-	// gets the notify timeout, so an exhausted pool cannot block forever
+	// A caller without a deadline gets the notify timeout, so an exhausted
+	// pool cannot block forever
 	ctx, cancel := withQueueDeadline(ctx, psq.config)
 	defer cancel()
-	tx, err := psq.sqlDB.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Execute NOTIFY command
-	_, err = tx.ExecContext(ctx, "SELECT pg_notify($1, $2)", channel, string(msgBytes))
-	if err != nil {
-		return fmt.Errorf("failed to notify: %w", err)
-	}
-
-	// Commit the transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit notification: %w", err)
-	}
-
-	return nil
+	return notifyPostgreSQL(ctx, psq.sqlDB, channel, msgBytes)
 }
 
 // ConsumeMessages returns the local channel for ChatResponse messages
