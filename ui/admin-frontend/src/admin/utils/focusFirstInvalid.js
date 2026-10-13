@@ -13,14 +13,13 @@
 const FOCUSABLE =
   'input:not([type="hidden"]):not([aria-hidden="true"]):not([tabindex="-1"]), textarea, select, button, [role="combobox"], [tabindex="0"]';
 
-// The element to focus for an invalid marker: MUI Select puts aria-invalid on
-// a hidden native input, so use its visible combobox; a FormControl or a
-// custom picker marked .Mui-error gets its first focusable descendant.
+// The element to focus for an invalid marker: the marker itself when it can
+// take focus, else the first focusable element of its FormControl. That
+// covers MUI Select, which puts aria-invalid on a hidden native input
+// (aria-hidden, tabindex -1) whose FormControl's first focusable element is
+// the visible combobox, and custom pickers marked .Mui-error.
 export const focusTargetFor = (el) => {
   if (!el) return null;
-  if (el.classList.contains('MuiSelect-nativeInput')) {
-    return el.parentElement?.querySelector('[role="combobox"]') || null;
-  }
   if (el.matches(FOCUSABLE)) return el;
   const scope = el.closest('.MuiFormControl-root') || el;
   return scope.querySelector(FOCUSABLE);

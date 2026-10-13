@@ -48,6 +48,16 @@ const clickBackdropOver = (beneath) => {
   });
 };
 
+// Let the menu close and leave the DOM, then wait past the longest time the
+// replay could still be pending (MAX_WAIT_MS, 600 ms), so a "nothing
+// happened" assertion is not just "nothing happened yet".
+const settleAfterClose = async () => {
+  await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 700));
+  });
+};
+
 describe("installMultiSelectClickThrough", () => {
   let uninstall;
   beforeEach(() => {
@@ -77,9 +87,7 @@ describe("installMultiSelectClickThrough", () => {
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Teams" }));
     await screen.findByRole("listbox");
     clickBackdropOver(screen.getByRole("button", { name: "Delete", hidden: true }));
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
-    });
+    await settleAfterClose();
     expect(onDelete).not.toHaveBeenCalled();
   });
 
@@ -89,9 +97,7 @@ describe("installMultiSelectClickThrough", () => {
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Teams" }));
     await screen.findByRole("listbox");
     clickBackdropOver(screen.getByRole("button", { name: "Outside", hidden: true }));
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
-    });
+    await settleAfterClose();
     expect(onOutside).not.toHaveBeenCalled();
   });
 
@@ -102,9 +108,7 @@ describe("installMultiSelectClickThrough", () => {
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Teams" }));
     await screen.findByRole("listbox");
     clickBackdropOver(screen.getByRole("button", { name: "Outside", hidden: true }));
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 50));
-    });
+    await settleAfterClose();
     expect(onOutside).not.toHaveBeenCalled();
     uninstall = () => {};
   });

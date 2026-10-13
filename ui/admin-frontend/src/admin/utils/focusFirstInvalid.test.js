@@ -59,6 +59,22 @@ describe("focusFirstInvalid", () => {
     expect(screen.getByRole("textbox", { name: "Email" })).toHaveFocus();
   });
 
+  it("maps an errored Select's hidden native input to its visible combobox", () => {
+    render(
+      <FormControl error>
+        <InputLabel id="v-label">Vendor</InputLabel>
+        <Select labelId="v-label" label="Vendor" value="">
+          <MenuItem value="a">A</MenuItem>
+        </Select>
+      </FormControl>
+    );
+    // MUI marks the hidden native input, which cannot take focus usefully.
+    // eslint-disable-next-line testing-library/no-node-access
+    const native = document.querySelector(".MuiSelect-nativeInput");
+    expect(native).toBeTruthy();
+    expect(focusTargetFor(native)).toBe(screen.getByRole("combobox", { name: "Vendor" }));
+  });
+
   it("maps a custom picker's .Mui-error control to its first focusable element", () => {
     render(
       <div className="MuiFormControl-root Mui-error" data-testid="picker">
