@@ -90,6 +90,10 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	if !requireSecretReadForCredentials(c, nil, map[string]string{"auth_key": input.Data.Attributes.AuthKey}) {
+		return
+	}
+
 	// Refuse an impossible access-method request before anything is written.
 	if err := applyToolAccessInput(&models.Tool{ToolType: input.Data.Attributes.ToolType},
 		input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled); err != nil {
@@ -297,6 +301,10 @@ func (a *API) updateTool(c *gin.Context) {
 	tool.OASSpec = input.Data.Attributes.OASSpec
 	tool.PrivacyScore = input.Data.Attributes.PrivacyScore
 	tool.AuthSchemaName = input.Data.Attributes.AuthSchemaName
+	if !requireSecretReadForCredentials(c, map[string]string{"auth_key": tool.AuthKey},
+		map[string]string{"auth_key": input.Data.Attributes.AuthKey}) {
+		return
+	}
 	if input.Data.Attributes.AuthKey != services.REDACTED_VALUE {
 		tool.AuthKey = input.Data.Attributes.AuthKey
 	}

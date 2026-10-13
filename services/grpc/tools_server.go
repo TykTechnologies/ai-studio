@@ -250,6 +250,9 @@ func (s *ToolsServer) CreateTool(ctx context.Context, req *pb.CreateToolRequest)
 	}
 
 	// Call existing service method
+	if err := refuseNewReferences(nil, map[string]string{"auth_key": req.GetAuthKey()}); err != nil {
+		return nil, err
+	}
 	tool, err := s.service.CreateTool(
 		req.GetName(),
 		req.GetDescription(),
@@ -297,6 +300,17 @@ func (s *ToolsServer) UpdateTool(ctx context.Context, req *pb.UpdateToolRequest)
 	}
 	if req.GetToolType() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "tool_type is required")
+	}
+
+	existing, err := s.service.GetToolByID(uint(toolID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load tool: %v", err)
+	}
+	if err := refuseNewReferences(map[string]string{"auth_key": existing.AuthKey}, map[string]string{"auth_key": req.GetAuthKey()}); err != nil {
+		return nil, err
 	}
 
 	// Call existing service method

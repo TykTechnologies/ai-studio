@@ -174,6 +174,9 @@ func (s *LLMManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRe
 	if req.GetDefaultModel() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "default_model is required")
 	}
+	if err := refuseNewReferences(nil, map[string]string{"api_key": req.GetApiKey(), "api_endpoint": req.GetApiEndpoint()}); err != nil {
+		return nil, err
+	}
 
 	// Convert vendor string to models.Vendor
 	vendor := models.Vendor(req.GetVendor())
@@ -232,6 +235,12 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 	existingLLM, err := s.service.GetLLMByID(uint(llmID))
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
+	}
+
+	if err := refuseNewReferences(
+		map[string]string{"api_key": existingLLM.APIKey, "api_endpoint": existingLLM.APIEndpoint},
+		map[string]string{"api_key": req.GetApiKey(), "api_endpoint": req.GetApiEndpoint()}); err != nil {
+		return nil, err
 	}
 
 	// Determine namespace: use from request if provided, otherwise preserve existing

@@ -1611,8 +1611,11 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		// Resolve secret references for microgateway
-		resolvedAPIKey := secrets.GetValue(llm.APIKey, false) // false to resolve actual value
-		resolvedEndpoint := secrets.GetValue(llm.APIEndpoint, false)
+		// Edges never resolve references themselves (and released ones
+		// would resolve $ENV/ against their own environment): what the
+		// policy refuses goes out as a bare "$ENV/" (secrets.ForEdge).
+		resolvedAPIKey := secrets.ForEdge(secrets.ResolveRef(llm.APIKey))
+		resolvedEndpoint := secrets.ForEdge(secrets.ResolveRef(llm.APIEndpoint))
 
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
@@ -1646,7 +1649,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			resolvedMetadata := make(models.JSONMap, len(llm.Metadata))
 			for k, v := range llm.Metadata {
 				if strVal, ok := v.(string); ok {
-					resolvedMetadata[k] = secrets.GetValue(strVal, false)
+					resolvedMetadata[k] = secrets.ForEdge(secrets.ResolveRef(strVal))
 				} else {
 					resolvedMetadata[k] = v
 				}
@@ -1924,7 +1927,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if r, ok := resolvedRefs[v]; ok {
 			return r
 		}
-		r := secrets.GetValue(v, false)
+		r := secrets.ForEdge(secrets.ResolveRef(v))
 		resolvedRefs[v] = r
 		return r
 	}
@@ -2298,7 +2301,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	governedTools := s.loadGovernedMetadata(models.GovernedObjectTypeTool)
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
-		resolvedAuthKey := secrets.GetValue(tool.AuthKey, false)
+		resolvedAuthKey := secrets.ForEdge(secrets.ResolveRef(tool.AuthKey))
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
@@ -2387,7 +2390,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	governedDatasources := s.loadGovernedMetadata(models.GovernedObjectTypeDatasource)
 	for _, ds := range datasources {
 		// Resolve and encrypt secrets for edge transit
-		resolvedConnString := secrets.GetValue(ds.DBConnString, false)
+		resolvedConnString := secrets.ForEdge(secrets.ResolveRef(ds.DBConnString))
 		encryptedConnString := ""
 		if resolvedConnString != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
@@ -2398,7 +2401,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnString = encrypted
 		}
 
-		resolvedConnAPIKey := secrets.GetValue(ds.DBConnAPIKey, false)
+		resolvedConnAPIKey := secrets.ForEdge(secrets.ResolveRef(ds.DBConnAPIKey))
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
@@ -2419,7 +2422,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				embed = models.LegacyEmbed{}
 			}
 		}
-		resolvedEmbedAPIKey := embed.APIKey
+		embed.URL = secrets.ForEdge(embed.URL)
+		resolvedEmbedAPIKey := secrets.ForEdge(embed.APIKey)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)

@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/filterscript"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
@@ -106,6 +107,7 @@ func main() {
 	if filterscript.OSModuleAllowed() {
 		log.Error().Msg(filterscript.OSModuleWarning)
 	}
+	applyEdgeReferencePolicy(cfg)
 
 	// Connect to database
 	dbConfig := database.DatabaseConfig{
@@ -686,4 +688,13 @@ func ensureAdminAppExists(serviceContainer *services.ServiceContainer) (*databas
 
 	log.Debug().Uint("app_id", adminApp.ID).Msg("Created admin app for token management")
 	return adminApp, nil
+}
+// applyEdgeReferencePolicy makes an edge never resolve $ENV/ references: the
+// hub resolves what its operator allows into the snapshot, and sends what it
+// refused as a bare "$ENV/". A standalone microgateway keeps the operator
+// allowlist (AI_STUDIO_ENV_REF_ALLOWLIST) for its own configuration.
+func applyEdgeReferencePolicy(cfg *config.Config) {
+	if cfg.IsEdge() {
+		secrets.DisableEnvRefs()
+	}
 }

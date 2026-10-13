@@ -92,6 +92,9 @@ func (a *API) createEmbedder(c *gin.Context) {
 	if e.IsLinked() && !a.requireLLMReadToLink(c) {
 		return
 	}
+	if !requireSecretReadForCredentials(c, nil, embedderCredentialFields(e)) {
+		return
+	}
 	e, err := a.service.CreateEmbedder(e, currentUserID(c))
 	if err != nil {
 		respondEmbedderError(c, err)
@@ -149,15 +152,18 @@ func (a *API) updateEmbedder(c *gin.Context) {
 		return
 	}
 	changes := attributesToEmbedder(&input.Data.Attributes)
+	current, err := a.service.GetEmbedder(id)
+	if err != nil {
+		respondEmbedderError(c, err)
+		return
+	}
 	if changes.IsLinked() {
-		current, err := a.service.GetEmbedder(id)
-		if err != nil {
-			respondEmbedderError(c, err)
-			return
-		}
 		if (!current.IsLinked() || *current.LLMID != *changes.LLMID) && !a.requireLLMReadToLink(c) {
 			return
 		}
+	}
+	if !requireSecretReadForCredentials(c, embedderCredentialFields(current), embedderCredentialFields(changes)) {
+		return
 	}
 	e, err := a.service.UpdateEmbedder(id, changes, currentUserID(c))
 	if err != nil {

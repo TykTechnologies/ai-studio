@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
@@ -379,6 +380,7 @@ func TestGuardrailRunner_ScopeSelectsMessages(t *testing.T) {
 // never sees "$ENV/NAME" as its credential.
 func TestGuardrailRunner_ResolvesConnectionReferences(t *testing.T) {
 	t.Setenv("GUARDRAIL_TEST_KEY", "resolved-key")
+	t.Setenv(secrets.EnvRefAllowlistVar, "GUARDRAIL_TEST_KEY") // $ENV/ resolves only allowlisted names
 	var seen guardrails.Config
 	guardrails.RegisterSpec(guardrails.Spec{
 		Name: "fake_conn", DisplayName: "fake_conn",

@@ -57,6 +57,7 @@ func TestEmbedder_Spec(t *testing.T) {
 	t.Setenv("TYK_AI_SECRET_KEY", "test-key")
 	require.NoError(t, secrets.CreateSecret(db, &secrets.Secret{VarName: "EMB_KEY", Value: "sk-real"}))
 	t.Setenv("EMB_URL", "https://env.example/v1")
+	t.Setenv(secrets.EnvRefAllowlistVar, "EMB_URL") // $ENV/ resolves only allowlisted names
 
 	t.Run("standalone resolves secrets only when asked", func(t *testing.T) {
 		e := &Embedder{Name: "s", Vendor: OPENAI, Endpoint: "$ENV/EMB_URL", APIKey: "$SECRET/EMB_KEY", ModelName: "m", PrivacyScore: 40}

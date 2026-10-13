@@ -67,6 +67,7 @@ Remember that fundamental system parameters are typically set via environment va
 *   Database Connection (`DATABASE_TYPE`, `DATABASE_URL`, and for Postgres optionally `DATABASE_SCHEMA`)
 *   License Key (`TYK_AI_LICENSE`)
 *   Secrets Encryption Key (`TYK_AI_SECRET_KEY`)
+*   Environment variables `$ENV/` references may read (`AI_STUDIO_ENV_REF_ALLOWLIST`, comma-separated; empty by default, so no `$ENV/` reference resolves). See [Secrets](./secrets.md).
 *   Base URL (`SITE_URL`)
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)

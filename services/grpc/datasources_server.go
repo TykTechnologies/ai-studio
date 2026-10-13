@@ -123,6 +123,9 @@ func (s *DatasourcesServer) CreateDatasource(ctx context.Context, req *pb.Create
 	if req.GetName() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "name is required")
 	}
+	if err := refuseNewReferences(nil, datasourceRefFields(req.GetDbConnString(), req.GetDbConnApiKey(), req.GetEmbedUrl(), req.GetEmbedApiKey())); err != nil {
+		return nil, err
+	}
 
 	// Call existing service method
 	datasource, err := s.service.CreateDatasource(
@@ -201,6 +204,18 @@ func (s *DatasourcesServer) UpdateDatasource(ctx context.Context, req *pb.Update
 	// Validate required fields
 	if req.GetName() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+	existing, err := s.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load datasource: %v", err)
+	}
+	embed := existing.EmbedFields(false)
+	if err := refuseNewReferences(datasourceRefFields(existing.DBConnString, existing.DBConnAPIKey, embed.URL, embed.APIKey),
+		datasourceRefFields(req.GetDbConnString(), req.GetDbConnApiKey(), req.GetEmbedUrl(), req.GetEmbedApiKey())); err != nil {
+		return nil, err
 	}
 
 	// Call existing service method
@@ -938,4 +953,10 @@ func (s *DatasourcesServer) DeleteNamespace(ctx context.Context, req *pb.DeleteN
 		Success: true,
 		Message: fmt.Sprintf("Namespace '%s' deleted successfully", req.GetNamespace()),
 	}, nil
+}
+func datasourceRefFields(connString, connAPIKey, embedURL, embedAPIKey string) map[string]string {
+	return map[string]string{
+		"db_conn_string": connString, "db_conn_api_key": connAPIKey,
+		"embed_url": embedURL, "embed_api_key": embedAPIKey,
+	}
 }

@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -64,8 +65,14 @@ func TestForEdge(t *testing.T) {
 		}
 	}
 	t.Setenv("MICROGATEWAY_ENCRYPTION_KEY", "edge-key")
-	if got := GetValue(ForEdge("$ENV/MICROGATEWAY_ENCRYPTION_KEY"), false); got != "" {
-		t.Errorf("old-edge resolution of the shipped value = %q, want empty", got)
+	// A pre-2.3 edge resolved $ENV/NAME with os.Getenv(NAME); for the bare
+	// "$ENV/" that is os.Getenv(""), which is empty.
+	shipped := ForEdge("$ENV/MICROGATEWAY_ENCRYPTION_KEY")
+	if name := strings.TrimPrefix(shipped, EnvRefPrefix); os.Getenv(name) != "" {
+		t.Errorf("old-edge resolution of the shipped value %q is not empty", shipped)
+	}
+	if got := GetValue(shipped, false); got != shipped {
+		t.Errorf("GetValue(%q) = %q, want it left unresolved", shipped, got)
 	}
 	if !IsReference(ForEdge("$ENV/X")) || EnvRefAllowed("") {
 		t.Error("a bare $ENV/ must stay an unresolved reference")

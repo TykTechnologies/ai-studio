@@ -45,6 +45,10 @@ func (a *API) createDatasource(c *gin.Context) {
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
+	if !requireSecretReadForCredentials(c, nil, datasourceCredentialFields(input.Data.Attributes.DBConnString,
+		input.Data.Attributes.DBConnAPIKey, input.Data.Attributes.EmbedUrl, input.Data.Attributes.EmbedAPIKey)) {
+		return
+	}
 
 	// Creating a datasource already active is the publish action, and needs
 	// every "required to publish" metadata field.
@@ -203,6 +207,14 @@ func (a *API) updateDatasource(c *gin.Context) {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{Title: "Not Found", Detail: "Datasource not found"}}})
+		return
+	}
+
+	existingEmbed := existingDS.EmbedFields(false)
+	if !requireSecretReadForCredentials(c,
+		datasourceCredentialFields(existingDS.DBConnString, existingDS.DBConnAPIKey, existingEmbed.URL, existingEmbed.APIKey),
+		datasourceCredentialFields(input.Data.Attributes.DBConnString, input.Data.Attributes.DBConnAPIKey,
+			input.Data.Attributes.EmbedUrl, input.Data.Attributes.EmbedAPIKey)) {
 		return
 	}
 

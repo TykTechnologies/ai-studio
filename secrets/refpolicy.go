@@ -48,14 +48,10 @@ func EnvRefAllowed(name string) bool {
 	return false
 }
 
-// ResolveRef resolves v like GetValue, except that an $ENV/ reference
-// EnvRefAllowed refuses is returned unchanged (see IsReference), so the value
-// never leaves the process. Use it wherever a reference is resolved for a
-// value someone else chose where to send.
+// ResolveRef resolves v. It is GetValue(v, false), which applies the policy
+// itself: an $ENV/ reference EnvRefAllowed refuses is returned unchanged (see
+// IsReference), so the value never leaves the process.
 func ResolveRef(v string) string {
-	if name, ok := strings.CutPrefix(v, EnvRefPrefix); ok && !EnvRefAllowed(name) {
-		return v
-	}
 	return GetValue(v, false)
 }
 
