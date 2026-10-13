@@ -1,23 +1,10 @@
-issues:
-  # third_party/gorm.io is upstream gorm, rebuilt by scripts/gorm-vendor.sh and
-  # never edited by hand; third_party/langchaingo is Tyk's langchaingo fork,
-  # kept in upstream style (see third_party/README.md).
-  exclude-dirs:
-    - third_party
+# golangci-lint v2 configuration (https://golangci-lint.run/docs/configuration/file/).
+# Validate with: golangci-lint config verify
+version: "2"
 
-  exclude:
-    - "^exported: exported var Err[A-Za-z0-9]+ should have comment or be unexported$"
-    - "shadow: declaration of .err. shadows declaration"
-
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    # Exclude some linters from running on test files.
-    - path: _test\.go
-      linters:
-        - dupl
-
-  # Show only new issues created since branching away from default branch on the remote
-  new-from-rev: origin/master
+run:
+  timeout: 10m
+  build-tags: []
 
 linters:
   enable:
@@ -25,9 +12,6 @@ linters:
     - dupl
     - errcheck
     - gocritic
-    - gofmt
-    - gofumpt
-    - goimports
     - govet
     - gosec
     - ineffassign
@@ -36,110 +20,110 @@ linters:
     - staticcheck
     - whitespace
 
-linters-settings:
-  auto-fix: true
-  dupl:
-    # tokens count to trigger issue, 150 by default
-    threshold: 100
-    auto-fix: true
+  settings:
+    dupl:
+      # tokens count to trigger issue, 150 by default
+      threshold: 100
 
-  errcheck:
-    auto-fix: true
-    # Report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`.
-    check-blank: true
+    errcheck:
+      # Report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`.
+      check-blank: true
 
-    # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
-    check-type-assertions: true
+      # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+      check-type-assertions: true
 
-  gocritic:
-    auto-fix: true
-    # See https://go-critic.github.io/overview#checks-overview
-    # To check which checks are enabled run `GL_DEBUG=gocritic golangci-lint run`
-    enabled-tags:
-      - performance
+    gocritic:
+      # See https://go-critic.github.io/overview#checks-overview
+      # To check which checks are enabled run `GL_DEBUG=gocritic golangci-lint run`
+      enabled-tags:
+        - performance
 
-  gofmt:
-    auto-fix: true
-    # Simplify code with '-s' option
-    simplify: true
+    govet:
+      # enable-all includes the shadow analyzer (v1's check-shadowing).
+      enable-all: true
 
-  gofumpt:
-    auto-fix: true
-    # Choose whether or not to use the extra rules that are disabled by default
-    extra-rules: true
+    lll:
+      # Max line length; lines longer will be reported
+      # '\t' is counted as 1 character by default, and can be changed with the 'tab-width' option
+      line-length: 120
+      # Tab width in spaces
+      tab-width: 2
 
-    # Select the Go version to target.
-    lang-version: "1.21"
+    misspell:
+      # Correct spellings using locale preferences for US or UK.
+      # Default is to use a neutral variety of English.
+      # Setting locale to US will correct the British spelling of 'colour' to 'color'.
 
-  goimports:
-    auto-fix: false
-    # Put imports beginning with prefixes after 3rd-party packages; it's a comma-separated list of prefixes
-    local-prefixes: ""
+      # Intentionally leaving this unset as most engineering terminology skews US however Tyk standard is UK.
+      #locale: UK
 
-  govet:
-    auto-fix: true
-    # Report about shadowed variables
-    check-shadowing: true
-    enable-all: true
+      ignore-rules: []
 
-  lll:
-    auto-fix: true
-    # Max line length; lines longer will be reported
-    # '\t' is counted as 1 character by default, and can be changed with the 'tab-width' option
-    line-length: 120
-    # Tab width in spaces
-    tab-width: 2
+    staticcheck:
+      # https://staticcheck.dev/docs/configuration/options/#checks
+      # The Go version is taken from go.mod.
+      checks: ["all"]
 
-  misspell:
-    auto-fix: true
-    # Correct spellings using locale preferences for US or UK.
-    # Default is to use a neutral variety of English.
-    # Setting locale to US will correct the British spelling of 'colour' to 'color'.
+    whitespace:
+      multi-if: false # Enforces newlines (or comments) after every multi-line if statement
+      multi-func: false # Enforces newlines (or comments) after every multi-line function signature
 
-    # Intentionally leaving this unset as most engineering terminology skews US however Tyk standard is UK.
-    #locale: UK
+  exclusions:
+    generated: lax
+    # v1's default exclusions, kept so the migration to v2 does not change the findings.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
 
-    ignore-words: []
+    # third_party/gorm.io is upstream gorm, rebuilt by scripts/gorm-vendor.sh and
+    # never edited by hand; third_party/langchaingo is Tyk's langchaingo fork,
+    # kept in upstream style (see third_party/README.md). examples$ and builtin$
+    # were excluded by v1's default directory exclusions.
+    paths:
+      - third_party
+      - builtin$
+      - examples$
 
-  staticcheck:
-    auto-fix: true
-    # https://staticcheck.io/docs/options#checks
-    checks: ["all"]
-    # Select the Go version to target.
-    go: "1.21"
+    # Excluding configuration per-path, per-linter, per-text and per-source
+    rules:
+      # Exclude some linters from running on test files.
+      - path: _test\.go
+        linters:
+          - dupl
+      # v2 needs a second condition besides text on each rule.
+      - linters:
+          - revive
+        text: "^exported: exported var Err[A-Za-z0-9]+ should have comment or be unexported$"
+      - linters:
+          - govet
+        text: "shadow: declaration of .err. shadows declaration"
 
-  whitespace:
-    auto-fix: true
-    multi-if: false # Enforces newlines (or comments) after every multi-line if statement
-    multi-func: false # Enforces newlines (or comments) after every multi-line function signature
+# gofmt, gofumpt and goimports are formatters in v2, no longer linters.
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
 
-  wsl:
-    auto-fix: true
-    # Controls if you may cuddle assignments and anything without needing an empty line between them.
-    allow-assign-and-anything: false
-    # Allow calls and assignments to be cuddled as long as the lines have any matching variables, fields or types.
-    # Default is true.
-    allow-assign-and-call: true
-    # Controls if you may end case statements with a whitespace.
-    allow-case-trailing-whitespace: true
-    # Allow declarations (var) to be cuddled.
-    allow-cuddle-declarations: true
-    # Allow multiline assignments to be cuddled. Default is true.
-    allow-multiline-assign: true
-    # This option allows whitespace after each comment group that begins a block.
-    allow-separated-leading-comment: false
-    # Allow trailing comments in ending of blocks
-    allow-trailing-comment: false
-    # Enforces that an if statement checking an error variable is cuddled with the line that assigned that error variable.
-    enforce-err-cuddling: true
-    # Force newlines in end of case at this limit (0 = never).
-    force-case-trailing-whitespace: 0
-    # Enforces that an assignment which is actually a short declaration (using :=) is only allowed to cuddle with other short declarations, and not plain assignments, blocks, etc.
-    force-short-decl-cuddling: false
-    # Append is only allowed to be cuddled if appending value is matching variables, fields or types on line above.
-    # Default is true.
-    strict-append: true
+  settings:
+    gofmt:
+      # Simplify code with '-s' option
+      simplify: true
 
-run:
-  timeout: 10m
-  build-tags: []
+    gofumpt:
+      # Extra rules that are disabled by default (v1's extra-rules)
+      extra:
+        group-params: true
+
+  exclusions:
+    generated: lax
+    paths:
+      - third_party
+      - builtin$
+      - examples$
+
+issues:
+  # Show only new issues created since branching away from the default branch on the remote
+  new-from-rev: origin/main
