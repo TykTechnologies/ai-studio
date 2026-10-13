@@ -1387,7 +1387,8 @@ type CallParams struct {
 
 // PreflightTokenLengthCheck trims the oldest history until the estimate fits
 // LLMSettings.MaxLength (0 or less means no limit). The first message (the
-// system prompt) is kept, and so is the latest turn. History goes a turn at a
+// system prompt) is kept, and so is the latest turn: the latest user message
+// and everything after it. History goes a turn at a
 // time: an assistant message that calls tools goes together with the tool
 // results that answer it, because a tool result without its call, or a call
 // without its results, is refused by every vendor.
@@ -1400,10 +1401,11 @@ func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []l
 			if tokenLength <= maxInputTokens {
 				break
 			}
-			// The oldest turn after the system prompt; it may not reach the
-			// last message, which is the turn being answered.
+			// The oldest turn after the system prompt. It may not reach the
+			// turn being answered: the latest user message and everything
+			// after it (or, with no user message, the last message).
 			n := oldestTurnLength(msgs, 1)
-			if n == 0 || 1+n >= len(msgs) {
+			if n == 0 || 1+n > latestTurnStart(msgs) {
 				break
 			}
 			msgs = append(msgs[:1], msgs[1+n:]...)
@@ -1420,6 +1422,18 @@ func (cs *ChatSession) PreflightTokenLengthCheck(msgs []llms.MessageContent) []l
 		slog.Info("chat history trimmed to fit the model's input length", "session_id", cs.id, "removed_messages", removed, "max_length", maxInputTokens)
 	}
 	return msgs
+}
+
+// latestTurnStart is the index of the latest user message, which with what
+// follows it is the turn being answered, or of the last message when there
+// is no user message after the first.
+func latestTurnStart(msgs []llms.MessageContent) int {
+	for i := len(msgs) - 1; i >= 1; i-- {
+		if msgs[i].Role == llms.ChatMessageTypeHuman {
+			return i
+		}
+	}
+	return len(msgs) - 1
 }
 
 // oldestTurnLength is the number of messages, from index i, that make up one

@@ -109,6 +109,28 @@ func TestPreflight_NeverSplitsTheLatestTurn(t *testing.T) {
 	assert.Equal(t, "SCT", roles(out))
 }
 
+// The user's latest message is part of the turn being answered: it is
+// never trimmed, however long, and neither is what follows it.
+func TestPreflight_KeepsTheLatestUserMessage(t *testing.T) {
+	long := strings.Repeat("word ", 200)
+	msgs := []llms.MessageContent{
+		text(llms.ChatMessageTypeSystem, "sys"),
+		text(llms.ChatMessageTypeHuman, long),
+		text(llms.ChatMessageTypeHuman, "latest "+long),
+		call("c1", `{"q":"x"}`), result("c1", "r"),
+	}
+	out := trimSession(50).PreflightTokenLengthCheck(msgs)
+	assert.Equal(t, "SUCT", roles(out))
+	assert.Contains(t, out[1].Parts[0].(llms.TextContent).Text, "latest")
+}
+
+// Results that follow their call in the first message are not orphans.
+func TestPreflight_KeepsResultsOfAFirstMessageCall(t *testing.T) {
+	msgs := []llms.MessageContent{call("c1", `{}`), result("c1", "r"), text(llms.ChatMessageTypeHuman, "q")}
+	out := trimSession(0).PreflightTokenLengthCheck(msgs)
+	assert.Equal(t, "CTU", roles(out))
+}
+
 // Tool results whose call was trimmed earlier are dropped, not sent orphaned.
 func TestPreflight_DropsOrphanedLeadingResults(t *testing.T) {
 	msgs := []llms.MessageContent{
@@ -120,8 +142,16 @@ func TestPreflight_DropsOrphanedLeadingResults(t *testing.T) {
 	assert.Equal(t, "SU", roles(out))
 }
 
-// A message that only calls tools is not free: its arguments count.
+// A message that only calls tools is not free: its name and arguments count.
 func TestEstimateTokenLengthCountsToolCalls(t *testing.T) {
 	s := trimSession(0)
 	assert.Greater(t, s.estimateTokenLength([]llms.MessageContent{call("c", `{"query":"a fairly long argument"}`)}), 3)
+
+	named := func(name string) llms.MessageContent {
+		return llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: []llms.ContentPart{llms.ToolCall{
+			ID: "c", Type: "function", FunctionCall: &llms.FunctionCall{Name: name, Arguments: `{}`},
+		}}}
+	}
+	assert.Greater(t, s.estimateTokenLength([]llms.MessageContent{named("a_much_longer_function_name_for_counting")}),
+		s.estimateTokenLength([]llms.MessageContent{named("f")}), "the name counts")
 }
