@@ -184,6 +184,8 @@ jobs:
         run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000
 
       # Saved even when a test failed: the caches only hold build inputs.
+      # TEMP: remove the pull_request clause before merge (it is only there to
+      # measure a warm run on PR #740; PR saves would fill the cache quota).
       - name: Save container caches
         if: ${{ !cancelled() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'pull_request') }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
