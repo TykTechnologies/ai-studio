@@ -30,6 +30,8 @@ The primary goal is to enhance LLM interactions by:
     *   Chunks the documents into smaller, manageable pieces.
     *   Uses the configured Embedding Service to convert each chunk into a vector embedding.
     *   Stores the text chunk and its corresponding embedding in the configured Vector Store.
+
+    **PDF text extraction:** the release images extract PDF text with a built-in Go parser. If the `pdftotext` command (from poppler-utils) is on the `PATH`, Tyk AI Studio uses it instead: its output keeps the page layout better, especially for tables and multi-column pages. To get it, build a derived image that installs poppler-utils. The trade-off is that `pdftotext` is a C program parsing uploaded files, which adds attack surface and image size, and you have to keep it patched. The log says which extractor is in use, once, at the first PDF upload.
 *   **RAG (Retrieval-Augmented Generation):** The core process where:
     1.  A user's query in the [Chat Interface](./chat-interface.md) is embedded using the same embedding service.
     2.  This query embedding is used to search the relevant vector store(s) for the most similar text chunks (based on vector similarity).
