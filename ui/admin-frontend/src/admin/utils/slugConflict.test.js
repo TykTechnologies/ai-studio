@@ -12,6 +12,8 @@ describe("slugConflictDetail", () => {
 
   it("ignores other errors", () => {
     expect(slugConflictDetail(err(400, "failover target 2: model not allowed"))).toBeNull();
+    // Only the slug-conflict message, not any text that says "too close".
+    expect(slugConflictDetail(err(400, 'route "chat" is too close to a reserved path'))).toBeNull();
     expect(slugConflictDetail(err(500, TOOL))).toBeNull();
     expect(slugConflictDetail({ message: "Network Error" })).toBeNull();
     expect(slugConflictDetail(undefined)).toBeNull();
