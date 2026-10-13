@@ -190,7 +190,7 @@ func (g *guardrailRunner) prepare() (*preparedGuardrail, error) {
 		// Resolve them here, where the filter runs: on Studio against the
 		// secret store, at the edge against the values the hub already
 		// resolved into the snapshot (GetValue leaves a non-reference
-		// untouched). $ENV/ only resolves variables set for guardrails.
+		// untouched). $ENV/ only resolves names on AI_STUDIO_ENV_REF_ALLOWLIST.
 		resolved := make(map[string]string, len(cfg.Connection))
 		var unresolved []string
 		for k, v := range cfg.Connection {

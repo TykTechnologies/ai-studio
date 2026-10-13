@@ -405,7 +405,7 @@ func TestGuardrailRunner_ResolvesConnectionReferences(t *testing.T) {
 	}
 }
 
-// $ENV/ in a connection only resolves variables set for guardrails. A saved
+// $ENV/ in a connection only resolves names on AI_STUDIO_ENV_REF_ALLOWLIST. A saved
 // filter naming AI Studio's own settings (TYK_AI_SECRET_KEY, DATABASE_URL)
 // never builds a provider with them, nor with the literal reference: the
 // filter errors and its fail mode applies.
