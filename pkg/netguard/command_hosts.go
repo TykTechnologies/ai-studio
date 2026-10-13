@@ -60,7 +60,13 @@ func unquote(s string) string {
 
 func valueTargetsInternalHost(value string) bool {
 	if i := strings.Index(value, "://"); i >= 0 {
-		return IsInternalHost(urlHost(value, value[i+3:]))
+		// Check both what url.Parse sees and the authority right after the
+		// "://": a value such as upstream:grpc://10.0.0.1 parses as an opaque
+		// URL with no host, and a malformed one does not parse at all.
+		if u, err := url.Parse(value); err == nil && IsInternalHost(u.Hostname()) {
+			return true
+		}
+		return IsInternalHost(authorityHost(value[i+3:]))
 	}
 	if host, _, err := net.SplitHostPort(value); err == nil {
 		value = host
@@ -72,13 +78,10 @@ func valueTargetsInternalHost(value string) bool {
 	return err == nil && isInternalAddr(addr)
 }
 
-// urlHost returns the host of a URL. When the URL does not parse (a bad
-// escape in the path, say), the host is read from the authority directly, so
-// a malformed URL cannot hide an internal host.
-func urlHost(rawURL, afterScheme string) string {
-	if u, err := url.Parse(rawURL); err == nil {
-		return u.Hostname()
-	}
+// authorityHost reads the host from the text after a URL's "://": up to the
+// first / ? or #, without userinfo, port or wrapping punctuation such as the
+// ")" of "(http://10.0.0.1)".
+func authorityHost(afterScheme string) string {
 	authority := afterScheme
 	if i := strings.IndexAny(authority, "/?#"); i >= 0 {
 		authority = authority[:i]
@@ -86,6 +89,7 @@ func urlHost(rawURL, afterScheme string) string {
 	if i := strings.LastIndexByte(authority, '@'); i >= 0 {
 		authority = authority[i+1:]
 	}
+	authority = strings.TrimRight(authority, ")>")
 	if host, _, err := net.SplitHostPort(authority); err == nil {
 		return host
 	}

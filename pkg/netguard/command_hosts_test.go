@@ -64,8 +64,13 @@ func TestCommandTargetsInternalHost(t *testing.T) {
 		{`/usr/local/bin/plugin --addr="127.0.0.1:9000"`, true},
 		{`/usr/local/bin/plugin --target="grpc://10.0.0.1:50051"`, true},
 		{"/usr/local/bin/plugin --upstreams=grpc://8.8.8.8:1,grpc://10.0.0.1:1", true},
-		{"grpc://127.0.0.1:50051/%zz", true},                       // bad escape: url.Parse fails
-		{"grpc://user@0x7f000001:50051/%zz", true},                 // userinfo, legacy form, bad escape
+		{"grpc://127.0.0.1:50051/%zz", true},                            // bad escape: url.Parse fails
+		{"grpc://user@0x7f000001:50051/%zz", true},                      // userinfo, legacy form, bad escape
+		{"/usr/local/bin/plugin upstream:grpc://127.0.0.1:50051", true}, // opaque URL, empty Hostname
+		{"/usr/local/bin/plugin x:http://10.0.0.1/", true},
+		{"/usr/local/bin/plugin (http://10.0.0.1)", true},
+		{"/usr/local/bin/plugin <http://10.0.0.1>", true},
+		{"/usr/local/bin/plugin (http://[::1])", true},
 		{"grpc://127.0.0.1.:50051", true},                          // trailing dot
 		{"grpc://100.100.100.200:80", true},                        // CGNAT range, cloud metadata
 		{"grpc://plugins.example.com:50051/?next=10.0.0.1", false}, // '=' in a URL query
