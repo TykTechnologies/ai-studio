@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -27,7 +28,6 @@ import (
 	mgwdb "github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,9 +109,22 @@ type decisionEdge struct {
 // ungranted System One route.
 func setupDecisionEdge(t *testing.T, upstream *decisionUpstream) *decisionEdge {
 	t.Helper()
-	dsn := fmt.Sprintf("file:decisions_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	// A file database opened the way the edge opens its own (WAL,
+	// busy_timeout, txlock=immediate, no shared cache). A shared-cache memory
+	// database took table locks: the budget recorder and the analytics
+	// writer, writing at once, failed with SQLITE_LOCKED ("database table is
+	// locked"), which busy_timeout does not retry, and the analytics row the
+	// test waits for was lost.
+	db, err := mgwdb.Connect(mgwdb.DatabaseConfig{
+		Type: "sqlite", DSN: filepath.Join(t.TempDir(), "decisions.db"),
+		MaxOpenConns: 10, MaxIdleConns: 5, LogLevel: "silent",
+	})
 	require.NoError(t, err)
+	t.Cleanup(func() { // after the server's shutdown: cleanups run last-in first-out
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	require.NoError(t, mgwdb.Migrate(db))
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
