@@ -698,7 +698,7 @@ const LLMForm = () => {
                   <Typography variant="body2" color="text.secondary" paragraph>
                     AWS Bedrock requires an AWS region endpoint and IAM credentials.
                     For security, store sensitive credentials using the Secrets Manager
-                    and reference them here as <strong>$SECRET/your-secret-name</strong> or <strong>$ENV/YOUR_ENV_VAR</strong>.
+                    and reference them here as <strong>$SECRET/your-secret-name</strong> (environment variables as <strong>$ENV/YOUR_ENV_VAR</strong> only when your operator allows them).
                   </Typography>
                   <Grid container spacing={3}>
                     <Grid item xs={12}>
@@ -782,7 +782,7 @@ const LLMForm = () => {
                         type={showApiKey ? "text" : "password"}
                         value={llm.api_key}
                         onChange={handleChange}
-                        helperText="Enter the key, or reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME."
+                        helperText="Enter the key, or reference a stored secret as $SECRET/name (environment variables as $ENV/NAME only when your operator allows them)."
                         InputProps={{
                           endAdornment: (
                             <InputAdornment position="end">

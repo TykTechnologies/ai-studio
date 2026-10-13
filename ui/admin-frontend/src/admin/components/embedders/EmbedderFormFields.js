@@ -166,7 +166,7 @@ const EmbedderFormFields = ({ draft, onChange, errors = {}, llms = [], vendors =
               type={showKey ? "text" : "password"}
               value={draft.api_key}
               onChange={set("api_key")}
-              helperText="Enter the key, or reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME."
+              helperText="Enter the key, or reference a stored secret as $SECRET/name (environment variables as $ENV/NAME only when your operator allows them)."
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
