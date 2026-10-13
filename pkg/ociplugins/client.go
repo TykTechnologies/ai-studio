@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/rs/zerolog/log"
 )
 
@@ -23,11 +24,17 @@ type SecurityService interface {
 	VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error
 }
 
+// pluginPuller pulls a plugin's manifest, config and binary from a registry.
+// ORASFetcher implements it; tests substitute a fake.
+type pluginPuller interface {
+	Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error)
+}
+
 // OCIPluginClient handles OCI-based plugin operations
 type OCIPluginClient struct {
 	config          *OCIConfig
 	storage         *ContentStorage
-	fetcher         *ORASFetcher
+	fetcher         pluginPuller
 	verifier        *SignatureVerifier  // Deprecated: use securityService instead
 	securityService SecurityService     // Enterprise security service (optional)
 
