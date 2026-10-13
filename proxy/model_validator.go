@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
+	openaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/openai"
 	"github.com/gorilla/mux"
 )
 
@@ -159,6 +160,11 @@ func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
 
 	modelInterface, ok := req["model"]
 	if !ok {
+		// "model" is optional on moderations: OpenAI then runs its default
+		// moderation model, which the allow-list is checked against.
+		if r != nil && openaiVendor.IsModerationsPath(r.URL.Path) {
+			return openaiVendor.DefaultModerationModel, nil
+		}
 		return "", &BadRequestError{"model field is required"}
 	}
 

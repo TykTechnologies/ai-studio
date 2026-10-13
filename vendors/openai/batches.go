@@ -31,6 +31,17 @@ const (
 	ResourceBatch = "openai.batch"
 )
 
+// DefaultModerationModel is the model OpenAI runs a moderation on when the
+// request names none ("model" is optional on /v1/moderations). The gateway
+// checks LLM allow-lists against it.
+const DefaultModerationModel = "omni-moderation-latest"
+
+// IsModerationsPath reports whether path is the moderations endpoint
+// (/v1/moderations, or /moderations under an endpoint prefix).
+func IsModerationsPath(path string) bool {
+	return strings.HasSuffix(strings.TrimSuffix(strings.ToLower(path), "/"), "/moderations")
+}
+
 // BatchPriceMultiplier is the share of the list price OpenAI bills batch
 // usage at.
 const BatchPriceMultiplier = 0.5
@@ -526,7 +537,8 @@ func batchFileLine(line []byte, off int) (batchLineSpan, error) {
 		return batchLineSpan{}, errors.New("a request must be a JSON object")
 	}
 	sp := batchLineSpan{start: -1}
-	method := ""
+	method, url := "", ""
+	modelMissing := false
 	for dec.More() {
 		tok, err := dec.Token()
 		if err != nil {
@@ -546,6 +558,7 @@ func batchFileLine(line []byte, off int) (batchLineSpan, error) {
 		case "url":
 			var u string
 			_ = json.Unmarshal(v, &u)
+			url = u
 			format, ok := batchEndpoints[u]
 			if !ok {
 				return batchLineSpan{}, fmt.Errorf("url %q is not supported in a batch", u)
@@ -561,9 +574,10 @@ func batchFileLine(line []byte, off int) (batchLineSpan, error) {
 				return batchLineSpan{}, errors.New("body must be an object")
 			}
 			if b.Model == nil || *b.Model == "" {
-				return batchLineSpan{}, errors.New("body.model is required")
+				modelMissing = true
+			} else {
+				sp.model = *b.Model
 			}
-			sp.model = *b.Model
 		}
 	}
 	switch {
@@ -575,6 +589,12 @@ func batchFileLine(line []byte, off int) (batchLineSpan, error) {
 		return batchLineSpan{}, errors.New("url is required")
 	case sp.start < 0:
 		return batchLineSpan{}, errors.New("body is required")
+	case modelMissing && !IsModerationsPath(url):
+		return batchLineSpan{}, errors.New("body.model is required")
+	case modelMissing:
+		// A moderation without a model runs on OpenAI's default; the
+		// allow-list is checked against that.
+		sp.model = DefaultModerationModel
 	}
 	return sp, nil
 }

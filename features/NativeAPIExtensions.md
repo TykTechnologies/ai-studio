@@ -634,7 +634,7 @@ The extension lives in `vendors/openai/batches.go` and has two resources:
 
 | Operation | Method and path | Behaviour |
 |---|---|---|
-| files.create | `POST /v1/files` | A `Multipart` `Admit` op (`splitBatchFile`). The body must open with the Content-Type's boundary and end at its closing boundary (no epilogue). Parsing fails closed on anything another multipart parser could read differently: every part carries exactly the plain `Content-Disposition: form-data; name="..."` (plus `; filename="..."` on the file part only; no quoted-pair escapes, no RFC 2231 `name*`/`filename*`, no repeated parameters) and at most a `Content-Type` besides; names are allow-listed (`file`, `purpose`, `expires_after[anchor]`, `expires_after[seconds]`) and unique. Exactly one `file` part and one `purpose` field, and `purpose` must be `batch`. Every non-blank line is a request: `custom_id`, `method: POST`, a `url` among `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/responses` and `/v1/moderations`, and a `body` with a `model`. Exact duplicate keys are refused at any depth, case variants where the gateway decodes structs (`batchLineFoldPaths`). Each line's model is checked against the allowed models (403 naming the `custom_id`) and the request filters run on its body (format `openai`). A filter's rewrite replaces only that line (compacted onto one line) and the upload is re-encoded with the same boundary. The file is written to the ledger (no accounting) and its ID wrapped. |
+| files.create | `POST /v1/files` | A `Multipart` `Admit` op (`splitBatchFile`). The body must open with the Content-Type's boundary and end at its closing boundary (no epilogue). Parsing fails closed on anything another multipart parser could read differently: every part carries exactly the plain `Content-Disposition: form-data; name="..."` (plus `; filename="..."` on the file part only; no quoted-pair escapes, no RFC 2231 `name*`/`filename*`, no repeated parameters) and at most a `Content-Type` besides; names are allow-listed (`file`, `purpose`, `expires_after[anchor]`, `expires_after[seconds]`) and unique. Exactly one `file` part and one `purpose` field, and `purpose` must be `batch`. Every non-blank line is a request: `custom_id`, `method: POST`, a `url` among `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/responses` and `/v1/moderations`, and a `body` with a `model` (optional on `/v1/moderations`, where a missing one is checked as `omni-moderation-latest`). Exact duplicate keys are refused at any depth, case variants where the gateway decodes structs (`batchLineFoldPaths`). Each line's model is checked against the allowed models (403 naming the `custom_id`) and the request filters run on its body (format `openai`). A filter's rewrite replaces only that line (compacted onto one line) and the upload is re-encoded with the same boundary. The file is written to the ledger (no accounting) and its ID wrapped. |
 | files.list | `GET /v1/files` | Served from the ledger: the App's uploaded files and the output and error files of its batches on this node. `limit` 1–1000 (default 1000), `after`. `purpose` and `order` are ignored. |
 | files.retrieve | `GET /v1/files/{id}` | Forwarded, ID wrapped, ledger snapshot refreshed. |
 | files.delete | `DELETE /v1/files/{id}` | Needs this node's ledger row (409 otherwise). An output or error file waits for its batch: an ended, unaccounted batch is accounted first, and the delete is refused (409) while it is not. |
@@ -831,7 +831,10 @@ See [Observability.md](Observability.md).
     resource lives in the project of the LLM's API key, so the reconciler
     polls the same project the resource was created in.
   - Uploads must use the plain multipart form the SDKs send (see
-    files.create); other encodings are refused with 400.
+    files.create); other encodings are refused with 400. Because quoted-pair
+    escapes are refused, a file name containing a backslash (`\`) or a
+    double quote cannot be expressed and the upload is refused (400): rename
+    the file (the SDKs send the local file name as-is).
 - **OpenAI Responses:**
   - Response IDs handed out before this change were raw and no longer
     verify: a chain continued from one gets a 404.
@@ -846,6 +849,11 @@ See [Observability.md](Observability.md).
     "model field is required" from the legacy chain's model validation:
     without a model the gateway could not apply the LLM's model allow-list.
     Batch lines must name `body.model` for the same reason.
+  - Moderations are the exception: OpenAI makes `model` optional on
+    `/v1/moderations`, so a moderation without one (synchronous or as a
+    batch line) is checked as `omni-moderation-latest`
+    (`openaiVendor.DefaultModerationModel`, the model OpenAI then runs): with
+    no allow-list it passes, and an allow-list must include that model.
   - `input_file` parts are not screened by the filters (`file_data`,
     including base64 PDFs and text files, as with files on Chat
     Completions), and a `file_id` in an `input_file` or `input_image` part is
