@@ -18,7 +18,7 @@ In **Filters**, add a filter and choose **Guardrail** as the filter type. The fo
 | Field | Meaning |
 |---|---|
 | Provider | Which engine classifies the text. See [Providers](#providers). |
-| On detection | `block` refuses the request (or stops the response); `redact` rewrites the matched text before it reaches the vendor; `log` lets it through. All three record a compliance event. |
+| On detection | `block` refuses the request (or stops the response); `redact` rewrites the matched text before it reaches the vendor (requests only; on a response filter it only logs, see [Redaction](#redaction)); `log` lets it through. All three record a compliance event. |
 | Detectors | What the provider looks for. For the built-in library these are categories; for external providers they are the provider's own detector names, with a threshold where the provider scores. |
 | Messages to inspect | On LLM requests: the last user message, all user messages (default), system and user messages, or every message. Chat messages and tool calls always inspect the whole text. |
 | If the provider fails | `closed` blocks (default on requests and tool calls), `open` lets the text through (default on responses). A timeout or error records a `guardrail.error` compliance event either way. |
@@ -37,7 +37,7 @@ The **Test** panel runs the guardrail against sample input. For a remote provide
 - **mask**: the same number of `*` characters.
 - **hash**: `[TYPE:1a2b3c4d]`, a short SHA-256 prefix, so the same value redacts to the same token.
 
-Redaction applies to LLM requests, chat messages, tool arguments and tool results. LLM **responses are block-only**: a response guardrail set to `redact` records the finding and lets the response through, and the form says so.
+Redaction applies to LLM requests, chat messages and tool arguments. Responses are **block-only**: a response guardrail (on LLM responses, and on tool results, which run as response filters) set to `redact` records the finding as a compliance event and lets the text through unchanged. The filter form labels the action **Redact (logs only on responses)** and shows a warning, and the filter detail page says the same. On a request, a finding the provider cannot rewrite (for example a Lakera `prompt_attack`, which has no span) is also only logged. Use `block` when such text must not pass.
 
 ### Compliance events and metrics
 
