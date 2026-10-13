@@ -45,6 +45,7 @@ func TestCommunityIsInternalIP(t *testing.T) {
 		"172.31.255.254",
 		"192.168.1.1",
 		"169.254.169.254", // cloud metadata endpoint
+		"100.100.100.200", // CGNAT range, Alibaba Cloud metadata endpoint
 		"::1",
 		"fe80::1",
 		"fc00::1",

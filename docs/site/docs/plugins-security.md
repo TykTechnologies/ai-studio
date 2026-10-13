@@ -93,7 +93,7 @@ These run when a plugin is created or updated through the API, and again when AI
 | Shell metacharacters | No `;`, `\|`, `&`, `` ` ``, `$(`, newlines or NUL. |
 | Executable location | Local executables must be under `/usr/bin/`, `/bin/`, `/usr/local/bin/` or `/opt/plugins/`, or a relative path under `plugins/`. Add directories with `AI_STUDIO_PLUGIN_ALLOWED_DIRS` (a path list, `:`-separated on Linux). The Microgateway allows `/opt/microgateway/plugins` and `./plugins`, refuses symbolic links, and requires the file to be executable. |
 | URL scheme | Only `grpc`, `oci`, `http` and `https` URLs. |
-| Internal hosts | The host of a URL in the command must not be internal. The host is resolved, and a name that does not resolve is treated as internal (fail closed). Internal means loopback, RFC 1918 private ranges, link-local (including `169.254.169.254` cloud metadata), IPv6 unique-local and `localhost`. Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` to allow internal hosts, for local development only. |
+| Internal hosts | The host of a URL in the command must not be internal. The host is resolved, and a name that does not resolve is treated as internal (fail closed). Internal means loopback, RFC 1918 private ranges, shared address space (`100.64.0.0/10`, including the `100.100.100.200` cloud metadata endpoint), link-local (including `169.254.169.254` cloud metadata), `0.0.0.0/8`, IPv6 unique-local and `localhost`. Community and Enterprise editions classify hosts the same way. Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` to allow internal hosts, for local development only. |
 
 ### Advisory checks (warning-only by default)
 

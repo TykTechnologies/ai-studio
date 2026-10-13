@@ -56,16 +56,19 @@ const (
 	EnvAllowedInternalHosts = "LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS"
 )
 
-// internalCIDRs covers loopback, RFC1918, link-local (incl. cloud metadata
-// endpoints), unique-local and unspecified addresses.
+// internalCIDRs covers loopback, RFC1918, shared address space (CGNAT, which
+// also holds some cloud metadata endpoints such as 100.100.100.200),
+// link-local (incl. cloud metadata endpoints), "this network",
+// unique-local and unspecified addresses.
 var internalCIDRs = func() []*net.IPNet {
 	cidrs := []string{
 		"10.0.0.0/8",
 		"172.16.0.0/12",
 		"192.168.0.0/16",
+		"100.64.0.0/10",
 		"127.0.0.0/8",
 		"169.254.0.0/16",
-		"0.0.0.0/32",
+		"0.0.0.0/8",
 		"::1/128",
 		"fc00::/7",
 		"fe80::/10",
@@ -81,8 +84,33 @@ var internalCIDRs = func() []*net.IPNet {
 	return nets
 }()
 
-// IsInternalIP reports whether ip belongs to a private, loopback, link-local,
-// unique-local, or unspecified range.
+// HostIsInternal reports whether host (an IP literal or a hostname) is an
+// internal address: localhost or *.localhost, an IP in internalCIDRs, or a
+// hostname that lookup resolves to any such IP. A hostname that does not
+// resolve counts as internal, so a name that resolves differently for the
+// dialer cannot slip past. lookup is net.LookupIP outside tests.
+func HostIsInternal(host string, lookup func(string) ([]net.IP, error)) bool {
+	lower := strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
+	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") {
+		return true
+	}
+	if ip := net.ParseIP(lower); ip != nil {
+		return IsInternalIP(ip)
+	}
+	ips, err := lookup(lower)
+	if err != nil {
+		return true
+	}
+	for _, ip := range ips {
+		if IsInternalIP(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsInternalIP reports whether ip belongs to a private, loopback, shared
+// (CGNAT), link-local, unique-local, "this network" or unspecified range.
 func IsInternalIP(ip net.IP) bool {
 	if ip == nil {
 		return false

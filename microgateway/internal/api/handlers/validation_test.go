@@ -42,8 +42,11 @@ func TestMicrogatewayValidatePluginCommand(t *testing.T) {
 			description: "Should allow valid binary paths",
 		},
 		{
+			// An IP literal: the plugin security service resolves hostnames
+			// and refuses one that does not resolve, so a made-up name would
+			// be refused and the test would depend on DNS.
 			name:        "Valid OCI",
-			command:     "oci://registry.example.com/plugins/auth:v1.0",
+			command:     "oci://93.184.216.34/plugins/auth:v1.0",
 			shouldError: false,
 			description: "Should allow OCI registry URLs",
 		},
@@ -99,8 +102,11 @@ func TestMicrogatewayIsInternalIP(t *testing.T) {
 		{"Not private 172.32", "172.32.0.1", false},
 		{"Not private 172.15", "172.15.255.255", false},
 		{"Public IP", "8.8.8.8", false},
-		{"Public Domain", "example.com", false},
-		{"External Service", "api.external.com", false},
+		// Public IP literals rather than hostnames, which would make the
+		// test depend on DNS (hostnames are resolved and classified by
+		// their addresses).
+		{"Public IP 93.184.216.34", "93.184.216.34", false},
+		{"Public IP 1.1.1.1", "1.1.1.1", false},
 		{"Edge 192.169", "192.169.0.1", false},
 		{"Edge 11.0.0.1", "11.0.0.1", false},
 	}

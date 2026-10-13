@@ -8,7 +8,8 @@ import (
 	"log"
 	"net"
 	"os"
-	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // communityService is the Community Edition implementation.
@@ -35,65 +36,11 @@ func (s *communityService) ValidateGRPCHost(host string) error {
 // and stay hermetic.
 var lookupIPFunc = net.LookupIP
 
-// IsInternalIP checks if a hostname/IP is internal/private using CIDR
-// validation. Hostnames are resolved via DNS and classified by their resolved
-// addresses; resolution failures fail closed (treated as internal) so an
-// unresolvable host cannot slip past the block.
+// IsInternalIP reports whether a hostname or IP is internal (see
+// netguard.HostIsInternal): hostnames are resolved and classified by every
+// address they resolve to, and a resolution failure counts as internal.
 func (s *communityService) IsInternalIP(host string) bool {
-	// Handle localhost variations: the bare name and the reserved
-	// *.localhost domain (RFC 6761), which resolve to loopback.
-	lowerHost := strings.ToLower(host)
-	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") || lowerHost == "::1" {
-		return true
-	}
-
-	// IP literal: classify directly
-	if ip := net.ParseIP(host); ip != nil {
-		return ipIsPrivate(ip)
-	}
-
-	// Hostname: resolve and classify every returned address. Any internal
-	// address taints the host, and a resolution failure fails closed —
-	// otherwise a name that resolves to a private IP (or refuses to resolve
-	// for the validator but resolves for the dialer) would bypass the block.
-	ips, err := lookupIPFunc(host)
-	if err != nil {
-		return true
-	}
-	for _, ip := range ips {
-		if ipIsPrivate(ip) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// ipIsPrivate reports whether ip falls in a private or special-use range.
-func ipIsPrivate(ip net.IP) bool {
-	// Private and special-use IP CIDR ranges
-	privateCIDRs := []string{
-		"10.0.0.0/8",     // Private Class A
-		"172.16.0.0/12",  // Private Class B
-		"192.168.0.0/16", // Private Class C
-		"127.0.0.0/8",    // IPv4 loopback
-		"169.254.0.0/16", // IPv4 link-local (incl. cloud metadata endpoints)
-		"::1/128",        // IPv6 loopback
-		"fc00::/7",       // IPv6 unique local addresses
-		"fe80::/10",      // IPv6 link-local
-	}
-
-	for _, cidrStr := range privateCIDRs {
-		_, cidr, err := net.ParseCIDR(cidrStr)
-		if err != nil {
-			continue
-		}
-		if cidr.Contains(ip) {
-			return true
-		}
-	}
-
-	return false
+	return netguard.HostIsInternal(host, lookupIPFunc)
 }
 
 // allowInternalAccess reports whether the development bypass for internal

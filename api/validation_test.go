@@ -140,16 +140,19 @@ func TestValidatePluginCommand(t *testing.T) {
 			description: "Should block 172.31.255.255 (end of private range)",
 		},
 
-		// Invalid URL schemes
+		// Invalid URL schemes. Hosts in this test are IP literals: the plugin
+		// security service resolves hostnames and refuses one that does not
+		// resolve, so a made-up name would fail for that reason instead and
+		// the test would depend on DNS.
 		{
 			name:        "Invalid Scheme - FTP",
-			command:     "ftp://example.com/plugin",
+			command:     "ftp://93.184.216.34/plugin",
 			shouldError: true,
 			description: "Should block FTP scheme",
 		},
 		{
 			name:        "Invalid Scheme - SSH",
-			command:     "ssh://user@server/plugin",
+			command:     "ssh://user@93.184.216.34/plugin",
 			shouldError: true,
 			description: "Should block SSH scheme",
 		},
@@ -197,13 +200,13 @@ func TestValidatePluginCommand(t *testing.T) {
 		},
 		{
 			name:        "Valid - OCI Registry",
-			command:     "oci://registry.example.com/plugins/auth-plugin:v1.0",
+			command:     "oci://93.184.216.34/plugins/auth-plugin:v1.0",
 			shouldError: false,
 			description: "Should allow OCI registry URLs",
 		},
 		{
 			name:        "Valid - External gRPC",
-			command:     "grpc://external-service.example.com:443/plugin",
+			command:     "grpc://93.184.216.34:443/plugin",
 			shouldError: false,
 			description: "Should allow external gRPC services",
 		},
@@ -339,13 +342,13 @@ func TestValidatePluginCommand_InternalNetworkBypass(t *testing.T) {
 		},
 		{
 			name:        "external URL always allowed",
-			command:     "https://api.example.com/webhook",
+			command:     "https://93.184.216.34/webhook",
 			envValue:    "",
 			shouldError: false,
 		},
 		{
 			name:        "external URL still allowed with env var",
-			command:     "https://api.example.com/webhook",
+			command:     "https://93.184.216.34/webhook",
 			envValue:    "true",
 			shouldError: false,
 		},
