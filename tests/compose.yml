@@ -82,7 +82,12 @@ services:
       - ..:/app
       - /app/ui/admin-frontend/node_modules
       - studio_tmp:/app/tmp
-      - go_cache:/root/go/pkg/mod
+      # The Go module and build caches are named volumes by default. CI
+      # points them at host directories it restores and saves with
+      # actions/cache (see .github/workflows/ui-tests.yml): a cold build of
+      # the enterprise binary inside this container takes about 4 minutes.
+      - ${STUDIO_GOMODCACHE:-go_cache}:/root/go/pkg/mod
+      - ${STUDIO_GOCACHE:-go_build_cache}:/root/.cache/go-build
       - studio_data:/app/data
     ports:
       - "8081:8080" # backend API (kept for debugging; tests use the frontend)
@@ -120,6 +125,8 @@ services:
     volumes:
       - ../ui/admin-frontend:/app/ui/admin-frontend
       - /app/ui/admin-frontend/node_modules
+      # npm's download cache; CI bind-mounts a cached host directory.
+      - ${FRONTEND_NPM_CACHE:-npm_cache}:/root/.npm
     ports:
       - "3000:3000"
     environment:
@@ -136,3 +143,5 @@ volumes:
   studio_tmp:
   studio_data:
   go_cache:
+  go_build_cache:
+  npm_cache:
