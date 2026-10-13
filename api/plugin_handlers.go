@@ -1227,6 +1227,10 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 		return
 	}
 
+	if !requireSecretReadForReferences(c, nil, req.Config) {
+		return
+	}
+
 	plugin, err := a.service.PluginService.CreateOCIPluginFromReference(&req)
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {

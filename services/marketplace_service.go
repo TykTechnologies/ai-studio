@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -429,6 +430,13 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 		Str("plugin_id", req.PluginID).
 		Str("version", req.Version).
 		Msg("Installing plugin from marketplace")
+
+	// This path carries no caller authorization, so it cannot judge whether
+	// the caller may read the secrets a reference names: refuse references
+	// (they can be added afterwards through the plugin API, which checks).
+	if keys := NewSecretReferences(nil, req.Config); len(keys) > 0 {
+		return nil, fmt.Errorf("secret references are not accepted at marketplace install (keys: %s); add them after install", strings.Join(keys, ", "))
+	}
 
 	// Get marketplace plugin info
 	var marketplacePlugin models.MarketplacePlugin
