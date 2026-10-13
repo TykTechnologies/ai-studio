@@ -64,7 +64,7 @@ jobs:
   # ==========================================================================
   dep-guard:
     if: github.event_name == 'pull_request'
-    uses: TykTechnologies/github-actions/.github/workflows/dependency-guard.yml@d3fa20888fa2878e877e22bb7702141217290e7c  # main
+    uses: TykTechnologies/github-actions/.github/workflows/dependency-guard.yml@9bf72299cb922a5f91ad1c3c1654a0ada7c468ae  # main (2026-10-12)
     permissions:
       contents: read
     with:
