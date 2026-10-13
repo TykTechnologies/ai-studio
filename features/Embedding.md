@@ -876,7 +876,10 @@ A host may build with `CGO_ENABLED=0` (the Tyk Dashboard's dev builds do), so
   registers itself with `studio.RegisterDatabaseDriver`. The standalone
   binary and `examples/embed-host` import it, so standalone Studio still
   runs on SQLite. A host that does not import it opens Postgres only, and
-  asking for `sqlite` gives an error naming the package.
+  asking for `sqlite` gives an error naming the package. Its dialector
+  (`sqlitedb.Open`) gives a file DSN the microgateway's concurrency defaults
+  (`pkg/sqlitedsn`: WAL, busy timeout, `_txlock=immediate`, no shared cache)
+  unless the DSN sets them; in-memory DSNs pass through unchanged.
 - **Chroma**: chroma-go's v2 client loads a tokenizer and the ONNX runtime
   through cgo. `data_session/chroma.go` is `//go:build cgo`, and
   `chroma_nocgo.go` stands in for it: Chroma datasources return
