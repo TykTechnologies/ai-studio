@@ -545,6 +545,27 @@ func groupsOverlap(a, b []string) bool {
 	return false
 }
 
+// genericPluginPageLabels are the labels tried, in order, for the sidebar
+// entry that opens Studio's own page for a plugin (/admin/plugins/:id).
+var genericPluginPageLabels = []string{"Configuration", "Plugin settings", "Plugin details"}
+
+// genericPluginPageLabel is "Configuration" unless one of the plugin's own
+// sidebar items already uses that title (compared case-insensitively), in
+// which case it is the next unused label, so a section never shows two
+// entries with the same name leading to different pages (#723).
+func genericPluginPageLabel(items []SidebarSubItem) string {
+	taken := make(map[string]bool, len(items))
+	for _, it := range items {
+		taken[strings.ToLower(strings.TrimSpace(it.Text))] = true
+	}
+	for _, label := range genericPluginPageLabels {
+		if !taken[strings.ToLower(label)] {
+			return label
+		}
+	}
+	return "Plugin page (Studio)"
+}
+
 // GetSidebarMenuItems returns sidebar menu items from registered plugins grouped by plugin
 func (s *PluginManifestService) GetSidebarMenuItems() ([]SidebarMenuItem, error) {
 	var entries []models.UIRegistry
@@ -597,7 +618,7 @@ func (s *PluginManifestService) GetSidebarMenuItems() ([]SidebarMenuItem, error)
 		// Installed Plugins as well.
 		subItems = append(subItems, SidebarSubItem{
 			ID:                 fmt.Sprintf("plugin_%d_configuration", pluginID),
-			Text:               "Configuration",
+			Text:               genericPluginPageLabel(subItems),
 			Path:               fmt.Sprintf("/admin/plugins/%d", pluginID),
 			RequiredPermission: ResolvePluginPermission(firstEntry.Plugin, "read"),
 		})
