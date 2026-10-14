@@ -1929,11 +1929,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if r, ok := resolvedRefs[v]; ok {
 			return r
 		}
-		// Connection references are mostly provider keys, which a provider
-		// client would replace with its own environment's when empty; a
-		// refused one goes out as a dud key (an endpoint then fails to
-		// parse, and the guardrail applies its fail mode).
-		r := secrets.ForEdgeCredential(secrets.ResolveRef(v))
+		// $ENV/ only resolves names on AI_STUDIO_ENV_REF_ALLOWLIST, never the
+		// hub's own settings. guardrails.ConfigJSONForEdge renders a value
+		// left unresolved per field: a dud key for secret fields (a provider
+		// client would replace an empty key with its own environment's), a
+		// bare "$ENV/" otherwise.
+		r := guardrails.ResolveConnectionValue(v)
 		resolvedRefs[v] = r
 		return r
 	}

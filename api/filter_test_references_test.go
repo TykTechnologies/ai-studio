@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"sync"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,12 +71,12 @@ func guardrailTestBody(filterID uint, config map[string]interface{}) FilterTestI
 // the connection block saved on the filter the test names.
 func TestFilterTestEndpoint_SecretReferencesOnlyReachTheSavedEndpoint(t *testing.T) {
 	api, _ := setupTestAPI(t)
-	t.Setenv("GUARD_TEST_CLASSIFIER_KEY", "the-real-key")
-	t.Setenv("AI_STUDIO_ENV_REF_ALLOWLIST", "GUARD_TEST_CLASSIFIER_KEY") // $ENV/ resolves only listed names
+	t.Setenv("GUARDRAIL_TEST_CLASSIFIER_KEY", "the-real-key")
+	t.Setenv(secrets.EnvRefAllowlistVar, "GUARDRAIL_TEST_CLASSIFIER_KEY")
 
 	saved := newRecordingClassifier(t)
 	attacker := newRecordingClassifier(t)
-	ref := "$ENV/GUARD_TEST_CLASSIFIER_KEY"
+	ref := "$ENV/GUARDRAIL_TEST_CLASSIFIER_KEY"
 
 	// 1. An ad-hoc config with a reference is refused before any call.
 	w := performRequest(api.router, "POST", "/api/v1/filters/test", guardrailTestBody(0, httpGuardrailConfig(attacker.URL, ref)))
@@ -86,15 +87,14 @@ func TestFilterTestEndpoint_SecretReferencesOnlyReachTheSavedEndpoint(t *testing
 	assert.Contains(t, out.Error, "save the filter first")
 	assert.Empty(t, attacker.calls(), "nothing may be sent before the filter is saved")
 
-	// 2. Save the filter (write permission), then test it: the reference
+	// 2. Save the filter (saving a reference needs filters write and
+	//    secrets read; stored directly here), then test it: the reference
 	//    resolves and reaches the saved endpoint.
-	w = performRequest(api.router, "POST", "/api/v1/filters", guardrailFilterInput("Classifier", false, httpGuardrailConfig(saved.URL, ref)))
-	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-	var created FilterResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
-	id64, err := strconv.ParseUint(created.ID, 10, 32)
+	stored, err := api.service.CreateFilterFromSpec(services.FilterSpec{
+		Name: "Classifier", Kind: models.FilterKindGuardrail, Config: httpGuardrailConfig(saved.URL, ref),
+	})
 	require.NoError(t, err)
-	id := uint(id64)
+	id := stored.ID
 
 	w = performRequest(api.router, "POST", "/api/v1/filters/test", guardrailTestBody(id, httpGuardrailConfig(saved.URL, ref)))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())

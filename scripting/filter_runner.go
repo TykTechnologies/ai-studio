@@ -190,12 +190,23 @@ func (g *guardrailRunner) prepare() (*preparedGuardrail, error) {
 		// Resolve them here, where the filter runs: on Studio against the
 		// secret store, at the edge against the values the hub already
 		// resolved into the snapshot (GetValue leaves a non-reference
-		// untouched).
+		// untouched). $ENV/ only resolves names on AI_STUDIO_ENV_REF_ALLOWLIST.
 		resolved := make(map[string]string, len(cfg.Connection))
+		var unresolved []string
 		for k, v := range cfg.Connection {
-			resolved[k] = secrets.GetValue(v, false)
+			resolved[k] = guardrails.ResolveConnectionValue(v)
+			if guardrails.IsReference(resolved[k]) {
+				unresolved = append(unresolved, "connection."+k)
+			}
 		}
 		cfg.Connection = resolved
+		// An unresolved reference is never sent to the provider as a
+		// credential: the filter errors and its fail mode applies.
+		if len(unresolved) > 0 {
+			sort.Strings(unresolved)
+			partial = &preparedGuardrail{cfg: cfg}
+			return nil, fmt.Errorf("guardrail '%s': %s not resolved (an unknown secret, an $ENV/ variable not listed in %s, or a reference the hub could not resolve)", g.filter.Name, strings.Join(unresolved, ", "), secrets.EnvRefAllowlistVar)
+		}
 
 		provider, err := guardrails.NewProvider(cfg)
 		if err != nil {

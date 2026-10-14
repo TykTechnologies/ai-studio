@@ -150,7 +150,7 @@ func TestGuardrailFilterEndpoints(t *testing.T) {
 		"no detectors":       guardrailFilterInput("Bad", false, map[string]interface{}{"provider": "builtin", "on_detect": "block"}),
 		"unknown detector":   guardrailFilterInput("Bad", false, builtinConfig("block", "no_such_category")),
 		"bad action":         guardrailFilterInput("Bad", false, builtinConfig("explode", "secrets")),
-		"redact unsupported": guardrailFilterInput("Bad", false, map[string]interface{}{"provider": "azure_content_safety", "detectors": []interface{}{map[string]interface{}{"name": "Hate"}}, "on_detect": "redact", "connection": map[string]interface{}{"endpoint": "https://x", "api_key": "$SECRET/K"}}),
+		"redact unsupported": guardrailFilterInput("Bad", false, map[string]interface{}{"provider": "azure_content_safety", "detectors": []interface{}{map[string]interface{}{"name": "Hate"}}, "on_detect": "redact", "connection": map[string]interface{}{"endpoint": "https://x", "api_key": "k"}}),
 		"missing connection": guardrailFilterInput("Bad", false, map[string]interface{}{"provider": "lakera", "detectors": []interface{}{map[string]interface{}{"name": "prompt_attack"}}, "on_detect": "block"}),
 		"missing config":     guardrailFilterInput("Bad", false, nil),
 	}
