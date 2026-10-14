@@ -153,7 +153,7 @@ flowchart TD
       Name               string `json:"name"`
       Description        string `json:"description"`
       ToolType           string `json:"tool_type"`
-      OASSpec            string `json:"oas_spec"`             // Base64 encoded OpenAPI specification
+      OASSpec            string `json:"oas_spec"`             // Base64 encoded OpenAPI specification; a REST tool's spec must decode and parse (checked on create and when it changes)
       AvailableOperations string `json:"available_operations"` // Comma-separated list of operations
       PrivacyScore       int    `json:"privacy_score"`
       AuthKey            string `json:"auth_key"`             // Secret reference ($SECRET/name)

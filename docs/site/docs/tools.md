@@ -110,6 +110,10 @@ Administrators define and manage Tools via the UI or API:
 6.  **Assign Filters (Optional):** Add request/response filters.
 7.  **Choose Access Methods (Optional):** Switch on **REST API** or **MCP** if Apps should reach the tool on the gateway. A new tool is chat only. See [Access methods](#access-methods).
 
+**The OpenAPI document must be usable.** Over the API a REST tool's `oas_spec` is the base64-encoded OpenAPI document. A spec that is not base64, or does not parse as an OpenAPI document, is refused with `400` when the tool is created, and on an update that changes the spec. **Import from URL** says why a document was refused.
+
+**Credentials.** A tool's auth key is usually a `$SECRET/name` reference. AI Studio resolves it when it calls the tool (in chat and on the gateway) and when it sends the tool to edges; the tool itself keeps the reference, so editing the tool never replaces it with the value. `$ENV/NAME` resolves only for names in `AI_STUDIO_ENV_REF_ALLOWLIST`, and adding or changing a reference needs `secrets:read` (see [Secrets](./secrets.md)).
+
 Over the API the two switches are the `rest_access_enabled` and `mcp_access_enabled` attributes of a tool. Leaving them out of a create request gives a chat-only tool; leaving them out of an update keeps their current values. Tool responses also carry `slug`, `app_grantable`, `rest_endpoint_url` and `mcp_endpoint_url`.
 
 ### Importing from a Tyk Dashboard (Enterprise)
