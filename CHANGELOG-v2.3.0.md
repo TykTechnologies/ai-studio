@@ -350,7 +350,7 @@ The bugsmash adds upgrade notes of its own:
 - **Approving a submission into catalogues needs catalogue write permission** ([#772](https://github.com/TykTechnologies/ai-studio/pull/772)).
 - **The quickstart needs your own secrets** ([#729](https://github.com/TykTechnologies/ai-studio/pull/729)). Replace the placeholders in its env files before the first start. A deployment that still uses values copied from an earlier quickstart or documentation sample should replace them with values you generate.
 - **advanced-llm-cache 1.2.2** ([ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)).
-  - Redis `tls_enabled` now takes effect; it was ignored. Check that your Redis endpoint accepts TLS before upgrading if the setting is on.
+  - Redis `tls_enabled` now takes effect: check that your Redis endpoint accepts TLS before upgrading.
   - The database and cluster addresses set in the configuration form now apply.
   - A stored `tls_skip_verify` stays ignored, with a warning. Use `tls_insecure` to turn off certificate verification.
   - The sharding, Redis timeout and cost-rule settings, which nothing implemented, are removed from the form.
