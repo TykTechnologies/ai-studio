@@ -3,7 +3,7 @@
 **Status:** Unreleased. This file collects what has merged to `main` since 2.2.1 and is updated as more merges land.
 **Diff so far:** [`v2.2.1...main`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.1...main)
 
-2.3.0 so far adds four capabilities, a chat billing fix and one edge fix.
+2.3.0 so far adds four capabilities, a chat billing fix, one edge fix, and the fixes from a bugsmash of the GitHub issue backlog.
 
 - **Decision models.** AI Studio now governs a new class of model that answers typed questions about a piece of evidence, with calibrated probabilities, instead of generating text. OpenAI's Decisions API (`gpt-6-luna`) and System One models (TypeSafe's Jev and wire-compatible self-hosts) are supported. Clients use one contract, the **OpenAI Decisions schema on `/v1/decisions`**, whatever the provider. Auth, filters, plugins, budgets and analytics apply to decision calls as they do to chat.
 - **Tyk OSS Gateway connections (Enterprise).** AI Studio can manage MCP proxies and keys directly on open-source Tyk Gateways, without a Tyk Dashboard.
@@ -11,8 +11,21 @@
 - **Native SDK features.** Anthropic Message Batches and `count_tokens`, and OpenAI's Responses, Conversations, Batches and Files APIs, now work through the native `/llm/` endpoints with the same governance as a chat call: filters, model allow-lists, budgets, analytics, and resources that belong to the App that created them.
 - **Chat billing.** Chat sessions are priced like gateway calls: Anthropic turns with tool calls are no longer billed two or three times, and cached tokens are billed at the cache price.
 - **Edge stability.** Two data races in the edge's control-plane client are fixed. One of them left an extra heartbeat worker running after every reconnect.
+- **Bugsmash.** Around seventy fixes from the GitHub issue backlog, across AI Studio, the Microgateway and eight plugins:
+  - Credential references (`$SECRET/`, `$ENV/`) follow one operator policy everywhere.
+  - Plugins get an explicit environment and only the service-API scopes they declare.
+  - Vendor clients no longer read keys or endpoints from the environment.
+  - Tool and LLM names must have unique slugs, and edges apply what they can store instead of refusing a whole configuration.
+  - AI Studio opens SQLite files in WAL mode.
+  - Long chat sessions send their newest messages.
 
 Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3.0 to serve decision models and to scan tool results, and should be upgraded with the hub for native API resource IDs. Existing request guardrails scan tool results after the upgrade, and a guardrail on a remote provider (Lakera, Azure, Bedrock Guardrails, Presidio, an HTTP classifier) sends them to that provider: check each one before you upgrade.
+
+The bugsmash adds upgrade notes of its own:
+- list the `$ENV/` names your configuration uses in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store;
+- set keys and endpoints on each LLM, embedder and datasource rather than through vendor environment variables;
+- set `TYK_AI_SECRET_KEY` if you use SSO;
+- give plugins that read host environment variables a `PLUGIN_ENV_PASSTHROUGH` entry.
 
 ---
 
@@ -44,6 +57,21 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
   - **A new seeded filter**, **Prompt injection in tool results (quarantine)**, unattached.
 
   See `docs/site/docs/guardrails.md` (Tool results, Quarantine, Budgets and the verdict cache).
+- **Credential references follow an operator policy** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789), [#788](https://github.com/TykTechnologies/ai-studio/pull/788), [#766](https://github.com/TykTechnologies/ai-studio/pull/766)).
+  - **`$ENV/NAME` resolves only for names in `AI_STUDIO_ENV_REF_ALLOWLIST`**, which is empty by default. This applies on every path: LLMs, tools, datasources, embedders, guardrail connections and plugin configuration.
+  - **Setting or changing a `$SECRET/` or `$ENV/` reference needs `secrets:read`.** Keeping a stored reference needs nothing extra. Submissions and plugins cannot set references.
+  - **Edges receive resolved values.** A reference the hub does not resolve reaches an edge as an unusable value, never as a name the edge could resolve itself.
+  - **Tool auth keys stored as references are resolved when AI Studio calls the tool**, in chat and on the embedded gateway, and stay references when the tool is edited.
+
+  See `docs/site/docs/secrets.md`.
+- **Plugin hardening** ([#750](https://github.com/TykTechnologies/ai-studio/pull/750), [#775](https://github.com/TykTechnologies/ai-studio/pull/775), [#741](https://github.com/TykTechnologies/ai-studio/pull/741), [#776](https://github.com/TykTechnologies/ai-studio/pull/776), [#745](https://github.com/TykTechnologies/ai-studio/pull/745), [#768](https://github.com/TykTechnologies/ai-studio/pull/768), [#749](https://github.com/TykTechnologies/ai-studio/pull/749)).
+  - **Explicit environment.** Plugins run with an environment allowlist instead of the host's environment. `PLUGIN_ENV_PASSTHROUGH` adds variables.
+  - **Declared scopes.** Brokered service-API calls are checked against the scopes the plugin's manifest declares and an admin approved. A plugin reads and writes its own configuration without a scope.
+  - **Plugin hosts.** Hosts are classified by parsed address, not by substring, and `100.64.0.0/10` counts as internal.
+  - **Cached binaries.** Cached OCI plugin binaries are checked against their fetch-time hash before they load.
+  - **Broker readiness.** The plugin broker waits for the plugin's ready signal.
+
+  See `docs/site/docs/plugins-security.md`.
 
 ## New features
 
@@ -132,7 +160,53 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 - **New seeded filter.** **Prompt injection in tool results (quarantine)**: the built-in injection heuristics, recording a flagged user message and quarantining a flagged tool result. It is seeded unattached on new installs, and on upgraded ones on their next start (unless `SKIP_FILTER_DEFAULTS=true`); existing filters are left as they are. Measured before release: none of 16 benign tool-output samples flagged, every injected sample caught.
 - **Live end-to-end suite.** `tests/guardrail_tool_results/` runs an Enterprise AI Studio and an edge against a recording mock upstream and checks every vendor format through both, buffered and streamed, plus Studio chat and native batches. It needs no vendor account.
 
+### Platform and console
+- **`$SECRET/` references in plugin configuration** ([#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A plugin's config fields can name a stored secret, which is resolved for the plugin and stays masked in the config form. Adding one needs `secrets:read`.
+- **`tyk.llm` `return_errors`** ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)). With `return_errors: true`, a failed call returns an error value instead of stopping the script, so a guardrail script can block when its checker is unavailable.
+- **Startup warning for `FILTER_SCRIPT_ALLOW_OS`** ([#790](https://github.com/TykTechnologies/ai-studio/pull/790), [ai-studio-enterprise#85](https://github.com/TykTechnologies/ai-studio-enterprise/pull/85)). AI Studio and the Microgateway log a warning at startup when filter scripts get Tengo's `os` module, and the runner and the warning read the switch the same way.
+- **Catalogue picker on the submission Approve dialog** ([#756](https://github.com/TykTechnologies/ai-studio/pull/756)).
+- **Privacy warning** ([#757](https://github.com/TykTechnologies/ai-studio/pull/757)). The tool and datasource forms warn when the chosen privacy level is above every active LLM provider.
+- **Push reminder** ([#752](https://github.com/TykTechnologies/ai-studio/pull/752)). After you save an object edges use, the console says straight away that edges need a configuration push.
+- **Helm `config.logLevel`** ([#748](https://github.com/TykTechnologies/ai-studio/pull/748)) sets AI Studio's `LOG_LEVEL` (default `info`).
+
 ## Bug fixes
+
+### Chat
+- **Long sessions sent their oldest messages** ([#791](https://github.com/TykTechnologies/ai-studio/pull/791)). A session loaded its first 100 messages, so once it passed 100 the newest ones, including the question being asked, were not sent. Sessions now send the newest 100 messages, with the system prompt kept in front.
+- **History trimming broke tool-using conversations** ([#791](https://github.com/TykTechnologies/ai-studio/pull/791)).
+  - Trimming to the LLM settings' max length removed single messages, so a tool call could lose its results and the vendor refused the request. History is now trimmed a whole turn at a time, and tool calls count toward the estimate.
+  - The latest user message and what follows it are never trimmed.
+  - An unset max length now means no limit. It used to drop almost the whole history.
+- **Long replies failed on the Postgres chat queue** ([#761](https://github.com/TykTechnologies/ai-studio/pull/761)) with `payload string too long (SQLSTATE 22023)`. Messages over the `NOTIFY` limit are now split.
+- **`$SECRET/` tool auth keys were sent as the literal reference** on chat and embedded-gateway tool calls ([#788](https://github.com/TykTechnologies/ai-studio/pull/788)).
+
+### Tools
+- **An `oas_spec` the tool cannot use is refused** ([#758](https://github.com/TykTechnologies/ai-studio/pull/758)). A spec that was not base64-encoded OpenAPI was stored and left the tool unusable. A REST tool now gets `400`, on create and on an update that changes the spec, and **Import from URL** says why a document was refused.
+- **One duplicate tool name froze an edge's configuration** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785), [#786](https://github.com/TykTechnologies/ai-studio/pull/786)). Two tools whose names give the same slug made every push to an edge fail as a whole. A name whose slug is taken is now refused, and the console shows the conflict under the Name field. Edges skip entries they cannot store and report them on the push. See the upgrade notes.
+- **Editing a tool with an `$ENV/` auth key stored the environment value** in place of the reference ([#788](https://github.com/TykTechnologies/ai-studio/pull/788)).
+
+### Filters and scripts
+- **Built-in filter templates** ([#739](https://github.com/TykTechnologies/ai-studio/pull/739)). The pattern-match template matches case-insensitively, and the LLM Check template fences the screened text and blocks when the check fails.
+- **A response filter let the response through when `tyk.llm` failed** ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)). Scripts can now handle the failure with `return_errors` (see New features).
+- **Guardrail Redact on response filters** ([#746](https://github.com/TykTechnologies/ai-studio/pull/746)). The form now says up front that Redact only logs on a response filter.
+
+### Plugins
+- **The plugin broker gave up waiting after 500 ms** ([#768](https://github.com/TykTechnologies/ai-studio/pull/768)) and carried on whether the plugin was ready or not. It now waits for the plugin's ready signal, and the SDK buffers events until the broker is up instead of dropping them.
+- **Plugin config forms showed secret fields in clear** when a field had a long description ([#769](https://github.com/TykTechnologies/ai-studio/pull/769)).
+- **A plugin's sidebar section showed Configuration twice** when the plugin had its own Configuration page ([#744](https://github.com/TykTechnologies/ai-studio/pull/744)).
+- **The plugin examples, scaffold and docs warm up the broker with a call that needs no scope** ([#774](https://github.com/TykTechnologies/ai-studio/pull/774), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)), so they keep working under scope enforcement.
+
+### Console
+- **Deep links survive sign-in** ([#742](https://github.com/TykTechnologies/ai-studio/pull/742)). Navigation names are unique, and the catalogs and datasources routes are consistent.
+- **View in Catalog on a submission** opens the resource it created ([#754](https://github.com/TykTechnologies/ai-studio/pull/754)).
+- **The quick start names empty provider secrets**, and the onboarding cards state their prerequisites ([#751](https://github.com/TykTechnologies/ai-studio/pull/751)).
+- **Edit app** sits in the App details header ([#759](https://github.com/TykTechnologies/ai-studio/pull/759)).
+- **Multi-select fields release outside clicks**, and a failed submit scrolls to the first error ([#762](https://github.com/TykTechnologies/ai-studio/pull/762)).
+- **Credential status says an unresolved `$ENV/` provider key is an unset environment variable** ([#763](https://github.com/TykTechnologies/ai-studio/pull/763)). The credential help texts point at the secret store ([#796](https://github.com/TykTechnologies/ai-studio/pull/796)).
+
+### Datasources
+- **PDF extraction** ([#753](https://github.com/TykTechnologies/ai-studio/pull/753), [#765](https://github.com/TykTechnologies/ai-studio/pull/765)). `pdftotext` is looked up once, only on the `PATH`, and runs with a minimal environment. The log names the extractor in use once.
+- **The vector store list** ([#777](https://github.com/TykTechnologies/ai-studio/pull/777)) offers the stores datasources implement (it listed Milvus and left out PGVector and Redis).
 
 ### Guardrails
 - **A guardrail redaction flattened tool-using conversations.** Redacting anything in a request rebuilt the body as plain `{role, content}` messages, dropping tool calls, tool results and their ids, images and `cache_control`, so the vendor refused the request or saw a different conversation. Redactions are now written into the body in place.
@@ -148,6 +222,7 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 - **Native OpenAI decision calls were not recorded** ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)). `/llm/rest/{openai-llm}/v1/decisions` already passed through, but response analysis rejected the path, so those calls wrote no proxy log, no cost and no budget spend.
 - **OpenAI and Ollama `/llm/` requests with array content were refused.** A chat completions body whose message content is a list of parts (text and `image_url` parts, a tool message with text parts) got `400` ("cannot unmarshal array") from the gateway's request screen before reaching the vendor. The screen now reads only the fields it needs.
 - **Calls to a model alias were recorded at zero cost** ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)). When the model a provider reports has no price, the call is now priced by the model that was requested. Jev answers `jev-latest` as `jev-1.13.0`, and OpenAI reports dated snapshots of chat models.
+- **OpenAI moderations without a `model` were refused** ([#755](https://github.com/TykTechnologies/ai-studio/pull/755)). They pass, since the moderations endpoint picks its own model.
 
 ### Analytics
 - **Anthropic Chat turns with several content blocks were billed two or three times** ([#736](https://github.com/TykTechnologies/ai-studio/pull/736)). The usage of a turn with text and a tool call (or a thinking block) was counted once per block, in tokens, cost and budget. It is now read once per turn.
@@ -159,6 +234,11 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 - **Edge control-client data races** ([#725](https://github.com/TykTechnologies/ai-studio/pull/725)).
   - The connected flag was shared between the connect path, the stream's receive loop and the heartbeat worker without synchronisation. A stream that dropped immediately could also be left marked as connected.
   - The heartbeat worker watched the client's current stream context, which a reconnect replaces. The old worker then waited on the new stream and never stopped, so every reconnect left one more heartbeat worker running.
+- **An edge that dropped mid-heartbeat could stay marked as connected** ([#779](https://github.com/TykTechnologies/ai-studio/pull/779)).
+- **A push could lose an edge's READY report** under contention ([#773](https://github.com/TykTechnologies/ai-studio/pull/773)), leaving the push waiting.
+- **Heartbeats report the configuration an edge applied** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)), not the last one it received. An edge whose last sync failed now shows as not in sync.
+- **SQLite writes failed with "database is locked" under concurrent writes** ([#800](https://github.com/TykTechnologies/ai-studio/pull/800)). AI Studio opens SQLite files with the Microgateway's defaults (WAL, a busy timeout, write transactions that take the lock up front). See the upgrade notes.
+- **Stop waits for background work** ([#728](https://github.com/TykTechnologies/ai-studio/pull/728), [#792](https://github.com/TykTechnologies/ai-studio/pull/792)). The legacy secret re-encryption and the notification body backfill are cancelled and waited for, so they no longer outlive a stopped Studio.
 
 ### Tyk connections (Enterprise)
 - **A changed base URL now reaches imported servers** ([ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)). Changing a connection's public base URL updates the portal URL of every server on the next sync. Before, servers kept the old URL until their definition changed. This applies to Dashboard connections too.
@@ -171,6 +251,8 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
   - The plugin cache directory was unwritable, so OCI plugins and the marketplace were off.
   - CE now uses the enterprise quickstart's `/opt` layout, and the database stays at the same host path.
 - **The Helm chart, quickstarts and deployment docs default to v2.2.1** (`725d561a`).
+- **The Helm chart renders `extraEnv`, `extraVolumes` and `extraVolumeMounts` for AI Studio** ([#735](https://github.com/TykTechnologies/ai-studio/pull/735)).
+- **The quickstart ships placeholders instead of sample secrets** ([#729](https://github.com/TykTechnologies/ai-studio/pull/729)). Its env files carry placeholders that must be replaced before the first start, and the deployment docs' sample outputs are marked as samples.
 
 ## Security
 - **Unauthenticated admin access to the microgateway, leading to malicious plugin loading** ([#731](https://github.com/TykTechnologies/ai-studio/pull/731), also released as 2.2.2). `POST /api/v1/auth/token` needed no credentials and issued a token for any App with any scopes, `admin` included. Anyone who could reach a microgateway's HTTP port could use it to load a malicious plugin of their own onto the gateway and attach it to its LLMs, where it sees and can change every prompt and response. They could also change LLMs, Apps, filters and prices, read analytics with stored bodies, and mint tokens. Edges and standalone microgateways were both affected. The route is removed in every mode, and an edge gateway (`GATEWAY_MODE=edge`) now mounts no `/api/v1` at all, since its configuration comes only from the control plane. See `CHANGELOG-v2.2.2.md` for what to check on existing gateways.
@@ -185,6 +267,15 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 - **Ambiguous request bodies with request filters attached.** With any request filter on the LLM, a request whose JSON repeats a key is now refused with `400` on every `/llm/` route and format, not only on the native batch and Anthropic messages paths, and a guardrail also refuses a body that spells a field it reads in different case (`"Content"`). A filter and the vendor could otherwise read different copies of the text. The refusal names only the format's own field names, never other keys, since keys can be tool data.
 - **Guardrail error events no longer quote the provider.** `guardrail.error` names the class of failure (`timeout`, `http_503`, `input_rejected`) instead of the provider's error message, which could quote the screened text. A provider panic is logged without its value for the same reason.
 - **Decision-metric labels.** `aistudio_decision_questions_total` counts only calls that a model answered or refused, so a failed call that names an invented model adds no series ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)).
+- **Credential references follow an operator policy** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789), [#788](https://github.com/TykTechnologies/ai-studio/pull/788)). See Highlights and the upgrade notes.
+- **Plugin service-API calls are checked against the plugin's approved scopes** ([#775](https://github.com/TykTechnologies/ai-studio/pull/775), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)), and a plugin can update only its own configuration.
+- **Vendor clients take keys and endpoints only from the object they serve** ([#797](https://github.com/TykTechnologies/ai-studio/pull/797)). The OpenAI, Anthropic, Google AI, Hugging Face and Ollama clients, and the Pinecone and Chroma vector stores, no longer fill an empty key or endpoint from environment variables.
+- **The SSO nonce endpoint requires the identity broker's shared secret** ([#787](https://github.com/TykTechnologies/ai-studio/pull/787)). With `TYK_AI_SECRET_KEY` unset, every call is refused, and the secret is compared in constant time.
+- **Assigning catalogues while approving a submission needs catalogue write permission** ([#772](https://github.com/TykTechnologies/ai-studio/pull/772)), as assigning them anywhere else does.
+- **Plugin host checks** ([#741](https://github.com/TykTechnologies/ai-studio/pull/741), [#776](https://github.com/TykTechnologies/ai-studio/pull/776), [ai-studio-enterprise#81](https://github.com/TykTechnologies/ai-studio-enterprise/pull/81)). Plugin hosts are classified by parsed address rather than by substring, `100.64.0.0/10` counts as internal, and the Enterprise validator resolves a hostname and refuses one that does not resolve.
+- **Cached OCI plugin binaries are verified against their fetch-time hash** before they load ([#745](https://github.com/TykTechnologies/ai-studio/pull/745)).
+- **`pdftotext` runs only from the `PATH`, with a minimal environment** ([#765](https://github.com/TykTechnologies/ai-studio/pull/765)).
+- **Secret fields stay masked in plugin config forms** ([#769](https://github.com/TykTechnologies/ai-studio/pull/769)), including the Redis passwords of advanced-llm-cache ([ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78)) and rate-limiter ([ai-studio-community-plugins#27](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/27)).
 
 ## Breaking changes and upgrade notes
 
@@ -242,9 +333,40 @@ Read **Breaking changes and upgrade notes** before upgrading. Edges must run 2.3
 - **Protocol.** The plugin, management and config-sync protos change additively: new fields and the new `CallDecision` RPC. [#737](https://github.com/TykTechnologies/ai-studio/pull/737) adds `LLMConfig` fields 27 to 31 (signing keys, workspace, price multipliers), `AnalyticsEvent.service_tier` and the plugin `AnalyticsRequest.service_tier`.
 - **Go embedders and plugin authors.** `models.LLMVendorProvider` gains `ProvidesChat()` and `DecisionEndpoint()`, so a custom vendor implementation must add them. The plugin `StudioServices` interface is unchanged: `CallDecision` is a package-level SDK function, so custom fakes keep compiling.
 
+- **`$ENV/` references resolve only for allowlisted names** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789)). List the environment variables your configuration names in `AI_STUDIO_ENV_REF_ALLOWLIST` (comma-separated, empty by default), or move those credentials to the secret store as `$SECRET/` references.
+  - This covers LLMs, tools, datasources, embedders, guardrail connections and plugin configuration.
+  - A reference that does not resolve leaves the credential unset: calls with it fail, and a guardrail applies its fail mode.
+- **Setting or changing a reference needs `secrets:read`** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789), [#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A create or update that adds or changes a `$SECRET/` or `$ENV/` value answers `403` without it. Keeping a stored reference, or sending the redacted placeholder back, needs nothing extra. Submissions and plugin service-API writes cannot set references.
+- **Vendor keys and endpoints are no longer read from the environment** ([#797](https://github.com/TykTechnologies/ai-studio/pull/797)). An LLM, embedder or datasource with an empty key or endpoint is no longer filled from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `PINECONE_API_KEY`, `CHROMA_URL` or `OLLAMA_HOST`. Set them on the object. Upgrade edges with the hub, and do not set vendor key variables on edges: older edges still read them.
+- **Plugins get an environment allowlist** ([#750](https://github.com/TykTechnologies/ai-studio/pull/750)). A plugin no longer inherits the host's environment. Name any variables a plugin needs in `PLUGIN_ENV_PASSTHROUGH` (see `docs/site/docs/plugins-deployment.md`).
+- **Plugins get only the scopes they declare** ([#775](https://github.com/TykTechnologies/ai-studio/pull/775)). A brokered service-API call outside the plugin's approved scopes is refused. Upgrading a plugin whose manifest declares new scopes asks an admin to approve them: advanced-llm-cache 1.2.2 adds `apps.write`.
+- **Plugin hosts in shared address space** ([#776](https://github.com/TykTechnologies/ai-studio/pull/776), [ai-studio-enterprise#81](https://github.com/TykTechnologies/ai-studio-enterprise/pull/81)). A plugin command or endpoint in `100.64.0.0/10` counts as internal. In Enterprise, a hostname is resolved when the plugin is validated, and one that does not resolve is refused.
+- **Tool and LLM names must have unique slugs** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)). A name that differs from an existing one only in case, spaces or punctuation is refused: `409` for tools and `400` for LLMs from the admin API, `AlreadyExists` from the plugin service API. Duplicates stored by earlier versions stay editable. Edges leave them out (the lowest ID keeps the slug) and show as Pending until they are renamed.
+- **LLMs and tools that need a filter or plugin from another namespace** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)). A global LLM or tool attached to a filter or plugin filed in another namespace is left out on that namespace's edges. An endpoint whose auth plugin an edge does not receive is left out too. Move the filter or plugin to the global namespace or to the LLM's namespace.
+- **Edge heartbeats report the configuration an edge applied** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)), so an edge whose last sync failed shows as not in sync.
+- **SSO needs `TYK_AI_SECRET_KEY`** ([#787](https://github.com/TykTechnologies/ai-studio/pull/787)). The identity broker authenticates its nonce requests with it. With it unset, every SSO login is refused, and AI Studio logs a warning at startup when the broker is enabled without it.
+- **SQLite runs in WAL mode** ([#800](https://github.com/TykTechnologies/ai-studio/pull/800)). AI Studio opens a SQLite file with `_journal_mode=WAL`, `_busy_timeout=5000`, `_synchronous=NORMAL` and `_txlock=immediate` unless `DATABASE_URL` sets them, and drops `cache=shared`. `-wal` and `-shm` files appear next to the database, so its directory must be writable. WAL does not work on network filesystems (NFS, SMB): set `_journal_mode=DELETE` in `DATABASE_URL` there. In-memory databases are unchanged.
+- **Chat sessions send their history** ([#791](https://github.com/TykTechnologies/ai-studio/pull/791)). On LLM settings without a max length, a session now sends its conversation (up to the newest 100 messages) instead of little more than the latest message. Set **Max Length** on the LLM settings to cap the input.
+- **Approving a submission into catalogues needs catalogue write permission** ([#772](https://github.com/TykTechnologies/ai-studio/pull/772)).
+- **The quickstart needs your own secrets** ([#729](https://github.com/TykTechnologies/ai-studio/pull/729)). Replace the placeholders in its env files before the first start. A deployment that still uses values copied from an earlier quickstart or documentation sample should replace them with values you generate.
+- **advanced-llm-cache 1.2.2** ([ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)).
+  - Redis `tls_enabled` now takes effect: check that your Redis endpoint accepts TLS before upgrading.
+  - The database and cluster addresses set in the configuration form now apply.
+  - A stored `tls_skip_verify` stays ignored, with a warning. Use `tls_insecure` to turn off certificate verification.
+  - The sharding, Redis timeout and cost-rule settings, which nothing implemented, are removed from the form.
+
 ### New configuration
 
 No new runtime setting is required. Gateway connections are configured per connection in the console, not through the environment.
+
+Bugsmash settings, on AI Studio and the Microgateway:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AI_STUDIO_ENV_REF_ALLOWLIST` | empty | Comma-separated environment variables a `$ENV/NAME` reference may resolve ([#794](https://github.com/TykTechnologies/ai-studio/pull/794)). Edges never resolve `$ENV/`; the hub sends resolved values |
+| `PLUGIN_ENV_PASSTHROUGH` | empty | Comma-separated host variables passed to plugin processes, besides the built-in allowlist; a trailing `*` matches a prefix ([#750](https://github.com/TykTechnologies/ai-studio/pull/750)) |
+
+The Helm chart adds `config.logLevel` ([#748](https://github.com/TykTechnologies/ai-studio/pull/748)), rendered as `LOG_LEVEL`.
 
 Native API operations ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)); AI Studio and the Microgateway read the same names, and unset or `0` keeps the default (see `docs/site/docs/configuration.md`):
 
@@ -296,6 +418,23 @@ For the live decision conformance suite only (`test-secrets/vendors.env`):
 | `VT_SYSTEMONE_ENDPOINT` | System One endpoint; default `https://api.typesafe.ai` |
 | `VT_SYSTEMONE_API_KEY` | Key for the hosted System One API; optional for a self-host |
 
+## Plugins
+
+Plugins fixed in the bugsmash. Each is released to the marketplace for 2.3.0 at the version below.
+
+| Plugin | Version | Changes |
+|---|---|---|
+| llm-cache | 1.2.1 | Lifecycle, edge ID and logging fixes: no `/tmp` debug log, no leaked goroutine, no double-close panic ([ai-studio-community-plugins#15](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/15)) |
+| llm-load-balancer (Enterprise) | 1.1.1 | Selection race, upstream URL validation and redaction, audit log file mode, invalid stored entries dropped at start-up with a logged error ([ai-studio-enterprise#74](https://github.com/TykTechnologies/ai-studio-enterprise/pull/74), [ai-studio-enterprise#83](https://github.com/TykTechnologies/ai-studio-enterprise/pull/83)) |
+| advanced-llm-cache (Enterprise) | 1.2.2 | Backend swap race, Redis TLS, idempotent shutdown, masked Redis password, configuration swapped as one snapshot, form keys aligned with what the plugin reads, `apps.write` scope ([ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)) |
+| rate-limiter | 1.1.1 | Redis client closed, corrupt counters handled, serialised rule saves, masked `redis_password` ([ai-studio-community-plugins#16](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/16), [ai-studio-community-plugins#18](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/18), [ai-studio-community-plugins#27](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/27), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)) |
+| llm-price-sync | 1.1.1 | Fetch URL checked against internal addresses, locked history updates, scheduler context, errors reported ([ai-studio-community-plugins#20](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/20), [ai-studio-community-plugins#22](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/22), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)) |
+| llm-firewall | 1.1.1 | JSON-safe block response, optional `fail_closed`, all prompt text inspected ([ai-studio-community-plugins#21](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/21), [ai-studio-community-plugins#25](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/25)) |
+| github-rag-ingest | 1.1.1 | Private clone cache with path checks, random secret IDs, index errors reported, `CancelJob` stops the running ingestion, masked `vault_token`, secret references for credentials ([ai-studio-community-plugins#17](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/17), [ai-studio-community-plugins#19](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/19), [ai-studio-community-plugins#23](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/23), [ai-studio-community-plugins#24](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/24), [ai-studio-community-plugins#26](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/26), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28), [ai-studio-community-plugins#29](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/29)) |
+| oauth2-client-credentials (Enterprise) | 1.3.2 | JWKS cache TTL and bounded stale keys; scopes documented ([ai-studio-enterprise#77](https://github.com/TykTechnologies/ai-studio-enterprise/pull/77), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80)) |
+
+github-rag-ingest 1.1.1 needs AI Studio 2.3.0 for `$SECRET/` references in its configuration and for `PLUGIN_ENV_PASSTHROUGH`.
+
 ## Known issues
 
 - **Model and Semantic Routers do not route decision calls yet.** They answer `400`.
@@ -314,4 +453,6 @@ For the live decision conformance suite only (`test-secrets/vendors.env`):
 
 ## Submodules
 
-- **enterprise** `118ad19` → `e4ac63a`: Tyk OSS Gateway connections for MCP proxies and keys ([ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)), with pooled Gateway clients, parallel node work and the literal-credential warning; plus the base URL and custom-domain fixes for Dashboard connections.
+- **enterprise** `118ad19` → `d7094dd`: Tyk OSS Gateway connections for MCP proxies and keys ([ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)), with pooled Gateway clients, parallel node work and the literal-credential warning; plus the base URL and custom-domain fixes for Dashboard connections.
+  Bugsmash: plugin fixes and scopes ([ai-studio-enterprise#74](https://github.com/TykTechnologies/ai-studio-enterprise/pull/74), [ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#77](https://github.com/TykTechnologies/ai-studio-enterprise/pull/77), [ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80), [ai-studio-enterprise#83](https://github.com/TykTechnologies/ai-studio-enterprise/pull/83), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)), `tyk.llm` `return_errors` ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)), plugin host classification ([ai-studio-enterprise#81](https://github.com/TykTechnologies/ai-studio-enterprise/pull/81)), the `FILTER_SCRIPT_ALLOW_OS` switch read in one place ([ai-studio-enterprise#85](https://github.com/TykTechnologies/ai-studio-enterprise/pull/85)), and guardrail tool-result scanning ([ai-studio-enterprise#82](https://github.com/TykTechnologies/ai-studio-enterprise/pull/82)).
+- **community** `2e23cdf` → `3afb9f8`: bugsmash fixes to llm-cache, rate-limiter, llm-price-sync, llm-firewall and github-rag-ingest ([ai-studio-community-plugins#15](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/15) to [ai-studio-community-plugins#29](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/29)).

@@ -92,7 +92,8 @@ The **Edit/Create LLM Call Settings View** enables administrators to configure o
    - Sets the minimum number of tokens that must be included in the model's response.
 
 8. **Max Length** *(Integer)*:
-   - Specifies the upper limit for the length of the response (e.g., 200,000 tokens).
+   - In Chat, the most input tokens a turn may send (for example, 200,000). When the conversation is longer, the oldest turns are dropped first, a whole turn at a time: a tool call goes with its results. The system prompt, the latest user message and what follows it are always sent.
+   - `0` or unset means no limit. A chat session sends at most its newest 100 messages (and its system prompt) either way.
 
 9. **Repetition Penalty** *(Decimal)*:
    - Penalizes repeated tokens to prevent the model from generating repetitive responses.
