@@ -255,7 +255,9 @@ func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
 		return nil, err
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	// The auth key stays as stored: a $SECRET/ or $ENV/ reference is
+	// resolved where the tool is called, never in the loaded tool, which
+	// API responses and edits save back.
 	return tool, nil
 }
 
@@ -319,7 +321,9 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 		return nil, err
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	// The auth key stays as stored: a $SECRET/ or $ENV/ reference is
+	// resolved where the tool is called, never in the loaded tool, which
+	// API responses and edits save back.
 	return tool, nil
 }
 
@@ -346,7 +350,9 @@ func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 		return nil, fmt.Errorf("error retrieving tool: %w", err)
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	// The auth key stays as stored: a $SECRET/ or $ENV/ reference is
+	// resolved where the tool is called, never in the loaded tool, which
+	// API responses and edits save back.
 	return &tool, nil
 }
 
@@ -856,8 +862,10 @@ func (s *Service) CallToolOperation(toolID uint, operationID string, params map[
 		return nil, err
 	}
 
-	// Use cached client for better performance
-	client, err := s.getCachedUniversalClient(tool, tool.AuthSchemaName, tool.AuthKey)
+	// The tool is loaded with its secret references kept (they are what API
+	// responses show); the call resolves them. The client cache is keyed by
+	// a hash of the resolved key, so a rotated secret gets a new client.
+	client, err := s.getCachedUniversalClient(tool, tool.AuthSchemaName, secrets.GetValue(tool.AuthKey, false))
 	if err != nil {
 		return nil, err
 	}
