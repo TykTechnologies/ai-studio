@@ -37,9 +37,13 @@ var setupDBSeq atomic.Int64
 // instead: no table lock can be contended.
 func setupDB(t *testing.T) *gorm.DB {
 	name := fmt.Sprintf("proxytest_%d", setupDBSeq.Add(1))
+	// No PrepareStmt: with gorm's prepared-statement cache, a transaction
+	// holding the one connection waited for another goroutine to finish
+	// preparing the same statement, and that goroutine waited for the
+	// connection (TestSetupDBTransactionDoesNotWaitOnAnotherGoroutinesPrepare).
+	// Studio does not enable PrepareStmt either.
 	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{
 		SkipDefaultTransaction: true,
-		PrepareStmt:            true, // Enable prepared statement cache
 	})
 	require.NoError(t, err)
 
