@@ -3,7 +3,6 @@ package pinecone
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
@@ -34,9 +33,8 @@ func WithEmbedder(e embeddings.Embedder) Option {
 	}
 }
 
-// WithAPIKey is an option for setting the api key. If the option is not set
-// the api key is read from the PINECONE_API_KEY environment variable. If the
-// variable is not present, an error will be returned.
+// WithAPIKey is an option for setting the api key. It must be set.
+// Tyk: upstream falls back to the PINECONE_API_KEY environment variable.
 func WithAPIKey(apiKey string) Option {
 	return func(p *Store) {
 		p.apiKey = apiKey
@@ -76,15 +74,9 @@ func applyClientOptions(opts ...Option) (Store, error) {
 		return Store{}, fmt.Errorf("%w: missing embedder", ErrInvalidOptions)
 	}
 
+	// Tyk: no PINECONE_API_KEY fallback; the key must be passed.
 	if o.apiKey == "" {
-		o.apiKey = os.Getenv(_pineconeEnvVrName)
-		if o.apiKey == "" {
-			return Store{}, fmt.Errorf(
-				"%w: missing api key. Pass it as an option or set the %s environment variable",
-				ErrInvalidOptions,
-				_pineconeEnvVrName,
-			)
-		}
+		return Store{}, fmt.Errorf("%w: missing api key", ErrInvalidOptions)
 	}
 
 	return *o, nil

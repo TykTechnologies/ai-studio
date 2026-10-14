@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/callbacks"
@@ -17,7 +16,7 @@ import (
 
 var (
 	ErrEmptyResponse            = errors.New("no response")
-	ErrMissingToken             = errors.New("missing the Anthropic API key, set it in the ANTHROPIC_API_KEY environment variable")
+	ErrMissingToken             = errors.New("missing the Anthropic API key")
 	ErrUnexpectedResponseLength = errors.New("unexpected length of response")
 	ErrInvalidContentType       = errors.New("invalid content type")
 	ErrUnsupportedMessageType   = errors.New("unsupported message type")
@@ -55,7 +54,7 @@ func New(opts ...Option) (*LLM, error) {
 
 func newClient(opts ...Option) (*anthropicclient.Client, error) {
 	options := &options{
-		token:      os.Getenv(tokenEnvVarName),
+		// Tyk: no ANTHROPIC_API_KEY default; callers pass the token.
 		baseURL:    anthropicclient.DefaultBaseURL,
 		httpClient: httputil.DefaultClient,
 	}

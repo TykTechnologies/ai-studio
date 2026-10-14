@@ -12,7 +12,7 @@ func TestLLM(t *testing.T) {
 		t.Skip("OPENAI_API_KEY not set")
 	}
 
-	llm, err := New(WithModel("gpt-3.5-turbo"))
+	llm, err := New(WithToken(os.Getenv("OPENAI_API_KEY")), WithModel("gpt-3.5-turbo"))
 	if err != nil {
 		t.Fatalf("Failed to create OpenAI LLM: %v", err)
 	}

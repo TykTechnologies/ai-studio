@@ -2,7 +2,6 @@ package openai
 
 import (
 	"errors"
-	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/httputil"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/openai/internal/openaiclient"
@@ -10,7 +9,7 @@ import (
 
 var (
 	ErrEmptyResponse              = errors.New("no response")
-	ErrMissingToken               = errors.New("missing the OpenAI API key, set it in the OPENAI_API_KEY environment variable") //nolint:lll
+	ErrMissingToken               = errors.New("missing the OpenAI API key")
 	ErrMissingAzureModel          = errors.New("model needs to be provided when using Azure API")
 	ErrMissingAzureEmbeddingModel = errors.New("embeddings model needs to be provided when using Azure API")
 
@@ -18,14 +17,15 @@ var (
 )
 
 // newClient creates an instance of the internal client.
+//
+// Tyk: nothing is read from the process environment (upstream defaults the
+// token, model, base URL and organization from OPENAI_* variables). Callers
+// pass every value explicitly; an empty key filled from OPENAI_API_KEY sent
+// the host's key to the endpoint an LLM's writer chose.
 func newClient(opts ...Option) (*options, *openaiclient.Client, error) {
 	options := &options{
-		token:        os.Getenv(tokenEnvVarName),
-		model:        os.Getenv(modelEnvVarName),
-		baseURL:      getEnvs(baseURLEnvVarName, baseAPIBaseEnvVarName),
-		organization: os.Getenv(organizationEnvVarName),
-		apiType:      APIType(openaiclient.APITypeOpenAI),
-		httpClient:   httputil.DefaultClient,
+		apiType:    APIType(openaiclient.APITypeOpenAI),
+		httpClient: httputil.DefaultClient,
 	}
 
 	for _, opt := range opts {
@@ -55,14 +55,4 @@ func newClient(opts ...Option) (*options, *openaiclient.Client, error) {
 		options.responseFormat, clientOptions...,
 	)
 	return options, cli, err
-}
-
-func getEnvs(keys ...string) string {
-	for _, key := range keys {
-		val, ok := os.LookupEnv(key)
-		if ok {
-			return val
-		}
-	}
-	return ""
 }

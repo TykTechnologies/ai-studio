@@ -10,8 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/httputil"
 )
@@ -39,22 +37,11 @@ func checkError(resp *http.Response, body []byte) error {
 
 func NewClient(ourl *url.URL, ohttp *http.Client) (*Client, error) {
 	if ourl == nil {
-		scheme, hostport, ok := strings.Cut(os.Getenv("OLLAMA_HOST"), "://")
-		if !ok {
-			scheme, hostport = "http", os.Getenv("OLLAMA_HOST")
-		}
-
-		host, port, err := net.SplitHostPort(hostport)
-		if err != nil {
-			host, port = "127.0.0.1", "11434"
-			if ip := net.ParseIP(strings.Trim(os.Getenv("OLLAMA_HOST"), "[]")); ip != nil {
-				host = ip.String()
-			}
-		}
-
+		// Tyk: the local default, never OLLAMA_HOST from the environment;
+		// callers pass the server URL.
 		ourl = &url.URL{
-			Scheme: scheme,
-			Host:   net.JoinHostPort(host, port),
+			Scheme: "http",
+			Host:   net.JoinHostPort("127.0.0.1", "11434"),
 		}
 	}
 

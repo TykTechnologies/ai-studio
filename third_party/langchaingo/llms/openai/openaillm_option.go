@@ -5,6 +5,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/openai/internal/openaiclient"
 )
 
+// Tyk: upstream reads these variables as defaults; the fork does not (see
+// newClient). The names are kept for tests that prove they are ignored.
 const (
 	tokenEnvVarName        = "OPENAI_API_KEY"      //nolint:gosec
 	modelEnvVarName        = "OPENAI_MODEL"        //nolint:gosec

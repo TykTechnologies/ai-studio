@@ -294,9 +294,9 @@ func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) 
 		opts = append(opts, anthropic.WithBaseURL(baseURL))
 	}
 
-	if connDef.APIKey != "" {
-		opts = append(opts, anthropic.WithToken(connDef.APIKey))
-	}
+	// Always passed, even when empty: the client must refuse an empty key,
+	// never fill it from the host environment.
+	opts = append(opts, anthropic.WithToken(connDef.APIKey))
 
 	if llmSettings != nil {
 		opts = append(opts, anthropic.WithModel(llmSettings.ModelName))

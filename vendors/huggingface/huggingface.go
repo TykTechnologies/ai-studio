@@ -39,11 +39,14 @@ func (v *HuggingFace) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.Embedd
 	var err error
 
 	opts := []huggingface.Option{}
-	if spec.APIKey != "" {
-		opts = append(opts, huggingface.WithToken(spec.APIKey))
-	}
+	// Always passed, even when empty: the client must refuse an empty key,
+	// never fill it from the host environment.
+	opts = append(opts, huggingface.WithToken(spec.APIKey))
 
 	llm, err = NewHFWrapper(spec.Model, opts...)
+	if err != nil {
+		return nil, err
+	}
 
 	e, err := embeddings.NewEmbedder(llm)
 	if err != nil {
@@ -107,9 +110,7 @@ func (v *HuggingFace) DecisionEndpoint() string {
 func setupHuggingFaceDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]huggingface.Option, 0)
 
-	if connDef.APIKey != "" {
-		opts = append(opts, huggingface.WithToken(connDef.APIKey))
-	}
+	opts = append(opts, huggingface.WithToken(connDef.APIKey))
 
 	if llmSettings != nil {
 		opts = append(opts, huggingface.WithModel(llmSettings.ModelName))
