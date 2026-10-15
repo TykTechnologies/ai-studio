@@ -42,7 +42,7 @@ The Secrets Management system aims to:
     ```
     $ENV/VARIABLE_NAME
     ```
-    Replace `VARIABLE_NAME` with an environment variable name (e.g., `$ENV/MY_API_KEY`). This reads the value from AI Studio's environment at runtime, **but only for names the operator lists** in `AI_STUDIO_ENV_REF_ALLOWLIST`, a comma-separated list that is empty by default. AI Studio's environment also holds its own secrets, such as the encryption key and the database URL. An `$ENV/` reference to a name that isn't listed is never resolved: it stays as written, and nothing is sent in its place. List only the variables you inject for this purpose, for example Kubernetes secrets mounted as environment variables, or values provided by a vault agent or CI/CD pipeline. The list can't include itself.
+    Replace `VARIABLE_NAME` with an environment variable name (e.g., `$ENV/MY_API_KEY`). This reads the value from AI Studio's environment at runtime, **but only for names the operator lists** in `AI_STUDIO_ENV_REF_ALLOWLIST`, a comma-separated list that is empty by default. AI Studio's environment also holds its own secrets, such as the encryption key and the database URL. An `$ENV/` reference to a name that isn't listed is never resolved: it stays as written. The variable's value is never read, but AI Studio uses the reference text itself (`$ENV/NAME`) as the credential, so the provider or tool rejects the call (usually with `401`). See [Upgrading from 2.2](#upgrading-from-2-2) for how this shows up. List only the variables you inject for this purpose, for example Kubernetes secrets mounted as environment variables, or values provided by a vault agent or CI/CD pipeline. The list can't include itself.
 
     Store credentials in the secret store (`$SECRET/`) unless an external tool provides them through the environment.
 
@@ -54,6 +54,29 @@ The Secrets Management system aims to:
     1.  The configuration itself stores the `$SECRET/MY_KEY` string, *not* the actual secret value.
     2.  Only when the system needs the actual value at runtime (e.g., the [Proxy](./proxy.md) preparing a request for an LLM, or a [Tool](./tools.md) calling its external API), Tyk AI Studio retrieves the encrypted secret value, decrypts it using the `TYK_AI_SECRET_KEY`, and injects the plain text value into the operation.
     3.  The decrypted value is typically used immediately and not persisted further.
+
+## Upgrading from 2.2
+
+Before 2.3.0, every `$ENV/` reference resolved against AI Studio's environment. From 2.3.0, only names in `AI_STUDIO_ENV_REF_ALLOWLIST` do, and the list is empty by default. **Before you upgrade**, list the names your configuration uses in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store as `$SECRET/` references.
+
+References are stored as written, so a database dump shows every name in use:
+
+```bash
+# PostgreSQL
+pg_dump --data-only "$DATABASE_URL" | grep -oE '\$ENV/[A-Za-z_][A-Za-z0-9_]*' | sort -u
+# SQLite
+sqlite3 midsommar.db .dump | grep -oE '\$ENV/[A-Za-z_][A-Za-z0-9_]*' | sort -u
+```
+
+The output can include `$ENV/` references in plugin configuration, which the plugin resolves against its own environment (see [Plugin Security](./plugins-security.md)), not this list.
+
+If you upgrade without doing this, an LLM, tool, datasource, embedder or guardrail connection whose credential is an unlisted `$ENV/` reference behaves as follows:
+
+- **The console reports the LLM's credential as unresolved** and says the environment variable "is not set on the server", even when it is set. The variable is set; its name is not on the list.
+- **Calls fail at the provider.** Chat and the embedded gateway send the reference text (`$ENV/NAME`) as the key, so the provider or tool answers `401`. Edges send `refused-credential-reference` instead. A guardrail applies its fail mode.
+- **Nothing is logged.** Neither startup nor the failing requests mention the allowlist, and saving a new unlisted reference succeeds without a warning.
+
+To fix it, add the names to `AI_STUDIO_ENV_REF_ALLOWLIST` and restart AI Studio, or change the credentials to `$SECRET/` references.
 
 ## Creating & Managing Secrets (Admin)
 

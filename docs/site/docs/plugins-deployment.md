@@ -441,6 +441,13 @@ export PLUGIN_ENV_PASSTHROUGH="GITHUB_RAG_*"
 
 `ALLOW_INTERNAL_NETWORK_ACCESS` is not passed by default. A plugin that honours it for its own checks (such as the GitHub RAG ingest plugin) only sees it when you add it to `PLUGIN_ENV_PASSTHROUGH`.
 
+Before 2.3.0, plugins inherited the host's whole environment. Among the shipped plugins, only the GitHub RAG ingest plugin relies on that in a way that breaks on upgrade: it reads `GITHUB_RAG_SECRET_ENCRYPTION_KEY` (the key that encrypts stored GitHub PATs and SSH keys) and `GITHUB_RAG_KNOWN_HOSTS` from the host. If you set either, add `GITHUB_RAG_*` to `PLUGIN_ENV_PASSTHROUGH`, or set `secret_encryption_key` and `known_hosts_path` in the plugin configuration, **before you upgrade**. Without the key:
+
+- repositories whose credentials were stored encrypted fail to sync with `secret is encrypted but no encryption key is configured`;
+- credentials saved from then on are stored **unencrypted**. The plugin's warning about it is logged at debug level only, so it does not appear at the default `LOG_LEVEL=info`.
+
+Once the key reaches the plugin again, encrypted credentials are readable again. Re-enter any credential saved while it was missing, so that it is stored encrypted.
+
 The pass-through applies to every plugin the host starts, so name only the variables your plugins need. Avoid passing host credentials such as database URLs or encryption keys; the host logs a warning when the pass-through matches one. A bare `*` entry is ignored. Proxy variables are passed by default, so don't put proxy credentials in them unless plugins may use that proxy too. A plugin that needs configuration should normally receive it through its plugin config rather than the environment.
 
 `grpc://` plugins run as their own processes, outside the host, so this does not apply to them.
