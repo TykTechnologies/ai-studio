@@ -1190,7 +1190,7 @@ log.Printf("Plugin: %s - Hook: %s", plugin.Name, plugin.HookType)
 
 ### Get Plugins Count
 
-Calls `ListPlugins`, so the plugin needs the `plugins.read` service scope.
+Calls `ListPlugins` for one row. A plugin without the `plugins.read` service scope still gets the count (with no plugin rows), so plugins that warm up the broker with this call, as the 2.2 examples and scaffold did, need no scope for it. Any other `ListPlugins` call needs `plugins.read`.
 
 ```go
 func GetPluginsCount(ctx context.Context) (int64, error)
