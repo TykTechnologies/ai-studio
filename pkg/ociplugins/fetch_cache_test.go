@@ -16,11 +16,15 @@ import (
 type countingPuller struct {
 	manifestDigest string
 	binary         []byte
+	err            error // set to simulate an unreachable registry
 	pulls          int
 }
 
 func (p *countingPuller) Pull(context.Context, *OCIReference, *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
 	p.pulls++
+	if p.err != nil {
+		return nil, nil, nil, p.err
+	}
 	return &ocispec.Descriptor{Digest: digest.Digest(p.manifestDigest)}, &PluginConfig{Version: "1.0.0"}, p.binary, nil
 }
 
@@ -122,4 +126,89 @@ func TestFetchPlugin_LegacyEntryIsFetchedOnceThenCached(t *testing.T) {
 	_, err = client.FetchPlugin(context.Background(), ref, params)
 	require.NoError(t, err)
 	assert.Equal(t, 1, puller.pulls, "a legacy entry is fetched once, then served from the cache")
+}
+
+// storeUnhashedEntry caches binary the way an older release did: with no
+// recorded hash (meta false: no metadata file at all).
+func storeUnhashedEntry(t *testing.T, client *OCIPluginClient, ref *OCIReference, params *OCIPluginParams, binary []byte, meta bool) {
+	t.Helper()
+	_, err := client.storage.StoreExecutable(ref.Digest, cacheTestArch, binary)
+	require.NoError(t, err)
+	if meta {
+		require.NoError(t, client.storage.StoreMetadata(ref.Digest, cacheTestArch, &PluginMetadata{Reference: ref, Params: params}))
+	}
+}
+
+// With signatures optional (the default), an entry cached before hashes were
+// recorded (by 2.2, or rewritten by 2.2 after a rollback) is fetched again
+// once, so its hash is recorded and later loads are checked, instead of
+// loading unverified with a warning on every start.
+func TestFetchPlugin_UnhashedEntryIsFetchedOnceToRecordItsHash(t *testing.T) {
+	for name, meta := range map[string]bool{"metadata without hash": true, "no metadata": false} {
+		t.Run(name, func(t *testing.T) {
+			client, puller, _, ref, params := fetchFixture(t)
+			client.config.RequireSignature = false
+			storeUnhashedEntry(t, client, ref, params, []byte("old binary"), meta)
+
+			_, err := client.FetchPlugin(context.Background(), ref, params)
+			require.NoError(t, err)
+			assert.Equal(t, 1, puller.pulls, "an entry with no recorded hash must be fetched again to verify it")
+			stored, err := client.storage.LoadMetadata(ref.Digest, cacheTestArch)
+			require.NoError(t, err)
+			assert.NotEmpty(t, stored.BinarySHA256, "the refetch must record the binary hash")
+
+			_, err = client.FetchPlugin(context.Background(), ref, params)
+			require.NoError(t, err)
+			assert.Equal(t, 1, puller.pulls, "once the hash is recorded the entry loads from the cache")
+		})
+	}
+}
+
+// When the registry cannot be reached, an unhashed entry still loads (as on
+// 2.2), reported unverified, and no hash is recorded for the unchecked file:
+// the next load tries the registry again.
+func TestFetchPlugin_UnhashedEntryLoadsUnverifiedWhenRegistryUnreachable(t *testing.T) {
+	client, puller, _, ref, params := fetchFixture(t)
+	client.config.RequireSignature = false
+	storeUnhashedEntry(t, client, ref, params, []byte("old binary"), true)
+	puller.err = errors.New("registry unreachable")
+
+	local, err := client.FetchPlugin(context.Background(), ref, params)
+	require.NoError(t, err)
+	assert.False(t, local.Verified)
+	assert.Equal(t, client.storage.GetExecutablePath(ref.Digest, cacheTestArch), local.ExecutablePath)
+	stored, err := client.storage.LoadMetadata(ref.Digest, cacheTestArch)
+	require.NoError(t, err)
+	assert.Empty(t, stored.BinarySHA256, "an unchecked file must not get a hash recorded")
+
+	puller.err = nil
+	_, err = client.FetchPlugin(context.Background(), ref, params)
+	require.NoError(t, err)
+	assert.Equal(t, 2, puller.pulls, "the next load must try the registry again")
+}
+
+// The fallback is only for entries that cannot be checked: a binary that
+// fails its recorded hash is never loaded, whether or not the registry can
+// be reached.
+func TestFetchPlugin_TamperedBinaryNotLoadedWhenRegistryUnreachable(t *testing.T) {
+	client, puller, _, ref, params := fetchFixture(t)
+	client.config.RequireSignature = false
+	local, err := client.FetchPlugin(context.Background(), ref, params)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(local.ExecutablePath, []byte("tampered"), 0o700))
+	puller.err = errors.New("registry unreachable")
+
+	_, err = client.FetchPlugin(context.Background(), ref, params)
+	require.Error(t, err)
+}
+
+// With signatures required an unhashed entry is never loaded unverified,
+// even when the registry cannot be reached.
+func TestFetchPlugin_UnhashedEntryNotLoadedWhenSignaturesRequired(t *testing.T) {
+	client, puller, _, ref, params := fetchFixture(t)
+	storeUnhashedEntry(t, client, ref, params, []byte("old binary"), true)
+	puller.err = errors.New("registry unreachable")
+
+	_, err := client.FetchPlugin(context.Background(), ref, params)
+	require.Error(t, err)
 }

@@ -85,10 +85,12 @@ func TestGetPlugin_EntryWithoutHash(t *testing.T) {
 	}
 	for name, meta := range cases {
 		t.Run(name+"/signatures optional", func(t *testing.T) {
+			// Callers fetch it again on any GetPlugin error, which records
+			// its hash (see TestFetchPlugin_UnhashedEntryIsFetchedOnceToRecordItsHash).
 			client, ref, params := cachedPluginFixture(t, false, []byte("plugin binary"), meta)
-			local, err := client.GetPlugin(ref, params)
-			require.NoError(t, err)
-			assert.False(t, local.Verified, "an entry that cannot be checked must be reported unverified")
+			_, err := client.GetPlugin(ref, params)
+			var unchecked *ErrCacheUnchecked
+			require.True(t, errors.As(err, &unchecked), "error %v is not ErrCacheUnchecked", err)
 		})
 		t.Run(name+"/signatures required", func(t *testing.T) {
 			client, ref, params := cachedPluginFixture(t, true, []byte("plugin binary"), meta)

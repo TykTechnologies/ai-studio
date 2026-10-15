@@ -65,6 +65,19 @@ func (e *ErrCacheCorrupted) Error() string {
 	return fmt.Sprintf("cache corrupted at %q: %s", e.Path, e.Reason)
 }
 
+// ErrCacheUnchecked indicates a cached plugin has no recorded binary hash
+// (it was cached by an earlier release, or its metadata was rewritten by one
+// after a rollback), so it cannot be integrity-checked until it is fetched
+// again.
+type ErrCacheUnchecked struct {
+	Path   string
+	Reason string
+}
+
+func (e *ErrCacheUnchecked) Error() string {
+	return fmt.Sprintf("cached plugin at %q cannot be integrity-checked: %s", e.Path, e.Reason)
+}
+
 // ErrNetworkTimeout indicates a network operation timed out
 type ErrNetworkTimeout struct {
 	Operation string

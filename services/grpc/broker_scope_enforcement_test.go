@@ -174,3 +174,70 @@ func TestManagementScopeInterceptor_ScopeFreeNeedsAPluginID(t *testing.T) {
 		assert.Equal(t, codes.Unauthenticated, status.Code(err), "%s without a plugin ID", method)
 	}
 }
+
+// pluginCountProbe is the request GetPluginsCount sends (both SDK variants):
+// the broker warm-up the 2.2 examples, scaffold and SDK docs used, which
+// plugin binaries built from them still send on every session.
+func pluginCountProbe(pluginID uint) *pb.ListPluginsRequest {
+	return &pb.ListPluginsRequest{
+		Context: &pb.PluginContext{PluginId: uint32(pluginID), MethodScope: models.ServiceScopePluginsRead},
+		Page:    1,
+		Limit:   1,
+	}
+}
+
+// A plugin without plugins.read may still count plugins: the count probe
+// gets the total and no plugin rows, instead of a refusal and a warning on
+// every start that an admin cannot act on (the manifest does not declare
+// the scope).
+func TestBroker_PluginCountProbeNeedsNoScope(t *testing.T) {
+	for name, serviceAccess := range map[string]bool{"scopes approved": true, "service access not approved": false} {
+		t.Run(name, func(t *testing.T) {
+			f := newBrokerFixture(t, serviceAccess, models.ServiceScopeKVReadWrite)
+
+			resp, err := f.client.ListPlugins(context.Background(), pluginCountProbe(f.caller.ID))
+			require.NoError(t, err)
+			assert.EqualValues(t, 2, resp.TotalCount)
+			assert.Empty(t, resp.Plugins, "without plugins.read the count probe must return no plugin rows")
+		})
+	}
+}
+
+// Only the count probe is answered without the scope: any other listing,
+// including a single row from another page or with a filter, is refused.
+func TestBroker_PluginListingOtherThanCountProbeNeedsScope(t *testing.T) {
+	f := newBrokerFixture(t, true, models.ServiceScopeKVReadWrite)
+	active := true
+	for name, mutate := range map[string]func(*pb.ListPluginsRequest){
+		"two rows":    func(r *pb.ListPluginsRequest) { r.Limit = 2 },
+		"page two":    func(r *pb.ListPluginsRequest) { r.Page = 2 },
+		"no limit":    func(r *pb.ListPluginsRequest) { r.Limit = 0 },
+		"hook type":   func(r *pb.ListPluginsRequest) { r.HookType = models.HookTypePostAuth },
+		"namespace":   func(r *pb.ListPluginsRequest) { r.Namespace = "team-a" },
+		"active only": func(r *pb.ListPluginsRequest) { r.IsActive = &active },
+	} {
+		req := pluginCountProbe(f.caller.ID)
+		mutate(req)
+		_, err := f.client.ListPlugins(context.Background(), req)
+		requireCode(t, codes.PermissionDenied, err, "ListPlugins with "+name)
+	}
+}
+
+// With plugins.read the count probe is an ordinary listing.
+func TestBroker_PluginCountProbeWithScopeListsRows(t *testing.T) {
+	f := newBrokerFixture(t, true, models.ServiceScopePluginsRead)
+	resp, err := f.client.ListPlugins(context.Background(), pluginCountProbe(f.caller.ID))
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, resp.TotalCount)
+	assert.Len(t, resp.Plugins, 1)
+}
+
+// The count probe still needs the broker's plugin ID.
+func TestManagementScopeInterceptor_CountProbeNeedsAPluginID(t *testing.T) {
+	unary, _ := ManagementScopeInterceptors(nil)
+	_, err := unary(context.Background(), pluginCountProbe(1), &grpc.UnaryServerInfo{FullMethod: managementServicePrefix + "ListPlugins"},
+		func(ctx context.Context, req interface{}) (interface{}, error) {
+			return &pb.ListPluginsResponse{TotalCount: 3}, nil
+		})
+	assert.Equal(t, codes.Unauthenticated, status.Code(err))
+}

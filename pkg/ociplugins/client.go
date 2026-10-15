@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -112,6 +113,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Check if plugin already exists in cache
+	var unchecked *ErrCacheUnchecked
 	if c.HasPlugin(ref.Digest, params.Architecture) {
 		log.Debug().
 			Str("reference", ref.FullReference()).
@@ -123,16 +125,32 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 			return local, nil
 		}
 		// Fetch it again: the pull re-verifies the signature and the store
-		// replaces the cached file.
-		log.Warn().
-			Err(err).
-			Str("reference", ref.FullReference()).
-			Msg("Cached OCI plugin failed its integrity check, fetching it again")
+		// replaces the cached file and records its hash.
+		if errors.As(err, &unchecked) {
+			log.Info().
+				Str("reference", ref.FullReference()).
+				Str("reason", unchecked.Reason).
+				Msg("Cached OCI plugin has no recorded hash (cached by an earlier release); fetching it again to verify it")
+		} else {
+			log.Warn().
+				Err(err).
+				Str("reference", ref.FullReference()).
+				Msg("Cached OCI plugin failed its integrity check, fetching it again")
+		}
 	}
 
 	// Fetch the plugin manifest and layers
 	manifestDesc, pluginConfig, binaryData, err := c.fetcher.Pull(ctx, ref, params)
 	if err != nil {
+		// A copy that merely could not be checked still loads, as it did
+		// before hashes were recorded; one that failed its check never does.
+		if unchecked != nil {
+			log.Warn().
+				Err(err).
+				Str("reference", ref.FullReference()).
+				Msg("Cannot fetch the OCI plugin to verify its cached copy, which has no recorded hash; loading the cached copy unverified. It is verified on the next load that reaches the registry")
+			return c.unverifiedLocalPlugin(ref, params, unchecked.Path), nil
+		}
 		return nil, fmt.Errorf("failed to pull plugin: %w", err)
 	}
 
@@ -260,9 +278,12 @@ func (c *OCIPluginClient) GetPlugin(ref *OCIReference, params *OCIPluginParams) 
 // against the SHA-256 recorded when it was fetched. A mismatch is refused
 // (ErrCacheCorrupted); FetchPlugin then fetches the plugin again. An entry
 // with no recorded hash (no metadata, or cached by an older release) cannot
-// be checked: it is reported unverified, and refused when signatures are
-// required. So is an entry cached while signatures were not required, or
-// verified with a different public key than the one now asked for.
+// be checked: it is reported as ErrCacheUnchecked, which FetchPlugin answers
+// by fetching it again to record its hash (loading the cached copy
+// unverified only when the registry cannot be reached), or as
+// ErrCacheCorrupted when signatures are required. So is an entry cached
+// while signatures were not required, or verified with a different public
+// key than the one now asked for.
 func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	execPath := c.storage.GetExecutablePath(ref.Digest, params.Architecture)
 
@@ -275,22 +296,7 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 		if c.config.RequireSignature {
 			return nil, &ErrCacheCorrupted{Path: execPath, Reason: reason + "; signatures are required, so the plugin must be fetched and verified again"}
 		}
-		log.Warn().
-			Str("reference", ref.FullReference()).
-			Str("reason", reason).
-			Msg("Cached OCI plugin cannot be integrity-checked; loading it as unverified")
-		local := &LocalPlugin{
-			Reference:      ref,
-			Params:         params,
-			ExecutablePath: execPath,
-			CacheDir:       c.config.CacheDir,
-			Verified:       false,
-			FetchTime:      time.Now(), // Unknown fetch time
-		}
-		if metadata != nil {
-			local.FetchTime, local.Config = metadata.FetchTime, metadata.Config
-		}
-		return local, nil
+		return nil, &ErrCacheUnchecked{Path: execPath, Reason: reason}
 	}
 
 	if err := checkFileSHA256(execPath, metadata.BinarySHA256); err != nil {
@@ -316,6 +322,23 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 		FetchTime:      metadata.FetchTime,
 		Config:         metadata.Config,
 	}, nil
+}
+
+// unverifiedLocalPlugin returns the cached executable at execPath, which
+// could not be integrity-checked, as an unverified plugin.
+func (c *OCIPluginClient) unverifiedLocalPlugin(ref *OCIReference, params *OCIPluginParams, execPath string) *LocalPlugin {
+	local := &LocalPlugin{
+		Reference:      ref,
+		Params:         params,
+		ExecutablePath: execPath,
+		CacheDir:       c.config.CacheDir,
+		Verified:       false,
+		FetchTime:      time.Now(), // Unknown fetch time
+	}
+	if metadata, err := c.storage.LoadMetadata(ref.Digest, params.Architecture); err == nil {
+		local.FetchTime, local.Config = metadata.FetchTime, metadata.Config
+	}
+	return local
 }
 
 // checkFileSHA256 reports an error unless the file's SHA-256 is wantHex.

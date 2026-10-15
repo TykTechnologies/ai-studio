@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -45,6 +46,9 @@ func ManagementScopeInterceptors(db *gorm.DB) (grpc.UnaryServerInterceptor, grpc
 		}
 		if isSelfCall(ctx, info.FullMethod, req) {
 			return handler(ctx, req)
+		}
+		if isPluginCountProbe(info.FullMethod, req) && !pluginHoldsScope(ctx, db, models.ServiceScopePluginsRead) {
+			return countPluginsOnly(ctx, req, handler)
 		}
 		ctx, err := authorizePluginCall(ctx, db, info.FullMethod)
 		if err != nil {
@@ -156,6 +160,51 @@ var scopeFreeMethods = map[string]bool{
 	// first session, before an admin has approved their scopes; a plugin's
 	// own license check is unaffected.
 	managementServicePrefix + "GetLicenseInfo": true,
+}
+
+// isPluginCountProbe reports whether req is the ListPlugins request the SDKs'
+// GetPluginsCount sends: one row of the first page, with no filters. The 2.2
+// examples, plugin scaffold and SDK docs warmed up the broker with it, and
+// plugins built from them still do on every session without declaring
+// plugins.read.
+func isPluginCountProbe(fullMethod string, req interface{}) bool {
+	r, ok := req.(*pb.ListPluginsRequest)
+	return ok && fullMethod == managementServicePrefix+"ListPlugins" &&
+		r.GetPage() <= 1 && r.GetLimit() == 1 &&
+		r.GetHookType() == "" && r.GetNamespace() == "" && r.IsActive == nil
+}
+
+// pluginHoldsScope reports, without logging a refusal, whether the plugin
+// whose ID the broker put in ctx has approved service access and scope.
+func pluginHoldsScope(ctx context.Context, db *gorm.DB, scope string) bool {
+	pluginID := GetPluginIDFromContext(ctx)
+	if pluginID == 0 || db == nil {
+		return false
+	}
+	var plugin models.Plugin
+	if err := db.First(&plugin, pluginID).Error; err != nil {
+		return false
+	}
+	return plugin.HasServiceAccess() && plugin.HasServiceScope(scope)
+}
+
+// countPluginsOnly answers the count probe of a plugin without plugins.read
+// with the plugin count and no plugin rows, so the warm-up of plugins built
+// for 2.2 succeeds instead of logging a refusal on every start. It still
+// needs the broker's plugin ID.
+func countPluginsOnly(ctx context.Context, req interface{}, handler grpc.UnaryHandler) (interface{}, error) {
+	if GetPluginIDFromContext(ctx) == 0 {
+		return nil, status.Errorf(codes.Unauthenticated, "plugin authentication required")
+	}
+	resp, err := handler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	list, ok := resp.(*pb.ListPluginsResponse)
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "unexpected ListPlugins response")
+	}
+	return &pb.ListPluginsResponse{TotalCount: list.GetTotalCount(), TotalPages: list.GetTotalPages()}, nil
 }
 
 // isSelfCall reports whether req is a selfMethods call naming the calling
