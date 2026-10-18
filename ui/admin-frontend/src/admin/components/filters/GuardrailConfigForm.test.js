@@ -6,7 +6,9 @@ import testTheme from "../../utils/testTheme";
 import GuardrailConfigForm, {
   budgetErrors,
   effectiveToolAction,
+  effectiveToolCallAction,
   emptyGuardrailConfig,
+  scansToolCalls,
   scansToolResults,
 } from "./GuardrailConfigForm";
 
@@ -342,6 +344,41 @@ describe("GuardrailConfigForm: defaults are visible", () => {
   });
 });
 
+describe("GuardrailConfigForm tool calls", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  it("saves only what the admin set, and removes the key when scanning is turned off", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} onChange={onChange} />);
+    const scan = await screen.findByTestId("guardrail-tool-calls-scan");
+    expect(scan).not.toBeChecked();
+    expect(screen.getByTestId("guardrail-tool-calls-include-system")).toBeDisabled();
+
+    fireEvent.click(scan);
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ tool_calls: { scan: true } }));
+    fireEvent.click(screen.getByTestId("guardrail-tool-calls-include-system"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ tool_calls: { scan: true, include_system: true } }));
+    fireEvent.click(screen.getByTestId("guardrail-tool-calls-include-system"));
+    fireEvent.click(screen.getByTestId("guardrail-tool-calls-scan"));
+    expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].tool_calls).toBeUndefined();
+  });
+
+  it("is offered on response filters too, and warns that a remote provider receives the arguments", async () => {
+    render(
+      <Harness
+        responseFilter
+        initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety", tool_calls: { scan: true } }}
+      />
+    );
+    expect(await screen.findByTestId("guardrail-tool-calls-scan")).toBeChecked();
+    expect(screen.getByTestId("guardrail-tool-calls-remote")).toBeInTheDocument();
+    expect(screen.getByText(/never sent to the client/)).toBeInTheDocument();
+  });
+});
+
 describe("guardrail config helpers", () => {
   it("maps block to quarantine for tool results unless overridden", () => {
     expect(effectiveToolAction({ on_detect: "block" })).toBe("quarantine");
@@ -353,6 +390,15 @@ describe("guardrail config helpers", () => {
     expect(scansToolResults({})).toBe(true);
     expect(scansToolResults({ tool_results: {} })).toBe(true);
     expect(scansToolResults({ tool_results: { scan: false } })).toBe(false);
+  });
+
+  it("scans tool calls only when scan is true, and defaults their action to block or log", () => {
+    expect(scansToolCalls({})).toBe(false);
+    expect(scansToolCalls({ tool_calls: { scan: true } })).toBe(true);
+    expect(effectiveToolCallAction({ on_detect: "block" })).toBe("block");
+    expect(effectiveToolCallAction({ on_detect: "quarantine" })).toBe("log");
+    expect(effectiveToolCallAction({ on_detect: "redact" })).toBe("log");
+    expect(effectiveToolCallAction({ on_detect: "log", tool_calls: { on_detect: "block" } })).toBe("block");
   });
 
   it("checks single_call_chars against max_scan_chars", () => {

@@ -173,9 +173,11 @@ func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Reques
 
 	// Execute response filters (non-streaming)
 	if p.hasResponseFilters(conf) {
-		blocked, blockMsg, filterErr := ExecuteResponseFilters(
-			conf, p.gatewayService, respBody, http.StatusOK,
-			false, false, 0, "", r,
+		// The bridge answers in the OpenAI shape it was asked in.
+		blocked, blockMsg, filterErr := ExecuteBufferedResponseFilters(
+			conf, p.gatewayService,
+			BufferedResponse{Body: respBody, Format: requestFilterFormatOpenAI, RequestBody: reqBody},
+			http.StatusOK, r,
 		)
 		if filterErr != nil {
 			log.Error().Err(filterErr).Msg("Response filter error on Bedrock response")

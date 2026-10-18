@@ -24,6 +24,7 @@ var (
 	googleRootFields     = []string{"contents", "systemInstruction", "system_instruction"}
 	googleContentFields  = []string{"role", "parts"}
 	googleResponseFields = []string{"name", "id", "response"}
+	googleCallFields     = []string{"name", "id", "args"}
 	googleCodeFields     = []string{"outcome", "output"}
 )
 
@@ -75,6 +76,16 @@ func extractOpenAI(x *extraction, root *node) error {
 			return err
 		}
 		x.leaf(u, m.get("refusal"), pointer(path, "refusal"))
+		// The calls the model made (OpenAI arguments are a JSON string,
+		// Ollama's an object), and a legacy function_call.
+		for j, call := range m.get("tool_calls").elems() {
+			fnPath := pointer(pointerIndex(pointer(path, "tool_calls"), j), "function")
+			fn := call.get("function")
+			x.toolCall(fn.get("arguments"), pointer(fnPath, "arguments"), call.get("id"), fn.get("name"))
+		}
+		if fc := m.get("function_call"); fc.is(nodeObject) {
+			x.toolCall(fc.get("arguments"), pointer(pointer(path, "function_call"), "arguments"), nil, fc.get("name"))
+		}
 		x.leave(role)
 	}
 	return nil
@@ -220,7 +231,14 @@ func (x *extraction) anthropicBlock(u *Unit, b *node, path string) error {
 	switch typ := x.str(b.get("type")); typ {
 	case "text":
 		x.leaf(u, b.get("text"), pointer(path, "text"))
-	case "image", "thinking", "redacted_thinking", "tool_use", "server_tool_use", "mcp_tool_use", "container_upload":
+	case "tool_use", "server_tool_use", "mcp_tool_use":
+		if x.opts.ToolCalls {
+			if err := x.strict(b, path, "input"); err != nil {
+				return err
+			}
+		}
+		x.toolCall(b.get("input"), pointer(path, "input"), b.get("id"), b.get("name"))
+	case "image", "thinking", "redacted_thinking", "container_upload":
 	case "document":
 		return x.anthropicDocument(u, b, path)
 	case "search_result":
@@ -366,11 +384,20 @@ func (x *extraction) googlePart(u *Unit, part *node, path string) error {
 	if err != nil {
 		return err
 	}
+	fc, fcKey, err := x.alias(part, path, "functionCall", "function_call")
+	if err != nil {
+		return err
+	}
 	for i, key := range part.keys {
 		val, memberPath := part.vals[i], pointer(path, key)
 		switch {
 		case key == "text":
 			x.leaf(u, val, memberPath)
+		case key == fcKey && val == fc && x.opts.ToolCalls:
+			if err := x.strict(fc, memberPath, googleCallFields...); err != nil {
+				return err
+			}
+			x.toolCall(fc.get("args"), pointer(memberPath, "args"), fc.get("id"), fc.get("name"))
 		case key == frKey && val == fr:
 			if err := x.strict(fr, memberPath, googleResponseFields...); err != nil {
 				return err

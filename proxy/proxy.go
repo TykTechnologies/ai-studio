@@ -1131,15 +1131,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 		// Execute response filters (block-only, after hooks)
 		if hasResponseFilters {
-			blocked, blockMsg, err := ExecuteResponseFilters(
+			blocked, blockMsg, err := ExecuteBufferedResponseFilters(
 				llm,
 				p.gatewayService,
-				bufferedCapture.buffer.Bytes(),
+				BufferedResponse{
+					Body:        bufferedCapture.buffer.Bytes(),
+					Format:      requestFilterFormatFor(r, llm),
+					RequestBody: reqBody,
+				},
 				bufferedCapture.statusCode,
-				false, // isStreaming
-				false, // isChunk
-				0,     // chunkIndex
-				"",    // currentBuffer (not used for non-streaming)
 				r,
 			)
 			if err != nil {
@@ -2204,17 +2204,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	// Extract model from context (set by modelValidationMiddleware)
 	modelName, _ := r.Context().Value("model_name").(string)
 
-	// A decision request is not chat-shaped whatever its vendor; filters read
-	// it through the decision formats (see decisions_filters.go).
-	format := string(llm.Vendor)
-	if df := decisionFilterFormat(r.URL.Path); df != "" {
-		format = df
-	}
-	// A native chain hook names the body's shape when it is not the
-	// vendor's chat shape (OpenAI's Responses API).
-	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
-		format = hook.FilterFormat
-	}
+	format := requestFilterFormatFor(r, llm)
 	bodyBytes, err = p.runRequestFilters(llm, r, bodyBytes, format, modelName)
 	if err != nil {
 		return err
@@ -2240,6 +2230,23 @@ const (
 	requestFilterFormatOpenAI    = "openai"
 	requestFilterFormatAnthropic = "anthropic"
 )
+
+// requestFilterFormatFor is the filter format of a request on the native
+// pass-through: the LLM's vendor, a decision format for a decision request
+// (not chat-shaped whatever its vendor; see decisions_filters.go), or the
+// format a native chain hook names when the body is not the vendor's chat
+// shape (OpenAI's Responses API). A buffered response is read in the same
+// format.
+func requestFilterFormatFor(r *http.Request, llm *models.LLM) string {
+	format := string(llm.Vendor)
+	if df := decisionFilterFormat(r.URL.Path); df != "" {
+		format = df
+	}
+	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
+		format = hook.FilterFormat
+	}
+	return format
+}
 
 // hasRequestFilters reports whether llm has at least one request-side filter.
 func (p *Proxy) hasRequestFilters(llm *models.LLM) bool {

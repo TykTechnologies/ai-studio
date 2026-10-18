@@ -1018,19 +1018,45 @@ func packCalls(pieces []piece, maxCallChars int) []call {
 // tool result can be built to make its call fail (slow, throttled,
 // refused); kept apart, it can only cost other tool results, never the
 // user's prompt or the system prompt.
+//
+// Tool calls, when the filter scans them, are a class of their own: the
+// model wrote them, possibly from what a tool result told it, so they are
+// not the client's text, and keeping them out of the tool results' calls
+// leaves those calls (and the quarantine of their tool results when a call
+// fails under fail closed) exactly as they are without tool-call scanning.
 func (j *scanJob) packByTrust(pieces []piece, maxCallChars int) []call {
-	var own, tool []piece
+	var classes [trustClasses][]piece
 	for _, p := range pieces {
-		if j.segments[p.parent].IsToolResult() {
-			tool = append(tool, p)
+		c := trustClass(j.segments[p.parent])
+		classes[c] = append(classes[c], p)
+	}
+	var calls []call
+	for _, class := range classes {
+		if j.caps.SegmentPerCall {
+			calls = append(calls, j.packPerSegment(class, maxCallChars)...)
 		} else {
-			own = append(own, p)
+			calls = append(calls, packCalls(class, maxCallChars)...)
 		}
 	}
-	if !j.caps.SegmentPerCall {
-		return append(packCalls(own, maxCallChars), packCalls(tool, maxCallChars)...)
+	return calls
+}
+
+// Trust classes of segments, which never share a provider call.
+const (
+	trustOwn = iota
+	trustToolResult
+	trustToolCall
+	trustClasses
+)
+
+func trustClass(s guardrails.Segment) int {
+	switch {
+	case s.IsToolResult():
+		return trustToolResult
+	case s.IsToolCall():
+		return trustToolCall
 	}
-	return append(j.packPerSegment(own, maxCallChars), j.packPerSegment(tool, maxCallChars)...)
+	return trustOwn
 }
 
 // packPerSegment packs each segment's pieces into calls of their own, for a
@@ -1060,10 +1086,10 @@ func (j *scanJob) callsWithinSmallRun(calls []call) bool {
 	if j.caps.SegmentPerCall {
 		limit = smallRunWave
 	}
-	perClass := map[bool]int{}
+	var perClass [trustClasses]int
 	for _, c := range calls {
-		tool := j.segments[c[0].parent].IsToolResult()
-		if perClass[tool]++; perClass[tool] > limit {
+		class := trustClass(j.segments[c[0].parent])
+		if perClass[class]++; perClass[class] > limit {
 			return false
 		}
 	}

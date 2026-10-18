@@ -6,7 +6,7 @@ package segments
 // Extract returns the string leaves of body, in body order, with Index set
 // to the position in the result.
 func Extract(format string, body []byte) ([]Segment, error) {
-	x, err := extract(format, body)
+	x, err := extract(format, body, Options{})
 	if err != nil {
 		return nil, err
 	}

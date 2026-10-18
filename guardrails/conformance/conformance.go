@@ -86,7 +86,9 @@ func Check(newProvider func() (guardrails.Provider, error), opts Options) []Fail
 type seg struct {
 	index int
 	tool  bool
-	text  string
+	// call marks a tool call's arguments (with a goal context).
+	call bool
+	text string
 	// flagged marks a segment holding the probe.
 	flagged bool
 }
@@ -126,6 +128,15 @@ var cases = []testCase{
 			probe = o.RedactProbe
 		}
 		return []seg{{index: 10, text: o.Benign}, {index: 4, tool: true, text: probe, flagged: true}}
+	}},
+	// Tool calls (on filters that scan them) arrive as assistant text, or
+	// with ToolSegments as kind tool_call, with a goal context for
+	// providers that ask for one.
+	{name: "probe in a tool call beside user text and a tool result", segs: func(o Options, _ guardrails.Capabilities) []seg {
+		return []seg{{index: 12, text: o.Benign}, {index: 0, tool: true, text: o.Benign}, {index: 6, call: true, text: o.Probe, flagged: true}}
+	}},
+	{name: "benign and empty tool calls", segs: func(o Options, _ guardrails.Capabilities) []seg {
+		return []seg{{index: 3, call: true, text: o.Benign}, {index: 1, call: true, text: "{}"}}
 	}},
 }
 
@@ -217,12 +228,19 @@ func check(c testCase, newProvider func() (guardrails.Provider, error), opts Opt
 	byIndex := map[int]seg{}
 	for k, s := range segs {
 		orig := guardrails.Segment{Role: guardrails.RoleUser, Text: s.text}
-		if s.tool {
+		switch {
+		case s.tool:
 			orig = guardrails.Segment{Role: guardrails.RoleTool, Kind: guardrails.KindToolResult, ToolName: hostileToolName, ToolCallID: fmt.Sprintf("call_%d", k), Text: s.text}
+		case s.call:
+			orig = guardrails.Segment{Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall, ToolName: hostileToolName, ToolCallID: fmt.Sprintf("call_%d", k), Text: s.text,
+				Context: &guardrails.SegmentContext{UserGoal: opts.Benign, System: opts.Benign}}
 		}
 		sent := orig.ForProvider(s.index, s.text, caps)
 		if s.tool && !caps.ToolSegments && sent.Role == guardrails.RoleTool {
 			return fail("a provider without ToolSegments would be sent role tool")
+		}
+		if s.call && (sent.Role != guardrails.RoleAssistant || (sent.Context != nil) != (caps.ToolSegments && caps.WantsGoal) || (sent.Kind == guardrails.KindToolCall) != caps.ToolSegments) {
+			return fail("a tool call would be sent as %+v to a provider with %+v", sent, caps)
 		}
 		in.Segments = append(in.Segments, sent)
 		byIndex[s.index] = s

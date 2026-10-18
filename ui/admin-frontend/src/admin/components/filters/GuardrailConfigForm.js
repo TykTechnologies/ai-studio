@@ -101,6 +101,18 @@ export const effectiveToolAction = (config) => {
 // results were scanned do scan them.
 export const scansToolResults = (config) => !(config.tool_results && config.tool_results.scan === false);
 
+// Tool calls are scanned only when tool_calls.scan is true.
+export const scansToolCalls = (config) => !!(config.tool_calls && config.tool_calls.scan === true);
+
+// The action a flagged tool call gets (guardrails.Config.ActionFor): the
+// tool_calls override, else block for a Block filter and log otherwise, since
+// a call cannot be redacted or quarantined.
+export const effectiveToolCallAction = (config) => {
+  const override = config.tool_calls && config.tool_calls.on_detect;
+  if (override) return override;
+  return config.on_detect === "block" ? "block" : "log";
+};
+
 export const DEFAULT_QUARANTINE_PLACEHOLDER = "[content removed by policy: {{detector}} detected in {{source}}]";
 
 // Budget defaults and bounds (guardrails/config.go). Budgets apply to request
@@ -253,6 +265,15 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
     update({ tool_results: Object.keys(next).length ? next : undefined });
   };
 
+  // tool_calls carries only what the admin set; scanning is off unless
+  // scan is true, so an unchecked box removes the key.
+  const setToolCalls = (patch) => {
+    const next = withoutEmpty({ ...(config.tool_calls || {}), ...patch });
+    if (next.scan === false) delete next.scan;
+    if (next.include_system === false) delete next.include_system;
+    update({ tool_calls: Object.keys(next).length ? next : undefined });
+  };
+
   const setQuarantinePlaceholder = (placeholder) => {
     const next = withoutEmpty({ ...(config.quarantine || {}), placeholder });
     update({ quarantine: Object.keys(next).length ? next : undefined });
@@ -271,6 +292,8 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
   const toolAction = effectiveToolAction(config);
   const toolOverride = (config.tool_results && config.tool_results.on_detect) || "";
   const showQuarantine = config.on_detect === "quarantine" || (scanTools && toolAction === "quarantine");
+  const scanCalls = scansToolCalls(config);
+  const callOverride = (config.tool_calls && config.tool_calls.on_detect) || "";
   const remoteProvider = spec && !spec.local;
   const budget = config.budget || {};
   const budgetErr = budgetErrors(config);
@@ -581,6 +604,82 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             </Grid>
           </Grid>
         )}
+
+        <Grid item xs={12}>
+          <Typography variant="subtitle2" gutterBottom>
+            Tool calls
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            The arguments of the tools the model asks to run, in the request history and in responses. An injection
+            that reached the model shows up here as an action, such as data sent to an address the attacker chose. Off
+            by default.
+          </Typography>
+          <Grid container spacing={2} alignItems="flex-start">
+            <Grid item xs={12} md={4}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={scanCalls}
+                    onChange={(e) => setToolCalls({ scan: e.target.checked })}
+                    inputProps={{ "data-testid": "guardrail-tool-calls-scan" }}
+                  />
+                }
+                label="Scan tool calls"
+              />
+              <FormHelperText>
+                {responseFilter
+                  ? "On a response, a flagged call is never sent to the client, so it never runs."
+                  : "On a request the call has already run on the client: block stops the conversation, log records it."}
+              </FormHelperText>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth disabled={!scanCalls}>
+                <InputLabel id="guardrail-tool-call-action-label" shrink>
+                  Action on tool calls
+                </InputLabel>
+                <Select
+                  labelId="guardrail-tool-call-action-label"
+                  label="Action on tool calls"
+                  displayEmpty
+                  notched
+                  value={callOverride}
+                  onChange={(e) => setToolCalls({ on_detect: e.target.value })}
+                  inputProps={{ "data-testid": "guardrail-tool-call-action" }}
+                >
+                  <MenuItem value="">{`Default (${actionLabel(effectiveToolCallAction(config))})`}</MenuItem>
+                  <MenuItem value="block">{actionLabel("block")}</MenuItem>
+                  <MenuItem value="log">{actionLabel("log")}</MenuItem>
+                </Select>
+                <FormHelperText>A tool call cannot be redacted or quarantined: it is blocked or logged.</FormHelperText>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!(config.tool_calls && config.tool_calls.include_system)}
+                    disabled={!scanCalls}
+                    onChange={(e) => setToolCalls({ include_system: e.target.checked })}
+                    inputProps={{ "data-testid": "guardrail-tool-calls-include-system" }}
+                  />
+                }
+                label="Include the system prompt in the call's context"
+              />
+              <FormHelperText>
+                Providers that judge a call against the user's goal (the HTTP classifier) get the latest user text with
+                each call; this adds the system prompt.
+              </FormHelperText>
+            </Grid>
+            {scanCalls && remoteProvider && (
+              <Grid item xs={12}>
+                <Alert severity="info" data-testid="guardrail-tool-calls-remote">
+                  This provider runs outside the gateway, so tool arguments are sent to it, and they can hold data an
+                  agent read.
+                </Alert>
+              </Grid>
+            )}
+          </Grid>
+        </Grid>
 
         {showQuarantine && !responseFilter && (
           <Grid item xs={12}>
