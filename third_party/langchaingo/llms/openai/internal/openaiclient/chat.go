@@ -574,6 +574,18 @@ func parseStreamingChatResponse(ctx context.Context, r *http.Response, payload *
 			if data == "[DONE]" {
 				return
 			}
+			// Tyk: an error object in the stream ends it with that error, as
+			// the official SDKs raise it (a gateway's mid-stream block, a
+			// vendor failure after the 200). The JSON is kept in the error so
+			// a caller can relay it.
+			var streamErr errorMessage
+			if json.Unmarshal([]byte(data), &streamErr) == nil && streamErr.Error.Message != "" {
+				select {
+				case <-readerCtx.Done():
+				case responseChan <- StreamedChatResponsePayload{Error: fmt.Errorf("stream error event: %s", data)}:
+				}
+				return
+			}
 			var streamPayload StreamedChatResponsePayload
 			err := json.NewDecoder(bytes.NewReader([]byte(data))).Decode(&streamPayload)
 			if err != nil {

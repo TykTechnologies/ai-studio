@@ -333,6 +333,14 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 			var err error
 			attemptRelay := &loopbackRelay{}
 			resp, err = p.runDriverAttempt(actx, r, a, &req, nil, attemptRelay)
+			if msg := attemptRelay.streamBlocked(); msg != "" {
+				// The inner hop's response filters blocked the answer: it is
+				// refused whatever the driver made of the error event, and
+				// its tool calls never reach the client.
+				cancel()
+				respondStreamBlocked(w, msg)
+				return
+			}
 			if err == nil {
 				cancel()
 				served, relay = a, attemptRelay
@@ -593,6 +601,14 @@ func (p *Proxy) handleChatCompletionStream(
 		var err error
 		relay = &loopbackRelay{}
 		resp, err = p.runDriverAttempt(actx, r, a, req, streamingFunc, relay)
+		if msg := relay.streamBlocked(); msg != "" {
+			// The inner hop's response filters blocked the stream (text, the
+			// final pass, or a tool call): the client is told so, and the
+			// tool calls the driver assembled are never emitted.
+			cancel()
+			p.failStreamBlocked(w, flusher, framesSent, msg)
+			return
+		}
 		if err == nil {
 			cancel()
 			served = a
@@ -717,6 +733,34 @@ func (p *Proxy) failStream(w http.ResponseWriter, flusher http.Flusher, framesSe
 		detail = fmt.Sprintf("%s: %s", message, err.Error())
 	}
 	p.sendStreamError(w, flusher, detail, errType)
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
+// respondStreamBlocked answers a request whose inner hop a response filter
+// blocked with the OpenAI policy error and the block message (never the
+// findings, which the inner hop does not send).
+func respondStreamBlocked(w http.ResponseWriter, msg string) {
+	w.Header().Del("Content-Type")
+	clearServedHeaders(w)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(OAIErrorResponse{Error: &APIError{
+		Code: "policy_violation", Type: "policy_violation", Message: msg,
+		HTTPStatus: http.StatusText(http.StatusBadRequest), HTTPStatusCode: http.StatusBadRequest,
+	}})
+}
+
+// failStreamBlocked ends an /ai/ stream whose inner hop a response filter
+// blocked: before the first frame with an HTTP 400, after it with an OpenAI
+// error chunk and [DONE].
+func (p *Proxy) failStreamBlocked(w http.ResponseWriter, flusher http.Flusher, framesSent int, msg string) {
+	metrics.RecordPolicyBlock(context.Background(), "response_filter", "filter")
+	if framesSent == 0 {
+		respondStreamBlocked(w, msg)
+		return
+	}
+	p.sendStreamError(w, flusher, msg, "policy_violation")
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }

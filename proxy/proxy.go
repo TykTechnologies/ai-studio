@@ -1983,6 +1983,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 						metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 						logger.Warnf("Streamed tool call blocked by filter: %s", tcMsg)
 						w.Write(release)
+						markStreamBlocked(w, r, tcMsg)
 						w.Write(dialect.blockEvent(framer, tcMsg))
 						if f, ok := w.(http.Flusher); ok {
 							f.Flush()
@@ -2009,6 +2010,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					// Blocked mid-stream: the event that tripped it is never
 					// sent; the stream ends with the vendor's error event.
 					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
+					markStreamBlocked(w, r, blockMsg)
 					w.Write(dialect.blockEvent(framer, blockMsg))
 					if f, ok := w.(http.Flusher); ok {
 						f.Flush()
@@ -2081,6 +2083,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			if tcBlocked {
 				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 				if !clientGone {
+					markStreamBlocked(w, r, tcMsg)
 					w.Write(dialect.blockEvent(framer, tcMsg))
 					if f, ok := w.(http.Flusher); ok {
 						f.Flush()
@@ -2103,6 +2106,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 			logger.Warnf("Streaming response blocked by filter at end of stream: %s", blockMsg)
 			if !clientGone {
+				markStreamBlocked(w, r, blockMsg)
 				w.Write(dialect.blockEvent(framer, blockMsg))
 				if f, ok := w.(http.Flusher); ok {
 					f.Flush()

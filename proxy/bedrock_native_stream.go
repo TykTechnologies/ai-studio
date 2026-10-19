@@ -157,6 +157,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	block := func(msg string) {
 		metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 		log.Warn().Str("reason", msg).Msg("Bedrock stream blocked by filter")
+		markStreamBlocked(w, r, msg)
 		_, _ = w.Write(dialect.blockEvent(framer, msg))
 		flush()
 	}
