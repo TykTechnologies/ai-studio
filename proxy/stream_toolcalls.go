@@ -145,6 +145,9 @@ func (d streamDialect) callOps(ev streamEvent) (ops []callOp, closeAll bool) {
 	if data == "[DONE]" {
 		return nil, true
 	}
+	if d == "bedrock" {
+		return bedrockCallOps(ev)
+	}
 	if !strings.HasPrefix(data, "{") {
 		return nil, false
 	}
@@ -307,6 +310,44 @@ func (d streamDialect) callOps(ev streamEvent) (ops []callOp, closeAll bool) {
 		}
 	}
 	return ops, false
+}
+
+// bedrockCallOps reads a Converse stream event (named by its event type):
+// contentBlockStart with a toolUse start opens a call, contentBlockDelta
+// toolUse input adds to it, contentBlockStop closes it, messageStop ends
+// every call.
+func bedrockCallOps(ev streamEvent) ([]callOp, bool) {
+	var e struct {
+		Index int `json:"contentBlockIndex"`
+		Start struct {
+			ToolUse *struct {
+				ToolUseID string `json:"toolUseId"`
+				Name      string `json:"name"`
+			} `json:"toolUse"`
+		} `json:"start"`
+		Delta struct {
+			ToolUse *struct {
+				Input string `json:"input"`
+			} `json:"toolUse"`
+		} `json:"delta"`
+	}
+	_ = json.Unmarshal(ev.data, &e)
+	key := "b" + strconv.Itoa(e.Index)
+	switch ev.name {
+	case "contentBlockStart":
+		if tu := e.Start.ToolUse; tu != nil {
+			return []callOp{{key: key, id: tu.ToolUseID, name: tu.Name, start: true}}, false
+		}
+	case "contentBlockDelta":
+		if tu := e.Delta.ToolUse; tu != nil {
+			return []callOp{{key: key, args: tu.Input}}, false
+		}
+	case "contentBlockStop":
+		return []callOp{{key: key, stop: true}}, false
+	case "messageStop":
+		return nil, true
+	}
+	return nil, false
 }
 
 func firstNonEmpty(a, b string) string {

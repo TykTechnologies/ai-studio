@@ -2,8 +2,12 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
+	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi"
 )
 
 // Streamed responses reach the gateway in reads of any size, which cut
@@ -34,7 +38,14 @@ const (
 	wireJSONArray
 	// wireNDJSON: one JSON object per line (Ollama).
 	wireNDJSON
+	// wireEventStream: AWS binary event stream messages (Bedrock
+	// converse-stream), each led by its total length.
+	wireEventStream
 )
+
+// maxEventStreamMessage bounds one event stream message; a larger length
+// prefix is a corrupt stream, relayed as it is without further framing.
+const maxEventStreamMessage = 16 << 20
 
 // streamEvent is one whole event: its bytes as received, and its payload
 // (an SSE event's data, or a JSON element or line).
@@ -70,6 +81,8 @@ func newEventFramer(contentType string) *eventFramer {
 	f := &eventFramer{elemStart: -1}
 	ct := strings.ToLower(contentType)
 	switch {
+	case strings.Contains(ct, "vnd.amazon.eventstream"):
+		f.wire = wireEventStream
 	case strings.Contains(ct, "text/event-stream"):
 		f.wire = wireSSE
 	case strings.Contains(ct, "ndjson"):
@@ -102,8 +115,44 @@ func (f *eventFramer) feed(b []byte) []streamEvent {
 		return f.sseEvents()
 	case wireNDJSON:
 		return f.lineEvents()
+	case wireEventStream:
+		return f.eventStreamEvents()
 	}
 	return f.arrayEvents()
+}
+
+// eventStreamEvents releases every complete event stream message: its name
+// is its :event-type header ("exception:<type>" for an exception), its data
+// the payload.
+func (f *eventFramer) eventStreamEvents() []streamEvent {
+	var out []streamEvent
+	for len(f.buf) >= 12 {
+		total := int(binary.BigEndian.Uint32(f.buf[:4]))
+		if total < 16 || total > maxEventStreamMessage {
+			// Not a stream the gateway can frame: no more events; the rest
+			// is relayed by flush.
+			return out
+		}
+		if len(f.buf) < total {
+			return out
+		}
+		raw := f.buf[:total]
+		ev := streamEvent{raw: raw}
+		if msg, err := eventstream.NewDecoder().Decode(bytes.NewReader(raw), nil); err == nil {
+			ev.data = msg.Payload
+			if h := msg.Headers.Get(":message-type"); h != nil && h.String() == "exception" {
+				ev.name = "exception:"
+				if t := msg.Headers.Get(":exception-type"); t != nil {
+					ev.name += t.String()
+				}
+			} else if t := msg.Headers.Get(":event-type"); t != nil {
+				ev.name = t.String()
+			}
+		}
+		out = append(out, ev)
+		f.buf = f.buf[total:]
+	}
+	return out
 }
 
 // flush returns what is left at the end of the body as one last event
@@ -226,6 +275,18 @@ func (d streamDialect) text(ev streamEvent) string {
 	if len(ev.data) == 0 || ev.data[0] != '{' {
 		return ""
 	}
+	if d == "bedrock" {
+		if ev.name != "contentBlockDelta" {
+			return ""
+		}
+		var e struct {
+			Delta struct {
+				Text string `json:"text"`
+			} `json:"delta"`
+		}
+		_ = json.Unmarshal(ev.data, &e)
+		return e.Delta.Text
+	}
 	var m map[string]json.RawMessage
 	if json.Unmarshal(ev.data, &m) != nil {
 		return ""
@@ -322,6 +383,18 @@ func (d streamDialect) blockEvent(f *eventFramer, msg string) []byte {
 		wire = wireJSONArray
 	}
 	switch wire {
+	case wireEventStream:
+		// A validationException, which the AWS SDKs raise.
+		var b bytes.Buffer
+		_ = eventstream.NewEncoder().Encode(&b, eventstream.Message{
+			Headers: eventstream.Headers{
+				{Name: eventstreamapi.MessageTypeHeader, Value: eventstream.StringValue(eventstreamapi.ExceptionMessageType)},
+				{Name: eventstreamapi.ExceptionTypeHeader, Value: eventstream.StringValue("validationException")},
+				{Name: eventstreamapi.ContentTypeHeader, Value: eventstream.StringValue("application/json")},
+			},
+			Payload: enc(map[string]string{"message": text}),
+		})
+		return b.Bytes()
 	case wireNDJSON:
 		return append(enc(map[string]string{"error": text}), '\n')
 	case wireJSONArray:

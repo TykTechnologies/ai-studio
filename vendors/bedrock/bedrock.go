@@ -106,6 +106,20 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	return client, nil
 }
 
+// RuntimeBaseURL is the Bedrock runtime base URL requests to llm go to: the
+// configured endpoint (without a trailing /v1), or for a plain region
+// https://bedrock-runtime.{region}.amazonaws.com.
+func RuntimeBaseURL(llm *models.LLM) (string, error) {
+	endpoint := strings.TrimSuffix(strings.TrimSuffix(llm.APIEndpoint, "/"), "/v1")
+	switch {
+	case endpoint == "":
+		return "", fmt.Errorf("bedrock endpoint is empty")
+	case !strings.Contains(endpoint, ".") && !strings.Contains(endpoint, "/") && !strings.Contains(endpoint, ":"):
+		return "https://bedrock-runtime." + endpoint + ".amazonaws.com", nil
+	}
+	return strings.TrimSuffix(endpoint, "/"), nil
+}
+
 // InvalidateClientCache removes a cached client for the given LLM ID.
 // Useful when credentials are updated.
 func InvalidateClientCache(llmID uint) {
@@ -415,7 +429,11 @@ func (v *Bedrock) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, _ i
 func (v *Bedrock) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
 	if err != nil {
-		return fmt.Errorf("failed to parse region: %w", err)
+		// An endpoint that names no region (a VPC endpoint, a proxy)
+		// takes it from metadata.aws_region.
+		if region = metadataString(llm.Metadata, "aws_region"); region == "" {
+			return fmt.Errorf("failed to parse region: %w", err)
+		}
 	}
 
 	accessKeyID, secretAccessKey, sessionToken, err := extractAWSCredentials(llm)
