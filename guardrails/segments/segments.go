@@ -112,6 +112,10 @@ type Unit struct {
 	sep      string
 	whole    wholeNode
 	adjacent bool
+	// removeArray and removeElem locate a tool definition in its array,
+	// for RemovalEdits.
+	removeArray string
+	removeElem  int
 }
 
 // piece is one part of a unit's detection text: a leaf, or detection-only
@@ -262,6 +266,9 @@ type Options struct {
 	// user text before the call and the system prompt. Tool call units are
 	// never rewritten: Quarantine and MapRewrite refuse them.
 	ToolCalls bool
+	// ToolDefinitions adds a unit for each tool the request offers the
+	// model (see definitions.go), after the conversation's units.
+	ToolDefinitions bool
 }
 
 // ExtractUnitsWith is ExtractUnits with opts.
@@ -331,6 +338,9 @@ func extract(format string, body []byte, opts Options) (*extraction, error) {
 	x := newExtraction(body)
 	x.opts = opts
 	if err := fn(x, root); err != nil {
+		return nil, err
+	}
+	if err := x.definitions(strings.ToLower(format), root); err != nil {
 		return nil, err
 	}
 	x.finish()
@@ -672,7 +682,7 @@ func (x *extraction) toolCall(args *node, path string, id, name *node) {
 func (x *extraction) attachGoals() {
 	var system []string
 	for _, u := range x.units {
-		if u.Role == guardrails.RoleSystem && u.Text != "" {
+		if u.Role == guardrails.RoleSystem && u.Kind == guardrails.KindText && u.Text != "" {
 			system = append(system, u.Text)
 		}
 	}

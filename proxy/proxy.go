@@ -2510,8 +2510,13 @@ func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
 		return ""
 	}
 
-	// Create hash from tool version + allowed operations
+	// Create hash from tool version + allowed operations, and the versions
+	// of the guardrails that screen its definitions, so editing one
+	// rebuilds (and rescreens) the MCP server.
 	hashData := fmt.Sprintf("%s:%s", p.toolCacheVersion(toolModel), strings.Join(allowedOps, ","))
+	for _, f := range scripting.DefinitionScreeners(toolFilterPointers(toolModel)) {
+		hashData += fmt.Sprintf(":%d@%d", f.ID, f.UpdatedAt.UnixNano())
+	}
 	h := sha256.New()
 	h.Write([]byte(hashData))
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -2873,6 +2878,15 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 	tools, err := client.AsTool(operations...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert operations to tools: %w", err)
+	}
+
+	// The spec may be a third party's: the tool's request guardrails that
+	// scan tool definitions screen the list once, here, where it is built
+	// (the server is cached until the tool or those filters change). A
+	// flagged operation is left out of tools/list, or the server refused.
+	tools, operations, err = p.screenMCPToolDefinitions(r, toolModel, tools, operations)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create a new MCP server for this tool

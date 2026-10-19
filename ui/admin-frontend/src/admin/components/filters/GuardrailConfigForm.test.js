@@ -7,6 +7,7 @@ import GuardrailConfigForm, {
   budgetErrors,
   effectiveToolAction,
   effectiveToolCallAction,
+  effectiveToolDefinitionAction,
   emptyGuardrailConfig,
   scansToolCalls,
   scansToolResults,
@@ -376,6 +377,34 @@ describe("GuardrailConfigForm tool calls", () => {
     expect(await screen.findByTestId("guardrail-tool-calls-scan")).toBeChecked();
     expect(screen.getByTestId("guardrail-tool-calls-remote")).toBeInTheDocument();
     expect(screen.getByText(/never sent to the client/)).toBeInTheDocument();
+  });
+});
+
+describe("GuardrailConfigForm tool definitions", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  it("is a request-filter section that stores only what is set", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} onChange={onChange} />);
+    fireEvent.click(await screen.findByTestId("guardrail-tool-definitions-scan"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ tool_definitions: { scan: true } }));
+    expect(screen.getByText("Default (Remove the tool)")).toBeInTheDocument();
+  });
+
+  it("is not offered on response filters", async () => {
+    render(<Harness responseFilter initial={{ ...emptyGuardrailConfig(), provider: "builtin" }} />);
+    await screen.findByTestId("guardrail-tool-calls-scan");
+    expect(screen.queryByTestId("guardrail-tool-definitions-scan")).not.toBeInTheDocument();
+  });
+
+  it("defaults to remove for block and quarantine filters", () => {
+    expect(effectiveToolDefinitionAction({ on_detect: "block" })).toBe("remove");
+    expect(effectiveToolDefinitionAction({ on_detect: "quarantine" })).toBe("remove");
+    expect(effectiveToolDefinitionAction({ on_detect: "log" })).toBe("log");
+    expect(effectiveToolDefinitionAction({ on_detect: "log", tool_definitions: { on_detect: "block" } })).toBe("block");
   });
 });
 

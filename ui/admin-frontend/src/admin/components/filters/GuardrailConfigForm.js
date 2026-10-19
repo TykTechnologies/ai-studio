@@ -113,10 +113,24 @@ export const effectiveToolCallAction = (config) => {
   return config.on_detect === "block" ? "block" : "log";
 };
 
+// Tool definitions are scanned only when tool_definitions.scan is true.
+export const scansToolDefinitions = (config) => !!(config.tool_definitions && config.tool_definitions.scan === true);
+
+// The action a flagged tool definition gets: the override, else remove for a
+// Block or Quarantine filter, else log.
+export const effectiveToolDefinitionAction = (config) => {
+  const override = config.tool_definitions && config.tool_definitions.on_detect;
+  if (override) return override;
+  return config.on_detect === "block" || config.on_detect === "quarantine" ? "remove" : "log";
+};
+
 // Shadow (don't wait) is allowed only when every action the filter can take
 // is log (guardrails.Config shadowAllowed).
 export const shadowAllowed = (config) =>
-  config.on_detect === "log" && effectiveToolAction(config) === "log" && effectiveToolCallAction(config) === "log";
+  config.on_detect === "log" &&
+  effectiveToolAction(config) === "log" &&
+  effectiveToolCallAction(config) === "log" &&
+  effectiveToolDefinitionAction(config) === "log";
 
 export const DEFAULT_QUARANTINE_PLACEHOLDER = "[content removed by policy: {{detector}} detected in {{source}}]";
 
@@ -279,6 +293,12 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
     update({ tool_calls: Object.keys(next).length ? next : undefined });
   };
 
+  const setToolDefinitions = (patch) => {
+    const next = withoutEmpty({ ...(config.tool_definitions || {}), ...patch });
+    if (next.scan === false) delete next.scan;
+    update({ tool_definitions: Object.keys(next).length ? next : undefined });
+  };
+
   const setQuarantinePlaceholder = (placeholder) => {
     const next = withoutEmpty({ ...(config.quarantine || {}), placeholder });
     update({ quarantine: Object.keys(next).length ? next : undefined });
@@ -299,6 +319,8 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
   const showQuarantine = config.on_detect === "quarantine" || (scanTools && toolAction === "quarantine");
   const scanCalls = scansToolCalls(config);
   const callOverride = (config.tool_calls && config.tool_calls.on_detect) || "";
+  const scanDefs = scansToolDefinitions(config);
+  const defOverride = (config.tool_definitions && config.tool_definitions.on_detect) || "";
   const remoteProvider = spec && !spec.local;
   const budget = config.budget || {};
   const budgetErr = budgetErrors(config);
@@ -685,6 +707,59 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             )}
           </Grid>
         </Grid>
+
+        {!responseFilter && (
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" gutterBottom>
+              Tool definitions
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              The tools a request offers the model: name, description and parameter schema. Definitions often come
+              from MCP servers or API specs a third party wrote, and a description can carry instructions the model
+              follows. Each definition is scanned once. Off by default.
+            </Typography>
+            <Grid container spacing={2} alignItems="flex-start">
+              <Grid item xs={12} md={4}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={scanDefs}
+                      onChange={(e) => setToolDefinitions({ scan: e.target.checked })}
+                      inputProps={{ "data-testid": "guardrail-tool-definitions-scan" }}
+                    />
+                  }
+                  label="Scan tool definitions"
+                />
+              </Grid>
+              <Grid item xs={12} md={8}>
+                <FormControl fullWidth disabled={!scanDefs}>
+                  <InputLabel id="guardrail-tool-def-action-label" shrink>
+                    Action on tool definitions
+                  </InputLabel>
+                  <Select
+                    labelId="guardrail-tool-def-action-label"
+                    label="Action on tool definitions"
+                    displayEmpty
+                    notched
+                    value={defOverride}
+                    onChange={(e) => setToolDefinitions({ on_detect: e.target.value })}
+                    inputProps={{ "data-testid": "guardrail-tool-definition-action" }}
+                  >
+                    <MenuItem value="">{`Default (${effectiveToolDefinitionAction(config) === "remove" ? "Remove the tool" : actionLabel("log")})`}</MenuItem>
+                    <MenuItem value="remove">Remove the tool</MenuItem>
+                    <MenuItem value="block">{actionLabel("block")}</MenuItem>
+                    <MenuItem value="log">{actionLabel("log")}</MenuItem>
+                  </Select>
+                  <FormHelperText>
+                    Remove drops the tool from the request and lets it go on (the request is blocked when that would
+                    leave no tool, or when it forces the removed tool). Tools AI Studio serves over MCP and a chat's
+                    tools are screened when their list is built.
+                  </FormHelperText>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Grid>
+        )}
 
         {(shadowAllowed(config) || config.shadow) && (
           <Grid item xs={12}>

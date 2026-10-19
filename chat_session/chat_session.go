@@ -504,7 +504,11 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 	}
 
 	// prep tools
-	tools := cs.prepareTools()
+	tools, err := cs.prepareTools()
+	if err != nil {
+		cs.sendError(err)
+		return false
+	}
 
 	// secure file references
 	scanFailureResponse, ok := cs.scanFiles(msg.FileRef)
@@ -554,7 +558,11 @@ func (cs *ChatSession) regenerateTurn() bool {
 	}
 	messages = cs.PreflightTokenLengthCheck(messages)
 
-	tools := cs.prepareTools()
+	tools, err := cs.prepareTools()
+	if err != nil {
+		cs.sendError(err)
+		return false
+	}
 	opts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 
 	cs.streamBuffer = ""
@@ -617,7 +625,10 @@ func (cs *ChatSession) sendError(err error) {
 	}
 }
 
-func (cs *ChatSession) prepareTools() []llms.Tool {
+// prepareTools builds the chat's tool definitions and screens them with the
+// chat's request guardrails that scan tool definitions: a flagged tool is
+// left out, or the turn refused (an *ErrToolDefinitionsBlocked).
+func (cs *ChatSession) prepareTools() ([]llms.Tool, error) {
 	tools := make([]llms.Tool, 0)
 	ids := make(map[string]struct{})
 	for _, t := range cs.snapshotTools() {
@@ -670,7 +681,20 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 
 	}
 
-	return tools
+	if len(scripting.DefinitionScreeners(cs.filters)) == 0 {
+		return tools, nil
+	}
+	var llmID uint
+	var vendor, model string
+	if cs.chatRef.LLM != nil {
+		llmID, vendor = cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor)
+	}
+	if cs.chatRef.LLMSettings != nil {
+		model = cs.chatRef.LLMSettings.ModelName
+	}
+	scope := map[string]interface{}{"session_id": cs.ID(), "user_id": int64(cs.userID), "chat_id": int64(cs.chatRef.ID)}
+	record := scripting.EventRecorder("chat_request", 0, cs.userID, llmID, vendor, model)
+	return scripting.ScreenToolDefinitions(cs.runCtx(), cs.filters, tools, scope, record, cs.service)
 }
 
 func (cs *ChatSession) getSystemPrompt() string {

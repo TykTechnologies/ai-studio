@@ -242,7 +242,11 @@ func (cs *ChatSession) callModelAfterTools() bool {
 
 	// Regenerate options from current session state instead of using w.Opts
 	// This ensures we have the correct tools and settings after NATS deserialization
-	tools := cs.prepareTools()
+	tools, err := cs.prepareTools()
+	if err != nil {
+		cs.sendError(err)
+		return false
+	}
 	currentOpts := cs.getOptions(cs.chatRef.LLMSettings, tools)
 
 	// Check token length and get LLM response based on updated history

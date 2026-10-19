@@ -1046,6 +1046,7 @@ const (
 	trustOwn = iota
 	trustToolResult
 	trustToolCall
+	trustToolDefinition
 	trustClasses
 )
 
@@ -1055,6 +1056,8 @@ func trustClass(s guardrails.Segment) int {
 		return trustToolResult
 	case s.IsToolCall():
 		return trustToolCall
+	case s.IsToolDefinition():
+		return trustToolDefinition
 	}
 	return trustOwn
 }

@@ -26,6 +26,8 @@ import {
   scansToolResults,
   scansToolCalls,
   effectiveToolCallAction,
+  scansToolDefinitions,
+  effectiveToolDefinitionAction,
 } from "./GuardrailConfigForm";
 
 const ACTION_LABELS = { block: "Block", redact: "Redact", quarantine: "Quarantine", log: "Log only" };
@@ -147,6 +149,8 @@ const FilterDetails = () => {
                   }`
                 )}
               {config.shadow && row("Shadow", "Runs in the background; traffic never waits for it")}
+              {!attrs.response_filter && scansToolDefinitions(config) &&
+                row("Tool definitions", `Scanned; action ${effectiveToolDefinitionAction(config)}${config.tool_definitions?.on_detect ? "" : " (default)"}`)}
               {row("Tool calls", scansToolCalls(config) ? "Scanned" : "Not scanned")}
               {scansToolCalls(config) &&
                 row(

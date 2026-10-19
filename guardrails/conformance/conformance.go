@@ -88,6 +88,8 @@ type seg struct {
 	tool  bool
 	// call marks a tool call's arguments (with a goal context).
 	call bool
+	// def marks a tool definition.
+	def bool
 	text string
 	// flagged marks a segment holding the probe.
 	flagged bool
@@ -137,6 +139,11 @@ var cases = []testCase{
 	}},
 	{name: "benign and empty tool calls", segs: func(o Options, _ guardrails.Capabilities) []seg {
 		return []seg{{index: 3, call: true, text: o.Benign}, {index: 1, call: true, text: "{}"}}
+	}},
+	// Tool definitions arrive as user text, or with ToolSegments as role
+	// system with kind tool_definition.
+	{name: "probe in a tool definition beside a benign one", segs: func(o Options, _ guardrails.Capabilities) []seg {
+		return []seg{{index: 8, def: true, text: o.Benign}, {index: 2, def: true, text: o.Probe, flagged: true}, {index: 5, text: o.Benign}}
 	}},
 }
 
@@ -234,6 +241,8 @@ func check(c testCase, newProvider func() (guardrails.Provider, error), opts Opt
 		case s.call:
 			orig = guardrails.Segment{Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall, ToolName: hostileToolName, ToolCallID: fmt.Sprintf("call_%d", k), Text: s.text,
 				Context: &guardrails.SegmentContext{UserGoal: opts.Benign, System: opts.Benign}}
+		case s.def:
+			orig = guardrails.Segment{Role: guardrails.RoleSystem, Kind: guardrails.KindToolDefinition, ToolName: hostileToolName, Text: s.text}
 		}
 		sent := orig.ForProvider(s.index, s.text, caps)
 		if s.tool && !caps.ToolSegments && sent.Role == guardrails.RoleTool {

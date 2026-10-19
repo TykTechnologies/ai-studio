@@ -49,10 +49,19 @@ const (
 // injection that reached the model turns into an action, such as data sent
 // to an address the attacker chose. Tool calls are segments only on filters
 // that scan them (Config.ToolCalls).
+//
+// A tool definition is a tool the request offers the model: its name,
+// description and parameter schema (OpenAI tools and functions, Anthropic
+// tools, Google functionDeclarations, Bedrock toolConfig, Responses tools).
+// Definitions often come from MCP servers or OpenAPI specs a third party
+// wrote, and a description can carry instructions the model follows (tool
+// poisoning). They are segments only on filters that scan them
+// (Config.ToolDefinitions).
 const (
-	KindText       = "text"
-	KindToolResult = "tool_result"
-	KindToolCall   = "tool_call"
+	KindText           = "text"
+	KindToolResult     = "tool_result"
+	KindToolCall       = "tool_call"
+	KindToolDefinition = "tool_definition"
 )
 
 // Segment is one piece of text a provider classifies: a message, a response
@@ -99,13 +108,18 @@ func (s Segment) IsToolCall() bool {
 	return s.Kind == KindToolCall
 }
 
-// Untrusted reports text the client did not write itself: a tool result, or
-// a tool call the model made (whose arguments can carry what a tool result
-// told it). Untrusted text never shares a provider call with the client's
-// own text, so text built to make its call fail cannot cost the user's
-// prompt.
+// IsToolDefinition reports a tool definition.
+func (s Segment) IsToolDefinition() bool {
+	return s.Kind == KindToolDefinition
+}
+
+// Untrusted reports text the client did not write itself: a tool result, a
+// tool call the model made (whose arguments can carry what a tool result
+// told it), or a tool definition (often written by a third party). Untrusted
+// text never shares a provider call with the client's own text, so text
+// built to make its call fail cannot cost the user's prompt.
 func (s Segment) Untrusted() bool {
-	return s.IsToolResult() || s.IsToolCall()
+	return s.IsToolResult() || s.IsToolCall() || s.IsToolDefinition()
 }
 
 // ForProvider is what a provider with caps is sent of s, at index with
@@ -118,6 +132,13 @@ func (s Segment) Untrusted() bool {
 // (Capabilities.WantsGoal).
 func (s Segment) ForProvider(index int, text string, caps Capabilities) Segment {
 	switch {
+	case s.IsToolDefinition():
+		// Untrusted metadata: plain user text to a provider that does not
+		// know definitions, as for tool results.
+		if !caps.ToolSegments {
+			return Segment{Index: index, Role: RoleUser, Text: text}
+		}
+		return Segment{Index: index, Role: RoleSystem, Text: text, Kind: KindToolDefinition, ToolName: s.ToolName}
 	case s.IsToolCall():
 		if !caps.ToolSegments {
 			return Segment{Index: index, Role: RoleAssistant, Text: text}

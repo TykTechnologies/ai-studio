@@ -107,7 +107,8 @@ func TestClientTools_ParkAndResume(t *testing.T) {
 	cs.stateMu.Unlock()
 
 	// The model sees the client tool as a function.
-	defs := cs.prepareTools()
+	defs, err := cs.prepareTools()
+	require.NoError(t, err)
 	require.Len(t, defs, 1)
 	assert.Equal(t, "ask-approval", defs[0].Function.Name)
 
