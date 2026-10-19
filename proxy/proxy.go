@@ -1932,6 +1932,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	hasResponseFilters := p.hasResponseFilters(llm)
 	framer := newEventFramer(resp.Header.Get("Content-Type"))
 	dialect := streamDialect(requestFilterFormatFor(r, llm))
+	// Streamed tool calls are held until classified only when a response
+	// guardrail scans tool calls (stream_toolcalls.go).
+	var hold *toolCallHold
+	if hasResponseFilters && responseFiltersScanToolCalls(llm) {
+		hold = newToolCallHold(dialect)
+	}
 
 	for {
 		n, readErr := resp.Body.Read(buffer)
@@ -1958,7 +1964,37 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 				var release []byte
 				for _, ev := range events {
 					delta.WriteString(dialect.text(ev))
-					release = append(release, ev.raw...)
+					if hold == nil {
+						release = append(release, ev.raw...)
+						continue
+					}
+					now, ready := hold.observe(ev)
+					release = append(release, now...)
+					if !ready {
+						continue
+					}
+					held, calls, overflow := hold.take()
+					tcBlocked, tcMsg, tcErr := classifyHeldCalls(llm, p.gatewayService, calls, overflow, reqBody, string(dialect), resp.StatusCode, r)
+					if tcErr != nil {
+						logger.Errorf("Tool call filter error on a stream: %v", tcErr)
+					}
+					if tcBlocked {
+						// The flagged call's events are never sent.
+						metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+						logger.Warnf("Streamed tool call blocked by filter: %s", tcMsg)
+						w.Write(release)
+						w.Write(dialect.blockEvent(framer, tcMsg))
+						if f, ok := w.(http.Flusher); ok {
+							f.Flush()
+						}
+						isErr = true
+						blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
+						p.goAnalyze(func() {
+							p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+						})
+						return
+					}
+					release = append(release, held...)
 				}
 				textBuffer.WriteString(delta.String())
 				blocked, blockMsg, filterErr := false, "", error(nil)
@@ -2028,6 +2064,35 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		if ev := framer.flush(); ev != nil {
 			textBuffer.WriteString(dialect.text(*ev))
 			tail = ev.raw
+			if hold != nil {
+				tail, _ = hold.observe(*ev)
+			}
+		}
+	}
+	// Calls still held when the stream ends are classified now; after an
+	// upstream failure they are not released at all.
+	if hold != nil && hold.holding {
+		held, calls, overflow := hold.take()
+		if !isErr {
+			tcBlocked, tcMsg, tcErr := classifyHeldCalls(llm, p.gatewayService, calls, overflow, reqBody, string(dialect), resp.StatusCode, r)
+			if tcErr != nil {
+				logger.Errorf("Tool call filter error at end of stream: %v", tcErr)
+			}
+			if tcBlocked {
+				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+				if !clientGone {
+					w.Write(dialect.blockEvent(framer, tcMsg))
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+				}
+				blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
+				p.goAnalyze(func() {
+					p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+				})
+				return
+			}
+			tail = append(held, tail...)
 		}
 	}
 	if !isErr && hasResponseFilters {

@@ -59,6 +59,9 @@ type ScriptInput struct {
 	ResponseBody   string `json:"-"`
 	ResponseFormat string `json:"-"`
 	RequestBody    string `json:"-"`
+	// RequestFormat is RequestBody's format when it is not ResponseFormat
+	// (a stream's held tool calls, re-encoded as an OpenAI response).
+	RequestFormat string `json:"-"`
 
 	// RecordEvents, when set, records a filter's compliance events with the
 	// call site's attribution (app, user, LLM, vendor, model, scope), as the

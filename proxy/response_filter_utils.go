@@ -56,6 +56,12 @@ type BufferedResponse struct {
 	Body        []byte
 	Format      string
 	RequestBody []byte
+	// ToolCallsOnly runs only the guardrails that scan tool calls: Body is
+	// the tool calls a stream held back, whose text the other filters have
+	// already seen.
+	ToolCallsOnly bool
+	// RequestFormat is RequestBody's format when it differs from Format.
+	RequestFormat string
 }
 
 // ExecuteBufferedResponseFilters runs the response filters on a buffered
@@ -202,11 +208,15 @@ func runResponseFilters(
 		scriptInput.ResponseBody = string(buffered.Body)
 		scriptInput.ResponseFormat = buffered.Format
 		scriptInput.RequestBody = string(buffered.RequestBody)
+		scriptInput.RequestFormat = buffered.RequestFormat
 	}
 
 	// Execute response filters in chain
 	for _, filter := range llm.Filters {
 		if !filter.ResponseFilter {
+			continue
+		}
+		if buffered != nil && buffered.ToolCallsOnly && !(filter.IsGuardrail() && guardrails.ConfigScansToolCalls(filter.Config)) {
 			continue
 		}
 		slog.Debug("executing response filter", "filter_name", filter.Name, "is_chunk", isChunk, "is_final", isFinal, "chunk_index", chunkIndex)

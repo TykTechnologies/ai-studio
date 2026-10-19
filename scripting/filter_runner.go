@@ -969,7 +969,11 @@ func (sel *selection) addResponseToolCalls(input *ScriptInput, cfg guardrails.Co
 	if err != nil || len(units) == 0 {
 		return
 	}
-	goal := goalContext(cfg, segments.Goal(input.ResponseFormat, []byte(input.RequestBody)))
+	reqFormat := input.RequestFormat
+	if reqFormat == "" {
+		reqFormat = input.ResponseFormat
+	}
+	goal := goalContext(cfg, segments.Goal(reqFormat, []byte(input.RequestBody)))
 	for _, u := range units {
 		seg := u.Segment
 		seg.Index = len(sel.segments)
