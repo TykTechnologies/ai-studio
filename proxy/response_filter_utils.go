@@ -98,6 +98,25 @@ func responseFiltersScanToolCalls(llm *models.LLM) bool {
 	return false
 }
 
+// ExecuteStreamTextFilters runs the response filters on a streamed response
+// whose events the gateway has framed and read: delta is the text the
+// latest events added, buffer all the text so far. Script filters see delta
+// as the chunk's raw input, as they did with per-read extraction.
+func ExecuteStreamTextFilters(
+	llm *models.LLM,
+	service services.ServiceInterface,
+	delta string,
+	statusCode int,
+	chunkIndex int,
+	buffer string,
+	r *http.Request,
+) (blocked bool, blockMessage string, err error) {
+	if !hasResponseFilterList(llm) {
+		return false, "", nil
+	}
+	return runResponseFilters(llm, service, delta, statusCode, true, false, chunkIndex, buffer, r, nil)
+}
+
 // ExecuteFinalResponseFilters runs the response filters once more when a
 // streaming response has completed, over the whole accumulated text. Per-chunk
 // evaluation can legitimately skip a response that never reaches a script's
