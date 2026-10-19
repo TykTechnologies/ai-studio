@@ -480,9 +480,26 @@ func (p *Proxy) Stop(ctx context.Context) error {
 	server := p.server
 	p.serverMu.Unlock()
 	if server == nil {
+		DrainShadowGuardrails(ctx)
 		return nil
 	}
-	return server.Shutdown(ctx)
+	err := server.Shutdown(ctx)
+	DrainShadowGuardrails(ctx)
+	return err
+}
+
+// shadowDrainLimit bounds how long a shutdown waits for shadow guardrail
+// evaluations still queued: they never hold up traffic, so they must not
+// hold up a shutdown either.
+const shadowDrainLimit = 5 * time.Second
+
+// DrainShadowGuardrails waits, at most shadowDrainLimit and no longer than
+// ctx allows, for the shadow guardrail evaluations still queued, so their
+// compliance events are recorded before the analytics recorder stops.
+func DrainShadowGuardrails(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, shadowDrainLimit)
+	defer cancel()
+	scripting.DrainShadowGuardrails(ctx)
 }
 
 func (p *Proxy) Reload() error {
@@ -2344,6 +2361,8 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 		IsChat:     false,
 		Format:     format,
 		Ctx:        r.Context(),
+		// Shadow guardrails record their events later through this.
+		RecordEvents: scripting.EventRecorder("proxy_request", appID, 0, llm.ID, string(llm.Vendor), modelName),
 	}
 	if len(messages) > 0 {
 		scriptInput.MessageTools = p.messageExtractorRegistry.MessageTools(format, bodyBytes)

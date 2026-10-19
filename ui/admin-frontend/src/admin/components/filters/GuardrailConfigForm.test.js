@@ -379,6 +379,32 @@ describe("GuardrailConfigForm tool calls", () => {
   });
 });
 
+describe("GuardrailConfigForm shadow", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  it("offers shadow only when every action is log, and flags a shadow filter that no longer qualifies", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "log" }} onChange={onChange} />);
+    fireEvent.click(await screen.findByTestId("guardrail-shadow"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ shadow: true }));
+    expect(screen.queryByTestId("guardrail-shadow-invalid")).not.toBeInTheDocument();
+  });
+
+  it("hides the toggle for a blocking filter", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} />);
+    await screen.findByTestId("guardrail-tool-calls-scan");
+    expect(screen.queryByTestId("guardrail-shadow")).not.toBeInTheDocument();
+  });
+
+  it("warns when a shadow filter has a non-log action", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "log", shadow: true, tool_results: { on_detect: "quarantine" } }} />);
+    expect(await screen.findByTestId("guardrail-shadow-invalid")).toBeInTheDocument();
+  });
+});
+
 describe("guardrail config helpers", () => {
   it("maps block to quarantine for tool results unless overridden", () => {
     expect(effectiveToolAction({ on_detect: "block" })).toBe("quarantine");

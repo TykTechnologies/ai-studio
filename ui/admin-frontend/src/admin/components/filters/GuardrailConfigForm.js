@@ -113,6 +113,11 @@ export const effectiveToolCallAction = (config) => {
   return config.on_detect === "block" ? "block" : "log";
 };
 
+// Shadow (don't wait) is allowed only when every action the filter can take
+// is log (guardrails.Config shadowAllowed).
+export const shadowAllowed = (config) =>
+  config.on_detect === "log" && effectiveToolAction(config) === "log" && effectiveToolCallAction(config) === "log";
+
 export const DEFAULT_QUARANTINE_PLACEHOLDER = "[content removed by policy: {{detector}} detected in {{source}}]";
 
 // Budget defaults and bounds (guardrails/config.go). Budgets apply to request
@@ -680,6 +685,31 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             )}
           </Grid>
         </Grid>
+
+        {(shadowAllowed(config) || config.shadow) && (
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={!!config.shadow}
+                  onChange={(e) => update({ shadow: e.target.checked || undefined })}
+                  inputProps={{ "data-testid": "guardrail-shadow" }}
+                />
+              }
+              label="Shadow (don't wait)"
+            />
+            <FormHelperText>
+              The traffic goes on at once and the provider runs in the background, so a slow provider adds no latency.
+              Detections are recorded as compliance events when it finishes; when the background queue is full, the
+              check is skipped and recorded as not scanned. For a log-only rollout.
+            </FormHelperText>
+            {config.shadow && !shadowAllowed(config) && (
+              <Alert severity="error" sx={{ mt: 1 }} data-testid="guardrail-shadow-invalid">
+                Shadow needs every action to be Log: the filter's, the tool results' and the tool calls'.
+              </Alert>
+            )}
+          </Grid>
+        )}
 
         {showQuarantine && !responseFilter && (
           <Grid item xs={12}>

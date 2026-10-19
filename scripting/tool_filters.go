@@ -201,9 +201,10 @@ func runToolFilter(
 			},
 		},
 		Context:    id.scriptContext(),
-		IsChat:     id.IsChat,
-		IsResponse: isResponse,
-		Ctx:        ctx,
+		IsChat:       id.IsChat,
+		IsResponse:   isResponse,
+		Ctx:          ctx,
+		RecordEvents: EventRecorder(scope, id.AppID, id.UserID, 0, "", ""),
 	}
 
 	// RunScript recovers panics from the Tengo VM and returns them as errors,

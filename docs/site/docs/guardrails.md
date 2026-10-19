@@ -115,6 +115,22 @@ The placeholder defaults to `[content removed by policy: {{detector}} detected i
 
 Edges older than this release do not know `quarantine`: the hub sends them `block` in its place, so during a rolling upgrade an old edge blocks a request a new edge would quarantine. Settings older edges do not know (the placeholder, tool-result scanning, budgets) are ignored there, and those edges behave as before: they scan tool results only under the `all_messages` scope. Tool-result scanning on an edge needs an edge of this release or later.
 
+### Shadow (don't wait)
+
+A guardrail set to `log` still calls its provider inline: the request waits for the verdict before going on, so a log-only rollout of a slow classifier adds its latency to every request the verdict cache cannot answer. With `"shadow": true` it does not wait. The request (or response, or chat message, or tool call) goes on at once, unchanged, and the classification runs in a background pool on the same node, with a context detached from the request and bounded by the filter's own timeout and time budget. When it finishes, its compliance events are recorded with the same attribution (app, LLM, user, request id, roles, kinds, tool names) as an inline `log` run would record, and reach AI Studio from edges on the analytics pulse like any other event. Its successful verdicts fill the verdict cache; switching the filter to enforce changes its version, so everything is classified again.
+
+```json
+{"provider": "http", "on_detect": "log", "tool_results": {"on_detect": "log"}, "shadow": true, ...}
+```
+
+- Shadow is allowed only when every action the filter can take is `log`: `on_detect`, the tool-result action (unset, it follows `on_detect`) and the tool-call action. Saving it with any other action is refused with HTTP 400.
+- A shadow filter never changes traffic, whatever it finds and however it fails: the fail mode only labels its `guardrail.error` events.
+- The pool is bounded. `GUARDRAIL_SHADOW_WORKERS` evaluations run at once per process (default four per CPU, at least 8), and at most `GUARDRAIL_SHADOW_QUEUE_BYTES` of text wait (default 64 MiB), of which one tenant (app, else user, else chat session) may hold half. An evaluation that does not fit is dropped, never waited for: it is counted in `aistudio_guardrail_shadow_dropped_total{provider,reason}` (`queue_full`, `tenant_share`, `shutdown`) and recorded as one `guardrail.unscanned` event with reason `shadow_dropped`.
+- A graceful shutdown waits up to 5 seconds for queued evaluations, then abandons them.
+- The filter **Test** panel runs a shadow filter inline, so it shows the verdict.
+
+The form shows **Shadow (don't wait)** when every action is Log.
+
 ### Budgets and the verdict cache
 
 A request guardrail screens text whose size and shape the sender controls: a tool result can be padded to any length, and an agent's request carries its whole history every turn. Two mechanisms keep that affordable without opening a way past the guardrail.
@@ -176,6 +192,7 @@ Blocks count towards `aistudio_policy_blocks_total` like any filter block. These
 | `aistudio_guardrail_errors_total` | `provider`, `fail_mode` (`open`, `closed`, or `unscanned` when the failed call's segments were flagged instead) | Provider failures and how they were handled |
 | `aistudio_guardrail_segments_total` | `provider`, `segment_kind`, `result` (`scanned`, `cached`, `unscanned`) | Request segments screened |
 | `aistudio_guardrail_cache_total` | `provider`, `outcome` (`hit`, `miss`) | Verdict cache lookups |
+| `aistudio_guardrail_shadow_dropped_total` | `provider`, `reason` (`queue_full`, `tenant_share`, `shutdown`) | Shadow evaluations dropped instead of queued; see [Shadow](#shadow-dont-wait) |
 | `aistudio_guardrail_calls_abandoned_total` | `provider` | Provider calls given up on because they did not return after their timeout; their work continues in the background, so a steady rate means a provider that ignores its timeout |
 
 ### Seeded defaults

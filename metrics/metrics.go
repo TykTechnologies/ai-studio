@@ -34,6 +34,7 @@ var (
 	guardrailSegmentsTotal otelmetric.Int64Counter
 	guardrailCacheTotal    otelmetric.Int64Counter
 	guardrailAbandonedTotal otelmetric.Int64Counter
+	guardrailShadowDropped  otelmetric.Int64Counter
 	goroutinePanicsTotal  otelmetric.Int64Counter
 	decisionQuestionsTotal otelmetric.Int64Counter
 
@@ -170,6 +171,13 @@ func registerInstruments(meter otelmetric.Meter) {
 	)
 	if err != nil {
 		panic("failed to create guardrailAbandonedTotal counter: " + err.Error())
+	}
+
+	guardrailShadowDropped, err = meter.Int64Counter("aistudio_guardrail_shadow_dropped_total",
+		otelmetric.WithDescription("Shadow guardrail evaluations dropped instead of queued, by provider and reason (queue_full, tenant_share, shutdown)"),
+	)
+	if err != nil {
+		panic("failed to create guardrailShadowDropped counter: " + err.Error())
 	}
 
 	goroutinePanicsTotal, err = meter.Int64Counter("aistudio_goroutine_panics_total",
@@ -421,6 +429,17 @@ func RecordGuardrailAbandoned(ctx context.Context, provider string) {
 	}
 	guardrailAbandonedTotal.Add(ctx, 1,
 		otelmetric.WithAttributes(attribute.String("provider", provider)),
+	)
+}
+
+// RecordGuardrailShadowDropped counts a shadow guardrail evaluation that was
+// dropped rather than queued (the request was never waited on).
+func RecordGuardrailShadowDropped(ctx context.Context, provider, reason string) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailShadowDropped.Add(ctx, 1,
+		otelmetric.WithAttributes(attribute.String("provider", provider), attribute.String("reason", reason)),
 	)
 }
 

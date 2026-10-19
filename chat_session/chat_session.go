@@ -833,6 +833,8 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					},
 					IsChat: true,
 					Ctx:    cs.ctx,
+					RecordEvents: scripting.EventRecorder("file_reference", 0, cs.userID, cs.chatRef.LLM.ID,
+						string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName),
 				}
 
 				output, err := sr.RunScript(scriptInput, cs.service)

@@ -286,13 +286,30 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		if p == nil {
 			return nil, err
 		}
-		return g.failed(input, p.cfg, err), nil
+		failed := g.failed(input, p.cfg, err)
+		if p.cfg.Shadow && input.RecordEvents != nil {
+			// A shadow filter never changes traffic, even when it cannot
+			// run: the failure is recorded and the traffic goes on.
+			input.RecordEvents(input.Ctx, g.filter.Name, &ScriptOutput{ComplianceEvents: failed.ComplianceEvents})
+			return passThrough(input), nil
+		}
+		return failed, nil
 	}
-	cfg, provider, caps := p.cfg, p.provider, p.caps
 
-	if input.IsChunk && !shouldEvaluateChunk(input, cfg.EvaluateEvery(caps)) {
+	if input.IsChunk && !shouldEvaluateChunk(input, p.cfg.EvaluateEvery(p.caps)) {
 		return passThrough(input), nil
 	}
+	if p.cfg.Shadow && input.RecordEvents != nil {
+		return g.shadow(input, p), nil
+	}
+	return g.evaluate(input, p)
+}
+
+// evaluate classifies input with the prepared guardrail and maps the verdict
+// onto the output: the work of a run once the filter is prepared, inline or
+// (for a shadow filter) on the shadow pool.
+func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*ScriptOutput, error) {
+	cfg, provider, caps := p.cfg, p.provider, p.caps
 
 	sel := buildSegments(input, cfg)
 	if sel.refuse != nil {

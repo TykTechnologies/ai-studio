@@ -146,6 +146,7 @@ const FilterDetails = () => {
                     config.tool_results?.on_detect ? "" : " (default)"
                   }`
                 )}
+              {config.shadow && row("Shadow", "Runs in the background; traffic never waits for it")}
               {row("Tool calls", scansToolCalls(config) ? "Scanned" : "Not scanned")}
               {scansToolCalls(config) &&
                 row(

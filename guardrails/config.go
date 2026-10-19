@@ -212,6 +212,14 @@ type Config struct {
 	Stream       Stream      `json:"stream,omitempty"`
 	BlockMessage string      `json:"block_message,omitempty"`
 	Budget       Budget      `json:"budget,omitzero"`
+	// Shadow runs the filter without waiting for it: the request or
+	// response goes on at once, unchanged, and the classification runs in a
+	// bounded background pool that records compliance events when it
+	// finishes. Valid only when every action the filter can take is log, so
+	// a shadow filter never changes traffic; a full pool drops the
+	// evaluation (counted, and recorded as guardrail.unscanned) rather than
+	// delay anything. For a log-only rollout of a slow provider.
+	Shadow bool `json:"shadow,omitempty"`
 	// Cache, when false, keeps the filter's verdicts out of the verdict
 	// cache: for a provider whose verdict depends on more than the text (an
 	// HTTP classifier that reads the request metadata). Nil means true.
@@ -378,6 +386,12 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		return cfg, fmt.Errorf("%w: tool_calls.on_detect %q is not one of block, log (a tool call cannot be redacted or quarantined)", ErrInvalidConfig, cfg.ToolCalls.OnDetect)
 	}
 
+	if cfg.Shadow {
+		if err := cfg.shadowAllowed(); err != nil {
+			return cfg, err
+		}
+	}
+
 	if p := cfg.Quarantine.Placeholder; p == nil {
 		def := DefaultQuarantinePlaceholder
 		cfg.Quarantine.Placeholder = &def
@@ -438,6 +452,22 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// shadowAllowed reports why the filter cannot run in shadow: some action it
+// can take is not log.
+func (c Config) shadowAllowed() error {
+	actions := map[string]string{
+		"on_detect":              c.OnDetect,
+		"tool_results.on_detect": c.ActionFor(KindToolResult),
+		"tool_calls.on_detect":   c.ActionFor(KindToolCall),
+	}
+	for _, field := range []string{"on_detect", "tool_results.on_detect", "tool_calls.on_detect"} {
+		if a := actions[field]; a != ActionLog {
+			return fmt.Errorf("%w: shadow requires every action to be log, and %s is %s", ErrInvalidConfig, field, a)
+		}
+	}
+	return nil
 }
 
 // normalize validates the budget and fills its defaults; timeoutMs is the

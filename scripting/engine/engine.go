@@ -60,6 +60,14 @@ type ScriptInput struct {
 	ResponseFormat string `json:"-"`
 	RequestBody    string `json:"-"`
 
+	// RecordEvents, when set, records a filter's compliance events with the
+	// call site's attribution (app, user, LLM, vendor, model, scope), as the
+	// call site does with the output it is handed. A guardrail in shadow
+	// mode returns at once and records its events through it when its
+	// background evaluation finishes; with none set (the filter Test panel)
+	// a shadow guardrail runs inline. Not script-visible.
+	RecordEvents func(ctx context.Context, filterName string, out *ScriptOutput) `json:"-"`
+
 	// Ctx, when set, bounds the execution: the script is aborted when the
 	// context is cancelled, in addition to the FILTER_SCRIPT_TIMEOUT limit.
 	// Call sites pass the request or session context so a caller that has

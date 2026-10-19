@@ -177,6 +177,7 @@ func runResponseFilters(
 		CurrentBuffer: currentBuffer,
 		StatusCode:    statusCode,
 		Ctx:           r.Context(),
+		RecordEvents:  scripting.EventRecorder("proxy_response", uint(appID), 0, llm.ID, string(llm.Vendor), modelName),
 	}
 	if buffered != nil {
 		scriptInput.ResponseBody = string(buffered.Body)

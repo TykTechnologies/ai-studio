@@ -66,6 +66,8 @@ func (cs *ChatSession) runRequestFilters(ctx context.Context, text string, pass 
 			IsChat: true,
 			Format: pass.format,
 			Ctx:    ctx,
+			RecordEvents: scripting.EventRecorder("chat_request", 0, cs.userID, cs.chatRef.LLM.ID,
+				string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName),
 		}
 		for k, v := range pass.extra {
 			input.Context[k] = v

@@ -361,6 +361,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// The reconciler records usage the same way; stop it before waiting.
 	s.stopNativeWorkers()
 
+	// Shadow guardrail evaluations still queued record compliance events.
+	proxy.DrainShadowGuardrails(ctx)
+
 	// A response is analysed after it is written; wait for that too, so its
 	// records reach the data collection plugins before they stop.
 	if w, ok := s.gateway.(interface{ WaitForAnalytics(context.Context) error }); ok {
