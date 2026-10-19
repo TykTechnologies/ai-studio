@@ -52,8 +52,10 @@ func UnixSocketPath(endpoint string) (path string, ok bool, err error) {
 	return filepath.Clean(u.Path), true, nil
 }
 
-// unixSocketAllowlist is the operator's allowlist, entries cleaned and their
-// symlinks resolved where they exist; a directory entry keeps its trailing
+// unixSocketAllowlist is the operator's allowlist, each entry cleaned, both
+// as written and with its symlinks resolved where it exists (so an endpoint
+// written the way the entry was, /tmp/... where /tmp is a symlink, matches
+// as written and once resolved); a directory entry keeps its trailing
 // slash.
 func unixSocketAllowlist() []string {
 	var out []string
@@ -63,14 +65,16 @@ func unixSocketAllowlist() []string {
 			continue
 		}
 		dir := strings.HasSuffix(e, "/")
-		p := filepath.Clean(e)
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			p = r
+		forms := []string{filepath.Clean(e)}
+		if r, err := filepath.EvalSymlinks(forms[0]); err == nil && r != forms[0] {
+			forms = append(forms, r)
 		}
-		if dir {
-			p = strings.TrimSuffix(p, "/") + "/"
+		for _, p := range forms {
+			if dir {
+				p = strings.TrimSuffix(p, "/") + "/"
+			}
+			out = append(out, p)
 		}
-		out = append(out, p)
 	}
 	return out
 }

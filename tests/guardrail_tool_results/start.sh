@@ -26,11 +26,13 @@ for p in "${E2E_STUDIO_PORT:-18080}" "${E2E_PROXY_PORT:-19090}" "${E2E_GRPC_PORT
   lsof -ti :"$p" -sTCP:LISTEN | xargs kill 2>/dev/null  # listeners only, never clients
 done
 sleep 1
-mkdir -p "$E"
+mkdir -p "$E" "$E/sock"
 rm -f "$E"/studio.db* "$E"/edge.db* "$E"/requests.jsonl "$E"/*.log
 python3 "$HERE/make_env.py" || exit 1
 
-python3 "$HERE/mockupstream.py" "$MOCK_PORT" "$E/requests.jsonl" > "$E/mock.log" 2>&1 &
+# The mock also serves the HTTP classifier on a Unix socket, which both nodes
+# allow (GUARDRAIL_UNIX_SOCKET_ALLOWLIST=$E/sock/).
+python3 "$HERE/mockupstream.py" "$MOCK_PORT" "$E/requests.jsonl" "$E/sock/classifier.sock" > "$E/mock.log" 2>&1 &
 
 # Studio must run from the repo root (templates/).
 cd "$ROOT"

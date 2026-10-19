@@ -200,7 +200,7 @@ func runToolFilter(
 				Parts: []llms.ContentPart{llms.TextPart(raw)},
 			},
 		},
-		Context:    id.scriptContext(),
+		Context:      id.scriptContext(),
 		IsChat:       id.IsChat,
 		IsResponse:   isResponse,
 		Ctx:          ctx,

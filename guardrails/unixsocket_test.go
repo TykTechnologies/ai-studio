@@ -40,12 +40,12 @@ func TestUnixSocketPath(t *testing.T) {
 		path    string
 		ok, bad bool
 	}{
-		"unix:///run/guard/guard.sock":       {path: "/run/guard/guard.sock", ok: true},
+		"unix:///run/guard/guard.sock":        {path: "/run/guard/guard.sock", ok: true},
 		"UNIX:///run/guard/./x/../guard.sock": {path: "/run/guard/guard.sock", ok: true},
-		"https://classifier/v1":              {},
-		"unix://host/run/guard.sock":         {ok: true, bad: true},
-		"unix:relative.sock":                 {ok: true, bad: true},
-		"unix:///run/guard.sock?x=1":         {ok: true, bad: true},
+		"https://classifier/v1":               {},
+		"unix://host/run/guard.sock":          {ok: true, bad: true},
+		"unix:relative.sock":                  {ok: true, bad: true},
+		"unix:///run/guard.sock?x=1":          {ok: true, bad: true},
 	}
 	for in, want := range cases {
 		path, ok, err := UnixSocketPath(in)
@@ -120,10 +120,19 @@ func TestCheckUnixSocket(t *testing.T) {
 	}
 	// The allowlist is resolved too: /tmp/... on a host where /tmp is a
 	// symlink still covers the socket.
-	t.Setenv(EnvUnixSocketAllowlist, strings.Replace(allowed, "/private/tmp/", "/tmp/", 1)+"/")
+	viaLink := strings.Replace(allowed, "/private/tmp/", "/tmp/", 1)
+	t.Setenv(EnvUnixSocketAllowlist, viaLink+"/")
 	if _, err := CheckUnixSocket(guard, true); err != nil {
 		t.Errorf("allowlist entry through a symlink: %v", err)
 	}
+	// And so does an endpoint written the way the operator wrote the entry.
+	if got, err := CheckUnixSocket(filepath.Join(viaLink, "guard.sock"), true); err != nil || got != guard {
+		t.Errorf("endpoint and entry through the same symlink: %q %v", got, err)
+	}
+	if _, err := CheckUnixSocket(filepath.Join(viaLink, "guard.sock"), false); err != nil {
+		t.Errorf("endpoint through a symlink at save: %v", err)
+	}
+	refused(filepath.Join(viaLink, "escape.sock"), true)
 }
 
 // A filter is refused when it is saved (or tested, or prepared) with a
@@ -137,7 +146,7 @@ func TestNormalizeUnixEndpoint(t *testing.T) {
 		return Config{Provider: ProviderHTTP, Detectors: []DetectorConfig{{Name: "x"}}, OnDetect: ActionLog, Connection: map[string]string{"endpoint": endpoint}}
 	}
 	t.Setenv(EnvUnixSocketAllowlist, "")
-	if err := CheckEndpoint(cfg("unix://"+sock)); !errors.Is(err, ErrInvalidConfig) || !errors.Is(err, ErrUnixSocketRefused) {
+	if err := CheckEndpoint(cfg("unix://" + sock)); !errors.Is(err, ErrInvalidConfig) || !errors.Is(err, ErrUnixSocketRefused) {
 		t.Errorf("no allowlist: err = %v", err)
 	}
 	if err := CheckEndpoint(cfg("$SECRET/GUARD_ENDPOINT")); err != nil {
@@ -147,7 +156,7 @@ func TestNormalizeUnixEndpoint(t *testing.T) {
 		t.Error("docker.sock accepted with no allowlist")
 	}
 	t.Setenv(EnvUnixSocketAllowlist, dir+"/")
-	if err := CheckEndpoint(cfg("unix://"+sock)); err != nil {
+	if err := CheckEndpoint(cfg("unix://" + sock)); err != nil {
 		t.Errorf("allowed socket: %v", err)
 	}
 	if err := CheckEndpoint(cfg("unix:///var/run/docker.sock")); !errors.Is(err, ErrUnixSocketRefused) {

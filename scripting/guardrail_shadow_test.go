@@ -140,6 +140,10 @@ func TestShadow_NoLatencyEventsArriveLater(t *testing.T) {
 					t.Errorf("response=%v: event %d %s = %v, inline %v", response, i, k, events[i].Metadata[k], want.ComplianceEvents[i].Metadata[k])
 				}
 			}
+			// Marked, so a review can tell shadow verdicts from inline ones.
+			if events[i].Metadata["shadow"] != true || want.ComplianceEvents[i].Metadata["shadow"] != nil {
+				t.Errorf("response=%v: event %d shadow marker %v, inline %v", response, i, events[i].Metadata["shadow"], want.ComplianceEvents[i].Metadata["shadow"])
+			}
 		}
 		if sink.names[0] != f.Name {
 			t.Errorf("recorded under %q", sink.names[0])

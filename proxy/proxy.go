@@ -1910,6 +1910,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	for k, v := range resp.Header {
 		w.Header()[k] = v
 	}
+	hasResponseFilters := p.hasResponseFilters(llm)
+	if hasResponseFilters {
+		// A block holds or ends the stream early and adds an error event,
+		// so the upstream's length is not the client's.
+		w.Header().Del("Content-Length")
+	}
 	respStatus = resp.StatusCode
 	w.WriteHeader(resp.StatusCode)
 	if f, ok := w.(http.Flusher); ok {
@@ -1929,7 +1935,6 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// routinely fails after a complete response.
 	clientGone := false
 	chunkIndex := 0
-	hasResponseFilters := p.hasResponseFilters(llm)
 	framer := newEventFramer(resp.Header.Get("Content-Type"))
 	dialect := streamDialect(requestFilterFormatFor(r, llm))
 	// Streamed tool calls are held until classified only when a response

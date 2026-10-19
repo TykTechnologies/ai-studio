@@ -17,7 +17,9 @@ import (
 
 type mcpPoison struct{}
 
-func (mcpPoison) Capabilities() guardrails.Capabilities { return guardrails.Capabilities{ToolSegments: true} }
+func (mcpPoison) Capabilities() guardrails.Capabilities {
+	return guardrails.Capabilities{ToolSegments: true}
+}
 
 func (mcpPoison) Classify(_ context.Context, in guardrails.Input) (guardrails.Verdict, error) {
 	v := guardrails.Verdict{}

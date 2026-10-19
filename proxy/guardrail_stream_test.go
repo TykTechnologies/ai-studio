@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -105,6 +106,31 @@ func TestStreamingGuardrail_BlocksEveryFormat(t *testing.T) {
 				assert.Contains(t, got, "safe ", route)
 				assert.Contains(t, got, tc.errMarker, "%s: %s", route, got)
 			}
+		})
+	}
+}
+
+// An upstream may send a stream with a Content-Length (a Gemini JSON array
+// through some proxies). A block changes the body's length, so the client
+// must not get the upstream's length: it would read a truncated body (or
+// lose the error event) instead of the block.
+func TestStreamingGuardrail_UpstreamContentLength(t *testing.T) {
+	for _, tc := range streamCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			sized := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", tc.contentType)
+				w.Header().Set("Content-Length", strconv.Itoa(len(tc.body)))
+				_, _ = w.Write([]byte(tc.body))
+			}
+			h := newFailoverHarness(t, sized, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+				primary.Vendor = tc.vendor
+				primary.Failover = models.LLMFailover{}
+				primary.Filters = []*models.Filter{forbiddenResponseGuardrail()}
+			})
+			resp, body := h.post("/llm/stream/primary"+tc.path, tc.reqBody)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			assert.NotContains(t, string(body), "FORBIDDEN")
+			assert.Contains(t, string(body), tc.errMarker, string(body))
 		})
 	}
 }

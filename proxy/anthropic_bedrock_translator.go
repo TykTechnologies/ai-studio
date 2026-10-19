@@ -526,9 +526,9 @@ type anthropicStreamState struct {
 	cacheReadTokens  int32
 	textBuffer       string
 
-	proxy      *Proxy
-	conf       *models.LLM
-	request    *http.Request
+	proxy   *Proxy
+	conf    *models.LLM
+	request *http.Request
 }
 
 func (s *anthropicStreamState) ensureMessageStart() {

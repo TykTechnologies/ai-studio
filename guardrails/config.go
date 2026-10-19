@@ -239,20 +239,20 @@ type Config struct {
 	Detectors  []DetectorConfig  `json:"detectors"`
 	// Exclude names detectors to leave out when a category is enabled, e.g.
 	// "pii.ipv4" while "pii" is on. Built-in provider only.
-	Exclude      []string    `json:"exclude,omitempty"`
-	Scope        string      `json:"scope,omitempty"`
-	OnDetect     string      `json:"on_detect"`
-	Redaction    Redaction   `json:"redaction,omitempty"`
-	Quarantine   Quarantine  `json:"quarantine,omitempty"`
-	ToolResults  ToolResults `json:"tool_results,omitempty"`
-	ToolCalls    ToolCalls   `json:"tool_calls,omitzero"`
+	Exclude     []string    `json:"exclude,omitempty"`
+	Scope       string      `json:"scope,omitempty"`
+	OnDetect    string      `json:"on_detect"`
+	Redaction   Redaction   `json:"redaction,omitempty"`
+	Quarantine  Quarantine  `json:"quarantine,omitempty"`
+	ToolResults ToolResults `json:"tool_results,omitempty"`
+	ToolCalls   ToolCalls   `json:"tool_calls,omitzero"`
 	// ToolDefinitions: see ToolDefinitions. Requests only.
 	ToolDefinitions ToolDefinitions `json:"tool_definitions,omitzero"`
-	FailMode     string      `json:"fail_mode,omitempty"`
-	TimeoutMs    int         `json:"timeout_ms,omitempty"`
-	Stream       Stream      `json:"stream,omitempty"`
-	BlockMessage string      `json:"block_message,omitempty"`
-	Budget       Budget      `json:"budget,omitzero"`
+	FailMode        string          `json:"fail_mode,omitempty"`
+	TimeoutMs       int             `json:"timeout_ms,omitempty"`
+	Stream          Stream          `json:"stream,omitempty"`
+	BlockMessage    string          `json:"block_message,omitempty"`
+	Budget          Budget          `json:"budget,omitzero"`
 	// Shadow runs the filter without waiting for it: the request or
 	// response goes on at once, unchanged, and the classification runs in a
 	// bounded background pool that records compliance events when it

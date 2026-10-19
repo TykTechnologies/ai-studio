@@ -89,7 +89,7 @@ type seg struct {
 	// call marks a tool call's arguments (with a goal context).
 	call bool
 	// def marks a tool definition.
-	def bool
+	def  bool
 	text string
 	// flagged marks a segment holding the probe.
 	flagged bool

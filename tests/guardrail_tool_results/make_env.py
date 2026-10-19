@@ -44,7 +44,8 @@ jwt = rnd.token_hex(32)
 
 # Optional extra settings for both nodes, e.g. a small native API guardrail
 # call budget for the batch-over-budget scenario.
-extra = ""
+# Both nodes may reach the mock's classifier socket (Unix socket transport).
+extra = f"GUARDRAIL_UNIX_SOCKET_ALLOWLIST={E}/sock/\n"
 if os.environ.get("E2E_NATIVE_MAX_GUARDRAIL_CALLS"):
     extra += "NATIVE_API_MAX_GUARDRAIL_CALLS=" + os.environ["E2E_NATIVE_MAX_GUARDRAIL_CALLS"] + "\n"
 

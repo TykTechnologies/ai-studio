@@ -215,6 +215,12 @@ func (g *guardrailRunner) shadow(input *ScriptInput, p *preparedGuardrail) *Scri
 			return
 		}
 		if out != nil && len(out.ComplianceEvents) > 0 {
+			for i := range out.ComplianceEvents {
+				if out.ComplianceEvents[i].Metadata == nil {
+					out.ComplianceEvents[i].Metadata = map[string]interface{}{}
+				}
+				out.ComplianceEvents[i].Metadata["shadow"] = true
+			}
 			record(ctx, g.filter.Name, out)
 		}
 	}

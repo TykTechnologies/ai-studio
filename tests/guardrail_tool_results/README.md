@@ -82,8 +82,36 @@ the Studio down along with the mock.
 | S20 | Anthropic Message Batches: only the poisoned item rewritten | |
 | S20b | OpenAI batch input file (Files API upload): only the poisoned lines rewritten, ids kept; with `E2E_NATIVE_MAX_GUARDRAIL_CALLS` set, a file needing more remote guardrail calls is refused with 400 naming the limit, nothing sent and no content echoed | |
 
+## Agent actions: `live_agent_e2e.py`
+
+`live_agent_e2e.py` checks the guardrails on agent actions (epic
+`midsommar-clean-q0z`) on the same stack, hub and edge:
+
+```bash
+E2E_DIR=<the directory start.sh printed> python3 tests/guardrail_tool_results/live_agent_e2e.py
+```
+
+Here the mock also scripts the vendor's reply (`POST /_respond` with a
+`text` or a `tool_call`, streamed in several events in every format) and
+plays an HTTP guardrail classifier (`/classify`, flagging segments that hold
+`[canary:`, with `pin`, `kinds` and `delay_ms` query options). It also serves
+everything on the Unix socket `$E2E_DIR/sock/classifier.sock`, which
+`start.sh` allowlists on both nodes (`GUARDRAIL_UNIX_SOCKET_ALLOWLIST`).
+
+| | What | Bead |
+|---|---|---|
+| A1 | A flagged tool call in a buffered response is blocked (OpenAI Chat, Responses, Anthropic, Gemini); a clean one passes; the classifier sees `kind: tool_call`, the tool name and the user's goal | q0z.13 |
+| A2 | A flagged streamed tool call never reaches the client and the stream ends with the vendor's error event (SSE, Responses events, Gemini SSE and JSON array); a clean one streams through | q0z.14 |
+| A3 | A flagged tool call in the request history: `block` refuses it with nothing sent (OpenAI, Anthropic, Gemini); `log` passes it and records a `tool_call` event | q0z.13 |
+| A4 | A poisoned tool definition is removed and the others reach the vendor (OpenAI, Responses, Anthropic, Gemini); a `tool_choice` forcing it, or removing the only one, is refused; `block` refuses; `tool_definitions` on a response filter is refused when saved | q0z.16 |
+| A5 | Shadow: a 1.5 s classifier adds no latency and its event arrives later marked `shadow`, from the hub and the edge; the same filter inline waits; a shadow filter that could block is refused | q0z.17 |
+| A6 | The classifier over the allowlisted Unix socket (through the symlinked stack directory on macOS), hub and edge; a socket outside the allowlist, or climbing out with `..`, is refused when saved | q0z.18 |
+| A7 | A flagged text stream ends with the vendor's error event and no clean finish, on `/llm/stream` and on `/llm/rest` with `stream: true`, in every streamed format; clean text streams through | q0z.20 |
+| A8 | A flagged tool call or text from an Anthropic upstream is blocked on `/ai/` and the unified `/v1`, streamed and not, hub and edge | q0z.23 |
+| A9 | Studio chat: the model's flagged tool call is not run and the turn stops; a clean one runs; a poisoned tool definition is not offered to the model | q0z.15, q0z.16 |
+
 Not covered live: real vendor accounts (the provider adapters are checked
 against fakes in `enterprise/guardrails/providers` and live with
-`make test-guardrails`), Bedrock Converse upstreams, and a v2.2.2 edge
+`make test-guardrails`), Bedrock upstreams (Converse, the native streams and the bridges are covered by the `proxy` tests against a fake runtime), and a v2.2.2 edge
 binary. Old-edge snapshots are checked in `guardrails/edge_compat_*_test.go`
 against the vendored v2.2.2 normaliser.

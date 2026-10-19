@@ -37,7 +37,7 @@ for part in "$@"; do
     ;;
   mock)
     stop "$MOCK_PORT"
-    nohup python3 "$HERE/mockupstream.py" "$MOCK_PORT" "$E/requests.jsonl" >> "$E/mock.log" 2>&1 &
+    nohup python3 "$HERE/mockupstream.py" "$MOCK_PORT" "$E/requests.jsonl" "$E/sock/classifier.sock" >> "$E/mock.log" 2>&1 &
     wait_up "http://127.0.0.1:$MOCK_PORT/health" mock
     ;;
   esac
