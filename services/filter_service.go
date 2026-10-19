@@ -47,6 +47,9 @@ func (spec FilterSpec) validate() (string, models.JSONMap, error) {
 		if err != nil {
 			return "", nil, err
 		}
+		if err := guardrails.CheckEndpoint(cfg); err != nil {
+			return "", nil, err
+		}
 		stored, err := guardrails.ForStorage(parsed, cfg).ToMap()
 		if err != nil {
 			return "", nil, err

@@ -39,7 +39,8 @@ func init() {
 		Detectors:     []DetectorSpec{},
 		OpenDetectors: true,
 		ConnectionFields: []ConnectionField{
-			{Name: "endpoint", Label: "Endpoint URL", Description: "Full URL the request is POSTed to.", Required: true, Example: "https://classifier.internal/v1/classify"},
+			{Name: "endpoint", Label: "Endpoint URL", Description: "Full URL the request is POSTed to, or unix:///path/to.sock for a classifier on the same host listening on a Unix socket (only sockets your operator lists in GUARDRAIL_UNIX_SOCKET_ALLOWLIST).", Required: true, Example: "https://classifier.internal/v1/classify"},
+			{Name: "path", Label: "Request path", Description: "For a unix:// endpoint: the HTTP path and query requested over the socket. Default /.", Example: "/v1/classify"},
 			{Name: "api_key", Label: "API key", Description: "Sent as Authorization: Bearer. Use a $SECRET/ reference.", Secret: true, Example: "$SECRET/CLASSIFIER_KEY"},
 			{Name: "auth_header", Label: "Auth header", Description: "Header name to carry the key in when it is not Authorization: Bearer.", Example: "X-API-Key"},
 		},

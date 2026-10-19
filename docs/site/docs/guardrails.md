@@ -300,6 +300,30 @@ and expects:
 }
 ```
 
+**Over a Unix socket.** A classifier on the same host as the gateway can listen on a Unix domain socket instead of a TCP port, so it needs no port and can run with no network at all. Set the endpoint to `unix:///run/guard/guard.sock` and the connection field `path` to the HTTP path (and query) to request, `/` by default; the request is the same HTTP/1.1 POST with the same JSON, auth header and response cap. Over loopback, a classify call with a short segment took about 34 µs over a socket and 42 µs over TCP (Apple M4 Max, trivial classifier), so the transport is not where the latency goes.
+
+A socket endpoint is an HTTP request to a local socket chosen by whoever can write filters, and local sockets include admin APIs such as `/var/run/docker.sock`. So sockets are refused unless the operator lists them in `GUARDRAIL_UNIX_SOCKET_ALLOWLIST`: comma-separated exact socket paths, or directories ending in `/` whose sockets are allowed. It is empty by default. The check runs when a filter is saved or tested (a socket the list does not cover is refused with HTTP 400) and again before every call on every node, with symlinks resolved: the path as written and the path it resolves to must both be listed, and it must be a socket. A socket a node does not allow, or that is missing, is a provider error there, so the fail mode and the unscanned rules apply. The endpoint reaches edges unchanged, so each edge needs the socket mounted and its own `GUARDRAIL_UNIX_SOCKET_ALLOWLIST`.
+
+```yaml
+services:
+  guard:
+    image: registry.example.com/wolf-guard@sha256:...
+    network_mode: none            # no network at all
+    volumes: [guard-sock:/run/guard]
+  midsommar:
+    environment:
+      GUARDRAIL_UNIX_SOCKET_ALLOWLIST: /run/guard/guard.sock
+    volumes: [guard-sock:/run/guard]
+  mgw:
+    environment:
+      GUARDRAIL_UNIX_SOCKET_ALLOWLIST: /run/guard/guard.sock
+    volumes: [guard-sock:/run/guard]
+volumes:
+  guard-sock: {}
+```
+
+The Studio and microgateway images run as uid 65532: the classifier must create the socket so that uid can connect (a shared group and mode `0660`, or `0666` on a volume only these containers mount).
+
 `findings[].score` is compared with the detector's threshold when one is set (default 0.5). `rewritten` is optional and only used when `redact` was true. Detector names are whatever the service defines; the form lets you type them.
 
 ### Microsoft Presidio {#presidio}
