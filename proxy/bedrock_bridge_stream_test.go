@@ -65,6 +65,39 @@ func TestBedrockBridgeStreams_Guardrails(t *testing.T) {
 	}
 }
 
+// A Converse stream that breaks (here a corrupt frame after the first text
+// event) ends the bridged stream with the vendor's error event, not a clean
+// [DONE] or message_stop that reads as a complete, empty answer.
+func TestBedrockBridgeStreams_StreamErrorReachesTheClient(t *testing.T) {
+	good := bedrockStream(t, "Sure. ", `{"to":"x"}`)
+	first := bedrockFrame(t, "messageStart", map[string]any{"role": "assistant"})
+	first = append(first, bedrockFrame(t, "contentBlockDelta", map[string]any{"contentBlockIndex": 0, "delta": map[string]any{"text": "Sure. "}})...)
+	broken := append(append([]byte{}, first...), []byte("\x00\x00\x00\x30\x00\x00\x00\x10garbage-not-a-frame-at-all-xxxxxxxxxxxxxxxxxxxx")...)
+	_ = good
+	for _, filtered := range []bool{false, true} {
+		var filters []*models.Filter
+		if filtered {
+			filters = []*models.Filter{forbiddenResponseGuardrail()}
+		}
+		rec := &bedrockRecorder{reply: broken}
+		h := bedrockHarness(t, rec, filters...)
+		resp, body := h.post("/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "Authorization", "Bearer "+h.apiKey)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		got := string(body)
+		assert.Contains(t, got, "Sure. ", "filtered=%v: %s", filtered, got)
+		assert.Contains(t, got, `"error":{`, "filtered=%v: %s", filtered, got)
+		assert.NotContains(t, got, `"finish_reason":"stop"`, got)
+
+		rec = &bedrockRecorder{reply: broken}
+		h = bedrockHarness(t, rec, filters...)
+		resp, body = h.post("/anthropic/primary/v1/messages", `{"model":"anthropic.claude-3","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`, "x-api-key", h.apiKey)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		got = string(body)
+		assert.Contains(t, got, "event: error", "filtered=%v: %s", filtered, got)
+		assert.NotContains(t, got, "event: message_stop", got)
+	}
+}
+
 // Without response filters the bridges stream as before.
 func TestBedrockBridgeStreams_NoFilters(t *testing.T) {
 	rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}

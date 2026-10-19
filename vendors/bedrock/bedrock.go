@@ -181,10 +181,23 @@ func GetModelID(llm *models.LLM, override string) string {
 type ChatMessage struct {
 	Role    string
 	Content string
+	// ToolCalls are an assistant message's tool calls.
+	ToolCalls []ChatToolCall
+	// ToolCallID is the call a "tool" message answers.
+	ToolCallID string
+}
+
+// ChatToolCall is a tool call in the history; Arguments is its JSON.
+type ChatToolCall struct {
+	ID, Name, Arguments string
 }
 
 // ConvertChatMessagesToConverse converts ChatMessage slices to Converse types.
 // System messages are extracted into a separate slice as required by the Converse API.
+// An assistant's tool calls become toolUse blocks (after its text, if any:
+// Converse refuses an empty text block), and "tool" messages toolResult
+// blocks, consecutive ones in one user turn, as Converse wants the results
+// of parallel calls together.
 func ConvertChatMessagesToConverse(messages []ChatMessage) ([]types.Message, []types.SystemContentBlock) {
 	var converseMsgs []types.Message
 	var systemBlocks []types.SystemContentBlock
@@ -197,16 +210,52 @@ func ConvertChatMessagesToConverse(messages []ChatMessage) ([]types.Message, []t
 			continue
 		}
 
+		if msg.Role == "tool" {
+			result := &types.ContentBlockMemberToolResult{Value: types.ToolResultBlock{
+				ToolUseId: aws.String(msg.ToolCallID),
+				Content:   []types.ToolResultContentBlock{&types.ToolResultContentBlockMemberText{Value: msg.Content}},
+			}}
+			if n := len(converseMsgs); n > 0 && converseMsgs[n-1].Role == types.ConversationRoleUser && isToolResultTurn(converseMsgs[n-1]) {
+				converseMsgs[n-1].Content = append(converseMsgs[n-1].Content, result)
+				continue
+			}
+			converseMsgs = append(converseMsgs, types.Message{Role: types.ConversationRoleUser, Content: []types.ContentBlock{result}})
+			continue
+		}
+
 		role := convertToConverseRole(msg.Role)
+		var content []types.ContentBlock
+		if msg.Content != "" || len(msg.ToolCalls) == 0 {
+			content = append(content, &types.ContentBlockMemberText{Value: msg.Content})
+		}
+		for _, c := range msg.ToolCalls {
+			var input map[string]any
+			if err := json.Unmarshal([]byte(c.Arguments), &input); err != nil || input == nil {
+				input = map[string]any{}
+			}
+			content = append(content, &types.ContentBlockMemberToolUse{Value: types.ToolUseBlock{
+				ToolUseId: aws.String(c.ID),
+				Name:      aws.String(c.Name),
+				Input:     document.NewLazyDocument(input),
+			}})
+		}
 		converseMsgs = append(converseMsgs, types.Message{
-			Role: role,
-			Content: []types.ContentBlock{
-				&types.ContentBlockMemberText{Value: msg.Content},
-			},
+			Role:    role,
+			Content: content,
 		})
 	}
 
 	return converseMsgs, systemBlocks
+}
+
+// isToolResultTurn reports whether every block of m is a toolResult.
+func isToolResultTurn(m types.Message) bool {
+	for _, b := range m.Content {
+		if _, ok := b.(*types.ContentBlockMemberToolResult); !ok {
+			return false
+		}
+	}
+	return len(m.Content) > 0
 }
 
 // BuildInferenceConfig builds a Converse InferenceConfiguration from OpenAI parameters.

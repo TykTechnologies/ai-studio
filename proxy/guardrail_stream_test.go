@@ -110,6 +110,30 @@ func TestStreamingGuardrail_BlocksEveryFormat(t *testing.T) {
 	}
 }
 
+// A buffered Responses API answer's text reaches response guardrails (it has
+// output items, not choices, and was let through unread).
+func TestResponseGuardrail_BufferedResponsesText(t *testing.T) {
+	for _, text := range []string{"safe text", "FORBIDDEN text"} {
+		body := `{"id":"resp_1","object":"response","status":"completed","model":"gpt-4o","output":[{"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"` + text + `","annotations":[]}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`
+		serve := func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
+		}
+		h := newFailoverHarness(t, serve, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+			primary.Failover = models.LLMFailover{}
+			primary.Filters = []*models.Filter{forbiddenResponseGuardrail()}
+		})
+		resp, got := h.post("/llm/rest/primary/v1/responses", `{"model":"gpt-4o","input":"hi"}`)
+		if strings.Contains(text, "FORBIDDEN") {
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, string(got))
+			assert.NotContains(t, string(got), "FORBIDDEN")
+		} else {
+			assert.Equal(t, http.StatusOK, resp.StatusCode, string(got))
+			assert.Contains(t, string(got), text)
+		}
+	}
+}
+
 // An upstream may send a stream with a Content-Length (a Gemini JSON array
 // through some proxies). A block changes the body's length, so the client
 // must not get the upstream's length: it would read a truncated body (or

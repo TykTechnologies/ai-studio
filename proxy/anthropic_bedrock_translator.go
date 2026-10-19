@@ -312,6 +312,14 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 			return // the screen ended the stream with an error event
 		}
 	}
+	if err := stream.Err(); err != nil {
+		// The stream broke: end it with an error event, never with the
+		// message_stop that would read as a complete answer. Held tool
+		// calls are dropped with it.
+		log.Error().Err(err).Msg("Bedrock Anthropic stream error")
+		writeAnthropicSSEError(w, flusher, "api_error", "the Bedrock stream failed before it completed")
+		return
+	}
 
 	st.finish()
 	if screen != nil && screen.Finish() {

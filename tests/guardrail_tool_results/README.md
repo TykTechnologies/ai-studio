@@ -109,6 +109,8 @@ everything on the Unix socket `$E2E_DIR/sock/classifier.sock`, which
 | A7 | A flagged text stream ends with the vendor's error event and no clean finish, on `/llm/stream` and on `/llm/rest` with `stream: true`, in every streamed format; clean text streams through | q0z.20 |
 | A8 | A flagged tool call or text from an Anthropic upstream is blocked on `/ai/` and the unified `/v1`, streamed and not, hub and edge | q0z.23 |
 | A9 | Studio chat: the model's flagged tool call is not run and the turn stops; a clean one runs; a poisoned tool definition is not offered to the model | q0z.15, q0z.16 |
+| A10 | An OpenAI-shaped agent loop (parallel tool calls and results) over `/ai/` and `/v1` reaches OpenAI, Anthropic and Gemini upstreams in their own shape, and its poisoned tool result is quarantined on the inner hop (the mock refuses empty turns and broken pairing, as the vendors do) | q0z.24 |
+| A11 | Buffered Responses API text reaches response guardrails: flagged text is blocked, clean text passes | q0z.25 |
 
 Not covered live: real vendor accounts (the provider adapters are checked
 against fakes in `enterprise/guardrails/providers` and live with

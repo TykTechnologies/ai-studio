@@ -123,7 +123,7 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	if streamingFunc != nil {
 		opts = append(opts, llms.WithStreamingFunc(streamingFunc))
 	}
-	messages := attemptReq.GetMessages()
+	messages := attemptReq.DriverMessages(internalConf.Vendor)
 
 	// The attempt context is detached from the request's, so carry the
 	// Server-Timing recorder (if any) across for the loopback transport.

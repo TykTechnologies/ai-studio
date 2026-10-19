@@ -91,7 +91,10 @@ def openai_pairing(msgs):
 
 def anthropic_pairing(msgs):
     pending = set()
-    for m in msgs:
+    for i, m in enumerate(msgs):
+        # Anthropic: every message but a final assistant one needs content.
+        if m.get("content") in ([], "", None) and not (i == len(msgs) - 1 and m.get("role") == "assistant"):
+            return f"messages.{i}: all messages must have non-empty content except for the optional final assistant message"
         content = m.get("content")
         blocks = content if isinstance(content, list) else []
         if m.get("role") == "assistant":
@@ -113,8 +116,10 @@ def anthropic_pairing(msgs):
 
 def gemini_pairing(contents):
     calls = []
-    for c in contents:
+    for i, c in enumerate(contents):
         parts = c.get("parts") or []
+        if not parts:
+            return f"contents[{i}].parts must not be empty"
         if c.get("role") == "model":
             calls = [p["functionCall"].get("name") for p in parts if isinstance(p, dict) and "functionCall" in p]
             continue

@@ -45,6 +45,22 @@ type ChatCompletionRequest struct {
 type Message struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
+	// Name is a legacy function message's function name.
+	Name string `json:"name,omitempty"`
+	// ToolCalls are an assistant message's tool calls.
+	ToolCalls []MessageToolCall `json:"tool_calls,omitempty"`
+	// ToolCallID is the call a tool message answers.
+	ToolCallID string `json:"tool_call_id,omitempty"`
+}
+
+// MessageToolCall is a tool call in an assistant message of the history.
+type MessageToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type,omitempty"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
 }
 
 type AudioConfig struct {
@@ -221,6 +237,15 @@ func (r *ChatCompletionRequest) GetMessageContent(msg Message) (string, []map[st
 		return v, nil, true
 	case []map[string]any:
 		return "", v, true
+	case []any:
+		// What encoding/json decodes an array of parts into.
+		parts := make([]map[string]any, 0, len(v))
+		for _, p := range v {
+			if m, ok := p.(map[string]any); ok {
+				parts = append(parts, m)
+			}
+		}
+		return "", parts, true
 	default:
 		return "", nil, false
 	}
@@ -395,6 +420,60 @@ func (r *ChatCompletionRequest) GetMessages() []llms.MessageContent {
 	}
 
 	return messages
+}
+
+// DriverMessages is GetMessages for the /ai/ bridge's driver call: on top of
+// the text, it carries the history's tool calls (as llms.ToolCall parts of
+// the assistant message) and tool results (as llms.ToolCallResponse parts
+// with the call's id and tool name), so the vendor gets the conversation the
+// client sent, and the inner hop's guardrails read tool results as tool
+// results. Consecutive tool messages become one message, as Anthropic and
+// Gemini want the results of parallel calls in one turn. Drivers without
+// tool parts (Ollama) get GetMessages, as before.
+//
+// GetMessages itself is unchanged: script filters read its text parts.
+func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.MessageContent {
+	plain := r.GetMessages()
+	switch vendor {
+	case models.OPENAI, models.ANTHROPIC, models.GOOGLEAI, models.VERTEX:
+	default:
+		return plain
+	}
+	names := map[string]string{}
+	out := make([]llms.MessageContent, 0, len(plain))
+	for i, msg := range r.Messages {
+		mc := plain[i]
+		switch {
+		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
+			for _, c := range msg.ToolCalls {
+				names[c.ID] = c.Function.Name
+				args := c.Function.Arguments
+				if strings.TrimSpace(args) == "" {
+					args = "{}"
+				}
+				typ := c.Type
+				if typ == "" {
+					typ = "function"
+				}
+				mc.Parts = append(mc.Parts, llms.ToolCall{ID: c.ID, Type: typ, FunctionCall: &llms.FunctionCall{Name: c.Function.Name, Arguments: args}})
+			}
+		case msg.Role == "tool":
+			var text strings.Builder
+			for _, p := range mc.Parts {
+				if t, ok := p.(llms.TextContent); ok {
+					text.WriteString(t.Text)
+				}
+			}
+			part := llms.ToolCallResponse{ToolCallID: msg.ToolCallID, Name: names[msg.ToolCallID], Content: text.String()}
+			if n := len(out); n > 0 && out[n-1].Role == llms.ChatMessageTypeTool {
+				out[n-1].Parts = append(out[n-1].Parts, part)
+				continue
+			}
+			mc = llms.MessageContent{Role: llms.ChatMessageTypeTool, Parts: []llms.ContentPart{part}}
+		}
+		out = append(out, mc)
+	}
+	return out
 }
 
 // convertRole converts OpenAI role strings to langchaingo ChatMessageType

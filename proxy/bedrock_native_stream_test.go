@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 )
 
 // bedrockFrame encodes one Converse stream event as AWS sends it.
@@ -82,13 +83,19 @@ func (b *bedrockRecorder) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func bedrockHarness(t *testing.T, rec *bedrockRecorder, filters ...*models.Filter) *failoverHarness {
-	return newFailoverHarness(t, rec.serve, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+	h := newFailoverHarness(t, rec.serve, serveOpenAIText("never"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.BEDROCK
 		primary.Failover = models.LLMFailover{}
 		primary.DefaultModel = "anthropic.claude-3"
 		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
 		primary.Filters = filters
 	})
+	// The SDK client cache is process-wide and keyed by LLM ID, which every
+	// test database starts again from 1: never hand this test a client (and
+	// its pooled connections) built for an earlier test's fake Bedrock.
+	bedrockVendor.InvalidateClientCache(h.primary.ID)
+	t.Cleanup(func() { bedrockVendor.InvalidateClientCache(h.primary.ID) })
+	return h
 }
 
 func (h *failoverHarness) postBedrock(path, body string) (*http.Response, []byte) {

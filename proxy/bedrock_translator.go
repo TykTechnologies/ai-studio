@@ -435,6 +435,17 @@ func (p *Proxy) bedrockPumpStream(
 			return
 		}
 	}
+	if err := stream.Err(); err != nil {
+		// The stream broke: end it with an OpenAI error object and [DONE],
+		// which SDKs raise, rather than a bare [DONE] that reads as a
+		// complete answer. Held tool calls are dropped with it.
+		log.Error().Err(err).Msg("Bedrock ConverseStream error")
+		b, _ := json.Marshal(ChatCompletionStreamError{Error: ChatCompletionErrorDetail{
+			Message: "the Bedrock stream failed before it completed", Type: "upstream_error"}})
+		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", b)
+		flusher.Flush()
+		return
+	}
 
 	// Send [DONE] marker
 	fmt.Fprintf(w, "data: [DONE]\n\n")
@@ -472,10 +483,15 @@ func openAIMessagesToChatMessages(messages []Message) []bedrockVendor.ChatMessag
 				}
 			}
 		}
-		result = append(result, bedrockVendor.ChatMessage{
-			Role:    msg.Role,
-			Content: content,
-		})
+		cm := bedrockVendor.ChatMessage{
+			Role:       msg.Role,
+			Content:    content,
+			ToolCallID: msg.ToolCallID,
+		}
+		for _, c := range msg.ToolCalls {
+			cm.ToolCalls = append(cm.ToolCalls, bedrockVendor.ChatToolCall{ID: c.ID, Name: c.Function.Name, Arguments: c.Function.Arguments})
+		}
+		result = append(result, cm)
 	}
 	return result
 }
