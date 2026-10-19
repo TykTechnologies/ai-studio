@@ -61,7 +61,11 @@ func credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region st
 func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse region from endpoint: %w", err)
+		// An endpoint that names no region takes it from metadata.aws_region,
+		// as signed native requests do.
+		if region = metadataString(llm.Metadata, "aws_region"); region == "" {
+			return nil, fmt.Errorf("failed to parse region from endpoint: %w", err)
+		}
 	}
 
 	accessKeyID, secretAccessKey, sessionToken, err := extractAWSCredentials(llm)
@@ -69,7 +73,9 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 		return nil, err
 	}
 
-	fp := credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region)
+	// The endpoint is part of the key: the client has it baked in, so an LLM
+	// moved to another endpoint must get a new one.
+	fp := credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region+"|"+llm.APIEndpoint)
 
 	// Check cache
 	if cached, ok := clientCache.Load(llm.ID); ok {

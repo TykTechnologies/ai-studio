@@ -1,0 +1,79 @@
+package proxy
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+)
+
+// The /ai/ and /anthropic/ bridges to Bedrock re-encode the Converse stream
+// as OpenAI or Anthropic SSE. Response guardrails see its text per event and
+// in a final pass, and hold its tool calls; they never ran there before.
+func TestBedrockBridgeStreams_Guardrails(t *testing.T) {
+	type bridge struct {
+		name, path, body, auth, errMarker string
+	}
+	bridges := []bridge{
+		{"ai", "/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"tidy my inbox"}]}`, "Authorization", `"message":"Response blocked by filter`},
+		{"anthropic", "/anthropic/primary/v1/messages", `{"model":"anthropic.claude-3","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"tidy my inbox"}]}`, "x-api-key", "event: error"},
+	}
+	post := func(h *failoverHarness, b bridge) string {
+		value := h.apiKey
+		if b.auth == "Authorization" {
+			value = "Bearer " + h.apiKey
+		}
+		resp, body := h.post(b.path, b.body, b.auth, value)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+		return string(body)
+	}
+	for _, b := range bridges {
+		t.Run(b.name+" text block", func(t *testing.T) {
+			rec := &bedrockRecorder{reply: bedrockStream(t, "FORBIDDEN text", `{"to":"x"}`)}
+			got := post(bedrockHarness(t, rec, forbiddenResponseGuardrail()), b)
+			assert.NotContains(t, got, "FORBIDDEN")
+			assert.Contains(t, got, b.errMarker, got)
+		})
+		t.Run(b.name+" tool call block", func(t *testing.T) {
+			rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"EXFIL"}`)}
+			got := post(bedrockHarness(t, rec, streamCallGuardrail(true)), b)
+			assert.Contains(t, got, "Sure. ")
+			assert.NotContains(t, got, "EXFIL")
+			assert.NotContains(t, got, `"send"`)
+			assert.Contains(t, got, b.errMarker, got)
+		})
+		t.Run(b.name+" clean call released", func(t *testing.T) {
+			rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}
+			got := post(bedrockHarness(t, rec, streamCallGuardrail(true)), b)
+			assert.Contains(t, got, `"send"`)
+			assert.Contains(t, got, `to`)
+			assert.NotContains(t, got, "blocked by filter")
+		})
+		t.Run(b.name+" final pass", func(t *testing.T) {
+			// Split across two text deltas, each innocent alone at the
+			// default cadence of a remote provider (1000 characters).
+			f := forbiddenResponseGuardrail()
+			f.Config["stream"] = map[string]any{"evaluate_every_chars": 100000}
+			rec := &bedrockRecorder{reply: bedrockStream(t, "FORBIDDEN", "{}")}
+			got := post(bedrockHarness(t, rec, f), b)
+			assert.Contains(t, got, b.errMarker, "the end-of-stream pass must block: %s", got)
+		})
+	}
+}
+
+// Without response filters the bridges stream as before.
+func TestBedrockBridgeStreams_NoFilters(t *testing.T) {
+	rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}
+	h := bedrockHarness(t, rec)
+	resp, body := h.post("/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "Authorization", "Bearer "+h.apiKey)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	got := string(body)
+	assert.Contains(t, got, "Sure. ")
+	assert.Contains(t, got, `"send"`)
+	assert.True(t, strings.HasSuffix(got, "data: [DONE]\n\n"))
+	_ = models.BEDROCK
+}

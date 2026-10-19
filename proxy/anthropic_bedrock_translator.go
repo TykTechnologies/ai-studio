@@ -281,17 +281,25 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	}
 	defer stream.Close()
 
+	// With response filters, the Anthropic SSE this bridge writes is
+	// screened as the native streams are (stream_screen.go).
+	var out http.ResponseWriter = w
+	var outFlusher http.Flusher = flusher
+	var screen *streamScreen
+	if p.hasResponseFilters(conf) {
+		screen = p.newStreamScreen(w, flusher, r, conf, "anthropic", "text/event-stream", reqBody, requestFilterFormatAnthropic)
+		out, outFlusher = screen, screen
+	}
 	st := &anthropicStreamState{
-		w:          w,
-		flusher:    flusher,
-		msgID:      "msg_" + uuid.New().String(),
-		echoModel:  echoModel(req.Model, modelID),
-		started:    map[int32]bool{},
-		stopped:    map[int32]bool{},
-		hasFilters: p.hasResponseFilters(conf),
-		proxy:      p,
-		conf:       conf,
-		request:    r,
+		w:         out,
+		flusher:   outFlusher,
+		msgID:     "msg_" + uuid.New().String(),
+		echoModel: echoModel(req.Model, modelID),
+		started:   map[int32]bool{},
+		stopped:   map[int32]bool{},
+		proxy:     p,
+		conf:      conf,
+		request:   r,
 	}
 
 	for event := range stream.Events() {
@@ -299,12 +307,16 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 			log.Error().Err(err).Msg("Bedrock Anthropic stream error")
 			break
 		}
-		if blocked := st.handleEvent(event); blocked {
-			return // filter blocked and already emitted an error event
+		st.handleEvent(event)
+		if screen != nil && screen.Blocked() {
+			return // the screen ended the stream with an error event
 		}
 	}
 
 	st.finish()
+	if screen != nil && screen.Finish() {
+		return
+	}
 
 	// Record analytics after the stream completes (ProxyLog first so ChatRecord can enrich it).
 	responseText := st.textBuffer
@@ -514,9 +526,6 @@ type anthropicStreamState struct {
 	cacheReadTokens  int32
 	textBuffer       string
 
-	// filters
-	hasFilters bool
-	chunkIndex int
 	proxy      *Proxy
 	conf       *models.LLM
 	request    *http.Request
@@ -561,9 +570,9 @@ func (s *anthropicStreamState) ensureBlockStart(idx int32, isTool bool, toolID, 
 	})
 }
 
-// handleEvent processes a single Converse stream event. It returns true if a response filter
-// blocked the stream (an error event was already emitted and the stream should end).
-func (s *anthropicStreamState) handleEvent(event types.ConverseStreamOutput) bool {
+// handleEvent processes a single Converse stream event. Response filters
+// screen what it writes (streamScreen) when the LLM has any.
+func (s *anthropicStreamState) handleEvent(event types.ConverseStreamOutput) {
 	switch v := event.(type) {
 	case *types.ConverseStreamOutputMemberMessageStart:
 		s.ensureMessageStart()
@@ -584,9 +593,6 @@ func (s *anthropicStreamState) handleEvent(event types.ConverseStreamOutput) boo
 		case *types.ContentBlockDeltaMemberText:
 			s.ensureBlockStart(idx, false, "", "")
 			s.textBuffer += d.Value
-			if s.hasFilters && s.runTextFilter(d.Value) {
-				return true
-			}
 			writeAnthropicSSE(s.w, s.flusher, "content_block_delta", map[string]any{
 				"type":  "content_block_delta",
 				"index": idx,
@@ -616,25 +622,6 @@ func (s *anthropicStreamState) handleEvent(event types.ConverseStreamOutput) boo
 			s.cacheReadTokens = aws.ToInt32(v.Value.Usage.CacheReadInputTokens)
 		}
 	}
-	return false
-}
-
-func (s *anthropicStreamState) runTextFilter(text string) bool {
-	chunkBytes, _ := json.Marshal(text)
-	blocked, blockMsg, filterErr := ExecuteResponseFilters(
-		s.conf, s.proxy.gatewayService, chunkBytes, http.StatusOK,
-		true, true, s.chunkIndex, s.textBuffer, s.request,
-	)
-	s.chunkIndex++
-	if filterErr != nil {
-		log.Error().Err(filterErr).Int("chunk", s.chunkIndex).Msg("Response filter error on Bedrock Anthropic stream")
-		return false
-	}
-	if blocked {
-		writeAnthropicSSEError(s.w, s.flusher, "invalid_request_error", fmt.Sprintf("Response blocked by filter: %s", blockMsg))
-		return true
-	}
-	return false
 }
 
 func (s *anthropicStreamState) emitBlockStop(idx int32) {
