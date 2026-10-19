@@ -102,6 +102,13 @@ const unscannedUndecodable = "undecodable"
 // name the call.
 const FormatToolResult = "tool_result"
 
+// FormatToolCall marks a ScriptInput whose RawInput is the arguments of a
+// tool call the model asked a Studio chat to run, screened by the chat's
+// request guardrails that scan tool calls before the call runs. Context
+// tool_name and tool_call_id name the call, user_goal and system_prompt its
+// goal. The guardrail never rewrites it: block keeps it from running.
+const FormatToolCall = "tool_call"
+
 // preparedGuardrail is a filter's config parsed, normalised and with its
 // connection references resolved, plus the provider built from it. Preparing
 // one means two JSON round trips, a catalogue check and a secret-store read
@@ -832,6 +839,9 @@ func buildSegments(input *ScriptInput, cfg guardrails.Config) selection {
 	if input.Format == FormatToolResult {
 		return toolOutputSelection(input, cfg)
 	}
+	if input.Format == FormatToolCall {
+		return toolCallSelection(input, cfg)
+	}
 
 	// Proxy requests: read the body block by block, unless the format has
 	// its own extractor that found the text (decisions, Responses,
@@ -1143,6 +1153,27 @@ func toolOutputSelection(input *ScriptInput, cfg guardrails.Config) selection {
 		sel.units = append(sel.units, u)
 		sel.addDecodedViews(meta, u)
 	}
+	return sel
+}
+
+// toolCallSelection reads a tool call the model asked a Studio chat to run
+// (FormatToolCall): one tool call segment with its goal, and the decoded
+// view of its arguments. Nothing when the filter does not scan tool calls.
+func toolCallSelection(input *ScriptInput, cfg guardrails.Config) selection {
+	if !cfg.ScansToolCalls() {
+		return selection{}
+	}
+	seg := guardrails.Segment{Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall, Text: input.RawInput}
+	seg.ToolName, _ = input.Context["tool_name"].(string)
+	seg.ToolCallID, _ = input.Context["tool_call_id"].(string)
+	goal, _ := input.Context["user_goal"].(string)
+	system, _ := input.Context["system_prompt"].(string)
+	seg.Context = goalContext(cfg, guardrails.SegmentContext{UserGoal: goal, System: system})
+	if strings.TrimSpace(seg.Text) == "" {
+		seg.Text = "{}"
+	}
+	sel := selection{segments: []guardrails.Segment{seg}, mode: modePayload}
+	sel.addView(seg, segments.Unit{Segment: seg}, decodedJSON(seg.Text))
 	return sel
 }
 

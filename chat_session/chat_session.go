@@ -76,6 +76,12 @@ type ChatSession struct {
 	// guardrail blocked a tool result: the turn stops after the results are
 	// stored (see screenToolResult).
 	toolResultBlocked bool
+	// toolCallBlocked is set when a chat guardrail kept a tool call the
+	// model asked for from running; the turn stops as for a blocked result.
+	toolCallBlocked bool
+	// lastUserText is the latest user message, as filtered: the goal tool
+	// calls are screened against.
+	lastUserText string
 
 	// Lifecycle and v2 event support (see events.go).
 	outputMode    OutputMode
@@ -490,6 +496,7 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 
 	// Update message payload with filtered content for RAG
 	msg.Payload = filteredMessage
+	cs.lastUserText = filteredMessage
 
 	// handle RAG
 	n := cs.chatRef.RagResultsPerSource
@@ -1073,6 +1080,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 
 	content := ""
 	cs.toolResultBlocked = false
+	cs.toolCallBlocked = false
 	for _, reply := range resp.Choices {
 		if reply.Content != "" {
 			content = reply.Content
@@ -1174,11 +1182,16 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 			return false, err
 		}
 
-		if cs.toolResultBlocked {
+		if cs.toolResultBlocked || cs.toolCallBlocked {
 			// The history holds a policy notice in place of the blocked
-			// result, so the conversation stays valid; the model is not
-			// called again this turn.
-			cs.sendError(errToolResultBlocked)
+			// result (or of the result of a call that was never run), so
+			// the conversation stays valid; the model is not called again
+			// this turn.
+			if cs.toolCallBlocked {
+				cs.sendError(errToolCallBlocked)
+			} else {
+				cs.sendError(errToolResultBlocked)
+			}
 			return false, nil
 		}
 
@@ -1667,6 +1680,15 @@ func (cs *ChatSession) handleToolCalls(ctx context.Context, choice *llms.Content
 		if !ok {
 			errMsg := fmt.Sprintf("tool not found: %s", t.FunctionCall.Name)
 			cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+			continue
+		}
+
+		// The chat's guardrails that scan tool calls see the call before it
+		// runs or reaches the user: a blocked call is never executed, and a
+		// policy notice stands in for its result.
+		if cs.screenToolCall(ctx, t) {
+			cs.toolCallBlocked = true
+			cs.handleToolError(scripting.ToolBlockedMessage, t.ID, t.FunctionCall.Name, toolResult)
 			continue
 		}
 
