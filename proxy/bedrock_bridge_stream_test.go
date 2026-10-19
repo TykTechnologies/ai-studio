@@ -11,6 +11,27 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
+// postBridge posts to a Bedrock bridge, retrying (at most twice) a stream
+// that failed before its first frame. On CI runners the AWS SDK's
+// connection to the test's fake Bedrock is occasionally closed under its
+// first read ("use of closed network connection"); it has never reproduced
+// locally (midsommar-clean-q0z.26). A stream that breaks after frames, as
+// TestBedrockBridgeStreams_StreamErrorReachesTheClient plants, is never
+// retried.
+func postBridge(t *testing.T, h *failoverHarness, path, body string, headers ...string) (*http.Response, []byte) {
+	t.Helper()
+	for attempt := 0; ; attempt++ {
+		resp, got := h.post(path, body, headers...)
+		s := string(got)
+		early := strings.HasPrefix(s, `data: {"error":{"message":"the Bedrock stream failed before it completed"`) ||
+			strings.HasPrefix(s, "event: error\ndata: {\"error\":{\"message\":\"the Bedrock stream failed before it completed\"")
+		if !early || attempt == 2 {
+			return resp, got
+		}
+		t.Logf("retrying a Bedrock bridge stream that failed before its first frame (q0z.26): %s", s)
+	}
+}
+
 // The /ai/ and /anthropic/ bridges to Bedrock re-encode the Converse stream
 // as OpenAI or Anthropic SSE. Response guardrails see its text per event and
 // in a final pass, and hold its tool calls; they never ran there before.
@@ -27,7 +48,7 @@ func TestBedrockBridgeStreams_Guardrails(t *testing.T) {
 		if b.auth == "Authorization" {
 			value = "Bearer " + h.apiKey
 		}
-		resp, body := h.post(b.path, b.body, b.auth, value)
+		resp, body := postBridge(t, h, b.path, b.body, b.auth, value)
 		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 		return string(body)
 	}
@@ -81,7 +102,7 @@ func TestBedrockBridgeStreams_StreamErrorReachesTheClient(t *testing.T) {
 		}
 		rec := &bedrockRecorder{reply: broken}
 		h := bedrockHarness(t, rec, filters...)
-		resp, body := h.post("/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "Authorization", "Bearer "+h.apiKey)
+		resp, body := postBridge(t, h, "/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "Authorization", "Bearer "+h.apiKey)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		got := string(body)
 		assert.Contains(t, got, "Sure. ", "filtered=%v: %s", filtered, got)
@@ -90,7 +111,7 @@ func TestBedrockBridgeStreams_StreamErrorReachesTheClient(t *testing.T) {
 
 		rec = &bedrockRecorder{reply: broken}
 		h = bedrockHarness(t, rec, filters...)
-		resp, body = h.post("/anthropic/primary/v1/messages", `{"model":"anthropic.claude-3","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`, "x-api-key", h.apiKey)
+		resp, body = postBridge(t, h, "/anthropic/primary/v1/messages", `{"model":"anthropic.claude-3","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`, "x-api-key", h.apiKey)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		got = string(body)
 		assert.Contains(t, got, "event: error", "filtered=%v: %s", filtered, got)
@@ -102,7 +123,7 @@ func TestBedrockBridgeStreams_StreamErrorReachesTheClient(t *testing.T) {
 func TestBedrockBridgeStreams_NoFilters(t *testing.T) {
 	rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}
 	h := bedrockHarness(t, rec)
-	resp, body := h.post("/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "Authorization", "Bearer "+h.apiKey)
+	resp, body := postBridge(t, h, "/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"hi"}]}`, "Authorization", "Bearer "+h.apiKey)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	got := string(body)
 	assert.Contains(t, got, "Sure. ")

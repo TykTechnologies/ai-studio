@@ -158,7 +158,7 @@ func TestShimToolHistory_ReachesTheVendor(t *testing.T) {
 func TestShimToolHistory_Bedrock(t *testing.T) {
 	rec := &bedrockRecorder{reply: bedrockStream(t, "fine", "{}")}
 	h := bedrockHarness(t, rec)
-	resp, body := h.post("/ai/primary/v1/chat/completions", strings.Replace(agentLoop, `"stream":false`, `"stream":true`, 1), "Authorization", "Bearer "+h.apiKey)
+	resp, body := postBridge(t, h, "/ai/primary/v1/chat/completions", strings.Replace(agentLoop, `"stream":false`, `"stream":true`, 1), "Authorization", "Bearer "+h.apiKey)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
