@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -69,12 +70,27 @@ func captureStreamedResponse(r *http.Request, llm *models.LLM, contentType strin
 	return c.Finish()
 }
 
+// streamBufferBytes is AGENT_TRACING_MAX_STREAM_BUFFER_BYTES: the tool-call
+// argument bytes a streamed response's capture keeps (default 1 MiB).
+var streamBufferBytes atomic.Int64
+
+func init() { streamBufferBytes.Store(1 << 20) }
+
+// SetAgentTraceStreamBufferBytes sets the per-response argument cap of the
+// streamed capture; zero or less keeps the default.
+func SetAgentTraceStreamBufferBytes(n int) {
+	if n <= 0 {
+		n = 1 << 20
+	}
+	streamBufferBytes.Store(int64(n))
+}
+
 // newStreamCapture starts a capture of a body of contentType in dialect (a
 // request filter format: openai, openai_responses, anthropic, google_ai,
 // vertex, ollama, bedrock).
 func newStreamCapture(contentType string, d streamDialect, maxArgs int, fp agenttrace.Fingerprinter) *streamCapture {
 	if maxArgs <= 0 {
-		maxArgs = 1 << 20
+		maxArgs = int(streamBufferBytes.Load())
 	}
 	return &streamCapture{dialect: d, framer: newEventFramer(contentType), fp: fp, maxArgs: maxArgs, byKey: map[string]*streamCall{}}
 }

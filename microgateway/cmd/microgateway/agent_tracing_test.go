@@ -10,6 +10,8 @@ import (
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 )
 
 type fakeEnabler struct {
@@ -31,7 +33,7 @@ func gateConfig(enabled bool, mode string) *config.Config {
 }
 
 func TestStartAgentTracingGate(t *testing.T) {
-	t.Cleanup(func() { agenttrace.SetEnabled(false); agenttrace.SetSink(nil) })
+	t.Cleanup(func() { agenttrace.SetEnabled(false); agenttrace.SetSink(nil); resetEdgeTracingGlobals() })
 	yes := func() bool { return true }
 	no := func() bool { return false }
 
@@ -69,7 +71,7 @@ func TestStartAgentTracingGate(t *testing.T) {
 // The start gate installs the declared-context extractor from the edge's
 // configuration, whatever the gate decides (jyx.113).
 func TestStartAgentTracingInstallsDeclaredExtractor(t *testing.T) {
-	t.Cleanup(func() { declared.SetDefault(nil) })
+	t.Cleanup(resetEdgeTracingGlobals)
 	h := http.Header{"Helicone-Session-Id": {"h-1"}, "X-My-Session": {"m-1"}}
 
 	cfg := gateConfig(false, "edge")
@@ -84,5 +86,27 @@ func TestStartAgentTracingInstallsDeclaredExtractor(t *testing.T) {
 	startAgentTracing(cfg, &fakeEnabler{}, nil)
 	if d := declared.Default().Headers(h, "", nil).Declared; d.SessionID != "m-1" {
 		t.Fatalf("configured session header not read: %+v", d)
+	}
+}
+
+// resetEdgeTracingGlobals restores what startAgentTracing sets process-wide.
+func resetEdgeTracingGlobals() {
+	declared.SetDefault(nil)
+	tracing.SetOutboundPropagation(true, true, true)
+	proxy.SetOpenAIClientRequestID(true)
+	proxy.SetAgentTraceStreamBufferBytes(0)
+}
+
+// The start gate applies the edge's outbound propagation settings in every
+// edition, before deciding on capture (jyx.110).
+func TestStartAgentTracingAppliesPropagation(t *testing.T) {
+	t.Cleanup(resetEdgeTracingGlobals)
+	cfg := gateConfig(false, "")
+	cfg.AgentTracing.PropagateLLMProviders = false
+	cfg.AgentTracing.PropagateHTTPUpstreams = true
+	cfg.AgentTracing.PropagateMCP = false
+	startAgentTracing(cfg, nil, nil)
+	if tracing.PropagateToLLMProviders() || !tracing.PropagateToHTTPUpstreams() || tracing.PropagateToMCP() {
+		t.Fatal("propagation settings not applied")
 	}
 }

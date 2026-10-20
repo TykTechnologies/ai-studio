@@ -28,10 +28,13 @@ func (mcpMeta) InjectMeta(ctx context.Context, meta map[string]any) map[string]a
 // InjectMCPMeta writes the current span context into meta and returns it
 // (a new map when meta is nil). Trace keys the client sent are replaced by
 // the gateway span context, whose parent is the client's, so the chain stays
-// intact; baggage is reduced to the allowlist as on HTTP.
+// intact; baggage is reduced to the allowlist as on HTTP. With
+// AGENT_TRACING_PROPAGATE_MCP off the trace keys are removed instead.
 func InjectMCPMeta(ctx context.Context, meta map[string]any) map[string]any {
 	h := http.Header{}
-	InjectOutgoing(ctx, h)
+	if PropagateToMCP() {
+		InjectOutgoing(ctx, h)
+	}
 	if meta == nil {
 		meta = map[string]any{}
 	}

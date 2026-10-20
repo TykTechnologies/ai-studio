@@ -43,6 +43,10 @@ var (
 	agentSets   []*agentInstruments
 
 	agentIncludeApp atomic.Bool
+	// agentMetricsOff switches off the tyk_agent_* metrics
+	// (AGENT_TRACING_METRICS_ENABLED=false); the tyk_tracing_* health
+	// metrics stay.
+	agentMetricsOff atomic.Bool
 
 	// activeSessionsFn reports the active session count, and whether this
 	// node should report it (only the assembler's leader does).
@@ -57,6 +61,10 @@ func init() { agentIncludeApp.Store(true) }
 // SetAgentMetricsIncludeAppID switches the tyk.app.id attribute
 // (AGENT_TRACING_METRICS_INCLUDE_APP_ID).
 func SetAgentMetricsIncludeAppID(on bool) { agentIncludeApp.Store(on) }
+
+// SetAgentMetricsEnabled switches the tyk_agent_* metrics
+// (AGENT_TRACING_METRICS_ENABLED, default on).
+func SetAgentMetricsEnabled(on bool) { agentMetricsOff.Store(!on) }
 
 // SetActiveSessionsFn sets the function the active sessions gauge reads.
 func SetActiveSessionsFn(fn func() (int64, bool)) {
@@ -121,7 +129,7 @@ func newAgentInstruments(meter otelmetric.Meter) (*agentInstruments, error) {
 	if _, err = meter.Int64ObservableGauge("tyk_agent_sessions_active",
 		otelmetric.WithDescription("Agent sessions currently active (reported by the assembler's leader)"),
 		otelmetric.WithInt64Callback(func(_ context.Context, o otelmetric.Int64Observer) error {
-			if fn := activeSessionsFn.Load(); fn != nil {
+			if fn := activeSessionsFn.Load(); fn != nil && !agentMetricsOff.Load() {
 				if n, ok := (*fn)(); ok {
 					o.Observe(n)
 				}
@@ -174,11 +182,17 @@ func appAttrs(appID uint, extra ...attribute.KeyValue) otelmetric.MeasurementOpt
 
 // RecordAgentSessionClosed records a closed session's duration.
 func RecordAgentSessionClosed(ctx context.Context, appID uint, seconds float64) {
+	if agentMetricsOff.Load() {
+		return
+	}
 	agentEach(func(s *agentInstruments) { s.sessionDuration.Record(ctx, seconds, appAttrs(appID)) })
 }
 
 // RecordAgentTurnClosed records a closed turn's LLM and tool call counts.
 func RecordAgentTurnClosed(ctx context.Context, appID uint, llmCalls, toolCalls int) {
+	if agentMetricsOff.Load() {
+		return
+	}
 	agentEach(func(s *agentInstruments) {
 		s.turnLLMCalls.Record(ctx, int64(llmCalls), appAttrs(appID))
 		s.turnToolCalls.Record(ctx, int64(toolCalls), appAttrs(appID))
@@ -187,7 +201,7 @@ func RecordAgentTurnClosed(ctx context.Context, appID uint, llmCalls, toolCalls 
 
 // RecordAgentCost adds micros of cost in currency.
 func RecordAgentCost(ctx context.Context, appID uint, currency string, micros int64) {
-	if micros <= 0 {
+	if micros <= 0 || agentMetricsOff.Load() {
 		return
 	}
 	if currency == "" {

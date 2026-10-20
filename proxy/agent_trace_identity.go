@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/trace"
 
@@ -105,14 +106,35 @@ func traceSpanIDFor(ctx context.Context) string {
 
 // injectUpstreamTrace continues the trace into an LLM upstream (traceparent,
 // tracestate, and baggage reduced to the allowlist), unless the LLM opted out
-// of propagation, in which case it removes all three (decision Q11).
+// of propagation or AGENT_TRACING_PROPAGATE_LLM_PROVIDERS is off, in which
+// case it removes all three (decision Q11). With agent tracing on, an OpenAI
+// upstream also gets the gateway span id as X-Client-Request-Id, so the
+// provider's logs can be matched with the span
+// (AGENT_TRACING_OPENAI_CLIENT_REQUEST_ID), unless the LLM opted out.
 func injectUpstreamTrace(ctx context.Context, h http.Header, llm *models.LLM) {
-	if llm != nil && llm.TracingPropagationOptOut {
+	if llm != nil && llm.Vendor == models.OPENAI && !llm.TracingPropagationOptOut &&
+		openAIClientRequestID.Load() && h.Get(hdrClientRequestID) == "" {
+		if id := agenttrace.From(ctx).LogicalSpanID(); !id.IsZero() {
+			h.Set(hdrClientRequestID, id.String())
+		}
+	}
+	if (llm != nil && llm.TracingPropagationOptOut) || !tracing.PropagateToLLMProviders() {
 		tracing.StripTraceContext(h)
 		return
 	}
 	tracing.InjectOutgoing(ctx, h)
 }
+
+// hdrClientRequestID is OpenAI's client-supplied request id header.
+const hdrClientRequestID = "X-Client-Request-Id"
+
+var openAIClientRequestID atomic.Bool
+
+func init() { openAIClientRequestID.Store(true) }
+
+// SetOpenAIClientRequestID switches the X-Client-Request-Id an OpenAI
+// upstream gets while agent tracing is on (default on).
+func SetOpenAIClientRequestID(on bool) { openAIClientRequestID.Store(on) }
 
 // callToolOperation calls a tool operation with the request's trace context
 // in the call's headers, so the tool upstream continues the trace. It always
@@ -120,7 +142,7 @@ func injectUpstreamTrace(ctx context.Context, h http.Header, llm *models.LLM) {
 // context-aware variant would pick a method promoted from an embedded
 // service and bypass a wrapper's override of CallToolOperation.
 func (p *Proxy) callToolOperation(ctx context.Context, toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	if trace.SpanContextFromContext(ctx).IsValid() {
+	if trace.SpanContextFromContext(ctx).IsValid() && tracing.PropagateToHTTPUpstreams() {
 		h := make(map[string][]string, len(headers)+2)
 		for k, v := range headers {
 			h[k] = v

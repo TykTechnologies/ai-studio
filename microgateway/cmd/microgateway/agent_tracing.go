@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
 
@@ -37,6 +38,9 @@ func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func(
 		Harness:          at.HarnessSessionHeaders,
 		BaggageAllowlist: allow,
 	}))
+	tracing.SetOutboundPropagation(at.PropagateLLMProviders, at.PropagateHTTPUpstreams, at.PropagateMCP)
+	proxy.SetOpenAIClientRequestID(at.OpenAIClientRequestID)
+	proxy.SetAgentTraceStreamBufferBytes(at.MaxStreamBufferBytes)
 	if !at.Enabled {
 		return false
 	}

@@ -41,4 +41,13 @@ func TestInjectMCPMeta(t *testing.T) {
 	if fresh := InjectMCPMeta(ctx, nil); fresh["traceparent"] == nil {
 		t.Fatal("a nil _meta gets a new map")
 	}
+
+	// AGENT_TRACING_PROPAGATE_MCP=false: no trace keys leave, the client's
+	// included.
+	SetOutboundPropagation(true, true, false)
+	t.Cleanup(func() { SetOutboundPropagation(true, true, true) })
+	off := InjectMCPMeta(ctx, map[string]any{"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01", "progressToken": "p1"})
+	if _, ok := off["traceparent"]; ok || off["progressToken"] != "p1" {
+		t.Fatalf("propagation off: %v", off)
+	}
 }

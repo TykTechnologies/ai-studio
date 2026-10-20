@@ -96,6 +96,32 @@ func TestAgentMetrics_ReaderAndAttributeSets(t *testing.T) {
 	}
 }
 
+// AGENT_TRACING_METRICS_ENABLED=false switches off the tyk_agent_* metrics;
+// the tyk_tracing_* health metrics stay (jyx.110).
+func TestAgentMetrics_Disabled(t *testing.T) {
+	Init()
+	SetAgentMetricsEnabled(false)
+	t.Cleanup(func() { SetAgentMetricsEnabled(true); SetActiveSessionsFn(nil) })
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	if err := AddAgentMetricsMeter(provider.Meter("agenttracing")); err != nil {
+		t.Fatal(err)
+	}
+	recordAgentSamples(context.Background())
+
+	got := collectKeys(t, reader)
+	for _, name := range []string{"tyk_agent_session_duration", "tyk_agent_turn_llm_calls", "tyk_agent_cost", "tyk_agent_sessions_active"} {
+		if _, ok := got[name]; ok {
+			t.Errorf("%s recorded with agent metrics off", name)
+		}
+	}
+	for _, name := range []string{"tyk_tracing_correlation_links", "tyk_tracing_export_failures"} {
+		if _, ok := got[name]; !ok {
+			t.Errorf("health metric %s is missing", name)
+		}
+	}
+}
+
 // collectKeys returns, per metric name, the sorted attribute keys of its
 // data points.
 func collectKeys(t *testing.T, r *sdkmetric.ManualReader) map[string][]string {

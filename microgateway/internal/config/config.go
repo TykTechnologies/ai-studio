@@ -77,6 +77,13 @@ type AgentTracingConfig struct {
 	// (other entries are header names read as a session id).
 	CompatHeaders         []string `env:"AGENT_TRACING_COMPAT_HEADERS" envDefault:"helicone,portkey,openrouter,bifrost,agent_router,cloudflare,agentcore,mcp_session" envSeparator:","`
 	HarnessSessionHeaders []string `env:"AGENT_TRACING_HARNESS_SESSION_HEADERS" envDefault:"claude_code,codex_cli,opencode" envSeparator:","`
+	// Outbound propagation, as on the hub: whether LLM providers, HTTP
+	// upstreams and MCP servers get the trace context (every edition), and
+	// whether an OpenAI upstream gets the span id as X-Client-Request-Id.
+	PropagateLLMProviders  bool `env:"AGENT_TRACING_PROPAGATE_LLM_PROVIDERS" envDefault:"true"`
+	PropagateHTTPUpstreams bool `env:"AGENT_TRACING_PROPAGATE_HTTP_UPSTREAMS" envDefault:"true"`
+	PropagateMCP           bool `env:"AGENT_TRACING_PROPAGATE_MCP" envDefault:"true"`
+	OpenAIClientRequestID  bool `env:"AGENT_TRACING_OPENAI_CLIENT_REQUEST_ID" envDefault:"true"`
 }
 
 // agentTracingChunkLimit keeps a chunk well under the 16 MiB gRPC message cap.

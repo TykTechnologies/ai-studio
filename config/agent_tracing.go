@@ -269,7 +269,27 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 
 	p.positiveInt("AGENT_TRACING_UI_MAX_PAYLOAD_VIEW_BYTES", &cfg.UIMaxPayloadViewBytes)
 
+	// Settings of the spec whose feature is not built yet: setting one warns,
+	// so an operator is not left expecting an effect.
+	for _, key := range AgentTracingReservedEnv {
+		if v, ok := p.get(key); ok && !(key == "AGENT_TRACING_PAYLOAD_BACKEND" && cfg.PayloadBackend == "db") {
+			p.warn("%s=%s has no effect yet: the feature is planned for a later release", key, v)
+		}
+	}
+
 	return cfg, p.warnings
+}
+
+// AgentTracingReservedEnv are the AGENT_TRACING_* settings parsed for the
+// spec's configuration surface but not used yet: the filesystem payload
+// backend (only db is built), the client-retry and delegation correlation
+// rules, and the OTel export's per-span inline content cap. Each warns when
+// set (bead jyx.110).
+var AgentTracingReservedEnv = []string{
+	"AGENT_TRACING_PAYLOAD_BACKEND",
+	"AGENT_TRACING_RETRY_WINDOW",
+	"AGENT_TRACING_DELEGATION_TOOL_PATTERNS",
+	"AGENT_TRACING_EXPORT_MAX_SPAN_CONTENT_BYTES",
 }
 
 // atParser reads AGENT_TRACING_* values, keeping the default and recording

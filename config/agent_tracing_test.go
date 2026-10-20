@@ -115,7 +115,7 @@ func TestAgentTracingConfigParse(t *testing.T) {
 				"AGENT_TRACING_COMPAT_HEADERS":           "none",
 				"AGENT_TRACING_DELEGATION_TOOL_PATTERNS": "^task$;;^(unclosed;;^spawn_.*$",
 			},
-			warnings: 1,
+			warnings: 2, // the bad pattern, and the reserved setting (jyx.110)
 			check: func(t *testing.T, c AgentTracingConfig) {
 				if len(c.CompatHeaders) != 0 || c.CompatHeaders == nil {
 					t.Fatalf("compat headers not emptied: %#v", c.CompatHeaders)

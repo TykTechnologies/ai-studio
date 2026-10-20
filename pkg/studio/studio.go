@@ -466,6 +466,11 @@ func New(opts Options) (_ *Studio, err error) {
 		Harness:          conf.AgentTracing.HarnessSessionHeaders,
 		BaggageAllowlist: conf.AgentTracing.BaggageAllowlist,
 	}))
+	tracing.SetOutboundPropagation(conf.AgentTracing.PropagateLLMProviders,
+		conf.AgentTracing.PropagateHTTPUpstreams, conf.AgentTracing.PropagateMCP)
+	proxy.SetOpenAIClientRequestID(conf.AgentTracing.OpenAIClientRequestID)
+	proxy.SetAgentTraceStreamBufferBytes(conf.AgentTracing.MaxStreamBufferBytes)
+	metrics.SetAgentMetricsEnabled(conf.AgentTracing.MetricsEnabled)
 	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
 	if agenttrace.Enabled() {
 		// The embedded gateway's captures are staged by the analytics handler.
