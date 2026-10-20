@@ -167,6 +167,7 @@ func (ch *nativeChain) prepare(w http.ResponseWriter, r *http.Request) bool {
 	if !changed {
 		return true
 	}
+	noteClientBody(r.Context(), body)
 	out, err := json.Marshal(obj)
 	if err != nil {
 		ch.fail(w, http.StatusInternalServerError, nativeErrAPI, "failed to encode request body")

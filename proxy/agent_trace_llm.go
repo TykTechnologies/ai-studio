@@ -53,6 +53,7 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 	if rec == nil || llm == nil {
 		return
 	}
+	reqBody = captureRequestBody(r.Context(), reqBody)
 	fp := agenttrace.CurrentFingerprinter()
 	format := requestFilterFormatFor(r, llm)
 	var x agenttrace.Extracts

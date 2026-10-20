@@ -40,8 +40,9 @@ func beginRequestCapture(r *http.Request) (*http.Request, *agenttrace.Recorder) 
 
 	// Headers only: an LLM body's fields are read on the analytics
 	// goroutine (applyDeclaredBody), never on the request path.
-	res := declared.Default().Headers(r.Header, "", nil)
-	ctx = context.WithValue(ctx, declaredKey{}, &res)
+	st := &captureState{declared: declared.Default().Headers(r.Header, "", nil)}
+	res := &st.declared
+	ctx = context.WithValue(ctx, captureStateKey{}, st)
 
 	ctx = tracing.ExtractIncoming(ctx, r.Header)
 	parent := trace.SpanContextFromContext(ctx)
@@ -78,20 +79,48 @@ func beginRequestCapture(r *http.Request) (*http.Request, *agenttrace.Recorder) 
 	return r.WithContext(trace.ContextWithRemoteSpanContext(ctx, gateway)), rec
 }
 
-// declaredKey holds the request's declared.Result while tracing is on, for
-// the body fields read after the response (applyDeclaredBody).
-type declaredKey struct{}
+// captureStateKey holds the request's captureState while tracing is on.
+type captureStateKey struct{}
+
+// captureState is what the capture keeps between the request path and the
+// analysis after the response: the declared context from the headers, for
+// the body fields read later (applyDeclaredBody), and the request body as
+// the client sent it when a native chain hook rewrote it (noteClientBody).
+type captureState struct {
+	declared   declared.Result
+	clientBody []byte
+}
+
+// noteClientBody keeps the request body as the client sent it, before a
+// native chain hook unwrapped its resource references, so the capture reads
+// the client's ids (previous_response_id, conversation): the same id space
+// as the response ids it reads, wrapped, from the response the client got
+// (jyx.147). Called on the request path, before the analysis starts.
+func noteClientBody(ctx context.Context, body []byte) {
+	if st, _ := ctx.Value(captureStateKey{}).(*captureState); st != nil && agenttrace.From(ctx) != nil {
+		st.clientBody = body
+	}
+}
+
+// captureRequestBody is the request body the capture reads: the client's,
+// when a chain hook rewrote what went upstream, else reqBody.
+func captureRequestBody(ctx context.Context, reqBody []byte) []byte {
+	if st, _ := ctx.Value(captureStateKey{}).(*captureState); st != nil && st.clientBody != nil {
+		return st.clientBody
+	}
+	return reqBody
+}
 
 // applyDeclaredBody adds an LLM request body's declared fields (§4.2
 // priority 4: conversation, metadata.session_id, user, and Claude Code's
 // metadata.user_id session) to the capture, below every header source. It
 // runs on the analytics goroutine.
 func applyDeclaredBody(ctx context.Context, rec *agenttrace.Recorder, body []byte) {
-	stored, _ := ctx.Value(declaredKey{}).(*declared.Result)
-	if rec == nil || stored == nil || len(body) == 0 {
+	st, _ := ctx.Value(captureStateKey{}).(*captureState)
+	if rec == nil || st == nil || len(body) == 0 {
 		return
 	}
-	res := *stored
+	res := st.declared
 	declared.Default().ApplyBody(&res, body)
 	d := res.Declared
 	rec.Update(func(ev *agenttrace.Event) {
