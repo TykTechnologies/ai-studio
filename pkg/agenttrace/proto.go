@@ -118,7 +118,7 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 		AttemptOf:      spanIDFrom(p.AttemptOf),
 		AnalyticsRef:   p.AnalyticsRef,
 		ContentMode:    p.ContentMode,
-		Attributes:     copyMap(p.Attributes),
+		Attributes:     boundAttributes(p.Attributes),
 	}
 	if id := p.Identity; id != nil {
 		e.Identity = Identity{

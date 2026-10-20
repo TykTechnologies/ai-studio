@@ -1,6 +1,10 @@
 package agenttrace
 
-import "unicode/utf8"
+import (
+	"sort"
+	"strings"
+	"unicode/utf8"
+)
 
 // Extract bounds, the same as the extraction library applies at capture
 // (pkg/agenttrace/extract, jyx.62). The hub applies them again to an edge's
@@ -46,6 +50,49 @@ func (x *Extracts) Bound() {
 	for i := range x.OfferedTools {
 		x.OfferedTools[i] = cutText(x.OfferedTools[i], maxExtractNameBytes)
 	}
+}
+
+// Attribute bounds for an edge event's Attributes (jyx.160).
+const (
+	maxAttributes       = 64
+	maxAttributeKey     = 128
+	maxAttributeValue   = 1024
+	attributeNamespaces = "tyk. gen_ai. mcp. http."
+)
+
+// boundAttributes keeps an edge event's attributes in the namespaces the
+// gateway writes (tyk.*, gen_ai.*, mcp.*, http.*), with bounded keys and
+// values and at most maxAttributes of them (in key order, so the choice is
+// stable). Attributes go to an unbounded column; an edge is not trusted to
+// have bounded them.
+func boundAttributes(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(in))
+	for k := range in {
+		if len(k) <= maxAttributeKey && inAttributeNamespace(k) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	if len(keys) > maxAttributes {
+		keys = keys[:maxAttributes]
+	}
+	out := make(map[string]string, len(keys))
+	for _, k := range keys {
+		out[k] = cutText(in[k], maxAttributeValue)
+	}
+	return out
+}
+
+func inAttributeNamespace(k string) bool {
+	for _, ns := range strings.Fields(attributeNamespaces) {
+		if strings.HasPrefix(k, ns) {
+			return true
+		}
+	}
+	return false
 }
 
 func boundID(s string) string {
