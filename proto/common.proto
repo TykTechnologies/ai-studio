@@ -356,6 +356,19 @@ message ConfigurationSnapshot {
   // store them (a key edges keep unique, such as a tool slug, used twice),
   // one line each. Edges report them with their own (pkg/snapshotguard).
   repeated string omitted_entries = 16;
+
+  // Agent Call Tracing (Enterprise): the fingerprint key edges use, present
+  // only while tracing runs on the hub.
+  AgentTracingKeys agent_tracing_keys = 17;
+}
+
+// AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing
+// fingerprints with (decision D4). It is derived from the hub's root key
+// with HKDF, never the root itself, and travels encrypted with the
+// microgateway encryption key. Edges hold it in memory only.
+message AgentTracingKeys {
+  uint32 key_id = 1;                  // 1..255, the first byte of every fingerprint
+  string hmac_key_encrypted = 2;      // base64 key, encrypted like LLM API keys
 }
 
 // ConfigurationChange represents a single configuration change

@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
@@ -2556,6 +2557,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			UpdatedAt:      timestamppb.New(token.UpdatedAt),
 		}
 		snapshot.AccessTokens = append(snapshot.AccessTokens, pbToken)
+	}
+
+	// Agent Call Tracing (Enterprise): edges fingerprint with the hub's
+	// derived HMAC key (D4), sent encrypted like LLM API keys; a key that
+	// cannot be encrypted is left out, never sent in plaintext.
+	if id, key, ok := agenttrace.EdgeKey(); ok {
+		enc, err := s.encryptForMicrogateway(base64.StdEncoding.EncodeToString(key))
+		if err != nil {
+			logger.Log.Error().Err(err).Msg("Failed to encrypt the agent tracing fingerprint key - leaving it out of the snapshot")
+		} else {
+			snapshot.AgentTracingKeys = &pb.AgentTracingKeys{KeyId: uint32(id), HmacKeyEncrypted: enc}
+		}
 	}
 
 	logger.Log.Debug().
