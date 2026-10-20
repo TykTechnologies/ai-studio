@@ -170,7 +170,9 @@ func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingC
 		NodeID:       nodeID,
 		Version:      version,
 	})
-	if !s.AgentTracing.Running() {
+	// The gate turned the capture flag on only if it built the Enterprise
+	// service; Running reports true only once Start succeeded.
+	if !agenttrace.Enabled() {
 		return
 	}
 	if err := s.AgentTracing.Start(ctx); err != nil {
