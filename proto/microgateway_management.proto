@@ -98,8 +98,9 @@ message LLMInfo {
     map<string, string> metadata = 17;  // Plugin-stored data
     // The LLM has at least one request filter (a script or guardrail that
     // reads request bodies), so a plugin can avoid lossy rewrites the
-    // filters would screen.
-    bool has_request_filters = 18;
+    // filters would screen. Always set by hosts that know it: absent means
+    // an older host, so unknown.
+    optional bool has_request_filters = 18;
 }
 
 // App Management Messages

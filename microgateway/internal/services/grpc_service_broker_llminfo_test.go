@@ -27,6 +27,8 @@ func TestLLMInfoHasRequestFilters(t *testing.T) {
 	for id, want := range map[uint]bool{1: false, 2: true, 3: false} {
 		llm, err := server.managementService.GetLLM(id)
 		require.NoError(t, err)
-		assert.Equal(t, want, server.convertLLMToPB(llm).GetHasRequestFilters(), "LLM %d", id)
+		info := server.convertLLMToPB(llm)
+		assert.Equal(t, want, info.GetHasRequestFilters(), "LLM %d", id)
+		assert.NotNil(t, info.HasRequestFilters, "has_request_filters is always set, so absent means an older host")
 	}
 }

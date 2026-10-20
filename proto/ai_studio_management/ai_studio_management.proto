@@ -608,8 +608,9 @@ message LLMInfo {
     // the value gateway plugins see as the LLM slug.
     string slug = 16;
     // has_request_filters is true when a request filter (script or
-    // guardrail) is attached; which filters is not exposed.
-    bool has_request_filters = 17;
+    // guardrail) is attached; which filters is not exposed. Always set by
+    // hosts that know it: absent means an older host, so unknown.
+    optional bool has_request_filters = 17;
 }
 
 // LLM CRUD Messages

@@ -3632,8 +3632,9 @@ type LLMInfo struct {
 	// the value gateway plugins see as the LLM slug.
 	Slug string `protobuf:"bytes,16,opt,name=slug,proto3" json:"slug,omitempty"`
 	// has_request_filters is true when a request filter (script or
-	// guardrail) is attached; which filters is not exposed.
-	HasRequestFilters bool `protobuf:"varint,17,opt,name=has_request_filters,json=hasRequestFilters,proto3" json:"has_request_filters,omitempty"`
+	// guardrail) is attached; which filters is not exposed. Always set by
+	// hosts that know it: absent means an older host, so unknown.
+	HasRequestFilters *bool `protobuf:"varint,17,opt,name=has_request_filters,json=hasRequestFilters,proto3,oneof" json:"has_request_filters,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -3781,8 +3782,8 @@ func (x *LLMInfo) GetSlug() string {
 }
 
 func (x *LLMInfo) GetHasRequestFilters() bool {
-	if x != nil {
-		return x.HasRequestFilters
+	if x != nil && x.HasRequestFilters != nil {
+		return *x.HasRequestFilters
 	}
 	return false
 }
@@ -17168,7 +17169,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\"S\n" +
 	"\x15GetLLMPluginsResponse\x12:\n" +
-	"\aplugins\x18\x01 \x03(\v2 .ai_studio_management.PluginInfoR\aplugins\"\xdb\x05\n" +
+	"\aplugins\x18\x01 \x03(\v2 .ai_studio_management.PluginInfoR\aplugins\"\xf8\x05\n" +
 	"\aLLMInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -17188,12 +17189,13 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12G\n" +
 	"\bmetadata\x18\x0f \x03(\v2+.ai_studio_management.LLMInfo.MetadataEntryR\bmetadata\x12\x12\n" +
-	"\x04slug\x18\x10 \x01(\tR\x04slug\x12.\n" +
-	"\x13has_request_filters\x18\x11 \x01(\bR\x11hasRequestFilters\x1a;\n" +
+	"\x04slug\x18\x10 \x01(\tR\x04slug\x123\n" +
+	"\x13has_request_filters\x18\x11 \x01(\bH\x01R\x11hasRequestFilters\x88\x01\x01\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
-	"\x0f_monthly_budget\"\xba\x04\n" +
+	"\x0f_monthly_budgetB\x16\n" +
+	"\x14_has_request_filters\"\xba\x04\n" +
 	"\x10CreateLLMRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +

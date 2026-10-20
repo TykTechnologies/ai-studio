@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -779,7 +780,7 @@ func (s *MicrogatewayManagementServer) convertLLMToPB(llm *database.LLM) *pb.LLM
 		RateLimitRpm:      int32(llm.RateLimitRPM),
 		CreatedAt:         timestamppb.New(llm.CreatedAt),
 		UpdatedAt:         timestamppb.New(llm.UpdatedAt),
-		HasRequestFilters: hasRequestFilters,
+		HasRequestFilters: proto.Bool(hasRequestFilters),
 	}
 }
 

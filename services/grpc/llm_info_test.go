@@ -57,6 +57,7 @@ func TestLLMInfoCarriesSlugAndRequestFilterPresence(t *testing.T) {
 		assert.Equal(t, tc.wantSlug, got.GetSlug(), "ListLLMs slug for %q", tc.name)
 		assert.Equal(t, models.LLMRouteSlug(tc.name), got.GetSlug(), "the slug is the gateway's route slug")
 		assert.Equal(t, tc.wantFilters, got.GetHasRequestFilters(), "ListLLMs has_request_filters for %q", tc.name)
+		assert.NotNil(t, got.HasRequestFilters, "has_request_filters is always set, so absent means an older host")
 
 		one, err := server.GetLLM(ctx, &pb.GetLLMRequest{LlmId: ids[tc.name]})
 		require.NoError(t, err)

@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -426,6 +427,6 @@ func convertLLMToPB(llm *models.LLM) *pb.LLMInfo {
 		UpdatedAt:        timestamppb.New(llm.UpdatedAt),
 		// The gateway routes and names the LLM by this slug
 		Slug:              models.LLMRouteSlug(llm.Name),
-		HasRequestFilters: llm.HasRequestFilters(),
+		HasRequestFilters: proto.Bool(llm.HasRequestFilters()),
 	}
 }
