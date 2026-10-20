@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
@@ -31,7 +32,7 @@ import (
 // requestFilterFormatOpenAIResponses is the filter format of a Responses API
 // body, keyed like vendor formats in the extractor and reconstructor
 // registries.
-const requestFilterFormatOpenAIResponses = "openai_responses"
+const requestFilterFormatOpenAIResponses = requestformat.OpenAIResponses
 
 // responsesSlot is one prompt text of a Responses body: its role as filters
 // see it, its text, and how to write a rewritten text back.

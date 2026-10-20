@@ -32,6 +32,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -2352,8 +2353,8 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 // Anthropic-shaped bodies to a Bedrock LLM and must say so, or the filters
 // would be handed a Converse-format extractor for an OpenAI body.
 const (
-	requestFilterFormatOpenAI    = "openai"
-	requestFilterFormatAnthropic = "anthropic"
+	requestFilterFormatOpenAI    = requestformat.OpenAI
+	requestFilterFormatAnthropic = requestformat.Anthropic
 )
 
 // requestFilterFormatFor is the filter format of a request on the native
@@ -2361,16 +2362,10 @@ const (
 // (not chat-shaped whatever its vendor; see decisions_filters.go), or the
 // format a native chain hook names when the body is not the vendor's chat
 // shape (OpenAI's Responses API). A buffered response is read in the same
-// format.
+// format. requestformat.For decides, so gateway plugins resolve the same
+// format from the vendor, method, path and endpoint.
 func requestFilterFormatFor(r *http.Request, llm *models.LLM) string {
-	format := string(llm.Vendor)
-	if df := decisionFilterFormat(r.URL.Path); df != "" {
-		format = df
-	}
-	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
-		format = hook.FilterFormat
-	}
-	return format
+	return requestformat.For(string(llm.Vendor), r.Method, r.URL.Path, switches.UpstreamEndpoint(llm))
 }
 
 // hasRequestFilters reports whether llm has at least one request-side filter.

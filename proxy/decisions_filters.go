@@ -16,14 +16,15 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // Filter formats for decision bodies, keyed like vendor formats in the
 // extractor and reconstructor registries.
 const (
-	requestFilterFormatOpenAIDecisions = "openai_decisions"
-	requestFilterFormatSystemOne       = "systemone"
+	requestFilterFormatOpenAIDecisions = requestformat.OpenAIDecisions
+	requestFilterFormatSystemOne       = requestformat.SystemOne
 )
 
 // decisionFilterFormat is the filter format of a request to a decision

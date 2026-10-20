@@ -19,12 +19,13 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
 // requestFilterFormatOpenAIInput is the filter format of an embeddings,
 // completions or moderations body.
-const requestFilterFormatOpenAIInput = "openai_input"
+const requestFilterFormatOpenAIInput = requestformat.OpenAIInput
 
 // openAIInputFields are the prompt fields of these bodies, in the order
 // their texts are listed.
