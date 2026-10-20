@@ -28,7 +28,6 @@ func (h *captureHandler) SetAsGlobalHandler()                                   
 func (h *captureHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {}
 func (h *captureHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog)          {}
 func (h *captureHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {}
-func (*captureHandler) RecordMCPCalls(context.Context, []models.MCPCallRecord) error { return nil }
 
 // TestProxyLogBodySuppression_Unit is a synchronous unit test that verifies body
 // suppression at the ProxyLog construction level without relying on the async

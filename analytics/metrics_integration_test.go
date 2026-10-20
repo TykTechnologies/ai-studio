@@ -357,7 +357,6 @@ func (m *mockHandler) RecordComplianceEvents(_ context.Context, events []*models
 		m.onRecordComplianceEvents(events)
 	}
 }
-func (*mockHandler) RecordMCPCalls(context.Context, []models.MCPCallRecord) error { return nil }
 
 // Verify mockHandler satisfies the interface at compile time.
 var _ AnalyticsHandler = (*mockHandler)(nil)

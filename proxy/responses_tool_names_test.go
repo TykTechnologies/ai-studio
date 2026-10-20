@@ -107,7 +107,6 @@ func (h *eventRecorder) RecordComplianceEvents(_ context.Context, e []*models.Co
 	defer h.mu.Unlock()
 	h.events = append(h.events, e...)
 }
-func (*eventRecorder) RecordMCPCalls(context.Context, []models.MCPCallRecord) error { return nil }
 
 // Tool outputs of a Responses request reach a tool-aware provider with the
 // tool's name and call id, and the compliance events name the tools, as on

@@ -21,7 +21,6 @@ func (h *testAnalyticsHandler) RecordComplianceEvents(_ context.Context, events 
 	defer h.mu.Unlock()
 	h.events = append(h.events, events...)
 }
-func (*testAnalyticsHandler) RecordMCPCalls(context.Context, []models.MCPCallRecord) error { return nil }
 func (h *testAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord)  {}
 func (h *testAnalyticsHandler) RecordChatLogEntry(_ context.Context, log *models.LLMChatLogEntry)  {}
 func (h *testAnalyticsHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog)             {}

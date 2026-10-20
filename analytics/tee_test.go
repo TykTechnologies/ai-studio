@@ -130,6 +130,26 @@ func TestTee_MCPCalls(t *testing.T) {
 	assert.Nil(t, sink.mcp[1].MCPServerID)
 }
 
+// noMCPHandler is a host's own handler written before MCP calls existed: it
+// does not implement MCPCallRecorder (none of its methods are called here).
+type noMCPHandler struct{ AnalyticsHandler }
+
+// Recording MCP calls is optional: a primary or sink without
+// MCPCallRecorder is skipped, the others still get the rows.
+func TestTee_MCPCallsSkipHandlersWithoutRecorder(t *testing.T) {
+	sink := &teeRecorder{}
+	tee := NewTee(noMCPHandler{}, noMCPHandler{}, sink)
+	require.NoError(t, tee.RecordMCPCalls(context.Background(), []models.MCPCallRecord{{PrimitiveName: "x"}}))
+	tee.Stop(time.Second)
+	require.Len(t, sink.mcp, 1)
+
+	// The package helper drops the batch (no error, so no endless retry)
+	// when the process's handler does not record MCP calls.
+	SetHandler(noMCPHandler{})
+	t.Cleanup(ResetHandler)
+	assert.NoError(t, RecordMCPCalls(context.Background(), []models.MCPCallRecord{{PrimitiveName: "x"}}))
+}
+
 // A slow or stuck sink never slows the request path: its queue fills and
 // further records are dropped for it (counted), while the primary still
 // gets them all.

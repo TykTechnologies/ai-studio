@@ -32,11 +32,15 @@ type AnalyticsHandler interface {
 
 	// RecordComplianceEvents records filter script compliance events
 	RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent)
+}
 
-	// RecordMCPCalls records MCP calls a Tyk Gateway proxied (ingested
-	// from Tyk Pump). Unlike the other methods it reports a batch it could
-	// not take (ErrRecorderBusy), because its caller can have the sender
-	// retry.
+// MCPCallRecorder is implemented by handlers that record MCP calls a Tyk
+// Gateway proxied (ingested from Tyk Pump). It is optional, so a host's own
+// AnalyticsHandler keeps compiling; a handler without it does not receive
+// MCP calls. Unlike the AnalyticsHandler methods it reports a batch it
+// could not take (ErrRecorderBusy), because its caller can have the sender
+// retry.
+type MCPCallRecorder interface {
 	RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error
 }
 

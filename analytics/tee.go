@@ -212,10 +212,17 @@ func (t *Tee) RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord
 	}
 	// A batch the primary refuses is retried by the sender, so the sinks
 	// only get the batches the primary took (no duplicates on the retry).
-	if err := t.primary.RecordMCPCalls(ctx, records); err != nil {
-		return err
+	// Handlers that do not record MCP calls (MCPCallRecorder) are skipped.
+	if r, ok := t.primary.(MCPCallRecorder); ok {
+		if err := r.RecordMCPCalls(ctx, records); err != nil {
+			return err
+		}
 	}
-	t.toSinks(func(h AnalyticsHandler) { _ = h.RecordMCPCalls(context.Background(), c) })
+	t.toSinks(func(h AnalyticsHandler) {
+		if r, ok := h.(MCPCallRecorder); ok {
+			_ = r.RecordMCPCalls(context.Background(), c)
+		}
+	})
 	return nil
 }
 
@@ -241,3 +248,5 @@ func recordExchangeWith(ctx context.Context, h AnalyticsHandler, log *models.Pro
 
 var _ AnalyticsHandler = (*Tee)(nil)
 var _ ExchangeRecorder = (*Tee)(nil)
+var _ MCPCallRecorder = (*Tee)(nil)
+var _ MCPCallRecorder = (*DatabaseHandler)(nil)

@@ -183,11 +183,6 @@ func (h *HTTPAnalyticsHandler) RecordProxyLogsBatch(_ context.Context, logs []*m
 func (h *HTTPAnalyticsHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {
 }
 
-// RecordMCPCalls implements analytics.AnalyticsHandler (no-op for HTTP handler)
-func (h *HTTPAnalyticsHandler) RecordMCPCalls(_ context.Context, _ []models.MCPCallRecord) error {
-	return nil
-}
-
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *HTTPAnalyticsHandler) SetAsGlobalHandler() {
 	analytics.SetHandler(h)

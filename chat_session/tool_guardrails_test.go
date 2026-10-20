@@ -48,7 +48,6 @@ func (h *complianceCapture) RecordComplianceEvents(_ context.Context, events []*
 	defer h.mu.Unlock()
 	h.events = append(h.events, events...)
 }
-func (*complianceCapture) RecordMCPCalls(context.Context, []models.MCPCallRecord) error { return nil }
 func (h *complianceCapture) RecordChatRecord(context.Context, *models.LLMChatRecord)         {}
 func (h *complianceCapture) RecordChatLogEntry(context.Context, *models.LLMChatLogEntry)     {}
 func (h *complianceCapture) RecordProxyLog(context.Context, *models.ProxyLog)                {}
