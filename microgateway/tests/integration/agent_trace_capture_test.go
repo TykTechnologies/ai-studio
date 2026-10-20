@@ -73,7 +73,7 @@ func (e pulseEdge) GetEdgeNamespace() string                         { return ""
 // setupCaptureGateway boots the microgateway as setupTrafficTest does, with
 // the analytics pulse loaded and agent tracing capture on (what the
 // Enterprise edge's start gate does once it passes).
-func setupCaptureGateway(t *testing.T) (string, *pulseHub, uint) {
+func setupCaptureGateway(t *testing.T, appTracing ...string) (string, *pulseHub, uint) {
 	t.Helper()
 	dsn := fmt.Sprintf("file:gwcapture_%d?mode=memory&cache=shared", time.Now().UnixNano())
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
@@ -107,6 +107,9 @@ func setupCaptureGateway(t *testing.T) (string, *pulseHub, uint) {
 		APIKeyEncrypted: apiKeyEnc, DefaultModel: "gpt-4", IsActive: true}
 	require.NoError(t, db.Create(llm).Error)
 	app := &mgwdb.App{Name: "Capture App", UserID: 5, IsActive: true}
+	if len(appTracing) > 0 {
+		app.Tracing = mgwdb.JSON(appTracing[0]) // the hub App's tracing settings, as synced
+	}
 	require.NoError(t, db.Create(app).Error)
 	require.NoError(t, db.Create(&mgwdb.AppLLM{AppID: app.ID, LLMID: llm.ID, IsActive: true}).Error)
 	require.NoError(t, db.Create(&mgwdb.APIToken{Token: trafficTestToken, Name: "capture", AppID: app.ID, IsActive: true}).Error)
@@ -207,6 +210,23 @@ func TestAgentTraceCapture_EdgeLLMCallsReachThePulse(t *testing.T) {
 	assert.Equal(t, outer.TraceID, attempt.TraceID, "both hops share the trace")
 	assert.Equal(t, appID, outer.Identity.AppID)
 	assertEdgeLLMEvent(t, attempt, appID)
+}
+
+// An App the hub switched tracing off for is not captured on the edge: the
+// calls are served and nothing reaches the hub's capture (jyx.112).
+func TestAgentTraceCapture_EdgeAppTracingOff(t *testing.T) {
+	baseURL, hub, _ := setupCaptureGateway(t, `{"enabled":false}`)
+	chatBody := `{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}`
+
+	status, body := gatewayPost(t, baseURL+"/llm/rest/mock-openai/v1/chat/completions", trafficTestToken, chatBody)
+	require.Equal(t, http.StatusOK, status, "body: %s", body)
+	status, body = gatewayPost(t, baseURL+"/ai/mock-openai/v1/chat/completions", trafficTestToken, chatBody)
+	require.Equal(t, http.StatusOK, status, "body: %s", body)
+
+	time.Sleep(500 * time.Millisecond) // several capture flush intervals
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+	assert.Empty(t, hub.events, "an App with tracing off leaves no capture")
 }
 
 // postWithHeaders is gatewayPost with extra request headers.

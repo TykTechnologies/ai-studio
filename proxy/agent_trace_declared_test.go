@@ -3,10 +3,12 @@ package proxy
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 )
@@ -108,6 +110,32 @@ func TestAgentTraceDeclared_NothingDeclared(t *testing.T) {
 	assert.False(t, ev.TraceID.IsZero(), "a minted trace id")
 	assert.True(t, ev.Declared.TraceID.IsZero())
 	assert.Empty(t, ev.Declared.SessionID)
+}
+
+// An App with tracing switched off is not captured at all: no event of any
+// kind, while the request itself is served (jyx.112).
+func TestAgentTraceAppTracingOffCapturesNothing(t *testing.T) {
+	sink := withCapture(t)
+	h := newFailoverHarness(t, serveToolCall, serveOpenAIText("never"), nil)
+	off := false
+	h.app.Tracing = models.AppTracingSettings{Enabled: &off}
+	require.NoError(t, h.db.Model(h.app).Select("tracing").Updates(h.app).Error)
+
+	resp, body := h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest, "X-Tyk-Session-Id", "s1")
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	waitForLogs(t, h, 1) // the analytics ran
+	time.Sleep(100 * time.Millisecond)
+	sink.mu.Lock()
+	assert.Empty(t, sink.events, "an App with tracing off leaves no capture")
+	sink.mu.Unlock()
+
+	// Control: switched back on, the same App is captured.
+	on := true
+	h.app.Tracing = models.AppTracingSettings{Enabled: &on}
+	require.NoError(t, h.db.Model(h.app).Select("tracing").Updates(h.app).Error)
+	resp, body = h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	waitLLMEvent(t, sink)
 }
 
 // Tool and MCP calls carry the declared context too.

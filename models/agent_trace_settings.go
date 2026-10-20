@@ -36,6 +36,11 @@ type AppTracingSettings struct {
 	OwnerMayViewContent bool `json:"owner_may_view_content,omitempty"`
 }
 
+// TracingOn reports whether the App's traffic is traced: on unless the App
+// switched tracing off (nil inherits the install, which is on wherever
+// capture runs at all).
+func (s AppTracingSettings) TracingOn() bool { return s.Enabled == nil || *s.Enabled }
+
 // Bounds of the App settings.
 const (
 	MinTracingSessionIdleTimeout = time.Minute

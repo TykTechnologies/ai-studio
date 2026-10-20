@@ -49,6 +49,9 @@ type Recorder struct {
 	// returned (Hold); finishWanted is a Finish that waits for it.
 	holds        int
 	finishWanted bool
+	// discarded is set by Discard; From then returns nil, so every hook on
+	// the request stops at its first check.
+	discarded atomic.Bool
 }
 
 func noRelease() {}
@@ -132,6 +135,9 @@ func From(ctx context.Context) *Recorder {
 		return nil
 	}
 	r, _ := ctx.Value(ctxKey{}).(*Recorder)
+	if r != nil && r.discarded.Load() {
+		return nil
+	}
 	return r
 }
 
@@ -327,11 +333,13 @@ func (r *Recorder) Finish() {
 }
 
 // Discard ends the capture without emitting anything (for example when the
-// App has tracing off). Later Finish calls do nothing.
+// App has tracing off). Later Finish calls do nothing, and From returns nil
+// for the request from then on, so no hook does any further work.
 func (r *Recorder) Discard() {
 	if r == nil {
 		return
 	}
+	r.discarded.Store(true)
 	r.mu.Lock()
 	r.finished = true
 	r.extra = nil

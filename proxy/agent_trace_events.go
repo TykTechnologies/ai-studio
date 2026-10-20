@@ -55,10 +55,15 @@ func recordGatewayEvent(ctx context.Context, ge agenttrace.GatewayEvent) {
 // captureApp stamps the authenticated App on the request's capture, so an
 // event the request ends with (even a denial before any upstream call) is
 // attributable to its App. Called where authentication puts the App on the
-// context.
+// context. An App with tracing switched off ends the capture here: nothing
+// of the request is recorded, and no hook does any further work for it.
 func captureApp(ctx context.Context, app *models.App) {
 	rec := agenttrace.From(ctx)
 	if rec == nil || app == nil {
+		return
+	}
+	if !app.Tracing.TracingOn() {
+		rec.Discard()
 		return
 	}
 	rec.Update(func(ev *agenttrace.Event) { fillAppIdentity(ev, app) })
