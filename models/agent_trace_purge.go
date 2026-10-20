@@ -1,6 +1,8 @@
 package models
 
 import (
+	"encoding/hex"
+
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -10,8 +12,9 @@ const purgeChunk = 500
 // PurgeAgentTraceSession deletes one session of one App and everything
 // captured for it (spec §9.4 right to erasure): spans, links, payloads
 // (content and previews), staged capture events of its spans, correlation
-// keys, agents, the filter join rows, traces and the session row. It returns
-// the number of rows deleted.
+// keys, agents, the filter join rows, traces and the session row, and it
+// blanks the bodies of the proxy logs of its calls. It returns the number of
+// rows deleted.
 //
 // The deletes run one after another, children first and the session row
 // last, so a purge that fails part-way leaves the session visible and can
@@ -44,6 +47,17 @@ func PurgeAgentTraceSession(db *gorm.DB, appID uint, sessionID string) (int64, e
 			if err := del(s.q, s.model); err != nil {
 				return total, err
 			}
+		}
+		// The gateway's own log of the same calls keeps their bodies (unless
+		// the LLM does not log bodies); the erasure blanks them and keeps
+		// the rows, which billing and analytics count (jyx.130).
+		hexIDs := make([]string, len(ids))
+		for i, id := range ids {
+			hexIDs[i] = hex.EncodeToString(id)
+		}
+		if err := db.Model(&ProxyLog{}).Where("app_id = ? AND trace_span_id IN ?", appID, hexIDs).
+			Updates(map[string]any{"request_body": "", "response_body": ""}).Error; err != nil {
+			return total, err
 		}
 	}
 	rest := []struct {
