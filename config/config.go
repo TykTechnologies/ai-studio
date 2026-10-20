@@ -902,6 +902,8 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	}
 
 	conf.SecretKey = getenv("TYK_AI_SECRET_KEY")
+	// Agent tracing keys fall back to the secrets key (D4).
+	conf.AgentTracing.FallbackKey = conf.SecretKey
 	conf.MicrogatewayEncryptionKey = getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	conf.CSRFTrustedOrigins = getenv("CSRF_TRUSTED_ORIGINS")
 	conf.CSRFKey = getenv("CSRF_KEY")

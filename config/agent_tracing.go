@@ -21,7 +21,15 @@ type AgentTracingConfig struct {
 	// Key is AGENT_TRACING_KEY, the root key the HMAC and payload keys are
 	// derived from with HKDF (D4). Empty falls back to TYK_AI_SECRET_KEY;
 	// tracing refuses to start with neither. Never logged.
-	Key string
+	Key string `json:"-"`
+	// PreviousKey is AGENT_TRACING_KEY_PREVIOUS: the root key before a
+	// rotation. Payloads encrypted under it stay readable, and correlation
+	// lookups try it too. Never logged.
+	PreviousKey string `json:"-"`
+	// FallbackKey is the secrets key (TYK_AI_SECRET_KEY, or the embedding
+	// host's SecretKey), used when Key is empty. The host sets it; it is not
+	// read from the environment here.
+	FallbackKey string `json:"-"`
 
 	// Capture queue and stream caps (§10).
 	QueueMaxEvents       int
@@ -184,6 +192,7 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 
 	p.boolean("AGENT_TRACING_ENABLED", &cfg.Enabled)
 	cfg.Key = getenv("AGENT_TRACING_KEY")
+	cfg.PreviousKey = getenv("AGENT_TRACING_KEY_PREVIOUS")
 
 	p.positiveInt("AGENT_TRACING_QUEUE_MAX_EVENTS", &cfg.QueueMaxEvents)
 	p.positiveInt64("AGENT_TRACING_QUEUE_MAX_BYTES", &cfg.QueueMaxBytes)
