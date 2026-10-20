@@ -19,6 +19,10 @@ type CaptureSettings struct {
 	FlushInterval  time.Duration // send at least this often (D3: 10 s)
 	FlushMaxEvents int           // or as soon as this many are queued (D3: 500)
 	ChunkMaxBytes  int           // capture events per pulse (D3: 4 MiB)
+	// MetadataOnly drops captured content before it is sent: the edge's
+	// connection to the hub is not verified TLS (TLS off, or certificate
+	// verification skipped), and content must not cross it (D4).
+	MetadataOnly bool
 }
 
 // captureOutbox holds capture events between requests and their pulses. It
@@ -146,6 +150,9 @@ func (p *AnalyticsPulsePlugin) chunkCapture(c *captureOutbox, events []*agenttra
 		// The content pipeline runs on the edge, off the request path; raw
 		// content never travels (ToProto ignores it).
 		agenttrace.ProcessContent(ev)
+		if c.settings.MetadataOnly {
+			agenttrace.StripPayloadData(ev)
+		}
 		ev.SetIdempotencyKey(p.edgeID)
 		pe := agenttrace.ToProto(ev)
 		size := proto.Size(pe) + perEventOverhead

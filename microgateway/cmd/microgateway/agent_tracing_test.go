@@ -89,6 +89,38 @@ func TestStartAgentTracingInstallsDeclaredExtractor(t *testing.T) {
 	}
 }
 
+// Content crosses to the hub only over verified TLS: with TLS off or the
+// certificate check skipped, the pulse is told to send metadata only
+// (jyx.127).
+func TestStartAgentTracingMetadataOnlyWithoutVerifiedTLS(t *testing.T) {
+	if !aiconfig.IsEnterprise() {
+		t.Skip("capture starts only in the Enterprise build")
+	}
+	t.Cleanup(func() { agenttrace.SetEnabled(false); agenttrace.SetSink(nil); resetEdgeTracingGlobals() })
+	yes := func() bool { return true }
+	for _, tc := range []struct {
+		name         string
+		tls, skip    bool
+		metadataOnly bool
+	}{
+		{"verified TLS", true, false, false},
+		{"TLS off", false, false, true},
+		{"verification skipped", true, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := gateConfig(true, "edge")
+			cfg.HubSpoke.ClientTLSEnabled, cfg.HubSpoke.SkipTLSVerify = tc.tls, tc.skip
+			en := &fakeEnabler{ok: true}
+			if !startAgentTracing(cfg, en, yes) {
+				t.Fatal("capture did not start")
+			}
+			if en.settings.MetadataOnly != tc.metadataOnly {
+				t.Fatalf("MetadataOnly=%v, want %v", en.settings.MetadataOnly, tc.metadataOnly)
+			}
+		})
+	}
+}
+
 // resetEdgeTracingGlobals restores what startAgentTracing sets process-wide.
 func resetEdgeTracingGlobals() {
 	declared.SetDefault(nil)

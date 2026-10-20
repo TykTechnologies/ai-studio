@@ -60,12 +60,22 @@ func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func(
 		FlushInterval:  at.FlushInterval,
 		FlushMaxEvents: at.FlushMaxEvents,
 		ChunkMaxBytes:  at.ChunkMaxBytes,
+		MetadataOnly:   !verifiedHubTLS(cfg),
 	}):
 		log.Warn().Msg("AGENT_TRACING_ENABLED is set, but the analytics pulse is not loaded to carry capture events; Agent Call Tracing stays off")
 		return false
 	}
 	agenttrace.SetSink(analytics.CaptureSink())
 	agenttrace.SetEnabled(true)
+	if !verifiedHubTLS(cfg) {
+		log.Warn().Msg("Agent Call Tracing: the connection to the hub is not verified TLS (EDGE_TLS_ENABLED=false or EDGE_SKIP_TLS_VERIFY=true); this edge sends trace metadata only, never captured content")
+	}
 	log.Info().Msg("Agent Call Tracing capture started on this edge")
 	return true
+}
+
+// verifiedHubTLS reports whether the edge reaches the hub over TLS with the
+// certificate verified, the channel captured content may cross.
+func verifiedHubTLS(cfg *config.Config) bool {
+	return cfg.HubSpoke.ClientTLSEnabled && !cfg.HubSpoke.SkipTLSVerify
 }
