@@ -121,7 +121,8 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
     // The config as the editor shows it (engine tokens masked), which is also
     // what saveConfig accepts back for settings outside the editor
     const editorConfig = async (): Promise<Json> => (await rpc(page, pluginId, 'getEditor')).data.config ?? {};
-    const original = await editorConfig();
+    // The stored config as is, restored at the end through the host's API
+    const original = await storedConfig(page, pluginId);
     page.on('dialog', (dialog) => dialog.accept());
 
     try {
@@ -141,7 +142,9 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
         await expect(ui.locator(`tr[data-binding="app:${APP_ID}"]`)).toBeVisible();
 
         await ui.getByTestId('pc-save').click();
-        await expect(ui.getByText('Saved. Edge gateways apply the change')).toBeVisible({ timeout: 20000 });
+        await expect(ui.getByTestId('pc-info')).toContainText('Saved. Compression on edge gateways does not change yet', { timeout: 20000 });
+        // Edges apply the change only after a push; the message links there
+        await expect(ui.getByTestId('pc-info').getByRole('link', { name: 'Edge Gateways' })).toHaveAttribute('href', '/admin/edge-gateways');
 
         await expect.poll(async () => {
             const cfg = await storedConfig(page, pluginId);
@@ -164,6 +167,37 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
         expect(refused.status).toBe(200);
         expect(refused.data.saved).toBe(false);
         expect(JSON.stringify(refused.data.errors)).toContain('no-such-policy');
+
+        // --- engine settings belong to the plugin config form (eac.45) --------
+        // An administrator stores an engine through the host's plugin API; the
+        // editor shows its token masked and refuses to repoint or drop it.
+        {
+            const patched = await api(page, 'patch', `/api/v1/plugins/${pluginId}`, {
+                config: { ...(await storedConfig(page, pluginId)), engine_e2e_url: 'http://127.0.0.1:9', engine_e2e_token: 'e2e-literal' },
+            });
+            expect(patched.status, JSON.stringify(patched.body)).toBeLessThan(300);
+            await expect.poll(async () => (await editorConfig()).engine_e2e_url, { timeout: 30000 }).toBe('http://127.0.0.1:9');
+            const shown = await editorConfig();
+            expect(shown.engine_e2e_token).toBe('********');
+
+            const { engine_e2e_url: _dropped, ...withoutURL } = shown;
+            const drop = await rpc(page, pluginId, 'saveConfig', { config: { ...withoutURL, mode: 'off' } });
+            expect(drop.data.saved).toBe(false);
+            expect(JSON.stringify(drop.data.errors)).toContain('engine_e2e_url: the policy editor cannot remove');
+
+            const repoint = await rpc(page, pluginId, 'saveConfig', { config: { ...shown, engine_e2e_url: 'https://attacker.example' } });
+            expect(repoint.data.saved).toBe(false);
+            expect(JSON.stringify(repoint.data.errors)).toContain('engine_e2e_url: the policy editor cannot change');
+
+            const stored = await storedConfig(page, pluginId);
+            expect([stored.engine_e2e_url, stored.mode]).toEqual(['http://127.0.0.1:9', shown.mode]);
+
+            // Unchanged engine keys with a policy change save, the token kept
+            const keep = await rpc(page, pluginId, 'saveConfig', { config: { ...shown, mode: 'audit' } });
+            expect(keep.data.saved, JSON.stringify(keep.data)).toBe(true);
+            const kept = await storedConfig(page, pluginId);
+            expect([kept.mode, kept.engine_e2e_url, kept.engine_e2e_token]).toEqual(['audit', 'http://127.0.0.1:9', 'e2e-literal']);
+        }
 
         // --- read-only role (Enterprise) ----------------------------------------
         const role = await api(page, 'post', '/api/v1/rbac/roles', {
@@ -212,12 +246,13 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
         await ui2.locator(`tr[data-policy="${policy}"]`).getByRole('button', { name: 'Delete' }).click();
         await expect(ui2.locator(`tr[data-policy="${policy}"]`)).toHaveCount(0);
         await ui2.getByTestId('pc-save').click();
-        await expect(ui2.getByText('Saved. Edge gateways apply the change')).toBeVisible({ timeout: 20000 });
+        await expect(ui2.getByTestId('pc-info')).toContainText('Saved. Compression on edge gateways does not change yet', { timeout: 20000 });
         const after = await storedConfig(page, pluginId);
         expect(after.policies?.[policy]).toBeUndefined();
         expect(after.bindings?.[`app:${APP_ID}`]).toBeUndefined();
     } finally {
-        const restore = await rpc(page, pluginId, 'saveConfig', { config: original });
-        expect(restore.data.saved, JSON.stringify(restore.data)).toBe(true);
+        // The host's plugin API restores every key, engine settings included
+        const restore = await api(page, 'patch', `/api/v1/plugins/${pluginId}`, { config: original });
+        expect(restore.status, JSON.stringify(restore.body)).toBeLessThan(300);
     }
 });
