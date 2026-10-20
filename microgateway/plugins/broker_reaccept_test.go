@@ -76,17 +76,6 @@ func TestRenewSessionBroker_ReacceptsOnlyWhenNeverConnected(t *testing.T) {
 	assert.False(t, oldKept, "the unused server was stopped")
 }
 
-// Re-accepting backs off: every renewal at first, then every tenth.
-func TestShouldReacceptBroker(t *testing.T) {
-	var got []int
-	for n := 1; n <= 40; n++ {
-		if shouldReacceptBroker(n) {
-			got = append(got, n)
-		}
-	}
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 10, 20, 30, 40}, got)
-}
-
 // The bug this works around: go-plugin keeps a broker ID's connection info
 // for five seconds after the host accepts on it, so a plugin that dials
 // later cannot connect to that ID at all, while a fresh accept works.

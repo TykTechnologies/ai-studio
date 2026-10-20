@@ -2457,12 +2457,16 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 	return summary
 }
 
-// shouldReacceptBroker says whether session renewal n may give a plugin
-// that never connected a fresh broker ID: each of the first five renewals,
-// then every tenth (about five minutes with 30 s sessions).
-func shouldReacceptBroker(n int) bool {
-	return n <= 5 || n%10 == 0
-}
+// Session lengths. While the plugin has not connected to its service
+// broker, sessions are short so that a fresh broker ID is offered often: a
+// plugin built before 2.3 dials lazily, retrying for about 25 s and reading
+// the current broker ID on each attempt, and can only connect within five
+// seconds of the host accepting on an ID, so it connects on the first host
+// call that overlaps a renewal.
+const (
+	sessionTimeoutMs            = int32(30000)
+	unconnectedSessionTimeoutMs = int32(10000)
+)
 
 // renewSessionBroker returns the broker ID for the plugin's next session.
 // go-plugin hands a plugin a broker ID's connection info once, when the host
@@ -2474,7 +2478,7 @@ func shouldReacceptBroker(n int) bool {
 // plugin the new ID (the SDK drops its client when the ID changes and dials
 // the new one).
 func (pm *PluginManager) renewSessionBroker(pluginID uint, client *MicrogatewayPluginClient, current uint32, renewal int) uint32 {
-	if current == 0 || client.BrokerConnected(current) || !shouldReacceptBroker(renewal) {
+	if current == 0 || client.BrokerConnected(current) {
 		return current
 	}
 	pm.mu.RLock()
@@ -2497,11 +2501,14 @@ func (pm *PluginManager) renewSessionBroker(pluginID uint, client *MicrogatewayP
 		return current
 	}
 	client.StopBroker(current)
-	log.Info().
-		Uint("plugin_id", pluginID).
+	ev := log.Debug()
+	if renewal <= 3 {
+		ev = log.Info()
+	}
+	ev.Uint("plugin_id", pluginID).
 		Uint32("old_broker_id", current).
 		Uint32("broker_id", next).
-		Msg("Plugin never connected to its service broker; serving it on a fresh broker ID")
+		Msg("Plugin has not connected to its service broker; serving it on a fresh broker ID")
 	return next
 }
 
@@ -2528,8 +2535,6 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 		Uint32("broker_id", brokerID).
 		Msg("Starting plugin session loop")
 
-	sessionTimeoutMs := int32(30000) // 30 second sessions
-
 	for renewal := 0; ; renewal++ {
 		select {
 		case <-ctx.Done():
@@ -2549,11 +2554,16 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 			Uint32("broker_id", brokerID).
 			Msg("Calling OpenSession RPC on plugin")
 
-		// Call OpenSession - this blocks until timeout or explicit close
+		// Call OpenSession - this blocks until timeout or explicit close.
+		// Sessions are short while the plugin has not connected.
+		timeoutMs := sessionTimeoutMs
+		if brokerID != 0 && !client.BrokerConnected(brokerID) {
+			timeoutMs = unconnectedSessionTimeoutMs
+		}
 		resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
 			ServiceBrokerId: brokerID,
 			PluginId:        uint32(pluginID),
-			TimeoutMs:       sessionTimeoutMs,
+			TimeoutMs:       timeoutMs,
 		})
 
 		log.Debug().
