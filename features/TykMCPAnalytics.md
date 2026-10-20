@@ -56,12 +56,21 @@ Tyk Gateway 5.14+ ──Redis──▶ Tyk Pump ──HTTP POST──▶ Studio 
 
 ## 3. Recorder (core)
 
-`AnalyticsHandler.RecordMCPCalls(ctx, []models.MCPCallRecord)` and the
-package helper `analytics.RecordMCPCalls`. The batched `DatabaseHandler`
-writes them through its worker like the other batch types (drop on a full
-buffer, nothing after `Stop`). `analytics.Tee` forwards copies to host sinks
-(`pkg/studio` `AnalyticsSinks`). The microgateway, `pkg/aigateway` and the
-file demo handlers are no-ops: ingest happens on the control plane only.
+The optional interface `analytics.MCPCallRecorder`
+(`RecordMCPCalls(ctx, []models.MCPCallRecord) error`) and the package helper
+`analytics.RecordMCPCalls`. It is not part of `AnalyticsHandler`, so hosts'
+own handlers compile unchanged; a handler without it does not receive MCP
+calls, and the helper then drops the batch (logged once) rather than have
+the pump retry something that can never succeed.
+
+The `DatabaseHandler` writes MCP batches through a writer goroutine of its
+own, so a burst never delays the chat records budgets are computed from.
+When its buffer is full (or it has stopped) it returns `ErrRecorderBusy`;
+the ingest endpoint answers 503 and the pump retries. `analytics.Tee`
+forwards copies to the host sinks that implement the interface
+(`pkg/studio` `AnalyticsSinks`), only after the primary has taken the batch.
+The microgateway and `pkg/aigateway` handlers do not implement it: ingest
+happens on the control plane only.
 
 ## 4. Ingest endpoint (core)
 
