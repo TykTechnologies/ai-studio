@@ -42,7 +42,8 @@ const (
 	//     vendor_workspace_id and price_multipliers, llm_chat_records and
 	//     proxy_logs service_tier (nullable, additive).
 	// 11: native_resources.screening_digest (nullable, additive).
-	SchemaVersion          = 11
+	// 12: agent_trace_* tables (agent tracing, new tables only).
+	SchemaVersion          = 12
 	MinReaderSchemaVersion = 1
 )
 

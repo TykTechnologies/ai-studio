@@ -40,6 +40,210 @@ TABLE agent_groups
   constraint CONSTRAINT `fk_agent_groups_group` FOREIGN KEY (`group_id`) REFERENCES `groups`(`id`)
   constraint PRIMARY KEY (`agent_config_id`,`group_id`)
   autoindex origin=pk unique=1 (agent_config_id, group_id)
+TABLE agent_trace_agents
+  column `id` text
+  column `session_id` text NOT NULL
+  column `name` text NOT NULL
+  column `declared` numeric NOT NULL
+  column `parent_agent_id` text
+  column `spawned_by_span_id` blob
+  column `confidence` text NOT NULL
+  column `system_prompt_fp` blob
+  column `toolset_fp` blob
+  column `first_seen` datetime NOT NULL
+  column `last_seen` datetime NOT NULL
+  column `self_cost_micros` integer
+  column `total_cost_micros` integer
+  column `self_tokens` integer
+  column `total_tokens` integer
+  constraint PRIMARY KEY (`id`)
+  autoindex origin=pk unique=1 (id)
+  index CREATE INDEX `idx_agent_trace_agents_last_seen` ON `agent_trace_agents`(`last_seen`)
+  index CREATE INDEX `idx_agent_trace_agents_session` ON `agent_trace_agents`(`session_id`)
+TABLE agent_trace_capture_events
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `idempotency_key` text NOT NULL
+  column `source` text NOT NULL
+  column `kind` text NOT NULL
+  column `app_id` integer
+  column `span_id` blob
+  column `received_at` datetime NOT NULL
+  column `event` blob NOT NULL
+  column `size` integer NOT NULL DEFAULT 0
+  index CREATE INDEX `idx_agent_trace_capture_events_received` ON `agent_trace_capture_events`(`received_at`)
+  index CREATE UNIQUE INDEX `idx_agent_trace_capture_events_idem` ON `agent_trace_capture_events`(`idempotency_key`)
+TABLE agent_trace_correlation_keys
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `app_id` integer NOT NULL
+  column `key_type` text NOT NULL
+  column `key_hash` blob NOT NULL
+  column `span_id` blob NOT NULL
+  column `trace_id` blob NOT NULL
+  column `session_id` text NOT NULL
+  column `agent_ref` text
+  column `attrs` text
+  column `created_at` datetime NOT NULL
+  column `expires_at` datetime NOT NULL
+  index CREATE INDEX `idx_agent_trace_correlation_keys_expires` ON `agent_trace_correlation_keys`(`expires_at`)
+  index CREATE INDEX `idx_agent_trace_correlation_keys_lookup` ON `agent_trace_correlation_keys`(`app_id`,`key_type`,`key_hash`)
+TABLE agent_trace_payloads
+  column `id` text
+  column `span_id` blob NOT NULL
+  column `app_id` integer NOT NULL
+  column `part` text NOT NULL
+  column `content_state` text NOT NULL
+  column `media_type` text NOT NULL
+  column `encoding` text NOT NULL
+  column `encrypted` numeric NOT NULL
+  column `key_id` integer NOT NULL DEFAULT 0
+  column `data` blob
+  column `blob_ref` text
+  column `original_bytes` integer NOT NULL DEFAULT 0
+  column `stored_bytes` integer NOT NULL DEFAULT 0
+  column `truncated` numeric NOT NULL
+  column `redaction_count` integer NOT NULL DEFAULT 0
+  column `fingerprint` blob
+  column `created_at` datetime NOT NULL
+  column `expires_at` datetime NOT NULL
+  constraint PRIMARY KEY (`id`)
+  autoindex origin=pk unique=1 (id)
+  index CREATE INDEX `idx_agent_trace_payloads_expires` ON `agent_trace_payloads`(`expires_at`)
+  index CREATE INDEX `idx_agent_trace_payloads_span` ON `agent_trace_payloads`(`span_id`)
+TABLE agent_trace_session_agents
+  column `session_id` text
+  column `name` text
+  constraint PRIMARY KEY (`session_id`,`name`)
+  autoindex origin=pk unique=1 (session_id, name)
+  index CREATE INDEX `idx_agent_trace_session_agents_name` ON `agent_trace_session_agents`(`name`)
+TABLE agent_trace_session_models
+  column `session_id` text
+  column `name` text
+  constraint PRIMARY KEY (`session_id`,`name`)
+  autoindex origin=pk unique=1 (session_id, name)
+  index CREATE INDEX `idx_agent_trace_session_models_name` ON `agent_trace_session_models`(`name`)
+TABLE agent_trace_session_tools
+  column `session_id` text
+  column `name` text
+  constraint PRIMARY KEY (`session_id`,`name`)
+  autoindex origin=pk unique=1 (session_id, name)
+  index CREATE INDEX `idx_agent_trace_session_tools_name` ON `agent_trace_session_tools`(`name`)
+TABLE agent_trace_sessions
+  column `id` text
+  column `app_id` integer NOT NULL
+  column `team_id` integer
+  column `user_id` integer
+  column `end_user` text
+  column `external_id` text
+  column `external_source` text
+  column `source` text NOT NULL
+  column `name` text
+  column `status` text NOT NULL
+  column `started_at` datetime NOT NULL
+  column `last_activity_at` datetime NOT NULL
+  column `ended_at` datetime
+  column `turn_count` integer NOT NULL DEFAULT 0
+  column `span_count` integer NOT NULL DEFAULT 0
+  column `llm_call_count` integer NOT NULL DEFAULT 0
+  column `tool_call_count` integer NOT NULL DEFAULT 0
+  column `error_count` integer NOT NULL DEFAULT 0
+  column `dropped_count` integer NOT NULL DEFAULT 0
+  column `input_tokens` integer NOT NULL DEFAULT 0
+  column `output_tokens` integer NOT NULL DEFAULT 0
+  column `cost_micros` integer NOT NULL DEFAULT 0
+  column `currency` text
+  column `min_confidence` text
+  column `sampled` numeric NOT NULL
+  column `content_mode` text NOT NULL
+  column `retention_until` datetime NOT NULL
+  constraint PRIMARY KEY (`id`)
+  autoindex origin=pk unique=1 (id)
+  index CREATE INDEX `idx_agent_trace_sessions_app_cost` ON `agent_trace_sessions`(`app_id`,`cost_micros`)
+  index CREATE INDEX `idx_agent_trace_sessions_app_external` ON `agent_trace_sessions`(`app_id`,`external_id`)
+  index CREATE INDEX `idx_agent_trace_sessions_app_started` ON `agent_trace_sessions`(`app_id`,`started_at`)
+  index CREATE INDEX `idx_agent_trace_sessions_app_user_started` ON `agent_trace_sessions`(`app_id`,`user_id`,`started_at`)
+  index CREATE INDEX `idx_agent_trace_sessions_retention` ON `agent_trace_sessions`(`retention_until`)
+  index CREATE INDEX `idx_agent_trace_sessions_status_activity` ON `agent_trace_sessions`(`status`,`last_activity_at`)
+  index CREATE INDEX `idx_agent_trace_sessions_team_started` ON `agent_trace_sessions`(`team_id`,`started_at`)
+TABLE agent_trace_span_links
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `span_id` blob NOT NULL
+  column `span_start` datetime NOT NULL
+  column `linked_trace_id` blob NOT NULL
+  column `linked_span_id` blob NOT NULL
+  column `link_type` text NOT NULL
+  column `confidence` text NOT NULL
+  column `rule` text NOT NULL
+  column `detail` text
+  index CREATE INDEX `idx_agent_trace_span_links_linked` ON `agent_trace_span_links`(`linked_span_id`)
+  index CREATE INDEX `idx_agent_trace_span_links_span_start` ON `agent_trace_span_links`(`span_start`)
+  index CREATE INDEX `idx_agent_trace_span_links_span` ON `agent_trace_span_links`(`span_id`)
+TABLE agent_trace_spans
+  column `span_id` blob
+  column `trace_id` blob NOT NULL
+  column `session_id` text NOT NULL
+  column `app_id` integer NOT NULL
+  column `parent_span_id` blob
+  column `parent_confidence` text
+  column `parent_rule` text
+  column `agent_ref` text
+  column `kind` text NOT NULL
+  column `name` text NOT NULL
+  column `start_time` datetime NOT NULL
+  column `end_time` datetime
+  column `status` text NOT NULL
+  column `error_type` text
+  column `error_message` text
+  column `credential_id` text
+  column `user_id` integer
+  column `resource_type` text
+  column `resource_id` text
+  column `provider` text
+  column `operation` text
+  column `request_model` text
+  column `response_model` text
+  column `tool_name` text
+  column `tool_call_ids` text
+  column `finish_reasons` text
+  column `input_tokens` integer
+  column `output_tokens` integer
+  column `cache_read_tokens` integer
+  column `cache_write_tokens` integer
+  column `reasoning_tokens` integer
+  column `cost_micros` integer
+  column `ttft_ms` integer
+  column `http_status` integer
+  column `gateway_node` text
+  column `analytics_ref` text
+  column `inferred` numeric NOT NULL
+  column `content_state` text NOT NULL
+  column `attributes` text
+  constraint PRIMARY KEY (`span_id`)
+  autoindex origin=pk unique=1 (span_id)
+  index CREATE INDEX `idx_agent_trace_spans_app_kind_start` ON `agent_trace_spans`(`app_id`,`kind`,`start_time`)
+  index CREATE INDEX `idx_agent_trace_spans_app_tool_start` ON `agent_trace_spans`(`app_id`,`tool_name`,`start_time`)
+  index CREATE INDEX `idx_agent_trace_spans_session_start` ON `agent_trace_spans`(`session_id`,`start_time`)
+  index CREATE INDEX `idx_agent_trace_spans_trace_start` ON `agent_trace_spans`(`trace_id`,`start_time`)
+TABLE agent_trace_traces
+  column `trace_id` blob
+  column `session_id` text NOT NULL
+  column `app_id` integer NOT NULL
+  column `turn_index` integer NOT NULL DEFAULT 0
+  column `source` text NOT NULL
+  column `root_span_id` blob
+  column `started_at` datetime NOT NULL
+  column `ended_at` datetime
+  column `status` text NOT NULL
+  column `span_count` integer NOT NULL DEFAULT 0
+  column `llm_call_count` integer NOT NULL DEFAULT 0
+  column `tool_call_count` integer NOT NULL DEFAULT 0
+  column `error_count` integer NOT NULL DEFAULT 0
+  column `input_tokens` integer NOT NULL DEFAULT 0
+  column `output_tokens` integer NOT NULL DEFAULT 0
+  column `cost_micros` integer NOT NULL DEFAULT 0
+  constraint PRIMARY KEY (`trace_id`)
+  autoindex origin=pk unique=1 (trace_id)
+  index CREATE INDEX `idx_agent_trace_traces_app_started` ON `agent_trace_traces`(`app_id`,`started_at`)
+  index CREATE INDEX `idx_agent_trace_traces_session_turn` ON `agent_trace_traces`(`session_id`,`turn_index`)
 TABLE app_datasources
   column `app_id` integer
   column `datasource_id` integer
