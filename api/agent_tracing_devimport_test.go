@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/agenttracing"
@@ -16,10 +17,12 @@ import (
 // importingTracing is a tracing service that implements the seed import.
 type importingTracing struct {
 	recordingTracing
-	doc []byte
+	doc    []byte
+	viewer agenttracing.Viewer
 }
 
-func (i *importingTracing) ImportDocument(_ context.Context, doc []byte) (string, error) {
+func (i *importingTracing) ImportDocument(_ context.Context, v agenttracing.Viewer, _ agenttracing.AccessMeta, doc []byte) (string, error) {
+	i.viewer = v
 	i.doc = doc
 	if string(doc) == `"bad"` {
 		return "", agenttracing.BadRequest("not a v1 document")
@@ -52,24 +55,32 @@ func TestAgentTracingDevImport_AbsentWithoutDevMode(t *testing.T) {
 	assert.Nil(t, svc.doc)
 }
 
-// In DEVMODE it needs traces:write, passes the body through, answers 201
-// with the session id, and maps a bad document to 400.
+// In DEVMODE it needs traces:write and trace-content read, passes the
+// body and the caller's viewer through, answers 201 with the session id,
+// and maps a bad document to 400.
 func TestAgentTracingDevImport_DevMode(t *testing.T) {
 	withDevMode(t, true)
 	svc := &importingTracing{}
-	api := withTracing(t, svc)
+	api, admin, member := setupAuthzAPI(t)
+	api.service.AgentTracing = svc
 	e, ok := api.routePerms["POST "+devImportPath]
 	require.True(t, ok)
 	assert.Equal(t, authz.Write("traces"), e.perm)
 
-	w := performRequest(api.router, "POST", devImportPath, map[string]any{"version": 1})
+	w := apitest.PerformAuthRequest(api.router, "POST", devImportPath, map[string]any{"version": 1}, admin.APIKey)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	assert.Contains(t, w.Body.String(), testSessionID)
 	assert.JSONEq(t, `{"version": 1}`, string(svc.doc))
+	assert.True(t, svc.viewer.AllApps, "the caller's viewer reaches the importer")
 	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 
-	w = performRequest(api.router, "POST", devImportPath, "bad")
+	w = apitest.PerformAuthRequest(api.router, "POST", devImportPath, "bad", admin.APIKey)
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	svc.doc = nil
+	w = apitest.PerformAuthRequest(api.router, "POST", devImportPath, map[string]any{"version": 1}, member.APIKey)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	assert.Nil(t, svc.doc)
 }
 
 // A service without the importer (Community, or tracing off) answers as

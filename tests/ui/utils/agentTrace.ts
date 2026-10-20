@@ -182,7 +182,7 @@ export function conversationSession(opts: SessionOptions = {}): { doc: Json; id:
  * A metadata-only session of about `spanCount` spans: turns of an LLM call
  * asking for a tool, the tool call, and the LLM call that answers.
  */
-export function largeSession(spanCount: number): { doc: Json; id: string } {
+export function largeSession(spanCount: number, appId = 1): { doc: Json; id: string } {
   const id = randomUUID();
   const t0 = Date.now() - 60 * 60_000;
   const spans: Json[] = [];
@@ -210,7 +210,7 @@ export function largeSession(spanCount: number): { doc: Json; id: string } {
     content_included: false,
     session: {
       id,
-      app_id: 1,
+      app_id: appId,
       user_id: 1,
       source: 'declared',
       external_id: `e2e-large-${id.slice(0, 8)}`,
@@ -273,4 +273,22 @@ export async function createUserWithRole(page: Page, roleName: string, email: st
     },
   });
   expect(res.status(), await res.text()).toBeLessThan(300);
+}
+
+let seedAppId: number | undefined;
+
+/**
+ * The App seeded sessions belong to: the import refuses an app_id that
+ * names no App. Created once per run; its content mode inherits the
+ * global one, which the import applies like captured traffic.
+ */
+export async function seedApp(page: Page): Promise<number> {
+  if (seedAppId) return seedAppId;
+  const res = await page.request.post(`${config.api_url}/api/v1/apps`, {
+    headers: { ...(await csrfHeaders(page)), 'Content-Type': 'application/json' },
+    data: { data: { type: 'apps', attributes: { name: `e2e tracing seed ${Date.now()}`, description: 'agent tracing e2e seed', user_id: 1, llm_ids: [] } } },
+  });
+  expect(res.status(), await res.text()).toBeLessThan(300);
+  seedAppId = Number((await res.json()).data.id);
+  return seedAppId;
 }

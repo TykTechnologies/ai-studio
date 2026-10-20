@@ -14,6 +14,7 @@ import {
     csrfHeaders,
     importSession,
     largeSession,
+    seedApp,
 } from '../utils/agentTrace';
 
 /**
@@ -26,11 +27,12 @@ const sessionsPath = '/admin/agent-sessions';
 
 test.skip(process.env.TEST_EDITION === 'ce', 'Enterprise only');
 
-async function loginAsAdmin(page: Page) {
+async function loginAsAdmin(page: Page): Promise<number> {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
     await new AdminMainPage(page).dismissQuickStartModal();
+    return seedApp(page);
 }
 
 async function gotoSession(page: Page, id: string) {
@@ -49,9 +51,9 @@ function watchExfil(page: Page): string[] {
 
 test.describe('Agent sessions', () => {
     test('list, filters and the transcript of a tool-using turn', async ({ page }) => {
-        await loginAsAdmin(page);
-        const ok = conversationSession();
-        const failed = conversationSession({ withError: true });
+        const appId = await loginAsAdmin(page);
+        const ok = conversationSession({ appId });
+        const failed = conversationSession({ appId, withError: true });
         await importSession(page, ok.doc);
         await importSession(page, failed.doc);
 
@@ -87,8 +89,8 @@ test.describe('Agent sessions', () => {
 
     test('captured Markdown never loads an image or makes a link fetch', async ({ page }) => {
         const hits = watchExfil(page);
-        await loginAsAdmin(page);
-        const s = conversationSession();
+        const appId = await loginAsAdmin(page);
+        const s = conversationSession({ appId });
         await importSession(page, s.doc);
         await gotoSession(page, s.id);
         const answer = page.getByTestId('assistant-step').last();
@@ -103,8 +105,8 @@ test.describe('Agent sessions', () => {
     });
 
     test('timeline, span drawer and keyboard navigation', async ({ page }) => {
-        await loginAsAdmin(page);
-        const s = conversationSession();
+        const appId = await loginAsAdmin(page);
+        const s = conversationSession({ appId });
         await importSession(page, s.doc);
         await gotoSession(page, s.id);
 
@@ -137,8 +139,8 @@ test.describe('Agent sessions', () => {
     });
 
     test('dragging a range on the timeline strip filters the transcript', async ({ page }) => {
-        await loginAsAdmin(page);
-        const s = conversationSession();
+        const appId = await loginAsAdmin(page);
+        const s = conversationSession({ appId });
         await importSession(page, s.doc);
         await gotoSession(page, s.id);
         const transcript = page.getByTestId('transcript');
@@ -163,8 +165,8 @@ test.describe('Agent sessions', () => {
     });
 
     test('exports match the API', async ({ page }) => {
-        await loginAsAdmin(page);
-        const s = conversationSession();
+        const appId = await loginAsAdmin(page);
+        const s = conversationSession({ appId });
         await importSession(page, s.doc);
         await gotoSession(page, s.id);
 
@@ -189,8 +191,8 @@ test.describe('Agent sessions', () => {
 
     test('a 5,000-span session renders within budget', async ({ page }) => {
         test.setTimeout(180_000);
-        await loginAsAdmin(page);
-        const big = largeSession(5000);
+        const appId = await loginAsAdmin(page);
+        const big = largeSession(5000, appId);
         await importSession(page, big.doc);
 
         await page.goto(`${config.base_url}${sessionsPath}`);
@@ -206,8 +208,8 @@ test.describe('Agent sessions', () => {
     });
 
     test('accessibility: no serious axe violations on the list and a session', async ({ page }) => {
-        await loginAsAdmin(page);
-        const s = conversationSession();
+        const appId = await loginAsAdmin(page);
+        const s = conversationSession({ appId });
         await importSession(page, s.doc);
 
         await page.goto(`${config.base_url}${sessionsPath}`);
@@ -226,8 +228,8 @@ test.describe('Agent sessions', () => {
 test.describe('Agent sessions: content permission', () => {
     for (const role of ['Viewer', 'Auditor']) {
         test(`${role} sees metadata only, an admin sees content and is audited`, async ({ page }) => {
-            await loginAsAdmin(page);
-            const s = conversationSession();
+            const appId = await loginAsAdmin(page);
+            const s = conversationSession({ appId });
             await importSession(page, s.doc);
             const email = `${role.toLowerCase()}_${Date.now()}@tyk.io`;
             await createUserWithRole(page, role, email, config.password);
@@ -313,7 +315,7 @@ test.describe('Agent sessions: live capture', () => {
         await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', () => r()));
         const port = (upstream.address() as AddressInfo).port;
         try {
-            await loginAsAdmin(page);
+            const appId = await loginAsAdmin(page);
             const h = { ...(await csrfHeaders(page)), 'Content-Type': 'application/json' };
             const api = (path: string) => `${config.api_url}/api/v1${path}`;
             const name = `e2e tracing llm ${Date.now()}`;

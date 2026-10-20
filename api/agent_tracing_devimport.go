@@ -18,7 +18,8 @@ const maxDevImportBytes = 64 << 20
 
 // registerAgentTracingDevRoutes adds the e2e seed import (jyx.35) in
 // DEVMODE only: POST /agent-tracing/dev/import stores one JSON v1 session
-// document. It needs traces:write, and does not exist outside DEVMODE.
+// document. It needs traces:write and trace-content read (an import creates
+// content), and does not exist outside DEVMODE.
 func (a *API) registerAgentTracingDevRoutes(g *permRouter, devMode bool) {
 	if !devMode {
 		return
@@ -40,12 +41,18 @@ func (a *API) importAgentTraceDocument(c *gin.Context) {
 		respondAgentTracing(c, nil, err)
 		return
 	}
+	// The route requires traces:write; an import also creates content that
+	// trace-content readers will see, so creating it needs that too.
+	if !authz.Can(c, authz.Read("trace-content")) {
+		c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Read("trace-content")))
+		return
+	}
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, maxDevImportBytes))
 	if err != nil {
 		agentTracingError(c, http.StatusBadRequest, "Bad Request", "the document could not be read")
 		return
 	}
-	id, err := imp.ImportDocument(c.Request.Context(), body)
+	id, err := imp.ImportDocument(c.Request.Context(), agentTracingViewer(c), agentAccessMeta(c), body)
 	if err != nil {
 		var bad *agenttracing.BadRequestError
 		if errors.As(err, &bad) {
