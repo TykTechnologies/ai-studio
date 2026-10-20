@@ -97,6 +97,9 @@ func (a *API) createTool(c *gin.Context) {
 	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
 		return
 	}
+	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, "")) {
+		return
+	}
 
 	// Refuse an impossible access-method request before anything is written.
 	if err := applyToolAccessInput(&models.Tool{ToolType: input.Data.Attributes.ToolType},
@@ -331,6 +334,9 @@ func (a *API) updateTool(c *gin.Context) {
 	tool.Namespace = input.Data.Attributes.Namespace
 
 	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
+		return
+	}
+	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, tool.TracingContentModeMax)) {
 		return
 	}
 	if input.Data.Attributes.TracingContentModeMax != nil {

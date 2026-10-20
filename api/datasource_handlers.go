@@ -45,6 +45,9 @@ func (a *API) createDatasource(c *gin.Context) {
 	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
 		return
 	}
+	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, "")) {
+		return
+	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
@@ -250,6 +253,10 @@ func (a *API) updateDatasource(c *gin.Context) {
 			}{{Title: "Forbidden", Detail: "Only administrators can change namespace"}}})
 			return
 		}
+	}
+
+	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, existingDS.TracingContentModeMax)) {
+		return
 	}
 
 	// Written first: UpdateDatasource reloads and saves the row, so its

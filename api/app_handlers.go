@@ -96,7 +96,7 @@ func (a *API) createApp(c *gin.Context) {
 		}
 		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
 	}
-	tracingOpt, ok := a.appTracingOption(c, input.Data.Attributes.Tracing, false)
+	tracingOpt, ok := a.appTracingOption(c, input.Data.Attributes.Tracing, models.AppTracingSettings{})
 	if !ok {
 		return
 	}
@@ -370,7 +370,7 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
-		tracingOpt, ok := a.appTracingOption(c, input.Data.Attributes.Tracing, existing.Tracing.OwnerMayViewContent)
+		tracingOpt, ok := a.appTracingOption(c, input.Data.Attributes.Tracing, existing.Tracing)
 		if !ok {
 			return
 		}

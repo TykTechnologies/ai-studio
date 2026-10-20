@@ -135,30 +135,68 @@ func TestAppTracingOwnerContentNeedsTracesWrite(t *testing.T) {
 	grant := &models.AppTracingSettings{OwnerMayViewContent: true}
 
 	c, w := ctxWith(authz.Write("apps"))
-	opt, ok := a.appTracingOption(c, grant, false)
+	opt, ok := a.appTracingOption(c, grant, models.AppTracingSettings{})
 	assert.False(t, ok)
 	assert.Nil(t, opt)
 	assert.Equal(t, http.StatusForbidden, w.Code)
 	assert.Contains(t, w.Body.String(), "traces:write")
 
+	stored := models.AppTracingSettings{ContentMode: "metadata", OwnerMayViewContent: true}
 	c, w = ctxWith(authz.Write("apps"))
-	_, ok = a.appTracingOption(c, &models.AppTracingSettings{ContentMode: "metadata", OwnerMayViewContent: true}, true)
-	assert.True(t, ok, "an unchanged grant needs no traces:write")
+	_, ok = a.appTracingOption(c, &models.AppTracingSettings{ContentMode: "metadata", OwnerMayViewContent: true}, stored)
+	assert.True(t, ok, "unchanged settings need no traces:write")
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	c, _ = ctxWith(authz.Write("apps"))
-	_, ok = a.appTracingOption(c, &models.AppTracingSettings{}, true)
+	_, ok = a.appTracingOption(c, &models.AppTracingSettings{ContentMode: "metadata"}, stored)
 	assert.False(t, ok, "revoking the grant is a change too")
 
 	c, _ = ctxWith(authz.Write("apps"), authz.Write("traces"))
-	opt, ok = a.appTracingOption(c, grant, false)
+	opt, ok = a.appTracingOption(c, grant, models.AppTracingSettings{})
 	assert.True(t, ok)
 	assert.NotNil(t, opt)
 
 	c, _ = ctxWith()
-	opt, ok = a.appTracingOption(c, nil, false)
+	opt, ok = a.appTracingOption(c, nil, models.AppTracingSettings{})
 	assert.True(t, ok, "no tracing in the request leaves it alone")
 	assert.Nil(t, opt)
+}
+
+// jyx.99: every App tracing field, not only the content grant, needs
+// traces:write to change; apps:write alone widened capture and retention.
+func TestAppTracingEveryFieldNeedsTracesWrite(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	a := &API{}
+	ctxWith := func(perms ...authz.Permission) (*gin.Context, *httptest.ResponseRecorder) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		authz.WithContext(c, authz.NewContext(7, false, func() (authz.Set, error) { return authz.NewSet(perms...), nil }))
+		return c, w
+	}
+	on, days, fewer := true, 365, 3
+	stored := models.AppTracingSettings{PayloadDays: &fewer}
+	for name, change := range map[string]models.AppTracingSettings{
+		"enabled":              {Enabled: &on, PayloadDays: &fewer},
+		"content_mode":         {ContentMode: "full", PayloadDays: &fewer},
+		"max_request_override": {MaxRequestOverride: "full", PayloadDays: &fewer},
+		"session_idle_timeout": {SessionIdleTimeout: "2h", PayloadDays: &fewer},
+		"payload_days":         {PayloadDays: &days},
+		"cleared":              {},
+	} {
+		change := change
+		c, w := ctxWith(authz.Write("apps"))
+		_, ok := a.appTracingOption(c, &change, stored)
+		assert.False(t, ok, "%s with apps:write only", name)
+		assert.Equal(t, http.StatusForbidden, w.Code, name)
+
+		c, _ = ctxWith(authz.Write("apps"), authz.Write("traces"))
+		_, ok = a.appTracingOption(c, &change, stored)
+		assert.True(t, ok, "%s with traces:write", name)
+	}
+	same := fewer
+	c, _ := ctxWith(authz.Write("apps"))
+	_, ok := a.appTracingOption(c, &models.AppTracingSettings{PayloadDays: &same}, stored)
+	assert.True(t, ok, "an equal value behind another pointer is no change")
 }
 
 // Tools and datasources: the cap round-trips, an update that omits it keeps

@@ -50,6 +50,9 @@ func (a *API) createLLM(c *gin.Context) {
 		input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)) {
 		return
 	}
+	if !a.requireTracingWrite(c, input.Data.Attributes.TracingContentModeMax != "" || input.Data.Attributes.TracingPropagationOptOut) {
+		return
+	}
 
 	// Creating a provider already active is the publish action on llms, and
 	// needs every "required to publish" metadata field.
@@ -240,6 +243,10 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
+	if !a.requireTracingWrite(c, input.Data.Attributes.TracingContentModeMax != thisLLM.TracingContentModeMax ||
+		input.Data.Attributes.TracingPropagationOptOut != thisLLM.TracingPropagationOptOut) {
 		return
 	}
 
