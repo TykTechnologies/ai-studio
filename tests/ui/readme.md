@@ -76,7 +76,7 @@ TEST_BASE_URL=http://localhost:8080 TEST_PROXY_URL=http://localhost:9090 \
   npx playwright test tests/agent-tracing.spec.ts --project=chromium
 ```
 
-Without `TEST_PROXY_URL` (the embedded gateway, `PROXY_PORT`), the live capture case is skipped. It waits out the assembler's 30-second settle window.
+Without `TEST_PROXY_URL` (the embedded gateway, `PROXY_PORT`), the live capture case is skipped. It waits out the assembler's 30-second settle window. When Studio runs in a container, set `TEST_MOCK_UPSTREAM_HOST=host.docker.internal` so it can reach the test's mock LLM upstream (CI does).
 
 `tests/agent-tracing-ce.spec.ts` checks that the Community Edition hides the feature. Run it against a CE build with `TEST_EDITION=ce`; global setup then accepts the CE backend, and the Enterprise specs skip.
 

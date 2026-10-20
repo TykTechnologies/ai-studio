@@ -89,6 +89,10 @@ services:
       - ${STUDIO_GOMODCACHE:-go_cache}:/root/go/pkg/mod
       - ${STUDIO_GOCACHE:-go_build_cache}:/root/.cache/go-build
       - studio_data:/app/data
+    # The agent tracing live-capture spec runs a mock LLM upstream on the
+    # runner; Studio reaches it as host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8081:8080" # backend API (kept for debugging; tests use the frontend)
       - "9090:9090" # embedded gateway / proxy

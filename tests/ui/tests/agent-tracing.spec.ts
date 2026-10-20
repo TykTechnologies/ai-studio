@@ -293,6 +293,8 @@ const stripExportTime = (md: string) =>
  * the raw values appear nowhere. Needs AGENT_TRACING_CONTENT_DEFAULT_MODE
  * at least redacted (an App can only lower it), ALLOW_INTERNAL_NETWORK_ACCESS
  * for the in-test mock upstream, and TEST_PROXY_URL (the gateway port).
+ * When Studio runs in a container, TEST_MOCK_UPSTREAM_HOST names this
+ * machine as the container sees it (host.docker.internal in CI).
  */
 test.describe('Agent sessions: live capture', () => {
     test.skip(!process.env.TEST_PROXY_URL, 'set TEST_PROXY_URL to the embedded gateway (PROXY_PORT)');
@@ -312,7 +314,10 @@ test.describe('Agent sessions: live capture', () => {
                 }));
             });
         });
-        await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', () => r()));
+        const upstreamHost = process.env.TEST_MOCK_UPSTREAM_HOST || '127.0.0.1';
+        // A containerised Studio reaches the mock through the host gateway.
+        const bindHost = upstreamHost === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0';
+        await new Promise<void>((r) => upstream.listen(0, bindHost, () => r()));
         const port = (upstream.address() as AddressInfo).port;
         try {
             const appId = await loginAsAdmin(page);
@@ -320,7 +325,7 @@ test.describe('Agent sessions: live capture', () => {
             const api = (path: string) => `${config.api_url}/api/v1${path}`;
             const name = `e2e tracing llm ${Date.now()}`;
             const llm = await page.request.post(api('/llms'), { headers: h, data: { data: { type: 'llms', attributes: {
-                name, vendor: 'openai', api_endpoint: `http://127.0.0.1:${port}/v1`, api_key: 'sk-upstream-e2e',
+                name, vendor: 'openai', api_endpoint: `http://${upstreamHost}:${port}/v1`, api_key: 'sk-upstream-e2e',
                 default_model: 'gpt-4o', active: true, privacy_score: 50, allowed_models: [],
             } } } });
             expect(llm.status(), await llm.text()).toBeLessThan(300);
