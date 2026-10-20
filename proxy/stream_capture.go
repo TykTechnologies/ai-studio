@@ -39,6 +39,7 @@ type streamCapture struct {
 	argBytes int
 
 	id       string
+	model    string // the model the vendor names (jyx.165)
 	finishes []string
 	complete bool
 
@@ -111,6 +112,8 @@ type streamCaptureResult struct {
 	ServerToolCalls []extract.ToolCall
 	// ArgsOverflow: some argument bytes were over the cap.
 	ArgsOverflow bool
+	// Model is the model the vendor's events name, "" when none does.
+	Model string
 }
 
 // Finish ends the body and returns what was captured.
@@ -123,6 +126,7 @@ func (c *streamCapture) Finish() streamCaptureResult {
 	x.Stream = true
 	x.StreamIncomplete = !c.complete
 	x.ResponseID = boundStreamID(c.id)
+	res.Model = boundStreamText(c.model, extract.MaxNameBytes)
 	x.FinishReasons = c.finishes
 	if len(x.FinishReasons) > extract.MaxFinishReasons {
 		x.FinishReasons = x.FinishReasons[:extract.MaxFinishReasons]
@@ -229,6 +233,13 @@ func (c *streamCapture) finish(reason string) {
 	}
 }
 
+// setModel keeps the first model the stream names.
+func (c *streamCapture) setModel(model string) {
+	if c.model == "" {
+		c.model = model
+	}
+}
+
 func (c *streamCapture) setID(id string) {
 	if c.id == "" {
 		c.id = id
@@ -301,6 +312,7 @@ func (c *streamCapture) skippable(data string) bool {
 // openAI reads a Chat Completions chunk, or an Ollama native line.
 func (c *streamCapture) openAI(m map[string]json.RawMessage) {
 	c.setID(jsonStr(m["id"]))
+	c.setModel(jsonStr(m["model"]))
 	if raw, ok := m["choices"]; ok {
 		var choices []struct {
 			Index int `json:"index"`
@@ -440,6 +452,7 @@ func (c *streamCapture) responses(typ string, m map[string]json.RawMessage) {
 func (c *streamCapture) responseHeader(raw json.RawMessage, final bool) {
 	var r struct {
 		ID                string `json:"id"`
+		Model             string `json:"model"`
 		Status            string `json:"status"`
 		IncompleteDetails *struct {
 			Reason string `json:"reason"`
@@ -449,6 +462,7 @@ func (c *streamCapture) responseHeader(raw json.RawMessage, final bool) {
 		return
 	}
 	c.setID(r.ID)
+	c.setModel(r.Model)
 	if final {
 		c.finish(r.Status)
 		if r.IncompleteDetails != nil {
@@ -463,10 +477,12 @@ func (c *streamCapture) anthropic(typ string, m map[string]json.RawMessage) {
 	switch typ {
 	case "message_start":
 		var msg struct {
-			ID string `json:"id"`
+			ID    string `json:"id"`
+			Model string `json:"model"`
 		}
 		_ = json.Unmarshal(m["message"], &msg)
 		c.setID(msg.ID)
+		c.setModel(msg.Model)
 	case "content_block_start":
 		var b struct {
 			Type  string          `json:"type"`
@@ -518,6 +534,7 @@ func (c *streamCapture) anthropic(typ string, m map[string]json.RawMessage) {
 // google reads a Gemini / Vertex chunk: function calls arrive whole. The
 // stream has no terminal event; a finish reason marks the end.
 func (c *streamCapture) google(m map[string]json.RawMessage) {
+	c.setModel(jsonStr(m["modelVersion"]))
 	type functionCall struct {
 		ID   string          `json:"id"`
 		Name string          `json:"name"`

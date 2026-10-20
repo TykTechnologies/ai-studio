@@ -58,10 +58,11 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 	format := requestFilterFormatFor(r, llm)
 	var x agenttrace.Extracts
 	var serverTools int
+	var streamModel string
 	if streamed {
 		ct, _ := r.Context().Value(upstreamContentTypeKey{}).(string)
 		res := captureStreamedResponse(r, llm, ct, respBody, 0, fp)
-		x, serverTools = res.Extracts, len(res.ServerToolCalls)
+		x, serverTools, streamModel = res.Extracts, len(res.ServerToolCalls), res.Model
 	} else if resp, err := extract.ParseResponse(format, respBody, fp); err == nil {
 		resp.Apply(&x)
 		serverTools = len(resp.ServerToolCalls)
@@ -92,6 +93,11 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 		if record != nil {
 			ev.ResponseModel = record.Name
 			ev.Usage = usageFromRecord(record)
+		}
+		if streamModel != "" {
+			// A stream's record names the requested model; the vendor's
+			// events name the one that answered (jyx.165).
+			ev.ResponseModel = streamModel
 		}
 		ev.Extracts = x
 		if serverTools > 0 {

@@ -292,3 +292,29 @@ func BenchmarkStreamCapture(b *testing.B) {
 		})
 	}
 }
+
+// The model a stream's events name is the response model (jyx.165): the
+// first one named, in every dialect that names one.
+func TestStreamCaptureModel(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		dialect streamDialect
+		ct      string
+		body    []byte
+		want    string
+	}{
+		{"openai chat", "openai", "text/event-stream", streamFixture(t, "openai_chat_parallel_stream.sse"), "gpt-4o-2024-08-06"},
+		{"openai chat, aborted", "openai", "text/event-stream", streamFixture(t, "stream_abort.sse"), "gpt-4o-2024-08-06"},
+		{"anthropic", "anthropic", "text/event-stream", streamFixture(t, "anthropic_messages_stream_parallel.sse"), "claude-sonnet-4-5"},
+		{"responses", "openai", "text/event-stream", []byte("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-5-2026-01-01\",\"status\":\"in_progress\"}}\n\n"), "gpt-5-2026-01-01"},
+		{"google", "google_ai", "text/event-stream", []byte("data: {\"responseId\":\"g-1\",\"modelVersion\":\"gemini-2.5-pro\",\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Hi\"}]}}]}\n\n"), "gemini-2.5-pro"},
+		{"ollama", "ollama", "application/x-ndjson", []byte("{\"model\":\"llama3\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\"}\n"), "llama3"},
+		{"none named", "openai", "text/event-stream", []byte("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, n := range []int{0, 3} {
+				assert.Equal(t, tc.want, capture(tc.dialect, tc.ct, tc.body, n, 0).Model, "read size %d", n)
+			}
+		})
+	}
+}
