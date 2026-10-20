@@ -155,7 +155,7 @@ func (p *AnalyticsPulsePlugin) chunkCapture(c *captureOutbox, events []*agenttra
 			if ev.Attributes == nil {
 				ev.Attributes = map[string]string{}
 			}
-			ev.Attributes["tyk.content.withheld"] = "edge_link_unverified_tls"
+			ev.Attributes["tyk.content.withheld"] = agenttrace.WithheldEdgeLinkUnverifiedTLS
 		}
 		ev.SetIdempotencyKey(p.edgeID)
 		pe := agenttrace.ToProto(ev)

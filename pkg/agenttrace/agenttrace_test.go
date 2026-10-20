@@ -122,7 +122,7 @@ func fullEvent() *Event {
 			Truncated: true, RedactionCount: 2, Fingerprint: f.Fingerprint([]byte("x")), Data: []byte(`{"a":1}`),
 		}},
 		ContentMode: ContentRedacted,
-		Attributes:  map[string]string{"tyk.upstream.request_id": "req_1"},
+		Attributes:  map[string]string{"mcp.method.name": "tools/call"},
 	}
 }
 

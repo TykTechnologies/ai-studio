@@ -8,31 +8,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// An edge event's attributes keep only the gateway's namespaces, bounded
-// (jyx.160).
-func TestFromProtoBoundsAttributes(t *testing.T) {
+// The hub keeps exactly the attributes a capture writes, with valid
+// values: an edge cannot preset the hub's own statements (attribution, the
+// offered tool set) or put content in attributes (jyx.160, jyx.167).
+func TestFromProtoAllowlistsAttributes(t *testing.T) {
+	assert.Equal(t, []string{
+		"http.request.method", "mcp.method.name", "mcp.protocol.version",
+		"tyk.content.withheld", "tyk.server_tool_calls",
+	}, CaptureAttributeKeys(), "a new capture attribute must be added here and to the allowlist on purpose")
+
 	attrs := map[string]string{
 		"mcp.method.name":            "tools/call",
+		"mcp.protocol.version":       "2026-07-28",
 		"http.request.method":        "POST",
-		"gen_ai.x":                   strings.Repeat("v", 5000),
-		"evil.key":                   "x",
+		"tyk.server_tool_calls":      "2",
+		"tyk.content.withheld":       WithheldEdgeLinkUnverifiedTLS,
+		"tyk.attribution.rule":       "catalogue_unique",
+		"tyk.attribution.confidence": "exact",
+		"tyk.tools.offered":          `["x"]`,
+		"tyk.tool_calls.not_offered": `["y"]`,
+		"tyk.tool.in_catalogue":      "true",
 		"gen_ai.input.messages":      "secret prompt",
-		"http.request.body.content":  "secret body",
-		strings.Repeat("tyk.k", 100): "long key",
-	}
-	for i := 0; i < 100; i++ {
-		attrs["tyk.a"+strings.Repeat("0", i%3)+string(rune('a'+i%26))+string(rune('a'+i/26))] = "v"
+		"evil.key":                   "x",
 	}
 	ev := &Event{Kind: KindToolCall, SpanID: NewSpanID(), Attributes: attrs}
 	got := FromProto(ToProto(ev)).Attributes
-	assert.LessOrEqual(t, len(got), maxAttributes)
-	assert.NotContains(t, got, "evil.key")
-	assert.NotContains(t, got, "gen_ai.input.messages", "content never sits in attributes (jyx.161)")
-	assert.NotContains(t, got, "http.request.body.content")
-	assert.NotContains(t, got, strings.Repeat("tyk.k", 100))
-	assert.Len(t, got["gen_ai.x"], maxAttributeValue)
-	assert.Equal(t, "tools/call", got["mcp.method.name"])
-	assert.Equal(t, "POST", got["http.request.method"])
+	assert.Equal(t, map[string]string{
+		"mcp.method.name":       "tools/call",
+		"mcp.protocol.version":  "2026-07-28",
+		"http.request.method":   "POST",
+		"tyk.server_tool_calls": "2",
+		"tyk.content.withheld":  WithheldEdgeLinkUnverifiedTLS,
+	}, got)
+
+	bad := map[string]string{
+		"mcp.method.name":       strings.Repeat("m", 200),
+		"http.request.method":   "post; drop",
+		"tyk.server_tool_calls": "many",
+		"tyk.content.withheld":  "because I said so",
+	}
+	assert.Nil(t, boundAttributes(bad), "invalid values are dropped")
 	assert.Nil(t, boundAttributes(nil))
 }
 
