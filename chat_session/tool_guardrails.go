@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
@@ -18,6 +20,10 @@ var errTurnFailed = errors.New("the request could not be processed")
 // a tool result. Like scripting.ToolBlockedMessage for the model, it names
 // neither the filter nor the content.
 var errToolResultBlocked = errors.New("a tool result was blocked by policy; the turn was stopped")
+
+// errToolCallBlocked is what the user is told when a chat guardrail keeps a
+// tool call the model asked for from running.
+var errToolCallBlocked = errors.New("a tool call was blocked by policy and not run; the turn was stopped")
 
 // filterPass is one use of the chat's request filters: which of them run
 // and how the text is presented to them.
@@ -66,6 +72,8 @@ func (cs *ChatSession) runRequestFilters(ctx context.Context, text string, pass 
 			IsChat: true,
 			Format: pass.format,
 			Ctx:    ctx,
+			RecordEvents: scripting.EventRecorder("chat_request", 0, cs.userID, cs.chatRef.LLM.ID,
+				string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName),
 		}
 		for k, v := range pass.extra {
 			input.Context[k] = v
@@ -104,6 +112,79 @@ func (cs *ChatSession) runScriptRequestFilters(ctx context.Context, text string)
 			"filter_name", stop.filter.Name, "session_id", cs.ID(), "error", stop.err)
 	}
 	return "", true
+}
+
+// screenToolCall runs the chat's request guardrails that scan tool calls over
+// a call the model asked for, before it runs (a REST tool) or is handed to
+// the user (a client tool): each sees the call's arguments with the user's
+// goal (the latest user message, and the system prompt where the filter
+// includes it). It reports whether a guardrail blocked the call, or failed,
+// in which case the call must not run.
+func (cs *ChatSession) screenToolCall(ctx context.Context, t llms.ToolCall) (blocked bool) {
+	if t.FunctionCall == nil {
+		return false
+	}
+	scans := func(f *models.Filter) bool {
+		return f.IsGuardrail() && guardrails.ConfigScansToolCalls(f.Config)
+	}
+	any := false
+	for _, f := range cs.filters {
+		if !f.ResponseFilter && scans(f) {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return false
+	}
+	_, stop := cs.runRequestFilters(ctx, t.FunctionCall.Arguments, filterPass{
+		keep:   scans,
+		role:   llms.ChatMessageTypeAI,
+		format: scripting.FormatToolCall,
+		extra: map[string]interface{}{
+			"tool_name": t.FunctionCall.Name, "tool_call_id": t.ID,
+			"user_goal": cs.userGoal(), "system_prompt": cs.getSystemPrompt(),
+		},
+	})
+	switch {
+	case stop == nil:
+		return false
+	case stop.err != nil:
+		slog.Error("chat guardrail on a tool call failed; not running it",
+			"filter_name", stop.filter.Name, "session_id", cs.ID(), "error", stop.err)
+	default:
+		slog.Info("tool call blocked by a chat guardrail",
+			"filter_name", stop.filter.Name, "tool", t.FunctionCall.Name, "session_id", cs.ID())
+	}
+	return true
+}
+
+// userGoal is the latest user message of the conversation: the one this
+// turn answers, or, in a turn resumed from stored history, the last human
+// message there.
+func (cs *ChatSession) userGoal() string {
+	if cs.lastUserText != "" {
+		return cs.lastUserText
+	}
+	msgs, err := cs.getMessages()
+	if err != nil {
+		return ""
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != llms.ChatMessageTypeHuman {
+			continue
+		}
+		var b strings.Builder
+		for _, p := range msgs[i].Parts {
+			if tp, ok := p.(llms.TextContent); ok {
+				b.WriteString(tp.Text)
+			}
+		}
+		if s := b.String(); strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // screenToolResult runs the chat's request-side guardrail filters over the

@@ -42,7 +42,14 @@ func TestResponsesExtractor_NamesToolResults(t *testing.T) {
 				assert.Equal(t, scripting.MessageTool{Name: want.ToolName, CallID: want.ToolCallID}, tools[i], want.Path)
 			}
 			for i, m := range msgs {
-				if m.Role != llms.ChatMessageTypeTool {
+				switch {
+				case m.Role == llms.ChatMessageTypeTool:
+				case tools[i].Call:
+					// A tool call's arguments name the call (scanned only by
+					// guardrails that scan tool calls).
+					assert.Equal(t, llms.ChatMessageTypeAI, m.Role, "message %d is a call but not the model's", i)
+					assert.NotEmpty(t, tools[i].Name, "message %d is a call with no tool name", i)
+				default:
 					assert.Zero(t, tools[i], "message %d is not a tool result", i)
 				}
 			}

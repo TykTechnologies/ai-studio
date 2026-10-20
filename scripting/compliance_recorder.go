@@ -15,6 +15,9 @@ func RecordComplianceEvents(ctx context.Context, output *ScriptOutput, filterNam
 	if output == nil || len(output.ComplianceEvents) == 0 {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	now := time.Now()
 	events := make([]*models.ComplianceEvent, 0, len(output.ComplianceEvents))
@@ -42,4 +45,14 @@ func RecordComplianceEvents(ctx context.Context, output *ScriptOutput, filterNam
 	}
 
 	analytics.RecordComplianceEvents(ctx, events)
+}
+
+// EventRecorder is a ScriptInput.RecordEvents that records a filter's
+// events with the given attribution, as the call site does with the output
+// it is handed. A shadow guardrail records through it when its background
+// evaluation finishes.
+func EventRecorder(filterScope string, appID, userID, llmID uint, vendor, modelName string) func(context.Context, string, *ScriptOutput) {
+	return func(ctx context.Context, filterName string, out *ScriptOutput) {
+		RecordComplianceEvents(ctx, out, filterName, filterScope, appID, userID, llmID, vendor, modelName)
+	}
 }

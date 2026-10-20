@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net"
 	"net/http"
+	"strings"
 )
 
 // internalHopToken is the value InternalRoutingTransport puts in
@@ -21,6 +22,28 @@ func newInternalHopToken() string {
 		panic("proxy: reading random bytes for the internal hop token: " + err.Error())
 	}
 	return hex.EncodeToString(b)
+}
+
+// hdrStreamBlocked is the trailer with which the inner hop of the gateway's
+// own loopback says a response filter blocked the stream it answered, with
+// the block message. The outer hop (the /ai/ bridge and what routes through
+// it) reads it whatever its SDK driver made of the error event in the
+// stream, so a block always reaches the client, and the tool calls the
+// driver assembled are never emitted.
+const hdrStreamBlocked = "X-Tyk-Stream-Blocked"
+
+// markStreamBlocked sets the block trailer on a stream answered to the
+// gateway's own loopback hop. Other clients get the vendor's error event
+// only.
+func markStreamBlocked(w http.ResponseWriter, r *http.Request, msg string) {
+	if r == nil || !IsInternalHop(r) {
+		return
+	}
+	msg = strings.Join(strings.Fields(msg), " ")
+	if msg == "" {
+		msg = "blocked by policy"
+	}
+	w.Header().Set(http.TrailerPrefix+hdrStreamBlocked, msg)
 }
 
 // IsInternalHop reports whether r is the gateway calling itself on its

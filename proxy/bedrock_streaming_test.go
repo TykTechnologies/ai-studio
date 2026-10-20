@@ -151,38 +151,3 @@ func TestExtractTextFromStreamEvent(t *testing.T) {
 		assert.Equal(t, "", text)
 	})
 }
-
-func TestBuildConverseStreamInput(t *testing.T) {
-	t.Run("builds input with messages and system blocks", func(t *testing.T) {
-		req := &bedrockConverseStreamRequest{
-			Messages: []bedrockMessage{
-				{
-					Role:    "user",
-					Content: []bedrockContentBlock{{Text: "Hello!"}},
-				},
-			},
-			System: []bedrockSystemBlock{
-				{Text: "You are a helpful assistant."},
-			},
-			InferenceConfig: &bedrockInferenceConfig{
-				MaxTokens:   aws.Int32(1024),
-				Temperature: aws.Float32(0.7),
-			},
-		}
-
-		input := buildConverseStreamInput("anthropic.claude-3-sonnet", req)
-		assert.Equal(t, "anthropic.claude-3-sonnet", *input.ModelId)
-		require.Len(t, input.Messages, 1)
-		require.Len(t, input.System, 1)
-		require.NotNil(t, input.InferenceConfig)
-		assert.Equal(t, int32(1024), *input.InferenceConfig.MaxTokens)
-	})
-
-	t.Run("handles empty request", func(t *testing.T) {
-		req := &bedrockConverseStreamRequest{}
-		input := buildConverseStreamInput("test-model", req)
-		assert.Equal(t, "test-model", *input.ModelId)
-		assert.Nil(t, input.Messages)
-		assert.Nil(t, input.InferenceConfig)
-	})
-}

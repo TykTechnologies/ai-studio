@@ -38,6 +38,9 @@ func ExtractResponseText(vendor models.Vendor, responseBody []byte) (string, err
 			return "", fmt.Errorf("failed to parse OpenAI response: %w", err)
 		}
 		if len(resp.Choices) == 0 {
+			if text, ok := responsesOutputText(responseBody); ok {
+				return text, nil
+			}
 			return "", fmt.Errorf("no choices in OpenAI response")
 		}
 		return resp.Choices[0].Message.Content, nil
@@ -113,6 +116,46 @@ func hasChoices(body []byte) bool {
 		Choices json.RawMessage `json:"choices"`
 	}
 	return json.Unmarshal(body, &probe) == nil && len(probe.Choices) > 0
+}
+
+// responsesOutputText reads the text of an OpenAI Responses API body: the
+// output_text and refusal parts of its message items, in order (parts of
+// one message joined, messages one per line). ok is false for a body with no
+// output array; a body whose output holds only tool calls or reasoning has
+// no text.
+func responsesOutputText(body []byte) (string, bool) {
+	var resp struct {
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type    string `json:"type"`
+				Text    string `json:"text"`
+				Refusal string `json:"refusal"`
+			} `json:"content"`
+		} `json:"output"`
+	}
+	if json.Unmarshal(body, &resp) != nil || resp.Output == nil {
+		return "", false
+	}
+	var messages []string
+	for _, item := range resp.Output {
+		if item.Type != "message" {
+			continue
+		}
+		var b strings.Builder
+		for _, part := range item.Content {
+			switch part.Type {
+			case "output_text":
+				b.WriteString(part.Text)
+			case "refusal":
+				b.WriteString(part.Refusal)
+			}
+		}
+		if b.Len() > 0 {
+			messages = append(messages, b.String())
+		}
+	}
+	return strings.Join(messages, "\n"), true
 }
 
 // ExtractStreamingChunkText extracts text from a streaming chunk

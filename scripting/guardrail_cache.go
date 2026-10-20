@@ -161,6 +161,10 @@ func newVerdictKeyer(ctx context.Context, p *preparedGuardrail, input *ScriptInp
 	for _, field := range []string{"v1", version, string(digest), p.caps.Version, strconv.FormatBool(p.caps.ToolSegments), string(direction), strconv.FormatBool(redact), tenant} {
 		writeField(&b, field)
 	}
+	if p.caps.WantsGoal {
+		// Tool calls are sent with their context only to such providers.
+		writeField(&b, "wants_goal")
+	}
 	return &verdictKeyer{ctx: ctx, cache: cache, provider: p.cfg.Provider, prefix: b.Bytes(), keys: map[int]string{}}
 }
 
@@ -184,6 +188,13 @@ func (k *verdictKeyer) key(s guardrails.Segment) string {
 	mac.Write(k.prefix)
 	for _, field := range []string{s.Role, s.Kind, s.ToolName, s.Text} {
 		writeField(mac, field)
+	}
+	if s.IsToolCall() && s.Context != nil {
+		// The same arguments under another goal are another question. Only
+		// tool calls carry a context, so other keys are as they were.
+		for _, field := range []string{"context", s.Context.UserGoal, s.Context.System} {
+			writeField(mac, field)
+		}
 	}
 	return string(mac.Sum(nil))
 }

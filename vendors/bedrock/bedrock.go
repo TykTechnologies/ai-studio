@@ -61,7 +61,11 @@ func credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region st
 func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse region from endpoint: %w", err)
+		// An endpoint that names no region takes it from metadata.aws_region,
+		// as signed native requests do.
+		if region = metadataString(llm.Metadata, "aws_region"); region == "" {
+			return nil, fmt.Errorf("failed to parse region from endpoint: %w", err)
+		}
 	}
 
 	accessKeyID, secretAccessKey, sessionToken, err := extractAWSCredentials(llm)
@@ -69,7 +73,9 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 		return nil, err
 	}
 
-	fp := credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region)
+	// The endpoint is part of the key: the client has it baked in, so an LLM
+	// moved to another endpoint must get a new one.
+	fp := credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region+"|"+llm.APIEndpoint)
 
 	// Check cache
 	if cached, ok := clientCache.Load(llm.ID); ok {
@@ -104,6 +110,20 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	client := bedrockruntime.NewFromConfig(cfg, opts...)
 	clientCache.Store(llm.ID, &clientCacheEntry{client: client, fingerprint: fp})
 	return client, nil
+}
+
+// RuntimeBaseURL is the Bedrock runtime base URL requests to llm go to: the
+// configured endpoint (without a trailing /v1), or for a plain region
+// https://bedrock-runtime.{region}.amazonaws.com.
+func RuntimeBaseURL(llm *models.LLM) (string, error) {
+	endpoint := strings.TrimSuffix(strings.TrimSuffix(llm.APIEndpoint, "/"), "/v1")
+	switch {
+	case endpoint == "":
+		return "", fmt.Errorf("bedrock endpoint is empty")
+	case !strings.Contains(endpoint, ".") && !strings.Contains(endpoint, "/") && !strings.Contains(endpoint, ":"):
+		return "https://bedrock-runtime." + endpoint + ".amazonaws.com", nil
+	}
+	return strings.TrimSuffix(endpoint, "/"), nil
 }
 
 // InvalidateClientCache removes a cached client for the given LLM ID.
@@ -161,10 +181,23 @@ func GetModelID(llm *models.LLM, override string) string {
 type ChatMessage struct {
 	Role    string
 	Content string
+	// ToolCalls are an assistant message's tool calls.
+	ToolCalls []ChatToolCall
+	// ToolCallID is the call a "tool" message answers.
+	ToolCallID string
+}
+
+// ChatToolCall is a tool call in the history; Arguments is its JSON.
+type ChatToolCall struct {
+	ID, Name, Arguments string
 }
 
 // ConvertChatMessagesToConverse converts ChatMessage slices to Converse types.
 // System messages are extracted into a separate slice as required by the Converse API.
+// An assistant's tool calls become toolUse blocks (after its text, if any:
+// Converse refuses an empty text block), and "tool" messages toolResult
+// blocks, consecutive ones in one user turn, as Converse wants the results
+// of parallel calls together.
 func ConvertChatMessagesToConverse(messages []ChatMessage) ([]types.Message, []types.SystemContentBlock) {
 	var converseMsgs []types.Message
 	var systemBlocks []types.SystemContentBlock
@@ -177,16 +210,52 @@ func ConvertChatMessagesToConverse(messages []ChatMessage) ([]types.Message, []t
 			continue
 		}
 
+		if msg.Role == "tool" {
+			result := &types.ContentBlockMemberToolResult{Value: types.ToolResultBlock{
+				ToolUseId: aws.String(msg.ToolCallID),
+				Content:   []types.ToolResultContentBlock{&types.ToolResultContentBlockMemberText{Value: msg.Content}},
+			}}
+			if n := len(converseMsgs); n > 0 && converseMsgs[n-1].Role == types.ConversationRoleUser && isToolResultTurn(converseMsgs[n-1]) {
+				converseMsgs[n-1].Content = append(converseMsgs[n-1].Content, result)
+				continue
+			}
+			converseMsgs = append(converseMsgs, types.Message{Role: types.ConversationRoleUser, Content: []types.ContentBlock{result}})
+			continue
+		}
+
 		role := convertToConverseRole(msg.Role)
+		var content []types.ContentBlock
+		if msg.Content != "" || len(msg.ToolCalls) == 0 {
+			content = append(content, &types.ContentBlockMemberText{Value: msg.Content})
+		}
+		for _, c := range msg.ToolCalls {
+			var input map[string]any
+			if err := json.Unmarshal([]byte(c.Arguments), &input); err != nil || input == nil {
+				input = map[string]any{}
+			}
+			content = append(content, &types.ContentBlockMemberToolUse{Value: types.ToolUseBlock{
+				ToolUseId: aws.String(c.ID),
+				Name:      aws.String(c.Name),
+				Input:     document.NewLazyDocument(input),
+			}})
+		}
 		converseMsgs = append(converseMsgs, types.Message{
-			Role: role,
-			Content: []types.ContentBlock{
-				&types.ContentBlockMemberText{Value: msg.Content},
-			},
+			Role:    role,
+			Content: content,
 		})
 	}
 
 	return converseMsgs, systemBlocks
+}
+
+// isToolResultTurn reports whether every block of m is a toolResult.
+func isToolResultTurn(m types.Message) bool {
+	for _, b := range m.Content {
+		if _, ok := b.(*types.ContentBlockMemberToolResult); !ok {
+			return false
+		}
+	}
+	return len(m.Content) > 0
 }
 
 // BuildInferenceConfig builds a Converse InferenceConfiguration from OpenAI parameters.
@@ -415,7 +484,11 @@ func (v *Bedrock) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, _ i
 func (v *Bedrock) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
 	if err != nil {
-		return fmt.Errorf("failed to parse region: %w", err)
+		// An endpoint that names no region (a VPC endpoint, a proxy)
+		// takes it from metadata.aws_region.
+		if region = metadataString(llm.Metadata, "aws_region"); region == "" {
+			return fmt.Errorf("failed to parse region: %w", err)
+		}
 	}
 
 	accessKeyID, secretAccessKey, sessionToken, err := extractAWSCredentials(llm)

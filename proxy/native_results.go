@@ -219,7 +219,10 @@ func (c *nativeCall) resultLine(line []byte, filtered bool) ([]byte, nativeapi.U
 	if !filtered || view.Message == nil {
 		return line, view.Usage, false
 	}
-	isBlocked, msg, ferr := ExecuteResponseFilters(c.nr.llm, c.p.gatewayService, view.Message, http.StatusOK, false, false, 0, "", c.r)
+	// The line's request is not on hand, so its tool calls are screened
+	// without a goal.
+	isBlocked, msg, ferr := ExecuteBufferedResponseFilters(c.nr.llm, c.p.gatewayService,
+		BufferedResponse{Body: view.Message, Format: string(c.nr.llm.Vendor)}, http.StatusOK, c.r)
 	if ferr != nil {
 		// Response filters fail open on an error, as on the synchronous chain.
 		slog.Error("response filter failed on a results line", "op", c.op.Name, "key", view.Key, "error", ferr)

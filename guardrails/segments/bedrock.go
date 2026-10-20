@@ -121,6 +121,7 @@ func (x *extraction) bedrockBlocks(u *Unit, n *node, path string) error {
 				if err := x.strict(val, memberPath, bedrockToolUseFields...); err != nil {
 					return err
 				}
+				x.toolCall(val.get("input"), pointer(memberPath, "input"), val.get("toolUseId"), val.get("name"))
 			case key == "toolResult":
 				if err := x.bedrockToolResult(val, memberPath); err != nil {
 					return err

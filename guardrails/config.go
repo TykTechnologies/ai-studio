@@ -30,6 +30,10 @@ const (
 	// client resends in its history (a tool result) bricks an agent loop:
 	// every later request carries the same text.
 	ActionQuarantine = "quarantine"
+	// ActionRemove drops a flagged tool definition from the request's tools
+	// before it is forwarded, so the model goes on without that tool. Tool
+	// definitions only.
+	ActionRemove = "remove"
 )
 
 // Scopes select which messages of a request are sent to the provider. On the
@@ -123,8 +127,91 @@ func (c Config) ScansToolResults() bool {
 	return c.ToolResults.Scan == nil || *c.ToolResults.Scan
 }
 
+// ToolCalls configures how a guardrail treats tool calls: the arguments of
+// the tools the model asks to run, in a request's history (OpenAI
+// tool_calls, Anthropic tool_use, Google functionCall, Bedrock toolUse,
+// Responses function_call) and in a buffered response.
+type ToolCalls struct {
+	// Scan sends tool calls to the provider, across the whole history of a
+	// request and in responses. Off by default: arguments can hold data an
+	// agent read (file contents, records, credentials), which a filter
+	// stored before this setting existed must not start sending to a remote
+	// provider on upgrade.
+	Scan *bool `json:"scan,omitempty"`
+	// OnDetect is the action for a flagged tool call, log or block. On a
+	// response, block refuses the response so the client never runs the
+	// call. On a request the call has already run on the client, so block
+	// stops the next turn (and, since the client resends the call in its
+	// history, every later turn of that conversation) and log records it.
+	// Empty means the filter's on_detect where that is block or log, and log
+	// otherwise: a tool call cannot be redacted or quarantined.
+	OnDetect string `json:"on_detect,omitempty"`
+	// IncludeSystem adds the system prompt to the context sent with each
+	// tool call to providers that judge calls against the goal
+	// (Capabilities.WantsGoal). The user's goal is always sent to them.
+	IncludeSystem bool `json:"include_system,omitempty"`
+}
+
+// ToolDefinitions configures how a request guardrail treats the tools a
+// request offers the model: their names, descriptions and parameter schemas.
+type ToolDefinitions struct {
+	// Scan sends each tool definition to the provider. Off by default.
+	Scan *bool `json:"scan,omitempty"`
+	// OnDetect is the action for a flagged definition: log, block (refuse
+	// the request) or remove (drop the tool from the request's tools and go
+	// on; where that cannot be written into the body, block). Empty means
+	// remove on a filter whose on_detect is block or quarantine, and log
+	// otherwise.
+	OnDetect string `json:"on_detect,omitempty"`
+}
+
+// ScansToolDefinitions reports whether tool definitions are scanned.
+func (c Config) ScansToolDefinitions() bool {
+	return c.ToolDefinitions.Scan != nil && *c.ToolDefinitions.Scan
+}
+
+// ScansToolCalls reports whether tool calls are scanned.
+func (c Config) ScansToolCalls() bool {
+	return c.ToolCalls.Scan != nil && *c.ToolCalls.Scan
+}
+
+// ConfigScansToolDefinitions reports whether a stored config map turns
+// tool-definition scanning on, without parsing the rest of it.
+func ConfigScansToolDefinitions(raw map[string]any) bool {
+	td, _ := raw["tool_definitions"].(map[string]any)
+	scan, _ := td["scan"].(bool)
+	return scan
+}
+
+// ConfigScansToolCalls reports whether a stored config map turns tool-call
+// scanning on, without parsing the rest of it: for callers deciding whether
+// to read a body's tool calls at all.
+func ConfigScansToolCalls(raw map[string]any) bool {
+	tc, _ := raw["tool_calls"].(map[string]any)
+	scan, _ := tc["scan"].(bool)
+	return scan
+}
+
 // ActionFor is the action for a flagged segment of the given kind.
 func (c Config) ActionFor(kind string) string {
+	if kind == KindToolDefinition {
+		switch {
+		case c.ToolDefinitions.OnDetect != "":
+			return c.ToolDefinitions.OnDetect
+		case c.OnDetect == ActionBlock || c.OnDetect == ActionQuarantine:
+			return ActionRemove
+		}
+		return ActionLog
+	}
+	if kind == KindToolCall {
+		switch {
+		case c.ToolCalls.OnDetect != "":
+			return c.ToolCalls.OnDetect
+		case c.OnDetect == ActionBlock:
+			return ActionBlock
+		}
+		return ActionLog
+	}
 	if kind != KindToolResult {
 		return c.OnDetect
 	}
@@ -152,17 +239,28 @@ type Config struct {
 	Detectors  []DetectorConfig  `json:"detectors"`
 	// Exclude names detectors to leave out when a category is enabled, e.g.
 	// "pii.ipv4" while "pii" is on. Built-in provider only.
-	Exclude      []string    `json:"exclude,omitempty"`
-	Scope        string      `json:"scope,omitempty"`
-	OnDetect     string      `json:"on_detect"`
-	Redaction    Redaction   `json:"redaction,omitempty"`
-	Quarantine   Quarantine  `json:"quarantine,omitempty"`
-	ToolResults  ToolResults `json:"tool_results,omitempty"`
-	FailMode     string      `json:"fail_mode,omitempty"`
-	TimeoutMs    int         `json:"timeout_ms,omitempty"`
-	Stream       Stream      `json:"stream,omitempty"`
-	BlockMessage string      `json:"block_message,omitempty"`
-	Budget       Budget      `json:"budget,omitzero"`
+	Exclude     []string    `json:"exclude,omitempty"`
+	Scope       string      `json:"scope,omitempty"`
+	OnDetect    string      `json:"on_detect"`
+	Redaction   Redaction   `json:"redaction,omitempty"`
+	Quarantine  Quarantine  `json:"quarantine,omitempty"`
+	ToolResults ToolResults `json:"tool_results,omitempty"`
+	ToolCalls   ToolCalls   `json:"tool_calls,omitzero"`
+	// ToolDefinitions: see ToolDefinitions. Requests only.
+	ToolDefinitions ToolDefinitions `json:"tool_definitions,omitzero"`
+	FailMode        string          `json:"fail_mode,omitempty"`
+	TimeoutMs       int             `json:"timeout_ms,omitempty"`
+	Stream          Stream          `json:"stream,omitempty"`
+	BlockMessage    string          `json:"block_message,omitempty"`
+	Budget          Budget          `json:"budget,omitzero"`
+	// Shadow runs the filter without waiting for it: the request or
+	// response goes on at once, unchanged, and the classification runs in a
+	// bounded background pool that records compliance events when it
+	// finishes. Valid only when every action the filter can take is log, so
+	// a shadow filter never changes traffic; a full pool drops the
+	// evaluation (counted, and recorded as guardrail.unscanned) rather than
+	// delay anything. For a log-only rollout of a slow provider.
+	Shadow bool `json:"shadow,omitempty"`
 	// Cache, when false, keeps the filter's verdicts out of the verdict
 	// cache: for a provider whose verdict depends on more than the text (an
 	// HTTP classifier that reads the request metadata). Nil means true.
@@ -323,6 +421,27 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		return cfg, fmt.Errorf("%w: tool_results.on_detect %q is not one of block, redact, quarantine, log", ErrInvalidConfig, cfg.ToolResults.OnDetect)
 	}
 
+	switch cfg.ToolCalls.OnDetect {
+	case "", ActionBlock, ActionLog:
+	default:
+		return cfg, fmt.Errorf("%w: tool_calls.on_detect %q is not one of block, log (a tool call cannot be redacted or quarantined)", ErrInvalidConfig, cfg.ToolCalls.OnDetect)
+	}
+
+	switch cfg.ToolDefinitions.OnDetect {
+	case "", ActionBlock, ActionLog, ActionRemove:
+	default:
+		return cfg, fmt.Errorf("%w: tool_definitions.on_detect %q is not one of block, remove, log", ErrInvalidConfig, cfg.ToolDefinitions.OnDetect)
+	}
+	if responseFilter && cfg.ScansToolDefinitions() {
+		return cfg, fmt.Errorf("%w: tool definitions are scanned on requests only", ErrInvalidConfig)
+	}
+
+	if cfg.Shadow {
+		if err := cfg.shadowAllowed(); err != nil {
+			return cfg, err
+		}
+	}
+
 	if p := cfg.Quarantine.Placeholder; p == nil {
 		def := DefaultQuarantinePlaceholder
 		cfg.Quarantine.Placeholder = &def
@@ -383,6 +502,23 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// shadowAllowed reports why the filter cannot run in shadow: some action it
+// can take is not log.
+func (c Config) shadowAllowed() error {
+	actions := map[string]string{
+		"on_detect":                  c.OnDetect,
+		"tool_results.on_detect":     c.ActionFor(KindToolResult),
+		"tool_calls.on_detect":       c.ActionFor(KindToolCall),
+		"tool_definitions.on_detect": c.ActionFor(KindToolDefinition),
+	}
+	for _, field := range []string{"on_detect", "tool_results.on_detect", "tool_calls.on_detect", "tool_definitions.on_detect"} {
+		if a := actions[field]; a != ActionLog {
+			return fmt.Errorf("%w: shadow requires every action to be log, and %s is %s", ErrInvalidConfig, field, a)
+		}
+	}
+	return nil
 }
 
 // normalize validates the budget and fills its defaults; timeoutMs is the

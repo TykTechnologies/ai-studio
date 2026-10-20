@@ -59,6 +59,7 @@ func ExecuteResponseFilters(
 		CurrentBuffer: currentBuffer,
 		StatusCode:    200, // Chat responses don't have HTTP status codes
 		Ctx:           ctx,
+		RecordEvents:  scripting.EventRecorder("chat_response", 0, userID, 0, vendor, modelName),
 	}
 
 	// Execute response filters in chain

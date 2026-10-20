@@ -19,6 +19,23 @@ Routes are matched by path suffix, so any base URL works:
     GET  /_recorded?since=N             recorded requests from index N
     POST /_reset                        forget the recorded requests
     POST /_tool {"status":200,"body":"..."}  what /tool/* answers
+    POST /_respond {"text": "...", "tool_call": {"name": "...", "args": {...}}}
+                                        what the vendor routes answer instead of
+                                        "ok" until reset ({} resets): the text,
+                                        streamed in several events, or a tool
+                                        call, its arguments streamed in two
+                                        halves; "chat_args" are the arguments
+                                        of Studio chat's tool call
+    POST /classify?pin=1&delay_ms=N&kinds=tool_call,...
+                                        an HTTP guardrail classifier: flags
+                                        segments holding "[canary:" (only of
+                                        the listed kinds), pinned to the
+                                        segment with pin=1, after N ms
+
+    python3 mockupstream.py PORT RECORD_FILE [SOCKET]
+
+also serves everything on the Unix socket SOCKET; requests that arrive there
+are recorded with "via": "unix".
 
 Like the vendors, it rejects a conversation whose tool calls and tool results
 do not pair up (400), so a guardrail rewrite that breaks the shape fails the
@@ -43,6 +60,7 @@ from urllib.parse import parse_qs, urlparse
 LOCK = threading.Lock()
 RECORDED = []
 TOOL = {"status": 200, "body": '{"ok": true}'}
+RESPOND = {}
 RECORD_FILE = None
 
 
@@ -73,7 +91,10 @@ def openai_pairing(msgs):
 
 def anthropic_pairing(msgs):
     pending = set()
-    for m in msgs:
+    for i, m in enumerate(msgs):
+        # Anthropic: every message but a final assistant one needs content.
+        if m.get("content") in ([], "", None) and not (i == len(msgs) - 1 and m.get("role") == "assistant"):
+            return f"messages.{i}: all messages must have non-empty content except for the optional final assistant message"
         content = m.get("content")
         blocks = content if isinstance(content, list) else []
         if m.get("role") == "assistant":
@@ -95,8 +116,10 @@ def anthropic_pairing(msgs):
 
 def gemini_pairing(contents):
     calls = []
-    for c in contents:
+    for i, c in enumerate(contents):
         parts = c.get("parts") or []
+        if not parts:
+            return f"contents[{i}].parts must not be empty"
         if c.get("role") == "model":
             calls = [p["functionCall"].get("name") for p in parts if isinstance(p, dict) and "functionCall" in p]
             continue
@@ -125,8 +148,20 @@ def responses_pairing(items):
 
 # ---- the server ----------------------------------------------------------------------
 
+def halves(s):
+    n = max(1, len(s) // 2)
+    return [s[:n], s[n:]]
+
+
+def pieces(text):
+    # Three events or so, cut inside words, so a phrase spans events.
+    n = max(1, len(text) // 3)
+    return [text[i:i + n] for i in range(0, len(text), n)]
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    VIA = "tcp"
 
     def log_message(self, *args):
         pass
@@ -216,18 +251,30 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(raw) if raw else {}
         except ValueError:
             body = None
-        entry = {"ts": time.time(), "path": u.path, "query": u.query, "method": "POST", "raw": raw.decode("utf-8", "replace"), "body": body}
+        entry = {"ts": time.time(), "path": u.path, "query": u.query, "method": "POST", "raw": raw.decode("utf-8", "replace"), "body": body, "via": self.VIA}
         p = u.path
+        if p == "/_respond":
+            cfg = json.loads(raw or b"{}")
+            RESPOND.clear()
+            RESPOND.update(cfg)
+            return self.send_json(200, {"ok": True})
         if p == "/classify":
-            # An HTTP guardrail classifier (the http provider's contract) that
-            # flags a call holding a canary without saying which segment:
-            # an unpinned finding (D4).
+            # An HTTP guardrail classifier (the http provider's contract). By
+            # default it flags a call holding a canary without saying which
+            # segment: an unpinned finding (D4).
             entry["kind"] = "classifier"
             record(entry)
+            q = parse_qs(u.query)
+            if q.get("delay_ms"):
+                time.sleep(int(q["delay_ms"][0]) / 1000)
+            kinds = set(q["kinds"][0].split(",")) if q.get("kinds") else None
             segs = (body or {}).get("segments") or []
-            hit = any("[canary:" in (s.get("text") or "") for s in segs)
-            findings = [{"detector": "prompt_attack", "category": "injection", "score": 0.99, "segment_index": -1}] if hit else []
-            return self.send_json(200, {"flagged": hit, "findings": findings})
+            hits = [s for s in segs if "[canary:" in (s.get("text") or "") and (kinds is None or (s.get("kind") or "text") in kinds)]
+            if q.get("pin"):
+                findings = [{"detector": "prompt_attack", "category": "injection", "score": 0.99, "segment_index": s.get("index", 0)} for s in hits]
+            else:
+                findings = [{"detector": "prompt_attack", "category": "injection", "score": 0.99, "segment_index": -1}] if hits else []
+            return self.send_json(200, {"flagged": bool(hits), "findings": findings})
         if p.endswith("/files"):
             # OpenAI Files: a multipart upload (purpose=batch, a JSONL file).
             entry["kind"] = "openai_file"
@@ -281,18 +328,24 @@ class Handler(BaseHTTPRequestHandler):
             text = "done: " + (c or "")[:60]
         elif tools and last.get("role") == "user" and "use the tool" in json.dumps(last.get("content")):
             fn = tools[0].get("function", {}).get("name", "tool")
-            tool_call = {"id": f"call_mock_{int(time.time() * 1000) % 100000}", "type": "function", "function": {"name": fn, "arguments": "{}"}}
+            tool_call = {"id": f"call_mock_{int(time.time() * 1000) % 100000}", "type": "function", "function": {"name": fn, "arguments": json.dumps(RESPOND.get("chat_args") or {})}}
+        elif RESPOND.get("tool_call"):
+            tc = RESPOND["tool_call"]
+            tool_call = {"id": "call_mock_r1", "type": "function", "function": {"name": tc["name"], "arguments": json.dumps(tc.get("args") or {})}}
+        elif RESPOND.get("text"):
+            text = RESPOND["text"]
         usage = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
         if body.get("stream"):
-            delta = {"role": "assistant"}
+            def chunk(delta, finish=None, **extra):
+                return dict({"id": "chatcmpl-mock", "object": "chat.completion.chunk", "created": int(time.time()), "model": model,
+                             "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}, **extra)
             if tool_call:
-                delta["tool_calls"] = [dict(tool_call, index=0)]
+                a, b = halves(tool_call["function"]["arguments"])
+                events = [chunk({"role": "assistant", "tool_calls": [{"index": 0, "id": tool_call["id"], "type": "function", "function": {"name": tool_call["function"]["name"], "arguments": a}}]}),
+                          chunk({"tool_calls": [{"index": 0, "function": {"arguments": b}}]})]
             else:
-                delta["content"] = text
-            events = [
-                {"id": "chatcmpl-mock", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
-                {"id": "chatcmpl-mock", "object": "chat.completion.chunk", "created": int(time.time()), "model": model, "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls" if tool_call else "stop"}], "usage": usage},
-            ]
+                events = [chunk({"role": "assistant", "content": t}) if i == 0 else chunk({"content": t}) for i, t in enumerate(pieces(text))]
+            events.append(chunk({}, "tool_calls" if tool_call else "stop", usage=usage))
             return self.send_sse(events)
         msg = {"role": "assistant", "content": None if tool_call else text}
         if tool_call:
@@ -305,9 +358,33 @@ class Handler(BaseHTTPRequestHandler):
         err = responses_pairing(body.get("input"))
         if err:
             return self.send_json(400, {"error": {"message": err, "type": "invalid_request_error"}})
-        self.send_json(200, {"id": "resp_mock", "object": "response", "created_at": int(time.time()), "status": "completed", "model": body.get("model", "gpt-mock"),
-                             "output": [{"type": "message", "id": "msg_mock", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": "ok", "annotations": []}]}],
-                             "usage": {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}})
+        tc = RESPOND.get("tool_call")
+        text = RESPOND.get("text") or "ok"
+        if tc:
+            item = {"type": "function_call", "id": "fc_mock1", "call_id": "call_mock_r1", "name": tc["name"], "arguments": json.dumps(tc.get("args") or {}), "status": "completed"}
+        else:
+            item = {"type": "message", "id": "msg_mock", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": text, "annotations": []}]}
+        resp = {"id": "resp_mock", "object": "response", "created_at": int(time.time()), "status": "completed", "model": body.get("model", "gpt-mock"),
+                "output": [item], "usage": {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}}
+        if not body.get("stream"):
+            return self.send_json(200, resp)
+        started = dict(resp, status="in_progress", output=[])
+        events = [("response.created", {"type": "response.created", "response": started})]
+        if tc:
+            a, b = halves(item["arguments"])
+            events += [("response.output_item.added", {"type": "response.output_item.added", "output_index": 0, "item": dict(item, arguments="", status="in_progress")}),
+                       ("response.function_call_arguments.delta", {"type": "response.function_call_arguments.delta", "item_id": item["id"], "output_index": 0, "delta": a}),
+                       ("response.function_call_arguments.delta", {"type": "response.function_call_arguments.delta", "item_id": item["id"], "output_index": 0, "delta": b}),
+                       ("response.function_call_arguments.done", {"type": "response.function_call_arguments.done", "item_id": item["id"], "output_index": 0, "arguments": item["arguments"]}),
+                       ("response.output_item.done", {"type": "response.output_item.done", "output_index": 0, "item": item})]
+        else:
+            events += [("response.output_item.added", {"type": "response.output_item.added", "output_index": 0, "item": dict(item, content=[], status="in_progress")})]
+            events += [("response.output_text.delta", {"type": "response.output_text.delta", "item_id": item["id"], "output_index": 0, "content_index": 0, "delta": t}) for t in pieces(text)]
+            events += [("response.output_item.done", {"type": "response.output_item.done", "output_index": 0, "item": item})]
+        events.append(("response.completed", {"type": "response.completed", "response": resp}))
+        for i, (_, ev) in enumerate(events):
+            ev["sequence_number"] = i
+        self.send_sse(events, done=False)
 
     # ---- Anthropic Messages ----
     def anthropic(self, body):
@@ -315,37 +392,83 @@ class Handler(BaseHTTPRequestHandler):
         if err:
             return self.send_json(400, {"type": "error", "error": {"type": "invalid_request_error", "message": err}})
         model = body.get("model", "claude-mock")
+        tc = RESPOND.get("tool_call")
+        text = RESPOND.get("text") or "ok"
+        stop = "tool_use" if tc else "end_turn"
         if body.get("stream"):
-            events = [
-                ("message_start", {"type": "message_start", "message": {"id": "msg_mock", "type": "message", "role": "assistant", "model": model, "content": [], "stop_reason": None, "usage": {"input_tokens": 10, "output_tokens": 1}}}),
-                ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
-                ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "ok"}}),
+            events = [("message_start", {"type": "message_start", "message": {"id": "msg_mock", "type": "message", "role": "assistant", "model": model, "content": [], "stop_reason": None, "usage": {"input_tokens": 10, "output_tokens": 1}}})]
+            if tc:
+                events.append(("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_mock_r1", "name": tc["name"], "input": {}}}))
+                events += [("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": h}}) for h in halves(json.dumps(tc.get("args") or {}))]
+            else:
+                events.append(("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}))
+                events += [("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": t}}) for t in pieces(text)]
+            events += [
                 ("content_block_stop", {"type": "content_block_stop", "index": 0}),
-                ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 2}}),
+                ("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop}, "usage": {"output_tokens": 2}}),
                 ("message_stop", {"type": "message_stop"}),
             ]
             return self.send_sse(events, done=False)
-        self.send_json(200, {"id": "msg_mock", "type": "message", "role": "assistant", "model": model, "content": [{"type": "text", "text": "ok"}],
-                             "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 2}})
+        content = [{"type": "tool_use", "id": "toolu_mock_r1", "name": tc["name"], "input": tc.get("args") or {}}] if tc else [{"type": "text", "text": text}]
+        self.send_json(200, {"id": "msg_mock", "type": "message", "role": "assistant", "model": model, "content": content,
+                             "stop_reason": stop, "usage": {"input_tokens": 10, "output_tokens": 2}})
 
     # ---- Gemini ----
     def gemini(self, body, stream, sse):
         err = gemini_pairing(body.get("contents") or [])
         if err:
             return self.send_json(400, {"error": {"code": 400, "message": err, "status": "INVALID_ARGUMENT"}})
-        resp = {"candidates": [{"content": {"role": "model", "parts": [{"text": "ok"}]}, "finishReason": "STOP", "index": 0}],
-                "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 2, "totalTokenCount": 12}, "modelVersion": "gemini-mock"}
+        tc = RESPOND.get("tool_call")
+        text = RESPOND.get("text") or "ok"
+        usage = {"promptTokenCount": 10, "candidatesTokenCount": 2, "totalTokenCount": 12}
+
+        def cand(parts, last):
+            c = {"content": {"role": "model", "parts": parts}, "index": 0}
+            out = {"candidates": [c], "modelVersion": "gemini-mock"}
+            if last:
+                c["finishReason"] = "STOP"
+                out["usageMetadata"] = usage
+            return out
+        if tc:
+            chunks = [cand([{"functionCall": {"name": tc["name"], "args": tc.get("args") or {}}}], True)]
+        else:
+            ts = pieces(text) if stream else [text]
+            chunks = [cand([{"text": t}], i == len(ts) - 1) for i, t in enumerate(ts)]
         if stream and sse:
-            return self.send_sse([resp], done=False)
+            return self.send_sse(chunks, done=False)
         if stream:
-            return self.send_json(200, [resp])
-        self.send_json(200, resp)
+            return self.send_json(200, chunks)
+        self.send_json(200, chunks[0])
+
+
+class UnixHandler(Handler):
+    VIA = "unix"
+
+    def address_string(self):
+        return "unix"
+
+
+def serve_unix(path):
+    import os
+    import socketserver
+    if os.path.exists(path):
+        os.unlink(path)
+
+    class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+        daemon_threads = True
+
+    srv = Server(path, UnixHandler)
+    os.chmod(path, 0o600)
+    print(f"mock upstream on unix:{path}", flush=True)
+    srv.serve_forever()
 
 
 def main():
     global RECORD_FILE
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 14021
     RECORD_FILE = sys.argv[2] if len(sys.argv) > 2 else None
+    if len(sys.argv) > 3:
+        threading.Thread(target=serve_unix, args=(sys.argv[3],), daemon=True).start()
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"mock upstream on :{port}", flush=True)
     srv.serve_forever()

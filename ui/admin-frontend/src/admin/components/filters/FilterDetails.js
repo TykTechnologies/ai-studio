@@ -24,6 +24,10 @@ import {
   DEFAULT_QUARANTINE_PLACEHOLDER,
   effectiveToolAction,
   scansToolResults,
+  scansToolCalls,
+  effectiveToolCallAction,
+  scansToolDefinitions,
+  effectiveToolDefinitionAction,
 } from "./GuardrailConfigForm";
 
 const ACTION_LABELS = { block: "Block", redact: "Redact", quarantine: "Quarantine", log: "Log only" };
@@ -143,6 +147,17 @@ const FilterDetails = () => {
                   `${ACTION_LABELS[effectiveToolAction(config)] || effectiveToolAction(config)}${
                     config.tool_results?.on_detect ? "" : " (default)"
                   }`
+                )}
+              {config.shadow && row("Shadow", "Runs in the background; traffic never waits for it")}
+              {!attrs.response_filter && scansToolDefinitions(config) &&
+                row("Tool definitions", `Scanned; action ${effectiveToolDefinitionAction(config)}${config.tool_definitions?.on_detect ? "" : " (default)"}`)}
+              {row("Tool calls", scansToolCalls(config) ? "Scanned" : "Not scanned")}
+              {scansToolCalls(config) &&
+                row(
+                  "Action on tool calls",
+                  `${ACTION_LABELS[effectiveToolCallAction(config)] || effectiveToolCallAction(config)}${
+                    config.tool_calls?.on_detect ? "" : " (default)"
+                  }${config.tool_calls?.include_system ? "; system prompt sent with each call" : ""}`
                 )}
               {!attrs.response_filter &&
                 (config.on_detect === "quarantine" || (scansToolResults(config) && effectiveToolAction(config) === "quarantine")) &&

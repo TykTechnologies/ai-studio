@@ -189,7 +189,7 @@ func responsesItemSlots(item map[string]any, names map[string]string) ([]respons
 		case nil:
 			return nil, nil
 		case string:
-			return []responsesSlot{{role: llms.ChatMessageTypeAI, text: a, set: func(s string) { item[field] = s }}}, nil
+			return []responsesSlot{{role: llms.ChatMessageTypeAI, text: a, set: func(s string) { item[field] = s }, tool: responsesCall(item, "call_id")}}, nil
 		default:
 			return nil, fmt.Errorf("%s must be a string", field)
 		}
@@ -215,9 +215,23 @@ func responsesItemSlots(item map[string]any, names map[string]string) ([]respons
 				s[i].tool = serverToolResult(typ, item, s[i].owner)
 			}
 		}
+		if f.path == "arguments" {
+			// An MCP call's (or approval request's) arguments.
+			for i := range s {
+				s[i].tool = responsesCall(item, "id")
+			}
+		}
 		slots = append(slots, s...)
 	}
 	return slots, nil
+}
+
+// responsesCall names a tool call item's tool and id (idField: call_id for
+// function and custom tool calls, id for MCP items), marked as a call.
+func responsesCall(item map[string]any, idField string) scripting.MessageTool {
+	name, _ := item["name"].(string)
+	id, _ := item[idField].(string)
+	return scripting.MessageTool{Name: name, CallID: id, Call: true}
 }
 
 // serverToolResult names the tool behind a tool-result text of a built-in

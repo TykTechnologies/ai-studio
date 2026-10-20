@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -44,7 +45,82 @@ func ExecuteResponseFilters(
 		}
 	}
 
-	return runResponseFilters(llm, service, responseText, statusCode, isChunk, false, chunkIndex, currentBuffer, r)
+	return runResponseFilters(llm, service, responseText, statusCode, isChunk, false, chunkIndex, currentBuffer, r, nil)
+}
+
+// BufferedResponse is a whole (not streamed) LLM response for the response
+// filters: its body in Format (a request filter format name), and the
+// request it answers as it was forwarded. Guardrails that scan tool calls
+// read the response's tool calls from Body and their goal from RequestBody.
+type BufferedResponse struct {
+	Body        []byte
+	Format      string
+	RequestBody []byte
+	// ToolCallsOnly runs only the guardrails that scan tool calls: Body is
+	// the tool calls a stream held back, whose text the other filters have
+	// already seen.
+	ToolCallsOnly bool
+	// RequestFormat is RequestBody's format when it differs from Format.
+	RequestFormat string
+}
+
+// ExecuteBufferedResponseFilters runs the response filters on a buffered
+// response: as ExecuteResponseFilters does for a full response, with the
+// response's text, and with the body and request on hand for guardrails
+// that scan tool calls. A body whose text cannot be extracted is screened
+// with no text (a response made only of tool calls has none), so its tool
+// calls are still screened; filters that scan only text let it through, as
+// before.
+func ExecuteBufferedResponseFilters(
+	llm *models.LLM,
+	service services.ServiceInterface,
+	resp BufferedResponse,
+	statusCode int,
+	r *http.Request,
+) (blocked bool, blockMessage string, err error) {
+	if !hasResponseFilterList(llm) {
+		return false, "", nil
+	}
+	responseText, err := switches.ExtractResponseText(llm.Vendor, resp.Body)
+	if err != nil {
+		if !responseFiltersScanToolCalls(llm) {
+			slog.Warn("failed to extract response text for filtering, allowing response", "error", err)
+			return false, "", nil
+		}
+		slog.Warn("failed to extract response text for filtering; screening its tool calls only", "error", err)
+		responseText = ""
+	}
+	return runResponseFilters(llm, service, responseText, statusCode, false, false, 0, "", r, &resp)
+}
+
+// responseFiltersScanToolCalls reports whether any of llm's response
+// filters is a guardrail that scans tool calls.
+func responseFiltersScanToolCalls(llm *models.LLM) bool {
+	for _, f := range llm.Filters {
+		if f.ResponseFilter && f.IsGuardrail() && guardrails.ConfigScansToolCalls(f.Config) {
+			return true
+		}
+	}
+	return false
+}
+
+// ExecuteStreamTextFilters runs the response filters on a streamed response
+// whose events the gateway has framed and read: delta is the text the
+// latest events added, buffer all the text so far. Script filters see delta
+// as the chunk's raw input, as they did with per-read extraction.
+func ExecuteStreamTextFilters(
+	llm *models.LLM,
+	service services.ServiceInterface,
+	delta string,
+	statusCode int,
+	chunkIndex int,
+	buffer string,
+	r *http.Request,
+) (blocked bool, blockMessage string, err error) {
+	if !hasResponseFilterList(llm) {
+		return false, "", nil
+	}
+	return runResponseFilters(llm, service, delta, statusCode, true, false, chunkIndex, buffer, r, nil)
 }
 
 // ExecuteFinalResponseFilters runs the response filters once more when a
@@ -65,7 +141,7 @@ func ExecuteFinalResponseFilters(
 	if !hasResponseFilterList(llm) || fullText == "" {
 		return false, "", nil
 	}
-	return runResponseFilters(llm, service, "", statusCode, true, true, chunkIndex, fullText, r)
+	return runResponseFilters(llm, service, "", statusCode, true, true, chunkIndex, fullText, r, nil)
 }
 
 func hasResponseFilterList(llm *models.LLM) bool {
@@ -87,6 +163,7 @@ func runResponseFilters(
 	chunkIndex int,
 	currentBuffer string,
 	r *http.Request,
+	buffered *BufferedResponse,
 ) (blocked bool, blockMessage string, err error) {
 	// Get model name from request context
 	modelName := ""
@@ -125,11 +202,21 @@ func runResponseFilters(
 		CurrentBuffer: currentBuffer,
 		StatusCode:    statusCode,
 		Ctx:           r.Context(),
+		RecordEvents:  scripting.EventRecorder("proxy_response", uint(appID), 0, llm.ID, string(llm.Vendor), modelName),
+	}
+	if buffered != nil {
+		scriptInput.ResponseBody = string(buffered.Body)
+		scriptInput.ResponseFormat = buffered.Format
+		scriptInput.RequestBody = string(buffered.RequestBody)
+		scriptInput.RequestFormat = buffered.RequestFormat
 	}
 
 	// Execute response filters in chain
 	for _, filter := range llm.Filters {
 		if !filter.ResponseFilter {
+			continue
+		}
+		if buffered != nil && buffered.ToolCallsOnly && !(filter.IsGuardrail() && guardrails.ConfigScansToolCalls(filter.Config)) {
 			continue
 		}
 		slog.Debug("executing response filter", "filter_name", filter.Name, "is_chunk", isChunk, "is_final", isFinal, "chunk_index", chunkIndex)

@@ -112,6 +112,10 @@ type Unit struct {
 	sep      string
 	whole    wholeNode
 	adjacent bool
+	// removeArray and removeElem locate a tool definition in its array,
+	// for RemovalEdits.
+	removeArray string
+	removeElem  int
 }
 
 // piece is one part of a unit's detection text: a leaf, or detection-only
@@ -148,6 +152,9 @@ const (
 	// blocks (a Bedrock toolResult's content), so it becomes
 	// [{"text": placeholder}].
 	wholeTextBlocks
+	// wholeNone: the unit is never rewritten (a tool call's arguments,
+	// which the model wrote and the client already ran).
+	wholeNone
 )
 
 // Quarantine returns the edits that replace all of the unit's content with
@@ -156,6 +163,8 @@ const (
 // body), or nothing to replace.
 func (u Unit) Quarantine(placeholder string) (edits []Edit, ok bool) {
 	switch u.whole {
+	case wholeNone:
+		return nil, false
 	case wholeString:
 		if u.ownsLeaves() {
 			return []Edit{{Path: u.Path, Value: encodeString(placeholder)}}, true
@@ -196,6 +205,9 @@ func (u Unit) ownsLeaves() bool {
 // that is not a leaf (a response key) or a redaction ran across the boundary
 // between two leaves.
 func (u Unit) MapRewrite(rewritten string) (edits []Edit, ok bool) {
+	if u.whole == wholeNone {
+		return nil, false
+	}
 	parts := []string{rewritten}
 	if len(u.pieces) > 1 {
 		parts = strings.Split(rewritten, u.sep)
@@ -242,7 +254,26 @@ var extractors = map[string]func(x *extraction, root *node) error{
 // does not recognise is treated as user, so its text is scanned under user
 // scopes rather than skipped.
 func ExtractUnits(format string, body []byte) ([]Unit, error) {
-	x, err := extract(format, body)
+	return ExtractUnitsWith(format, body, Options{})
+}
+
+// Options selects what is extracted besides messages and tool results.
+type Options struct {
+	// ToolCalls adds a unit for each tool call the model made: Role
+	// assistant, Kind tool_call, the tool's name and call id, and as Text
+	// the call's arguments (a JSON string as the body holds it, or the raw
+	// JSON of an arguments object). Each carries a Context with the latest
+	// user text before the call and the system prompt. Tool call units are
+	// never rewritten: Quarantine and MapRewrite refuse them.
+	ToolCalls bool
+	// ToolDefinitions adds a unit for each tool the request offers the
+	// model (see definitions.go), after the conversation's units.
+	ToolDefinitions bool
+}
+
+// ExtractUnitsWith is ExtractUnits with opts.
+func ExtractUnitsWith(format string, body []byte, opts Options) ([]Unit, error) {
+	x, err := extract(format, body, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -271,8 +302,13 @@ func Generic(body []byte) ([]Unit, error) {
 // JSON (ErrUnrecognisedBody) or has a repeated or case-variant key
 // (ErrDuplicateKey) is an error.
 func Read(format string, body []byte) ([]Unit, error) {
+	return ReadWith(format, body, Options{})
+}
+
+// ReadWith is Read with opts. A body read generically has no tool calls.
+func ReadWith(format string, body []byte, opts Options) ([]Unit, error) {
 	if Supports(format) {
-		units, err := ExtractUnits(format, body)
+		units, err := ExtractUnitsWith(format, body, opts)
 		if err == nil || errors.Is(err, ErrDuplicateKey) {
 			return units, err
 		}
@@ -287,7 +323,7 @@ func CheckKeys(body []byte) error {
 	return err
 }
 
-func extract(format string, body []byte) (*extraction, error) {
+func extract(format string, body []byte, opts Options) (*extraction, error) {
 	fn, ok := extractors[strings.ToLower(format)]
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
@@ -300,16 +336,24 @@ func extract(format string, body []byte) (*extraction, error) {
 		return nil, fmt.Errorf("%w: not a JSON object", ErrUnrecognisedBody)
 	}
 	x := newExtraction(body)
+	x.opts = opts
 	if err := fn(x, root); err != nil {
 		return nil, err
 	}
+	if err := x.definitions(strings.ToLower(format), root); err != nil {
+		return nil, err
+	}
 	x.finish()
+	if opts.ToolCalls {
+		x.attachGoals()
+	}
 	return x, nil
 }
 
 // extraction is the state of one ExtractUnits call.
 type extraction struct {
 	body []byte
+	opts Options
 	// names maps tool call ids to tool names from every call the request
 	// shows the model making.
 	names map[string]string
@@ -604,6 +648,55 @@ func (x *extraction) alias(n *node, path, camel, snake string) (*node, string, e
 func (x *extraction) noteCall(id, name *node) {
 	if i, n := x.str(id), x.str(name); i != "" && n != "" {
 		x.names[i] = n
+	}
+}
+
+// toolCall opens a unit for a tool call the model made, when the extraction
+// asks for them: args is the arguments node at path (a JSON string, or an
+// object such as Anthropic's input), id and name the call's. A string is the
+// unit's leaf; an object is its raw JSON, as detection text. A call with no
+// arguments, or empty ones, still names the tool, so it is a unit with the
+// text "{}".
+func (x *extraction) toolCall(args *node, path string, id, name *node) {
+	if !x.opts.ToolCalls {
+		return
+	}
+	u := x.open(path, wholeNone, guardrails.Segment{
+		Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall,
+		ToolName: x.str(name), ToolCallID: x.str(id),
+	})
+	switch {
+	case args.is(nodeString) && x.str(args) != "":
+		x.leaf(u, args, path)
+	case args.is(nodeObject) || args.is(nodeArray):
+		x.detect(u, string(x.body[args.start:args.end]))
+	}
+	if len(u.pieces) == 0 {
+		x.detect(u, "{}")
+	}
+}
+
+// attachGoals sets the Context of every tool call unit: the latest user text
+// before the call's message, and the system prompt, each clipped
+// (guardrails.ClipContext).
+func (x *extraction) attachGoals() {
+	var system []string
+	for _, u := range x.units {
+		if u.Role == guardrails.RoleSystem && u.Kind == guardrails.KindText && u.Text != "" {
+			system = append(system, u.Text)
+		}
+	}
+	sys := guardrails.ClipContext(strings.Join(system, "\n\n"))
+	// Units are in body order, so the user text seen last before a call is
+	// the user's latest instruction to the model that made it.
+	lastUser := ""
+	for _, u := range x.units {
+		switch {
+		case u.Role == guardrails.RoleUser && u.Kind == guardrails.KindText && strings.TrimSpace(u.Text) != "":
+			lastUser = u.Text
+		case u.IsToolCall():
+			u.Context = &guardrails.SegmentContext{UserGoal: guardrails.ClipContext(lastUser), System: sys}
+		}
 	}
 }
 

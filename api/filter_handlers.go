@@ -427,6 +427,14 @@ func (a *API) testFilter(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: reason})
 			return
 		}
+		// A socket endpoint is tested only when the operator allows it,
+		// as when it is saved.
+		if cfg, err := guardrails.ParseConfig(input.Config); err == nil {
+			if err := guardrails.CheckEndpoint(cfg); err != nil {
+				c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: err.Error()})
+				return
+			}
+		}
 	}
 
 	// Convert the input map to ScriptInput struct

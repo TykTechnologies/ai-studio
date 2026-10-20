@@ -117,6 +117,7 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 		case resp.StatusCode < http.StatusMultipleChoices:
 			relay.capture(resp.Header)
 			relay.clearFailure()
+			relay.watchStream(resp)
 		case resp.StatusCode >= http.StatusBadRequest:
 			relay.captureFailure(resp)
 		}
@@ -137,6 +138,50 @@ type loopbackRelay struct {
 	// reason from here instead (see attemptFailure.withLoopback).
 	failStatus int
 	failBody   []byte
+	// stream is the latest successful loopback response, whose trailer says
+	// whether the inner hop blocked its stream (hdrStreamBlocked).
+	stream *http.Response
+}
+
+// maxDrainOnClose bounds what a driver's early Close reads to reach the
+// loopback stream's end (and its trailer). The inner hop ends a blocked
+// stream right after its error event.
+const maxDrainOnClose = 1 << 20
+
+// watchStream remembers resp for its trailer, and makes a driver that stops
+// reading early (on the error event) still read to the end on Close, so the
+// trailer arrives.
+func (l *loopbackRelay) watchStream(resp *http.Response) {
+	resp.Body = drainOnClose{resp.Body}
+	l.mu.Lock()
+	l.stream = resp
+	l.mu.Unlock()
+}
+
+// streamBlocked is the block message the inner hop sent in its trailer, or
+// "". Read it once the driver is done with the response.
+func (l *loopbackRelay) streamBlocked() string {
+	if l == nil {
+		return ""
+	}
+	l.mu.Lock()
+	resp := l.stream
+	l.mu.Unlock()
+	if resp == nil {
+		return ""
+	}
+	// A driver may return without reading or closing the body.
+	_ = resp.Body.Close()
+	return resp.Trailer.Get(hdrStreamBlocked)
+}
+
+type drainOnClose struct {
+	io.ReadCloser
+}
+
+func (d drainOnClose) Close() error {
+	_, _ = io.CopyN(io.Discard, d.ReadCloser, maxDrainOnClose)
+	return d.ReadCloser.Close()
 }
 
 // maxRelayedErrorBody caps how much of a refusal's body is kept. The inner

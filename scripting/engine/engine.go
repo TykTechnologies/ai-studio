@@ -50,6 +50,27 @@ type ScriptInput struct {
 	// events and quarantine placeholders. Not script-visible.
 	MessageTools []MessageTool `json:"-"`
 
+	// ResponseBody is the raw body of a buffered (not streamed) LLM
+	// response, in ResponseFormat (a request filter format name), on
+	// response filters; RequestBody is the request it answers, as forwarded.
+	// Guardrails that scan tool calls read the response's tool calls from
+	// the one and their goal from the other. Not script-visible: scripts
+	// see the response's text in RawInput, as before.
+	ResponseBody   string `json:"-"`
+	ResponseFormat string `json:"-"`
+	RequestBody    string `json:"-"`
+	// RequestFormat is RequestBody's format when it is not ResponseFormat
+	// (a stream's held tool calls, re-encoded as an OpenAI response).
+	RequestFormat string `json:"-"`
+
+	// RecordEvents, when set, records a filter's compliance events with the
+	// call site's attribution (app, user, LLM, vendor, model, scope), as the
+	// call site does with the output it is handed. A guardrail in shadow
+	// mode returns at once and records its events through it when its
+	// background evaluation finishes; with none set (the filter Test panel)
+	// a shadow guardrail runs inline. Not script-visible.
+	RecordEvents func(ctx context.Context, filterName string, out *ScriptOutput) `json:"-"`
+
 	// Ctx, when set, bounds the execution: the script is aborted when the
 	// context is cancelled, in addition to the FILTER_SCRIPT_TIMEOUT limit.
 	// Call sites pass the request or session context so a caller that has
@@ -60,9 +81,12 @@ type ScriptInput struct {
 
 // MessageTool is the tool behind one tool-result message: its name and the
 // id of the call it answers. Zero for a message that is not a tool result.
+// With Call set, the message is instead a tool call's arguments (an
+// assistant message), and Name and CallID are the call's.
 type MessageTool struct {
 	Name   string
 	CallID string
+	Call   bool
 }
 
 // ComplianceEventOutput represents a compliance event reported by a filter script.

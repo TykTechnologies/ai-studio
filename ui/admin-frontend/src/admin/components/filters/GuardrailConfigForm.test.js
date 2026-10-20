@@ -6,7 +6,10 @@ import testTheme from "../../utils/testTheme";
 import GuardrailConfigForm, {
   budgetErrors,
   effectiveToolAction,
+  effectiveToolCallAction,
+  effectiveToolDefinitionAction,
   emptyGuardrailConfig,
+  scansToolCalls,
   scansToolResults,
 } from "./GuardrailConfigForm";
 
@@ -342,6 +345,95 @@ describe("GuardrailConfigForm: defaults are visible", () => {
   });
 });
 
+describe("GuardrailConfigForm tool calls", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  it("saves only what the admin set, and removes the key when scanning is turned off", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} onChange={onChange} />);
+    const scan = await screen.findByTestId("guardrail-tool-calls-scan");
+    expect(scan).not.toBeChecked();
+    expect(screen.getByTestId("guardrail-tool-calls-include-system")).toBeDisabled();
+
+    fireEvent.click(scan);
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ tool_calls: { scan: true } }));
+    fireEvent.click(screen.getByTestId("guardrail-tool-calls-include-system"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ tool_calls: { scan: true, include_system: true } }));
+    fireEvent.click(screen.getByTestId("guardrail-tool-calls-include-system"));
+    fireEvent.click(screen.getByTestId("guardrail-tool-calls-scan"));
+    expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].tool_calls).toBeUndefined();
+  });
+
+  it("is offered on response filters too, and warns that a remote provider receives the arguments", async () => {
+    render(
+      <Harness
+        responseFilter
+        initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety", tool_calls: { scan: true } }}
+      />
+    );
+    expect(await screen.findByTestId("guardrail-tool-calls-scan")).toBeChecked();
+    expect(screen.getByTestId("guardrail-tool-calls-remote")).toBeInTheDocument();
+    expect(screen.getByText(/never sent to the client/)).toBeInTheDocument();
+  });
+});
+
+describe("GuardrailConfigForm tool definitions", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  it("is a request-filter section that stores only what is set", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} onChange={onChange} />);
+    fireEvent.click(await screen.findByTestId("guardrail-tool-definitions-scan"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ tool_definitions: { scan: true } }));
+    expect(screen.getByText("Default (Remove the tool)")).toBeInTheDocument();
+  });
+
+  it("is not offered on response filters", async () => {
+    render(<Harness responseFilter initial={{ ...emptyGuardrailConfig(), provider: "builtin" }} />);
+    await screen.findByTestId("guardrail-tool-calls-scan");
+    expect(screen.queryByTestId("guardrail-tool-definitions-scan")).not.toBeInTheDocument();
+  });
+
+  it("defaults to remove for block and quarantine filters", () => {
+    expect(effectiveToolDefinitionAction({ on_detect: "block" })).toBe("remove");
+    expect(effectiveToolDefinitionAction({ on_detect: "quarantine" })).toBe("remove");
+    expect(effectiveToolDefinitionAction({ on_detect: "log" })).toBe("log");
+    expect(effectiveToolDefinitionAction({ on_detect: "log", tool_definitions: { on_detect: "block" } })).toBe("block");
+  });
+});
+
+describe("GuardrailConfigForm shadow", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  it("offers shadow only when every action is log, and flags a shadow filter that no longer qualifies", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "log" }} onChange={onChange} />);
+    fireEvent.click(await screen.findByTestId("guardrail-shadow"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ shadow: true }));
+    expect(screen.queryByTestId("guardrail-shadow-invalid")).not.toBeInTheDocument();
+  });
+
+  it("hides the toggle for a blocking filter", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} />);
+    await screen.findByTestId("guardrail-tool-calls-scan");
+    expect(screen.queryByTestId("guardrail-shadow")).not.toBeInTheDocument();
+  });
+
+  it("warns when a shadow filter has a non-log action", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "log", shadow: true, tool_results: { on_detect: "quarantine" } }} />);
+    expect(await screen.findByTestId("guardrail-shadow-invalid")).toBeInTheDocument();
+  });
+});
+
 describe("guardrail config helpers", () => {
   it("maps block to quarantine for tool results unless overridden", () => {
     expect(effectiveToolAction({ on_detect: "block" })).toBe("quarantine");
@@ -353,6 +445,15 @@ describe("guardrail config helpers", () => {
     expect(scansToolResults({})).toBe(true);
     expect(scansToolResults({ tool_results: {} })).toBe(true);
     expect(scansToolResults({ tool_results: { scan: false } })).toBe(false);
+  });
+
+  it("scans tool calls only when scan is true, and defaults their action to block or log", () => {
+    expect(scansToolCalls({})).toBe(false);
+    expect(scansToolCalls({ tool_calls: { scan: true } })).toBe(true);
+    expect(effectiveToolCallAction({ on_detect: "block" })).toBe("block");
+    expect(effectiveToolCallAction({ on_detect: "quarantine" })).toBe("log");
+    expect(effectiveToolCallAction({ on_detect: "redact" })).toBe("log");
+    expect(effectiveToolCallAction({ on_detect: "log", tool_calls: { on_detect: "block" } })).toBe("block");
   });
 
   it("checks single_call_chars against max_scan_chars", () => {

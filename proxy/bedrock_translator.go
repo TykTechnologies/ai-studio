@@ -173,9 +173,11 @@ func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Reques
 
 	// Execute response filters (non-streaming)
 	if p.hasResponseFilters(conf) {
-		blocked, blockMsg, filterErr := ExecuteResponseFilters(
-			conf, p.gatewayService, respBody, http.StatusOK,
-			false, false, 0, "", r,
+		// The bridge answers in the OpenAI shape it was asked in.
+		blocked, blockMsg, filterErr := ExecuteBufferedResponseFilters(
+			conf, p.gatewayService,
+			BufferedResponse{Body: respBody, Format: requestFilterFormatOpenAI, RequestBody: reqBody},
+			http.StatusOK, r,
 		)
 		if filterErr != nil {
 			log.Error().Err(filterErr).Msg("Response filter error on Bedrock response")
@@ -275,9 +277,16 @@ func (p *Proxy) bedrockPumpStream(
 	isFirstChunk := true
 	var inputTokens, outputTokens int32
 	var cacheWriteTokens, cacheReadTokens int32
-	hasResponseFilters := p.hasResponseFilters(conf)
 	var textBuffer strings.Builder
-	chunkIndex := 0
+
+	// With response filters, the OpenAI SSE this bridge writes is screened
+	// as the native streams are (stream_screen.go): text per event and at
+	// the end, tool calls held until classified.
+	var screen *streamScreen
+	if p.hasResponseFilters(conf) {
+		screen = p.newStreamScreen(w, flusher, r, conf, "openai", "text/event-stream", reqBody, requestFilterFormatOpenAI)
+		w, flusher = screen, screen
+	}
 
 	// Bedrock numbers every content block in one sequence, text and tool use
 	// alike, but OpenAI's tool_calls[].index counts tool calls only - it is what
@@ -376,25 +385,6 @@ func (p *Proxy) bedrockPumpStream(
 			if textDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberText); ok {
 				// Accumulate text for logging
 				textBuffer.WriteString(textDelta.Value)
-
-				// Execute response filters on text content
-				if hasResponseFilters {
-					chunkBytes, _ := json.Marshal(textDelta.Value)
-					blocked, blockMsg, filterErr := ExecuteResponseFilters(
-						conf, p.gatewayService, chunkBytes, http.StatusOK,
-						true, true, chunkIndex, textBuffer.String(), r,
-					)
-					if filterErr != nil {
-						log.Error().Err(filterErr).Int("chunk", chunkIndex).Msg("Response filter error on Bedrock stream")
-					} else if blocked {
-						p.sendStreamError(w, flusher, fmt.Sprintf("Response blocked by filter: %s", blockMsg), "content_filter")
-						fmt.Fprintf(w, "data: [DONE]\n\n")
-						flusher.Flush()
-						return
-					}
-					chunkIndex++
-				}
-
 				sendChunk(ChatCompletionDelta{Content: textDelta.Value})
 			}
 
@@ -440,11 +430,29 @@ func (p *Proxy) bedrockPumpStream(
 				sendSSEChunk(w, flusher, chunkResp)
 			}
 		}
+		if screen != nil && screen.Blocked() {
+			// The screen ended the stream with an error and [DONE].
+			return
+		}
+	}
+	if err := stream.Err(); err != nil {
+		// The stream broke: end it with an OpenAI error object and [DONE],
+		// which SDKs raise, rather than a bare [DONE] that reads as a
+		// complete answer. Held tool calls are dropped with it.
+		log.Error().Err(err).Msg("Bedrock ConverseStream error")
+		b, _ := json.Marshal(ChatCompletionStreamError{Error: ChatCompletionErrorDetail{
+			Message: "the Bedrock stream failed before it completed", Type: "upstream_error"}})
+		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", b)
+		flusher.Flush()
+		return
 	}
 
 	// Send [DONE] marker
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
+	if screen != nil && screen.Finish() {
+		return
+	}
 
 	// Record proxy log and analytics in a single goroutine to ensure correct ordering:
 	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
@@ -475,10 +483,15 @@ func openAIMessagesToChatMessages(messages []Message) []bedrockVendor.ChatMessag
 				}
 			}
 		}
-		result = append(result, bedrockVendor.ChatMessage{
-			Role:    msg.Role,
-			Content: content,
-		})
+		cm := bedrockVendor.ChatMessage{
+			Role:       msg.Role,
+			Content:    content,
+			ToolCallID: msg.ToolCallID,
+		}
+		for _, c := range msg.ToolCalls {
+			cm.ToolCalls = append(cm.ToolCalls, bedrockVendor.ChatToolCall{ID: c.ID, Name: c.Function.Name, Arguments: c.Function.Arguments})
+		}
+		result = append(result, cm)
 	}
 	return result
 }

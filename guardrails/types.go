@@ -41,9 +41,27 @@ const (
 // sent back to the model: in OpenAI a role "tool" message, in Anthropic a
 // tool_result block inside a user message, in Google a functionResponse
 // part. It is the main channel for indirect prompt injection.
+//
+// A tool call is the model asking for a tool to run: its arguments (OpenAI
+// tool_calls[].function.arguments, Anthropic tool_use input, Google
+// functionCall args, Bedrock toolUse input, Responses function_call
+// arguments), in a request's history or in a response. It is where an
+// injection that reached the model turns into an action, such as data sent
+// to an address the attacker chose. Tool calls are segments only on filters
+// that scan them (Config.ToolCalls).
+//
+// A tool definition is a tool the request offers the model: its name,
+// description and parameter schema (OpenAI tools and functions, Anthropic
+// tools, Google functionDeclarations, Bedrock toolConfig, Responses tools).
+// Definitions often come from MCP servers or OpenAPI specs a third party
+// wrote, and a description can carry instructions the model follows (tool
+// poisoning). They are segments only on filters that scan them
+// (Config.ToolDefinitions).
 const (
-	KindText       = "text"
-	KindToolResult = "tool_result"
+	KindText           = "text"
+	KindToolResult     = "tool_result"
+	KindToolCall       = "tool_call"
+	KindToolDefinition = "tool_definition"
 )
 
 // Segment is one piece of text a provider classifies: a message, a response
@@ -53,13 +71,31 @@ type Segment struct {
 	Index int    `json:"index"`
 	Role  string `json:"role"` // system, user, assistant, tool
 	Text  string `json:"text"`
-	// Kind is KindText or KindToolResult; empty means text.
+	// Kind is KindText, KindToolResult or KindToolCall; empty means text.
 	Kind string `json:"kind,omitempty"`
-	// ToolName and ToolCallID identify the call a tool result answers, when
-	// the request names them.
+	// ToolName and ToolCallID identify the call a tool result answers, or a
+	// tool call itself, when the request names them.
 	ToolName   string `json:"tool_name,omitempty"`
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	// Context is what the model was asked to do when it made a tool call:
+	// set on tool call segments only (never on tool results, whose calls
+	// stay free of the user's text), and sent only to providers that ask
+	// for it (Capabilities.WantsGoal).
+	Context *SegmentContext `json:"context,omitempty"`
 }
+
+// SegmentContext is the goal behind a tool call: the latest user text before
+// the call and, when the filter asks for it, the system prompt, each cut to
+// MaxContextChars.
+type SegmentContext struct {
+	UserGoal string `json:"user_goal,omitempty"`
+	System   string `json:"system,omitempty"`
+}
+
+// MaxContextChars bounds each text of a SegmentContext, in characters. A
+// longer text keeps its first third and its last two thirds, as the
+// classifiers the context is for truncate their input.
+const MaxContextChars = 4096
 
 // IsToolResult reports text a tool produced, as opposed to the client's
 // own user or system text.
@@ -67,20 +103,71 @@ func (s Segment) IsToolResult() bool {
 	return s.Kind == KindToolResult || s.Role == RoleTool
 }
 
+// IsToolCall reports a tool call's arguments.
+func (s Segment) IsToolCall() bool {
+	return s.Kind == KindToolCall
+}
+
+// IsToolDefinition reports a tool definition.
+func (s Segment) IsToolDefinition() bool {
+	return s.Kind == KindToolDefinition
+}
+
+// Untrusted reports text the client did not write itself: a tool result, a
+// tool call the model made (whose arguments can carry what a tool result
+// told it), or a tool definition (often written by a third party). Untrusted
+// text never shares a provider call with the client's own text, so text
+// built to make its call fail cannot cost the user's prompt.
+func (s Segment) Untrusted() bool {
+	return s.IsToolResult() || s.IsToolCall() || s.IsToolDefinition()
+}
+
 // ForProvider is what a provider with caps is sent of s, at index with
 // text (s's text, or a piece of it): its role and text, and for a tool
-// result its tool metadata when the provider handles tool results
+// result or tool call its tool metadata when the provider handles them
 // (Capabilities.ToolSegments). A provider that does not is sent a tool
-// result as user text, a role every provider accepts; its findings still
-// come back onto the tool result by index.
+// result as user text and a tool call as assistant text, roles every
+// provider accepts; its findings still come back onto the segment by index.
+// A tool call's context goes only to a provider that asks for it
+// (Capabilities.WantsGoal).
 func (s Segment) ForProvider(index int, text string, caps Capabilities) Segment {
-	if !s.IsToolResult() {
+	switch {
+	case s.IsToolDefinition():
+		// Untrusted metadata: plain user text to a provider that does not
+		// know definitions, as for tool results.
+		if !caps.ToolSegments {
+			return Segment{Index: index, Role: RoleUser, Text: text}
+		}
+		return Segment{Index: index, Role: RoleSystem, Text: text, Kind: KindToolDefinition, ToolName: s.ToolName}
+	case s.IsToolCall():
+		if !caps.ToolSegments {
+			return Segment{Index: index, Role: RoleAssistant, Text: text}
+		}
+		out := Segment{Index: index, Role: RoleAssistant, Text: text, Kind: KindToolCall, ToolName: s.ToolName, ToolCallID: s.ToolCallID}
+		if caps.WantsGoal && s.Context != nil {
+			c := *s.Context
+			out.Context = &c
+		}
+		return out
+	case !s.IsToolResult():
 		return Segment{Index: index, Role: s.Role, Text: text}
-	}
-	if !caps.ToolSegments {
+	case !caps.ToolSegments:
 		return Segment{Index: index, Role: RoleUser, Text: text}
 	}
 	return Segment{Index: index, Role: RoleTool, Text: text, Kind: KindToolResult, ToolName: s.ToolName, ToolCallID: s.ToolCallID}
+}
+
+// ClipContext cuts text to MaxContextChars, keeping its first third and its
+// last two thirds around a marker line.
+func ClipContext(text string) string {
+	runes := []rune(text)
+	if len(runes) <= MaxContextChars {
+		return text
+	}
+	const marker = "\n[…]\n"
+	keep := MaxContextChars - len([]rune(marker))
+	head := keep / 3
+	return string(runes[:head]) + marker + string(runes[len(runes)-(keep-head):])
 }
 
 // RedactionSpec asks a provider that can rewrite text to do so.
@@ -183,8 +270,16 @@ type Capabilities struct {
 	// it is sent segments with role tool and their Kind, ToolName and
 	// ToolCallID. A provider without it is sent a tool result as role user
 	// with no tool metadata, a role every provider accepts, and its
-	// findings are mapped back onto the tool result.
+	// findings are mapped back onto the tool result. The same holds for tool
+	// calls: with it they arrive as role assistant with Kind tool_call and
+	// the tool's name and call id, without it as plain assistant text.
 	ToolSegments bool
+	// WantsGoal reports a provider that judges a tool call against what the
+	// model was asked to do: it is sent each tool call segment's Context
+	// (the user's goal, and the system prompt where the filter includes
+	// it). Only meaningful with ToolSegments. Other providers never receive
+	// the user's text alongside a tool call.
+	WantsGoal bool
 }
 
 // DefaultCallChars is the call size the runner uses for a remote provider

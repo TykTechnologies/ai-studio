@@ -54,10 +54,10 @@ const responseSafeConfig = (config) => {
 };
 
 // requestOnlyKeysDropped leaves out the settings a response filter ignores
-// (tool results, quarantine, budgets, the verdict cache), so they are not
+// (tool results, tool definitions, quarantine, budgets, the verdict cache), so they are not
 // stored on it. The form keeps them in state in case the box is unticked.
 const requestOnlyKeysDropped = (config) => {
-  const { tool_results, quarantine, budget, cache, ...rest } = responseSafeConfig(config);
+  const { tool_results, tool_definitions, quarantine, budget, cache, ...rest } = responseSafeConfig(config);
   return rest;
 };
 

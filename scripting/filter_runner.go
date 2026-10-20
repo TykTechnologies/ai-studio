@@ -81,6 +81,9 @@ type selection struct {
 	// unredactable marks units a view flagged for something their own text
 	// did not show, which no rewrite of their text can cover.
 	unredactable map[int]bool
+	// definitions maps a tool definition segment to its unit, for removal
+	// (in messages mode, where units holds no real units).
+	definitions map[int]segments.Unit
 	// replaceWhole: the raw input is one tool output read as JSON, so a
 	// quarantine replaces all of it with the placeholder text.
 	replaceWhole bool
@@ -98,6 +101,13 @@ const unscannedUndecodable = "undecodable"
 // guardrails before the model sees it. Context tool_name and tool_call_id
 // name the call.
 const FormatToolResult = "tool_result"
+
+// FormatToolCall marks a ScriptInput whose RawInput is the arguments of a
+// tool call the model asked a Studio chat to run, screened by the chat's
+// request guardrails that scan tool calls before the call runs. Context
+// tool_name and tool_call_id name the call, user_goal and system_prompt its
+// goal. The guardrail never rewrites it: block keeps it from running.
+const FormatToolCall = "tool_call"
 
 // preparedGuardrail is a filter's config parsed, normalised and with its
 // connection references resolved, plus the provider built from it. Preparing
@@ -286,13 +296,30 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		if p == nil {
 			return nil, err
 		}
-		return g.failed(input, p.cfg, err), nil
+		failed := g.failed(input, p.cfg, err)
+		if p.cfg.Shadow && input.RecordEvents != nil {
+			// A shadow filter never changes traffic, even when it cannot
+			// run: the failure is recorded and the traffic goes on.
+			input.RecordEvents(input.Ctx, g.filter.Name, &ScriptOutput{ComplianceEvents: failed.ComplianceEvents})
+			return passThrough(input), nil
+		}
+		return failed, nil
 	}
-	cfg, provider, caps := p.cfg, p.provider, p.caps
 
-	if input.IsChunk && !shouldEvaluateChunk(input, cfg.EvaluateEvery(caps)) {
+	if input.IsChunk && !shouldEvaluateChunk(input, p.cfg.EvaluateEvery(p.caps)) {
 		return passThrough(input), nil
 	}
+	if p.cfg.Shadow && input.RecordEvents != nil {
+		return g.shadow(input, p), nil
+	}
+	return g.evaluate(input, p)
+}
+
+// evaluate classifies input with the prepared guardrail and maps the verdict
+// onto the output: the work of a run once the filter is prepared, inline or
+// (for a shadow filter) on the shadow pool.
+func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*ScriptOutput, error) {
+	cfg, provider, caps := p.cfg, p.provider, p.caps
 
 	sel := buildSegments(input, cfg)
 	if sel.refuse != nil {
@@ -390,6 +417,8 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		out.Message = cfg.BlockMessage
 	case guardrails.ActionQuarantine:
 		out.Message = "guardrail quarantined content"
+	case guardrails.ActionRemove:
+		out.Message = "guardrail removed tool definitions"
 	case guardrails.ActionRedact:
 		out.Message = "guardrail redacted content"
 	}
@@ -418,7 +447,7 @@ type outcome struct {
 }
 
 // actionRank orders actions by strength.
-var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionRedact: 2, guardrails.ActionQuarantine: 3, guardrails.ActionBlock: 4}
+var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionRedact: 2, guardrails.ActionQuarantine: 3, guardrails.ActionRemove: 3, guardrails.ActionBlock: 4}
 
 // decide picks the action for each flagged segment: the filter's on_detect,
 // or for a tool result its tool_results action (block becoming quarantine).
@@ -500,19 +529,52 @@ func (o *outcome) quarantine(segs map[int]bool) {
 // request; an error means the edits could not be written into the body.
 func (o *outcome) apply(out *ScriptOutput, input *ScriptInput, sel selection, cfg guardrails.Config, rewritten map[int]string) error {
 	texts := map[int]string{}
+	var removals []segments.Unit
 	for si, a := range o.actions {
 		switch a {
 		case guardrails.ActionRedact:
 			texts[si] = rewritten[si]
 		case guardrails.ActionQuarantine:
 			texts[si] = renderQuarantine(*cfg.Quarantine.Placeholder, sel.segments[si], o.findings[si], input)
+		case guardrails.ActionRemove:
+			u, ok := sel.definitions[si]
+			if !ok {
+				o.block()
+				return nil
+			}
+			removals = append(removals, u)
 		}
 	}
-	if len(texts) == 0 {
+	if len(texts) == 0 && len(removals) == 0 {
 		return nil
 	}
+	var removalEdits []segments.Edit
+	if len(removals) > 0 {
+		var err error
+		if removalEdits, err = segments.RemovalEdits(input.Format, []byte(input.RawInput), removals); err != nil {
+			// The tools array would be left empty, or the request forces a
+			// removed tool: refuse the request rather than send it broken.
+			o.block()
+			return nil
+		}
+	}
 	if sel.mode != modeBody {
-		return applyRewrites(out, input, sel, texts)
+		if len(removals) == 0 {
+			return applyRewrites(out, input, sel, texts)
+		}
+		if len(texts) > 0 {
+			// Message rewrites go back through the format's reconstructor,
+			// which rebuilds the body from the messages and would lose the
+			// removal: both at once cannot be written.
+			o.block()
+			return nil
+		}
+		body, err := segments.Apply([]byte(input.RawInput), removalEdits)
+		if err != nil {
+			return err
+		}
+		out.Payload, out.Messages = string(body), nil
+		return nil
 	}
 	if sel.replaceWhole {
 		for si, text := range texts {
@@ -537,6 +599,7 @@ func (o *outcome) apply(out *ScriptOutput, input *ScriptInput, sel selection, cf
 		}
 		edits = append(edits, unitEdits...)
 	}
+	edits = append(edits, removalEdits...)
 	body, err := segments.Apply([]byte(input.RawInput), edits)
 	if err != nil {
 		return err
@@ -639,6 +702,18 @@ func renderQuarantine(template string, seg guardrails.Segment, findings []guardr
 	}
 	if seg.Role == guardrails.RoleTool && toolName != "" {
 		source += " from " + toolName
+	}
+	if seg.IsToolDefinition() {
+		source = "tool definition"
+		if toolName != "" {
+			source += " of " + toolName
+		}
+	}
+	if seg.IsToolCall() {
+		source = "tool call"
+		if toolName != "" {
+			source += " to " + toolName
+		}
 	}
 
 	return strings.NewReplacer(
@@ -754,18 +829,25 @@ func buildSegments(input *ScriptInput, cfg guardrails.Config) selection {
 		if input.IsChunk {
 			text = input.CurrentBuffer
 		}
-		return payloadSelection("assistant", text)
+		sel := payloadSelection("assistant", text)
+		if cfg.ScansToolCalls() && !input.IsChunk && input.ResponseBody != "" {
+			sel.addResponseToolCalls(input, cfg)
+		}
+		return sel
 	}
 
 	if input.Format == FormatToolResult {
 		return toolOutputSelection(input, cfg)
+	}
+	if input.Format == FormatToolCall {
+		return toolCallSelection(input, cfg)
 	}
 
 	// Proxy requests: read the body block by block, unless the format has
 	// its own extractor that found the text (decisions, Responses,
 	// embeddings), whose reconstructor writes a rewrite back.
 	if input.Format != "" && (segments.Supports(input.Format) || !anyMessageText(input.Messages)) {
-		units, err := segments.Read(input.Format, []byte(input.RawInput))
+		units, err := segments.ReadWith(input.Format, []byte(input.RawInput), segments.Options{ToolCalls: cfg.ScansToolCalls(), ToolDefinitions: cfg.ScansToolDefinitions()})
 		switch {
 		case errors.Is(err, segments.ErrDuplicateKey):
 			return selection{refuse: err}
@@ -791,6 +873,8 @@ func buildSegments(input *ScriptInput, cfg guardrails.Config) selection {
 	// the extracted messages, filtered by scope. Index is the position in
 	// input.Messages so a rewrite lands on the right message.
 	cands := make([]candidate, len(input.Messages))
+	named := len(input.MessageTools) == len(input.Messages)
+	scanCalls := cfg.ScansToolCalls() && named
 	turn := 0
 	for i, m := range input.Messages {
 		role := roleName(m.Role)
@@ -798,26 +882,105 @@ func buildSegments(input *ScriptInput, cfg guardrails.Config) selection {
 			role = guardrails.RoleTool
 		}
 		cands[i] = candidate{role: role, message: i, turn: turn}
-		if role == guardrails.RoleTool {
+		switch {
+		case role == guardrails.RoleTool:
 			cands[i].kind = guardrails.KindToolResult
+		case scanCalls && role == guardrails.RoleAssistant && input.MessageTools[i].Call:
+			// A tool call's arguments (Responses function_call): without
+			// tool-call scanning they stay assistant text, as before.
+			cands[i].kind = guardrails.KindToolCall
 		}
 		if role == guardrails.RoleAssistant {
 			turn++
 		}
 	}
 	sel := selection{mode: modeMessages}
-	named := len(input.MessageTools) == len(input.Messages)
+	var system []string
+	lastUser := ""
 	for i, in := range selectInScope(cands, cfg) {
-		if in {
-			c := cands[i]
-			seg := guardrails.Segment{Index: i, Role: c.role, Kind: c.kind, Text: messageText(input.Messages[i])}
-			if named && c.kind == guardrails.KindToolResult {
-				seg.ToolName, seg.ToolCallID = input.MessageTools[i].Name, input.MessageTools[i].CallID
+		c := cands[i]
+		text := messageText(input.Messages[i])
+		switch {
+		case c.role == guardrails.RoleSystem && text != "":
+			system = append(system, text)
+		case c.role == guardrails.RoleUser && strings.TrimSpace(text) != "":
+			lastUser = text
+		}
+		if !in {
+			continue
+		}
+		seg := guardrails.Segment{Index: i, Role: c.role, Kind: c.kind, Text: text}
+		if named && c.kind != "" {
+			seg.ToolName, seg.ToolCallID = input.MessageTools[i].Name, input.MessageTools[i].CallID
+		}
+		if c.kind == guardrails.KindToolCall {
+			seg.Context = goalContext(cfg, guardrails.SegmentContext{UserGoal: lastUser, System: strings.Join(system, "\n\n")})
+		}
+		pos := len(sel.segments)
+		sel.segments = append(sel.segments, seg)
+		if c.kind == guardrails.KindToolCall {
+			// Index is the message's position here, not the segment's.
+			sel.addViewAt(pos, seg, segments.Unit{Segment: seg}, decodedJSON(text))
+		}
+	}
+	if cfg.ScansToolDefinitions() && input.Format == segments.FormatOpenAIResponses {
+		// The Responses extractor lists no tools; they are read from the
+		// body, and a removal is written into it.
+		if units, err := segments.ResponsesToolDefinitions([]byte(input.RawInput)); err == nil {
+			for _, u := range units {
+				pos := len(sel.segments)
+				seg := u.Segment
+				seg.Index = pos
+				sel.segments = append(sel.segments, seg)
+				if sel.definitions == nil {
+					sel.definitions = map[int]segments.Unit{}
+				}
+				sel.definitions[pos] = u
+				sel.addViewAt(pos, seg, u, decodedJSON(seg.Text))
 			}
-			sel.segments = append(sel.segments, seg)
 		}
 	}
 	return sel
+}
+
+// goalContext is the context sent with a tool call: the user's goal, and the
+// system prompt only when the filter includes it, each clipped.
+func goalContext(cfg guardrails.Config, c guardrails.SegmentContext) *guardrails.SegmentContext {
+	out := guardrails.SegmentContext{UserGoal: guardrails.ClipContext(c.UserGoal)}
+	if cfg.ToolCalls.IncludeSystem {
+		out.System = guardrails.ClipContext(c.System)
+	}
+	return &out
+}
+
+// decodedJSON is segments.JSONView of text, or "" when it has none.
+func decodedJSON(text string) string {
+	v, _ := segments.JSONView(text)
+	return v
+}
+
+// addResponseToolCalls adds the tool calls of a buffered response
+// (input.ResponseBody, in input.ResponseFormat) as tool call segments, each
+// with the goal of the request that produced it (input.RequestBody), and
+// the decoded view of its arguments. A body that cannot be read adds none:
+// its text is screened as before.
+func (sel *selection) addResponseToolCalls(input *ScriptInput, cfg guardrails.Config) {
+	units, err := segments.ResponseToolCalls(input.ResponseFormat, []byte(input.ResponseBody))
+	if err != nil || len(units) == 0 {
+		return
+	}
+	reqFormat := input.RequestFormat
+	if reqFormat == "" {
+		reqFormat = input.ResponseFormat
+	}
+	goal := goalContext(cfg, segments.Goal(reqFormat, []byte(input.RequestBody)))
+	for _, u := range units {
+		seg := u.Segment
+		seg.Index = len(sel.segments)
+		seg.Context = goal
+		sel.segments = append(sel.segments, seg)
+		sel.addView(seg, u, decodedJSON(seg.Text))
+	}
 }
 
 // bodySelection picks the units the guardrail scans (selectInScope).
@@ -834,6 +997,9 @@ func bodySelection(units []segments.Unit, cfg guardrails.Config) selection {
 			// placeholders; providerSegment decides what providers see.
 			seg := u.Segment
 			seg.Index = len(sel.segments)
+			if seg.IsToolCall() && seg.Context != nil {
+				seg.Context = goalContext(cfg, *seg.Context)
+			}
 			if u.Undecodable {
 				sel.undecodable = append(sel.undecodable, seg.Index)
 			}
@@ -851,6 +1017,12 @@ func bodySelection(units []segments.Unit, cfg guardrails.Config) selection {
 // addView adds text as a detection-only view of the unit behind seg, when
 // there is one.
 func (sel *selection) addView(seg guardrails.Segment, u segments.Unit, text string) {
+	sel.addViewAt(seg.Index, seg, u, text)
+}
+
+// addViewAt is addView for the segment at position parent, whose Index is
+// not its position (messages mode, where Index is the message's).
+func (sel *selection) addViewAt(parent int, seg guardrails.Segment, u segments.Unit, text string) {
 	if text == "" {
 		return
 	}
@@ -858,8 +1030,11 @@ func (sel *selection) addView(seg guardrails.Segment, u segments.Unit, text stri
 		sel.viewOf = map[int]int{}
 	}
 	view := seg
-	view.Index, view.Text = len(sel.segments), text
-	sel.viewOf[view.Index] = seg.Index
+	view.Text = text
+	if sel.mode != modeMessages {
+		view.Index = len(sel.segments)
+	}
+	sel.viewOf[len(sel.segments)] = parent
 	sel.segments = append(sel.segments, view)
 	sel.units = append(sel.units, u)
 }
@@ -868,6 +1043,20 @@ func (sel *selection) addView(seg guardrails.Segment, u segments.Unit, text stri
 // or holds JSON escapes (segments.JSONView): a pattern over the raw text
 // would see the escapes the model reads through.
 func (sel *selection) addDecodedViews(seg guardrails.Segment, u segments.Unit) {
+	if seg.Kind == guardrails.KindToolDefinition {
+		if sel.definitions == nil {
+			sel.definitions = map[int]segments.Unit{}
+		}
+		sel.definitions[seg.Index] = u
+		sel.addView(seg, u, decodedJSON(seg.Text))
+		return
+	}
+	if seg.Kind == guardrails.KindToolCall {
+		// Arguments held as an object have no leaves; their raw JSON is
+		// the text.
+		sel.addView(seg, u, decodedJSON(seg.Text))
+		return
+	}
 	if seg.Kind != guardrails.KindToolResult {
 		return
 	}
@@ -971,6 +1160,27 @@ func toolOutputSelection(input *ScriptInput, cfg guardrails.Config) selection {
 	return sel
 }
 
+// toolCallSelection reads a tool call the model asked a Studio chat to run
+// (FormatToolCall): one tool call segment with its goal, and the decoded
+// view of its arguments. Nothing when the filter does not scan tool calls.
+func toolCallSelection(input *ScriptInput, cfg guardrails.Config) selection {
+	if !cfg.ScansToolCalls() {
+		return selection{}
+	}
+	seg := guardrails.Segment{Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall, Text: input.RawInput}
+	seg.ToolName, _ = input.Context["tool_name"].(string)
+	seg.ToolCallID, _ = input.Context["tool_call_id"].(string)
+	goal, _ := input.Context["user_goal"].(string)
+	system, _ := input.Context["system_prompt"].(string)
+	seg.Context = goalContext(cfg, guardrails.SegmentContext{UserGoal: goal, System: system})
+	if strings.TrimSpace(seg.Text) == "" {
+		seg.Text = "{}"
+	}
+	sel := selection{segments: []guardrails.Segment{seg}, mode: modePayload}
+	sel.addView(seg, segments.Unit{Segment: seg}, decodedJSON(seg.Text))
+	return sel
+}
+
 // payloadSelection is a single text whose rewrite is the payload.
 func payloadSelection(role, text string) selection {
 	return selection{segments: []guardrails.Segment{{Index: 0, Role: role, Text: text}}, mode: modePayload}
@@ -1010,6 +1220,12 @@ func selectInScope(cands []candidate, cfg guardrails.Config) []bool {
 	for i, c := range cands {
 		tool := c.kind == guardrails.KindToolResult || c.role == guardrails.RoleTool
 		switch {
+		case c.kind == guardrails.KindToolDefinition:
+			in[i] = cfg.ScansToolDefinitions()
+		case c.kind == guardrails.KindToolCall:
+			// Present only when the filter scans tool calls, across the
+			// whole history like tool results.
+			in[i] = cfg.ScansToolCalls()
 		case tool && scanTools:
 			in[i] = true
 		case tool:

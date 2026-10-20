@@ -244,9 +244,7 @@ func TestAnthropicStream_TextThenToolUseSequence(t *testing.T) {
 		}},
 	}
 	for _, e := range events {
-		if blocked := st.handleEvent(e); blocked {
-			t.Fatal("unexpected filter block")
-		}
+		st.handleEvent(e)
 	}
 	st.finish()
 

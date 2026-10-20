@@ -480,9 +480,26 @@ func (p *Proxy) Stop(ctx context.Context) error {
 	server := p.server
 	p.serverMu.Unlock()
 	if server == nil {
+		DrainShadowGuardrails(ctx)
 		return nil
 	}
-	return server.Shutdown(ctx)
+	err := server.Shutdown(ctx)
+	DrainShadowGuardrails(ctx)
+	return err
+}
+
+// shadowDrainLimit bounds how long a shutdown waits for shadow guardrail
+// evaluations still queued: they never hold up traffic, so they must not
+// hold up a shutdown either.
+const shadowDrainLimit = 5 * time.Second
+
+// DrainShadowGuardrails waits, at most shadowDrainLimit and no longer than
+// ctx allows, for the shadow guardrail evaluations still queued, so their
+// compliance events are recorded before the analytics recorder stops.
+func DrainShadowGuardrails(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, shadowDrainLimit)
+	defer cancel()
+	scripting.DrainShadowGuardrails(ctx)
 }
 
 func (p *Proxy) Reload() error {
@@ -957,6 +974,23 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
 		return
 	}
+	// A streamed answer on the REST path would be buffered whole and its
+	// text never read (response filters fail open on an SSE body). With
+	// response filters attached, a stream goes to the streaming handler, as
+	// /llm/call sends it, so it streams and is filtered; one the gateway
+	// cannot read as a stream is refused rather than passed unfiltered.
+	if p.hasResponseFilters(llm) {
+		if bedrockInvokeStream(r.URL.Path) {
+			respondWithError(w, http.StatusBadRequest, "Bedrock invoke-with-response-stream cannot be screened by this LLM's response filters; use converse-stream", nil, false)
+			return
+		}
+		if streaming, err := switches.DetectStreamingIntent(llm.Vendor, r); err == nil && streaming {
+			r = r.Clone(r.Context())
+			r.URL.Path = strings.Replace(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug), fmt.Sprintf("/llm/stream/%s", llmSlug), 1)
+			p.handleStreamingLLMRequest(w, r)
+			return
+		}
+	}
 	// A failover rung arriving from the outer hop carries a trusted marker;
 	// keep it on the context so this attempt's analytics can say so.
 	if m, ok := p.parseFailoverMarker(r); ok {
@@ -1131,15 +1165,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 		// Execute response filters (block-only, after hooks)
 		if hasResponseFilters {
-			blocked, blockMsg, err := ExecuteResponseFilters(
+			blocked, blockMsg, err := ExecuteBufferedResponseFilters(
 				llm,
 				p.gatewayService,
-				bufferedCapture.buffer.Bytes(),
+				BufferedResponse{
+					Body:        bufferedCapture.buffer.Bytes(),
+					Format:      requestFilterFormatFor(r, llm),
+					RequestBody: reqBody,
+				},
 				bufferedCapture.statusCode,
-				false, // isStreaming
-				false, // isChunk
-				0,     // chunkIndex
-				"",    // currentBuffer (not used for non-streaming)
 				r,
 			)
 			if err != nil {
@@ -1876,6 +1910,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	for k, v := range resp.Header {
 		w.Header()[k] = v
 	}
+	hasResponseFilters := p.hasResponseFilters(llm)
+	if hasResponseFilters {
+		// A block holds or ends the stream early and adds an error event,
+		// so the upstream's length is not the client's.
+		w.Header().Del("Content-Length")
+	}
 	respStatus = resp.StatusCode
 	w.WriteHeader(resp.StatusCode)
 	if f, ok := w.(http.Flusher); ok {
@@ -1895,7 +1935,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// routinely fails after a complete response.
 	clientGone := false
 	chunkIndex := 0
-	hasResponseFilters := p.hasResponseFilters(llm)
+	framer := newEventFramer(resp.Header.Get("Content-Type"))
+	dialect := streamDialect(requestFilterFormatFor(r, llm))
+	// Streamed tool calls are held until classified only when a response
+	// guardrail scans tool calls (stream_toolcalls.go).
+	var hold *toolCallHold
+	if hasResponseFilters && responseFiltersScanToolCalls(llm) {
+		hold = newToolCallHold(dialect)
+	}
 
 	for {
 		n, readErr := resp.Body.Read(buffer)
@@ -1913,34 +1960,63 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			responses = append(responses, chunk)
 			fullResponse.Write(chunk)
 
-			// Execute response filters on each chunk (if configured)
+			// With response filters, only whole events go on, once the
+			// filters have seen their text (see stream_events.go).
 			if hasResponseFilters {
-				// Extract text from this chunk and add to text buffer
-				chunkText := switches.ExtractStreamingChunkText(llm.Vendor, chunk)
-				if chunkText != "" {
-					textBuffer.WriteString(chunkText)
+				events := framer.feed(chunk)
+				chunk = nil
+				var delta strings.Builder
+				var release []byte
+				for _, ev := range events {
+					delta.WriteString(dialect.text(ev))
+					if hold == nil {
+						release = append(release, ev.raw...)
+						continue
+					}
+					now, ready := hold.observe(ev)
+					release = append(release, now...)
+					if !ready {
+						continue
+					}
+					held, calls, overflow := hold.take()
+					tcBlocked, tcMsg, tcErr := classifyHeldCalls(llm, p.gatewayService, calls, overflow, reqBody, string(dialect), resp.StatusCode, r)
+					if tcErr != nil {
+						logger.Errorf("Tool call filter error on a stream: %v", tcErr)
+					}
+					if tcBlocked {
+						// The flagged call's events are never sent.
+						metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+						logger.Warnf("Streamed tool call blocked by filter: %s", tcMsg)
+						w.Write(release)
+						markStreamBlocked(w, r, tcMsg)
+						w.Write(dialect.blockEvent(framer, tcMsg))
+						if f, ok := w.(http.Flusher); ok {
+							f.Flush()
+						}
+						isErr = true
+						blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
+						p.goAnalyze(func() {
+							p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+						})
+						return
+					}
+					release = append(release, held...)
 				}
-
-				blocked, blockMsg, filterErr := ExecuteResponseFilters(
-					llm,
-					p.gatewayService,
-					chunk,
-					resp.StatusCode,
-					true,                   // isStreaming
-					true,                   // isChunk
-					chunkIndex,             // chunkIndex
-					textBuffer.String(),    // currentBuffer (accumulated EXTRACTED TEXT)
-					r,
-				)
+				textBuffer.WriteString(delta.String())
+				blocked, blockMsg, filterErr := false, "", error(nil)
+				if len(events) > 0 {
+					blocked, blockMsg, filterErr = ExecuteStreamTextFilters(llm, p.gatewayService, delta.String(), resp.StatusCode, chunkIndex, textBuffer.String(), r)
+				}
 				if filterErr != nil {
 					logger.Errorf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
 					// Fail open on error - continue streaming
 				} else if blocked {
 					metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
-					// Response blocked mid-stream - send error chunk and stop
+					// Blocked mid-stream: the event that tripped it is never
+					// sent; the stream ends with the vendor's error event.
 					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
-					errorChunk := buildFilterBlockedErrorChunk(blockMsg)
-					w.Write(errorChunk)
+					markStreamBlocked(w, r, blockMsg)
+					w.Write(dialect.blockEvent(framer, blockMsg))
 					if f, ok := w.(http.Flusher); ok {
 						f.Flush()
 					}
@@ -1952,17 +2028,20 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					})
 					return
 				}
+				chunk = release
 			}
 
 			// Filter passed or no filters - write chunk to client
-			if _, werr := w.Write(chunk); werr != nil {
-				clientGone = true
-				break
+			if len(chunk) > 0 {
+				if _, werr := w.Write(chunk); werr != nil {
+					clientGone = true
+					break
+				}
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+				chunkIndex++
 			}
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
-			chunkIndex++
 		}
 		if readErr == io.EOF {
 			break
@@ -1985,6 +2064,45 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// guardrail's cadence), and a credential in a two-chunk answer is still a
 	// leak worth recording. Everything is already with the client, so a block
 	// here ends the stream with an error event and logs a blocked response.
+	// A last event with no terminator is read now, and released only if the
+	// final evaluation passes.
+	var tail []byte
+	if hasResponseFilters {
+		if ev := framer.flush(); ev != nil {
+			textBuffer.WriteString(dialect.text(*ev))
+			tail = ev.raw
+			if hold != nil {
+				tail, _ = hold.observe(*ev)
+			}
+		}
+	}
+	// Calls still held when the stream ends are classified now; after an
+	// upstream failure they are not released at all.
+	if hold != nil && hold.holding {
+		held, calls, overflow := hold.take()
+		if !isErr {
+			tcBlocked, tcMsg, tcErr := classifyHeldCalls(llm, p.gatewayService, calls, overflow, reqBody, string(dialect), resp.StatusCode, r)
+			if tcErr != nil {
+				logger.Errorf("Tool call filter error at end of stream: %v", tcErr)
+			}
+			if tcBlocked {
+				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+				if !clientGone {
+					markStreamBlocked(w, r, tcMsg)
+					w.Write(dialect.blockEvent(framer, tcMsg))
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+				}
+				blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
+				p.goAnalyze(func() {
+					p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+				})
+				return
+			}
+			tail = append(held, tail...)
+		}
+	}
 	if !isErr && hasResponseFilters {
 		blocked, blockMsg, filterErr := ExecuteFinalResponseFilters(llm, p.gatewayService, resp.StatusCode, chunkIndex, textBuffer.String(), r)
 		if filterErr != nil {
@@ -1993,7 +2111,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 			logger.Warnf("Streaming response blocked by filter at end of stream: %s", blockMsg)
 			if !clientGone {
-				w.Write(buildFilterBlockedErrorChunk(blockMsg))
+				markStreamBlocked(w, r, blockMsg)
+				w.Write(dialect.blockEvent(framer, blockMsg))
 				if f, ok := w.(http.Flusher); ok {
 					f.Flush()
 				}
@@ -2004,6 +2123,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 				p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 			})
 			return
+		}
+	}
+	if len(tail) > 0 && !clientGone {
+		w.Write(tail)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
 		}
 	}
 	if !isErr {
@@ -2204,17 +2329,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	// Extract model from context (set by modelValidationMiddleware)
 	modelName, _ := r.Context().Value("model_name").(string)
 
-	// A decision request is not chat-shaped whatever its vendor; filters read
-	// it through the decision formats (see decisions_filters.go).
-	format := string(llm.Vendor)
-	if df := decisionFilterFormat(r.URL.Path); df != "" {
-		format = df
-	}
-	// A native chain hook names the body's shape when it is not the
-	// vendor's chat shape (OpenAI's Responses API).
-	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
-		format = hook.FilterFormat
-	}
+	format := requestFilterFormatFor(r, llm)
 	bodyBytes, err = p.runRequestFilters(llm, r, bodyBytes, format, modelName)
 	if err != nil {
 		return err
@@ -2240,6 +2355,23 @@ const (
 	requestFilterFormatOpenAI    = "openai"
 	requestFilterFormatAnthropic = "anthropic"
 )
+
+// requestFilterFormatFor is the filter format of a request on the native
+// pass-through: the LLM's vendor, a decision format for a decision request
+// (not chat-shaped whatever its vendor; see decisions_filters.go), or the
+// format a native chain hook names when the body is not the vendor's chat
+// shape (OpenAI's Responses API). A buffered response is read in the same
+// format.
+func requestFilterFormatFor(r *http.Request, llm *models.LLM) string {
+	format := string(llm.Vendor)
+	if df := decisionFilterFormat(r.URL.Path); df != "" {
+		format = df
+	}
+	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
+		format = hook.FilterFormat
+	}
+	return format
+}
 
 // hasRequestFilters reports whether llm has at least one request-side filter.
 func (p *Proxy) hasRequestFilters(llm *models.LLM) bool {
@@ -2337,6 +2469,8 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 		IsChat:     false,
 		Format:     format,
 		Ctx:        r.Context(),
+		// Shadow guardrails record their events later through this.
+		RecordEvents: scripting.EventRecorder("proxy_request", appID, 0, llm.ID, string(llm.Vendor), modelName),
 	}
 	if len(messages) > 0 {
 		scriptInput.MessageTools = p.messageExtractorRegistry.MessageTools(format, bodyBytes)
@@ -2484,8 +2618,13 @@ func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
 		return ""
 	}
 
-	// Create hash from tool version + allowed operations
+	// Create hash from tool version + allowed operations, and the versions
+	// of the guardrails that screen its definitions, so editing one
+	// rebuilds (and rescreens) the MCP server.
 	hashData := fmt.Sprintf("%s:%s", p.toolCacheVersion(toolModel), strings.Join(allowedOps, ","))
+	for _, f := range scripting.DefinitionScreeners(toolFilterPointers(toolModel)) {
+		hashData += fmt.Sprintf(":%d@%d", f.ID, f.UpdatedAt.UnixNano())
+	}
 	h := sha256.New()
 	h.Write([]byte(hashData))
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -2847,6 +2986,15 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 	tools, err := client.AsTool(operations...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert operations to tools: %w", err)
+	}
+
+	// The spec may be a third party's: the tool's request guardrails that
+	// scan tool definitions screen the list once, here, where it is built
+	// (the server is cached until the tool or those filters change). A
+	// flagged operation is left out of tools/list, or the server refused.
+	tools, operations, err = p.screenMCPToolDefinitions(r, toolModel, tools, operations)
+	if err != nil {
+		return nil, err
 	}
 
 	// Create a new MCP server for this tool

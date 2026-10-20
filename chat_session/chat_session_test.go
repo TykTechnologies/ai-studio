@@ -281,7 +281,8 @@ func TestChatSession_PrepareTools(t *testing.T) {
 		},
 	}
 
-	tools := cs.prepareTools()
+	tools, err := cs.prepareTools()
+	assert.NoError(t, err)
 	assert.NotEmpty(t, tools)
 	// Additional checks on the prepared tools can be added here
 }
