@@ -2582,6 +2582,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				MaxSpanBytes:       uint32(max(g.MaxSpanBytes, 0)),
 				StoreBinary:        g.StoreBinary,
 				RedactionDetectors: g.Detectors,
+				// While the hub exports assembled spans, edges leave out
+				// their live proxy span too (jyx.90).
+				AssembledExportActive: agenttrace.ExportActive(),
 			}
 		}
 	}

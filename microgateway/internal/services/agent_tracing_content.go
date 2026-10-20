@@ -19,6 +19,10 @@ import (
 // (tracing off there), or in a Community build where no pipeline is
 // registered, no content is captured: raw parts are dropped.
 func installAgentTracingContent(p *pb.AgentTracingContentPolicy, db *gorm.DB) {
+	// The hub's OTel exporter exports the assembled span under the gateway
+	// span id; the edge then leaves out its own live span for captured
+	// requests, as the hub does.
+	agenttrace.SetExportActive(p != nil && p.AssembledExportActive)
 	if p == nil {
 		agenttrace.SetContentProcessor(nil)
 		return

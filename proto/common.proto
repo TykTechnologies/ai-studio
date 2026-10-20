@@ -377,6 +377,10 @@ message AgentTracingContentPolicy {
   uint32 max_span_bytes = 5;
   bool store_binary = 6;
   repeated string redaction_detectors = 7;
+  // assembled_export_active is set while the hub's OTel exporter exports
+  // assembled agent-trace spans under the gateway span id; edges then leave
+  // out their own live proxy span for captured requests (one call, one span).
+  bool assembled_export_active = 8;
 }
 
 // AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing
