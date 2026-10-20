@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
@@ -124,6 +125,10 @@ func (p *Proxy) planFailover(primary *models.LLM, requestedModel string, r *http
 			Int("target_index", i+1).
 			Str("reason", reason).
 			Msg("failover target skipped")
+		recordGatewayEvent(r.Context(), agenttrace.GatewayEvent{
+			Type: agenttrace.GatewayEventFallback, Outcome: agenttrace.OutcomeSkip,
+			Name: strconv.FormatUint(uint64(t.LLMID), 10), Detail: reason,
+		})
 	}
 
 	for i, t := range primary.Failover.Targets {

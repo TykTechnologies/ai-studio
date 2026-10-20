@@ -20,7 +20,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
@@ -108,7 +107,7 @@ func (c *nativeCall) checkBudget(w http.ResponseWriter) bool {
 	}
 	status, msg := budgetDenial(err, "Budget limit exceeded")
 	if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
-		metrics.RecordPolicyBlock(c.r.Context(), "budget", "budget")
+		recordPolicyBlock(c.r.Context(), "budget", "budget")
 	}
 	respondBudgetDenial(w, c.r, status, msg, err)
 	c.status, c.respBody = status, []byte(msg)
@@ -273,7 +272,7 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 	// The guardrail call budget is the whole create's, not an item's.
 	for _, err := range errs {
 		if errors.Is(err, guardrails.ErrCallBudget) {
-			metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
+			recordPolicyBlock(c.r.Context(), "request_filter", "firewall")
 			c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest,
 				fmt.Sprintf("this LLM screens every request with a guardrail: screening this batch needs more than the %d guardrail provider calls one upload may make here (NATIVE_API_MAX_GUARDRAIL_CALLS)", c.p.config.nativeMaxGuardrailCalls()))
 			return nil, false
@@ -282,7 +281,7 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 	// Report the first refused item in body order, whichever worker saw it.
 	for i, err := range errs {
 		if err != nil {
-			metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
+			recordPolicyBlock(c.r.Context(), "request_filter", "firewall")
 			msg := fmt.Sprintf("request refused: %v", err)
 			if items[i].Key != "" {
 				msg = fmt.Sprintf("request %q refused: %v", items[i].Key, err)

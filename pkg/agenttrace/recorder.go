@@ -45,6 +45,41 @@ type Recorder struct {
 	span     Event
 	extra    []*Event
 	finished bool
+	// holds counts work still filling the capture after the handler
+	// returned (Hold); finishWanted is a Finish that waits for it.
+	holds        int
+	finishWanted bool
+}
+
+func noRelease() {}
+
+// Hold keeps the capture open for work that completes after the request
+// handler returns (the analytics goroutine): a Finish while held waits until
+// every release has been called. The release is idempotent; on a nil
+// Recorder Hold returns a no-op and allocates nothing.
+func (r *Recorder) Hold() (release func()) {
+	if r == nil {
+		return noRelease
+	}
+	r.mu.Lock()
+	if r.finished {
+		r.mu.Unlock()
+		return noRelease
+	}
+	r.holds++
+	r.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			r.mu.Lock()
+			r.holds--
+			fire := r.holds == 0 && r.finishWanted
+			r.mu.Unlock()
+			if fire {
+				r.Finish()
+			}
+		})
+	}
 }
 
 // Begin attaches a Recorder to ctx and returns both. With the flag off it
@@ -216,6 +251,11 @@ func (r *Recorder) Finish() {
 	}
 	r.mu.Lock()
 	if r.finished {
+		r.mu.Unlock()
+		return
+	}
+	if r.holds > 0 {
+		r.finishWanted = true
 		r.mu.Unlock()
 		return
 	}

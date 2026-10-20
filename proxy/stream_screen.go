@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/rs/zerolog/log"
 )
@@ -121,7 +120,7 @@ func (s *streamScreen) classifyHeld() ([]byte, bool) {
 func (s *streamScreen) block() { s.blockWith(s.pending) }
 
 func (s *streamScreen) blockWith(msg string) {
-	metrics.RecordPolicyBlock(s.r.Context(), "response_filter", "filter")
+	recordPolicyBlock(s.r.Context(), "response_filter", "filter")
 	log.Warn().Str("reason", msg).Msg("Bridged stream blocked by filter")
 	s.emit(s.dialect.blockEvent(s.framer, msg))
 	s.blocked = true

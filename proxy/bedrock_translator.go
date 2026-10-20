@@ -67,7 +67,7 @@ func (p *Proxy) bedrockScreenRequest(
 
 	filtered, err := p.runRequestFilters(conf, r, reqBody, requestFilterFormatOpenAI, model)
 	if err != nil {
-		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
+		recordPolicyBlock(r.Context(), "request_filter", "firewall")
 		fail := attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
 		modelID := bedrockVendor.GetModelID(conf, model)
 		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
@@ -131,9 +131,11 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 // writes the returned body. Every attempt leaves a ProxyLog, a failed one
 // with the status Bedrock returned, so a failed primary and the fallback that
 // served can be read together.
-func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Request, a llmAttempt, req *ChatCompletionRequest, reqBody []byte) ([]byte, attemptFailure) {
+func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Request, a llmAttempt, req *ChatCompletionRequest, reqBody []byte) (body []byte, failure attemptFailure) {
 	timestamp := time.Now()
 	conf := a.conf
+	done := bedrockMetrics(r, conf, false)
+	defer func() { done(failure.statusOr(http.StatusOK)) }()
 
 	app, fail := p.bedrockPrepare(r, conf)
 	if fail.err != nil {
@@ -182,13 +184,17 @@ func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Reques
 		if filterErr != nil {
 			log.Error().Err(filterErr).Msg("Response filter error on Bedrock response")
 		} else if blocked {
-			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp)
+			bt := newBedrockTrace(r, requestFilterFormatOpenAI)
+			bt.handOff()
+			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp, bt)
 			return nil, attemptFailure{err: fmt.Errorf("Response blocked by filter: %s", blockMsg), status: http.StatusBadRequest, hasStatus: true}
 		}
 	}
 
-	// Record analytics
-	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp)
+	// Record analytics (and the agent tracing capture, when on)
+	bt := newBedrockTrace(r, requestFilterFormatOpenAI)
+	bt.handOff()
+	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp, bt)
 
 	return respBody, attemptFailure{}
 }
@@ -207,9 +213,11 @@ func (p *Proxy) bedrockStreamAttempt(
 	reqBody []byte,
 	completionID string,
 	created int64,
-) (bool, attemptFailure) {
+) (opened bool, failure attemptFailure) {
 	timestamp := time.Now()
 	conf := a.conf
+	done := bedrockMetrics(r, conf, true)
+	defer func() { done(failure.statusOr(http.StatusOK)) }()
 
 	app, fail := p.bedrockPrepare(r, conf)
 	if fail.err != nil {
@@ -275,6 +283,9 @@ func (p *Proxy) bedrockPumpStream(
 	timestamp time.Time,
 ) {
 	isFirstChunk := true
+	bt := newBedrockTrace(r, requestFilterFormatOpenAI)
+	defer bt.abandon()
+	ttftSeen := false
 	var inputTokens, outputTokens int32
 	var cacheWriteTokens, cacheReadTokens int32
 	var textBuffer strings.Builder
@@ -319,6 +330,12 @@ func (p *Proxy) bedrockPumpStream(
 			break
 		}
 
+		bt.observe(event)
+		if _, delta := event.(*types.ConverseStreamOutputMemberContentBlockDelta); delta && !ttftSeen {
+			ttftSeen = true
+			bt.firstToken()
+			metrics.ObserveTimeToFirstToken(r.Context(), string(conf.Vendor), conf.Name, time.Since(timestamp).Seconds())
+		}
 		switch v := event.(type) {
 		case *types.ConverseStreamOutputMemberMessageStart:
 			// Send first chunk with role
@@ -457,8 +474,9 @@ func (p *Proxy) bedrockPumpStream(
 	// Record proxy log and analytics in a single goroutine to ensure correct ordering:
 	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
 	responseText := textBuffer.String()
+	bt.handOff()
 	p.goAnalyze(func() {
-		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp)
+		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp, bt)
 	})
 }
 
@@ -563,7 +581,7 @@ func sendSSEChunk(w http.ResponseWriter, flusher http.Flusher, chunk ChatComplet
 	flusher.Flush()
 }
 
-func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, output *bedrockruntime.ConverseOutput, reqBody []byte, respBody []byte, r *http.Request, timestamp time.Time) {
+func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, output *bedrockruntime.ConverseOutput, reqBody []byte, respBody []byte, r *http.Request, timestamp time.Time, bt *bedrockTrace) {
 	const maxBodySize = 65535
 
 	// Record proxy log
@@ -595,6 +613,9 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 			timestamp)
 	}
 	recordBedrockExchange(p, llm, app, proxyLog, record, r)
+	bt.setOutput(output)
+	bt.setResponse(respBody)
+	captureBedrock(r, llm, app, modelID, reqBody, proxyLog, record, bt)
 }
 
 // recordBedrockFailedAttempt leaves a ProxyLog for a Bedrock rung that failed
@@ -630,10 +651,14 @@ func recordBedrockFailedAttempt(llm *models.LLM, app *models.App, modelID string
 // recordBedrockStreamAnalytics records the proxy log and chat record for
 // Bedrock streaming paths where recordBedrockAnalytics (which expects a
 // ConverseOutput) cannot be used.
-func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, reqBody []byte, responseText string, promptTokens, responseTokens, cacheWriteTokens, cacheReadTokens int, r *http.Request, timestamp time.Time) {
+func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, reqBody []byte, responseText string, promptTokens, responseTokens, cacheWriteTokens, cacheReadTokens int, r *http.Request, timestamp time.Time, bt *bedrockTrace) {
 	proxyLog := bedrockProxyLog(llm, app, modelID, reqBody, responseText, r, timestamp)
 	record := bedrockChatRecord(p, llm, app, modelID, promptTokens, responseTokens, cacheWriteTokens, cacheReadTokens, timestamp)
 	recordBedrockExchange(p, llm, app, proxyLog, record, r)
+	if bt != nil {
+		bt.setResponse([]byte(responseText))
+	}
+	captureBedrock(r, llm, app, modelID, reqBody, proxyLog, record, bt)
 }
 
 // recordBedrockExchange records a Bedrock request's proxy log with its chat

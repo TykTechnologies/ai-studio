@@ -761,7 +761,7 @@ func respondStreamBlocked(w http.ResponseWriter, msg string) {
 // blocked: before the first frame with an HTTP 400, after it with an OpenAI
 // error chunk and [DONE].
 func (p *Proxy) failStreamBlocked(w http.ResponseWriter, flusher http.Flusher, framesSent int, msg string) {
-	metrics.RecordPolicyBlock(context.Background(), "response_filter", "filter")
+	recordPolicyBlock(context.Background(), "response_filter", "filter")
 	if framesSent == 0 {
 		respondStreamBlocked(w, msg)
 		return

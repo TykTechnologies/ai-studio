@@ -534,7 +534,7 @@ func (c *nativeCall) requestBody(w http.ResponseWriter) ([]byte, bool) {
 		}); err != nil {
 			switch {
 			case errors.Is(err, errNativeScreenedElsewhere):
-				metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
+				recordPolicyBlock(c.r.Context(), "request_filter", "firewall")
 				c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, nativeScreenedElsewhereMsg)
 			case errors.Is(err, errNativeScreeningUnchecked):
 				c.fail(w, http.StatusServiceUnavailable, nativeErrAPI, "the input file could not be checked; retry shortly")

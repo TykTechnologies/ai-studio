@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/rs/zerolog/log"
 )
 
@@ -256,6 +257,10 @@ func (p *Proxy) routeBridgeRequest(w http.ResponseWriter, r *http.Request, ref R
 		Msg("router resolved request")
 	*model = d.Model
 	setRouteHeaders(w, d)
+	recordGatewayEvent(r.Context(), agenttrace.GatewayEvent{
+		Type: agenttrace.GatewayEventRouter, Outcome: agenttrace.OutcomeAllow, Name: ref.Slug,
+		Detail: fmt.Sprintf("llm=%s model=%s route=%s reason=%s", conf.Name, d.Model, d.Route, d.Reason),
+	})
 	return conf, r.WithContext(withRouteDecision(r.Context(), d)), withBodyModel(body, d.Model), true
 }
 

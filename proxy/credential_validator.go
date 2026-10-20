@@ -431,6 +431,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, "scope", accessToken.Scope)
 				// The app is what budget, analytics, filters and the plugin hooks read.
 				ctx = context.WithValue(ctx, "app", app)
+				captureApp(ctx, app)
 				ctx = WithAuthIdentity(ctx, &AuthIdentity{AppID: app.ID, Method: AuthMethodOAuth, OAuthUserID: user.ID})
 
 				// Tool requests do not fire the post-auth hook, matching the app-secret
@@ -462,6 +463,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				if err == nil {
 					// Valid app secret - add app to context like API key flow
 					ctx := context.WithValue(r.Context(), "app", app)
+					captureApp(ctx, app)
 					ctx = WithAuthIdentity(ctx, &AuthIdentity{AppID: app.ID, Method: AuthMethodAppKey})
 
 					// For tool requests, validate the app has access to the tool
@@ -472,6 +474,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						}
 						ctx = context.WithValue(toolCtx, "app", app)
 
+						captureApp(ctx, app)
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
@@ -750,6 +753,8 @@ func (cv *CredentialValidator) checkAPICredential(apiKey, dsSlug, llmSlug, route
 		Msg("CheckAPICredential: Retrieved app for credential")
 
 	ctx := context.WithValue(r.Context(), "app", app)
+
+	captureApp(ctx, app)
 	ctx = WithAuthIdentity(ctx, &AuthIdentity{AppID: app.ID, Method: AuthMethodAppKey})
 	// Note: toolSlug might be already in r.Context() if set before calling this func
 	// but setting it again here from param ensures it's the one CheckAPICredential is using.

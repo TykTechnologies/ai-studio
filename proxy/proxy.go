@@ -664,7 +664,17 @@ func (p *Proxy) createHandler() http.Handler {
 func requestStartMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r, rec := beginRequestCapture(r)
-		defer rec.Finish()
+		var sw *captureStatusWriter
+		if rec != nil {
+			sw = &captureStatusWriter{ResponseWriter: w}
+			w = sw
+		}
+		defer func() {
+			if rec != nil {
+				finishCapture(rec, r, sw.status)
+			}
+			rec.Finish()
+		}()
 		next.ServeHTTP(w, r.WithContext(analytics.WithRequestStart(r.Context(), time.Now())))
 	})
 }
@@ -1050,7 +1060,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
-			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+			recordPolicyBlock(r.Context(), "budget", "budget")
 		}
 		// Error body for analytics should be constructed carefully if needed
 		p.goAnalyze(func() {
@@ -1062,7 +1072,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respStatus = http.StatusBadRequest
-		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
+		recordPolicyBlock(r.Context(), "request_filter", "firewall")
 		p.goAnalyze(func() {
 			p.analyzeResponse(llm, app, http.StatusBadRequest, policyViolationBody(err), reqBody, r)
 		})
@@ -1187,7 +1197,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				logger.Errorf("Response filter execution failed: %v", err)
 				// Fail open on error - allow response through
 			} else if blocked {
-				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+				recordPolicyBlock(r.Context(), "response_filter", "filter")
 				// Response was blocked by filter - return error instead
 				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
 				// Log with 400 status and include both the block reason and original LLM response for audit trail
@@ -1809,7 +1819,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
-			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+			recordPolicyBlock(r.Context(), "budget", "budget")
 		}
 		p.goAnalyze(func() {
 			p.analyzeStreamingResponse(llm, app, r, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, nil, time.Now(), "")
@@ -1820,7 +1830,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respStatus = http.StatusBadRequest
-		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
+		recordPolicyBlock(r.Context(), "request_filter", "firewall")
 		p.goAnalyze(func() {
 			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, policyViolationBody(err), reqBody, nil, time.Now(), "")
 		})
@@ -1994,7 +2004,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					}
 					if tcBlocked {
 						// The flagged call's events are never sent.
-						metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+						recordPolicyBlock(r.Context(), "response_filter", "filter")
 						logger.Warnf("Streamed tool call blocked by filter: %s", tcMsg)
 						w.Write(release)
 						markStreamBlocked(w, r, tcMsg)
@@ -2020,7 +2030,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					logger.Errorf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
 					// Fail open on error - continue streaming
 				} else if blocked {
-					metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+					recordPolicyBlock(r.Context(), "response_filter", "filter")
 					// Blocked mid-stream: the event that tripped it is never
 					// sent; the stream ends with the vendor's error event.
 					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
@@ -2095,7 +2105,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 				logger.Errorf("Tool call filter error at end of stream: %v", tcErr)
 			}
 			if tcBlocked {
-				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+				recordPolicyBlock(r.Context(), "response_filter", "filter")
 				if !clientGone {
 					markStreamBlocked(w, r, tcMsg)
 					w.Write(dialect.blockEvent(framer, tcMsg))
@@ -2117,7 +2127,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		if filterErr != nil {
 			logger.Errorf("Response filter execution error at end of stream: %v", filterErr)
 		} else if blocked {
-			metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+			recordPolicyBlock(r.Context(), "response_filter", "filter")
 			logger.Warnf("Streaming response blocked by filter at end of stream: %s", blockMsg)
 			if !clientGone {
 				markStreamBlocked(w, r, blockMsg)

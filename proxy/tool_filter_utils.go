@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 )
@@ -69,5 +68,5 @@ func toolFilterIdentity(ctx context.Context, tool *models.Tool) scripting.ToolFi
 
 // recordToolPolicyBlock reports a blocked tool call to the metrics pipeline.
 func recordToolPolicyBlock(ctx context.Context, scope string) {
-	metrics.RecordPolicyBlock(ctx, scope, "filter")
+	recordPolicyBlock(ctx, scope, "filter")
 }

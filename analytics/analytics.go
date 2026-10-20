@@ -135,7 +135,13 @@ func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int,
 		globalHandler.RecordToolCall(ctx, name, t, execTime, toolID)
 	}
 
-	metrics.RecordToolCall(ctx, name, fmt.Sprintf("%d", toolID))
+	// The metric's app_id is the calling App (it used to be given the tool
+	// id); empty when the context carries no App (an edge's pulse on the hub).
+	appID := ""
+	if app, ok := ctx.Value("app").(*models.App); ok && app != nil {
+		appID = fmt.Sprintf("%d", app.ID)
+	}
+	metrics.RecordToolCall(ctx, name, appID)
 	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
 

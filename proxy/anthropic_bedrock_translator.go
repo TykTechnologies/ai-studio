@@ -42,6 +42,17 @@ func (p *Proxy) handleAnthropicMessagesEntry(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// The bridge's own span and request metrics: it calls Bedrock directly,
+	// never through the /llm/ handlers that record them.
+	r, span := startProxySpan(r, conf)
+	done := bedrockMetrics(r, conf, true)
+	sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+	w = sw
+	defer func() {
+		endProxySpan(span, sw.status)
+		done(sw.status)
+	}()
+
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
 		respondWithAnthropicError(w, http.StatusInternalServerError, "api_error", "failed to read request body")
@@ -106,7 +117,7 @@ func (p *Proxy) anthropicScreenRequest(
 
 	filtered, err := p.runRequestFilters(conf, r, reqBody, requestFilterFormatAnthropic, modelID)
 	if err != nil {
-		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
+		recordPolicyBlock(r.Context(), "request_filter", "firewall")
 		fail := attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
 		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
 		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
@@ -192,12 +203,16 @@ func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Re
 			log.Error().Err(filterErr).Msg("Response filter error on Bedrock Anthropic response")
 		} else if blocked {
 			respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("Response blocked by filter: %s", blockMsg))
-			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp)
+			bt := newBedrockTrace(r, requestFilterFormatAnthropic)
+			bt.handOff()
+			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp, bt)
 			return
 		}
 	}
 
-	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp)
+	bt := newBedrockTrace(r, requestFilterFormatAnthropic)
+	bt.handOff()
+	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp, bt)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -302,10 +317,19 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 		request:   r,
 	}
 
+	bt := newBedrockTrace(r, requestFilterFormatAnthropic)
+	defer bt.abandon()
+	ttftSeen := false
 	for event := range stream.Events() {
 		if err := stream.Err(); err != nil {
 			log.Error().Err(err).Msg("Bedrock Anthropic stream error")
 			break
+		}
+		bt.observe(event)
+		if _, delta := event.(*types.ConverseStreamOutputMemberContentBlockDelta); delta && !ttftSeen {
+			ttftSeen = true
+			bt.firstToken()
+			metrics.ObserveTimeToFirstToken(r.Context(), string(conf.Vendor), conf.Name, time.Since(timestamp).Seconds())
 		}
 		st.handleEvent(event)
 		if screen != nil && screen.Blocked() {
@@ -330,8 +354,9 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	responseText := st.textBuffer
 	inputTokens, outputTokens := st.inputTokens, st.outputTokens
 	cacheWrite, cacheRead := st.cacheWriteTokens, st.cacheReadTokens
+	bt.handOff()
 	p.goAnalyze(func() {
-		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWrite), int(cacheRead), r, timestamp)
+		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWrite), int(cacheRead), r, timestamp, bt)
 	})
 }
 
