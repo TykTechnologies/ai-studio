@@ -296,7 +296,7 @@ Scripts on LLM requests can also read the request the way guardrails do: `input.
 
 ### HTTP classifier {#http}
 
-Any classifier or NER service behind a documented JSON contract, for wrapping self-hosted models such as Llama Prompt Guard 2 or LLM Guard, or an in-house model.
+Any classifier or NER service behind a documented JSON contract, for wrapping self-hosted models such as Llama Prompt Guard 2 or LLM Guard, or an in-house model. For a ready-made prompt-injection classifier that scores tool results, tool calls, user messages and tool definitions, see [Wolf Defender guardrail](./guardrails-wolf-defender.md).
 
 Connection: `endpoint` (required), `api_key` (sent as `Authorization: Bearer`, optional), `auth_header` (an alternative header name for the key).
 
@@ -360,7 +360,7 @@ A socket endpoint is an HTTP request to a local socket chosen by whoever can wri
 ```yaml
 services:
   guard:
-    image: registry.example.com/wolf-guard@sha256:...
+    image: registry.example.com/guard@sha256:...   # e.g. the Wolf Defender guardrail
     network_mode: none            # no network at all
     volumes: [guard-sock:/run/guard]
   midsommar:
