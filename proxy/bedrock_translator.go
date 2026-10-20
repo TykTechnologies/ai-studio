@@ -695,41 +695,31 @@ func bedrockProxyLog(llm *models.LLM, app *models.App, modelID string, reqBody [
 	return proxyLog
 }
 
-// bedrockChatRecord is the single place that calculates cost and builds an LLMChatRecord
-// for all Bedrock paths (non-streaming /ai/, streaming /ai/, and streaming /llm/stream/).
+// bedrockChatRecord builds the LLMChatRecord for all Bedrock paths
+// (non-streaming /ai/, streaming /ai/, and streaming /llm/stream/) the way
+// every other vendor's is built (buildChatRecordFor): the same price lookup,
+// cost (models.ChatRecordCost and its cache-price rules), total tokens and
+// default currency. Bedrock reports cache tokens apart from the input count.
 // It returns nil when the response reported no usage.
 func bedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, cacheWriteTokens int, cacheReadTokens int, timestamp time.Time) *models.LLMChatRecord {
 	if promptTokens == 0 && responseTokens == 0 && cacheWriteTokens == 0 && cacheReadTokens == 0 {
 		return nil
 	}
-
-	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelID, string(llm.Vendor))
-	if err != nil {
-		log.Debug().Str("model", modelID).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
-		price = &models.ModelPrice{}
-	}
-
-	cost := ((price.CPT * float64(responseTokens)) +
-		(price.CPIT * float64(promptTokens)) +
-		(price.CacheWritePT * float64(cacheWriteTokens)) +
-		(price.CacheReadPT * float64(cacheReadTokens))) * 10000
-
-	record := &models.LLMChatRecord{
-		LLMID:                  llm.ID,
-		Name:                   modelID,
-		Vendor:                 string(llm.Vendor),
-		PromptTokens:           promptTokens,
-		ResponseTokens:         responseTokens,
-		TotalTokens:            promptTokens + responseTokens,
-		CacheWritePromptTokens: cacheWriteTokens,
-		CacheReadPromptTokens:  cacheReadTokens,
-		Cost:                   cost,
-		Currency:               price.Currency,
-		Choices:                1,
-		TimeStamp:              timestamp,
-		AppID:                  app.ID,
-		UserID:                 app.UserID,
-		InteractionType:        models.ProxyInteraction,
-	}
-	return record
+	usage := &bedrockUsage{model: modelID, prompt: promptTokens, response: responseTokens,
+		cacheWrite: cacheWriteTokens, cacheRead: cacheReadTokens}
+	return buildChatRecordFor(p.gatewayService, llm, app, usage, modelID, timestamp)
 }
+
+// bedrockUsage is a Bedrock response's usage as a models.ITokenResponse.
+type bedrockUsage struct {
+	model                                   string
+	prompt, response, cacheWrite, cacheRead int
+}
+
+func (u *bedrockUsage) GetPromptTokens() int           { return u.prompt }
+func (u *bedrockUsage) GetResponseTokens() int         { return u.response }
+func (u *bedrockUsage) GetChoiceCount() int            { return 1 }
+func (u *bedrockUsage) GetToolCount() int              { return 0 }
+func (u *bedrockUsage) GetModel() string               { return u.model }
+func (u *bedrockUsage) GetCacheWritePromptTokens() int { return u.cacheWrite }
+func (u *bedrockUsage) GetCacheReadPromptTokens() int  { return u.cacheRead }
