@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -536,7 +537,13 @@ func (h *MicrogatewaAnalyticsHandler) truncateBody(body string, maxSize int) str
 		return body
 	}
 
-	return body[:maxSize] + "... [truncated]"
+	// Cut on a character boundary: a body cut inside a multi-byte character
+	// is not valid UTF-8, and gRPC refuses to send it in the analytics pulse.
+	cut := maxSize
+	for cut > 0 && !utf8.RuneStart(body[cut]) {
+		cut--
+	}
+	return body[:cut] + "... [truncated]"
 }
 
 // requestBodyToStore returns the request body as it may be stored, or "" when

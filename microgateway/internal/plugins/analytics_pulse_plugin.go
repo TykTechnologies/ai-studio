@@ -775,6 +775,12 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 
 	// Build and send pulse
 	pulse := p.buildPulseMessage(snap.analytics, snap.metadata, snap.budget, snap.proxy, snap.compliance, snap.toolCalls, sequenceNum)
+	if n := makeValidUTF8(pulse.ProtoReflect()); n > 0 {
+		log.Warn().
+			Uint64("sequence", sequenceNum).
+			Int("strings", n).
+			Msg("Analytics pulse: replaced invalid UTF-8 so the pulse can be sent")
+	}
 
 	log.Debug().
 		Uint64("sequence", sequenceNum).
