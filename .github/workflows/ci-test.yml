@@ -121,6 +121,9 @@ jobs:
             [ -n "$f" ] || continue
             case "$f" in
               ui/*) frontend=true ;;
+              # Its OTel attribute tables are generated from the enterprise
+              # mapping and checked by make agent-tracing-docs-verify.
+              docs/site/docs/agent-tracing.md) go=true ;;
               docs/* | features/* | read/*) ;;
               */*) go=true ;;
               *.md) ;;
