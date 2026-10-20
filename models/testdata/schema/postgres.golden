@@ -143,6 +143,7 @@ TABLE agent_trace_sessions
   index CREATE INDEX idx_agent_trace_sessions_app_started ON agent_trace_sessions USING btree (app_id, started_at)
   index CREATE INDEX idx_agent_trace_sessions_app_user_started ON agent_trace_sessions USING btree (app_id, user_id, started_at)
   index CREATE INDEX idx_agent_trace_sessions_retention ON agent_trace_sessions USING btree (retention_until)
+  index CREATE INDEX idx_agent_trace_sessions_started ON agent_trace_sessions USING btree (started_at, id)
   index CREATE INDEX idx_agent_trace_sessions_status_activity ON agent_trace_sessions USING btree (status, last_activity_at)
   index CREATE INDEX idx_agent_trace_sessions_team_started ON agent_trace_sessions USING btree (team_id, started_at)
   column id character varying(varchar) nullable=NO len=36
@@ -164,6 +165,8 @@ TABLE agent_trace_sessions
   column tool_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0
   column error_count bigint(int8) nullable=NO precision=64 scale=0 default=0
   column dropped_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column gateway_event_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column duration_ms bigint(int8) nullable=NO precision=64 scale=0 default=0
   column input_tokens bigint(int8) nullable=NO precision=64 scale=0 default=0
   column output_tokens bigint(int8) nullable=NO precision=64 scale=0 default=0
   column cost_micros bigint(int8) nullable=NO precision=64 scale=0 default=0
@@ -194,6 +197,7 @@ TABLE agent_trace_spans
   index CREATE INDEX idx_agent_trace_spans_app_kind_start ON agent_trace_spans USING btree (app_id, kind, start_time)
   index CREATE INDEX idx_agent_trace_spans_app_tool_start ON agent_trace_spans USING btree (app_id, tool_name, start_time)
   index CREATE INDEX idx_agent_trace_spans_session_start ON agent_trace_spans USING btree (session_id, start_time)
+  index CREATE INDEX idx_agent_trace_spans_span_id ON agent_trace_spans USING btree (span_id)
   index CREATE INDEX idx_agent_trace_spans_trace_start ON agent_trace_spans USING btree (app_id, trace_id, start_time)
   column app_id bigint(int8) nullable=NO precision=64 scale=0
   column span_id bytea(bytea) nullable=NO
@@ -239,6 +243,7 @@ TABLE agent_trace_traces
   index CREATE UNIQUE INDEX agent_trace_traces_pkey ON agent_trace_traces USING btree (app_id, trace_id)
   index CREATE INDEX idx_agent_trace_traces_app_started ON agent_trace_traces USING btree (app_id, started_at)
   index CREATE INDEX idx_agent_trace_traces_session_turn ON agent_trace_traces USING btree (session_id, turn_index)
+  index CREATE INDEX idx_agent_trace_traces_trace_id ON agent_trace_traces USING btree (trace_id)
   column app_id bigint(int8) nullable=NO precision=64 scale=0
   column trace_id bytea(bytea) nullable=NO
   column session_id character varying(varchar) nullable=NO len=36

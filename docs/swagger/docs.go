@@ -44,6 +44,466 @@ const docTemplate = `{
                 }
             }
         },
+        "/agent-tracing/sessions": {
+            "get": {
+                "description": "Sessions in a time range (default the last 24 h), newest first, with the spec §6.1 filters and cursor pagination. end_user and external_id are refused here: use POST /agent-tracing/sessions/query so they stay out of URLs.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "List agent sessions (Enterprise)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "RFC 3339 start (default 24 h before to)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC 3339 end (default now)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "App",
+                        "name": "app_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Studio user",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact session id",
+                        "name": "session_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Agent name",
+                        "name": "agent",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Model",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tool called",
+                        "name": "tool",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "active, closed or error",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "declared or inferred",
+                        "name": "source",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only sessions with weak links",
+                        "name": "weak_links",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Has errors",
+                        "name": "has_errors",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Has gateway events",
+                        "name": "has_gateway_events",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Minimum cost (micros)",
+                        "name": "cost_min_micros",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum cost (micros)",
+                        "name": "cost_max_micros",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Minimum duration (ms)",
+                        "name": "duration_min_ms",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum duration (ms)",
+                        "name": "duration_max_ms",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "started_at, cost, duration, tokens, turns, llm_calls, tool_calls or errors; prefix - for descending (default -started_at)",
+                        "name": "sort",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor of the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (1-200, default 50)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{data: [session], next_cursor}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tracing/sessions/query": {
+            "post": {
+                "description": "The sessions list with every filter in the body, including end_user and external_id.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "Query agent sessions (Enterprise)",
+                "parameters": [
+                    {
+                        "description": "Filters",
+                        "name": "query",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SessionQueryBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{data: [session], next_cursor}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tracing/sessions/{session_id}": {
+            "get": {
+                "description": "The session with its agents and turns, and what the caller may do with it (viewer).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "Get an agent session (Enterprise)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session id (UUID)",
+                        "name": "session_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{session, agents, traces, viewer}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tracing/sessions/{session_id}/search": {
+            "post": {
+                "description": "Matches span names, tool names, models, operations and error types. The term is in the body so it never reaches a URL.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "Find in a session (Enterprise)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session id (UUID)",
+                        "name": "session_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Find term (1-256 characters)",
+                        "name": "query",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SessionSearchBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{matches: [{span_id, field, snippet}], total, truncated}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tracing/sessions/{session_id}/spans": {
+            "get": {
+                "description": "The span skeleton (no content), keyset-paged by (start_time, span_id).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "List a session's spans (Enterprise)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session id (UUID)",
+                        "name": "session_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Span kind",
+                        "name": "kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Span status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Agent id",
+                        "name": "agent_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC 3339",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "RFC 3339",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "previews: ask for inline content previews",
+                        "name": "include",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor of the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (1-1000, default 1000)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{data: [span], next_cursor, previews}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tracing/spans/{span_id}": {
+            "get": {
+                "description": "One span with all its links (candidates included) and gateway events. No content.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "Get an agent span (Enterprise)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Span id (16 lowercase hex)",
+                        "name": "span_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{span, events, session_id}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/agent-tracing/traces/{trace_id}": {
+            "get": {
+                "description": "One turn with its first page of spans (keyset-paged like the session spans).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agent-tracing"
+                ],
+                "summary": "Get an agent trace (Enterprise)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Trace id (32 lowercase hex)",
+                        "name": "trace_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor of the previous page",
+                        "name": "cursor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (1-1000, default 1000)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "{trace, session_id, spans, next_cursor}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/analytics/app-interactions-over-time": {
             "get": {
                 "description": "Get the number of LLM interactions for a specific app over time",
@@ -32210,6 +32670,89 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.SessionQueryBody": {
+            "type": "object",
+            "properties": {
+                "agent": {
+                    "type": "string"
+                },
+                "app_id": {
+                    "type": "integer"
+                },
+                "cost_max_micros": {
+                    "type": "integer"
+                },
+                "cost_min_micros": {
+                    "type": "integer"
+                },
+                "cursor": {
+                    "type": "string"
+                },
+                "duration_max_ms": {
+                    "type": "integer"
+                },
+                "duration_min_ms": {
+                    "type": "integer"
+                },
+                "end_user": {
+                    "type": "string"
+                },
+                "external_id": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "has_errors": {
+                    "type": "boolean"
+                },
+                "has_gateway_events": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "sort": {
+                    "description": "a SessionSorts column, \"-\" prefix for descending",
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                },
+                "tool": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "weak_links": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.SessionSearchBody": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "q": {
                     "type": "string"
                 }
             }

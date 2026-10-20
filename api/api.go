@@ -1113,6 +1113,9 @@ func (a *API) setupRoutes() error {
 	v1.GET("/audit/export", authz.Read("audit"), a.exportAuditRecords)
 	v1.GET("/audit/resources/:type/:id", authz.Read("audit"), a.getAuditResourceHistory)
 
+	// Agent Call Tracing read API (Enterprise; 402 in CE)
+	a.registerAgentTracingRoutes(v1)
+
 	// Webhook routes (Enterprise feature). Approving, testing and replaying
 	// send platform data to an external URL, so they need execute; every
 	// mutation here is recorded by the audit middleware.

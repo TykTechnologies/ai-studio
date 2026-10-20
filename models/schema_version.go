@@ -51,7 +51,10 @@ const (
 	//     The tables are unreleased (added in 12); AutoMigrate cannot change
 	//     a primary key, so databases created at 12 or 13 need the agent_trace
 	//     tables dropped once.
-	SchemaVersion          = 14
+	// 15: agent tracing read API: agent_trace_sessions.duration_ms and
+	//     gateway_event_count (defaulted), indexes on sessions (started_at,
+	//     id), spans (span_id) and traces (trace_id) (additive).
+	SchemaVersion          = 15
 	MinReaderSchemaVersion = 1
 )
 

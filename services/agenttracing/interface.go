@@ -35,4 +35,6 @@ type Service interface {
 	// IsEnterpriseAvailable reports whether the Enterprise implementation is
 	// linked in, whether or not it is running.
 	IsEnterpriseAvailable() bool
+
+	Querier
 }

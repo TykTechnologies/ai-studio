@@ -3428,6 +3428,61 @@ definitions:
       role:
         type: string
     type: object
+  api.SessionQueryBody:
+    properties:
+      agent:
+        type: string
+      app_id:
+        type: integer
+      cost_max_micros:
+        type: integer
+      cost_min_micros:
+        type: integer
+      cursor:
+        type: string
+      duration_max_ms:
+        type: integer
+      duration_min_ms:
+        type: integer
+      end_user:
+        type: string
+      external_id:
+        type: string
+      from:
+        type: string
+      has_errors:
+        type: boolean
+      has_gateway_events:
+        type: boolean
+      limit:
+        type: integer
+      model:
+        type: string
+      session_id:
+        type: string
+      sort:
+        description: a SessionSorts column, "-" prefix for descending
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      to:
+        type: string
+      tool:
+        type: string
+      user_id:
+        type: integer
+      weak_links:
+        type: boolean
+    type: object
+  api.SessionSearchBody:
+    properties:
+      limit:
+        type: integer
+      q:
+        type: string
+    type: object
   api.SimplifiedDataSourceResponse:
     properties:
       id:
@@ -7439,6 +7494,321 @@ paths:
       summary: OAuth Authorization Server Metadata
       tags:
       - oauth
+  /agent-tracing/sessions:
+    get:
+      description: 'Sessions in a time range (default the last 24 h), newest first,
+        with the spec §6.1 filters and cursor pagination. end_user and external_id
+        are refused here: use POST /agent-tracing/sessions/query so they stay out
+        of URLs.'
+      parameters:
+      - description: RFC 3339 start (default 24 h before to)
+        in: query
+        name: from
+        type: string
+      - description: RFC 3339 end (default now)
+        in: query
+        name: to
+        type: string
+      - description: App
+        in: query
+        name: app_id
+        type: integer
+      - description: Studio user
+        in: query
+        name: user_id
+        type: integer
+      - description: Exact session id
+        in: query
+        name: session_id
+        type: string
+      - description: Agent name
+        in: query
+        name: agent
+        type: string
+      - description: Model
+        in: query
+        name: model
+        type: string
+      - description: Tool called
+        in: query
+        name: tool
+        type: string
+      - description: active, closed or error
+        in: query
+        name: status
+        type: string
+      - description: declared or inferred
+        in: query
+        name: source
+        type: string
+      - description: Only sessions with weak links
+        in: query
+        name: weak_links
+        type: boolean
+      - description: Has errors
+        in: query
+        name: has_errors
+        type: boolean
+      - description: Has gateway events
+        in: query
+        name: has_gateway_events
+        type: boolean
+      - description: Minimum cost (micros)
+        in: query
+        name: cost_min_micros
+        type: integer
+      - description: Maximum cost (micros)
+        in: query
+        name: cost_max_micros
+        type: integer
+      - description: Minimum duration (ms)
+        in: query
+        name: duration_min_ms
+        type: integer
+      - description: Maximum duration (ms)
+        in: query
+        name: duration_max_ms
+        type: integer
+      - description: started_at, cost, duration, tokens, turns, llm_calls, tool_calls
+          or errors; prefix - for descending (default -started_at)
+        in: query
+        name: sort
+        type: string
+      - description: next_cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (1-200, default 50)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{data: [session], next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List agent sessions (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}:
+    get:
+      description: The session with its agents and turns, and what the caller may
+        do with it (viewer).
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{session, agents, traces, viewer}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get an agent session (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}/search:
+    post:
+      consumes:
+      - application/json
+      description: Matches span names, tool names, models, operations and error types.
+        The term is in the body so it never reaches a URL.
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Find term (1-256 characters)
+        in: body
+        name: query
+        required: true
+        schema:
+          $ref: '#/definitions/api.SessionSearchBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{matches: [{span_id, field, snippet}], total, truncated}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Find in a session (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}/spans:
+    get:
+      description: The span skeleton (no content), keyset-paged by (start_time, span_id).
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Span kind
+        in: query
+        name: kind
+        type: string
+      - description: Span status
+        in: query
+        name: status
+        type: string
+      - description: Agent id
+        in: query
+        name: agent_id
+        type: string
+      - description: RFC 3339
+        in: query
+        name: from
+        type: string
+      - description: RFC 3339
+        in: query
+        name: to
+        type: string
+      - description: 'previews: ask for inline content previews'
+        in: query
+        name: include
+        type: string
+      - description: next_cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (1-1000, default 1000)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{data: [span], next_cursor, previews}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List a session's spans (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/query:
+    post:
+      consumes:
+      - application/json
+      description: The sessions list with every filter in the body, including end_user
+        and external_id.
+      parameters:
+      - description: Filters
+        in: body
+        name: query
+        required: true
+        schema:
+          $ref: '#/definitions/api.SessionQueryBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{data: [session], next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Query agent sessions (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/spans/{span_id}:
+    get:
+      description: One span with all its links (candidates included) and gateway events.
+        No content.
+      parameters:
+      - description: Span id (16 lowercase hex)
+        in: path
+        name: span_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{span, events, session_id}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get an agent span (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/traces/{trace_id}:
+    get:
+      description: One turn with its first page of spans (keyset-paged like the session
+        spans).
+      parameters:
+      - description: Trace id (32 lowercase hex)
+        in: path
+        name: trace_id
+        required: true
+        type: string
+      - description: next_cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (1-1000, default 1000)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{trace, session_id, spans, next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get an agent trace (Enterprise)
+      tags:
+      - agent-tracing
   /analytics/app-interactions-over-time:
     get:
       consumes:

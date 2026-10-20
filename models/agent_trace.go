@@ -36,7 +36,7 @@ const (
 // The counters and token/cost totals are rollups the assembler upserts with
 // UpsertAgentTraceSessionRollup.
 type AgentTraceSession struct {
-	ID     string `gorm:"primaryKey;size:36" json:"id"` // UUIDv7, Tyk-minted
+	ID     string `gorm:"primaryKey;size:36;index:idx_agent_trace_sessions_started,priority:2" json:"id"` // UUIDv7, Tyk-minted
 	AppID  uint   `gorm:"not null;index:idx_agent_trace_sessions_app_started,priority:1;index:idx_agent_trace_sessions_app_user_started,priority:1;index:idx_agent_trace_sessions_app_external,priority:1;index:idx_agent_trace_sessions_app_cost,priority:1" json:"app_id"`
 	TeamID *uint  `gorm:"index:idx_agent_trace_sessions_team_started,priority:1" json:"team_id,omitempty"`
 	// UserID is the Studio user the credential belongs to (as on proxy_logs);
@@ -49,7 +49,7 @@ type AgentTraceSession struct {
 	Name           string `gorm:"size:255" json:"name,omitempty"`
 	Status         string `gorm:"size:16;not null;index:idx_agent_trace_sessions_status_activity,priority:1" json:"status"`
 
-	StartedAt      time.Time  `gorm:"not null;index:idx_agent_trace_sessions_app_started,priority:2;index:idx_agent_trace_sessions_app_user_started,priority:3;index:idx_agent_trace_sessions_team_started,priority:2" json:"started_at"`
+	StartedAt      time.Time  `gorm:"not null;index:idx_agent_trace_sessions_started,priority:1;index:idx_agent_trace_sessions_app_started,priority:2;index:idx_agent_trace_sessions_app_user_started,priority:3;index:idx_agent_trace_sessions_team_started,priority:2" json:"started_at"`
 	LastActivityAt time.Time  `gorm:"not null;index:idx_agent_trace_sessions_status_activity,priority:2" json:"last_activity_at"`
 	EndedAt        *time.Time `json:"ended_at,omitempty"`
 
@@ -59,6 +59,11 @@ type AgentTraceSession struct {
 	ToolCallCount int    `gorm:"not null;default:0" json:"tool_call_count"`
 	ErrorCount    int    `gorm:"not null;default:0" json:"error_count"`
 	DroppedCount  int    `gorm:"not null;default:0" json:"dropped_count"` // captures dropped under load; the UI shows a banner
+	// GatewayEventCount and DurationMs (last_activity_at - started_at) back
+	// the list's gateway-event and duration filters and sorts: date
+	// arithmetic between columns is not portable, so the assembler stores it.
+	GatewayEventCount int   `gorm:"not null;default:0" json:"gateway_event_count"`
+	DurationMs        int64 `gorm:"not null;default:0" json:"duration_ms"`
 	InputTokens   int64  `gorm:"not null;default:0" json:"input_tokens"`
 	OutputTokens  int64  `gorm:"not null;default:0" json:"output_tokens"`
 	CostMicros    int64  `gorm:"not null;default:0;index:idx_agent_trace_sessions_app_cost,priority:2" json:"cost_micros"` // cost * 1e6 in Currency
@@ -105,7 +110,7 @@ func (AgentTraceSessionAgent) TableName() string { return "agent_trace_session_a
 // still get separate rows.
 type AgentTraceTrace struct {
 	AppID      uint       `gorm:"primaryKey;autoIncrement:false;not null;index:idx_agent_trace_traces_app_started,priority:1" json:"app_id"`
-	TraceID    []byte     `gorm:"primaryKey" json:"trace_id"` // 16 bytes
+	TraceID    []byte     `gorm:"primaryKey;index:idx_agent_trace_traces_trace_id" json:"trace_id"` // 16 bytes; the index serves lookups by id alone
 	SessionID  string     `gorm:"size:36;not null;index:idx_agent_trace_traces_session_turn,priority:1" json:"session_id"`
 	TurnIndex  int        `gorm:"not null;default:0;index:idx_agent_trace_traces_session_turn,priority:2" json:"turn_index"`
 	Source     string     `gorm:"size:32;not null" json:"source"` // client_traceparent | tyk
@@ -131,7 +136,7 @@ func (AgentTraceTrace) TableName() string { return "agent_trace_traces" }
 // and copied here for rollups; AnalyticsRef points at that per-request record.
 type AgentTraceSpan struct {
 	AppID            uint    `gorm:"primaryKey;autoIncrement:false;not null;index:idx_agent_trace_spans_trace_start,priority:1;index:idx_agent_trace_spans_app_kind_start,priority:1;index:idx_agent_trace_spans_app_tool_start,priority:1" json:"app_id"`
-	SpanID           []byte  `gorm:"primaryKey" json:"span_id"` // 8 bytes
+	SpanID           []byte  `gorm:"primaryKey;index:idx_agent_trace_spans_span_id" json:"span_id"` // 8 bytes; the index serves lookups by id alone
 	TraceID          []byte  `gorm:"not null;index:idx_agent_trace_spans_trace_start,priority:2" json:"trace_id"`
 	SessionID        string  `gorm:"size:36;not null;index:idx_agent_trace_spans_session_start,priority:1" json:"session_id"`
 	ParentSpanID     []byte  `json:"parent_span_id,omitempty"`

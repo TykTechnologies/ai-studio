@@ -9,7 +9,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 )
 
-type fakeService struct{ started bool }
+// fakeService embeds the inert service for the query methods.
+type fakeService struct {
+	communityService
+	started bool
+}
 
 func (f *fakeService) Start(context.Context) error { f.started = true; return nil }
 func (f *fakeService) Stop()                       {}

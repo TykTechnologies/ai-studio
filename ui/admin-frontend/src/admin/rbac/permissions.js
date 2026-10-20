@@ -22,6 +22,12 @@ export const P = Object.freeze({
   // Analytics
   ANALYTICS_READ: p('analytics', 'read'),
   PROXY_LOGS_READ: p('proxy-logs', 'read'),
+  // Agent Call Tracing (Enterprise): execute exports, delete purges.
+  TRACES_READ: p('traces', 'read'),
+  TRACES_WRITE: p('traces', 'write'),
+  TRACES_DELETE: p('traces', 'delete'),
+  TRACES_EXECUTE: p('traces', 'execute'),
+  TRACE_CONTENT_READ: p('trace-content', 'read'),
 
   // Plugins
   PLUGINS_READ: p('plugins', 'read'),

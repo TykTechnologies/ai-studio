@@ -147,6 +147,8 @@ TABLE agent_trace_sessions
   column `tool_call_count` integer NOT NULL DEFAULT 0
   column `error_count` integer NOT NULL DEFAULT 0
   column `dropped_count` integer NOT NULL DEFAULT 0
+  column `gateway_event_count` integer NOT NULL DEFAULT 0
+  column `duration_ms` integer NOT NULL DEFAULT 0
   column `input_tokens` integer NOT NULL DEFAULT 0
   column `output_tokens` integer NOT NULL DEFAULT 0
   column `cost_micros` integer NOT NULL DEFAULT 0
@@ -162,6 +164,7 @@ TABLE agent_trace_sessions
   index CREATE INDEX `idx_agent_trace_sessions_app_started` ON `agent_trace_sessions`(`app_id`,`started_at`)
   index CREATE INDEX `idx_agent_trace_sessions_app_user_started` ON `agent_trace_sessions`(`app_id`,`user_id`,`started_at`)
   index CREATE INDEX `idx_agent_trace_sessions_retention` ON `agent_trace_sessions`(`retention_until`)
+  index CREATE INDEX `idx_agent_trace_sessions_started` ON `agent_trace_sessions`(`started_at`,`id`)
   index CREATE INDEX `idx_agent_trace_sessions_status_activity` ON `agent_trace_sessions`(`status`,`last_activity_at`)
   index CREATE INDEX `idx_agent_trace_sessions_team_started` ON `agent_trace_sessions`(`team_id`,`started_at`)
 TABLE agent_trace_span_links
@@ -223,6 +226,7 @@ TABLE agent_trace_spans
   index CREATE INDEX `idx_agent_trace_spans_app_kind_start` ON `agent_trace_spans`(`app_id`,`kind`,`start_time`)
   index CREATE INDEX `idx_agent_trace_spans_app_tool_start` ON `agent_trace_spans`(`app_id`,`tool_name`,`start_time`)
   index CREATE INDEX `idx_agent_trace_spans_session_start` ON `agent_trace_spans`(`session_id`,`start_time`)
+  index CREATE INDEX `idx_agent_trace_spans_span_id` ON `agent_trace_spans`(`span_id`)
   index CREATE INDEX `idx_agent_trace_spans_trace_start` ON `agent_trace_spans`(`app_id`,`trace_id`,`start_time`)
 TABLE agent_trace_traces
   column `app_id` integer NOT NULL
@@ -245,6 +249,7 @@ TABLE agent_trace_traces
   autoindex origin=pk unique=1 (app_id, trace_id)
   index CREATE INDEX `idx_agent_trace_traces_app_started` ON `agent_trace_traces`(`app_id`,`started_at`)
   index CREATE INDEX `idx_agent_trace_traces_session_turn` ON `agent_trace_traces`(`session_id`,`turn_index`)
+  index CREATE INDEX `idx_agent_trace_traces_trace_id` ON `agent_trace_traces`(`trace_id`)
 TABLE app_datasources
   column `app_id` integer
   column `datasource_id` integer

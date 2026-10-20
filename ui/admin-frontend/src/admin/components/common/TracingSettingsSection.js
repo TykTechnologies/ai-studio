@@ -14,6 +14,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { StyledAccordion } from "../../styles/sharedStyles";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
 import { usePermissions } from "../../context/PermissionsContext";
+import { P } from "../../rbac/permissions";
 
 // Agent tracing settings (Enterprise). The API stores them on every
 // edition, but the section only appears when agent tracing is running
@@ -27,9 +28,6 @@ export const CONTENT_MODES = [
   { value: "redacted", label: "Redacted: content with PII removed" },
   { value: "full", label: "Full: content as sent" },
 ];
-
-// The permission that lets an admin grant the Portal owner content access.
-const TRACES_WRITE = "traces:write";
 
 const DURATION_PATTERN = /^(\d+(\.\d+)?(h|m|s))+$/;
 const DURATION_PART = /(\d+(?:\.\d+)?)(h|m|s)/g;
@@ -180,7 +178,8 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
   const { can } = usePermissions();
   if (!visible) return null;
   const set = (name, v) => onChange({ ...value, [name]: v });
-  const canGrantContent = can(TRACES_WRITE);
+  // Granting the Portal owner content access needs traces:write.
+  const canGrantContent = can(P.TRACES_WRITE);
   return (
     <StyledAccordion data-testid="tracing-settings-section">
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>

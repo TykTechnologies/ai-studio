@@ -62,7 +62,7 @@ The catalogue lives in core (`pkg/authz/catalogue.go`) so both editions share on
 
 | Group | Resources (S = sensitive data class) |
 |---|---|
-| Analytics | `analytics`, `proxy-logs` (S) |
+| Analytics | `analytics`, `proxy-logs` (S), `traces`, `trace-content` (S) |
 | Plugins | `plugins`, `marketplace` |
 | LLM management | `llms`, `model-prices`, `model-routers`, `semantic-routers`, `embedders` |
 | Context management | `datasources`, `tools`, `filters`, `filestores`, `tags` |
@@ -86,9 +86,9 @@ Governed metadata on an object is authorised by that object's permission: `PUT /
 |---|---|---|
 | `owner` | Owner | `*`. Seeded to user ID 1. User-only binding. Only an Owner may grant or revoke Owner. The last Owner cannot be removed or demoted. |
 | `administrator` | Administrator | `*`. Bindable to users and teams. Cannot bind/unbind Owner. |
-| `editor` | Editor | Everything except: `users`/`groups` beyond read, `roles`, `sso-profiles`, `plugins`/`marketplace` write, delete and publish, `metadata` write, delete and publish, `audit`, `exports`, `proxy-logs`, `chat-history`. Includes `credentials:*`, `secrets:*` and `publish` on LLMs, tools, data sources, apps, agents and model routers. |
+| `editor` | Editor | Everything except: `users`/`groups` beyond read, `roles`, `sso-profiles`, `plugins`/`marketplace` write, delete and publish, `metadata` write, delete and publish, `traces` beyond read, `audit`, `exports`, `proxy-logs`, `chat-history`, `trace-content`. Includes `credentials:*`, `secrets:*` and `publish` on LLMs, tools, data sources, apps, agents and model routers. |
 | `viewer` | Viewer | `read` on every resource except the sensitive ones. |
-| `auditor` | Auditor | Viewer plus `audit`, `compliance`, `proxy-logs`, `chat-history`, `exports` read. Never credentials or identity provider secrets. |
+| `auditor` | Auditor | Viewer plus `audit`, `compliance`, `proxy-logs`, `chat-history`, `exports`, `trace-content` read. Never credentials or identity provider secrets. |
 
 Portal/chat-only users hold no binding; `ShowPortal`/`ShowChat` keep governing those surfaces. Operator- or analyst-style roles are a clone of Viewer with a few `execute`/`read` permissions added. Workflow roles are built from `publish`: *LLM Submitter* = `llms:read, llms:write`; *LLM Reviewer* = `llms:read, llms:write, llms:publish`; *Release approver* = `llms:publish` (and the other `*:publish` grants) with no write.
 

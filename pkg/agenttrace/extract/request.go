@@ -205,7 +205,11 @@ func parseResponsesRequest(body []byte, fp agenttrace.Fingerprinter) (Request, e
 		case "function_call", "custom_tool_call":
 			names[it.CallID] = it.Name
 			lastModel = i
-		case "reasoning", "computer_call", "local_shell_call":
+		case "computer_call", "local_shell_call":
+			// Named like the response side names these calls.
+			names[it.CallID] = it.Type
+			lastModel = i
+		case "reasoning":
 			lastModel = i
 		case "", "message":
 			if it.Role == guardrails.RoleAssistant {
@@ -216,7 +220,7 @@ func parseResponsesRequest(body []byte, fp agenttrace.Fingerprinter) (Request, e
 	for i := lastModel + 1; i < len(items); i++ {
 		it := items[i]
 		switch it.Type {
-		case "function_call_output", "custom_tool_call_output":
+		case "function_call_output", "custom_tool_call_output", "computer_call_output", "local_shell_call_output":
 			r.ToolResults = append(r.ToolResults, ToolResult{
 				ID:       it.CallID,
 				Name:     names[it.CallID],
@@ -240,7 +244,7 @@ func parseResponsesRequest(body []byte, fp agenttrace.Fingerprinter) (Request, e
 			if r.LastRole == "developer" {
 				r.LastRole = guardrails.RoleSystem
 			}
-		case "function_call_output", "custom_tool_call_output", "mcp_call":
+		case "function_call_output", "custom_tool_call_output", "computer_call_output", "local_shell_call_output", "mcp_call":
 			r.LastRole = guardrails.RoleTool
 		default:
 			r.LastRole = guardrails.RoleAssistant

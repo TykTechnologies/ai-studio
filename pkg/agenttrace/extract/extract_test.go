@@ -111,6 +111,16 @@ func TestParseRequest_ResponsesToolLoopHistory(t *testing.T) {
 	reasoning := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,{"type":"reasoning","id":"rs","summary":[]},` + fc("c2") + `,` + out("c2") + `]}`
 	assert.Equal(t, []string{"c2"}, ids(reasoning))
 
+	// Client-executed computer and shell calls are answered like functions.
+	computer := `{"input":[` + user + `,{"type":"computer_call","call_id":"cc1","action":{"type":"click"}},` +
+		`{"type":"computer_call_output","call_id":"cc1","output":{"type":"computer_screenshot","image_url":"data:image/png;base64,AA"}},` +
+		`{"type":"local_shell_call","call_id":"sh1","action":{"type":"exec"}},{"type":"local_shell_call_output","call_id":"sh1","output":"ok"}]}`
+	r, err := ParseRequest(FormatOpenAIResponses, []byte(computer), testFP)
+	require.NoError(t, err)
+	require.Len(t, r.ToolResults, 1, "the computer call is history once the shell call follows")
+	assert.Equal(t, idName{"sh1", "local_shell_call"}, idName{r.ToolResults[0].ID, r.ToolResults[0].Name})
+	assert.NotNil(t, r.ToolResults[0].ResultFP)
+
 	newTurn := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,{"role":"assistant","content":"done"},` + user + `]}`
 	assert.Empty(t, ids(newTurn))
 }
