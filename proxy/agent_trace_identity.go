@@ -148,7 +148,7 @@ func traceSpanIDFor(ctx context.Context) string {
 // (AGENT_TRACING_OPENAI_CLIENT_REQUEST_ID), unless the LLM opted out.
 func injectUpstreamTrace(ctx context.Context, h http.Header, llm *models.LLM) {
 	if llm != nil && llm.Vendor == models.OPENAI && !llm.TracingPropagationOptOut &&
-		openAIClientRequestID.Load() && h.Get(hdrClientRequestID) == "" {
+		tracing.PropagateToLLMProviders() && openAIClientRequestID.Load() && h.Get(hdrClientRequestID) == "" {
 		if id := agenttrace.From(ctx).LogicalSpanID(); !id.IsZero() {
 			h.Set(hdrClientRequestID, id.String())
 		}

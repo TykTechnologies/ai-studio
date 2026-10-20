@@ -103,6 +103,16 @@ func TestAgentTraceSettings_OpenAIClientRequestID(t *testing.T) {
 	resp, body = h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest, "X-Client-Request-Id", "client-1")
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 	assert.Equal(t, "client-1", upstream.Get("X-Client-Request-Id"))
+
+	// With propagation to LLM providers off the span id stays home too; a
+	// client-set value still passes (jyx.145).
+	withPropagation(t, false, true, true)
+	resp, body = h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	assert.Empty(t, upstream.Get("X-Client-Request-Id"))
+	resp, body = h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest, "X-Client-Request-Id", "client-2")
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	assert.Equal(t, "client-2", upstream.Get("X-Client-Request-Id"))
 }
 
 // AGENT_TRACING_MAX_STREAM_BUFFER_BYTES sets the streamed capture's
