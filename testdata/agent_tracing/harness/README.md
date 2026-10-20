@@ -19,12 +19,15 @@ The skeleton keeps the structure, ids, roles, types, model names and `metadata`.
 | Claude Code | 2.1.304 | Anthropic Messages | Header `X-Claude-Code-Agent-Id: <17 hex>` | Only on sub-agent (Agent/Task tool) requests, one id per sub-agent. Main-thread requests have none. |
 | OpenCode | 1.18.23 | Anthropic Messages | Headers `X-Session-Id: ses_<26 chars>` and `X-Session-Affinity` (the same value) | Per session. The same across `--session` and `--continue`. Distinct for parallel sessions. |
 | OpenCode | 1.18.23 | OpenAI Responses | Headers `X-Session-Id`, `Session-Id` and `X-Session-Affinity` (the same value), `Originator: opencode`; body `prompt_cache_key` = the session id; `store: false` | As above. `store:false` means there is no `previous_response_id` chain. |
-| Codex CLI | not tested | | | Not installed on the capture host. No extractor ships; clients send `X-Tyk-Session-Id`. |
+| Codex CLI | 0.160.1 (`codex exec`, via `npx`) | OpenAI Responses | Headers `Session-Id`, `Thread-Id` and `X-Client-Request-Id`, all the session id (UUIDv7); body `prompt_cache_key` and `client_metadata.session_id` are the same; `Originator: codex_exec`; `store: false` | Per session. The same across `exec resume <id>` and `resume --last`. Distinct for parallel sessions. `X-Client-Request-Id` is per session, **not** per request. |
+| Codex CLI | 0.160.1 | OpenAI Responses | Header `X-Codex-Turn-Metadata`: a JSON string with `session_id`, `thread_id`, `turn_id`, `root_turn_id`, `agent_name` (`/root`), `request_kind` (`turn`), `model`, `installation_id` and more | `turn_id` is the same for every request of one user turn and new for each turn, so it gives exact turn boundaries. `agent_name` is path-style. Only `/root` was seen; sub-agent paths were not captured. `installation_id` is a stable per-install id: never store it. |
 
 Notes for the extractors and the assembler:
 - **Header precedence.** OpenCode's `X-Session-Id` is the same header as the OpenRouter compatibility family (`x-session-id`, precedence level 3). It is already grouped while compat headers are on, but labelled with the OpenRouter source. Identify OpenCode by `User-Agent: opencode/<version>` to label it correctly.
 - **Side calls share the session id.** OpenCode's first request in each session is a title-generation call with no tools. On OpenAI it goes to a different, smaller model than the one configured (`gpt-5.4-nano` here).
 - **Claude Code sub-agents.** Sub-agent requests carry the parent's session id plus `X-Claude-Code-Agent-Id`. That identifies a declared sub-agent; linking it to the parent's Agent tool call still needs R5 or the tool result.
+- **Codex sends store:false and resends the full history**, like OpenCode on OpenAI, so there is no `previous_response_id` chain (R3). Trailing-result detection (R1) must use only the results after the last model-output item.
+- **Codex `X-Client-Request-Id`** is the session id. The spec lets the gateway set this header to its span id for OpenAI. Doing so would overwrite a client value, so the gateway must not touch it when the client already sent one.
 - **Legacy metadata shape.** Older Claude Code versions are reported to send `metadata.user_id` as `user_<hash>_account_<uuid>_session_<uuid>`. That shape was not captured here, so an extractor for it must stay off by default until it is verified.
 
 ## Re-capturing after a harness upgrade
@@ -41,6 +44,7 @@ bash testdata/agent_tracing/harness/capture/run-claude.sh            # fresh, --
 bash testdata/agent_tracing/harness/capture/run-claude.sh subagent   # one Agent/Task delegation
 bash testdata/agent_tracing/harness/capture/run-opencode.sh anthropic/claude-haiku-5-5 ant
 bash testdata/agent_tracing/harness/capture/run-opencode.sh openai/gpt-5.5 oai
+CODEX_VERSION=0.160.1 bash testdata/agent_tracing/harness/capture/run-codex.sh   # npx, pinned; no global install
 
 python3 testdata/agent_tracing/harness/capture/summarize.py cc- "$OUT/capture.jsonl"   # eyeball the signals
 python3 testdata/agent_tracing/harness/capture/sanitize.py "$OUT/capture.jsonl" testdata/agent_tracing/harness

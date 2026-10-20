@@ -13,17 +13,21 @@ DROP_HEADERS = {'content-length', 'accept-encoding', 'connection'}
 SECRET = re.compile(r'^(authorization|x-api-key|api-key|cookie|openai-organization|openai-project|chatgpt-account-id)$', re.I)
 DEVICE = re.compile(r'(\\*"device_id\\*":\\*")[0-9a-f]{64}')
 ACCOUNT = re.compile(r'(\\*"account_uuid\\*":\\*")[^"\\]*')
+# Codex: a stable per-install id in X-Codex-Turn-Metadata and client_metadata.
+INSTALL = re.compile(r'(\\*"(?:x-codex-)?installation[_-]id\\*":\\*")[0-9a-fA-F-]{36}')
 
 groups = {
     'cc-': 'claude-code-2.1.304/anthropic-messages.jsonl',
     'oc-ant-': 'opencode-1.18.23/anthropic-messages.jsonl',
     'oc-oai-': 'opencode-1.18.23/openai-responses.jsonl',
+    'cx-': 'codex-cli-0.160.1/openai-responses.jsonl',
 }
 files = {}
 
 
 def scrub(s):
     s = DEVICE.sub(r"\1<device_id:sha256>", s)
+    s = INSTALL.sub(r"\1<installation_id>", s)
     return ACCOUNT.sub(r"\1<account_uuid>", s)
 
 
