@@ -301,6 +301,7 @@ func (a *API) searchAgentSession(c *gin.Context) {
 // @Tags agent-tracing
 // @Produce json
 // @Param trace_id path string true "Trace id (32 lowercase hex)"
+// @Param app_id query int true "App the trace belongs to (ids are unique per App)"
 // @Param cursor query string false "next_cursor of the previous page"
 // @Param limit query int false "Page size (1-1000, default 1000)"
 // @Success 200 {object} map[string]interface{} "{trace, session_id, spans, next_cursor}"
@@ -311,12 +312,16 @@ func (a *API) getAgentTrace(c *gin.Context) {
 	if !ok {
 		return
 	}
+	appID, ok := appIDQuery(c)
+	if !ok {
+		return
+	}
 	q, err := spanQueryFromURL(c)
 	if err != nil {
 		agentTracingError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	res, err := a.agentTracing().GetTrace(c.Request.Context(), agentTracingViewer(c), id, q)
+	res, err := a.agentTracing().GetTrace(c.Request.Context(), agentTracingViewer(c), appID, id, q)
 	respondAgentTracing(c, res, err)
 }
 
@@ -326,6 +331,7 @@ func (a *API) getAgentTrace(c *gin.Context) {
 // @Tags agent-tracing
 // @Produce json
 // @Param span_id path string true "Span id (16 lowercase hex)"
+// @Param app_id query int true "App the span belongs to (ids are unique per App)"
 // @Success 200 {object} map[string]interface{} "{span, events, session_id}"
 // @Failure 404 {object} ErrorResponse
 // @Router /agent-tracing/spans/{span_id} [get]
@@ -334,8 +340,23 @@ func (a *API) getAgentSpan(c *gin.Context) {
 	if !ok {
 		return
 	}
-	res, err := a.agentTracing().GetSpan(c.Request.Context(), agentTracingViewer(c), id)
+	appID, ok := appIDQuery(c)
+	if !ok {
+		return
+	}
+	res, err := a.agentTracing().GetSpan(c.Request.Context(), agentTracingViewer(c), appID, id)
 	respondAgentTracing(c, res, err)
+}
+
+// appIDQuery reads the required app_id: trace and span ids are
+// client-supplied, so they are unique only within an App.
+func appIDQuery(c *gin.Context) (uint, bool) {
+	n, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
+	if err != nil || n == 0 {
+		agentTracingError(c, http.StatusBadRequest, "Bad Request", "app_id is required: trace and span ids are unique per App")
+		return 0, false
+	}
+	return uint(n), true
 }
 
 func sessionIDParam(c *gin.Context) (string, bool) {

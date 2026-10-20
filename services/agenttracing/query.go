@@ -112,8 +112,10 @@ type Querier interface {
 	ListSessions(ctx context.Context, v Viewer, q SessionQuery) (any, error)
 	GetSession(ctx context.Context, v Viewer, sessionID string) (any, error)
 	ListSessionSpans(ctx context.Context, v Viewer, sessionID string, q SpanQuery) (any, error)
-	GetTrace(ctx context.Context, v Viewer, traceID []byte, q SpanQuery) (any, error)
-	GetSpan(ctx context.Context, v Viewer, spanID []byte) (any, error)
+	// GetTrace and GetSpan take the App: ids are client-supplied and unique
+	// only within one App (the tables are keyed by (app_id, id)).
+	GetTrace(ctx context.Context, v Viewer, appID uint, traceID []byte, q SpanQuery) (any, error)
+	GetSpan(ctx context.Context, v Viewer, appID uint, spanID []byte) (any, error)
 	SearchSession(ctx context.Context, v Viewer, sessionID string, q SearchQuery) (any, error)
 }
 
@@ -134,10 +136,12 @@ func (s communityService) GetSession(context.Context, Viewer, string) (any, erro
 func (s communityService) ListSessionSpans(context.Context, Viewer, string, SpanQuery) (any, error) {
 	return nil, s.err
 }
-func (s communityService) GetTrace(context.Context, Viewer, []byte, SpanQuery) (any, error) {
+func (s communityService) GetTrace(context.Context, Viewer, uint, []byte, SpanQuery) (any, error) {
 	return nil, s.err
 }
-func (s communityService) GetSpan(context.Context, Viewer, []byte) (any, error) { return nil, s.err }
+func (s communityService) GetSpan(context.Context, Viewer, uint, []byte) (any, error) {
+	return nil, s.err
+}
 func (s communityService) SearchSession(context.Context, Viewer, string, SearchQuery) (any, error) {
 	return nil, s.err
 }

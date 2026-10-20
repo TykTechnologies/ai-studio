@@ -51,7 +51,7 @@ func allowAll(NavItem) bool { return true }
 func TestAdminNavGroupOrder(t *testing.T) {
 	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), allowAll)
 	assert.Equal(t, []string{
-		"Overview", "Analytics", "Access", "Catalogs", "LLM management",
+		"Overview", "Analytics", "Agent sessions", "Access", "Catalogs", "LLM management",
 		"Context management", "Portal administration", "Community", "Governance",
 		"Settings", "Chat administration", "Plugins",
 	}, labels(nav))

@@ -292,17 +292,19 @@ func ListAgentTraceSpans(db *gorm.DB, f AgentTraceSpanFilter, after *AgentTraceS
 	return out, err
 }
 
-// GetAgentTraceSpan returns one span in scope, or gorm.ErrRecordNotFound.
-func GetAgentTraceSpan(db *gorm.DB, scope AgentTraceAppScope, spanID []byte) (*AgentTraceSpan, error) {
+// GetAgentTraceSpan returns the span (appID, spanID) when appID is in
+// scope, or gorm.ErrRecordNotFound. Span ids are unique only within an App.
+func GetAgentTraceSpan(db *gorm.DB, scope AgentTraceAppScope, appID uint, spanID []byte) (*AgentTraceSpan, error) {
 	var s AgentTraceSpan
-	err := scope.apply(db, "app_id").Where("span_id = ?", spanID).First(&s).Error
+	err := scope.apply(db, "app_id").Where("app_id = ? AND span_id = ?", appID, spanID).First(&s).Error
 	return &s, err
 }
 
-// GetAgentTraceTrace returns one trace in scope, or gorm.ErrRecordNotFound.
-func GetAgentTraceTrace(db *gorm.DB, scope AgentTraceAppScope, traceID []byte) (*AgentTraceTrace, error) {
+// GetAgentTraceTrace returns the trace (appID, traceID) when appID is in
+// scope, or gorm.ErrRecordNotFound. Trace ids are unique only within an App.
+func GetAgentTraceTrace(db *gorm.DB, scope AgentTraceAppScope, appID uint, traceID []byte) (*AgentTraceTrace, error) {
 	var t AgentTraceTrace
-	err := scope.apply(db, "app_id").Where("trace_id = ?", traceID).First(&t).Error
+	err := scope.apply(db, "app_id").Where("app_id = ? AND trace_id = ?", appID, traceID).First(&t).Error
 	return &t, err
 }
 

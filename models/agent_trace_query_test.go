@@ -232,11 +232,16 @@ func TestListAgentTraceSpans_FiltersAndScope(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, windowed, 3)
 
-		_, err = GetAgentTraceSpan(db, AgentTraceAppScope{AppIDs: []uint{2}}, []byte{0, 0, 0, 0, 0, 0, 0, 1})
-		assert.True(t, errors.Is(err, gorm.ErrRecordNotFound))
-		sp, err := GetAgentTraceSpan(db, AgentTraceAppScope{AllApps: true}, []byte{0, 0, 0, 0, 0, 0, 0, 1})
+		_, err = GetAgentTraceSpan(db, AgentTraceAppScope{AppIDs: []uint{2}}, 1, []byte{0, 0, 0, 0, 0, 0, 0, 1})
+		assert.True(t, errors.Is(err, gorm.ErrRecordNotFound), "App 1 is out of scope")
+		sp, err := GetAgentTraceSpan(db, AgentTraceAppScope{AllApps: true}, 1, []byte{0, 0, 0, 0, 0, 0, 0, 1})
 		require.NoError(t, err)
 		assert.Equal(t, uint(1), sp.AppID)
+		// The same span id in another App is another row.
+		seedQuerySpan(t, db, 2, sid(2), 1, queryBase, func(s *AgentTraceSpan) { s.Name = "other app" })
+		sp, err = GetAgentTraceSpan(db, AgentTraceAppScope{AllApps: true}, 2, []byte{0, 0, 0, 0, 0, 0, 0, 1})
+		require.NoError(t, err)
+		assert.Equal(t, "other app", sp.Name)
 
 		// Find matches names case-insensitively, treats % and _ literally,
 		// and never reads attributes.

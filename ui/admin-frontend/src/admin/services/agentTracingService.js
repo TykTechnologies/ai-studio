@@ -12,8 +12,11 @@ const agentTracingService = {
   getSession: (sessionId) => apiClient.get(`${BASE}/sessions/${sessionId}`).then((r) => r.data),
   listSpans: (sessionId, params = {}) =>
     apiClient.get(`${BASE}/sessions/${sessionId}/spans`, { params }).then((r) => r.data),
-  getTrace: (traceId, params = {}) => apiClient.get(`${BASE}/traces/${traceId}`, { params }).then((r) => r.data),
-  getSpan: (spanId) => apiClient.get(`${BASE}/spans/${spanId}`).then((r) => r.data),
+  // Trace and span ids are unique only within an App, so both need it.
+  getTrace: (traceId, appId, params = {}) =>
+    apiClient.get(`${BASE}/traces/${traceId}`, { params: { ...params, app_id: appId } }).then((r) => r.data),
+  getSpan: (spanId, appId) =>
+    apiClient.get(`${BASE}/spans/${spanId}`, { params: { app_id: appId } }).then((r) => r.data),
   search: (sessionId, q, limit) =>
     apiClient.post(`${BASE}/sessions/${sessionId}/search`, { q, ...(limit ? { limit } : {}) }).then((r) => r.data),
 };

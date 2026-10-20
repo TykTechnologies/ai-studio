@@ -27,12 +27,9 @@ type recordingTracing struct {
 	searchQ   agenttracing.SearchQuery
 	sessionID string
 	id        []byte
+	appID     uint
 	viewer    agenttracing.Viewer
 	calls     int
-	// Content routes (agent_tracing_content_handlers_test.go).
-	payloadQ agenttracing.PayloadQuery
-	meta     agenttracing.AccessMeta
-	endUser  string
 }
 
 func (r *recordingTracing) Start(context.Context) error { return nil }
@@ -60,12 +57,12 @@ func (r *recordingTracing) ListSessionSpans(_ context.Context, v agenttracing.Vi
 	r.sessionID, r.spanQ = id, q
 	return r.result(v)
 }
-func (r *recordingTracing) GetTrace(_ context.Context, v agenttracing.Viewer, id []byte, q agenttracing.SpanQuery) (any, error) {
-	r.id, r.spanQ = id, q
+func (r *recordingTracing) GetTrace(_ context.Context, v agenttracing.Viewer, appID uint, id []byte, q agenttracing.SpanQuery) (any, error) {
+	r.appID, r.id, r.spanQ = appID, id, q
 	return r.result(v)
 }
-func (r *recordingTracing) GetSpan(_ context.Context, v agenttracing.Viewer, id []byte) (any, error) {
-	r.id = id
+func (r *recordingTracing) GetSpan(_ context.Context, v agenttracing.Viewer, appID uint, id []byte) (any, error) {
+	r.appID, r.id = appID, id
 	return r.result(v)
 }
 func (r *recordingTracing) SearchSession(_ context.Context, v agenttracing.Viewer, id string, q agenttracing.SearchQuery) (any, error) {
@@ -102,8 +99,8 @@ func TestAgentTracingRoutes_CommunityAnswers402(t *testing.T) {
 		{"GET", "/api/v1/agent-tracing/sessions/" + testSessionID},
 		{"GET", "/api/v1/agent-tracing/sessions/" + testSessionID + "/spans"},
 		{"POST", "/api/v1/agent-tracing/sessions/" + testSessionID + "/search"},
-		{"GET", "/api/v1/agent-tracing/traces/" + strings.Repeat("ab", 16)},
-		{"GET", "/api/v1/agent-tracing/spans/" + strings.Repeat("cd", 8)},
+		{"GET", "/api/v1/agent-tracing/traces/" + strings.Repeat("ab", 16) + "?app_id=1"},
+		{"GET", "/api/v1/agent-tracing/spans/" + strings.Repeat("cd", 8) + "?app_id=1"},
 	} {
 		var body any
 		if r.method == "POST" {
@@ -232,12 +229,14 @@ func TestAgentTracingDetailRoutes(t *testing.T) {
 	assert.True(t, svc.spanQ.Previews)
 	assert.Equal(t, 1000, svc.spanQ.Limit)
 
-	w = performRequest(api.router, "GET", "/api/v1/agent-tracing/traces/"+strings.Repeat("ab", 16), nil)
+	w = performRequest(api.router, "GET", "/api/v1/agent-tracing/traces/"+strings.Repeat("ab", 16)+"?app_id=7", nil)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Len(t, svc.id, 16)
-	w = performRequest(api.router, "GET", "/api/v1/agent-tracing/spans/"+strings.Repeat("cd", 8), nil)
+	assert.Equal(t, uint(7), svc.appID)
+	w = performRequest(api.router, "GET", "/api/v1/agent-tracing/spans/"+strings.Repeat("cd", 8)+"?app_id=9", nil)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Len(t, svc.id, 8)
+	assert.Equal(t, uint(9), svc.appID)
 
 	calls := svc.calls
 	for _, bad := range []string{
@@ -245,6 +244,8 @@ func TestAgentTracingDetailRoutes(t *testing.T) {
 		"/api/v1/agent-tracing/sessions/" + strings.ToUpper(testSessionID),
 		"/api/v1/agent-tracing/sessions/" + testSessionID + "/spans?limit=1001",
 		"/api/v1/agent-tracing/sessions/" + testSessionID + "/spans?include=content",
+		"/api/v1/agent-tracing/traces/" + strings.Repeat("ab", 16), // no app_id
+		"/api/v1/agent-tracing/spans/" + strings.Repeat("cd", 8) + "?app_id=0",
 		"/api/v1/agent-tracing/traces/" + strings.Repeat("ab", 8),
 		"/api/v1/agent-tracing/traces/" + strings.Repeat("AB", 16),
 		"/api/v1/agent-tracing/spans/zz" + strings.Repeat("cd", 7),
