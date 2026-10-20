@@ -90,6 +90,25 @@ func TestCompressionHeader_ReachesPluginsNeverTheVendor(t *testing.T) {
 	}
 }
 
+// The decisions bridge makes its own loopback request: the header reaches
+// the plugin on the inner hop there too, and not the vendor.
+func TestCompressionHeader_DecisionsBridge(t *testing.T) {
+	h := newFailoverHarness(t, serveOpenAIDecision(), serveStatus(500), noFailover)
+	seen := &postAuthSeen{}
+	h.proxy.SetAuthHooks(&AuthHooks{PostAuth: seen.hook})
+
+	resp, out := h.post("/v1/decisions", unifiedDecisionBody(t, "primary/gpt-6-luna"),
+		"X-Tyk-Compression", "off", "X-Tyk-Compression-Debug", "1")
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+
+	assert.Equal(t, []string{"off"}, seen.innerHop(t))
+	calls := h.primaryVendor.calls()
+	require.Len(t, calls, 1)
+	for k := range calls[0].Headers {
+		assert.False(t, isCompressionHeader(k), "%s reached the vendor", k)
+	}
+}
+
 func TestStripCompressionHeaders(t *testing.T) {
 	h := http.Header{}
 	h.Set("X-Tyk-Compression", "off")
