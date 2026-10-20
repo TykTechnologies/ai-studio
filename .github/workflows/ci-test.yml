@@ -502,6 +502,28 @@ jobs:
         run: |
           go test -v -race -count=1 ./tests/cluster/
 
+      # Agent Call Tracing on Postgres, in a database of its own: the store
+      # and capture staging in core, and the enterprise assembler,
+      # correlation goldens, JSON v1 and content API (purge). Their gates
+      # read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN, so both are set.
+      # A Postgres-only bug (jyx.126) must not pass by skipping.
+      - name: Run agent tracing Postgres tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+          AGENT_TRACE_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE agenttrace_test'
+          go test -v -race -p 1 -count=1 -run 'AgentTrace|Capture' ./models/ ./analytics/
+
+      - name: Run enterprise agent tracing Postgres tests
+        if: env.FORK_PR != 'true'
+        working-directory: enterprise
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+          AGENT_TRACE_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+        run: |
+          go test -tags enterprise -v -race -p 1 -count=1 ./features/agenttracing/...
+
       - name: Run enterprise audit and webhooks Postgres tests
         if: env.FORK_PR != 'true'
         working-directory: enterprise
