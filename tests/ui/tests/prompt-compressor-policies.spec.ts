@@ -118,7 +118,10 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
             return page.getByRole('button', { name: SECTION, exact: true }).isVisible();
         }, { timeout: 90000, intervals: [2000] }).toBe(true);
     }
-    const original = await storedConfig(page, pluginId);
+    // The config as the editor shows it (engine tokens masked), which is also
+    // what saveConfig accepts back for settings outside the editor
+    const editorConfig = async (): Promise<Json> => (await rpc(page, pluginId, 'getEditor')).data.config ?? {};
+    const original = await editorConfig();
     page.on('dialog', (dialog) => dialog.accept());
 
     try {
@@ -138,7 +141,7 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
         await expect(ui.locator(`tr[data-binding="app:${APP_ID}"]`)).toBeVisible();
 
         await ui.getByTestId('pc-save').click();
-        await expect(ui.getByText('Saved. Gateways apply the change')).toBeVisible({ timeout: 20000 });
+        await expect(ui.getByText('Saved. Edge gateways apply the change')).toBeVisible({ timeout: 20000 });
 
         await expect.poll(async () => {
             const cfg = await storedConfig(page, pluginId);
@@ -156,7 +159,8 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
         await ui.getByRole('button', { name: 'Discard changes' }).click();
 
         // --- the RPC refuses it too ---------------------------------------------
-        const refused = await rpc(page, pluginId, 'saveConfig', { config: { bindings: { 'llm_id:1': 'no-such-policy' } } });
+        const current = await editorConfig();
+        const refused = await rpc(page, pluginId, 'saveConfig', { config: { ...current, bindings: { ...(current.bindings ?? {}), 'llm_id:1': 'no-such-policy' } } });
         expect(refused.status).toBe(200);
         expect(refused.data.saved).toBe(false);
         expect(JSON.stringify(refused.data.errors)).toContain('no-such-policy');
@@ -208,7 +212,7 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
         await ui2.locator(`tr[data-policy="${policy}"]`).getByRole('button', { name: 'Delete' }).click();
         await expect(ui2.locator(`tr[data-policy="${policy}"]`)).toHaveCount(0);
         await ui2.getByTestId('pc-save').click();
-        await expect(ui2.getByText('Saved. Gateways apply the change')).toBeVisible({ timeout: 20000 });
+        await expect(ui2.getByText('Saved. Edge gateways apply the change')).toBeVisible({ timeout: 20000 });
         const after = await storedConfig(page, pluginId);
         expect(after.policies?.[policy]).toBeUndefined();
         expect(after.bindings?.[`app:${APP_ID}`]).toBeUndefined();
