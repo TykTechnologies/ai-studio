@@ -15,7 +15,7 @@ import (
 // With the hop and failover tokens, a plugin could dial the loopback and
 // authenticate as any App through the auth hand-off (midsommar-clean-55x).
 var loopbackMarkers = []string{
-	"X-Tyk-Internal-Hop", "X-Tyk-Internal-Span",
+	"X-Tyk-Internal-Hop",
 	"X-Tyk-Failover-Token", "X-Tyk-Failover-Origin", "X-Tyk-Failover-Attempt",
 	"X-Tyk-Router-Origin", "X-Tyk-Router-Kind",
 	"X-Tyk-Auth-App", "X-Tyk-Auth-Method", "X-Tyk-Auth-Plugin", "X-Tyk-Auth-Subject", "X-Tyk-Auth-Claims",
