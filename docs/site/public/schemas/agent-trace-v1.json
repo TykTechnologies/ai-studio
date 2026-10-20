@@ -22,6 +22,11 @@
       "type": "array",
       "description": "Flat list ordered by (start_time, span_id). The tree is given by parent_span_id; gateway events are spans of kind gateway_event.",
       "items": { "$ref": "#/definitions/span" }
+    },
+    "resources": {
+      "type": "array",
+      "description": "Optional. Display names of the Studio resources the spans reference (span resource_type and resource_id), ordered by (type, id). Absent when the exporter did not resolve names; a reference missing from the list has no known name.",
+      "items": { "$ref": "#/definitions/resource" }
     }
   },
   "definitions": {
@@ -113,6 +118,16 @@
         "ended_at": { "$ref": "#/definitions/time" },
         "status": { "enum": ["in_progress", "ok", "error", "abandoned"] },
         "totals": { "$ref": "#/definitions/totals" }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "name"],
+      "properties": {
+        "type": { "enum": ["llm", "tool", "datasource", "plugin", "mcp_server"] },
+        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 }
       }
     },
     "usage": {
