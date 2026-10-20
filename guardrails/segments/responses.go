@@ -153,6 +153,7 @@ func (x *extraction) responsesItem(item *node, path string) error {
 	case typ == "mcp_call":
 		x.responsesCall(item.get("arguments"), pointer(path, "arguments"), item.get("id"), item.get("name"))
 		result := x.open(path, wholeLeaves, x.toolResult(x.str(item.get("id")), x.str(item.get("name"))))
+		result.ServerTool = true
 		x.leaf(result, item.get("output"), pointer(path, "output"))
 		x.leaf(result, item.get("error"), pointer(path, "error"))
 	case typ == "mcp_list_tools":
@@ -162,9 +163,11 @@ func (x *extraction) responsesItem(item *node, path string) error {
 		for k, t := range item.get("tools").elems() {
 			descPath := pointer(pointerIndex(pointer(path, "tools"), k), "description")
 			result := x.open(descPath, wholeLeaves, x.toolResult(id, x.str(t.get("name"))))
+			result.ServerTool = true
 			x.leaf(result, t.get("description"), descPath)
 		}
 		result := x.open(path, wholeLeaves, x.toolResult(id, x.str(item.get("server_label"))))
+		result.ServerTool = true
 		x.leaf(result, item.get("error"), pointer(path, "error"))
 	case typ == "mcp_approval_request":
 		x.responsesCall(item.get("arguments"), pointer(path, "arguments"), item.get("id"), item.get("name"))
@@ -174,12 +177,14 @@ func (x *extraction) responsesItem(item *node, path string) error {
 	case typ == "file_search_call":
 		x.modelText(path, guardrails.KindToolCall, x.str(item.get("id")), "file_search", item.get("queries"))
 		result := x.open(path, wholeLeaves, x.toolResult(x.str(item.get("id")), "file_search"))
+		result.ServerTool = true
 		for k, r := range item.get("results").elems() {
 			x.leaf(result, r.get("text"), pointer(pointerIndex(pointer(path, "results"), k), "text"))
 		}
 	case typ == "code_interpreter_call":
 		x.responsesCall(item.get("code"), pointer(path, "code"), item.get("id"), nil)
 		result := x.open(path, wholeLeaves, x.toolResult(x.str(item.get("id")), "code_interpreter"))
+		result.ServerTool = true
 		for k, o := range item.get("outputs").elems() {
 			x.leaf(result, o.get("logs"), pointer(pointerIndex(pointer(path, "outputs"), k), "logs"))
 		}

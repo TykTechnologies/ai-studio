@@ -115,6 +115,13 @@ type Unit struct {
 	// larger than maxDecodedText): the unit cannot be read in full, and the
 	// runner treats it as not scanned.
 	Undecodable bool
+	// ServerTool marks a tool result the vendor produced and the client
+	// replays (Anthropic's web search, web fetch, code execution and MCP
+	// connector results, Google's codeExecutionResult, the Responses
+	// built-in tools' results). A guardrail reads it like any tool result;
+	// a rewriter should leave it alone, since the vendor may check it
+	// against the encrypted or signed parts it came with.
+	ServerTool bool
 
 	pieces   []piece
 	sep      string

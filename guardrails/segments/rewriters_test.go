@@ -5,6 +5,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 )
 
 func TestCheckToolPairing(t *testing.T) {
@@ -325,5 +327,73 @@ func TestGoogleThoughtSignatureIsNotText(t *testing.T) {
 	}
 	if err := CheckToolPairing(FormatGoogleAI, body); err != nil {
 		t.Errorf("CheckToolPairing: %v", err)
+	}
+}
+
+// Tool results the vendor produced (and the client replays) are marked
+// ServerTool; the client's own tool results are not.
+func TestServerToolResults(t *testing.T) {
+	for _, tc := range []struct {
+		name, format, body string
+		server             map[string]bool // tool call id -> ServerTool
+	}{
+		{"anthropic", FormatAnthropic, `{"messages":[
+			{"role":"assistant","content":[
+				{"type":"server_tool_use","id":"s1","name":"web_search","input":{}},
+				{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","title":"T","url":"u","encrypted_content":"E"}]},
+				{"type":"server_tool_use","id":"s2","name":"web_fetch","input":{}},
+				{"type":"web_fetch_tool_result","tool_use_id":"s2","content":{"type":"web_fetch_result","url":"u","content":{"type":"document","source":{"type":"text","media_type":"text/plain","data":"page"}}}},
+				{"type":"server_tool_use","id":"s3","name":"code_execution","input":{}},
+				{"type":"code_execution_tool_result","tool_use_id":"s3","content":{"type":"code_execution_result","stdout":"out"}},
+				{"type":"mcp_tool_use","id":"m1","name":"x","server_name":"s","input":{}},
+				{"type":"mcp_tool_result","tool_use_id":"m1","content":[{"type":"text","text":"mcp"}]},
+				{"type":"tool_use","id":"c1","name":"f","input":{}}]},
+			{"role":"user","content":[{"type":"tool_result","tool_use_id":"c1","content":"client"}]}]}`,
+			map[string]bool{"s1": true, "s2": true, "s3": true, "m1": true, "c1": false}},
+		{"responses", FormatOpenAIResponses, `{"input":[
+			{"type":"file_search_call","id":"fs","queries":["q"],"results":[{"text":"r"}]},
+			{"type":"code_interpreter_call","id":"ci","code":"x","outputs":[{"type":"logs","logs":"l"}]},
+			{"type":"mcp_call","id":"mc","name":"n","arguments":"{}","output":"o"},
+			{"type":"function_call","name":"f","call_id":"c1","arguments":"{}"},
+			{"type":"function_call_output","call_id":"c1","output":"client"}]}`,
+			map[string]bool{"fs": true, "ci": true, "mc": true, "c1": false}},
+		{"google", FormatGoogleAI, `{"contents":[{"role":"model","parts":[{"codeExecutionResult":{"outcome":"OUTCOME_OK","output":"o"}}]},
+			{"role":"user","parts":[{"functionResponse":{"name":"f","response":{"r":"client"}}}]}]}`,
+			map[string]bool{"": true, "f": false}},
+		{"bedrock and openai results are the client's", FormatBedrock, `{"messages":[{"role":"user","content":[{"toolResult":{"toolUseId":"b1","content":[{"text":"client"}]}}]}]}`,
+			map[string]bool{"b1": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			units, err := ExtractUnits(tc.format, []byte(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := map[string]bool{}
+			for _, u := range units {
+				if u.Kind != guardrails.KindToolResult {
+					if u.ServerTool {
+						t.Errorf("a %s unit is marked ServerTool", u.Kind)
+					}
+					continue
+				}
+				key := u.ToolCallID
+				if tc.format == FormatGoogleAI {
+					key = map[string]string{"code_execution": "", "f": "f"}[u.ToolName]
+				}
+				want, ok := tc.server[key]
+				if !ok {
+					continue
+				}
+				seen[key] = true
+				if u.ServerTool != want {
+					t.Errorf("result %q (%s): ServerTool = %v, want %v", key, u.Text, u.ServerTool, want)
+				}
+			}
+			for key := range tc.server {
+				if !seen[key] {
+					t.Errorf("no tool result unit for %q", key)
+				}
+			}
+		})
 	}
 }
