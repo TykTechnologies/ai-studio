@@ -475,6 +475,7 @@ TABLE plugins
   column hook_types_customized boolean(bool) nullable=YES default=false
   column is_active boolean(bool) nullable=YES
   column service_scopes jsonb(jsonb) nullable=YES
+  column config_secrets_encrypted jsonb(jsonb) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES

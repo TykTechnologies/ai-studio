@@ -90,6 +90,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 	// Create plugin service adapter to break circular dependency
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
+	pluginServiceAdapter.SetCrypto(crypto)
 	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
 	// Initialize plugin manager with OCI support if configured

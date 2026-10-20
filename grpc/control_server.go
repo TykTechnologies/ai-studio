@@ -2117,6 +2117,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			AuthPluginIds: endpointAuthPlugins[endpointKey{models.EndpointTypePlugin, plugin.ID}],
 			CreatedAt:     timestamppb.New(plugin.CreatedAt),
 			UpdatedAt:     timestamppb.New(plugin.UpdatedAt),
+			// Deterministic ciphertext (encryptForMicrogateway), so the
+			// snapshot checksum changes when a referenced secret does and
+			// edges show as pending until the change is pushed.
+			ConfigSecretsEncrypted: s.pluginConfigSecretsForEdge(&plugin, cfg),
 		})
 	}
 
@@ -2978,6 +2982,12 @@ const (
 	// Governed metadata (Enterprise): gateway-visible fields are part of the snapshot.
 	topicGovernedMetadataUpdated = "system.governed_metadata.updated"
 	topicGovernedMetadataDeleted = "system.governed_metadata.deleted"
+
+	// Secrets: referenced values (LLM keys, plugin config secrets) travel
+	// in the snapshot, so a secret change can change it.
+	topicSecretCreated = "system.secret.created"
+	topicSecretUpdated = "system.secret.updated"
+	topicSecretDeleted = "system.secret.deleted"
 )
 
 // subscribeToConfigChanges sets up event subscriptions for configuration changes.
@@ -2999,6 +3009,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicToolCreated, topicToolUpdated, topicToolDeleted,
 		topicEmbedderCreated, topicEmbedderUpdated, topicEmbedderDeleted,
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
+		topicSecretCreated, topicSecretUpdated, topicSecretDeleted,
 	}
 
 	for _, topic := range configTopics {

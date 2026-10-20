@@ -432,6 +432,7 @@ TABLE plugins
   column `hook_types_customized` numeric DEFAULT false
   column `is_active` numeric
   column `service_scopes` JSON
+  column `config_secrets_encrypted` JSON
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
