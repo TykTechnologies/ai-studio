@@ -23,7 +23,7 @@ const llm1 = {
   attributes: {
     "tyk.tools.available": "4",
     "tyk.tools.offered": '["search","lookup","refund","notify"]',
-    "tyk.tool_calls.not_offered": '["delete_order"]',
+    "tyk.tool_calls.not_offered": '["delete_order","search"]',
   },
   parts: [
     { part: "user_message", content_state: "full", media_type: "text/plain", original_bytes: 40, content: "Please refund order 42 for [REDACTED:EMAIL]" },
@@ -44,6 +44,11 @@ const lookup = {
   kind: "tool_call", name: "tools/call lookup", tool_name: "lookup", status: "error", start_time: at(1.2), end_time: at(1.5),
   content_state: "hashed", parts: [{ part: "tool_result", content_state: "hashed", media_type: "application/json", original_bytes: 10 }],
   attribution: { via: "studio_mcp", in_catalogue: true, catalogue_type: "tool", catalogue_id: "9" },
+  attributes: {
+    "tyk.attribution.confidence": "weak",
+    "tyk.attribution.rule": "catalogue_ambiguous",
+    "tyk.attribution.candidates": '["tool:9","mcp_server:3"]',
+  },
 };
 const deny = {
   span_id: "0000000000000004", trace_id: TRACE, parent_span_id: llm1.span_id, kind: "gateway_event", name: "guardrail", status: "ok",
@@ -162,12 +167,29 @@ describe("TranscriptView", () => {
   it("shows the tools offered, a not-offered call and the Studio route", async () => {
     renderTranscript();
     const step = screen.getAllByTestId("assistant-step")[0];
-    expect(within(step).getByTestId("not-offered-chip")).toHaveTextContent("called a tool not offered: delete_order");
+    expect(within(step).getByTestId("not-offered-chip")).toHaveTextContent("called a tool not offered: delete_order, search");
+    // The card of a call the request did not offer carries the badge.
+    const searchCard = screen.getAllByTestId("tool-card").find((c) => c.textContent.includes("search("));
+    expect(within(searchCard).getByTestId("not-offered-badge")).toBeInTheDocument();
+    expect(screen.getAllByTestId("not-offered-badge")).toHaveLength(1);
     fireEvent.mouseOver(within(step).getByTestId("tools-available"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Offered: search, lookup, refund, notify");
     const lookupCard = screen.getAllByTestId("tool-card").find((c) => c.textContent.includes("lookup"));
     expect(within(lookupCard).getByTestId("via-studio-badge")).toHaveTextContent("via Studio MCP");
     expect(screen.getAllByTestId("via-studio-badge")).toHaveLength(1);
+  });
+
+  it("explains a weak catalogue match with its rule and candidates", async () => {
+    renderTranscript();
+    const badge = screen.getByTestId("weak-match-badge");
+    fireEvent.mouseOver(badge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Catalogue match by rule catalogue_ambiguous (weak confidence); candidates: tool:9, mcp_server:3"
+    );
+    // The inferred-link tooltip names the catalogue match too.
+    fireEvent.mouseOut(badge);
+    fireEvent.mouseOver(screen.getByTestId("inferred-badge"));
+    await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("candidates: tool:9, mcp_server:3"));
   });
 
   it("explains the inferred link's rule in a tooltip", async () => {

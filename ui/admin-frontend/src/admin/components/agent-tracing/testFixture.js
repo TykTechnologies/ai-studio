@@ -21,6 +21,7 @@ export const spans = [
     start_time: at(0), end_time: at(1), request_model: "gpt-4.1", resource_type: "llm", resource_id: "5",
     inferred: false, content_state: "full",
     usage: { input_tokens: 100, output_tokens: 20, cost_micros: 1500 },
+    attributes: { "tyk.tools.offered": '["web_search","fetch"]', "tyk.tool_calls.not_offered": '["shell"]' },
     parts: [
       { part: "request", content_state: "full", media_type: "application/json", original_bytes: 900 },
       { part: "response", content_state: "redacted", media_type: "application/json", original_bytes: 300, redaction_count: 2 },
@@ -30,6 +31,7 @@ export const spans = [
     span_id: ids.tool1, trace_id: TRACE, parent_span_id: ids.llm1, parent_confidence: "strong", parent_rule: "mcp_name_args",
     kind: "tool_call", name: "tools/call web_search", tool_name: "web_search", status: "ok",
     start_time: at(1.2), end_time: at(2), inferred: false, content_state: "hashed",
+    attributes: { "tyk.attribution.confidence": "weak", "tyk.attribution.rule": "catalogue_ambiguous", "tyk.attribution.candidates": '["tool:4","mcp_server:2"]' },
     parts: [{ part: "tool_args", content_state: "hashed", media_type: "application/json", original_bytes: 40 }],
     links: [{ type: "caused_by", trace_id: TRACE, span_id: ids.llm1, confidence: "exact", rule: "tool_call_id" }],
   },

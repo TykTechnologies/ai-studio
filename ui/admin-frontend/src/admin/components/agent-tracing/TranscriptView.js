@@ -18,7 +18,7 @@ import {
   rowIndexOf,
   stepLatency,
 } from "./transcriptModel";
-import { attrNames, attributionOf, attrsOf, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
+import { attrNames, attributionOf, attrsOf, catalogueMatchText, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
 import CapturedMarkdown from "./CapturedMarkdown";
@@ -158,9 +158,15 @@ const NextConnector = ({ tool, next }) => {
 const VIA_LABELS = { studio_mcp: "via Studio MCP", studio_rest: "via Studio REST tool" };
 
 const ToolCard = ({ item }) => {
-  const { resources } = useSessionDetail();
+  const { resources, index } = useSessionDetail();
   const { span, events, next } = item;
   const attr = attributionOf(span);
+  // The model called a tool its request did not offer (the requesting LLM
+  // span lists such calls): a governance signal.
+  const requester = span.parent_span_id ? index?.byId?.get(span.parent_span_id)?.span : null;
+  const notOffered = Boolean(requester && span.tool_name && attrNames(attrsOf(requester)["tyk.tool_calls.not_offered"]).includes(span.tool_name));
+  const match = catalogueMatchText(span);
+  const weakMatch = attrsOf(span)["tyk.attribution.confidence"] === "weak";
   const style = confidenceStyle(span.parent_confidence);
   const args = partText(span, "tool_args");
   const result = partText(span, "tool_result");
@@ -202,6 +208,16 @@ const ToolCard = ({ item }) => {
           {(span.kind === "datasource_call" || attr.catalogue_type === "datasource") && (
             <Chip size="small" variant="outlined" label={`datasource · ${catalogueName || resourceName(resources, span) || span.name}`} />
           )}
+          {notOffered && (
+            <Tooltip title="The request did not offer this tool to the model">
+              <Chip size="small" color="warning" variant="outlined" label="not offered" sx={{ color: "text.primary" }} data-testid="not-offered-badge" />
+            </Tooltip>
+          )}
+          {weakMatch && (
+            <Tooltip title={match}>
+              <Chip size="small" variant="outlined" label="weak catalogue match" data-testid="weak-match-badge" />
+            </Tooltip>
+          )}
           {attr.via === "tyk_gateway" && <Chip size="small" variant="outlined" label="via Tyk Gateway" data-testid="via-gateway-badge" />}
           {VIA_LABELS[attr.via] && <Chip size="small" variant="outlined" label={VIA_LABELS[attr.via]} data-testid="via-studio-badge" />}
           {attr.in_catalogue === false && (
@@ -212,7 +228,7 @@ const ToolCard = ({ item }) => {
           {clientSide && <Chip size="small" variant="outlined" label="client-side (inferred)" data-testid="client-side-badge" />}
           {noResult && <Chip size="small" variant="outlined" label="no result observed" />}
           {style.badge && (
-            <Tooltip title={`Linked by rule ${span.parent_rule || "?"} (${span.parent_confidence} confidence)`}>
+            <Tooltip title={`Linked by rule ${span.parent_rule || "?"} (${span.parent_confidence} confidence)${match ? `. ${match}` : ""}`}>
               <Chip size="small" color="warning" variant="outlined" label={style.badge} sx={{ color: "text.primary" }} data-testid="inferred-badge" />
             </Tooltip>
           )}

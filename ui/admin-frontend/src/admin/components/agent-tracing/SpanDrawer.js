@@ -29,7 +29,9 @@ import {
   KIND_LABELS,
   OUTPUT_PARTS,
   PART_LABELS,
+  attrNames,
   attrsOf,
+  catalogueMatchText,
   durationMs,
   formatBytes,
   partPlaceholder,
@@ -259,6 +261,9 @@ const Overview = ({ span, events, resources }) => {
               : undefined}
           </Row>
           <Row label="Tool call ids">{(span.tool_call_ids || []).join(", ")}</Row>
+          <Row label="Catalogue match">{catalogueMatchText(span) || undefined}</Row>
+          <Row label="Tools offered">{attrNames(attrsOf(span)["tyk.tools.offered"]).join(", ") || undefined}</Row>
+          <Row label="Calls not offered">{attrNames(attrsOf(span)["tyk.tool_calls.not_offered"]).join(", ") || undefined}</Row>
           <Row label="Request log">{span.analytics_ref}</Row>
         </TableBody>
       </Table>

@@ -49,6 +49,20 @@ export const gatewayEventOf = (s) => (s && s.gateway_event && typeof s.gateway_e
 export const eventOutcome = (s) => gatewayEventOf(s).outcome || "";
 
 /** Where a tool call was executed and how it maps to the App's catalogue (span.attribution). */
+/**
+ * How the tool call was matched to the App's catalogue (jyx.51): the rule
+ * and confidence, and the candidates of a weak match. Empty when unknown.
+ */
+export const catalogueMatchText = (span) => {
+  const a = attrsOf(span);
+  const confidence = a["tyk.attribution.confidence"];
+  if (!confidence) return "";
+  let text = `Catalogue match by rule ${a["tyk.attribution.rule"] || "?"} (${confidence} confidence)`;
+  const candidates = attrNames(a["tyk.attribution.candidates"]);
+  if (candidates.length) text += `; candidates: ${candidates.join(", ")}`;
+  return text;
+};
+
 export const attributionOf = (s) => (s && s.attribution && typeof s.attribution === "object" ? s.attribution : {});
 
 export const isProblem = (s) =>

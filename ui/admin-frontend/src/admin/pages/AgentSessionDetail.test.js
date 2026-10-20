@@ -104,6 +104,19 @@ describe("AgentSessionDetail", () => {
     expect(agentTracingService.getSpan).toHaveBeenCalledWith(ids.tool1, 7);
   });
 
+  // jyx.51 attributes in the drawer's overview (jyx.158).
+  it("shows the catalogue match, the tools offered and calls not offered in the drawer", async () => {
+    renderPage();
+    await loaded();
+    fireEvent.click(row(ids.tool1));
+    let drawer = await screen.findByRole("dialog");
+    expect(drawer).toHaveTextContent("Catalogue match by rule catalogue_ambiguous (weak confidence); candidates: tool:4, mcp_server:2");
+    fireEvent.click(row(ids.llm1));
+    drawer = await screen.findByRole("dialog");
+    await waitFor(() => expect(drawer).toHaveTextContent("Tools offeredweb_search, fetch"));
+    expect(drawer).toHaveTextContent("Calls not offeredshell");
+  });
+
   it("loads content only when a content tab is shown, and renders redaction chips", async () => {
     renderPage();
     await loaded();
