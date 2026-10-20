@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync/atomic"
 
@@ -84,31 +86,47 @@ type captureStateKey struct{}
 
 // captureState is what the capture keeps between the request path and the
 // analysis after the response: the declared context from the headers, for
-// the body fields read later (applyDeclaredBody), and the request body as
-// the client sent it when a native chain hook rewrote it (noteClientBody).
+// the body fields read later (applyDeclaredBody), and the resource ids a
+// native chain hook unwrapped in the request (noteUnwrappedRef).
 type captureState struct {
-	declared   declared.Result
-	clientBody []byte
+	declared declared.Result
+	// unwrapped pairs each vendor id the chain hook put in the request with
+	// the wrapped id the client sent.
+	unwrapped []unwrappedRef
 }
 
-// noteClientBody keeps the request body as the client sent it, before a
-// native chain hook unwrapped its resource references, so the capture reads
-// the client's ids (previous_response_id, conversation): the same id space
-// as the response ids it reads, wrapped, from the response the client got
-// (jyx.147). Called on the request path, before the analysis starts.
-func noteClientBody(ctx context.Context, body []byte) {
+type unwrappedRef struct{ wrapped, vendor string }
+
+// noteUnwrappedRef records that a native chain hook replaced the client's
+// wrapped resource id with the vendor's. Called on the request path, before
+// the analysis starts.
+func noteUnwrappedRef(ctx context.Context, wrapped, vendor string) {
 	if st, _ := ctx.Value(captureStateKey{}).(*captureState); st != nil && agenttrace.From(ctx) != nil {
-		st.clientBody = body
+		st.unwrapped = append(st.unwrapped, unwrappedRef{wrapped: wrapped, vendor: vendor})
 	}
 }
 
-// captureRequestBody is the request body the capture reads: the client's,
-// when a chain hook rewrote what went upstream, else reqBody.
+// captureRequestBody is the request body the capture reads: the body the
+// filters let through (what went upstream, never what a redacting filter
+// removed), with each resource id a native chain hook unwrapped put back
+// the way the client sent it. The capture then reads a Responses chain in
+// one id space, the client's: the response ids it reads from the response
+// the client got are wrapped too, so R3 links them (jyx.147, jyx.154).
 func captureRequestBody(ctx context.Context, reqBody []byte) []byte {
-	if st, _ := ctx.Value(captureStateKey{}).(*captureState); st != nil && st.clientBody != nil {
-		return st.clientBody
+	st, _ := ctx.Value(captureStateKey{}).(*captureState)
+	if st == nil || len(st.unwrapped) == 0 {
+		return reqBody
 	}
-	return reqBody
+	out := reqBody
+	for _, ref := range st.unwrapped {
+		if ref.vendor == "" || ref.wrapped == "" {
+			continue
+		}
+		vendor, _ := json.Marshal(ref.vendor)
+		wrapped, _ := json.Marshal(ref.wrapped)
+		out = bytes.ReplaceAll(out, vendor, wrapped)
+	}
+	return out
 }
 
 // applyDeclaredBody adds an LLM request body's declared fields (§4.2

@@ -156,6 +156,7 @@ func (ch *nativeChain) prepare(w http.ResponseWriter, r *http.Request) bool {
 		if err := rewriteRef(obj, ref, func(wrapped string) (string, error) {
 			if v, ok := c.unwrapID(rt, wrapped); ok {
 				changed = true
+				noteUnwrappedRef(r.Context(), wrapped, v)
 				return v, nil
 			}
 			return "", errNativeRef
@@ -167,7 +168,6 @@ func (ch *nativeChain) prepare(w http.ResponseWriter, r *http.Request) bool {
 	if !changed {
 		return true
 	}
-	noteClientBody(r.Context(), body)
 	out, err := json.Marshal(obj)
 	if err != nil {
 		ch.fail(w, http.StatusInternalServerError, nativeErrAPI, "failed to encode request body")
