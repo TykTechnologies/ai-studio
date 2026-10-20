@@ -183,6 +183,11 @@ func runResponseFilters(
 		}
 	}
 
+	// The proxy's handlers keep the App, not its id, in the context.
+	if app, ok := r.Context().Value("app").(*models.App); ok && appID == 0 && app != nil {
+		appID = int64(app.ID)
+	}
+
 	// Build script input for response context
 	scriptInput := &scripting.ScriptInput{
 		RawInput:   responseText,
@@ -190,9 +195,10 @@ func runResponseFilters(
 		VendorName: string(llm.Vendor),
 		ModelName:  modelName,
 		Context: map[string]interface{}{
-			"llm_id":     int64(llm.ID),
-			"app_id":     appID,
-			"request_id": r.Header.Get("X-Request-ID"),
+			"llm_id":          int64(llm.ID),
+			"app_id":          appID,
+			"request_id":      filterRequestID(r),
+			"dont_log_bodies": llm.DontLogBodies,
 		},
 		IsChat:        false,
 		IsResponse:    true,

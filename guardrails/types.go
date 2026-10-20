@@ -219,6 +219,19 @@ type Finding struct {
 	SegmentIndex int `json:"segment_index"`
 	// Span locates the finding inside the segment when the provider knows it.
 	Span *Span `json:"span,omitempty"`
+	// Evidence is set by the filter runner from the text the provider was
+	// sent, never by a provider: it is not part of the wire format.
+	Evidence *FindingEvidence `json:"-"`
+}
+
+// FindingEvidence is what a compliance event may say about a finding's text.
+type FindingEvidence struct {
+	// SHA256 is the hex SHA-256 of the exact text the provider was sent (the
+	// segment, or the piece of it a long segment was split into).
+	SHA256 string
+	// Excerpt is a masked excerpt of that text; empty unless the filter's
+	// evidence.excerpt is on.
+	Excerpt string
 }
 
 // Verdict is a provider's answer.

@@ -163,6 +163,11 @@ const FilterDetails = () => {
                 (config.on_detect === "quarantine" || (scansToolResults(config) && effectiveToolAction(config) === "quarantine")) &&
                 row("Quarantine placeholder", config.quarantine?.placeholder || DEFAULT_QUARANTINE_PLACEHOLDER)}
               {!attrs.response_filter && config.cache === false && row("Verdict cache", "Off")}
+              {config.evidence?.excerpt &&
+                row(
+                  "Flagged text in compliance events",
+                  `Masked excerpt of up to ${config.evidence.excerpt_chars || 200} characters`
+                )}
               {!attrs.response_filter && config.provider !== "builtin" && config.budget &&
                 Object.keys(config.budget).length > 0 &&
                 row(

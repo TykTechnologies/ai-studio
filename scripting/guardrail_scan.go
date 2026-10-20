@@ -185,6 +185,9 @@ type scanJob struct {
 	// abandons count towards the breaker, since a sender can make a large
 	// run slow.
 	small bool
+	// excerptChars is the length of the masked excerpt each finding's
+	// evidence carries; 0 for none (evidence.excerpt off, or not allowed).
+	excerptChars int
 
 	res scanResult
 	// pieces holds each segment's pieces; rewrites the rewritten text of
@@ -717,6 +720,18 @@ func failureReason(budget context.Context, r callResult, small, request, local b
 	return unscannedProviderError
 }
 
+// evidence is what a finding's compliance event may say about the piece of
+// text the provider flagged: the piece's SHA-256 (the text exactly as sent,
+// which providers that log by hash key their records on) and, when the
+// filter asks for it, a masked excerpt around span (piece-relative).
+func (j *scanJob) evidence(text string, span *guardrails.Span) *guardrails.FindingEvidence {
+	ev := &guardrails.FindingEvidence{SHA256: guardrails.TextSHA256(text)}
+	if j.excerptChars > 0 {
+		ev.Excerpt, _ = guardrails.Excerpt(text, span, j.excerptChars)
+	}
+	return ev
+}
+
 // addVerdict maps one call's findings and rewrites onto the run's segments.
 // A finding that names no piece of the call (a verdict on the call as a
 // whole, or an index the provider got wrong) applies to every segment in the
@@ -728,6 +743,9 @@ func (j *scanJob) addVerdict(c call, v guardrails.Verdict) {
 		findings = []guardrails.Finding{{Detector: "flagged", Category: guardrails.CategoryOther, Label: "Flagged by provider", Score: 1, Severity: "warning", SegmentIndex: -1}}
 	}
 	for _, f := range findings {
+		if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
+			f.Evidence = j.evidence(c[f.SegmentIndex].text, f.Span)
+		}
 		f.Span = nil // piece-relative; meaningless on the whole segment
 		if f.SegmentIndex < 0 || f.SegmentIndex >= len(c) {
 			for _, parent := range parents(c) {
@@ -836,6 +854,7 @@ func (j *scanJob) scanSeams(ctx context.Context, todo []int, pieceMax int) {
 		for _, f := range r.verdict.Findings {
 			if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
 				flagged[c[f.SegmentIndex].parent] = true
+				f.Evidence = j.evidence(c[f.SegmentIndex].text, f.Span)
 				f.Span = nil
 				f.SegmentIndex = c[f.SegmentIndex].parent
 				j.res.findings = append(j.res.findings, f)
