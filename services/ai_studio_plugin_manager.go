@@ -208,56 +208,15 @@ type AIStudioPluginClient struct {
 	eventServer *PluginEventServer // Reference to plugin event server for pub/sub
 }
 
-// SetupServiceBroker creates a long-lived brokered server for AI Studio services,
-// serving plugin pluginID: its calls carry that ID and are checked against its
-// approved scopes. Returns the broker ID that the plugin can use to dial back
-// to host services.
+// SetupServiceBroker serves AI Studio services to plugin pluginID on a fresh
+// broker ID for one call (an agent session): its calls carry that ID and are
+// checked against its approved scopes. The server is stopped once the
+// plugin can no longer connect to it, unless it did (startCallBroker).
 func (c *AIStudioPluginClient) SetupServiceBroker(pluginID uint) (uint32, error) {
 	if c.broker == nil || c.service == nil {
 		return 0, fmt.Errorf("broker or service not available")
 	}
-
-	// Allocate broker ID and start brokered server
-	brokerID := c.broker.NextId()
-
-	log.Debug().
-		Uint32("broker_id", brokerID).
-		Bool("has_event_server", c.eventServer != nil).
-		Msg("Setting up long-lived brokered server for AI Studio service API access")
-
-	// Capture event server reference for closure
-	evtServer := c.eventServer
-
-	// Start brokered server with AI Studio management services
-	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, c.service)...)
-
-		// Register AI Studio management services on brokered server
-		// Use factory function to avoid circular import (set by grpc package)
-		if NewAIStudioManagementServerFunc != nil {
-			aiStudioServer := NewAIStudioManagementServerFunc(c.service)
-			if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-				mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-				log.Debug().
-					Uint32("broker_id", brokerID).
-					Msg("AI Studio management services registered on long-lived brokered server")
-			}
-		} else {
-			log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
-		}
-
-		// Register plugin event service if available
-		if evtServer != nil {
-			eventpb.RegisterPluginEventServiceServer(s, evtServer)
-			log.Debug().
-				Uint32("broker_id", brokerID).
-				Msg("Plugin event service registered on long-lived brokered server")
-		}
-
-		return s
-	})
-
-	return brokerID, nil
+	return c.startCallBroker(pluginID, "agent session"), nil
 }
 
 // Delegate all PluginServiceClient methods to the plugin stub (with correct signatures)
@@ -2088,50 +2047,12 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 	var serviceBrokerID uint32
 	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
 		if clientWrapper.broker != nil && clientWrapper.service != nil {
-			brokerID := clientWrapper.broker.NextId()
-
+			brokerID := clientWrapper.startCallBroker(pluginID, "scheduled task")
 			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("schedule_id", scheduleProto.Id).
 				Uint32("broker_id", brokerID).
-				Msg("Setting up broker for scheduled task execution")
-
-			// Start brokered server for this scheduled task
-			serverReady := make(chan struct{})
-			go func() {
-				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// The plugin's calls carry its ID and are checked against its
-					// approved scopes.
-					s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, clientWrapper.service)...)
-
-					// Register AI Studio management services
-					if NewAIStudioManagementServerFunc != nil {
-						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
-						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-							log.Debug().
-								Uint32("broker_id", brokerID).
-								Uint("plugin_id", pluginID).
-								Msg("AI Studio services registered for scheduled task")
-						}
-					}
-
-					// Register plugin event service if available (for pub/sub support)
-					if clientWrapper.eventServer != nil {
-						eventpb.RegisterPluginEventServiceServer(s, clientWrapper.eventServer)
-						log.Debug().
-							Uint32("broker_id", brokerID).
-							Uint("plugin_id", pluginID).
-							Msg("Plugin event service registered for scheduled task")
-					}
-
-					close(serverReady)
-					return s
-				})
-			}()
-
-			waitBrokeredServer(serverReady, brokerID, pluginID, "scheduled task")
-
+				Msg("Set up broker for scheduled task execution")
 			serviceBrokerID = brokerID
 		}
 	}
@@ -2216,50 +2137,12 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 	var serviceBrokerID uint32
 	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
 		if clientWrapper.broker != nil && clientWrapper.service != nil {
-			brokerID := clientWrapper.broker.NextId()
-
+			brokerID := clientWrapper.startCallBroker(pluginID, "edge payload")
 			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("edge_id", payload.EdgeId).
 				Uint32("broker_id", brokerID).
-				Msg("Setting up broker for edge payload routing")
-
-			// Start brokered server for this edge payload call
-			serverReady := make(chan struct{})
-			go func() {
-				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// The plugin's calls carry its ID and are checked against its
-					// approved scopes.
-					s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, clientWrapper.service)...)
-
-					// Register AI Studio management services
-					if NewAIStudioManagementServerFunc != nil {
-						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
-						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-							log.Debug().
-								Uint32("broker_id", brokerID).
-								Uint("plugin_id", pluginID).
-								Msg("AI Studio services registered for edge payload routing")
-						}
-					}
-
-					// Register plugin event service if available (for pub/sub support)
-					if clientWrapper.eventServer != nil {
-						eventpb.RegisterPluginEventServiceServer(s, clientWrapper.eventServer)
-						log.Debug().
-							Uint32("broker_id", brokerID).
-							Uint("plugin_id", pluginID).
-							Msg("Plugin event service registered for edge payload routing")
-					}
-
-					close(serverReady)
-					return s
-				})
-			}()
-
-			waitBrokeredServer(serverReady, brokerID, pluginID, "edge payload")
-
+				Msg("Set up broker for edge payload routing")
 			serviceBrokerID = brokerID
 		}
 	}
