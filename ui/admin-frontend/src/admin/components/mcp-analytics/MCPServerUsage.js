@@ -50,7 +50,7 @@ export const StatTile = ({ label, value, testId }) => (
 
 const toolColumns = [
   { field: "name", headerName: "Name", renderCell: (r) => r.name },
-  { field: "primitive_type", headerName: "Type", renderCell: (r) => r.primitiveType },
+  { field: "primitive_type", headerName: "Type", renderCell: (r) => r.primitiveType || "—" },
   { field: "calls", headerName: "Calls", align: "right", renderCell: (r) => formatCount(r.calls) },
   { field: "error_rate", headerName: "Error rate", align: "right", renderCell: (r) => formatPercent(r.errorRate) },
   { field: "avg_ms", headerName: "Avg latency", align: "right", renderCell: (r) => formatMs(r.avgMs) },

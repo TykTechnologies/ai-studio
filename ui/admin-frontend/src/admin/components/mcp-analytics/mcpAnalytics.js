@@ -46,6 +46,30 @@ export const mapTimeseries = (ts) =>
     p95Ms: num(p.p95_ms),
   }));
 
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+// fillBuckets spreads points over every UTC bucket of the range: the API
+// returns only buckets with calls, which would leave a 30-day chart as one
+// floating dot. Missing buckets get zero calls and no latency (a gap).
+export const fillBuckets = (points, { startDate, endDate }, interval) => {
+  const step = interval === "hour" ? HOUR_MS : DAY_MS;
+  const start = Date.parse(`${startDate}T00:00:00Z`);
+  const end = Date.parse(`${endDate}T00:00:00Z`) + DAY_MS;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || (end - start) / step > 2000) return points;
+  const byTime = new Map(points.map((p) => [Date.parse(p.bucket), p]));
+  const out = [];
+  for (let t = start; t < end; t += step) {
+    out.push(byTime.get(t) || { bucket: new Date(t).toISOString(), calls: 0, errors: 0, p50Ms: null, p95Ms: null });
+  }
+  // Keep any point that does not sit on a bucket boundary rather than drop it.
+  points.forEach((p) => {
+    const t = Date.parse(p.bucket);
+    if ((t - start) % step !== 0 || t < start || t >= end) out.push(p);
+  });
+  return out.sort((a, b) => Date.parse(a.bucket) - Date.parse(b.bucket));
+};
+
 export const mapToolRow = (r) => ({
   id: `${r.primitive_type || ""}:${r.primitive_name || ""}`,
   primitiveType: r.primitive_type || "",
@@ -105,14 +129,13 @@ const pagedRows = (body, mapRow) => {
 export const fetchServerSummary = async (client, serverId, range) =>
   mapSummary((await client.get(`${MCP_ANALYTICS_BASE}/servers/${serverId}/summary`, { params: rangeParams(range) })).data);
 
-export const fetchServerTimeseries = async (client, serverId, range) =>
-  mapTimeseries(
-    (
-      await client.get(`${MCP_ANALYTICS_BASE}/servers/${serverId}/timeseries`, {
-        params: { ...rangeParams(range), interval: intervalFor(range.startDate, range.endDate) },
-      })
-    ).data,
-  );
+export const fetchServerTimeseries = async (client, serverId, range) => {
+  const interval = intervalFor(range.startDate, range.endDate);
+  const res = await client.get(`${MCP_ANALYTICS_BASE}/servers/${serverId}/timeseries`, {
+    params: { ...rangeParams(range), interval },
+  });
+  return fillBuckets(mapTimeseries(res.data), range, interval);
+};
 
 // query is useListQuery's queryParams: page, page_size, search, sort.
 export const fetchServerTools = async (client, serverId, range, query = { page: 1, page_size: 10 }) =>

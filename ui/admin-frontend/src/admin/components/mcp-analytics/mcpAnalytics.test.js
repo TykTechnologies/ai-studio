@@ -6,6 +6,7 @@ import {
   mapServerRow,
   mapOverview,
   intervalFor,
+  fillBuckets,
   fetchServerTools,
   fetchAppServers,
   adminAppPath,
@@ -60,6 +61,22 @@ describe("mcpAnalytics mappers", () => {
     const o = mapOverview({ calls: 10, errors: 1, top_tools: [{ mcp_server_id: 4, primitive_name: "x", calls: 6 }] });
     expect(o.errorRate).toBeCloseTo(0.1);
     expect(o.topTools[0]).toMatchObject({ id: "4:x", serverName: "MCP server 4", calls: 6 });
+  });
+
+  it("fills every bucket of the range, keeping the API's points", () => {
+    const pts = [{ bucket: "2026-10-19T00:00:00Z", calls: 5, errors: 1, p50Ms: 2, p95Ms: 7 }];
+    const days = fillBuckets(pts, { startDate: "2026-10-18", endDate: "2026-10-20" }, "day");
+    expect(days.map((p) => p.calls)).toEqual([0, 5, 0]);
+    expect(days[1]).toBe(pts[0]);
+    expect(days[0].p95Ms).toBeNull();
+
+    const hours = fillBuckets([{ bucket: "2026-10-20T09:00:00Z", calls: 2, errors: 0 }], { startDate: "2026-10-20", endDate: "2026-10-20" }, "hour");
+    expect(hours).toHaveLength(24);
+    expect(hours[9].calls).toBe(2);
+
+    // An off-boundary point is kept, not dropped.
+    const odd = fillBuckets([{ bucket: "2026-10-19T05:30:00Z", calls: 1 }], { startDate: "2026-10-19", endDate: "2026-10-19" }, "day");
+    expect(odd.map((p) => p.calls)).toEqual([0, 1]);
   });
 
   it("picks hourly buckets for short ranges", () => {
