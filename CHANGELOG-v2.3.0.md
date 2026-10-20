@@ -180,7 +180,7 @@ Off by default (`AGENT_TRACING_ENABLED`). The gateway turns the LLM, tool, MCP a
 - **Audited content access.** Content reads need the new `trace-content:read` permission and a working audit trail; without the audit trail, content reads answer 503. Changing any tracing setting needs `traces:write`.
 - **Agent Sessions** in the admin UI: a filterable list, a transcript and a timeline per session, and a find bar. Captured Markdown never loads images or HTML.
 - **Export** as JSON (agent-trace v1 schema) or Markdown, session purge, and end-user erasure.
-- **OpenTelemetry export** of finished turns to any OTLP backend, with Langfuse and Datadog LLM Observability presets, using GenAI semantic convention names (`genai-1.37`). Metadata only; content export is planned. Agent and tracing-health metrics go to Prometheus, and over OTLP to exporters that ask for them.
+- **OpenTelemetry export** of finished turns to any OTLP backend, with Langfuse and Datadog LLM Observability presets, using GenAI semantic convention names (`genai-1.41`, semconv v1.41). Metadata only; content export is planned. Agent and tracing-health metrics go to Prometheus, and over OTLP to exporters that ask for them.
 
 ### Platform and console
 - **`$SECRET/` references in plugin configuration** ([#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A plugin's config fields can name a stored secret, which is resolved for the plugin and stays masked in the config form. Adding one needs `secrets:read`.

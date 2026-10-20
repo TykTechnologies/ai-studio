@@ -202,7 +202,7 @@ All variables are read at start-up. An invalid value keeps the default and logs 
 | `AGENT_TRACING_CORRELATION_KEY_TTL` | `24h` | Lifetime of correlation index entries |
 | `AGENT_TRACING_STORE_SAMPLE_RATE` | `1.0` | Share of sessions stored, decided per session |
 | `AGENT_TRACING_EXPORTERS_FILE` | empty | OTel exporters file; empty means no export |
-| `AGENT_TRACING_EXPORT_SEMCONV_PROFILE` | `genai-1.37` | Attribute mapping profile, or a path to a mapping YAML |
+| `AGENT_TRACING_EXPORT_SEMCONV_PROFILE` | `genai-1.41` | Attribute mapping profile, or a path to a mapping YAML |
 | `AGENT_TRACING_EXPORT_AGENT_SPAN_MODE` | `tyk` | `semconv` names declared agents `invoke_agent {name}` |
 | `AGENT_TRACING_EXPORT_GATEWAY_EVENTS` | `events` | `spans` exports gateway decisions as child spans instead of span events |
 | `AGENT_TRACING_EXPORT_CONTENT` | `none` | Phase 2: `reference` and `inline` are not built yet. They log a warning and export metadata only. |
@@ -495,7 +495,7 @@ Tyk attributes use the `tyk.` prefix. Examples: `tyk.app.id`, `tyk.app.name`, `t
 
 <!-- BEGIN GENERATED: agent-tracing OTel attributes (make agent-tracing-docs) -->
 
-Profile `genai-1.37` (version 1, schema `https://opentelemetry.io/schemas/1.37.0`).
+Profile `genai-1.41` (version 1, schema `https://opentelemetry.io/schemas/1.41.0`).
 
 #### Span attributes
 
@@ -504,7 +504,7 @@ Profile `genai-1.37` (version 1, schema `https://opentelemetry.io/schemas/1.37.0
 | `agent_id` | `gen_ai.agent.id` | no |
 | `agent_name` | `gen_ai.agent.name` | no |
 | `cache_read_tokens` | `gen_ai.usage.cache_read.input_tokens` | no |
-| `cache_write_tokens` | `gen_ai.usage.cache_write.input_tokens` | no |
+| `cache_write_tokens` | `gen_ai.usage.cache_creation.input_tokens` | no |
 | `conversation_id` | `gen_ai.conversation.id` | no |
 | `data_source_id` | `gen_ai.data_source.id` | no |
 | `finish_reasons` | `gen_ai.response.finish_reasons` | no |
@@ -584,7 +584,6 @@ A stored attribute under `gen_ai.*` or `mcp.*` is exported only if it is listed 
 - `gen_ai.request.max_tokens`
 - `gen_ai.request.model`
 - `gen_ai.request.presence_penalty`
-- `gen_ai.request.previous_response.id`
 - `gen_ai.request.seed`
 - `gen_ai.request.stop_sequences`
 - `gen_ai.request.stream`
@@ -603,8 +602,8 @@ A stored attribute under `gen_ai.*` or `mcp.*` is exported only if it is listed 
 - `gen_ai.tool.description`
 - `gen_ai.tool.name`
 - `gen_ai.tool.type`
+- `gen_ai.usage.cache_creation.input_tokens`
 - `gen_ai.usage.cache_read.input_tokens`
-- `gen_ai.usage.cache_write.input_tokens`
 - `gen_ai.usage.input_tokens`
 - `gen_ai.usage.output_tokens`
 - `gen_ai.usage.reasoning.output_tokens`

@@ -26,7 +26,7 @@ func TestAgentTracingConfigDefaults(t *testing.T) {
 		cfg.TurnIdleTimeout != 5*time.Minute || cfg.SessionIdleTimeout != 30*time.Minute ||
 		cfg.ToolMatchWindow != 300*time.Second || cfg.MetadataRetentionDays != 30 || cfg.PayloadRetentionDays != 7 ||
 		cfg.CorrelationKeyTTL != 24*time.Hour || cfg.StoreSampleRate != 1.0 || cfg.ExportContent != "none" ||
-		cfg.ExportSemconvProfile != "genai-1.37" || !cfg.PropagateLLMProviders || cfg.ForwardTykHeaders ||
+		cfg.ExportSemconvProfile != "genai-1.41" || !cfg.PropagateLLMProviders || cfg.ForwardTykHeaders ||
 		!reflect.DeepEqual(cfg.BaggageAllowlist, []string{"session.id"}) ||
 		!reflect.DeepEqual(cfg.HarnessSessionHeaders, []string{"claude_code", "codex_cli", "opencode"}) {
 		t.Fatalf("unexpected defaults: %+v", cfg)

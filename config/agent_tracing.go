@@ -161,7 +161,7 @@ func DefaultAgentTracingConfig() AgentTracingConfig {
 
 		StoreSampleRate: 1.0,
 
-		ExportSemconvProfile:             "genai-1.37",
+		ExportSemconvProfile:             "genai-1.41",
 		ExportAgentSpanMode:              "tyk",
 		ExportGatewayEvents:              "events",
 		ExportContent:                    "none",

@@ -114,7 +114,7 @@ Also recorded:
 ### OTel export and metrics (ENT, `otelexport`)
 
 - **Worker.** Exports settled turns under lease `agent_trace_export`, poll 5 s, 100 turns per pass. `traces.exported_at` marks turns already sent; spans that arrive later are stored but not resent.
-- **Attribute names** all come from `mappings/genai-1.37.yaml`. The docs table is generated from it (`make agent-tracing-docs`) and checked in CI.
+- **Attribute names** all come from `mappings/genai-1.41.yaml`. The docs table is generated from it (`make agent-tracing-docs`) and checked in CI.
 - **One call, one span.** The assembled LLM span is exported under the gateway span id. While export is active, the proxy leaves out its own live span for captured requests. Hub replicas set this when the worker starts; edges get it through `assembled_export_active` (jyx.90).
 - **Metrics.**
   - Core instruments: `metrics/agenttracing.go` and `metrics/agentmetrics.go`.
