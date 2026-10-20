@@ -29,7 +29,7 @@ const llm1 = {
 const search = {
   span_id: "0000000000000002", trace_id: TRACE, parent_span_id: llm1.span_id, parent_confidence: "exact", parent_rule: "tool_call_id",
   kind: "tool_call", name: "tools/call search", tool_name: "search", status: "ok", start_time: at(1.1), end_time: at(1.9),
-  content_state: "full", attributes: { "tyk.mcp.server": "crm" },
+  content_state: "full", attribution: { via: "tyk_gateway", in_catalogue: false, catalogue_type: "mcp_server", server: "crm" },
   parts: [
     { part: "tool_args", content_state: "full", media_type: "application/json", original_bytes: 30, content: '{"order":42,"verbose":true,"filter":{"x":1}}' },
     { part: "tool_result", content_state: "full", media_type: "application/json", original_bytes: 2355, content: '{"a":1,"b":2,"c":3}' },
@@ -43,7 +43,7 @@ const lookup = {
 const deny = {
   span_id: "0000000000000004", trace_id: TRACE, parent_span_id: llm1.span_id, kind: "gateway_event", name: "guardrail", status: "ok",
   start_time: at(0.5), end_time: at(0.5), content_state: "metadata",
-  attributes: { "tyk.event": "guardrail", "tyk.event.outcome": "denied", "tyk.guardrail.name": "pii-filter" },
+  gateway_event: { type: "guardrail", outcome: "denied", name: "pii-filter" },
 };
 const llm2 = {
   span_id: "0000000000000005", trace_id: TRACE, kind: "llm_inference", name: "chat", status: "ok",
@@ -111,11 +111,16 @@ describe("transcript model", () => {
   it("words gateway events in plain language", () => {
     expect(gatewayChip(deny)).toEqual({ text: "Blocked by guardrail pii-filter", severity: "error" });
     expect(
-      gatewayChip({ attributes: { "tyk.event": "fallback", "tyk.event.outcome": "modified", "tyk.fallback.from_model": "claude-x", "tyk.fallback.to_model": "gpt-y", "http.response.status_code": 503 } }),
+      gatewayChip({ gateway_event: { type: "fallback", outcome: "modified", from_model: "claude-x", to_model: "gpt-y", reason: "503" } }),
     ).toEqual({ text: "Fallback: claude-x → gpt-y after 503", severity: "warning" });
-    expect(gatewayChip({ attributes: { "tyk.event": "retry", "tyk.attempt.number": 2, "tyk.attempt.total": 3 } }).text).toBe("Retry 2/3");
-    expect(gatewayChip({ attributes: { "tyk.event": "budget", "tyk.budget.id": "team-a", "tyk.budget.used_pct": 92 } }).text).toBe("Budget team-a at 92%");
-    expect(gatewayChip({ attributes: { "tyk.event": "rate_limit", "tyk.ratelimit.wait_ms": 1200 } }).text).toBe("Rate limited — 1.2 s wait");
+    expect(gatewayChip({ gateway_event: { type: "retry", attempt_number: 2, attempt_total: 3 } }).text).toBe("Retry 2/3");
+    expect(gatewayChip({ gateway_event: { type: "attempt", attempt_number: 1, attempt_total: 2, provider: "openai", reason: "429" } }).text).toBe(
+      "Attempt 1/2 (openai) after 429",
+    );
+    expect(gatewayChip({ gateway_event: { type: "budget", budget_id: "team-a", budget_used_pct: 92 } }).text).toBe("Budget team-a at 92%");
+    expect(gatewayChip({ gateway_event: { type: "rate_limit", wait_ms: 1200 } }).text).toBe("Rate limited — 1.2 s wait");
+    // Unknown types and outcomes render neutrally, never fail.
+    expect(gatewayChip({ name: "x", gateway_event: { type: "overload", outcome: "shed" } })).toEqual({ text: "overload shed", severity: "default" });
   });
 });
 
@@ -139,6 +144,8 @@ describe("TranscriptView", () => {
     const [searchCard, lookupCard] = within(group).getAllByTestId("tool-card");
     expect(searchCard).toHaveTextContent("search(order: 42, verbose: true)");
     expect(searchCard).toHaveTextContent("MCP · crm");
+    expect(within(searchCard).getByTestId("via-gateway-badge")).toBeInTheDocument();
+    expect(within(searchCard).getByTestId("not-in-catalogue-badge")).toBeInTheDocument();
     expect(within(searchCard).getByTestId("result-preview")).toHaveTextContent("JSON object, 3 keys, 2.3 KB");
     expect(within(group).getByTestId("next-connector")).toHaveTextContent("next: LLM call gpt-4.1");
     expect(within(lookupCard).getByTestId("inferred-badge")).toHaveTextContent("inferred");

@@ -18,7 +18,7 @@ import {
   rowIndexOf,
   stepLatency,
 } from "./transcriptModel";
-import { attrsOf, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
+import { attributionOf, attrsOf, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
 import MarkdownMessage from "../../../portal/components/chat/MarkdownMessage";
@@ -156,12 +156,16 @@ const NextConnector = ({ tool, next }) => {
 const ToolCard = ({ item }) => {
   const { resources } = useSessionDetail();
   const { span, events, next } = item;
-  const a = attrsOf(span);
+  const attr = attributionOf(span);
   const style = confidenceStyle(span.parent_confidence);
   const args = partText(span, "tool_args");
   const result = partText(span, "tool_result");
   const resultPart = partOf(span, "tool_result");
-  const clientSide = span.kind === "inferred_client_tool";
+  const clientSide = span.kind === "inferred_client_tool" || attr.via === "client";
+  const catalogueName =
+    attr.catalogue_type && attr.catalogue_id
+      ? resourceName(resources, { resource_type: attr.catalogue_type, resource_id: attr.catalogue_id })
+      : "";
   const noResult = !span.end_time || (clientSide && !resultPart);
   return (
     <Box sx={{ mb: 0.5 }}>
@@ -188,9 +192,17 @@ const ToolCard = ({ item }) => {
               {formatDuration(stepLatency(span))}
             </Typography>
           )}
-          {a["tyk.mcp.server"] && <Chip size="small" variant="outlined" label={`MCP · ${a["tyk.mcp.server"]}`} />}
-          {span.kind === "datasource_call" && (
-            <Chip size="small" variant="outlined" label={`datasource · ${resourceName(resources, span) || span.name}`} />
+          {(attr.server || attr.catalogue_type === "mcp_server") && (
+            <Chip size="small" variant="outlined" label={`MCP · ${attr.server || catalogueName}`} data-testid="mcp-badge" />
+          )}
+          {(span.kind === "datasource_call" || attr.catalogue_type === "datasource") && (
+            <Chip size="small" variant="outlined" label={`datasource · ${catalogueName || resourceName(resources, span) || span.name}`} />
+          )}
+          {attr.via === "tyk_gateway" && <Chip size="small" variant="outlined" label="via Tyk Gateway" data-testid="via-gateway-badge" />}
+          {attr.in_catalogue === false && (
+            <Tooltip title="The model called a tool that is not in this App's catalogue">
+              <Chip size="small" color="warning" variant="outlined" label="not in App catalogue" data-testid="not-in-catalogue-badge" />
+            </Tooltip>
           )}
           {clientSide && <Chip size="small" variant="outlined" label="client-side (inferred)" data-testid="client-side-badge" />}
           {noResult && <Chip size="small" variant="outlined" label="no result observed" />}

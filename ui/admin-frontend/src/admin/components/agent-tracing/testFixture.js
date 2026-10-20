@@ -36,7 +36,7 @@ export const spans = [
   {
     span_id: ids.deny, trace_id: TRACE, parent_span_id: ids.llm1, kind: "gateway_event", name: "guardrail pii-filter",
     status: "ok", start_time: at(1.1), end_time: at(1.1), inferred: false, content_state: "metadata",
-    attributes: { "tyk.event": "guardrail", "tyk.event.outcome": "denied" },
+    gateway_event: { type: "guardrail", outcome: "denied", name: "pii-filter" },
   },
   {
     span_id: ids.llm2, trace_id: TRACE, kind: "llm_inference", name: "chat gpt-4.1", status: "error", error_type: "upstream_503",

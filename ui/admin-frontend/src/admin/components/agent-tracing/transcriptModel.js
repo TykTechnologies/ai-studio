@@ -1,4 +1,4 @@
-import { TOOL_KINDS, attrsOf, durationMs, eventOutcome, ms, spanTimes } from "./spanModel";
+import { TOOL_KINDS, durationMs, gatewayEventOf, ms, spanTimes } from "./spanModel";
 import { formatDuration } from "./sessionFilters";
 
 // The Transcript ("Trajectory") view model (spec §6.2 View 1): a session's
@@ -78,43 +78,42 @@ export const confidenceStyle = (confidence) => {
 const DENIED = new Set(["denied", "exceeded"]);
 const MODIFIED = new Set(["modified", "redacted", "warned"]);
 
-/** Plain-language text and severity of a gateway event chip (spec §6.2). */
+/**
+ * Plain-language text and severity of a gateway event chip (spec §6.2),
+ * from span.gateway_event. Unknown types and outcomes render neutrally.
+ */
 export const gatewayChip = (s) => {
-  const a = attrsOf(s);
-  const outcome = eventOutcome(s);
-  const type = a["tyk.event"] || "";
+  const g = gatewayEventOf(s);
+  const outcome = g.outcome || "";
+  const name = g.name || "";
   let text;
-  switch (type) {
+  switch (g.type) {
     case "guardrail":
-      text =
-        outcome === "denied"
-          ? `Blocked by guardrail ${a["tyk.guardrail.name"] || ""}`.trim()
-          : `Guardrail ${a["tyk.guardrail.name"] || ""} ${outcome || "checked"}`.replace(/\s+/g, " ").trim();
+      text = outcome === "denied" ? `Blocked by guardrail ${name}` : `Guardrail ${name} ${outcome || "checked"}`;
       break;
     case "fallback":
-      text = `Fallback: ${a["tyk.fallback.from_model"] || "?"} → ${a["tyk.fallback.to_model"] || "?"}${a["http.response.status_code"] ? ` after ${a["http.response.status_code"]}` : ""}`;
+      text = `Fallback: ${g.from_model || "?"} → ${g.to_model || "?"}${g.reason ? ` after ${g.reason}` : ""}`;
       break;
     case "retry":
     case "attempt":
-      text = `Retry ${a["tyk.attempt.number"] || "?"}${a["tyk.attempt.total"] ? `/${a["tyk.attempt.total"]}` : ""}`;
+      text = `${g.type === "retry" ? "Retry" : "Attempt"} ${g.attempt_number ?? "?"}${g.attempt_total ? `/${g.attempt_total}` : ""}${g.provider ? ` (${g.provider})` : ""}${g.reason ? ` after ${g.reason}` : ""}`;
       break;
-    case "budget": {
-      const pct = a["tyk.budget.used_pct"];
-      text = `Budget ${a["tyk.budget.id"] || ""}${pct != null ? ` at ${Math.round(pct)}%` : ""} ${outcome === "exceeded" ? "exceeded" : ""}`
-        .replace(/\s+/g, " ")
-        .trim();
+    case "budget":
+      text = `Budget ${g.budget_id || ""}${g.budget_used_pct != null ? ` at ${Math.round(g.budget_used_pct)}%` : ""}${outcome === "exceeded" ? " exceeded" : ""}`;
       break;
-    }
     case "rate_limit":
-      text = `Rate limited${a["tyk.ratelimit.wait_ms"] != null ? ` — ${formatDuration(a["tyk.ratelimit.wait_ms"])} wait` : ""}`;
+      text = `Rate limited${g.wait_ms != null ? ` — ${formatDuration(g.wait_ms)} wait` : ""}`;
       break;
     case "policy":
-      text = `Policy ${a["tyk.policy.id"] || ""} ${outcome || ""}`.replace(/\s+/g, " ").trim();
+      text = `Policy ${g.policy_id || name} ${outcome}`;
       break;
     default:
-      text = s.name;
+      text = [g.type, name, outcome].filter(Boolean).join(" ") || s.name;
   }
-  return { text, severity: DENIED.has(outcome) ? "error" : MODIFIED.has(outcome) ? "warning" : "default" };
+  return {
+    text: text.replace(/\s+/g, " ").trim(),
+    severity: DENIED.has(outcome) ? "error" : MODIFIED.has(outcome) ? "warning" : "default",
+  };
 };
 
 /** Groups tool spans whose times overlap ("N parallel calls"). */

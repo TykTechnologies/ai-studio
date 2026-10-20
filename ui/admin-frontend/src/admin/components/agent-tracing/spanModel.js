@@ -22,8 +22,17 @@ export const durationMs = (s) => {
 
 export const attrsOf = (s) => (s && s.attributes && typeof s.attributes === "object" ? s.attributes : {});
 
+/**
+ * A gateway event span's details (agent-trace JSON v1 span.gateway_event):
+ * type, outcome and the optional fields of the event.
+ */
+export const gatewayEventOf = (s) => (s && s.gateway_event && typeof s.gateway_event === "object" ? s.gateway_event : {});
+
 /** The gateway event outcome (allowed, denied, modified, ...), if any. */
-export const eventOutcome = (s) => attrsOf(s)["tyk.event.outcome"] || "";
+export const eventOutcome = (s) => gatewayEventOf(s).outcome || "";
+
+/** Where a tool call was executed and how it maps to the App's catalogue (span.attribution). */
+export const attributionOf = (s) => (s && s.attribution && typeof s.attribution === "object" ? s.attribution : {});
 
 export const isProblem = (s) =>
   s.status === "error" || (s.kind === "gateway_event" && PROBLEM_OUTCOMES.has(eventOutcome(s)));

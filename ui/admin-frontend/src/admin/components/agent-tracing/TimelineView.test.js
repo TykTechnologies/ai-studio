@@ -20,7 +20,7 @@ const llm2 = {
   span_id: "0000000000000003", trace_id: B, agent_id: "root", kind: "llm_inference", name: "answer", status: "error", start_time: at(5), end_time: at(6),
   links: [{ type: "caused_by", trace_id: A, span_id: llm1.span_id, confidence: "exact", rule: "tool_call_id" }],
 };
-const deny = { span_id: "0000000000000004", trace_id: B, agent_id: "root", parent_span_id: llm2.span_id, kind: "gateway_event", name: "guardrail", status: "ok", start_time: at(5.5), end_time: at(5.5), attributes: { "tyk.event.outcome": "denied" } };
+const deny = { span_id: "0000000000000004", trace_id: B, agent_id: "root", parent_span_id: llm2.span_id, kind: "gateway_event", name: "guardrail", status: "ok", start_time: at(5.5), end_time: at(5.5), gateway_event: { type: "guardrail", outcome: "denied" } };
 const sub1 = { span_id: "0000000000000005", trace_id: A, agent_id: "research", kind: "llm_inference", name: "search plan", status: "ok", start_time: at(0.5), end_time: at(2) };
 const sub2 = { span_id: "0000000000000006", trace_id: A, agent_id: "research", kind: "tool_call", name: "search", status: "ok", start_time: at(1), end_time: at(1.5) };
 const guess = { span_id: "0000000000000007", trace_id: A, agent_id: "guess", kind: "llm_inference", name: "helper", status: "ok", start_time: at(2), end_time: at(3) };
