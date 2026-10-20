@@ -70,7 +70,7 @@ describe("TykIngestAnalytics", () => {
   it("never shows a plaintext after a reload", async () => {
     serverStatus = {
       has_token: true,
-      token_prefix: "tsi_ab12",
+      token_prefix: "tai_ing_ab12",
       token_created_at: recent(),
       last_batch_at: recent(),
       records_24h: 1234,
@@ -83,7 +83,7 @@ describe("TykIngestAnalytics", () => {
     expect(await screen.findByTestId("ingest-records-24h")).toHaveTextContent("1,234");
     expect(screen.getByTestId("ingest-unknown-api")).toHaveTextContent("2");
     expect(screen.getByTestId("ingest-unattributed")).toHaveTextContent("5");
-    expect(screen.getByTestId("ingest-token-state")).toHaveTextContent("tsi_ab12…");
+    expect(screen.getByTestId("ingest-token-state")).toHaveTextContent("tai_ing_ab12…");
     expect(screen.getByTestId("ingest-unknown-api-hint")).toHaveTextContent("api-x");
     expect(screen.queryByTestId("ingest-plaintext")).not.toBeInTheDocument();
     expect(screen.getByTestId("snippet-http-pump")).toHaveTextContent(`Bearer ${TOKEN_PLACEHOLDER}`);
