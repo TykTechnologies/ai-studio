@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/extract"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 )
 
 const (
@@ -304,6 +305,22 @@ func TestAgentTraceTool_RESTCapture(t *testing.T) {
 	assert.Equal(t, http.StatusOK, ev.HTTPStatus)
 	assert.Equal(t, modelArgsFP(t, `{"body":{"name":"x"}}`), ev.Extracts.ArgsFP)
 	assert.Equal(t, extract.ResultFingerprint(agenttrace.CurrentFingerprinter(), `{"message":"ok"}`), ev.Extracts.ResultFP)
+}
+
+// The REST envelope's headers carry the upstream's credentials; they are not
+// part of the captured arguments.
+func TestAgentTraceTool_RESTArgsLeaveOutHeaders(t *testing.T) {
+	withAgentTracing(t, true)
+	ctx, _ := agenttrace.Begin(context.Background())
+	in := scripting.ToolCallArgs{
+		OperationID: "op",
+		Parameters:  map[string][]string{"id": {"7"}},
+		Headers:     map[string][]string{"Authorization": {"Bearer upstream-secret"}},
+	}
+	c := restToolCapture(ctx, &models.Tool{Name: "t"}, in, nil, http.StatusOK)
+	assert.NotContains(t, string(c.args), "upstream-secret")
+	assert.Contains(t, string(c.args), `"id":["7"]`)
+	assert.Len(t, in.Headers, 1, "the caller's envelope is untouched")
 }
 
 // A REST tool call the upstream fails is an errored tool_call.

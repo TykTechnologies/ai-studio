@@ -264,11 +264,12 @@ func mcpResultText(res *mcp.CallToolResult) []byte {
 }
 
 // restToolCapture describes one REST tool call for captureTool. args are the
-// call's envelope as the client sent it; args_fp is computed over the same
-// arguments in the MCP shim's shape (single-valued parameters as scalars, the
-// payload as body), so a model's tool call matches whichever transport the
-// client used.
+// call's envelope as the client sent it, without its headers (they carry the
+// upstream's credentials); args_fp is computed over the same arguments in the
+// MCP shim's shape (single-valued parameters as scalars, the payload as
+// body), so a model's tool call matches whichever transport the client used.
 func restToolCapture(ctx context.Context, tool *models.Tool, in scripting.ToolCallArgs, result interface{}, status int) toolCapture {
+	in.Headers = nil
 	c := toolCapture{
 		kind:      agenttrace.KindToolCall,
 		resource:  agenttrace.Resource{Type: agenttrace.ResourceTool, ID: uintString(tool.ID), Name: tool.Name},
