@@ -96,6 +96,9 @@ func fullEvent() *Event {
 			MCPSessionID:    "mcp-1",
 			ClientInfo:      "claude-code/2.0",
 			Baggage:         map[string]string{"session.id": "sess-1"},
+			Harness:         "codex_cli",
+			TurnID:          "01a158d5-cbec-7402-855c-dc25520c80b0",
+			SubAgentID:      "a42171bcd11f9f20c",
 		},
 		Extracts: Extracts{
 			ToolCalls:          []ToolCallRequest{{ID: "call_1", Name: "search", ArgsFP: f.Fingerprint([]byte(`{}`)), ArgsUnavailable: true}},

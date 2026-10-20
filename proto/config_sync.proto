@@ -496,6 +496,12 @@ message CaptureDeclaredContextProto {
   string mcp_session_id = 17;
   string client_info = 18;
   map<string, string> baggage = 19;
+  // Coding-harness declarations (bead jyx.52): the turn id a harness
+  // declares (Codex CLI), its sub-agent instance id (Claude Code) and the
+  // harness name (claude_code, codex_cli, opencode).
+  string turn_id = 20;
+  string sub_agent_id = 21;
+  string harness = 22;
 }
 
 message CaptureToolCallProto {

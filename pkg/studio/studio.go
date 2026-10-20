@@ -46,6 +46,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -447,6 +448,7 @@ func New(opts Options) (_ *Studio, err error) {
 	// Baggage reaching LLM and tool upstreams is cut to the allowlist in
 	// every edition (decision Q11).
 	tracing.SetBaggageAllowlist(conf.AgentTracing.BaggageAllowlist)
+	declared.SetForwardTykHeaders(conf.AgentTracing.ForwardTykHeaders)
 	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
 	if agenttrace.Enabled() {
 		// The embedded gateway's captures are staged by the analytics handler.

@@ -269,6 +269,15 @@ type DeclaredContext struct {
 	ClientInfo string
 	// Baggage holds the allowlisted W3C baggage keys (§4.6).
 	Baggage map[string]string
+
+	// Coding-harness declarations (bead jyx.52), client-supplied like the
+	// rest: Harness names the harness recognised (claude_code, codex_cli,
+	// opencode); TurnID is a turn id it declares (Codex CLI), the same for
+	// every request of one user turn; SubAgentID is a sub-agent instance it
+	// declares (Claude Code), empty on the main agent's requests.
+	Harness    string
+	TurnID     string
+	SubAgentID string
 }
 
 // Extracts are the correlation material for one span (§4.4). Ids appear in

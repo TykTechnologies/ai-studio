@@ -142,6 +142,10 @@ func DefaultAgentTracingConfig() AgentTracingConfig {
 		SessionIdleTimeout: 30 * time.Minute,
 		CompatHeaders: []string{"helicone", "portkey", "openrouter", "bifrost", "agent_router",
 			"cloudflare", "agentcore", "mcp_session"},
+		// The coding-harness extractors verified against recorded traffic
+		// (bead jyx.52, testdata/agent_tracing/harness); remove one to switch
+		// it off. Other entries are header names read as a session id.
+		HarnessSessionHeaders:  []string{"claude_code", "codex_cli", "opencode"},
 		DelegationToolPatterns: []string{`^(task|agent|delegate.*|transfer_to_.*|handoff.*|spawn.*|run_?subagent)$`},
 		ToolNamePrefixStrip:    []string{"mcp__{server}__", "{server}__", "{server}."},
 

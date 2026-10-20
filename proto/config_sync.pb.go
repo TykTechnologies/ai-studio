@@ -3372,8 +3372,14 @@ type CaptureDeclaredContextProto struct {
 	McpSessionId    string                 `protobuf:"bytes,17,opt,name=mcp_session_id,json=mcpSessionId,proto3" json:"mcp_session_id,omitempty"`
 	ClientInfo      string                 `protobuf:"bytes,18,opt,name=client_info,json=clientInfo,proto3" json:"client_info,omitempty"`
 	Baggage         map[string]string      `protobuf:"bytes,19,rep,name=baggage,proto3" json:"baggage,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Coding-harness declarations (bead jyx.52): the turn id a harness
+	// declares (Codex CLI), its sub-agent instance id (Claude Code) and the
+	// harness name (claude_code, codex_cli, opencode).
+	TurnId        string `protobuf:"bytes,20,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	SubAgentId    string `protobuf:"bytes,21,opt,name=sub_agent_id,json=subAgentId,proto3" json:"sub_agent_id,omitempty"`
+	Harness       string `protobuf:"bytes,22,opt,name=harness,proto3" json:"harness,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CaptureDeclaredContextProto) Reset() {
@@ -3537,6 +3543,27 @@ func (x *CaptureDeclaredContextProto) GetBaggage() map[string]string {
 		return x.Baggage
 	}
 	return nil
+}
+
+func (x *CaptureDeclaredContextProto) GetTurnId() string {
+	if x != nil {
+		return x.TurnId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetSubAgentId() string {
+	if x != nil {
+		return x.SubAgentId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetHarness() string {
+	if x != nil {
+		return x.Harness
+	}
+	return ""
 }
 
 type CaptureToolCallProto struct {
@@ -4634,7 +4661,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x10reasoning_tokens\x18\x05 \x01(\x03R\x0freasoningTokens\x12\x1f\n" +
 	"\vcost_micros\x18\x06 \x01(\x03R\n" +
 	"costMicros\x12\x1a\n" +
-	"\bcurrency\x18\a \x01(\tR\bcurrency\"\x91\x06\n" +
+	"\bcurrency\x18\a \x01(\tR\bcurrency\"\xe6\x06\n" +
 	"\x1bCaptureDeclaredContextProto\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\fR\atraceId\x12$\n" +
 	"\x0eparent_span_id\x18\x02 \x01(\fR\fparentSpanId\x12\x1f\n" +
@@ -4660,7 +4687,11 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0emcp_session_id\x18\x11 \x01(\tR\fmcpSessionId\x12\x1f\n" +
 	"\vclient_info\x18\x12 \x01(\tR\n" +
 	"clientInfo\x12P\n" +
-	"\abaggage\x18\x13 \x03(\v26.microgateway.CaptureDeclaredContextProto.BaggageEntryR\abaggage\x1a:\n" +
+	"\abaggage\x18\x13 \x03(\v26.microgateway.CaptureDeclaredContextProto.BaggageEntryR\abaggage\x12\x17\n" +
+	"\aturn_id\x18\x14 \x01(\tR\x06turnId\x12 \n" +
+	"\fsub_agent_id\x18\x15 \x01(\tR\n" +
+	"subAgentId\x12\x18\n" +
+	"\aharness\x18\x16 \x01(\tR\aharness\x1a:\n" +
 	"\fBaggageEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"~\n" +

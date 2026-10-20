@@ -204,6 +204,7 @@ func (x *Extractor) Headers(h http.Header, bodyKind string, body []byte) Result 
 		}
 	}
 
+	r.Declared.Harness, r.Declared.TurnID, r.Declared.SubAgentID = r.Harness.Name, r.Harness.TurnID, r.Harness.SubAgentID
 	r.finish()
 	return r
 }

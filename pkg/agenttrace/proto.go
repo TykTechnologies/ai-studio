@@ -166,6 +166,9 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 			MCPSessionID:    d.McpSessionId,
 			ClientInfo:      d.ClientInfo,
 			Baggage:         copyMap(d.Baggage),
+			Harness:         d.Harness,
+			TurnID:          d.TurnId,
+			SubAgentID:      d.SubAgentId,
 		}
 	}
 	if x := p.Extracts; x != nil {
@@ -234,6 +237,9 @@ func declaredToProto(d *DeclaredContext) *pb.CaptureDeclaredContextProto {
 		McpSessionId:    d.MCPSessionID,
 		ClientInfo:      d.ClientInfo,
 		Baggage:         copyMap(d.Baggage),
+		Harness:         d.Harness,
+		TurnId:          d.TurnID,
+		SubAgentId:      d.SubAgentID,
 	}
 }
 
