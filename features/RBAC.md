@@ -88,7 +88,7 @@ Governed metadata on an object is authorised by that object's permission: `PUT /
 | `administrator` | Administrator | `*`. Bindable to users and teams. Cannot bind/unbind Owner. |
 | `editor` | Editor | Everything except: `users`/`groups` beyond read, `roles`, `sso-profiles`, `plugins`/`marketplace` write, delete and publish, `metadata` write, delete and publish, `traces` beyond read, `audit`, `exports`, `proxy-logs`, `chat-history`, `trace-content`. Includes `credentials:*`, `secrets:*` and `publish` on LLMs, tools, data sources, apps, agents and model routers. |
 | `viewer` | Viewer | `read` on every resource except the sensitive ones. |
-| `auditor` | Auditor | Viewer plus `audit`, `compliance`, `proxy-logs`, `chat-history`, `exports`, `trace-content` read. Never credentials or identity provider secrets. |
+| `auditor` | Auditor | Viewer plus `audit`, `compliance`, `proxy-logs`, `chat-history`, `exports` read (trace metadata via `traces`, but not `trace-content`). Never credentials or identity provider secrets. |
 
 Portal/chat-only users hold no binding; `ShowPortal`/`ShowChat` keep governing those surfaces. Operator- or analyst-style roles are a clone of Viewer with a few `execute`/`read` permissions added. Workflow roles are built from `publish`: *LLM Submitter* = `llms:read, llms:write`; *LLM Reviewer* = `llms:read, llms:write, llms:publish`; *Release approver* = `llms:publish` (and the other `*:publish` grants) with no write.
 

@@ -17,8 +17,10 @@ import (
 )
 
 // recordingTracing is an Enterprise-like service that records what the
-// handlers pass it.
+// handlers pass it. The embedded interface (nil) stands in for methods
+// these tests do not reach, so the fake keeps compiling as the service grows.
 type recordingTracing struct {
+	agenttracing.Service
 	err       error
 	sessionQ  agenttracing.SessionQuery
 	spanQ     agenttracing.SpanQuery
@@ -27,6 +29,10 @@ type recordingTracing struct {
 	id        []byte
 	viewer    agenttracing.Viewer
 	calls     int
+	// Content routes (agent_tracing_content_handlers_test.go).
+	payloadQ agenttracing.PayloadQuery
+	meta     agenttracing.AccessMeta
+	endUser  string
 }
 
 func (r *recordingTracing) Start(context.Context) error { return nil }
