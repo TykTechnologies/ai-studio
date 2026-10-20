@@ -4,6 +4,8 @@ import UsedBySection from "../common/UsedBySection";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
+import AppMCPUsage from "../mcp-analytics/AppMCPUsage";
+import { adminAppPath } from "../mcp-analytics/mcpAnalytics";
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 import agentService from "../../services/agentService";
 import { resetAppBudget } from "../../services/appService";
@@ -687,6 +689,8 @@ const AppDetails = () => {
             />
           </Box>
         </Section>
+
+        <AppMCPUsage client={apiClient} path={adminAppPath(id)} startDate={startDate} endDate={endDate} admin />
 
         <Section title="App Information">
           <Grid container spacing={2}>

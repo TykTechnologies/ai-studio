@@ -39,6 +39,8 @@ import pubClient from "../../admin/utils/pubClient";
 import AppStatusChip, { getAppStatusFromApp } from "./AppStatusChip";
 import { Line } from "react-chartjs-2";
 import DateRangePicker from "../../admin/components/common/DateRangePicker";
+import AppMCPUsage from "../../admin/components/mcp-analytics/AppMCPUsage";
+import { portalAppPath } from "../../admin/components/mcp-analytics/mcpAnalytics";
 
 import {
   Chart as ChartJS,
@@ -550,6 +552,8 @@ const AppDetailView = () => {
           }}
         />
       </Box>
+
+      <AppMCPUsage client={pubClient} path={portalAppPath(id)} startDate={startDate} endDate={endDate} />
 
       {/* Main App Details Paper */}
       <Paper sx={{ p: 3, mb: 3 }}>
