@@ -35,7 +35,7 @@ const renderPage = () =>
   );
 
 const spanById = (id) => spans.find((s) => s.span_id === id);
-const row = (id) => screen.queryAllByTestId("span-row").find((r) => r.getAttribute("data-span-id") === id);
+const row = (id) => screen.queryAllByTestId("timeline-bar").find((r) => r.getAttribute("data-span-id") === id);
 
 // CRA resets mock implementations before each test, so they are set here.
 beforeEach(() => {
@@ -62,8 +62,8 @@ beforeEach(() => {
   agentTracingService.search.mockResolvedValue({ matches: [{ span_id: ids.tool1, field: "tool_name", snippet: "web_search" }], total: 1, truncated: false });
 });
 
-// These tests drive the shell through the plain span list, which is view 2
-// until the Timeline (jyx.31) replaces it; the Transcript has its own tests.
+// These tests drive the shell through the Timeline (view 2), whose bars
+// carry the span ids; the Transcript and Timeline have their own tests.
 const loaded = async () => {
   await screen.findByText("refund flow");
   await screen.findByTestId("transcript");
@@ -99,7 +99,7 @@ describe("AgentSessionDetail", () => {
     fireEvent.click(row(ids.tool1));
     const drawer = await screen.findByRole("dialog");
     expect(within(drawer).getByRole("heading", { name: "tools/call web_search" })).toBeInTheDocument();
-    expect(row(ids.tool1)).toHaveAttribute("aria-selected", "true");
+    expect(row(ids.tool1)).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByTestId("selected-marker")).toBeInTheDocument();
     expect(agentTracingService.getSpan).toHaveBeenCalledWith(ids.tool1, 7);
   });
@@ -153,10 +153,10 @@ describe("AgentSessionDetail", () => {
   it("works from the keyboard alone: focus trap in the drawer and focus returned on Esc", async () => {
     renderPage();
     await loaded();
-    const grid = screen.getByRole("grid", { name: "Session spans" });
+    const grid = screen.getByRole("grid", { name: "Timeline" });
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: "j" });
-    await waitFor(() => expect(row(ids.llm1)).toHaveAttribute("aria-selected", "true"));
+    await waitFor(() => expect(row(ids.llm1)).toHaveAttribute("aria-pressed", "true"));
     fireEvent.keyDown(grid, { key: "Enter" });
     // The modal drawer takes focus, and gives it back when it closes.
     const drawer = await screen.findByRole("dialog");
@@ -175,6 +175,6 @@ describe("AgentSessionDetail", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(agentTracingService.search).toHaveBeenCalledWith(SESSION_ID, "web"));
     expect(await screen.findByTestId("find-count")).toHaveTextContent("1 of 1");
-    expect(row(ids.tool1)).toHaveAttribute("aria-selected", "true");
+    expect(row(ids.tool1)).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -12,8 +12,8 @@ import { SessionHeader, SummaryStrip } from "../components/agent-tracing/Session
 import TimelineStrip from "../components/agent-tracing/TimelineStrip";
 import SpanDrawer from "../components/agent-tracing/SpanDrawer";
 import FindBar from "../components/agent-tracing/FindBar";
-import SpanListView from "../components/agent-tracing/SpanListView";
 import TranscriptView from "../components/agent-tracing/TranscriptView";
+import TimelineView from "../components/agent-tracing/TimelineView";
 import { useEdition } from "../context/EditionContext";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 import { P } from "../rbac/permissions";
@@ -26,7 +26,7 @@ import { P } from "../rbac/permissions";
 // Tree (key 3) is Phase 2 and has no tab yet.
 export const VIEWS = [
   { value: "transcript", label: "Transcript", key: "1", Component: TranscriptView },
-  { value: "timeline", label: "Timeline", key: "2", Component: SpanListView },
+  { value: "timeline", label: "Timeline", key: "2", Component: TimelineView },
 ];
 
 const Body = ({ loadingSpans }) => {
