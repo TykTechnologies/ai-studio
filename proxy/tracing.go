@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 )
 
@@ -21,6 +22,12 @@ import (
 // traceparent is extracted regardless, which is what makes the gateway span join
 // the caller's trace rather than starting an unrelated one.
 func startProxySpan(r *http.Request, llm *models.LLM) (*http.Request, trace.Span) {
+	// With agent-trace OTel export running, the assembled span is exported
+	// under the gateway span id the upstream already sees as its parent; a
+	// live span here would describe the same call twice (jyx.32).
+	if agenttrace.ExportActive() && agenttrace.From(r.Context()) != nil {
+		return r, trace.SpanFromContext(r.Context())
+	}
 	model := requestModelName(r, llm)
 
 	// With agent tracing on, the request already carries the gateway span

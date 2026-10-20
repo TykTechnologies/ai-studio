@@ -242,6 +242,7 @@ TABLE agent_trace_traces
   constraint agent_trace_traces_pkey PRIMARY KEY (app_id, trace_id)
   index CREATE UNIQUE INDEX agent_trace_traces_pkey ON agent_trace_traces USING btree (app_id, trace_id)
   index CREATE INDEX idx_agent_trace_traces_app_started ON agent_trace_traces USING btree (app_id, started_at)
+  index CREATE INDEX idx_agent_trace_traces_export ON agent_trace_traces USING btree (exported_at)
   index CREATE INDEX idx_agent_trace_traces_session_turn ON agent_trace_traces USING btree (session_id, turn_index)
   index CREATE INDEX idx_agent_trace_traces_trace_id ON agent_trace_traces USING btree (trace_id)
   column app_id bigint(int8) nullable=NO precision=64 scale=0
@@ -253,6 +254,7 @@ TABLE agent_trace_traces
   column started_at timestamp with time zone(timestamptz) nullable=NO
   column ended_at timestamp with time zone(timestamptz) nullable=YES
   column status character varying(varchar) nullable=NO len=16
+  column exported_at timestamp with time zone(timestamptz) nullable=YES
   column span_count bigint(int8) nullable=NO precision=64 scale=0 default=0
   column llm_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0
   column tool_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0

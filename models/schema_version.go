@@ -56,7 +56,9 @@ const (
 	//     id), spans (span_id) and traces (trace_id) (additive).
 	// 16: proxy_logs.trace_span_id (indexed) and proxy_logs.request_id
 	//     (nullable, additive).
-	SchemaVersion          = 16
+	// 17: agent_trace_traces.exported_at (nullable) and its index: the OTel
+	//     exporter marks the turns it has sent (additive).
+	SchemaVersion          = 17
 	MinReaderSchemaVersion = 1
 )
 

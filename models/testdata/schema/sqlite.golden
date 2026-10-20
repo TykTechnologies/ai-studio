@@ -238,6 +238,7 @@ TABLE agent_trace_traces
   column `started_at` datetime NOT NULL
   column `ended_at` datetime
   column `status` text NOT NULL
+  column `exported_at` datetime
   column `span_count` integer NOT NULL DEFAULT 0
   column `llm_call_count` integer NOT NULL DEFAULT 0
   column `tool_call_count` integer NOT NULL DEFAULT 0
@@ -248,6 +249,7 @@ TABLE agent_trace_traces
   constraint PRIMARY KEY (`app_id`,`trace_id`)
   autoindex origin=pk unique=1 (app_id, trace_id)
   index CREATE INDEX `idx_agent_trace_traces_app_started` ON `agent_trace_traces`(`app_id`,`started_at`)
+  index CREATE INDEX `idx_agent_trace_traces_export` ON `agent_trace_traces`(`exported_at`)
   index CREATE INDEX `idx_agent_trace_traces_session_turn` ON `agent_trace_traces`(`session_id`,`turn_index`)
   index CREATE INDEX `idx_agent_trace_traces_trace_id` ON `agent_trace_traces`(`trace_id`)
 TABLE app_datasources

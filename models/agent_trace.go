@@ -118,6 +118,9 @@ type AgentTraceTrace struct {
 	StartedAt  time.Time  `gorm:"not null;index:idx_agent_trace_traces_app_started,priority:2" json:"started_at"`
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
 	Status     string     `gorm:"size:16;not null" json:"status"` // in_progress | ok | error | abandoned
+	// ExportedAt is when the OTel exporter sent the turn (Enterprise, spec
+	// §5.6); NULL until then. Spans that arrive later are stored, not resent.
+	ExportedAt *time.Time `gorm:"index:idx_agent_trace_traces_export,priority:1" json:"-"`
 
 	SpanCount     int   `gorm:"not null;default:0" json:"span_count"`
 	LLMCallCount  int   `gorm:"column:llm_call_count;not null;default:0" json:"llm_call_count"`

@@ -389,6 +389,23 @@ func lowerASCII(s string) string {
 	return string(b)
 }
 
+// ListAgentTraceTracesToExport returns up to limit turns not yet exported
+// that have settled (spec §5.6): closed, or started before cutoff (now minus
+// export.max_delay), oldest first.
+func ListAgentTraceTracesToExport(db *gorm.DB, cutoff time.Time, limit int) ([]AgentTraceTrace, error) {
+	var out []AgentTraceTrace
+	err := db.Where("exported_at IS NULL").
+		Where("status <> ? OR started_at < ?", "in_progress", cutoff.UTC()).
+		Order("started_at ASC").Limit(limit).Find(&out).Error
+	return out, err
+}
+
+// MarkAgentTraceExported records that a turn was exported.
+func MarkAgentTraceExported(db *gorm.DB, appID uint, traceID []byte, at time.Time) error {
+	return db.Model(&AgentTraceTrace{}).Where("app_id = ? AND trace_id = ?", appID, traceID).
+		Update("exported_at", at.UTC()).Error
+}
+
 // AgentTraceResourceNames returns display names of the given ids of one
 // resource type (llm, tool, datasource, plugin, mcp_server), in one query.
 // Unknown types and ids are left out.

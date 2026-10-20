@@ -262,3 +262,28 @@ func TestListAgentTraceSpans_FiltersAndScope(t *testing.T) {
 		assert.EqualValues(t, 1, total, "only the App's own spans")
 	})
 }
+
+// Turns settle for export when closed or older than max_delay, and each is
+// listed until marked exported.
+func TestAgentTraceTracesToExport(t *testing.T) {
+	agentTraceDBs(t, func(t *testing.T, db *gorm.DB) {
+		mk := func(b byte, status string, started time.Time) []byte {
+			id := []byte{b, b, b, b, b, b, b, b, b, b, b, b, b, b, b, b}
+			require.NoError(t, db.Create(&AgentTraceTrace{AppID: 1, TraceID: id, SessionID: sid(1), Source: "tyk", StartedAt: started, Status: status}).Error)
+			return id
+		}
+		closed := mk(1, "ok", queryBase)
+		old := mk(2, "in_progress", queryBase.Add(-time.Hour))
+		mk(3, "in_progress", queryBase.Add(time.Minute))
+		cutoff := queryBase.Add(-30 * time.Second)
+		got, err := ListAgentTraceTracesToExport(db, cutoff, 10)
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		assert.Equal(t, old, got[0].TraceID, "oldest first")
+		require.NoError(t, MarkAgentTraceExported(db, 1, closed, queryBase))
+		got, err = ListAgentTraceTracesToExport(db, cutoff, 10)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, old, got[0].TraceID)
+	})
+}
