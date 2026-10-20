@@ -432,6 +432,12 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			return
 		}
 
+		// With agent tracing on, the request is captured as a generic
+		// plugin_endpoint span (status and timing; the body is not parsed).
+		var capture proxy.PluginEndpointCapture
+		c.Request, capture = proxy.BeginPluginEndpointCapture(c.Request, route.PluginID, pluginName)
+		defer func() { capture.Finish(c.Writer.Status()) }()
+
 		// Get request ID from context
 		requestID := ""
 		if rid := c.Request.Context().Value("request_id"); rid != nil {
@@ -533,6 +539,7 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			}
 
 			endpointReq.Authenticated = true
+			capture.SetApp(appID)
 
 			// Fetch the full App object for the plugin (cached, 30s TTL)
 			if appID > 0 {

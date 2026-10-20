@@ -120,6 +120,22 @@ func (w *captureStatusWriter) Flush() {
 
 func (w *captureStatusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
+// writtenStatus is the status a handler wrote to w so far, found through any
+// wrapping writers; 0 when unknown (tracing off, or nothing written yet).
+func writtenStatus(w http.ResponseWriter) int {
+	for w != nil {
+		if sw, ok := w.(*captureStatusWriter); ok {
+			return sw.status
+		}
+		u, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return 0
+		}
+		w = u.Unwrap()
+	}
+	return 0
+}
+
 func boundDetail(s string) string {
 	if len(s) <= maxEventDetail {
 		return s

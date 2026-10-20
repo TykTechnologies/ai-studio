@@ -1398,6 +1398,13 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "operation_id is required", nil, false)
 		return
 	}
+	// With agent tracing on, the call is captured as a tool_call with the
+	// arguments as the client sent them, whichever way it ends (spec §3.2).
+	var capture *restCapture // nil with tracing off: nothing escapes
+	if capturing(r.Context()) {
+		capture = &restCapture{sent: input}
+		defer p.finishRESTCapture(r.Context(), w, tool, capture)
+	}
 	// Only whitelisted operations may be called, as on the MCP endpoint and in
 	// chat. Checked before the filters so a refused call never reaches them;
 	// the filters cannot change the operation afterwards (RunToolInputFilters
@@ -1447,6 +1454,9 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		result = applyFilteredToolResult(result, body, filtered)
+	}
+	if capture != nil {
+		capture.result = result
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1520,6 +1530,7 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	if ds == nil {
 		return // Error already written by prepareDatasourceRequest
 	}
+	noteDatasourceCall(r.Context(), ds, "search")
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
 	var query SearchQuery
 	if err := json.Unmarshal(body, &query); err != nil {
@@ -1543,6 +1554,9 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
+	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "search", body, resJSON, http.StatusOK))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -1613,6 +1627,7 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 	if ds == nil {
 		return
 	}
+	noteDatasourceCall(r.Context(), ds, "vector_search")
 	var query VectorSearchQuery
 	if err := json.Unmarshal(body, &query); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
@@ -1654,6 +1669,9 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
 	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "vector_search", body, resJSON, http.StatusOK))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resJSON)
@@ -1664,6 +1682,7 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 	if ds == nil {
 		return
 	}
+	noteDatasourceCall(r.Context(), ds, "metadata_query")
 	var query MetadataQuery
 	if err := json.Unmarshal(body, &query); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
@@ -1709,6 +1728,9 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
 	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "metadata_query", body, resJSON, http.StatusOK))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resJSON)
@@ -1719,6 +1741,7 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 	if ds == nil {
 		return
 	}
+	noteDatasourceCall(r.Context(), ds, "embeddings")
 
 	if embed := ds.EmbedFields(false); embed.Vendor == "" || embed.Model == "" {
 		respondWithError(w, http.StatusBadRequest, "datasource does not have an embedder configured", nil, false)
@@ -1750,6 +1773,9 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
+	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "embeddings", body, nil, http.StatusOK))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -3045,7 +3071,9 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 		mcpTool := mcp.NewTool(llmsTool.Function.Name, toolOptions...)
 
 		// Create a handler that forwards the call to our existing tool operation
-		mcpServer.AddTool(mcpTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// With agent tracing on, the call is captured as a tool_call
+		// whichever way it ends (spec §3.2).
+		mcpServer.AddTool(mcpTool, p.withMCPToolCapture(toolModel, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Record start time for analytics
 			t0 := time.Now()
 
@@ -3163,7 +3191,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 			// Convert the result to MCP format
 			return mcpToolResultFromValue(operationID, result), nil
-		})
+		}))
 	}
 
 	// Create both SSE and StreamableHTTP servers that will handle this tool's MCP format
@@ -3271,7 +3299,7 @@ func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	// Hand the handler the tool as loaded for this request, so filters
 	// never run from the copy captured when the MCP server was cached.
-	cache.SSEServer.MessageHandler().ServeHTTP(w, withResolvedTool(r, tool))
+	cache.SSEServer.MessageHandler().ServeHTTP(w, markMCPDetached(withResolvedTool(r, tool)))
 }
 func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) {
 	tool := p.authorizedMCPTool(w, r)

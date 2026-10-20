@@ -100,6 +100,31 @@ func Begin(ctx context.Context) (context.Context, *Recorder) {
 	return context.WithValue(ctx, ctxKey{}, r), r
 }
 
+// Fork begins a capture of its own for work that outlives the request that
+// carried it: an MCP tools/call on the legacy SSE transport is answered on
+// the event stream after its POST already returned 202. The new Recorder
+// continues the request's context (trace id, declared trace context and
+// parent, caller identity, gateway node) under a fresh span id with
+// StartTime now; the caller finishes it. With no Recorder on ctx (or the
+// flag off) it returns ctx unchanged and nil.
+func Fork(ctx context.Context) (context.Context, *Recorder) {
+	parent := From(ctx)
+	if parent == nil {
+		return ctx, nil
+	}
+	r := &Recorder{}
+	parent.mu.Lock()
+	r.span.TraceID = parent.span.TraceID
+	r.span.ParentSpanID = parent.span.ParentSpanID
+	r.span.Declared = parent.span.Declared
+	r.span.Identity = parent.span.Identity
+	r.span.GatewayNode = parent.span.GatewayNode
+	parent.mu.Unlock()
+	r.span.SpanID = NewSpanID()
+	r.span.StartTime = time.Now()
+	return context.WithValue(ctx, ctxKey{}, r), r
+}
+
 // From returns the request's Recorder, or nil when the flag is off or none
 // was begun. It allocates nothing.
 func From(ctx context.Context) *Recorder {
