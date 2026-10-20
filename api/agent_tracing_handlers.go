@@ -248,6 +248,7 @@ func (a *API) listAgentSessionSpans(c *gin.Context) {
 		agentTracingError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
+	q.Meta = agentAccessMeta(c)
 	res, err := a.agentTracing().ListSessionSpans(c.Request.Context(), agentTracingViewer(c), id, q)
 	respondAgentTracing(c, res, err)
 }
@@ -292,7 +293,7 @@ func (a *API) searchAgentSession(c *gin.Context) {
 		return
 	}
 	res, err := a.agentTracing().SearchSession(c.Request.Context(), agentTracingViewer(c), id,
-		agenttracing.SearchQuery{Term: term, Limit: limit})
+		agenttracing.SearchQuery{Term: term, Limit: limit, Meta: agentAccessMeta(c)})
 	respondAgentTracing(c, res, err)
 }
 

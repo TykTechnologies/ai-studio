@@ -97,12 +97,16 @@ type SpanQuery struct {
 	// Previews asks for the inline content previews; whether they are
 	// served is reported per page (see the spans response).
 	Previews bool
+	// Meta identifies the request for the audit record of served previews.
+	Meta AccessMeta
 }
 
 // SearchQuery is the in-session find. The term arrives in a POST body.
 type SearchQuery struct {
 	Term  string
 	Limit int
+	// Meta identifies the request for the audit record of content matches.
+	Meta AccessMeta
 }
 
 // Querier is the read side of the service. The Community stub answers every

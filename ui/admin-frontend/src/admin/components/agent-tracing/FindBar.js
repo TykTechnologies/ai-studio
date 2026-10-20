@@ -13,6 +13,19 @@ import agentTracingService from "../../services/agentTracingService";
 
 export const MAX_TERM = 256;
 
+/**
+ * Metadata matches, then content matches (content readers only), one per
+ * span, in that order.
+ */
+export const allMatches = (result) => {
+  const seen = new Set();
+  return [...(result?.matches || []), ...(result?.content_matches || [])].filter((m) => {
+    if (seen.has(m.span_id)) return false;
+    seen.add(m.span_id);
+    return true;
+  });
+};
+
 const FindBar = () => {
   const { detail, findOpen, dispatch } = useSessionDetail();
   const [term, setTerm] = useState("");
@@ -41,14 +54,14 @@ const FindBar = () => {
     try {
       const res = await agentTracingService.search(detail.session.id, q);
       setResult({ ...res, term: q });
-      go(res?.matches || [], 0);
+      go(allMatches(res), 0);
     } catch (e) {
       setResult(null);
       setError("Find failed");
     }
   };
 
-  const matches = result?.matches || [];
+  const matches = allMatches(result);
   const close = () => dispatch({ type: "find", open: false });
 
   return (
@@ -73,7 +86,12 @@ const FindBar = () => {
           }}
         />
         <Typography variant="body2" aria-live="polite" data-testid="find-count">
-          {error || (result ? (matches.length ? `${pos + 1} of ${result.total}${result.truncated ? "+" : ""}` : "No matches") : "")}
+          {error ||
+            (result
+              ? matches.length
+                ? `${pos + 1} of ${matches.length}${result.truncated ? "+" : ""}`
+                : "No matches"
+              : "")}
         </Typography>
         <Tooltip title="Previous match (Shift+Enter)">
           <span>
