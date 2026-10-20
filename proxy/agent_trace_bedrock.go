@@ -227,7 +227,7 @@ func captureBedrock(r *http.Request, llm *models.LLM, app *models.App, modelID s
 	fp := agenttrace.CurrentFingerprinter()
 	x := bt.responseExtracts(fp)
 	x.Stream = x.Stream || bt.ttft > 0
-	if req, err := extract.ParseRequest(bt.reqFormat, reqBody, fp); err == nil {
+	if req, err := extract.ParseRequestExtracts(bt.reqFormat, reqBody, fp); err == nil {
 		req.Apply(&x)
 	}
 	status := http.StatusOK

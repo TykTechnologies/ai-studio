@@ -65,7 +65,7 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 		resp.Apply(&x)
 		serverTools = len(resp.ServerToolCalls)
 	}
-	if req, err := extract.ParseRequest(format, reqBody, fp); err == nil {
+	if req, err := extract.ParseRequestExtracts(format, reqBody, fp); err == nil {
 		req.Apply(&x)
 	}
 	id := authidentity.From(r.Context())
@@ -148,7 +148,7 @@ func (p *Proxy) captureOuterCall(r *http.Request, served llmAttempt, tried, stat
 		if resp, err := extract.ParseResponse(requestFilterFormatOpenAI, respBody, fp); err == nil {
 			resp.Apply(&x)
 		}
-		if req, err := extract.ParseRequest(requestFilterFormatOpenAI, reqBody, fp); err == nil {
+		if req, err := extract.ParseRequestExtracts(requestFilterFormatOpenAI, reqBody, fp); err == nil {
 			req.Apply(&x)
 		}
 		rec.Update(func(ev *agenttrace.Event) {

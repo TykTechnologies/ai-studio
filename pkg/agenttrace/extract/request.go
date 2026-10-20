@@ -67,7 +67,7 @@ func parseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Requ
 	if !segments.Supports(format) {
 		return Request{}, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
-	units, err := segments.ExtractUnitsWith(format, body, segments.Options{ToolCalls: true})
+	units, err := segments.ExtractUnitsWith(format, body, segments.Options{})
 	if err != nil {
 		return Request{}, err
 	}

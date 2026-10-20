@@ -32,12 +32,19 @@ func BenchmarkAgentTraceCapturePerRequest(b *testing.B) {
 	llm := &models.LLM{Name: "Primary", Vendor: models.OPENAI}
 	app := &models.App{ID: 1}
 	for _, c := range []struct {
-		size int
-		off  bool // an off-mode content pipeline (the default) is installed
-	}{{1 << 10, false}, {32 << 10, false}, {32 << 10, true}} {
+		size  int
+		off   bool // an off-mode content pipeline (the default) is installed
+		agent bool // the body ends in a tool result (an agent loop)
+	}{{1 << 10, false, false}, {32 << 10, false, false}, {32 << 10, true, false}, {32 << 10, true, true}} {
 		pad := strings.Repeat("x", c.size)
 		reqBody := []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"` + pad + `"}]}`)
 		name := strconv.Itoa(c.size>>10) + "KiB"
+		if c.agent {
+			reqBody = []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"` + pad + `"},` +
+				`{"role":"assistant","tool_calls":[{"id":"call_0","type":"function","function":{"name":"search","arguments":"{}"}}]},` +
+				`{"role":"tool","tool_call_id":"call_0","content":"found"}]}`)
+			name += "/tool-result"
+		}
 		if c.off {
 			name += "/content-off-pipeline"
 			agenttrace.SetContentProcessor(offModeProcessor{})
