@@ -43,9 +43,17 @@ func CaptureRaw(ctx context.Context, part, mediaType string, data []byte) {
 	From(ctx).CaptureRaw(part, mediaType, data)
 }
 
-// CaptureRaw adds a raw part to the primary span.
+// CaptureRaw adds a raw part to the primary span. Set the span's App and
+// resource (Update) first: the content mode is resolved from them here, and
+// a span without them resolves to off and keeps no content.
 func (r *Recorder) CaptureRaw(part, mediaType string, data []byte) {
 	if r == nil || len(data) == 0 {
+		return
+	}
+	r.mu.Lock()
+	done := r.finished
+	r.mu.Unlock()
+	if done { // discarded or finished: never pay for the copy
 		return
 	}
 	// Content the span's mode drops is never copied: in off mode (the
