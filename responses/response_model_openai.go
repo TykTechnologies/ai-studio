@@ -236,14 +236,26 @@ func (o *OpenAIStreamingResponse) GetChoiceCount() int {
 	return len(o.Choices)
 }
 
+// GetToolCount counts the tool calls that start in this chunk. A streamed
+// call arrives as fragments, and only its first fragment carries its id and
+// name, so summing over the chunks counts each call once. (The finish chunk
+// usually has an empty delta, so counting there undercounted to zero.)
 func (o *OpenAIStreamingResponse) GetToolCount() int {
 	cnt := 0
-	if len(o.Choices) > 0 {
-		for _, v := range o.Choices {
-			if v.FinishReason == "tool_calls" {
-				if _, ok := v.Delta["tool_calls"]; ok {
-					cnt += len(v.Delta["tool_calls"].([]interface{}))
-				}
+	for _, v := range o.Choices {
+		calls, _ := v.Delta["tool_calls"].([]interface{})
+		for _, c := range calls {
+			call, _ := c.(map[string]interface{})
+			fn, _ := call["function"].(map[string]interface{})
+			if id, _ := call["id"].(string); id != "" {
+				cnt++
+			} else if name, _ := fn["name"].(string); name != "" {
+				cnt++
+			}
+		}
+		if fc, ok := v.Delta["function_call"].(map[string]interface{}); ok {
+			if name, _ := fc["name"].(string); name != "" {
+				cnt++
 			}
 		}
 	}

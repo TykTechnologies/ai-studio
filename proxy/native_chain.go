@@ -467,16 +467,25 @@ func (s *sseEventRewriter) emit(ev []byte) error {
 }
 
 // sseEventEnd is the length of the first complete event in b, including the
-// blank line that ends it, or -1.
+// blank line ("\n\n" or "\r\n\r\n") that ends it, or -1. It walks the
+// newlines once and stops at the first event: searching the whole buffer for
+// each terminator made framing a long buffered stream quadratic.
 func sseEventEnd(b []byte) int {
-	best := -1
-	if i := bytes.Index(b, []byte("\n\n")); i >= 0 {
-		best = i + 2
+	for i := 0; i < len(b); {
+		j := bytes.IndexByte(b[i:], '\n')
+		if j < 0 {
+			return -1
+		}
+		k := i + j
+		if k+1 < len(b) && b[k+1] == '\n' {
+			return k + 2
+		}
+		if k > 0 && b[k-1] == '\r' && k+2 < len(b) && b[k+1] == '\r' && b[k+2] == '\n' {
+			return k + 3
+		}
+		i = k + 1
 	}
-	if i := bytes.Index(b, []byte("\r\n\r\n")); i >= 0 && (best < 0 || i+4 < best) {
-		best = i + 4
-	}
-	return best
+	return -1
 }
 
 // rewriteSSEEvent applies rewrite to the data of one event. The event's other

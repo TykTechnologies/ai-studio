@@ -1,0 +1,12 @@
+{
+  "id": "resp_01RS",
+  "object": "response",
+  "status": "completed",
+  "output": [
+    {"type": "reasoning", "id": "rs_01", "summary": []},
+    {"type": "function_call", "id": "fc_01", "call_id": "call_lookup", "name": "lookup_order", "arguments": "{\"order_id\":\"A-1001\"}", "status": "completed"},
+    {"type": "function_call", "id": "fc_02", "call_id": "call_refund", "name": "refund_policy", "arguments": "{}", "status": "completed"},
+    {"type": "web_search_call", "id": "ws_01", "status": "completed"}
+  ],
+  "usage": {"input_tokens": 88, "output_tokens": 40, "total_tokens": 128}
+}
