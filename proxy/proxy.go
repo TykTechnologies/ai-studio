@@ -2438,12 +2438,7 @@ func requestFilterFormatFor(r *http.Request, llm *models.LLM) string {
 
 // hasRequestFilters reports whether llm has at least one request-side filter.
 func (p *Proxy) hasRequestFilters(llm *models.LLM) bool {
-	for _, filter := range llm.Filters {
-		if !filter.ResponseFilter {
-			return true
-		}
-	}
-	return false
+	return llm.HasRequestFilters()
 }
 
 // runRequestFilters runs llm's request filters (response filters are skipped)

@@ -424,5 +424,8 @@ func convertLLMToPB(llm *models.LLM) *pb.LLMInfo {
 		MonthlyBudget:    monthlyBudget,
 		CreatedAt:        timestamppb.New(llm.CreatedAt),
 		UpdatedAt:        timestamppb.New(llm.UpdatedAt),
+		// The gateway routes and names the LLM by this slug
+		Slug:              models.LLMRouteSlug(llm.Name),
+		HasRequestFilters: llm.HasRequestFilters(),
 	}
 }

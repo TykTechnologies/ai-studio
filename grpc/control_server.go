@@ -34,7 +34,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
-	"github.com/gosimple/slug"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1593,7 +1592,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	for _, llm := range llms {
 		// Same slug the proxy routes /llm/.../{slug}/ by; edges look the LLM
 		// up by this value (post-auth plugins, model-router rewrites).
-		llmSlug := slug.Make(llm.Name)
+		llmSlug := models.LLMRouteSlug(llm.Name)
 
 		// Get filter IDs for this LLM
 		filterIDs := make([]uint32, len(llm.Filters))
@@ -2167,7 +2166,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			for _, vendor := range pool.Vendors {
 				llmSlug := ""
 				if vendor.LLM != nil {
-					llmSlug = slug.Make(vendor.LLM.Name)
+					llmSlug = models.LLMRouteSlug(vendor.LLM.Name)
 				}
 				pbVendor := &pb.PoolVendorConfig{
 					Id:       uint32(vendor.ID),

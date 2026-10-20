@@ -3628,8 +3628,14 @@ type LLMInfo struct {
 	CreatedAt        *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt        *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Metadata         map[string]string      `protobuf:"bytes,15,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Plugin-stored data
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// slug is the route the LLM answers to on the gateway (/llm/rest/<slug>/),
+	// the value gateway plugins see as the LLM slug.
+	Slug string `protobuf:"bytes,16,opt,name=slug,proto3" json:"slug,omitempty"`
+	// has_request_filters is true when a request filter (script or
+	// guardrail) is attached; which filters is not exposed.
+	HasRequestFilters bool `protobuf:"varint,17,opt,name=has_request_filters,json=hasRequestFilters,proto3" json:"has_request_filters,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *LLMInfo) Reset() {
@@ -3765,6 +3771,20 @@ func (x *LLMInfo) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *LLMInfo) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *LLMInfo) GetHasRequestFilters() bool {
+	if x != nil {
+		return x.HasRequestFilters
+	}
+	return false
 }
 
 type CreateLLMRequest struct {
@@ -17148,7 +17168,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\"S\n" +
 	"\x15GetLLMPluginsResponse\x12:\n" +
-	"\aplugins\x18\x01 \x03(\v2 .ai_studio_management.PluginInfoR\aplugins\"\x97\x05\n" +
+	"\aplugins\x18\x01 \x03(\v2 .ai_studio_management.PluginInfoR\aplugins\"\xdb\x05\n" +
 	"\aLLMInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -17167,7 +17187,9 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"created_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12G\n" +
-	"\bmetadata\x18\x0f \x03(\v2+.ai_studio_management.LLMInfo.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x0f \x03(\v2+.ai_studio_management.LLMInfo.MetadataEntryR\bmetadata\x12\x12\n" +
+	"\x04slug\x18\x10 \x01(\tR\x04slug\x12.\n" +
+	"\x13has_request_filters\x18\x11 \x01(\bR\x11hasRequestFilters\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
