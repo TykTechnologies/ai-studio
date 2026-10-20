@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/brokerdial"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
@@ -16,13 +17,20 @@ import (
 
 // Global SDK state for service API access
 var (
-	serviceClient      pb.MicrogatewayManagementServiceClient
-	pluginID           uint32
-	serviceBrokerID    uint32
-	initialized        bool
-	initMutex          sync.Mutex
-	grpcBroker         *goplugin.GRPCBroker
-	sharedBrokerConn   *grpc.ClientConn // Shared connection for other services (e.g., event service)
+	pluginID        uint32
+	serviceBrokerID uint32
+	initialized     bool
+	initMutex       sync.Mutex
+	grpcBroker      *goplugin.GRPCBroker
+
+	// brokerConn is the one connection to the host's brokered server,
+	// shared with other services (e.g., the event service).
+	brokerConn brokerdial.Conn
+
+	// serviceClient is the management client on brokerConn's connection.
+	clientMu      sync.Mutex
+	serviceClient pb.MicrogatewayManagementServiceClient
+	clientConn    *grpc.ClientConn
 )
 
 // Initialize sets up the SDK with broker access
@@ -34,15 +42,16 @@ func InitializeServiceAPI(server *grpc.Server, broker *goplugin.GRPCBroker, plug
 	// Always update broker reference - handles both initial setup and plugin reloads
 	// If broker changed, invalidate any cached client
 	if grpcBroker != broker {
-		if serviceClient != nil {
+		if brokerConn.Current() != nil {
 			log.Info().Msg("Broker changed, invalidating cached service client")
-			serviceClient = nil
 		}
 		serviceBrokerID = 0 // Reset broker ID so it must be set again
+		brokerConn.SetID(0, false)
 	}
 
 	// Store broker for service API access
 	grpcBroker = broker
+	brokerConn.SetBroker(broker)
 	pluginID = pluginIDVal // May be 0 initially, updated later via SetPluginID
 	initialized = true
 
@@ -62,15 +71,15 @@ func SetServiceBrokerID(brokerID uint32) {
 
 	// If broker ID changed, invalidate the cached service client
 	// This handles plugin reloads where a new broker session is established
-	if serviceBrokerID != brokerID && serviceClient != nil {
+	if serviceBrokerID != brokerID && brokerConn.Current() != nil {
 		log.Info().
 			Uint32("old_broker_id", serviceBrokerID).
 			Uint32("new_broker_id", brokerID).
 			Msg("Broker ID changed, invalidating cached service client")
-		serviceClient = nil
 	}
 
 	serviceBrokerID = brokerID
+	brokerConn.SetID(brokerID, false)
 	log.Info().
 		Uint32("broker_id", brokerID).
 		Bool("initialized", initialized).
@@ -108,71 +117,46 @@ func SetPluginID(id uint32) {
 	log.Info().Uint32("plugin_id", pluginID).Msg("✅ Plugin ID updated in SDK")
 }
 
-// getServiceClient creates and returns the service client, creating it if necessary
-// Includes retry logic to handle race conditions where the broker server may not be ready yet
+// getServiceClient returns the management client on the shared broker
+// connection, dialling it if needed. It waits for the dial at most until ctx
+// ends (brokerdial.Conn): a dial the caller gave up on still completes, and
+// its connection serves the next call. Only one dial is ever in flight, and
+// a failed one is not retried for brokerdial.RetryAfter.
 func getServiceClient(ctx context.Context) (pb.MicrogatewayManagementServiceClient, error) {
-	if serviceClient != nil {
-		return serviceClient, nil
+	initMutex.Lock()
+	ready, hasBroker, id := initialized, grpcBroker != nil, serviceBrokerID
+	initMutex.Unlock()
+	if !ready || !hasBroker {
+		return nil, fmt.Errorf("SDK not initialized - call InitializeServiceAPI() first (initialized=%v, broker=%v)", ready, hasBroker)
 	}
-
-	log.Debug().
-		Bool("initialized", initialized).
-		Bool("has_broker", grpcBroker != nil).
-		Uint32("broker_id", serviceBrokerID).
-		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
-		Msg("getServiceClient: checking prerequisites (PLUGIN SIDE dial attempt)")
-
-	if !initialized || grpcBroker == nil {
-		return nil, fmt.Errorf("SDK not initialized - call InitializeServiceAPI() first (initialized=%v, broker=%v)", initialized, grpcBroker != nil)
-	}
-
-	if serviceBrokerID == 0 {
+	if id == 0 {
 		return nil, fmt.Errorf("service broker ID not set - call SetServiceBrokerID() with broker ID from config")
 	}
 
-	// Dial the brokered server where microgateway management services are registered
-	// Retry with backoff to handle race conditions where server may not be ready yet
-	var conn *grpc.ClientConn
-	var err error
-	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
-		conn, err = grpcBroker.Dial(serviceBrokerID)
-		if err == nil {
-			break
-		}
-		if i < maxRetries-1 {
-			backoff := time.Duration(50*(i+1)) * time.Millisecond
-			log.Debug().
-				Int("attempt", i+1).
-				Dur("backoff", backoff).
-				Err(err).
-				Msg("Broker dial failed, retrying...")
-			time.Sleep(backoff)
-		}
-	}
+	conn, err := brokerConn.Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial service broker ID %d after %d attempts: %w", serviceBrokerID, maxRetries, err)
+		return nil, fmt.Errorf("failed to dial service broker ID %d: %w", id, err)
 	}
 
-	// Store the shared connection for other services (e.g., event service) to reuse
-	// The go-plugin broker only allows ONE connection per broker ID, so we must share
-	sharedBrokerConn = conn
-
-	// Create service client from the brokered connection
-	serviceClient = pb.NewMicrogatewayManagementServiceClient(conn)
-
-	log.Info().
-		Uint32("plugin_id", pluginID).
-		Uint32("broker_id", serviceBrokerID).
-		Msg("✅ Service client created via broker dial - plugin can now call host services")
-
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	if serviceClient == nil || clientConn != conn {
+		serviceClient = pb.NewMicrogatewayManagementServiceClient(conn)
+		clientConn = conn
+		log.Info().
+			Uint32("broker_id", id).
+			Msg("✅ Service client created via broker dial - plugin can now call host services")
+	}
 	return serviceClient, nil
 }
 
 // createPluginContext creates the authentication context for service API calls
 func createPluginContext(methodScope string) *pb.PluginContext {
+	initMutex.Lock()
+	id := pluginID
+	initMutex.Unlock()
 	return &pb.PluginContext{
-		PluginId:    pluginID,
+		PluginId:    id,
 		MethodScope: methodScope,
 	}
 }
@@ -188,17 +172,13 @@ func IsInitialized() bool {
 // This allows other services (like the event service) to reuse the same connection.
 // The go-plugin broker only allows ONE connection per broker ID.
 func GetSharedBrokerConnection() *grpc.ClientConn {
-	initMutex.Lock()
-	defer initMutex.Unlock()
-	return sharedBrokerConn
+	return brokerConn.Current()
 }
 
-// SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use.
-// This is called by services that dial the broker first.
+// SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use,
+// when none is open yet. This is called by services that dial the broker first.
 func SetSharedBrokerConnection(conn *grpc.ClientConn) {
-	initMutex.Lock()
-	defer initMutex.Unlock()
-	sharedBrokerConn = conn
+	brokerConn.Share(conn)
 }
 
 // LLM Management Functions
