@@ -34,6 +34,11 @@ const maxPairingIDs = 5
 //     are absent, the calls of a model content pair by position with the
 //     id-less responses that follow it.
 //   - Bedrock Converse: toolUse.toolUseId and toolResult.toolUseId.
+//   - OpenAI Responses: the call_id of each *_call item that has one
+//     (function_call, custom_tool_call, computer_call, local_shell_call...)
+//     and of each *_call_output item. With previous_response_id the calls
+//     may live in the stored response, so an output without a call in the
+//     body is not an error there.
 //
 // Other formats are ErrUnsupportedFormat; a body that is not JSON, or not an
 // object, is ErrUnrecognisedBody, and a repeated key ErrDuplicateKey.
@@ -56,6 +61,8 @@ func CheckToolPairing(format string, body []byte) error {
 		x.googlePairs(root, p)
 	case f == FormatBedrock:
 		x.bedrockPairs(root, p)
+	case f == FormatOpenAIResponses:
+		x.responsesPairs(root, p)
 	default:
 		return fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
@@ -152,6 +159,29 @@ func (x *extraction) bedrockPairs(root *node, p *pairing) {
 	}
 }
 
+func (x *extraction) responsesPairs(root *node, p *pairing) {
+	stored := root.get("previous_response_id") != nil && !x.isNull(root.get("previous_response_id"))
+	results := map[string]int{}
+	for _, item := range root.get("input").elems() {
+		typ, id := x.str(item.get("type")), x.str(item.get("call_id"))
+		switch {
+		case id == "":
+		case strings.HasSuffix(typ, "_call_output"):
+			results[id]++
+		case strings.HasSuffix(typ, "_call"):
+			p.call(id)
+		}
+	}
+	for id, n := range results {
+		if stored && p.calls[id] == 0 {
+			continue // the call is in the stored response
+		}
+		for i := 0; i < n; i++ {
+			p.result(id)
+		}
+	}
+}
+
 // googlePairs pairs functionCall and functionResponse parts by id, and the
 // id-less ones by position: the k-th id-less response after a model content
 // answers that content's k-th id-less call.
@@ -233,13 +263,14 @@ type Breakpoint struct {
 //   - Bedrock Converse: cachePoint blocks in toolConfig.tools, system and
 //     message content.
 //
-// OpenAI, Ollama and Google bodies carry no breakpoints (OpenAI caches
+// OpenAI (Chat Completions and Responses), Ollama and Google bodies carry no
+// breakpoints (OpenAI caches
 // prefixes automatically; Google's cached content lives outside the
 // request), so they return none. Other formats are ErrUnsupportedFormat.
 func CacheBreakpoints(format string, body []byte) ([]Breakpoint, error) {
 	f := strings.ToLower(format)
 	switch f {
-	case FormatOpenAI, FormatOllama, FormatGoogleAI, FormatVertex:
+	case FormatOpenAI, FormatOllama, FormatGoogleAI, FormatVertex, FormatOpenAIResponses:
 		if err := CheckKeys(body); err != nil {
 			return nil, err
 		}

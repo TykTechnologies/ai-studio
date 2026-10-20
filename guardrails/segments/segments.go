@@ -248,6 +248,8 @@ var extractors = map[string]func(x *extraction, root *node) error{
 	FormatGoogleAI:  extractGoogle,
 	FormatVertex:    extractGoogle,
 	FormatBedrock:   extractBedrock,
+
+	FormatOpenAIResponses: extractResponses,
 }
 
 // ExtractUnits returns the units of body: each message's text and each tool

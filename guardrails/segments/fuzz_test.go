@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-var fuzzFormats = []string{FormatOpenAI, FormatOllama, FormatAnthropic, FormatGoogleAI, FormatBedrock}
+var fuzzFormats = []string{FormatOpenAI, FormatOllama, FormatAnthropic, FormatGoogleAI, FormatBedrock, FormatOpenAIResponses}
 
 // assertUnitsMapBack: an unchanged unit text maps back to no edits, and a
 // rewrite of every leaf maps back to one edit per leaf.
