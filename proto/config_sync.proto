@@ -396,6 +396,143 @@ message ToolCallProto {
   google.protobuf.Timestamp timestamp = 4;       // When the call completed
 }
 
+// Agent tracing capture events (Enterprise; pkg/agenttrace holds the Go
+// contract and the field docs). One CaptureEventProto is one observed span
+// as the gateway saw it; the hub's assembler turns events into sessions,
+// turns and span trees. Times are Unix nanoseconds (0 = unset). Ids are raw
+// bytes: trace 16, span 8. Fingerprints are a 1-byte key id then the HMAC.
+// The AnalyticsPulse field that carries these is wired by the edge transport.
+message CaptureEventProto {
+  string kind = 1;
+  bytes span_id = 2;
+  bytes trace_id = 3;                  // provisional
+  bytes parent_span_id = 4;            // declared parent
+  uint32 seq = 5;
+  string idempotency_key = 6;
+  string source = 7;                   // "embedded" or the edge id
+
+  CaptureIdentityProto identity = 8;
+  CaptureResourceProto resource = 9;
+  string provider = 10;
+  string operation = 11;
+  string request_model = 12;
+  string response_model = 13;
+  string tool_name = 14;
+
+  int64 start_unix_nano = 15;
+  int64 end_unix_nano = 16;
+  int64 ttft_nanos = 17;
+  string status = 18;
+  string error_type = 19;
+  string error_message = 20;
+  int32 http_status = 21;
+  string gateway_node = 22;
+
+  CaptureUsageProto usage = 23;
+  string analytics_ref = 24;
+  CaptureDeclaredContextProto declared = 25;
+  CaptureExtractsProto extracts = 26;
+  repeated CaptureGatewayEventProto gateway_events = 27;
+  repeated CapturePayloadPartProto parts = 28;
+  string content_mode = 29;
+  map<string, string> attributes = 30;
+  uint32 attempt = 31;
+}
+
+message CaptureIdentityProto {
+  uint64 app_id = 1;
+  uint64 team_id = 2;
+  string credential_id = 3;
+  uint64 user_id = 4;
+  string end_user_id = 5;
+  string on_behalf_of = 6;
+  string acting_agent = 7;
+}
+
+message CaptureResourceProto {
+  string type = 1;
+  string id = 2;
+  string name = 3;
+}
+
+message CaptureUsageProto {
+  int64 input_tokens = 1;
+  int64 output_tokens = 2;
+  int64 cache_read_tokens = 3;
+  int64 cache_write_tokens = 4;
+  int64 reasoning_tokens = 5;
+  int64 cost_micros = 6;
+  string currency = 7;
+}
+
+message CaptureDeclaredContextProto {
+  bytes trace_id = 1;
+  bytes parent_span_id = 2;
+  string trace_state = 3;
+  bool sampled = 4;
+  string trace_source = 5;
+  string session_id = 6;
+  string session_source = 7;
+  string session_name = 8;
+  string agent_name = 9;
+  string agent_id = 10;
+  string agent_path = 11;
+  string client_span_id = 12;
+  string end_user_id = 13;
+  string capture_mode = 14;
+  string external_trace_id = 15;
+  string conversation_id = 16;
+  string mcp_session_id = 17;
+  string client_info = 18;
+  map<string, string> baggage = 19;
+}
+
+message CaptureToolCallProto {
+  string id = 1;
+  string name = 2;
+  bytes args_fp = 3;
+  bool args_unavailable = 4;
+}
+
+message CaptureToolResultProto {
+  string id = 1;
+  bytes result_fp = 2;
+  bool is_error = 3;
+}
+
+message CaptureExtractsProto {
+  repeated CaptureToolCallProto tool_calls = 1;
+  repeated CaptureToolResultProto tool_results = 2;
+  string response_id = 3;
+  string previous_response_id = 4;
+  repeated string finish_reasons = 5;
+  bytes args_fp = 6;
+  bytes result_fp = 7;
+  string tool_call_id = 8;
+  bool tool_error = 9;
+  bool stream = 10;
+  bool stream_incomplete = 11;
+}
+
+message CaptureGatewayEventProto {
+  string type = 1;
+  string outcome = 2;
+  string detail = 3;
+  int64 at_unix_nano = 4;
+  string name = 5;
+}
+
+message CapturePayloadPartProto {
+  string part = 1;
+  string content_state = 2;
+  string media_type = 3;
+  int64 bytes = 4;
+  bool truncated = 5;
+  int32 redaction_count = 6;
+  bytes fingerprint = 7;
+  bytes data = 8;
+}
+
 // Plugin Control Payload Messages
 // These enable plugins running on edge instances to send arbitrary data back to control
 
