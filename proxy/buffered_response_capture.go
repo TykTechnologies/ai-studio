@@ -67,6 +67,9 @@ func (rc *bufferedResponseCapture) ModifyHeaders(headers map[string]string) {
 	// the set would keep only the first of a repeated header (Set-Cookie,
 	// Vary, Link). A key returned with the value it has now keeps all its
 	// values; a changed or new key is set; a key not returned is removed.
+	// So a hook cannot cut a repeated header down to its first value (it
+	// can drop the key, or set another value), and two keys of one map that
+	// differ only in case still collapse into one.
 	returned := make(map[string]string, len(headers))
 	for key, value := range headers {
 		returned[http.CanonicalHeaderKey(key)] = value
