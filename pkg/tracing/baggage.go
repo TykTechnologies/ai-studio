@@ -63,7 +63,13 @@ func FilterBaggage(h http.Header) {
 	var keep []baggage.Member
 	for _, m := range b.Members() {
 		if _, ok := allowed[m.Key()]; ok {
-			keep = append(keep, m)
+			// Key and value only: member properties are free-form and
+			// could carry anything past the allowlist.
+			bare, err := baggage.NewMemberRaw(m.Key(), m.Value())
+			if err != nil {
+				continue
+			}
+			keep = append(keep, bare)
 		}
 	}
 	if len(keep) == 0 {
@@ -76,6 +82,24 @@ func FilterBaggage(h http.Header) {
 		return
 	}
 	h[headerBaggage] = []string{kept.String()}
+}
+
+// dropTracestate removes tracestate, in any case spelling. A caller's
+// tracestate is vendor-defined and opaque, so it is never forwarded
+// upstream; traceparent carries the trace on its own.
+func dropTracestate(h http.Header) {
+	for k := range h {
+		if strings.EqualFold(k, headerTracestate) {
+			delete(h, k)
+		}
+	}
+}
+
+// FilterTraceContext applies the outbound rules to headers a caller
+// supplied: baggage reduced to the allowlist, tracestate removed.
+func FilterTraceContext(h http.Header) {
+	FilterBaggage(h)
+	dropTracestate(h)
 }
 
 // StripTraceContext removes traceparent, tracestate and baggage, for an

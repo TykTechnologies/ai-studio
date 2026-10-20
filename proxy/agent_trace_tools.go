@@ -165,8 +165,7 @@ func beginMCPToolCapture(ctx context.Context, request mcp.CallToolRequest) (cont
 		sc = trace.NewSpanContext(trace.SpanContextConfig{
 			TraceID:    parent.TraceID(),
 			SpanID:     trace.SpanID(rec.SpanID()),
-			TraceFlags: parent.TraceFlags() | trace.FlagsSampled,
-			TraceState: parent.TraceState(),
+			TraceFlags: parent.TraceFlags(), // the caller's sampling decision
 			Remote:     true,
 		})
 		changed = true

@@ -8,6 +8,33 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
+// Outbound headers never carry a caller's tracestate, and an allowlisted
+// baggage member loses its properties (jyx.89).
+func TestOutboundTraceContextHygiene(t *testing.T) {
+	withAllowlist(t, "session.id")
+	Use(nil, propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	t.Cleanup(func() { Use(nil, nil) })
+
+	ctx := ExtractIncoming(context.Background(), http.Header{
+		"Traceparent": {"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+		"Tracestate":  {"acme=c2VjcmV0LXRva2Vu,vendor=abc"},
+		"Baggage":     {"session.id=s1;user.email=leak%40x;pii=yes"},
+	})
+	out := http.Header{"tracestate": {"raw=1"}}
+	InjectOutgoing(ctx, out)
+	if out.Get("Traceparent") == "" {
+		t.Fatal("traceparent not propagated")
+	}
+	for k := range out {
+		if http.CanonicalHeaderKey(k) == "Tracestate" {
+			t.Fatalf("tracestate forwarded: %v", out)
+		}
+	}
+	if got := out.Get("Baggage"); got != "session.id=s1" {
+		t.Fatalf("baggage = %q", got)
+	}
+}
+
 // Outbound _meta carries the current span context, replacing the client's
 // trace keys, with baggage reduced to the allowlist; other keys are kept.
 func TestInjectMCPMeta(t *testing.T) {

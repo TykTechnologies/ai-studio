@@ -62,11 +62,17 @@ func beginRequestCapture(r *http.Request) (*http.Request, *agenttrace.Recorder) 
 	rec.SetTraceID(traceID)
 	d := res.Declared
 	rec.Update(func(ev *agenttrace.Event) { ev.Declared = d })
+	// The caller's sampling decision stands; a trace the gateway minted (or
+	// took from a header without flags) is sampled. The caller's tracestate
+	// is not carried on: it is recorded as declared, never forwarded.
+	flags := trace.FlagsSampled
+	if res.Declared.TraceSource == "traceparent" && !res.Declared.Sampled {
+		flags = 0
+	}
 	gateway := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID(traceID),
 		SpanID:     trace.SpanID(rec.SpanID()),
-		TraceFlags: parent.TraceFlags() | trace.FlagsSampled,
-		TraceState: parent.TraceState(),
+		TraceFlags: flags,
 		Remote:     true,
 	})
 	return r.WithContext(trace.ContextWithRemoteSpanContext(ctx, gateway)), rec

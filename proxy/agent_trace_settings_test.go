@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,6 +40,29 @@ func TestAgentTraceSettings_LLMPropagationOff(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 	assert.Empty(t, upstream.Get("Traceparent"))
 	assert.Empty(t, upstream.Get("Tracestate"))
+}
+
+// The caller's sampling decision reaches the upstream unchanged, a trace the
+// gateway mints is sampled, and the caller's tracestate is not forwarded
+// (jyx.89).
+func TestAgentTraceSettings_SamplingAndTracestate(t *testing.T) {
+	withW3CPropagation(t)
+	withAgentTracing(t, true)
+	var upstream http.Header
+	h := newFailoverHarness(t, recordUpstreamHeaders(&upstream, serveToolCall), serveOpenAIText("never"), nil)
+
+	unsampled := "00-" + clientTraceID + "-00f067aa0ba902b7-00"
+	resp, body := h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest,
+		"Traceparent", unsampled, "Tracestate", "acme=c2VjcmV0LXRva2Vu")
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	tp := upstream.Get("Traceparent")
+	assert.Equal(t, clientTraceID, traceIDOf(tp))
+	assert.True(t, strings.HasSuffix(tp, "-00"), "the caller's not-sampled flag stands: %s", tp)
+	assert.Empty(t, upstream.Get("Tracestate"), "the caller's tracestate is not forwarded")
+
+	resp, body = h.post("/llm/rest/primary/v1/chat/completions", toolResultRequest)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	assert.True(t, strings.HasSuffix(upstream.Get("Traceparent"), "-01"), "a minted trace is sampled")
 }
 
 // AGENT_TRACING_PROPAGATE_HTTP_UPSTREAMS=false: tool upstreams get no

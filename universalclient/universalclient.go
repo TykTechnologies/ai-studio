@@ -367,8 +367,8 @@ func (c *Client) CallOperationWithContext(ctx context.Context, operationId strin
 		req.Header[k] = v
 	}
 	// Caller-supplied baggage is reduced to the allowlist like injected
-	// baggage (decision Q11).
-	tracing.FilterBaggage(req.Header)
+	// baggage (decision Q11), and a caller's tracestate is not forwarded.
+	tracing.FilterTraceContext(req.Header)
 
 	// Set content type if not provided
 	if _, ok := req.Header["Content-Type"]; !ok && payload != nil {
