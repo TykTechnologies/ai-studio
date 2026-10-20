@@ -79,6 +79,7 @@ describe("TykConnectionForm", () => {
     apiClient.get.mockImplementation((path) => {
       if (path === "/tyk-mcp/status") return Promise.resolve(enabled);
       if (path === "/tyk-connections/7") return Promise.resolve({ data: existing });
+      if (path === "/tyk-connections/7/ingest-status") return Promise.resolve({ data: { has_token: false } });
       return Promise.reject(new Error("unexpected " + path));
     });
     apiClient.post.mockResolvedValue({ data: { id: 5 } });
@@ -215,5 +216,25 @@ describe("TykConnectionForm", () => {
       ),
     );
     expect(apiClient.patch.mock.calls[0][1]).not.toHaveProperty("dashboard_access_token");
+  });
+  it("shows the Analytics section only on an existing connection", async () => {
+    renderForm("/admin/tyk-connections/edit/7");
+    expect(await screen.findByTestId("analytics-section")).toBeInTheDocument();
+    expect(await screen.findByTestId("ingest-generate")).toBeInTheDocument();
+  });
+
+  it("has no Analytics section on a new connection", async () => {
+    renderForm("/admin/tyk-connections/new");
+    expect(await screen.findByText("Connect a Tyk Dashboard")).toBeInTheDocument();
+    expect(screen.queryByTestId("analytics-section")).not.toBeInTheDocument();
+  });
+
+  it("shows the upsell and no Analytics section on CE", async () => {
+    apiClient.get.mockImplementation(() => Promise.resolve({ data: { available: false } }));
+    renderForm("/admin/tyk-connections/edit/7");
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/tyk-mcp/status"));
+    await waitFor(() => expect(screen.queryByRole("progressbar")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("analytics-section")).not.toBeInTheDocument();
+    expect(apiClient.get).not.toHaveBeenCalledWith("/tyk-connections/7/ingest-status");
   });
 });
