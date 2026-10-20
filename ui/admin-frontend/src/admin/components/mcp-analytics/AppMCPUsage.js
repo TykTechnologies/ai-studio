@@ -12,8 +12,8 @@ import { fetchAppServers, formatCount, formatMs, formatPercent } from "./mcpAnal
  * period. The admin App page and the portal App page both render it, each
  * with its own client and path: the portal path only answers for Apps the
  * caller owns, so the portal never reaches an admin endpoint. The response
- * has a row per MCP server bound to the App; an App without MCP servers
- * gets no section at all.
+ * has a row per MCP server the App called in the period; an App without
+ * MCP calls gets no section at all.
  */
 const AppMCPUsage = ({ client, path, startDate, endDate, admin = false }) => {
   const [rows, setRows] = useState(null);
