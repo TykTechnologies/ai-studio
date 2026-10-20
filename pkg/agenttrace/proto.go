@@ -206,6 +206,8 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 			Data:           part.Data,
 		})
 	}
+	// The capturing gateway ran the content pipeline before sending it.
+	e.contentProcessed = true
 	return e
 }
 

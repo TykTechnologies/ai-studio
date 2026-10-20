@@ -178,6 +178,13 @@ type Event struct {
 	// Parts are the captured payloads, already through the content pipeline
 	// (§3.4 payloads, §5.5). Empty in off mode.
 	Parts []PayloadPart
+	// Raw is content captured on the request path, before the content
+	// pipeline (CaptureRaw). It is never serialised: ProcessContent turns it
+	// into Parts in the capture worker, and the converters ignore it.
+	Raw []RawPart
+	// contentProcessed is set once the content pipeline ran (ProcessContent,
+	// or FromProto for an event an edge processed), so it never runs twice.
+	contentProcessed bool
 	// ContentMode is the effective mode for this span (§5.5).
 	ContentMode string
 	// Attributes are extra semconv / tyk.* attributes (§3.4 spans.attributes),
@@ -348,6 +355,9 @@ func (e *Event) ApproxSize() int {
 		len(e.ToolName) + len(e.Declared.SessionID) + len(e.Declared.AgentPath)
 	for i := range e.Parts {
 		n += len(e.Parts[i].Data) + 64
+	}
+	for i := range e.Raw {
+		n += len(e.Raw[i].Data) + 64
 	}
 	for i := range e.Extracts.ToolCalls {
 		n += len(e.Extracts.ToolCalls[i].ID) + len(e.Extracts.ToolCalls[i].Name) + 40

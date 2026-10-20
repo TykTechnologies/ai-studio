@@ -121,6 +121,18 @@ func fullEvent() *Event {
 	}
 }
 
+// notOnTheWire are Event fields that never cross a process boundary: raw
+// content before the content pipeline, and the pipeline's run-once marker.
+var notOnTheWire = map[string]bool{"Event.Raw": true, "Event.contentProcessed": true}
+
+// sameOnTheWire compares two events as the wire carries them.
+func sameOnTheWire(a, b *Event) bool {
+	ac, bc := *a, *b
+	ac.Raw, bc.Raw = nil, nil
+	ac.contentProcessed, bc.contentProcessed = false, false
+	return reflect.DeepEqual(&ac, &bc)
+}
+
 // assertAllSet fails for any zero-valued field, recursively, so a field added
 // to the contract without a converter and a round-trip case fails this test.
 func assertAllSet(t *testing.T, v reflect.Value, path string) {
@@ -134,7 +146,11 @@ func assertAllSet(t *testing.T, v reflect.Value, path string) {
 			return
 		}
 		for i := 0; i < v.NumField(); i++ {
-			assertAllSet(t, v.Field(i), path+"."+v.Type().Field(i).Name)
+			name := path + "." + v.Type().Field(i).Name
+			if notOnTheWire[name] {
+				continue
+			}
+			assertAllSet(t, v.Field(i), name)
 		}
 	case reflect.Slice:
 		if v.Len() == 0 {
@@ -164,7 +180,7 @@ func TestProtoRoundTripCoversEveryField(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := FromProto(&p)
-	if !reflect.DeepEqual(in, out) {
+	if !sameOnTheWire(in, out) {
 		t.Fatalf("round trip mismatch:\n in=%+v\nout=%+v", in, out)
 	}
 }
@@ -180,7 +196,7 @@ func TestProtoRoundTripZeroEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := FromProto(&p)
-	if !reflect.DeepEqual(in, out) {
+	if !sameOnTheWire(in, out) {
 		t.Fatalf("zero round trip mismatch:\n in=%+v\nout=%+v", in, out)
 	}
 	if FromProto(nil) != nil || ToProto(nil) != nil {

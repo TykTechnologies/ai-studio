@@ -66,6 +66,9 @@ func EncodeStaged(e *Event) (blob []byte, stripped bool, err error) {
 	if e.IdempotencyKey == "" {
 		return nil, false, errors.New("agenttrace: staged event has no idempotency key")
 	}
+	// Raw content never reaches the table: it goes through the content
+	// pipeline first (or is dropped without one).
+	ProcessContent(e)
 	s := CurrentSealer()
 	if s == nil {
 		stripped = StripPayloadData(e)
