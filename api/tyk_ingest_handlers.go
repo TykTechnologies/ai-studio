@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/time/rate"
 )
 
 // Limits of the Tyk analytics ingest endpoint. Tyk Pump batches are a few
@@ -23,33 +23,49 @@ var (
 	ingestMaxBodyBytes int64 = 16 << 20
 	// ingestMaxRecords caps the records in one batch.
 	ingestMaxRecords = 5000
-	// ingestRate and ingestBurst limit requests per connection (token).
-	ingestRate  rate.Limit = 20
-	ingestBurst            = 40
+	// ingestRate (requests per second) and ingestBurst limit requests per
+	// connection (token).
+	ingestRate  float64 = 20
+	ingestBurst         = 40
 )
 
 var errIngestBodyTooLarge = errors.New("request body too large")
 
-// ingestLimiters rate-limits ingest requests per connection. A connection
-// has one live token, so this is per token; the map is bounded by the
-// number of connections.
+// ingestLimiters rate-limits ingest requests per connection with a token
+// bucket each. A connection has one live token, so this is per token; the
+// map is bounded by the number of connections.
 type ingestLimiters struct {
 	mu sync.Mutex
-	m  map[uint]*rate.Limiter
+	m  map[uint]*ingestBucket
+}
+
+type ingestBucket struct {
+	tokens float64
+	last   time.Time
 }
 
 func (l *ingestLimiters) allow(connectionID uint) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.m == nil {
-		l.m = make(map[uint]*rate.Limiter)
+		l.m = make(map[uint]*ingestBucket)
 	}
-	lim, ok := l.m[connectionID]
+	now := time.Now()
+	b, ok := l.m[connectionID]
 	if !ok {
-		lim = rate.NewLimiter(ingestRate, ingestBurst)
-		l.m[connectionID] = lim
+		b = &ingestBucket{tokens: float64(ingestBurst), last: now}
+		l.m[connectionID] = b
 	}
-	return lim.Allow()
+	b.tokens += now.Sub(b.last).Seconds() * ingestRate
+	if b.tokens > float64(ingestBurst) {
+		b.tokens = float64(ingestBurst)
+	}
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
 }
 
 // cappedReader fails with errIngestBodyTooLarge once more than n bytes

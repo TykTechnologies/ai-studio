@@ -19,7 +19,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/time/rate"
 )
 
 // fakeIngestService implements the ingest half of tykmcp.Service; every
@@ -238,7 +237,7 @@ func TestIngestTykAnalytics_Limits(t *testing.T) {
 
 func TestIngestTykAnalytics_RateLimit(t *testing.T) {
 	oldRate, oldBurst := ingestRate, ingestBurst
-	ingestRate, ingestBurst = rate.Limit(0.001), 2
+	ingestRate, ingestBurst = 0.001, 2
 	t.Cleanup(func() { ingestRate, ingestBurst = oldRate, oldBurst })
 	h := setupIngestAPI(t)
 	h.fake.tokens["tai_ing_other"] = 8
