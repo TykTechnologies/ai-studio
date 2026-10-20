@@ -2457,6 +2457,54 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 	return summary
 }
 
+// shouldReacceptBroker says whether session renewal n may give a plugin
+// that never connected a fresh broker ID: each of the first five renewals,
+// then every tenth (about five minutes with 30 s sessions).
+func shouldReacceptBroker(n int) bool {
+	return n <= 5 || n%10 == 0
+}
+
+// renewSessionBroker returns the broker ID for the plugin's next session.
+// go-plugin hands a plugin a broker ID's connection info once, when the host
+// accepts on it, and keeps it only five seconds, so a plugin whose SDK
+// dials lazily (every plugin built before AI Studio 2.3) and whose first
+// host call came later could never reach host services. When the plugin
+// has not connected to the current brokered server, this sets up a fresh
+// one on a new ID, stops the unused one, and the next OpenSession hands the
+// plugin the new ID (the SDK drops its client when the ID changes and dials
+// the new one).
+func (pm *PluginManager) renewSessionBroker(pluginID uint, client *MicrogatewayPluginClient, current uint32, renewal int) uint32 {
+	if current == 0 || client.BrokerConnected(current) || !shouldReacceptBroker(renewal) {
+		return current
+	}
+	pm.mu.RLock()
+	mgmt, events := pm.managementServer, pm.eventServer
+	pm.mu.RUnlock()
+	if mgmt == nil {
+		return current
+	}
+	var (
+		next uint32
+		err  error
+	)
+	if events != nil {
+		next, err = client.SetupServiceBrokerWithEvents(pluginID, mgmt, events)
+	} else {
+		next, err = client.SetupServiceBroker(pluginID, mgmt)
+	}
+	if err != nil {
+		log.Warn().Err(err).Uint("plugin_id", pluginID).Msg("Could not set up a fresh service broker for the plugin")
+		return current
+	}
+	client.StopBroker(current)
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Uint32("old_broker_id", current).
+		Uint32("broker_id", next).
+		Msg("Plugin never connected to its service broker; serving it on a fresh broker ID")
+	return next
+}
+
 // runPluginSessionLoop runs the session loop for a plugin.
 // This keeps calling OpenSession in a loop to maintain broker connectivity.
 // The loop exits when the session is explicitly closed or the plugin is unloaded.
@@ -2482,7 +2530,7 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 
 	sessionTimeoutMs := int32(30000) // 30 second sessions
 
-	for {
+	for renewal := 0; ; renewal++ {
 		select {
 		case <-ctx.Done():
 			log.Debug().
@@ -2490,6 +2538,10 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 				Msg("Plugin session loop cancelled")
 			return
 		default:
+		}
+
+		if renewal > 0 {
+			brokerID = pm.renewSessionBroker(pluginID, client, brokerID, renewal)
 		}
 
 		log.Debug().

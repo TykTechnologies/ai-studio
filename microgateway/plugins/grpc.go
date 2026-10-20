@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"net/rpc"
+	"sync"
+	"sync/atomic"
 
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
@@ -13,6 +15,7 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/stats"
 )
 
 // Global reference to service interfaces for broker setup
@@ -62,6 +65,58 @@ func (p *PluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, 
 type MicrogatewayPluginClient struct {
 	broker     *plugin.GRPCBroker
 	pluginStub pb.PluginServiceClient
+
+	// servers are the brokered service servers set up for the plugin, by
+	// broker ID (see BrokerConnected and StopBroker).
+	mu      sync.Mutex
+	servers map[uint32]*brokeredServer
+}
+
+// brokeredServer is one brokered service server, and whether the plugin
+// has connected to it.
+type brokeredServer struct {
+	connected atomic.Bool
+	mu        sync.Mutex
+	server    *grpc.Server
+	stopped   bool
+}
+
+// HandleConn implements stats.Handler: any connection means the plugin
+// dialled this broker ID.
+func (b *brokeredServer) HandleConn(_ context.Context, s stats.ConnStats) {
+	if _, ok := s.(*stats.ConnBegin); ok {
+		b.connected.Store(true)
+	}
+}
+
+func (b *brokeredServer) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context { return ctx }
+func (b *brokeredServer) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) context.Context   { return ctx }
+func (b *brokeredServer) HandleRPC(context.Context, stats.RPCStats)                          {}
+
+// BrokerConnected reports whether the plugin has connected to the brokered
+// server on id.
+func (c *MicrogatewayPluginClient) BrokerConnected(id uint32) bool {
+	c.mu.Lock()
+	b := c.servers[id]
+	c.mu.Unlock()
+	return b != nil && b.connected.Load()
+}
+
+// StopBroker stops the brokered server on id, if it is still serving.
+func (c *MicrogatewayPluginClient) StopBroker(id uint32) {
+	c.mu.Lock()
+	b := c.servers[id]
+	delete(c.servers, id)
+	c.mu.Unlock()
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.stopped = true
+	if b.server != nil {
+		b.server.Stop()
+	}
 }
 
 // SetupServiceBroker creates a long-lived brokered server for microgateway
@@ -112,6 +167,13 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(pluginID uint, m
 
 	// Allocate broker ID and start brokered server
 	brokerID := c.broker.NextId()
+	tracked := &brokeredServer{}
+	c.mu.Lock()
+	if c.servers == nil {
+		c.servers = map[uint32]*brokeredServer{}
+	}
+	c.servers[brokerID] = tracked
+	c.mu.Unlock()
 
 	log.Debug().
 		Uint32("broker_id", brokerID).
@@ -124,7 +186,15 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(pluginID uint, m
 	// will wait for connection info when it calls Dial().
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
 		opts = append(opts, pluginlimits.HostServiceServerOptions()...)
+		opts = append(opts, grpc.StatsHandler(tracked))
 		s := grpc.NewServer(append(opts, grpc.UnaryInterceptor(boundPluginIDInterceptor(pluginID)))...)
+		tracked.mu.Lock()
+		tracked.server = s
+		if tracked.stopped {
+			// StopBroker ran before go-plugin built the server.
+			s.Stop()
+		}
+		tracked.mu.Unlock()
 
 		// Register microgateway management services on brokered server
 		mgmtpb.RegisterMicrogatewayManagementServiceServer(s, mgmtServer)
