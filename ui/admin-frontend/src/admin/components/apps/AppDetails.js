@@ -690,7 +690,14 @@ const AppDetails = () => {
           </Box>
         </Section>
 
-        <AppMCPUsage client={apiClient} path={adminAppPath(id)} startDate={startDate} endDate={endDate} admin />
+        <AppMCPUsage
+          client={apiClient}
+          path={adminAppPath(id)}
+          startDate={startDate}
+          endDate={endDate}
+          boundServers={app?.attributes?.mcp_servers || []}
+          admin
+        />
 
         <Section title="App Information">
           <Grid container spacing={2}>

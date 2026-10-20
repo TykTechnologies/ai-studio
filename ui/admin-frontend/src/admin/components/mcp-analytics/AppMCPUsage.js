@@ -12,10 +12,11 @@ import { fetchAppServers, formatCount, formatMs, formatPercent } from "./mcpAnal
  * period. The admin App page and the portal App page both render it, each
  * with its own client and path: the portal path only answers for Apps the
  * caller owns, so the portal never reaches an admin endpoint. The response
- * has a row per MCP server the App called in the period; an App without
- * MCP calls gets no section at all.
+ * has a row per MCP server the App called in the period. boundServers are
+ * the App's own MCP servers (app.attributes.mcp_servers): bound but silent
+ * shows the Pump empty state; no calls and nothing bound shows nothing.
  */
-const AppMCPUsage = ({ client, path, startDate, endDate, admin = false }) => {
+const AppMCPUsage = ({ client, path, startDate, endDate, boundServers = [], admin = false }) => {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
 
@@ -35,7 +36,7 @@ const AppMCPUsage = ({ client, path, startDate, endDate, admin = false }) => {
     };
   }, [client, path, startDate, endDate]);
 
-  if (rows !== null && !error && rows.length === 0) return null;
+  if (rows !== null && !error && rows.length === 0 && boundServers.length === 0) return null;
 
   return (
     <Section
@@ -43,12 +44,12 @@ const AppMCPUsage = ({ client, path, startDate, endDate, admin = false }) => {
       description="Calls this App made to MCP servers through Tyk, per server."
       data-testid="app-mcp-usage-section"
     >
-      <AppMCPUsageBody rows={rows} error={error} admin={admin} />
+      <AppMCPUsageBody rows={rows} error={error} admin={admin} connectionId={boundServers[0]?.connection_id} />
     </Section>
   );
 };
 
-const AppMCPUsageBody = ({ rows, error, admin }) => {
+const AppMCPUsageBody = ({ rows, error, admin, connectionId }) => {
   if (rows === null) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
@@ -64,7 +65,7 @@ const AppMCPUsageBody = ({ rows, error, admin }) => {
     );
   }
   if (rows.every((r) => r.calls === 0)) {
-    return <MCPAnalyticsEmptyState compact showSetupLink={admin} connectionId={rows[0]?.connectionId} />;
+    return <MCPAnalyticsEmptyState compact showSetupLink={admin} connectionId={rows[0]?.connectionId ?? connectionId} />;
   }
 
   return (

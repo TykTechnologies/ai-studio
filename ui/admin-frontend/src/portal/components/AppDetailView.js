@@ -553,7 +553,15 @@ const AppDetailView = () => {
         />
       </Box>
 
-      <AppMCPUsage client={pubClient} path={portalAppPath(id)} startDate={startDate} endDate={endDate} />
+      {app && (
+        <AppMCPUsage
+          client={pubClient}
+          path={portalAppPath(id)}
+          startDate={startDate}
+          endDate={endDate}
+          boundServers={app.attributes?.mcp_servers || []}
+        />
+      )}
 
       {/* Main App Details Paper */}
       <Paper sx={{ p: 3, mb: 3 }}>

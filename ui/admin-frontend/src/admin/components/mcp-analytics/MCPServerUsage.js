@@ -198,7 +198,7 @@ const MCPServerUsage = ({ serverId, connectionId }) => {
             </Grid>
           </Section>
 
-          <Section title="Tools, resources and prompts" description="Errors are HTTP responses of 400 or above and JSON-RPC errors.">
+          <Section title="Tools, resources and prompts" description="Errors are HTTP responses of 400 or above and JSON-RPC errors the Gateway detects. An error an upstream MCP server returns inside an HTTP 200 response may not be counted.">
             {tools.error && <Alert severity="error">{tools.error}</Alert>}
             <DataTable
               columns={toolColumns}

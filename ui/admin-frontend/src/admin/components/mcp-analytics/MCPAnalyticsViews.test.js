@@ -127,6 +127,15 @@ describe("AppMCPUsage", () => {
     await waitFor(() => expect(second.container).toBeEmptyDOMElement());
   });
 
+  it("shows the Pump empty state for an App with bound but silent MCP servers", async () => {
+    client.get.mockResolvedValueOnce({ data: { servers: [] } });
+    wrap(
+      <AppMCPUsage client={client} path="/p" startDate="a" endDate="b" boundServers={[{ id: 4, connection_id: 7 }]} admin />,
+    );
+    expect(await screen.findByTestId("mcp-analytics-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("mcp-analytics-setup-link")).toHaveAttribute("href", "/admin/tyk-connections/edit/7#analytics");
+  });
+
   it("shows other errors", async () => {
     client.get.mockRejectedValueOnce({ response: { status: 500, data: { errors: [{ detail: "boom" }] } } });
     wrap(<AppMCPUsage client={client} path="/p" startDate="a" endDate="b" admin />);
