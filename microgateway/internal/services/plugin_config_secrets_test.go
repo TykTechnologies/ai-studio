@@ -116,16 +116,17 @@ func TestPluginConfigSecrets_MergeRules(t *testing.T) {
 	adapter := &PluginServiceAdapter{crypto: NewCryptoService(pluginSecretTestKey)}
 	p := database.Plugin{
 		ID: 42,
-		Config: database.JSON(`{"engine_main_token":"$SECRET/A","engine_bad_token":"$SECRET/B","plain":"keep",` +
+		Config: database.JSON(`{"engine_main_token":"$SECRET/A","engine_bad_token":"$SECRET/B","engine_blank_token":"$SECRET/C","plain":"keep",` +
 			`"env":"$ENV/HOME","big":12345678901234567890,"nested":{"t":"$SECRET/A"}}`),
 	}
 	encrypted, err := json.Marshal(map[string]string{
-		"engine_main_token": encryptedConfigSecret(t, "tok"),
-		"engine_bad_token":  "not-a-ciphertext",
-		"plain":             encryptedConfigSecret(t, "injected"),
-		"env":               encryptedConfigSecret(t, "injected"),
-		"nested":            encryptedConfigSecret(t, "injected"),
-		"absent":            encryptedConfigSecret(t, "injected"),
+		"engine_main_token":  encryptedConfigSecret(t, "tok"),
+		"engine_bad_token":   "not-a-ciphertext",
+		"engine_blank_token": "",
+		"plain":              encryptedConfigSecret(t, "injected"),
+		"env":                encryptedConfigSecret(t, "injected"),
+		"nested":             encryptedConfigSecret(t, "injected"),
+		"absent":             encryptedConfigSecret(t, "injected"),
 	})
 	require.NoError(t, err)
 	p.ConfigSecretsEncrypted = database.JSON(encrypted)
@@ -135,6 +136,7 @@ func TestPluginConfigSecrets_MergeRules(t *testing.T) {
 	require.NoError(t, json.Unmarshal(got, &cfg))
 	assert.JSONEq(t, `"tok"`, string(cfg["engine_main_token"]))
 	assert.JSONEq(t, `"`+secrets.RefusedCredential+`"`, string(cfg["engine_bad_token"]))
+	assert.JSONEq(t, `"`+secrets.RefusedCredential+`"`, string(cfg["engine_blank_token"]), "an empty field from the hub is not an empty credential")
 	assert.JSONEq(t, `"keep"`, string(cfg["plain"]))
 	assert.JSONEq(t, `"$ENV/HOME"`, string(cfg["env"]))
 	assert.JSONEq(t, `{"t":"$SECRET/A"}`, string(cfg["nested"]))

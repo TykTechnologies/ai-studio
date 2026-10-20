@@ -45,23 +45,27 @@ func snapshotPlugin(t *testing.T, server *ControlServer, id uint) (*pb.Configura
 func TestSnapshot_EdgePluginSecretReferencesAreEncrypted(t *testing.T) {
 	server, putSecret := setupPluginSecretServer(t)
 	putSecret("ENGINE_TOKEN", "hr-real-engine-token")
+	putSecret("EMPTY_TOKEN", "")
 	t.Setenv("ENGINE_ENV_TOKEN", "env-value-must-not-leave")
 	t.Setenv(secrets.EnvRefAllowlistVar, "ENGINE_ENV_TOKEN")
 
 	plugin := &models.Plugin{Name: "prompt-compressor", Command: "/bin/pc", IsActive: true,
 		HookType: models.HookTypePostAuth, HookTypes: []string{models.HookTypeStudioUI, models.HookTypePostAuth},
 		Config: map[string]interface{}{
-			"engine_main_token": "$SECRET/ENGINE_TOKEN",
-			"engine_main_url":   "http://127.0.0.1:8787",
-			"engine_gone_token": "$SECRET/NO_SUCH_SECRET",
-			"engine_env_token":  "$ENV/ENGINE_ENV_TOKEN",
-			"policies":          map[string]interface{}{"max": map[string]interface{}{"token": "$SECRET/ENGINE_TOKEN"}},
+			"engine_main_token":  "$SECRET/ENGINE_TOKEN",
+			"engine_main_url":    "http://127.0.0.1:8787",
+			"engine_gone_token":  "$SECRET/NO_SUCH_SECRET",
+			"engine_empty_token": "$SECRET/EMPTY_TOKEN",
+			"engine_env_token":   "$ENV/ENGINE_ENV_TOKEN",
+			"policies":           map[string]interface{}{"max": map[string]interface{}{"token": "$SECRET/ENGINE_TOKEN"}},
 		}}
 	require.NoError(t, server.db.Create(plugin).Error)
 
 	snapshot, p := snapshotPlugin(t, server, plugin.ID)
 
-	require.Len(t, p.ConfigSecretsEncrypted, 2, "only top-level $SECRET/ references: %v", p.ConfigSecretsEncrypted)
+	require.Len(t, p.ConfigSecretsEncrypted, 3, "only top-level $SECRET/ references: %v", p.ConfigSecretsEncrypted)
+	assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, testEncryptionKey, p.ConfigSecretsEncrypted["engine_empty_token"]),
+		"a secret stored empty never reaches the edge as an empty credential")
 	assert.Equal(t, "hr-real-engine-token", decryptLikeMicrogateway(t, testEncryptionKey, p.ConfigSecretsEncrypted["engine_main_token"]))
 	assert.Equal(t, secrets.RefusedCredential, decryptLikeMicrogateway(t, testEncryptionKey, p.ConfigSecretsEncrypted["engine_gone_token"]),
 		"an unresolvable reference never goes out as the reference")

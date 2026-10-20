@@ -102,7 +102,7 @@ func TestBufferedCapture_ModifyHeadersFullReplacementStillWorks(t *testing.T) {
 // was given, which omit Content-Encoding (the body it sees is decoded).
 type decodedBodyHook struct{ headerHook }
 
-func (decodedBodyHook) OnBeforeWrite(_ context.Context, req *ResponseWriteRequest) (*ResponseWriteResponse, error) {
+func (*decodedBodyHook) OnBeforeWrite(_ context.Context, req *ResponseWriteRequest) (*ResponseWriteResponse, error) {
 	return &ResponseWriteResponse{Modified: true, Body: []byte(`{"rewritten":true}`), Headers: req.Headers}, nil
 }
 

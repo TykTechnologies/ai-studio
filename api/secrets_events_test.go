@@ -69,4 +69,14 @@ func TestSecretHandlers_EmitSecretEventsWithoutTheSecret(t *testing.T) {
 	api.router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNoContent, w.Code)
 	next(services.TopicSecretDeleted)
+
+	// The bulk route deletes too: each deleted secret is one event.
+	require.Equal(t, http.StatusCreated, send(http.MethodPost, "/api/v1/secrets", "engine-token-value-3"))
+	next(services.TopicSecretCreated)
+	var again secrets.Secret
+	require.NoError(t, db.Where("var_name = ?", "ENGINE_TOKEN").First(&again).Error)
+	w = performRequest(api.router, http.MethodPost, "/api/v1/secrets/bulk", bulkBody("delete", again.ID))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	e := next(services.TopicSecretDeleted)
+	assert.Contains(t, string(e.Payload), fmt.Sprintf(`"object_id":%d`, again.ID))
 }

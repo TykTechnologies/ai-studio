@@ -16,8 +16,8 @@ import (
 // (the admin API, the edge DB at rest) sees a value.
 //
 // Only a key whose stored value is a $SECRET/ reference is replaced. A value
-// that does not decrypt becomes secrets.RefusedCredential, never the
-// ciphertext or the reference. No value is logged.
+// that is empty or does not decrypt becomes secrets.RefusedCredential, never
+// an empty credential, the ciphertext or the reference. No value is logged.
 func (a *PluginServiceAdapter) pluginConfigBytes(p database.Plugin) []byte {
 	configBytes, _ := json.Marshal(p.Config)
 	if len(p.ConfigSecretsEncrypted) == 0 {
@@ -40,7 +40,11 @@ func (a *PluginServiceAdapter) pluginConfigBytes(p database.Plugin) []byte {
 			continue
 		}
 		value := secrets.RefusedCredential
-		if a.crypto == nil {
+		if ciphertext == "" {
+			// The hub encrypts every value it sends, refusals included; an
+			// empty field would decrypt to an empty credential.
+			log.Error().Uint("plugin_id", p.ID).Str("key", key).Msg("Empty plugin config secret from the hub")
+		} else if a.crypto == nil {
 			log.Error().Uint("plugin_id", p.ID).Str("key", key).Msg("No crypto service to decrypt a plugin config secret")
 		} else if plain, err := a.crypto.Decrypt(ciphertext); err != nil {
 			log.Error().Err(err).Uint("plugin_id", p.ID).Str("key", key).Msg("Failed to decrypt a plugin config secret")

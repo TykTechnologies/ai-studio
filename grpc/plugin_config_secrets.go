@@ -20,8 +20,9 @@ import (
 // from the plugin's own config are resolved, since writing one there needs
 // the right to read secrets; a reference that a per-LLM config override put
 // in cfg is not (writing an override has no such check). A reference that
-// cannot be resolved goes out as secrets.RefusedCredential, and $ENV/ is never
-// resolved here: edges get nothing from the hub's environment.
+// cannot be resolved, or names a secret stored empty, goes out as
+// secrets.RefusedCredential, and $ENV/ is never resolved here: edges get
+// nothing from the hub's environment.
 func (s *ControlServer) pluginConfigSecretsForEdge(plugin *models.Plugin, cfg map[string]interface{}) map[string]string {
 	if !plugin.IsActive || !pluginRunsOnGateway(plugin) {
 		return nil
@@ -37,7 +38,7 @@ func (s *ControlServer) pluginConfigSecretsForEdge(plugin *models.Plugin, cfg ma
 				Msg("Plugin config secret reference comes from a per-LLM override; edges get it unresolved")
 			continue
 		}
-		encrypted, err := s.encryptForMicrogateway(secrets.ForEdgeCredential(secrets.ResolveRef(ref)))
+		encrypted, err := s.encryptForMicrogateway(secrets.CredentialRefForEdge(ref))
 		if err != nil {
 			// The plugin still runs, with the reference: leaving it out
 			// would drop it from every LLM chain it enforces policy on.
