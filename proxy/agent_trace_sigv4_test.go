@@ -23,7 +23,11 @@ import (
 // signature the way AWS does: it rebuilds the request from the headers the
 // Authorization header says were signed and signs it again.
 func sigV4Verifier(t *testing.T, accessKey, secret, region string, got *http.Header) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewServer(sigV4VerifyHandler(accessKey, secret, region, got))
+}
+
+func sigV4VerifyHandler(accessKey, secret, region string, got *http.Header) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*got = r.Header.Clone()
 		body, _ := io.ReadAll(r.Body)
 		auth := r.Header.Get("Authorization")
@@ -47,8 +51,29 @@ func sigV4Verifier(t *testing.T, accessKey, secret, region string, got *http.Hea
 			http.Error(w, "signature mismatch", http.StatusForbidden)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-	}))
+		_, _ = w.Write([]byte(`{"output":{"message":{"role":"assistant","content":[{"text":"ok"}]}},"stopReason":"end_turn","usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}`))
+	})
+}
+
+// The native /llm/rest/ Bedrock passthrough signs after httputil.ReverseProxy
+// has changed the headers: a client's X-Forwarded-For (appended to) and
+// Connection-listed headers (removed) used to break the signature (jyx.87).
+func TestBedrockREST_SigV4SurvivesForwardedAndConnectionHeaders(t *testing.T) {
+	var received http.Header
+	h := newFailoverHarness(t, sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received), serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.BEDROCK
+		primary.Failover = models.LLMFailover{}
+		primary.DefaultModel = "anthropic.claude-3"
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+	})
+	resp, body := h.post("/llm/rest/primary/model/anthropic.claude-3/converse",
+		`{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`,
+		"X-Forwarded-For", "203.0.113.7", "Connection", "X-Hop", "X-Hop", "drop-me")
+	require.Equal(t, http.StatusOK, resp.StatusCode, "the SigV4 verifier rejected the request: %s", body)
+	assert.Contains(t, received.Get("X-Forwarded-For"), "203.0.113.7")
+	assert.Empty(t, received.Get("X-Hop"))
 }
 
 func between(s, start, end string) string {
