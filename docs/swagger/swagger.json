@@ -545,6 +545,334 @@
                 }
             }
         },
+        "/analytics/mcp/apps/{id}": {
+            "get": {
+                "description": "The App's calls to each MCP server, busiest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "An App's MCP usage",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPAppUsage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/overview": {
+            "get": {
+                "description": "Calls, errors, latency and the busiest tools across every MCP server, from Tyk Gateway analytics. An error is an HTTP status \u003e= 400 or a JSON-RPC error.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP traffic overview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.MCPOverview"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/apps": {
+            "get": {
+                "description": "One page of the Apps calling the server, busiest first. A row with a null app_id is the traffic no App could be attributed to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Apps calling an MCP server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 10, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by App name",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPAppStatsPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/summary": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP server usage summary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.MCPSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/timeseries": {
+            "get": {
+                "description": "Buckets with no calls are omitted.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP server calls, errors and latency over time",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "hour or day (default day)",
+                        "name": "interval",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.MCPTimeseries"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/tools": {
+            "get": {
+                "description": "One page of the server's tools (and resources, prompts, discovery calls), busiest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP server per-tool usage",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 10, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tool name",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPToolStatsPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/analytics/model-usage": {
             "get": {
                 "description": "Get the usage statistics for a specific model over time",
@@ -11143,6 +11471,67 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/apps/{id}/analytics/mcp": {
+            "get": {
+                "description": "The App's calls to each MCP server through Tyk Gateways. Only the App's owner may read it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portal-analytics"
+                ],
+                "summary": "MCP usage of the caller's App",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPAppUsage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
                         }
                     }
                 }
@@ -27569,6 +27958,208 @@
                 }
             }
         },
+        "analytics.MCPAppRow": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "integer"
+                },
+                "app_name": {
+                    "type": "string"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.MCPOverview": {
+            "type": "object",
+            "properties": {
+                "avg_ms": {
+                    "type": "number"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "top_tools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPTopTool"
+                    }
+                }
+            }
+        },
+        "analytics.MCPServerRow": {
+            "type": "object",
+            "properties": {
+                "calls": {
+                    "type": "integer"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "mcp_server_id": {
+                    "type": "integer"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "server_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.MCPSummary": {
+            "type": "object",
+            "properties": {
+                "avg_ms": {
+                    "type": "number"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                }
+            }
+        },
+        "analytics.MCPTimeseries": {
+            "type": "object",
+            "properties": {
+                "interval": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPTimeseriesPoint"
+                    }
+                }
+            }
+        },
+        "analytics.MCPTimeseriesPoint": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "type": "string"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                }
+            }
+        },
+        "analytics.MCPToolRow": {
+            "type": "object",
+            "properties": {
+                "avg_ms": {
+                    "type": "number"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "primitive_name": {
+                    "type": "string"
+                },
+                "primitive_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.MCPTopTool": {
+            "type": "object",
+            "properties": {
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "mcp_server_id": {
+                    "type": "integer"
+                },
+                "primitive_name": {
+                    "type": "string"
+                },
+                "primitive_type": {
+                    "type": "string"
+                },
+                "server_name": {
+                    "type": "string"
+                }
+            }
+        },
         "analytics.ModelAppUsage": {
             "type": "object",
             "properties": {
@@ -29548,7 +30139,6 @@
                             "additionalProperties": true
                         },
                         "namespace": {
-                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -30600,6 +31190,62 @@
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "api.MCPAppStatsPage": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPAppRow"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/api.MCPPageMeta"
+                }
+            }
+        },
+        "api.MCPAppUsage": {
+            "type": "object",
+            "properties": {
+                "servers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPServerRow"
+                    }
+                }
+            }
+        },
+        "api.MCPPageMeta": {
+            "type": "object",
+            "properties": {
+                "page_number": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.MCPToolStatsPage": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPToolRow"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/api.MCPPageMeta"
                 }
             }
         },

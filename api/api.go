@@ -595,6 +595,7 @@ func (a *API) setupRoutes() error {
 
 	// Portal analytics endpoints with proper user validation
 	authed.GET("/apps/:id/analytics/usage", a.getUserAppUsage)
+	authed.GET("/apps/:id/analytics/mcp", a.getUserAppMCPUsage)
 	authed.GET("/apps/:id/analytics/interactions", a.getUserAppInteractions)
 
 	// Notification routes
@@ -1103,6 +1104,13 @@ func (a *API) setupRoutes() error {
 	v1.GET("/analytics/apps-for-model", authz.Read("analytics"), a.getAppsForModel)
 	v1.GET("/analytics/decisions", authz.Read("analytics"), a.getDecisionUsage)
 	v1.GET("/analytics/service-tier-usage", authz.Read("analytics"), a.getServiceTierUsage)
+	// MCP traffic proxied by Tyk Gateways (ingested from Tyk Pump).
+	v1.GET("/analytics/mcp/overview", authz.Read("analytics"), a.getMCPAnalyticsOverview)
+	v1.GET("/analytics/mcp/servers/:id/summary", authz.Read("analytics"), a.getMCPServerSummary)
+	v1.GET("/analytics/mcp/servers/:id/timeseries", authz.Read("analytics"), a.getMCPServerTimeseries)
+	v1.GET("/analytics/mcp/servers/:id/tools", authz.Read("analytics"), a.getMCPServerTools)
+	v1.GET("/analytics/mcp/servers/:id/apps", authz.Read("analytics"), a.getMCPServerApps)
+	v1.GET("/analytics/mcp/apps/:id", authz.Read("analytics"), a.getMCPAppUsage)
 
 	v1.GET("/analytics/proxy-logs-for-app", authz.Read("proxy-logs"), a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", authz.Read("proxy-logs"), a.getProxyLogsForLLM)
