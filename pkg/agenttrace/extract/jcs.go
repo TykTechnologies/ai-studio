@@ -155,11 +155,19 @@ func write(buf *bytes.Buffer, v value) error {
 		}
 		buf.WriteByte(']')
 	case object:
-		sorted := make(object, len(t))
-		copy(sorted, t)
-		sort.Slice(sorted, func(i, j int) bool { return lessUTF16(sorted[i].key, sorted[j].key) })
+		// Encode each key to UTF-16 once, not on every comparison.
+		type keyed struct {
+			m   member
+			u16 []uint16
+		}
+		sorted := make([]keyed, len(t))
+		for i, m := range t {
+			sorted[i] = keyed{m: m, u16: utf16.Encode([]rune(m.key))}
+		}
+		sort.Slice(sorted, func(i, j int) bool { return lessUnits(sorted[i].u16, sorted[j].u16) })
 		buf.WriteByte('{')
-		for i, m := range sorted {
+		for i, k := range sorted {
+			m := k.m
 			if i > 0 {
 				buf.WriteByte(',')
 			}
@@ -176,9 +184,8 @@ func write(buf *bytes.Buffer, v value) error {
 	return nil
 }
 
-// lessUTF16 orders keys by their UTF-16 code units (RFC 8785 §3.2.3).
-func lessUTF16(a, b string) bool {
-	ua, ub := utf16.Encode([]rune(a)), utf16.Encode([]rune(b))
+// lessUnits orders keys by their UTF-16 code units (RFC 8785 §3.2.3).
+func lessUnits(ua, ub []uint16) bool {
 	for i := 0; i < len(ua) && i < len(ub); i++ {
 		if ua[i] != ub[i] {
 			return ua[i] < ub[i]

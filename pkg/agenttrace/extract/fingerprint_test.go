@@ -1,8 +1,10 @@
 package extract
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +33,32 @@ func TestArgsFingerprint_FlatMCPEqualsNestedREST(t *testing.T) {
 
 // OpenAI sends function.arguments as a JSON string; Anthropic sends input as
 // an object. Key order and whitespace are not differences.
+// jyx.63: members that flatten to one key would make JCS depend on order,
+// so such arguments get no fingerprint.
+func TestArgsFingerprint_FlattenCollision(t *testing.T) {
+	for _, args := range []string{`{"a":{"b":1},"a_b":2}`, `{"a_b":2,"a":{"b":1}}`, `{"x":{"y_z":1,"y":{"z":2}}}`} {
+		_, err := ArgsFingerprint(testFP, []byte(args))
+		assert.ErrorIs(t, err, ErrDuplicateKey, args)
+	}
+}
+
+func TestCanonicalize_ManyKeysFast(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("{")
+	for i := 0; i < 200000; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `"k%07d":%d`, 199999-i, i)
+	}
+	b.WriteString("}")
+	start := time.Now()
+	out, err := Canonicalize([]byte(b.String()))
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(out), `{"k0000000":199999,`))
+	assert.Less(t, time.Since(start), 2*time.Second)
+}
+
 func TestArgsFingerprint_StringEncodedEqualsObject(t *testing.T) {
 	obj := `{"query":"cycle lanes","limit":5}`
 	str := `"{ \"limit\": 5.0, \"query\": \"cycle lanes\" }"`

@@ -63,7 +63,9 @@ func CanonicalArgs(args []byte) ([]byte, error) {
 	}
 	if obj, ok := v.(object); ok {
 		flat := object{}
-		flatten(&flat, "", obj)
+		if !flatten(&flat, map[string]bool{}, "", obj) {
+			return nil, ErrDuplicateKey
+		}
 		v = flat
 	}
 	var buf bytes.Buffer
@@ -73,19 +75,30 @@ func CanonicalArgs(args []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// flatten appends obj's members to out, nested objects as prefix_key.
-func flatten(out *object, prefix string, obj object) {
+// flatten appends obj's members to out, nested objects as prefix_key. It
+// reports false when two members flatten to the same key ({"a":{"b":1},
+// "a_b":2}): JCS would then depend on member order, so such arguments get
+// no fingerprint. By design the nested and flat forms of the same call are
+// equal, and an empty object contributes nothing.
+func flatten(out *object, seen map[string]bool, prefix string, obj object) bool {
 	for _, m := range obj {
 		key := m.key
 		if prefix != "" {
 			key = prefix + "_" + m.key
 		}
 		if sub, ok := m.val.(object); ok {
-			flatten(out, key, sub)
+			if !flatten(out, seen, key, sub) {
+				return false
+			}
 			continue
 		}
+		if seen[key] {
+			return false
+		}
+		seen[key] = true
 		*out = append(*out, member{key: key, val: m.val})
 	}
+	return true
 }
 
 // ResultFingerprint is the result_fp of a tool result: its text pieces in
