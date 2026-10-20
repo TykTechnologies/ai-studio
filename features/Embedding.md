@@ -141,7 +141,10 @@ for the host-facing API.
   (budgets and spend read `llm_chat_records`), and gives each sink a copy of
   every record (chat records, proxy logs, tool calls, compliance events and
   edge batches; a request's proxy log and chat record reach an
-  `ExchangeRecorder` sink together). Each sink has a bounded queue
+  `ExchangeRecorder` sink together). Tyk MCP analytics calls reach only
+  the sinks that also implement the optional `analytics.MCPCallRecorder`;
+  a sink without it is skipped for them, with nothing logged (the database
+  handler always records them). Each sink has a bounded queue
   (`analytics.TeeQueueSize`, 10000) drained by its own goroutine, so a slow
   sink loses records, counted in `Tee.Dropped` and logged, instead of
   slowing requests, and a panicking sink is recovered. `Stop` gives the

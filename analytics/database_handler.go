@@ -28,6 +28,7 @@ type DatabaseHandler struct {
 	chatRecordBatchChan    chan []*models.LLMChatRecord
 	proxyLogBatchChan      chan []*models.ProxyLog
 	complianceEventChan    chan []*models.ComplianceEvent
+	mcpCallChan            chan []models.MCPCallRecord
 	recStarted          bool
 	recMutex            sync.RWMutex
 	// teams attributes spend records to their team before they are written.
@@ -132,15 +133,49 @@ func (h *DatabaseHandler) start() {
 	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
+	h.mcpCallChan = make(chan []models.MCPCallRecord, batchBufferSize)
 
 	// Start background workers. A panic writing one record loses that
 	// record, not the worker (nor the process); workerDone closes once the
-	// worker has stopped for good.
+	// worker has stopped for good. MCP call records (ingested from Tyk Pump
+	// in batches of thousands) have a writer of their own, so a burst of
+	// them never delays, or crowds out, the chat records budgets are
+	// computed from.
 	h.workerDone = make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(2)
 	go func() {
-		defer close(h.workerDone)
+		defer workers.Done()
 		safe.Loop("analytics writer", h.ctx.Done(), h.startWorker)
 	}()
+	go func() {
+		defer workers.Done()
+		safe.Loop("analytics MCP writer", h.ctx.Done(), h.mcpWorker)
+	}()
+	go func() {
+		workers.Wait()
+		close(h.workerDone)
+	}()
+}
+
+// mcpWorker writes MCP call batches until the handler stops.
+func (h *DatabaseHandler) mcpWorker() {
+	for {
+		if h.ctx.Err() != nil {
+			return
+		}
+		select {
+		case calls := <-h.mcpCallChan:
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(calls, 100).Error
+			})
+			if err != nil {
+				logger.Warnf("Error creating MCP call records (%d): %s", len(calls), sanitizeError(err))
+			}
+		case <-h.ctx.Done():
+			return
+		}
+	}
 }
 
 // waitStopped waits, up to d, for the worker of a stopped handler (its
@@ -497,6 +532,37 @@ func (h *DatabaseHandler) RecordComplianceEvents(_ context.Context, events []*mo
 	case h.complianceEventChan <- events:
 	default:
 		logger.Warn("compliance event buffer full, dropping events")
+	}
+}
+
+// RecordMCPCalls queues MCP calls for the MCP writer. The writer writes the
+// slice it is given, so the caller must not reuse it. ErrRecorderBusy means
+// the batch was not queued (buffer full, or the handler stopped): the
+// ingest endpoint answers 503 so the pump retries it.
+func (h *DatabaseHandler) RecordMCPCalls(_ context.Context, records []models.MCPCallRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		h.recMutex.RUnlock()
+		return ErrRecorderBusy
+	}
+	h.recMutex.RUnlock()
+
+	for i := range records {
+		records[i].ClampLengths()
+	}
+
+	select {
+	case <-h.ctx.Done():
+		return ErrRecorderBusy
+	case h.mcpCallChan <- records:
+		return nil
+	default:
+		logger.Warnf("MCP call record buffer full, refusing batch, count: %d", len(records))
+		return ErrRecorderBusy
 	}
 }
 

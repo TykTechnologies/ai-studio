@@ -114,6 +114,11 @@ Each feature specification below provides detailed documentation on the individu
 - Community MCP server submissions with two-phase approval, handoff packages for platform-owned Dashboards and linking
 - Credential ledger, access report, audit trail, RBAC (`tyk-connections`, `mcp-servers`, `mcp-credentials`)
 
+### [Tyk MCP Analytics](TykMCPAnalytics.md) (Enterprise)
+- Tyk Pump delivers the Gateway's MCP analytics records to `POST /api/v1/ingest/tyk-analytics`, authenticated by a per-connection ingest token (stored hashed)
+- Records resolved to MCP servers on the token's connection and attributed to Apps by key hash or alias; no keys, bodies or IPs stored
+- Calls, error rates, p50/p95 latency, per-tool and per-App statistics for admins; MCP usage of their own Apps for portal users
+
 ### [Budget Control](Budgeting.md)
 - Monthly spending caps for apps and LLMs
 - Real-time usage tracking and blocking

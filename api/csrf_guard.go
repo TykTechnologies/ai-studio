@@ -13,6 +13,7 @@ import (
 
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 )
 
 // devCSRFTrustedOrigins builds the DEVMODE-only CSRF trusted-origin list.
@@ -79,8 +80,10 @@ func csrfGuard(csrfMiddleware func(http.Handler) http.Handler) gin.HandlerFunc {
 			return
 		}
 
-		// OAuth endpoints run their own state/PKCE checks.
-		if strings.HasPrefix(c.Request.URL.Path, "/oauth/") {
+		// OAuth endpoints run their own state/PKCE checks. The Tyk analytics
+		// ingest endpoint authenticates by bearer token only (never a
+		// cookie), so a request without one must get its 401, not a CSRF 403.
+		if strings.HasPrefix(c.Request.URL.Path, "/oauth/") || c.Request.URL.Path == tykmcp.IngestPath {
 			c.Next()
 			return
 		}

@@ -476,7 +476,10 @@ Goal: chat sessions and agents use a Tyk MCP server's tools under the calling Ap
 - Discovery probe key (`tools/list` through the proxy to enrich `primitives` for remote servers) — deferred because it is itself a long-lived credential to protect.
 - Rotation grace window; CSV export of the access report.
 - Auto-link handoff rows by a Dashboard tag convention.
-- Dashboard MCP analytics (`/api/activity/mcp/*`) on the App usage page.
+- ~~Dashboard MCP analytics on the App usage page.~~ Done another way: the
+  Gateway's MCP analytics records reach Studio through Tyk Pump, for both
+  connection kinds. See `features/TykMCPAnalytics.md`. Backfilling from the
+  Dashboard's `/api/activity/mcp/*` remains a follow-up there.
 - Tyk Developer Portal awareness; governed-metadata schema pack for MCP servers.
 
 ## 15. Delivery plan

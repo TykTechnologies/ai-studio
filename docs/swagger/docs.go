@@ -551,6 +551,334 @@ const docTemplate = `{
                 }
             }
         },
+        "/analytics/mcp/apps/{id}": {
+            "get": {
+                "description": "The App's calls to each MCP server, busiest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "An App's MCP usage",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPAppUsage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/overview": {
+            "get": {
+                "description": "Calls, errors, latency and the busiest tools across every MCP server, from Tyk Gateway analytics. An error is an HTTP status \u003e= 400 or a JSON-RPC error.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP traffic overview",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.MCPOverview"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/apps": {
+            "get": {
+                "description": "One page of the Apps calling the server, busiest first. A row with a null app_id is the traffic no App could be attributed to.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "Apps calling an MCP server",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 10, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by App name",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPAppStatsPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/summary": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP server usage summary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.MCPSummary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/timeseries": {
+            "get": {
+                "description": "Buckets with no calls are omitted.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP server calls, errors and latency over time",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "hour or day (default day)",
+                        "name": "interval",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/analytics.MCPTimeseries"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/analytics/mcp/servers/{id}/tools": {
+            "get": {
+                "description": "One page of the server's tools (and resources, prompts, discovery calls), busiest first.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Analytics"
+                ],
+                "summary": "MCP server per-tool usage",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "MCP server ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 10, max 100)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by tool name",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPToolStatsPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/analytics/model-usage": {
             "get": {
                 "description": "Get the usage statistics for a specific model over time",
@@ -11154,6 +11482,67 @@ const docTemplate = `{
                 }
             }
         },
+        "/common/apps/{id}/analytics/mcp": {
+            "get": {
+                "description": "The App's calls to each MCP server through Tyk Gateways. Only the App's owner may read it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portal-analytics"
+                ],
+                "summary": "MCP usage of the caller's App",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD, inclusive)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MCPAppUsage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/common/apps/{id}/analytics/usage": {
             "get": {
                 "description": "Get token usage and cost analytics for a user's app",
@@ -17214,6 +17603,92 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ingest/tyk-analytics": {
+            "post": {
+                "description": "Machine-to-machine endpoint for Tyk Pump (the http pump, or the stdout pump through a log shipper). The body is a JSON array of Tyk AnalyticsRecord, optionally gzip-encoded (Content-Encoding: gzip). Only MCP records are kept. Authenticated with the connection's ingest token (Authorization: Bearer). A bad or revoked token gets 401 so the pump drops the batch. Enterprise Edition; 404 in Community Edition.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Ingest Tyk Gateway analytics records",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer ingest token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Analytics records",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.TykAnalyticsRecord"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.IngestResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
                         }
                     }
                 }
@@ -25038,6 +25513,126 @@ const docTemplate = `{
                 }
             }
         },
+        "/tyk-connections/{id}/ingest-status": {
+            "get": {
+                "description": "Whether an ingest token is set, when the last batch arrived and what the last 24 hours brought.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Analytics ingest status of a Tyk connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.IngestStatus"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/ingest-token": {
+            "post": {
+                "description": "Returns the new token's plaintext exactly once; only its hash is stored. The previous token stops working immediately.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Generate or rotate a Tyk connection's analytics ingest token",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.RotatedIngestToken"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Revoke a Tyk connection's analytics ingest token",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.IngestStatus"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tyk-connections/{id}/nodes": {
             "get": {
                 "description": "Each node's reachability, version and whether it serves the MCP proxies AI Studio owns",
@@ -27372,6 +27967,208 @@ const docTemplate = `{
                 },
                 "totals": {
                     "$ref": "#/definitions/analytics.DecisionTotals"
+                }
+            }
+        },
+        "analytics.MCPAppRow": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "integer"
+                },
+                "app_name": {
+                    "type": "string"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.MCPOverview": {
+            "type": "object",
+            "properties": {
+                "avg_ms": {
+                    "type": "number"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "top_tools": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPTopTool"
+                    }
+                }
+            }
+        },
+        "analytics.MCPServerRow": {
+            "type": "object",
+            "properties": {
+                "calls": {
+                    "type": "integer"
+                },
+                "connection_id": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "mcp_server_id": {
+                    "type": "integer"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "server_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.MCPSummary": {
+            "type": "object",
+            "properties": {
+                "avg_ms": {
+                    "type": "number"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                }
+            }
+        },
+        "analytics.MCPTimeseries": {
+            "type": "object",
+            "properties": {
+                "interval": {
+                    "type": "string"
+                },
+                "points": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPTimeseriesPoint"
+                    }
+                }
+            }
+        },
+        "analytics.MCPTimeseriesPoint": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "type": "string"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                }
+            }
+        },
+        "analytics.MCPToolRow": {
+            "type": "object",
+            "properties": {
+                "avg_ms": {
+                    "type": "number"
+                },
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "last_seen_at": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "primitive_name": {
+                    "type": "string"
+                },
+                "primitive_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "analytics.MCPTopTool": {
+            "type": "object",
+            "properties": {
+                "calls": {
+                    "type": "integer"
+                },
+                "error_rate": {
+                    "type": "number"
+                },
+                "errors": {
+                    "type": "integer"
+                },
+                "mcp_server_id": {
+                    "type": "integer"
+                },
+                "primitive_name": {
+                    "type": "string"
+                },
+                "primitive_type": {
+                    "type": "string"
+                },
+                "server_name": {
+                    "type": "string"
                 }
             }
         },
@@ -30405,6 +31202,62 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "api.MCPAppStatsPage": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPAppRow"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/api.MCPPageMeta"
+                }
+            }
+        },
+        "api.MCPAppUsage": {
+            "type": "object",
+            "properties": {
+                "servers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPServerRow"
+                    }
+                }
+            }
+        },
+        "api.MCPPageMeta": {
+            "type": "object",
+            "properties": {
+                "page_number": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.MCPToolStatsPage": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/analytics.MCPToolRow"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/api.MCPPageMeta"
                 }
             }
         },
@@ -37132,6 +37985,70 @@ const docTemplate = `{
                 }
             }
         },
+        "tykmcp.IngestResult": {
+            "type": "object",
+            "properties": {
+                "accepted": {
+                    "description": "Accepted is how many records the batch held.",
+                    "type": "integer"
+                },
+                "skipped_non_mcp": {
+                    "description": "SkippedNonMCP records were not MCP traffic.",
+                    "type": "integer"
+                },
+                "stored": {
+                    "description": "Stored is how many were recorded as MCP calls.",
+                    "type": "integer"
+                },
+                "unattributed": {
+                    "description": "Unattributed records were stored without an App: the key is not a\nbrokered credential and the alias names no App.",
+                    "type": "integer"
+                },
+                "unknown_api": {
+                    "description": "UnknownAPI records were MCP traffic for an API that is not an MCP\nserver on the token's connection; they are not stored.",
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.IngestStatus": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "integer"
+                },
+                "has_token": {
+                    "type": "boolean"
+                },
+                "ingest_path": {
+                    "type": "string"
+                },
+                "last_batch_at": {
+                    "type": "string"
+                },
+                "last_unknown_api_id": {
+                    "type": "string"
+                },
+                "records_24h": {
+                    "description": "The counters cover the last 24 hours.",
+                    "type": "integer"
+                },
+                "skipped_non_mcp_24h": {
+                    "type": "integer"
+                },
+                "token_created_at": {
+                    "type": "string"
+                },
+                "token_prefix": {
+                    "type": "string"
+                },
+                "unattributed_24h": {
+                    "type": "integer"
+                },
+                "unknown_api_24h": {
+                    "type": "integer"
+                }
+            }
+        },
         "tykmcp.MintInput": {
             "type": "object",
             "properties": {
@@ -37402,6 +38319,17 @@ const docTemplate = `{
                 }
             }
         },
+        "tykmcp.RotatedIngestToken": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "$ref": "#/definitions/tykmcp.IngestStatus"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "tykmcp.ServerList": {
             "type": "object",
             "properties": {
@@ -37579,6 +38507,114 @@ const docTemplate = `{
                 },
                 "rest_to_mcp_supported": {
                     "type": "boolean"
+                }
+            }
+        },
+        "tykmcp.TykAnalyticsRecord": {
+            "type": "object",
+            "properties": {
+                "alias": {
+                    "type": "string"
+                },
+                "api_id": {
+                    "type": "string"
+                },
+                "api_key": {
+                    "description": "APIKey is the key's hash when the Gateway runs with hash_keys (the\ndefault), and the raw key otherwise. It is used to attribute the call\nand never persisted.",
+                    "type": "string"
+                },
+                "api_name": {
+                    "type": "string"
+                },
+                "latency": {
+                    "$ref": "#/definitions/tykmcp.TykLatency"
+                },
+                "mcp_stats": {
+                    "$ref": "#/definitions/tykmcp.TykMCPStats"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/tykmcp.TykNetworkStats"
+                },
+                "org_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "response_code": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.TykLatency": {
+            "type": "object",
+            "properties": {
+                "gateway": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "upstream": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.TykMCPStats": {
+            "type": "object",
+            "properties": {
+                "declared_protocol_version": {
+                    "type": "string"
+                },
+                "effective_protocol_version": {
+                    "type": "string"
+                },
+                "is_mcp": {
+                    "type": "boolean"
+                },
+                "jsonrpc_error_code": {
+                    "type": "integer"
+                },
+                "jsonrpc_method": {
+                    "type": "string"
+                },
+                "primitive_name": {
+                    "type": "string"
+                },
+                "primitive_type": {
+                    "type": "string"
+                },
+                "protocol_version_source": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.TykNetworkStats": {
+            "type": "object",
+            "properties": {
+                "bytes_in": {
+                    "type": "integer"
+                },
+                "bytes_out": {
+                    "type": "integer"
+                },
+                "closed_connections": {
+                    "type": "integer"
+                },
+                "open_connections": {
+                    "type": "integer"
                 }
             }
         },

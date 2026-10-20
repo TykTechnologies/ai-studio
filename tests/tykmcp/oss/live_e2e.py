@@ -13,7 +13,18 @@ Environment:
                 DEVMODE=true) and rolls a key
   GW_SECRET     the gateways' secret (default oss-secret)
   UPSTREAM_LOG  the demo MCP server's log, to check upstream headers (optional)
+  PUMP_PROFILE  MCP analytics producer (features/TykMCPAnalytics.md):
+                "analytics" (default: Tyk Pump stdout pump + Vector),
+                "httppump" (a local tyk-pump build with the http pump, image
+                tyk-pump-http:local), or "none" to skip the analytics checks
+  INGEST_URL    the ingest endpoint as the Pump containers reach it (default
+                http://host.docker.internal:<STUDIO port>/api/v1/ingest/tyk-analytics)
+  KEEP_DATA     set to stop after the analytics checks (section 6b) and keep
+                everything (connection, proxy, App, key, Pump, MCP records)
+                for manual or browser checks (a later normal run clears the
+                gateways and Pump, but not the kept Studio objects)
 """
+import datetime
 import http.cookiejar
 import json
 import os
@@ -31,6 +42,10 @@ GW = {"gw1": "http://localhost:18181", "gw2": "http://localhost:18182", "gw3": "
 UPSTREAM = "http://host.docker.internal:4021"
 UPSTREAM_LOG = os.environ.get("UPSTREAM_LOG", "")
 COMPOSE = ["docker", "compose", "-f", os.path.join(HERE, "docker-compose.yml")]
+PUMP_PROFILE = os.environ.get("PUMP_PROFILE", "analytics")
+KEEP_DATA = bool(os.environ.get("KEEP_DATA"))
+PUMP_SERVICES = {"analytics": ["pump", "vector"], "httppump": ["pump-http"]}
+INGEST_URL = os.environ.get("INGEST_URL", "http://host.docker.internal:%s/api/v1/ingest/tyk-analytics" % STUDIO.rsplit(":", 1)[-1].strip("/"))
 
 failures = []
 created = {"connections": [], "apps": [], "catalogues": []}
@@ -170,6 +185,50 @@ def servers(cid):
     return {s["tyk_api_id"]: s for s in (lst or {}).get("servers", [])}
 
 
+def stop_pumps():
+    for profile, svcs in PUMP_SERVICES.items():
+        subprocess.run(COMPOSE + ["--profile", profile, "stop"] + svcs, capture_output=True)
+
+
+def start_pump(token):
+    """Start the chosen Pump profile with the connection's ingest token."""
+    stop_pumps()
+    env = dict(os.environ, MCP_INGEST_TOKEN=token, MCP_INGEST_URL=INGEST_URL)
+    up = subprocess.run(COMPOSE + ["--profile", PUMP_PROFILE, "up", "-d", "--force-recreate"] + PUMP_SERVICES[PUMP_PROFILE],
+                        capture_output=True, text=True, env=env)
+    if up.returncode == 0 and PUMP_PROFILE == "analytics":
+        # Vector's docker_logs source reads from the moment it attaches: Pump
+        # output written before then is never shipped.
+        for _ in range(30):
+            logs = subprocess.run(COMPOSE + ["--profile", PUMP_PROFILE, "logs", "vector"], capture_output=True, text=True).stdout
+            if "Started watching for container logs" in logs:
+                break
+            time.sleep(1)
+    return up
+
+
+def stats_range():
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    return f"start_date={today - datetime.timedelta(days=1)}&end_date={today + datetime.timedelta(days=1)}"
+
+
+def tool_stats(server_id):
+    code, page = studio("GET", f"/api/v1/analytics/mcp/servers/{server_id}/tools?{stats_range()}&page_size=100")
+    rows = (page or {}).get("data") or [] if code == 200 else []
+    return {(r["primitive_type"], r["primitive_name"]): r for r in rows}
+
+
+def wait_for(fn, timeout=90):
+    """Poll fn until it returns a truthy value (the Pump purges every 2s,
+    Vector batches for up to 5s)."""
+    end = time.time() + timeout
+    while True:
+        v = fn()
+        if v or time.time() > end:
+            return v
+        time.sleep(2)
+
+
 def main():
     bootstrap()
     subprocess.run(COMPOSE + ["--profile", "scale", "stop", "gw3"], capture_output=True)
@@ -210,6 +269,21 @@ def main():
     check("2.both nodes answered", "2 of 2" in caps.get("gateway_nodes", {}).get("detail", ""), caps.get("gateway_nodes"))
     check("2.REST to MCP not offered", caps.get("rest_to_mcp_supported", {}).get("state") == "no")
     prefix = conn.get("gateway_api_id_prefix", "")
+
+    # ---------- 2b. MCP analytics: ingest token and the Pump ----------
+    analytics_on = PUMP_PROFILE in PUMP_SERVICES
+    if analytics_on:
+        code, rot = studio("POST", f"/api/v1/tyk-connections/{cid}/ingest-token")
+        ingest_token = (rot or {}).get("token", "")
+        check("2b.generate ingest token", code == 200 and ingest_token, (code, "no token" if code == 200 else rot))
+        code, st = studio("GET", f"/api/v1/tyk-connections/{cid}/ingest-status")
+        check("2b.status has a token but never shows it", code == 200 and st.get("has_token") and ingest_token not in json.dumps(st), (code, st))
+        code, _, _ = http("POST", STUDIO + "/api/v1/ingest/tyk-analytics", [], {"Authorization": "Bearer " + ingest_token[:-2] + "xx"}, raw=True)
+        check("2b.a wrong token is refused", code == 401, code)
+        code, _, _ = http("POST", STUDIO + "/api/v1/ingest/tyk-analytics", [], {"Authorization": "Bearer " + ingest_token}, raw=True)
+        check("2b.the token is accepted", code == 202, code)
+        up = start_pump(ingest_token)
+        check(f"2b.start the {PUMP_PROFILE} profile", up.returncode == 0, up.stderr[-300:])
 
     # ---------- 3. discovery ----------
     code, run = sync(cid)
@@ -314,6 +388,63 @@ def main():
     code, cr = studio("GET", f"/api/v1/mcp-credentials/{cred['id']}")
     check("6.credential not drifting", cr.get("drift") == "none", cr.get("drift"))
 
+    # ---------- 6b. MCP analytics: Gateway -> Redis -> Pump -> Studio ----------
+    # Calls so far on the Studio proxy with the App's key: one allowed
+    # get-weather and one blocked get-forecast (section 6). Add three
+    # get-weather calls on each node, a call to the operator proxy (it has
+    # no trafficLogs, so the Gateway records nothing), and REST traffic.
+    if analytics_on:
+        for n in ("gw1", "gw2"):
+            _, _, sid = mcp(n, "/oss-weather/", key, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "e2e", "version": "1"}})
+            for _ in range(3):
+                mcp(n, "/oss-weather/", key, "tools/call", {"name": "get-weather", "arguments": {"city": "Bergen"}}, sid)
+        _, _, sid = mcp("gw1", "/ops-weather/", key, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "e2e", "version": "1"}})
+        mcp("gw1", "/ops-weather/", key, "tools/call", {"name": "get-weather", "arguments": {"city": "Bergen"}}, sid)
+        rest = {"openapi": "3.0.3", "info": {"title": "ops-rest", "version": "1"}, "paths": {},
+                "x-tyk-api-gateway": {"info": {"id": "ops-rest", "name": "ops-rest", "state": {"active": True}},
+                                      "server": {"listenPath": {"value": "/ops-rest/", "strip": True}},
+                                      "upstream": {"url": UPSTREAM},
+                                      "middleware": {"global": {"trafficLogs": {"enabled": True}}}}}
+        gw("gw1", "POST", "/tyk/apis/oas", rest)
+        gw("gw1", "GET", "/tyk/reload?block=true")
+        for _ in range(3):
+            http("GET", GW["gw1"] + "/ops-rest/anything", raw=True)
+
+        weather = wait_for(lambda: (tool_stats(srv["id"]).get(("tool", "get-weather")) or {}).get("calls", 0) >= 7 and tool_stats(srv["id"]))
+        weather = weather or tool_stats(srv["id"])
+        gw_row = weather.get(("tool", "get-weather"), {})
+        check("6b.per-tool calls reach Studio", gw_row.get("calls") == 7 and gw_row.get("errors") == 0, gw_row)
+        # initialize: 2 in section 5, 2 in section 6, 2 above, plus the keyless
+        # one refused with 401; tools/list: 2 in section 5, 1 in section 6.
+        ini, lst = weather.get(("", "initialize"), {}), weather.get(("", "tools/list"), {})
+        check("6b.other methods counted, the 401 as an error", ini.get("calls") == 7 and ini.get("errors") == 1 and lst.get("calls") == 3, (ini, lst))
+        # Gateway 5.15.1 refuses a tool outside mcp_access_rights (403,
+        # JSON-RPC -32002) without writing an analytics record
+        # (midsommar-clean-emn). This flags a Gateway that starts to.
+        check("6b.(Gateway gap) a tool refused by key access is not recorded", ("tool", "get-forecast") not in weather, weather.get(("tool", "get-forecast")))
+        check("6b.latency recorded", gw_row.get("avg_ms") is not None and gw_row.get("p95_ms") is not None, gw_row)
+
+        code, apps = studio("GET", f"/api/v1/analytics/mcp/servers/{srv['id']}/apps?{stats_range()}&page_size=100")
+        by_app = {a.get("app_id"): a for a in (apps or {}).get("data") or []}
+        check("6b.calls attributed to the App", (by_app.get(int(app_id)) or {}).get("calls", 0) >= 8, by_app)
+        check("6b.the keyless 401 is an unattributed error row", (by_app.get(None) or {}).get("errors", 0) >= 1, by_app.get(None))
+        code, au = studio("GET", f"/api/v1/analytics/mcp/apps/{app_id}?{stats_range()}")
+        mine = [s for s in (au or {}).get("servers") or [] if s.get("mcp_server_id") == int(srv["id"])]
+        check("6b.App usage lists the Studio proxy", code == 200 and mine and mine[0].get("calls", 0) >= 8, (code, au))
+
+        code, ops = studio("GET", f"/api/v1/analytics/mcp/servers/{w['id']}/summary?{stats_range()}")
+        check("6b.operator proxy without trafficLogs records nothing", code == 200 and (ops or {}).get("calls") == 0, (code, ops))
+
+        code, st = studio("GET", f"/api/v1/tyk-connections/{cid}/ingest-status")
+        check("6b.ingest status counts records", code == 200 and st.get("last_batch_at") and st.get("records_24h", 0) >= 9, st)
+        check("6b.REST traffic never reaches Studio", st.get("last_unknown_api_id") != "ops-rest" and st.get("skipped_non_mcp_24h") == 0, st)
+        gw("gw1", "DELETE", "/tyk/apis/oas/ops-rest")
+        gw("gw1", "GET", "/tyk/reload?block=true")
+
+    if KEEP_DATA:
+        print(f"KEEP_DATA: stopping here; connection {cid}, App {app_id}, Studio proxy {srv['id']} ({srv.get('tyk_api_id')}) kept")
+        return
+
     # ---------- 7. a third node joins ----------
     up = subprocess.run(COMPOSE + ["--profile", "scale", "up", "-d", "gw3"], capture_output=True, text=True)
     check("7.gw3 started", up.returncode == 0, up.stderr[-300:])
@@ -409,6 +540,7 @@ def cleanup():
     for c in created["catalogues"]:
         studio("DELETE", f"/api/v1/tool-catalogues/{c}")
     subprocess.run(COMPOSE + ["--profile", "scale", "stop", "gw3"], capture_output=True)
+    stop_pumps()
     clean_gateways(("gw1", "gw2"))
 
 
@@ -416,6 +548,7 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        cleanup()
+        if not KEEP_DATA:
+            cleanup()
     print(f"\n{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
     sys.exit(1 if failures else 0)

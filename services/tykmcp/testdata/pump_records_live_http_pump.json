@@ -1,0 +1,938 @@
+[
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 163,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.392397132Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-open",
+  "api_id": "cap-open",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 1,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 1,
+   "upstream": 0,
+   "gateway": 1
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-open"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.392405965Z",
+  "api_schema": "",
+  "original_path": "/cap-open/mcp",
+  "listen_path": "/cap-open/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "initialize",
+   "primitive_type": "",
+   "primitive_name": "initialize",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 65,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.394838132Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-open",
+  "api_id": "cap-open",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-open"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.394847507Z",
+  "api_schema": "",
+  "original_path": "/cap-open/mcp",
+  "listen_path": "/cap-open/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/list",
+   "primitive_type": "",
+   "primitive_name": "tools/list",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 117,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.39779234Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-open",
+  "api_id": "cap-open",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 1,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 1,
+   "upstream": 0,
+   "gateway": 1
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-open"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.39779534Z",
+  "api_schema": "",
+  "original_path": "/cap-open/mcp",
+  "listen_path": "/cap-open/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "get-weather",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 117,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.400192882Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-open",
+  "api_id": "cap-open",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-open"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.400196215Z",
+  "api_schema": "",
+  "original_path": "/cap-open/mcp",
+  "listen_path": "/cap-open/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "get-weather",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 96,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.402521423Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-open",
+  "api_id": "cap-open",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-open"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.402524507Z",
+  "api_schema": "",
+  "original_path": "/cap-open/mcp",
+  "listen_path": "/cap-open/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "nope",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 163,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "b9bdb17f4a70e544",
+  "timestamp": "2026-10-20T10:00:03.405255257Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 1,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 1,
+   "upstream": 0,
+   "gateway": 1
+  },
+  "tags": [
+   "key-b9bdb17f4a70e544",
+   "api-cap-keyed"
+  ],
+  "alias": "studio:app:42",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.40525909Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "initialize",
+   "primitive_type": "",
+   "primitive_name": "initialize",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 65,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "b9bdb17f4a70e544",
+  "timestamp": "2026-10-20T10:00:03.408364715Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-b9bdb17f4a70e544",
+   "api-cap-keyed"
+  ],
+  "alias": "studio:app:42",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.40836859Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/list",
+   "primitive_type": "",
+   "primitive_name": "tools/list",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 117,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "b9bdb17f4a70e544",
+  "timestamp": "2026-10-20T10:00:03.41175959Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 1,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 1,
+   "upstream": 0,
+   "gateway": 1
+  },
+  "tags": [
+   "key-b9bdb17f4a70e544",
+   "api-cap-keyed"
+  ],
+  "alias": "studio:app:42",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.411762882Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "get-weather",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 117,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "b9bdb17f4a70e544",
+  "timestamp": "2026-10-20T10:00:03.414670965Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 1,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 1,
+   "upstream": 0,
+   "gateway": 1
+  },
+  "tags": [
+   "key-b9bdb17f4a70e544",
+   "api-cap-keyed"
+  ],
+  "alias": "studio:app:42",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.414674257Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "get-weather",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 96,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 200,
+  "api_key": "b9bdb17f4a70e544",
+  "timestamp": "2026-10-20T10:00:03.417300298Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-b9bdb17f4a70e544",
+   "api-cap-keyed"
+  ],
+  "alias": "studio:app:42",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.417304298Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "nope",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 114,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 401,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.420211048Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-keyed"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.420214048Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "get-weather",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ },
+ {
+  "method": "POST",
+  "host": "host.docker.internal:4021",
+  "path": "/mcp",
+  "raw_path": "/mcp",
+  "content_length": 114,
+  "user_agent": "Python-urllib/3.12",
+  "day": 20,
+  "month": 10,
+  "year": 2026,
+  "hour": 10,
+  "response_code": 403,
+  "api_key": "00000000",
+  "timestamp": "2026-10-20T10:00:03.423285007Z",
+  "api_version": "Non Versioned",
+  "api_name": "cap-keyed",
+  "api_id": "cap-keyed",
+  "org_id": "",
+  "oauth_id": "",
+  "request_time": 0,
+  "raw_request": "",
+  "raw_response": "",
+  "ip_address": "192.168.65.1",
+  "geo": {
+   "country": {
+    "iso_code": ""
+   },
+   "city": {
+    "geoname_id": 0,
+    "names": null
+   },
+   "location": {
+    "latitude": 0,
+    "longitude": 0,
+    "time_zone": ""
+   }
+  },
+  "network": {
+   "open_connections": 0,
+   "closed_connections": 0,
+   "bytes_in": 0,
+   "bytes_out": 0
+  },
+  "latency": {
+   "total": 0,
+   "upstream": 0,
+   "gateway": 0
+  },
+  "tags": [
+   "key-00000000",
+   "api-cap-keyed"
+  ],
+  "alias": "",
+  "track_path": false,
+  "expireAt": "2126-09-26T10:00:03.423287965Z",
+  "api_schema": "",
+  "original_path": "/cap-keyed/mcp",
+  "listen_path": "/cap-keyed/",
+  "graphql_stats": {
+   "Variables": "",
+   "RootFields": null,
+   "Types": null,
+   "Errors": null,
+   "OperationType": 0,
+   "HasErrors": false,
+   "IsGraphQL": false
+  },
+  "mcp_stats": {
+   "jsonrpc_error_code": 0,
+   "is_mcp": true,
+   "jsonrpc_method": "tools/call",
+   "primitive_type": "tool",
+   "primitive_name": "get-weather",
+   "effective_protocol_version": "",
+   "declared_protocol_version": "",
+   "protocol_version_source": ""
+  }
+ }
+]

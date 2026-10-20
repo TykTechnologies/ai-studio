@@ -124,6 +124,30 @@ func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int,
 	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
 
+// RecordMCPCalls records MCP calls a Tyk Gateway proxied, as ingested from
+// Tyk Pump. It returns ErrRecorderBusy when the handler could not take the
+// batch, so the sender retries it. With no handler, or one that does not
+// record MCP calls (MCPCallRecorder), there is nothing to record into and a
+// retry would never succeed: the batch is dropped (logged once).
+func RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
+	if r, ok := globalHandler.(MCPCallRecorder); ok {
+		return r.RecordMCPCalls(ctx, records)
+	}
+	noMCPRecorderOnce.Do(func() {
+		logger.Warnf("The analytics handler does not record MCP calls (%T); Tyk MCP analytics are dropped", globalHandler)
+	})
+	return nil
+}
+
+var noMCPRecorderOnce sync.Once
+
 func RecordContentMessage(
 	mc *llms.MessageContent,
 	cr *llms.ContentResponse,

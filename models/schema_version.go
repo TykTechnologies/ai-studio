@@ -42,7 +42,10 @@ const (
 	//     vendor_workspace_id and price_multipliers, llm_chat_records and
 	//     proxy_logs service_tier (nullable, additive).
 	// 11: native_resources.screening_digest (nullable, additive).
-	SchemaVersion          = 11
+	// 12: mcp_call_records (new table, additive): MCP analytics from Tyk Pump.
+	// 13: tyk_connection_ingests and tyk_ingest_stats (new tables, additive):
+	//     the analytics ingest token (hash only) and hourly counters.
+	SchemaVersion          = 13
 	MinReaderSchemaVersion = 1
 )
 
