@@ -81,3 +81,27 @@ func TestServiceCall_ConcurrentFirstCallsDialOnce(t *testing.T) {
 	assert.EqualValues(t, 1, dials.Load())
 	assert.Same(t, conn, GetSharedBrokerConnection())
 }
+
+// go-plugin hands over a broker ID's connection info only for a few seconds
+// after the host accepts on it. The SDK dials as soon as it learns the ID,
+// so a plugin whose first host call comes much later still connects.
+func TestServiceCall_DialsWhenTheBrokerIDArrives(t *testing.T) {
+	conn, err := grpc.NewClient("passthrough:///host", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	accepted := time.Now()
+	var dials atomic.Int32
+	withBrokerDial(t, func(*goplugin.GRPCBroker, uint32) (*grpc.ClientConn, error) {
+		dials.Add(1)
+		if time.Since(accepted) > 100*time.Millisecond {
+			return nil, context.DeadlineExceeded // "timeout waiting for connection info"
+		}
+		return conn, nil
+	})
+
+	time.Sleep(300 * time.Millisecond) // the first host call comes late
+	c, err := getServiceClient(context.Background())
+	require.NoError(t, err)
+	assert.NotNil(t, c)
+	assert.EqualValues(t, 1, dials.Load(), "dialled once, when the broker ID was set")
+}

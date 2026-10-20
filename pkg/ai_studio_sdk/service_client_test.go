@@ -73,3 +73,24 @@ func TestServiceCall_ConcurrentFirstCallsDialOnce(t *testing.T) {
 	assert.EqualValues(t, 1, dials.Load())
 	assert.Same(t, conn, GetSharedBrokerConnection())
 }
+
+// See the gateway SDK's test of the same name.
+func TestServiceCall_DialsWhenTheBrokerIDArrives(t *testing.T) {
+	conn, err := grpc.NewClient("passthrough:///host", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	accepted := time.Now()
+	var dials atomic.Int32
+	withBrokerDial(t, func(*goplugin.GRPCBroker, uint32) (*grpc.ClientConn, error) {
+		dials.Add(1)
+		if time.Since(accepted) > 100*time.Millisecond {
+			return nil, context.DeadlineExceeded
+		}
+		return conn, nil
+	})
+
+	time.Sleep(300 * time.Millisecond)
+	_, err = getServiceClient(context.Background())
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, dials.Load())
+}

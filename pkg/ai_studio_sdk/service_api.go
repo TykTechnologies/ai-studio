@@ -64,6 +64,10 @@ func SetServiceBrokerID(brokerID uint32) {
 	// Studio names the broker on many calls; a connection already open to
 	// its brokered server stays in use.
 	brokerConn.SetID(brokerID, true)
+	// Dial now: go-plugin keeps the connection info for a broker ID only
+	// five seconds after the host accepts on it, so a plugin whose first
+	// host call comes later could never connect (eac.59).
+	brokerConn.Warm()
 	log.Info().
 		Uint32("broker_id", brokerID).
 		Bool("sdk_initialized", initialized).

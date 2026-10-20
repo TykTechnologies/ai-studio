@@ -52,6 +52,7 @@ func InitializeServiceAPI(server *grpc.Server, broker *goplugin.GRPCBroker, plug
 	// Store broker for service API access
 	grpcBroker = broker
 	brokerConn.SetBroker(broker)
+	brokerConn.Warm() // when the broker ID is already known; see SetServiceBrokerID
 	pluginID = pluginIDVal // May be 0 initially, updated later via SetPluginID
 	initialized = true
 
@@ -80,6 +81,10 @@ func SetServiceBrokerID(brokerID uint32) {
 
 	serviceBrokerID = brokerID
 	brokerConn.SetID(brokerID, false)
+	// Dial now: go-plugin keeps the connection info for a broker ID only
+	// five seconds after the host accepts on it, so a plugin whose first
+	// host call comes later could never connect (eac.59).
+	brokerConn.Warm()
 	log.Info().
 		Uint32("broker_id", brokerID).
 		Bool("initialized", initialized).

@@ -111,9 +111,10 @@ func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 
 	stdlog.Printf("[EventSDK] ✅ getEventServiceClient: dial successful, creating gRPC client")
 
-	// CRITICAL: Share this connection with ai_studio_sdk so it doesn't try to dial again!
+	// CRITICAL: Share this connection with both SDKs so neither tries to dial again!
 	// The go-plugin broker only accepts ONE connection per broker ID, so we must share.
 	ai_studio_sdk.SetSharedBrokerConnection(dialConn)
+	mgwsdk.SetSharedBrokerConnection(dialConn)
 	stdlog.Printf("[EventSDK] ✅ Shared broker connection with ai_studio_sdk")
 
 	eventServiceClient = pb.NewPluginEventServiceClient(dialConn)
