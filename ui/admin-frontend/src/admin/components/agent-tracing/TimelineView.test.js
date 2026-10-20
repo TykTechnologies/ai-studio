@@ -101,7 +101,7 @@ describe("TimelineView", () => {
 
   it("sets the shared time range from a drag", () => {
     renderTimeline();
-    const grid = screen.getByRole("grid", { name: "Timeline" });
+    const grid = screen.getByRole("group", { name: "Timeline" });
     grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 960, height: 600, right: 960, bottom: 600 });
     // Track starts after the 180 px label column and is 780 px wide.
     fireEvent.mouseDown(grid, { button: 0, clientX: 180 + 78 });
@@ -120,7 +120,7 @@ describe("TimelineView", () => {
     expect(zoomed).toEqual({ from: T0 + 950, to: T0 + 1550 });
     fireEvent.click(screen.getByRole("button", { name: "Fit" }));
     expect(viewOf()).toEqual({ from: T0, to: T0 + 6000 });
-    const grid = screen.getByRole("grid", { name: "Timeline" });
+    const grid = screen.getByRole("group", { name: "Timeline" });
     grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 960, height: 600, right: 960, bottom: 600 });
     fireEvent.wheel(grid, { deltaY: -100, ctrlKey: true, clientX: 180 + 390 });
     const v = viewOf();
@@ -143,6 +143,6 @@ describe("TimelineView", () => {
     renderTimeline(many, { ...detail, agents: [] });
     expect(screen.getAllByTestId("timeline-bar").length).toBeLessThan(800);
     // Zoomed out with 5,000 rows in 600 px, rows are single-pixel bars.
-    expect(screen.getAllByRole("row")[0]).toHaveStyle({ height: "1px" });
+    expect(screen.getAllByRole("group", { name: / spans$/ })[0]).toHaveStyle({ height: "1px" });
   });
 });

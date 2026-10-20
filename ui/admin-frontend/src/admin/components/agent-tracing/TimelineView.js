@@ -131,7 +131,7 @@ const TimelineView = ({ height = 520 }) => {
           }}
         >
           {!compact && width > 60 && (
-            <Typography variant="caption" sx={{ color: "common.white", px: 0.5, whiteSpace: "nowrap" }}>
+            <Typography variant="caption" sx={{ color: theme.palette.getContrastText(colour), px: 0.5, whiteSpace: "nowrap" }}>
               {s.name}
             </Typography>
           )}
@@ -159,7 +159,7 @@ const TimelineView = ({ height = 520 }) => {
     const r = rows[i];
     if (r.type === "lane") {
       return (
-        <Box style={style} role="rowheader" data-testid="timeline-lane" sx={{ display: "flex", alignItems: "center", pl: 1 + r.lane.depth * 2, borderTop: 1, borderColor: "divider" }}>
+        <Box style={style} data-testid="timeline-lane" sx={{ display: "flex", alignItems: "center", pl: 1 + r.lane.depth * 2, borderTop: 1, borderColor: "divider" }}>
           <Typography variant="caption" sx={{ fontWeight: 600 }} noWrap>
             {r.lane.depth ? "↳ " : ""}
             {r.lane.name}
@@ -169,7 +169,7 @@ const TimelineView = ({ height = 520 }) => {
       );
     }
     return (
-      <Box style={style} role="row" aria-label={`${r.lane.name} spans`} sx={{ display: "flex" }}>
+      <Box style={style} role="group" aria-label={`${r.lane.name} spans`} sx={{ display: "flex" }}>
         <Box sx={{ width: LABEL_WIDTH, flexShrink: 0 }} />
         <Box sx={{ position: "relative", width: trackWidth, overflow: "hidden" }}>
           {r.spans.map((s) =>
@@ -208,7 +208,7 @@ const TimelineView = ({ height = 520 }) => {
       </Stack>
       <Box
         ref={box}
-        role="grid"
+        role="group"
         aria-label="Timeline"
         tabIndex={0}
         data-span-view="true"

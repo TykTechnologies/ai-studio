@@ -201,14 +201,14 @@ const ToolCard = ({ item }) => {
           {attr.via === "tyk_gateway" && <Chip size="small" variant="outlined" label="via Tyk Gateway" data-testid="via-gateway-badge" />}
           {attr.in_catalogue === false && (
             <Tooltip title="The model called a tool that is not in this App's catalogue">
-              <Chip size="small" color="warning" variant="outlined" label="not in App catalogue" data-testid="not-in-catalogue-badge" />
+              <Chip size="small" color="warning" variant="outlined" label="not in App catalogue" sx={{ color: "text.primary" }} data-testid="not-in-catalogue-badge" />
             </Tooltip>
           )}
           {clientSide && <Chip size="small" variant="outlined" label="client-side (inferred)" data-testid="client-side-badge" />}
           {noResult && <Chip size="small" variant="outlined" label="no result observed" />}
           {style.badge && (
             <Tooltip title={`Linked by rule ${span.parent_rule || "?"} (${span.parent_confidence} confidence)`}>
-              <Chip size="small" color="warning" variant="outlined" label={style.badge} data-testid="inferred-badge" />
+              <Chip size="small" color="warning" variant="outlined" label={style.badge} sx={{ color: "text.primary" }} data-testid="inferred-badge" />
             </Tooltip>
           )}
         </Stack>

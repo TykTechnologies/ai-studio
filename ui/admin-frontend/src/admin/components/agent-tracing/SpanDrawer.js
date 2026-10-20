@@ -71,7 +71,7 @@ export const RedactedText = ({ text }) => (
   <Box component="span" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
     {redactionSegments(text).map((seg, i) =>
       seg.redacted ? (
-        <Chip key={i} size="small" color="warning" variant="outlined" label={`REDACTED:${seg.redacted}`} sx={{ mx: 0.25, height: 20 }} />
+        <Chip key={i} size="small" color="warning" variant="outlined" label={`REDACTED:${seg.redacted}`} sx={{ mx: 0.25, height: 20, color: "text.primary" }} />
       ) : (
         <React.Fragment key={i}>{seg.text}</React.Fragment>
       ),

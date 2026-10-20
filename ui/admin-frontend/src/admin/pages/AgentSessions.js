@@ -199,7 +199,7 @@ const AgentSessions = () => {
             )}
             {s.totals?.dropped_count > 0 && (
               <Tooltip title={`${s.totals.dropped_count} captures were dropped under load`}>
-                <Chip size="small" color="warning" variant="outlined" label="incomplete" />
+                <Chip size="small" color="warning" variant="outlined" label="incomplete" sx={{ color: "text.primary" }} />
               </Tooltip>
             )}
           </Stack>

@@ -153,7 +153,7 @@ describe("AgentSessionDetail", () => {
   it("works from the keyboard alone: focus trap in the drawer and focus returned on Esc", async () => {
     renderPage();
     await loaded();
-    const grid = screen.getByRole("grid", { name: "Timeline" });
+    const grid = screen.getByRole("group", { name: "Timeline" });
     act(() => grid.focus());
     fireEvent.keyDown(grid, { key: "j" });
     await waitFor(() => expect(row(ids.llm1)).toHaveAttribute("aria-pressed", "true"));
