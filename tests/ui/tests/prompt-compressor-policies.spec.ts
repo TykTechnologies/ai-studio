@@ -1,5 +1,7 @@
 import { test } from '@fixtures';
 import { expect, Page } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 import { config } from '../config';
 
 /**
@@ -14,7 +16,12 @@ import { config } from '../config';
  *
  * The page is a web component in an open shadow root; Playwright's CSS and
  * test-id locators pierce it.
+ *
+ * tests/compose.yml (and the dev plugin watcher) build the plugin when the
+ * community submodule has it; with an older submodule pin the spec skips.
  */
+
+const PLUGIN_SOURCE = path.resolve(__dirname, '../../../community/plugins/prompt-compressor/main.go');
 
 const PLUGIN_KEY = 'plugin:com.tyk.prompt-compressor';
 const PLUGIN_COMMAND = 'file:///app/bin/plugins/prompt-compressor';
@@ -72,6 +79,7 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
     adminMainPage,
     adminUsersPage,
 }) => {
+    test.skip(!fs.existsSync(PLUGIN_SOURCE), 'the community submodule does not have the prompt-compressor plugin');
     test.setTimeout(300000);
     const ts = Date.now();
     const policy = `e2e-${ts}`;
