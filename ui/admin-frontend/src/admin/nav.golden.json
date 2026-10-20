@@ -15,6 +15,13 @@
       "permission": "analytics:read"
     },
     {
+      "id": "agent-sessions",
+      "text": "Agent sessions",
+      "path": "/admin/agent-sessions",
+      "icon": "account-tree",
+      "permission": "traces:read"
+    },
+    {
       "id": "access",
       "text": "Access",
       "icon": "users",

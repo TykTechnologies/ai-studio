@@ -22,6 +22,7 @@ func allFeatures() map[string]bool {
 		"feature_portal": true, "feature_chat": true, "feature_gateway": true,
 		"feature_groups": true, "feature_rbac": true, "feature_model_router": true,
 		"feature_semantic_router": true, "feature_tyk_mcp": true, "feature_webhooks": true,
+		"feature_agent_tracing": true,
 	}
 }
 
