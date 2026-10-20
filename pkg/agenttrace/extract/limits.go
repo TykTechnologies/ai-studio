@@ -10,8 +10,9 @@ const (
 	// dropped (left empty, so unlinkable) rather than cut, since two cut ids
 	// could collide into a false R1 link.
 	MaxIDBytes = 256
-	// MaxNameBytes caps tool names; longer ones are cut.
-	MaxNameBytes = 256
+	// MaxNameBytes caps tool names; longer ones are cut. 255 is the size of
+	// the tool name columns (jyx.126).
+	MaxNameBytes = 255
 	// MaxToolCalls caps the tool calls, server tool calls and tool results
 	// kept per body.
 	MaxToolCalls = 512

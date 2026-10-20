@@ -143,6 +143,16 @@ func EncodeCaptureRows(source string, events []*agenttrace.Event, onDrop func(re
 	rows := make([]models.AgentTraceCaptureEvent, 0, len(events))
 	var noSealer int64
 	for _, ev := range events {
+		switch ev.Kind {
+		case agenttrace.KindLLMInference, agenttrace.KindToolCall, agenttrace.KindDatasourceCall,
+			agenttrace.KindPluginEndpoint, agenttrace.KindGatewayEvent:
+		default:
+			// Only known kinds are staged: an unknown (or over-long) kind
+			// would overflow the staging row's kind column on Postgres and
+			// fail the whole insert (jyx.126).
+			onDrop("unknown_kind", 1)
+			continue
+		}
 		ev.SetIdempotencyKey(source)
 		blob, stripped, err := agenttrace.EncodeStaged(ev)
 		if err != nil {
