@@ -3,6 +3,7 @@ package agenttracing
 import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
@@ -18,6 +19,10 @@ type Deps struct {
 	// Audit returns the audit trail (payload views are audited). It is a
 	// getter because the API builds the audit service later; nil is fine.
 	Audit func() audit.Service
+	// Bus returns the event bus, whose system.* object events invalidate
+	// cached content settings at once. A getter: the host sets the bus
+	// after tracing starts; nil is fine.
+	Bus func() eventbridge.Bus
 	// NodeID identifies this Studio node in leases and logs.
 	NodeID string
 	// Version is reported in exported resource attributes.

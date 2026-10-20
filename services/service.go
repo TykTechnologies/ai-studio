@@ -167,6 +167,7 @@ func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingC
 		Config:       cfg,
 		LicenseValid: licenseValid,
 		Audit:        s.Audit,
+		Bus:          func() eventbridge.Bus { return s.EventBus },
 		NodeID:       nodeID,
 		Version:      version,
 	})
