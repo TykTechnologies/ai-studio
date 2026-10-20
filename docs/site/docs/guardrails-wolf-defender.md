@@ -401,6 +401,19 @@ high-entropy tokens.
 
 ## 9. Operate it
 
+**See what was flagged.** In AI Studio, **Compliance → Filter events**, expand
+an event: **Flagged text** lists each flagged message or tool result with the
+SHA-256 of the text the guardrail scored and the request id (the
+`X-Request-ID` the gateway answered with). Turn on **Show flagged text in
+compliance events** on the filters to record a 200-character excerpt as well,
+with credentials and personal data masked; Wolf Defender gives no position
+inside the text, so the excerpt is the start of the flagged message or tool
+result. The same `sha256` is the key of the guardrail's decision log
+(`decisions.jsonl`), its previews (`previews.jsonl`) and `GET /v1/admin/flags`,
+and the request id is in the decision log's `request_id`. The blocked request
+itself is in the app's request logs (status 400), with the first part of its
+body.
+
 **Kill switches, fastest first:**
 
 - In AI Studio, switch a filter's actions to Log only (or turn on Shadow), or
@@ -412,7 +425,7 @@ high-entropy tokens.
   tool results are unscanned), so detach the filters first.
 
 **Lift a false flag.** A flagged tool result keeps stopping its conversation
-for 7 days. Find its `sha256` in the decision log (or `GET /v1/admin/flags`),
+for 7 days. Find its `sha256` in the compliance event (or the decision log, or `GET /v1/admin/flags`),
 then either run `python -m wolfguard.store --db /var/lib/wolfguard/verdicts.db allow SHA256 --note "why"`
 inside the container, or call the guardrail:
 

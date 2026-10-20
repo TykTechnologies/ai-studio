@@ -30,6 +30,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import apiClient from "../../utils/apiClient";
 import { eventSourceLabel } from "./eventSource";
+import FlaggedText from "./FlaggedText";
 
 const SEVERITY_COLORS = {
   critical: "error",
@@ -314,6 +315,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                         <StyledTableCell colSpan={9} sx={{ py: 0, px: 0 }}>
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
+                              <FlaggedText metadata={e.metadata} />
                               <Typography variant="caption" color="text.secondary">
                                 Metadata
                               </Typography>

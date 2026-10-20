@@ -2398,6 +2398,17 @@ type requestFilterRunner struct {
 	runner scripting.FilterRunner
 }
 
+// filterRequestID is the request id filters see: the gateway's own (set by
+// its request-id middleware and returned as X-Request-ID, so a compliance
+// event and a guardrail provider's log name the request the client saw),
+// else the client's X-Request-ID.
+func filterRequestID(r *http.Request) string {
+	if id, ok := r.Context().Value("request_id").(string); ok && id != "" {
+		return id
+	}
+	return r.Header.Get("X-Request-ID")
+}
+
 // requestFilterRunners builds llm's request filters (response filters are
 // skipped) in chain order. The runners may be built once and reused for many
 // bodies, including from several goroutines at once, such as for every item of
@@ -2455,7 +2466,9 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 	}
 	scriptCtx["llm_id"] = int64(llm.ID) // Convert uint to int64 for Tengo
 	scriptCtx["app_id"] = int64(appID)  // Convert uint to int64 for Tengo
-	scriptCtx["request_id"] = r.Header.Get("X-Request-ID")
+	scriptCtx["request_id"] = filterRequestID(r)
+	// Guardrail compliance events carry no excerpt of a body the LLM keeps out of the logs.
+	scriptCtx["dont_log_bodies"] = llm.DontLogBodies
 	// "decision" for decision-model requests, "" otherwise.
 	scriptCtx["request_kind"] = string(requestKindForPath(r.URL.Path))
 

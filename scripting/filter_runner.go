@@ -348,9 +348,10 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 	job := &scanJob{
 		ctx: ctx, cfg: cfg, provider: provider, caps: caps,
 		segments: sel.segments, direction: direction, redact: redact, meta: meta(input),
-		cache:   newVerdictKeyer(ctx, p, input, direction, redact != nil),
-		breaker: breakerFor(p),
-		tenant:  tenantScope(input.Context),
+		cache:        newVerdictKeyer(ctx, p, input, direction, redact != nil),
+		breaker:      breakerFor(p),
+		tenant:       tenantScope(input.Context),
+		excerptChars: excerptChars(cfg, input),
 	}
 	res := job.scan()
 	sel.foldViews(&res)
@@ -403,7 +404,7 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		}
 	}
 
-	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict)...)
+	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), excerptChars: job.excerptChars})...)
 	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res.unscanned, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
@@ -1334,9 +1335,77 @@ func meta(input *ScriptInput) map[string]any {
 	return m
 }
 
+// evidenceContext is what complianceEvents needs from the request to point
+// at the flagged text.
+type evidenceContext struct {
+	requestID    string
+	excerptChars int
+}
+
+// maxEvidenceSegments bounds the segments one compliance event lists; count
+// still says how many findings there were.
+const maxEvidenceSegments = 5
+
+// excerptChars is the excerpt length the filter's events may carry: 0 unless
+// evidence.excerpt is on, the LLM logs bodies, and a masker is registered.
+func excerptChars(cfg guardrails.Config, input *ScriptInput) int {
+	if !cfg.Evidence.Excerpt || !guardrails.CanExcerpt() {
+		return 0
+	}
+	if v, _ := input.Context["dont_log_bodies"].(bool); v {
+		return 0
+	}
+	return cfg.Evidence.ExcerptLimit()
+}
+
+// requestIDOf is the gateway's id for the request (the X-Request-ID it
+// answers with, and the request_id providers are sent), "" when unknown.
+func requestIDOf(input *ScriptInput) string {
+	id, _ := input.Context["request_id"].(string)
+	return safeRef(id)
+}
+
+// safeRef keeps an identifier to 128 characters of letters, digits and
+// _ . : -, like safeLabel, so a client-chosen id cannot write into an event.
+func safeRef(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if b.Len() >= 128 {
+			break
+		}
+		if r == '_' || r == '.' || r == ':' || r == '-' || ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z') || ('0' <= r && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// segmentEvidence is one flagged segment as a compliance event lists it.
+func segmentEvidence(seg guardrails.Segment, idx int, f guardrails.Finding, excerptLen int) map[string]any {
+	ref := map[string]any{"index": idx, "role": seg.Role, "kind": segmentKind(seg)}
+	if name := safeLabel(seg.ToolName); name != "" {
+		ref["tool"] = name
+	}
+	ev := f.Evidence
+	if ev == nil {
+		// A cached verdict, or one the provider did not pin on a piece: the
+		// whole segment is what is known.
+		ev = &guardrails.FindingEvidence{SHA256: guardrails.TextSHA256(seg.Text)}
+		if excerptLen > 0 {
+			ev.Excerpt, _ = guardrails.Excerpt(seg.Text, nil, excerptLen)
+		}
+	}
+	ref["sha256"] = ev.SHA256
+	if ev.Excerpt != "" {
+		ref["excerpt"] = ev.Excerpt
+	}
+	return ref
+}
+
 // complianceEvents summarises the verdict as one event per detector. The
-// events carry counts and roles, never the matched text.
-func complianceEvents(filterName string, cfg guardrails.Config, findings []guardrails.Finding, segments []guardrails.Segment, o outcome, verdict guardrails.Verdict) []ComplianceEventOutput {
+// events carry counts, roles and the flagged segments' hashes; the text
+// itself only as a masked excerpt, when the filter's evidence.excerpt is on.
+func complianceEvents(filterName string, cfg guardrails.Config, findings []guardrails.Finding, segments []guardrails.Segment, o outcome, verdict guardrails.Verdict, ec evidenceContext) []ComplianceEventOutput {
 	type group struct {
 		f        guardrails.Finding
 		count    int
@@ -1346,13 +1415,15 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		tools    map[string]bool
 		kinds    map[string]bool
 		action   string
+		refs     []map[string]any
+		seen     map[string]bool
 	}
 	groups := map[string]*group{}
 	order := []string{}
 	for _, f := range findings {
 		g, ok := groups[f.Detector]
 		if !ok {
-			g = &group{f: f, severity: f.Severity, roles: map[string]bool{}, tools: map[string]bool{}, kinds: map[string]bool{}}
+			g = &group{f: f, severity: f.Severity, roles: map[string]bool{}, tools: map[string]bool{}, kinds: map[string]bool{}, seen: map[string]bool{}}
 			groups[f.Detector] = g
 			order = append(order, f.Detector)
 		}
@@ -1370,6 +1441,13 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 			seg := segments[f.SegmentIndex]
 			g.roles[seg.Role] = true
 			g.kinds[segmentKind(seg)] = true
+			if len(g.refs) < maxEvidenceSegments {
+				ref := segmentEvidence(seg, f.SegmentIndex, f, ec.excerptChars)
+				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
+					g.seen[key] = true
+					g.refs = append(g.refs, ref)
+				}
+			}
 			if name := safeLabel(seg.ToolName); name != "" {
 				g.tools[name] = true
 			}
@@ -1413,6 +1491,12 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		}
 		if len(tools) > 0 {
 			metadata["tool_names"] = tools
+		}
+		if len(g.refs) > 0 {
+			metadata["segments"] = g.refs
+		}
+		if ec.requestID != "" {
+			metadata["request_id"] = ec.requestID
 		}
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + strings.ReplaceAll(det, "/", "."),
