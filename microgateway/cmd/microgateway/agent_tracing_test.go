@@ -130,6 +130,7 @@ func resetEdgeTracingGlobals() {
 	tracing.SetOutboundPropagation(true, true, true)
 	proxy.SetOpenAIClientRequestID(true)
 	proxy.SetAgentTraceStreamBufferBytes(0)
+	agenttrace.SetGatewayNode("")
 }
 
 // The start gate applies the edge's outbound propagation settings in every

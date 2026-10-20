@@ -43,6 +43,8 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 	events := make([]*agenttrace.Event, 0, len(req.CaptureEvents))
 	for _, p := range req.CaptureEvents {
 		if ev := agenttrace.FromProto(p); ev != nil && !ev.SpanID.IsZero() {
+			// The authenticated edge served it, whatever the event says.
+			ev.GatewayNode = req.EdgeId
 			events = append(events, ev)
 		}
 	}

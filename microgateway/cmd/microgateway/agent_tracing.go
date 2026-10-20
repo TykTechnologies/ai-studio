@@ -41,6 +41,7 @@ func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func(
 	tracing.SetOutboundPropagation(at.PropagateLLMProviders, at.PropagateHTTPUpstreams, at.PropagateMCP)
 	proxy.SetOpenAIClientRequestID(at.OpenAIClientRequestID)
 	proxy.SetAgentTraceStreamBufferBytes(at.MaxStreamBufferBytes)
+	agenttrace.SetGatewayNode(cfg.HubSpoke.EdgeID)
 	if !at.Enabled {
 		return false
 	}

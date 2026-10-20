@@ -39,6 +39,21 @@ func TestFork(t *testing.T) {
 	}
 }
 
+// Every capture names the gateway that served it (jyx.150).
+func TestBeginSetsGatewayNode(t *testing.T) {
+	withEnabled(t, true)
+	t.Cleanup(func() { SetGatewayNode("") })
+	_, r := Begin(context.Background())
+	if r.span.GatewayNode != "" {
+		t.Fatalf("no node configured, got %q", r.span.GatewayNode)
+	}
+	SetGatewayNode("node-a")
+	_, r = Begin(context.Background())
+	if r.span.GatewayNode != "node-a" {
+		t.Fatalf("gateway node %q", r.span.GatewayNode)
+	}
+}
+
 func TestForkOff(t *testing.T) {
 	withEnabled(t, false)
 	ctx := context.Background()

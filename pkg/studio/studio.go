@@ -471,6 +471,7 @@ func New(opts Options) (_ *Studio, err error) {
 	proxy.SetOpenAIClientRequestID(conf.AgentTracing.OpenAIClientRequestID)
 	proxy.SetAgentTraceStreamBufferBytes(conf.AgentTracing.MaxStreamBufferBytes)
 	metrics.SetAgentMetricsEnabled(conf.AgentTracing.MetricsEnabled)
+	agenttrace.SetGatewayNode(nodeID)
 	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
 	if agenttrace.Enabled() {
 		// The embedded gateway's captures are staged by the analytics handler.

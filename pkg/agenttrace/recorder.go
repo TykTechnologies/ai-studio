@@ -100,7 +100,24 @@ func Begin(ctx context.Context) (context.Context, *Recorder) {
 	r := &Recorder{}
 	r.span.SpanID = NewSpanID()
 	r.span.StartTime = time.Now()
+	if n := gatewayNode.Load(); n != nil {
+		r.span.GatewayNode = *n
+	}
 	return context.WithValue(ctx, ctxKey{}, r), r
+}
+
+var gatewayNode atomic.Pointer[string]
+
+// SetGatewayNode names the gateway every capture of this process comes
+// from (spans.gateway_node): the hub's cluster node id, or the edge's id.
+// The hub overwrites an edge event's value with the authenticated edge id
+// at ingest.
+func SetGatewayNode(id string) {
+	if id == "" {
+		gatewayNode.Store(nil)
+		return
+	}
+	gatewayNode.Store(&id)
 }
 
 // Fork begins a capture of its own for work that outlives the request that
