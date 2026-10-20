@@ -65,6 +65,8 @@ export default defineConfig({
           { text: 'Compliance Events', link: '/docs/compliance-events' }, // v2.1
           { text: 'Governed Metadata (Enterprise)', link: '/docs/governed-metadata' }, // v2.2
           { text: 'Audit Trail (Enterprise)', link: '/docs/audit-trail' }, // Management API audit log
+          { text: 'Agent Call Tracing (Enterprise)', link: '/docs/agent-tracing' }, // Sessions, turns and span trees from gateway traffic
+          { text: 'Observability', link: '/docs/observability' }, // Gateway metrics and tracing
           { text: 'Webhooks (Enterprise)', link: '/docs/webhooks' }, // Outbound event delivery
           { text: 'Roles and Permissions (Enterprise)', link: '/docs/rbac' }, // Fine-grained RBAC
           { text: 'Notifications', link: '/docs/notifications' }, // New

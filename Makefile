@@ -536,6 +536,15 @@ module-check: ## Check the Go proxy would accept HEAD as a module zip (commit fi
 ent-link: ## Link enterprise tests of core packages in from enterprise/_coretests (no-op without the submodule)
 	@scripts/enterprise-link-tests.sh
 
+.PHONY: agent-tracing-docs agent-tracing-docs-verify
+agent-tracing-docs: ## Regenerate the OTel attribute tables in docs/site/docs/agent-tracing.md from the enterprise mapping profile
+	@cd enterprise && UPDATE_DOCS=1 go test -tags enterprise -count=1 -run TestAttributeTableDocInSync ./features/agenttracing/otelexport/
+
+agent-tracing-docs-verify: ## Check those tables match the mapping profile (no-op without the enterprise submodule)
+	@if [ -d enterprise/features/agenttracing/otelexport ]; then \
+		cd enterprise && go test -tags enterprise -count=1 -run TestAttributeTableDocInSync ./features/agenttracing/otelexport/; \
+	else echo "agent-tracing-docs-verify: no enterprise submodule, skipped"; fi
+
 .PHONY: enterprise-import-guard
 enterprise-import-guard: ## Check no public package imports the private enterprise module
 	@scripts/enterprise-import-guard.sh

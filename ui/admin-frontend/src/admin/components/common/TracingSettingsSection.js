@@ -289,7 +289,8 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               label="Let the App's owner view captured content in the Portal"
             />
             <Typography variant="caption" color="text.secondary" display="block">
-              Off by default: owners see trace metadata only. Every content view is audited.
+              Takes effect when Portal trace views ship; the Portal shows no traces yet. Off by default: owners will
+              see trace metadata only, and every content view is audited.
             </Typography>
           </Grid>
         </Grid>

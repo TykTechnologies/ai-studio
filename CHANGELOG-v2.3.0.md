@@ -171,6 +171,17 @@ New settings default to off, so existing filters behave exactly as before.
 - **Shadow (don't wait).** `"shadow": true` on a guardrail whose every action is `log` (anything else is refused with 400) returns at once and classifies in a bounded background pool per node (`GUARDRAIL_SHADOW_WORKERS`, `GUARDRAIL_SHADOW_QUEUE_BYTES`, half per tenant), recording the same compliance events as an inline log run (marked `"shadow": true` in their metadata) when it finishes, on requests, responses, Studio chat and tool filters, at the hub and at edges. A full pool drops the evaluation (`aistudio_guardrail_shadow_dropped_total`, one `guardrail.unscanned` event with reason `shadow_dropped`) rather than delay anything; shutdown waits up to 5 s. The form has a **Shadow (don't wait)** toggle.
 - **HTTP classifier over a Unix socket.** The endpoint can be `unix:///path/to.sock` (with the new `path` connection field for the request path), so a classifier on the same host needs no port and can run with `network_mode: none`. Sockets are refused unless listed in the new `GUARDRAIL_UNIX_SOCKET_ALLOWLIST` (exact paths, or directories ending in `/`; empty by default), checked when a filter is saved or tested and before every call on every node, with symlinks resolved (an entry and an endpoint written through the same symlinked directory match) and the target required to be a socket. A socket a node refuses is a provider error there.
 
+### Agent Call Tracing (Enterprise)
+Off by default (`AGENT_TRACING_ENABLED`). The gateway turns the LLM, tool, MCP and datasource traffic it already sees into sessions, turns and span trees, without an SDK in the agent. See `docs/site/docs/agent-tracing.md`.
+- **Capture everywhere the gateway runs.** `/llm/` REST and streaming, `/ai/` with each provider attempt, native dispatch, Bedrock, Studio tools, the MCP shim, datasources and edge plugin endpoints, in the embedded gateway and on edges. Edges send captures in their analytics pulse.
+- **Gateway decisions on the trace.** Filter and budget blocks, fallbacks and routing become `gateway_event` spans.
+- **Correlation with confidence.** Tool calls are linked to the LLM call that requested them by `tool_call_id`, `previous_response_id`, or tool name and arguments, and each link records its confidence (declared, exact, strong, weak) and rule. Tools the agent runs itself are inferred from the LLM traffic.
+- **Content off by default.** Modes are `off`, `metadata`, `redacted` and `full`, set globally, per App, per request (within a ceiling) and capped per LLM, tool or datasource. Secrets are always stripped. Content is encrypted at rest with keys derived from `AGENT_TRACING_KEY`.
+- **Audited content access.** Content reads need the new `trace-content:read` permission and a working audit trail; without the audit trail, content reads answer 503. Changing any tracing setting needs `traces:write`.
+- **Agent Sessions** in the admin UI: a filterable list, a transcript and a timeline per session, and a find bar. Captured Markdown never loads images or HTML.
+- **Export** as JSON (agent-trace v1 schema) or Markdown, session purge, and end-user erasure.
+- **OpenTelemetry export** of finished turns to any OTLP backend, with Langfuse and Datadog LLM Observability presets, using GenAI semantic convention names (`genai-1.37`). Metadata only; content export is planned. Agent and tracing-health metrics go to Prometheus, and over OTLP to exporters that ask for them.
+
 ### Platform and console
 - **`$SECRET/` references in plugin configuration** ([#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A plugin's config fields can name a stored secret, which is resolved for the plugin and stays masked in the config form. Adding one needs `secrets:read`.
 - **`tyk.llm` `return_errors`** ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)). With `return_errors: true`, a failed call returns an error value instead of stopping the script, so a guardrail script can block when its checker is unavailable.
@@ -383,6 +394,8 @@ New settings default to off, so existing filters behave exactly as before.
   - The sharding, Redis timeout and cost-rule settings, which nothing implemented, are removed from the form.
 
 ### New configuration
+
+Agent Call Tracing (Enterprise) adds `AGENT_TRACING_*` settings, all off or inert by default; the operator guide (`docs/site/docs/agent-tracing.md`) lists them. One applies in every edition: `AGENT_TRACING_BAGGAGE_ALLOWLIST` (default `session.id`) now cuts the W3C `baggage` header sent to every upstream down to the listed keys; set it to the keys your providers rely on, or `none`.
 
 No new runtime setting is required. Gateway connections are configured per connection in the console, not through the environment.
 

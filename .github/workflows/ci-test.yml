@@ -565,6 +565,12 @@ jobs:
       - name: Check the control plane logs only through the logger package
         run: make logging-guard
 
+      # The Agent Call Tracing operator guide's OTel attribute tables are
+      # generated from the enterprise mapping profile.
+      - name: Check the agent tracing OTel attribute tables are current
+        if: env.FORK_PR != 'true'
+        run: make agent-tracing-docs-verify
+
       # Plugin modules replace midsommar/v2 with this tree, so a root go.mod
       # raise must be followed there or `go build` stops at "updates to go.mod
       # needed" (make plugins, plugin-publish, the dev watcher). The
