@@ -37,4 +37,5 @@ type Service interface {
 	IsEnterpriseAvailable() bool
 
 	Querier
+	ContentService
 }

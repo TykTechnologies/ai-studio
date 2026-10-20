@@ -30,6 +30,10 @@ type recordingTracing struct {
 	appID     uint
 	viewer    agenttracing.Viewer
 	calls     int
+	// Content routes (agent_tracing_content_handlers_test.go).
+	payloadQ agenttracing.PayloadQuery
+	meta     agenttracing.AccessMeta
+	endUser  string
 }
 
 func (r *recordingTracing) Start(context.Context) error { return nil }

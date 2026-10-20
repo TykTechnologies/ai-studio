@@ -35,6 +35,7 @@ func (a *API) registerAgentTracingRoutes(v1 *permRouter) {
 	g.POST("/sessions/:session_id/search", authz.Read("traces"), a.searchAgentSession)
 	g.GET("/traces/:trace_id", authz.Read("traces"), a.getAgentTrace)
 	g.GET("/spans/:span_id", authz.Read("traces"), a.getAgentSpan)
+	a.registerAgentTracingContentRoutes(g)
 }
 
 // agentTracing is the tracing service, or an inert one when none is wired.
