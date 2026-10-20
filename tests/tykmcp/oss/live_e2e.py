@@ -19,6 +19,10 @@ Environment:
                 tyk-pump-http:local), or "none" to skip the analytics checks
   INGEST_URL    the ingest endpoint as the Pump containers reach it (default
                 http://host.docker.internal:<STUDIO port>/api/v1/ingest/tyk-analytics)
+  KEEP_DATA     set to stop after the analytics checks (section 6b) and keep
+                everything (connection, proxy, App, key, Pump, MCP records)
+                for manual or browser checks (a later normal run clears the
+                gateways and Pump, but not the kept Studio objects)
 """
 import datetime
 import http.cookiejar
@@ -39,6 +43,7 @@ UPSTREAM = "http://host.docker.internal:4021"
 UPSTREAM_LOG = os.environ.get("UPSTREAM_LOG", "")
 COMPOSE = ["docker", "compose", "-f", os.path.join(HERE, "docker-compose.yml")]
 PUMP_PROFILE = os.environ.get("PUMP_PROFILE", "analytics")
+KEEP_DATA = bool(os.environ.get("KEEP_DATA"))
 PUMP_SERVICES = {"analytics": ["pump", "vector"], "httppump": ["pump-http"]}
 INGEST_URL = os.environ.get("INGEST_URL", "http://host.docker.internal:%s/api/v1/ingest/tyk-analytics" % STUDIO.rsplit(":", 1)[-1].strip("/"))
 
@@ -436,6 +441,10 @@ def main():
         gw("gw1", "DELETE", "/tyk/apis/oas/ops-rest")
         gw("gw1", "GET", "/tyk/reload?block=true")
 
+    if KEEP_DATA:
+        print(f"KEEP_DATA: stopping here; connection {cid}, App {app_id}, Studio proxy {srv['id']} ({srv.get('tyk_api_id')}) kept")
+        return
+
     # ---------- 7. a third node joins ----------
     up = subprocess.run(COMPOSE + ["--profile", "scale", "up", "-d", "gw3"], capture_output=True, text=True)
     check("7.gw3 started", up.returncode == 0, up.stderr[-300:])
@@ -539,6 +548,7 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        cleanup()
+        if not KEEP_DATA:
+            cleanup()
     print(f"\n{len(failures)} failure(s)" + (": " + ", ".join(failures) if failures else ""))
     sys.exit(1 if failures else 0)
