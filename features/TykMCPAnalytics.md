@@ -164,11 +164,43 @@ Ingest administration (under the Tyk connection):
   per-tool table.
 - Pump 1.16's stdout pump omits zero-valued `mcp_stats` fields; the decoder
   defaults them.
+- Gateway 5.15.1 writes no analytics record for a `tools/call` refused by the
+  key's `mcp_access_rights` (HTTP 403, JSON-RPC -32002), so tools blocked by
+  Studio key access never appear (bead emn). Auth refusals (401 no key, 403
+  bad key) are recorded, with `api_key` `00000000` and no App.
+- Records that arrive after their server was deleted count as `unknown_api`
+  and are dropped (seen for calls in the seconds before a delete).
+- Bridge: Vector's `docker_logs` source reads from when it attaches, so Pump
+  output written while Vector is down is lost (Pump has already drained
+  Redis).
+- Pump 1.16.0 crashes at start unless `dont_purge_uptime_data` is true (the
+  uptime pump defaults to Mongo).
 - REST-as-MCP proxies report an upstream latency of 0; use the total.
 - Without `mcp_only` (http pump) or `filters.api_ids`, every API's records
   travel to Studio and are dropped on arrival.
 
-## 8. Follow-ups
+## 8. Verification
+
+- Unit and API tests on SQLite and Postgres 16: `analytics/mcp_*_test.go`,
+  `api/tyk_ingest_*_test.go`, `api/mcp_analytics_handlers_test.go`,
+  `enterprise/features/tykmcp/analytics*_test.go` (including a live capture
+  of 12 records, `testdata/mcp_analytics_live_records.json`), and the
+  enterprise core tests for the ingest flow and token RBAC.
+- Live E2E (`tests/tykmcp/oss/live_e2e.py`, 2026-10-20): ENT Studio against
+  two Tyk OSS Gateway 5.15.1 nodes and Redis. 86/86 checks with
+  `PUMP_PROFILE=analytics` (Tyk Pump 1.16.0 stdout pump + Vector 0.49.0,
+  `tests/tykmcp/oss/vector.toml`) and 86/86 with `PUMP_PROFILE=httppump`
+  (local tyk-pump build with the http pump, `feat/http-pump`). Checks 2b
+  (ingest token generated and shown once, wrong token 401, Pump profile
+  starts) and 6b (per-tool counts: get-weather 7 with no errors, initialize
+  7 with the keyless 401 as one error, tools/list 3; latency; App
+  attribution by key hash; App usage lists the server; an operator proxy
+  without trafficLogs records nothing; REST traffic never reaches Studio;
+  the ingest status counts the records).
+
+## 9. Follow-ups
+
+- emn: tools refused by key access rights are invisible (Gateway gap).
 
 - bv0.11 retention pruning for `mcp_call_records` (and old `tyk_ingest_stats` hours).
 - bv0.12 MDCB-embedded host hook (headless control plane passes
