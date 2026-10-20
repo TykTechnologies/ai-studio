@@ -144,6 +144,39 @@ func (s *ControlServer) scopeCaptureEvents(ctx context.Context, edgeID string, e
 	return kept, nil
 }
 
+// maxEdgeRequestID is proxy_logs.request_id's column size.
+const maxEdgeRequestID = 64
+
+// edgeTraceSpanID is an edge proxy log's trace_span_id as the hub stores it:
+// a non-zero 16-hex span id, lower-cased, or empty. An edge's value is
+// untrusted, and an over-long one would fail the row's whole batch on
+// Postgres.
+func edgeTraceSpanID(s string) string {
+	if s == "" {
+		return ""
+	}
+	id, ok := agenttrace.ParseSpanID(s)
+	if !ok {
+		return ""
+	}
+	return id.String()
+}
+
+// edgeRequestID is an edge proxy log's request_id as the hub stores it: an
+// edge mints request ids itself, so one over the column size (or with
+// control characters) is not one, and is cleared.
+func edgeRequestID(s string) string {
+	if len(s) > maxEdgeRequestID {
+		return ""
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7e {
+			return ""
+		}
+	}
+	return s
+}
+
 // captureOnly reports whether a pulse carries nothing but capture data.
 func captureOnly(req *pb.AnalyticsPulse) bool {
 	return len(req.AnalyticsEvents) == 0 && len(req.BudgetEvents) == 0 && len(req.ProxySummaries) == 0 &&
