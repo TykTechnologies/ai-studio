@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -207,6 +208,47 @@ func TestSendAnalyticsPulse_CaptureScopedToRegisteredEdge(t *testing.T) {
 	require.NoError(t, err, "a spoofed edge id is discarded, not retried")
 	require.True(t, resp.Success)
 	assert.Len(t, stagedCapture(t, db), 3)
+}
+
+// jyx.102: "", "global" and "default" are one namespace, as in the edge's
+// snapshot: an edge registered under any of them reports for the Apps of
+// the default namespace and the global ones, and no others.
+func TestSendAnalyticsPulse_CaptureNamespaceAliases(t *testing.T) {
+	for i, ns := range []string{"", "global", "Default "} {
+		db, server := capturePulseDB(t)
+		withHubTracing(t, true)
+		edgeID := fmt.Sprintf("edge-alias-%d", i)
+		require.NoError(t, db.Create(&models.EdgeInstance{EdgeID: edgeID, Namespace: ns}).Error)
+		p := capturePulse(1, edgeCaptureEvent(1, 7), edgeCaptureEvent(2, 9), edgeCaptureEvent(3, 10))
+		p.EdgeId = edgeID
+		resp, err := server.SendAnalyticsPulse(context.Background(), p)
+		require.NoError(t, err)
+		require.True(t, resp.Success)
+		var apps []uint
+		for _, r := range stagedCapture(t, db) {
+			apps = append(apps, r.AppID)
+		}
+		assert.ElementsMatch(t, []uint{7, 9}, apps, "edge namespace %q", ns)
+	}
+}
+
+// jyx.102: when the edge registry cannot be read, a capture-only pulse is
+// retried, and a pulse with other records keeps them and drops the capture
+// (a retry would count those records twice).
+func TestSendAnalyticsPulse_CaptureScopeUnavailable(t *testing.T) {
+	db, server := capturePulseDB(t)
+	withHubTracing(t, true)
+	require.NoError(t, db.Exec("DROP TABLE edge_instances").Error)
+
+	_, err := server.SendAnalyticsPulse(context.Background(), capturePulse(1, edgeCaptureEvent(1, 7)))
+	require.Error(t, err)
+
+	mixed := capturePulse(2, edgeCaptureEvent(2, 7))
+	mixed.ToolCalls = []*pb.ToolCallProto{{ToolId: 1, OperationId: "op", ExecTimeMs: 3, Timestamp: timestamppb.Now()}}
+	resp, err := server.SendAnalyticsPulse(context.Background(), mixed)
+	require.NoError(t, err)
+	assert.True(t, resp.Success)
+	assert.Empty(t, stagedCapture(t, db))
 }
 
 func TestBearerMatches(t *testing.T) {

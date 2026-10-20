@@ -48,7 +48,14 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 	}
 	events, err := s.scopeCaptureEvents(ctx, req.EdgeId, events)
 	if err != nil {
-		return 0, err
+		// Like a failed write: only a capture-only pulse is retried.
+		if captureOnly(req) {
+			return 0, err
+		}
+		logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("capture_events", len(events)).
+			Msg("Could not scope edge capture events; dropped so the pulse's other records are kept")
+		metrics.RecordTracingCaptureDropped(ctx, dropScopeUnavailable, int64(len(events)))
+		return 0, nil
 	}
 	inserted, err := analytics.StageCaptureEvents(s.db, req.EdgeId, events)
 	if err != nil {
@@ -80,6 +87,7 @@ func edgeDropLabel(reason string) string {
 const (
 	dropUnregisteredEdge = "edge_unregistered"
 	dropAppOutOfScope    = "edge_app_out_of_scope"
+	dropScopeUnavailable = "edge_scope_unavailable"
 )
 
 // scopeCaptureEvents keeps the events an edge may report. Every edge shares
@@ -113,12 +121,10 @@ func (s *ControlServer) scopeCaptureEvents(ctx context.Context, edgeID string, e
 		for id := range ids {
 			want = append(want, id)
 		}
-		q := s.db.Model(&models.App{}).Where("id IN ?", want)
-		if edge.Namespace == "" {
-			q = q.Where("namespace = ''")
-		} else {
-			q = q.Where("(namespace = '' OR namespace = ?)", edge.Namespace)
-		}
+		// The Apps the edge's snapshot carries: "", "global" and "default"
+		// are one namespace there (getConfigurationSnapshot), so here too.
+		q := s.db.Model(&models.App{}).Where("id IN ?", want).
+			Where("(namespace = '' OR namespace = ?)", models.CanonicalNamespace(edge.Namespace))
 		var allowed []uint
 		if err := q.Pluck("id", &allowed).Error; err != nil {
 			return nil, status.Error(codes.Unavailable, "app lookup failed; retry")
