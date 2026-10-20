@@ -8,7 +8,7 @@ import (
 // ErrAuditUnavailable: the audit record for a content access could not be
 // written, so the content is not served (spec §9.2, fail closed). The API
 // answers 503.
-var ErrAuditUnavailable = errors.New("agent trace content is unavailable: the access could not be audited")
+var ErrAuditUnavailable = errors.New("content access requires the audit trail: enable it (AUDIT_ENABLED) and check it is accepting records")
 
 // ErrForbidden: the viewer lacks the permission for this operation on this
 // App. The API answers 403 (or 404 where existence must not leak).
