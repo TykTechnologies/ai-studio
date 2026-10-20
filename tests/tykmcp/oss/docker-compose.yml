@@ -7,7 +7,7 @@
 #   docker compose -p tyk-oss-mcp -f tests/tykmcp/oss/docker-compose.yml up -d
 #   docker compose -p tyk-oss-mcp -f tests/tykmcp/oss/docker-compose.yml up -d --scale gw3=1   # (see profile below)
 #
-# MCP analytics (features: enterprise/docs/TykMCPAnalytics.md). The gateways
+# MCP analytics (features/TykMCPAnalytics.md). The gateways
 # write analytics to Redis; one Pump profile drains it into Studio's ingest
 # endpoint. Run only one of the two profiles, since Pump drains Redis:
 #

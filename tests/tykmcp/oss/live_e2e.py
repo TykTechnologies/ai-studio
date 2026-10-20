@@ -13,7 +13,7 @@ Environment:
                 DEVMODE=true) and rolls a key
   GW_SECRET     the gateways' secret (default oss-secret)
   UPSTREAM_LOG  the demo MCP server's log, to check upstream headers (optional)
-  PUMP_PROFILE  MCP analytics producer (enterprise/docs/TykMCPAnalytics.md):
+  PUMP_PROFILE  MCP analytics producer (features/TykMCPAnalytics.md):
                 "analytics" (default: Tyk Pump stdout pump + Vector),
                 "httppump" (a local tyk-pump build with the http pump, image
                 tyk-pump-http:local), or "none" to skip the analytics checks

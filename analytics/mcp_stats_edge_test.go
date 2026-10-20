@@ -76,7 +76,7 @@ func runMCPStatsEdgeSuite(t *testing.T, open func(t *testing.T) *gorm.DB) {
 		for _, name := range []string{"get_forecast", "getXforecast", "100%_done", "1000_done", `a\b`, "ab"} {
 			require.NoError(t, db.Create(&[]models.MCPCallRecord{s.call(name, ts, 1, 200, nil)}).Error)
 		}
-		f := dayFilter(s, day, day.Add(24*time.Hour-time.Second))
+		f := dayFilter(s, day, day.Add(24*time.Hour))
 		for search, want := range map[string][]string{
 			"t_f":   {"get_forecast"},
 			"0%_":   {"100%_done"},
@@ -108,7 +108,7 @@ func runMCPStatsEdgeSuite(t *testing.T, open func(t *testing.T) *gorm.DB) {
 			s.call("t", early, 30, 200, nil),
 		}).Error)
 
-		two := dayFilter(s, day, day.Add(48*time.Hour-time.Second))
+		two := dayFilter(s, day, day.Add(48*time.Hour))
 		ts, err := GetMCPTimeseries(db, two, "hour")
 		require.NoError(t, err)
 		require.Len(t, ts.Points, 2)
@@ -126,9 +126,27 @@ func runMCPStatsEdgeSuite(t *testing.T, open func(t *testing.T) *gorm.DB) {
 		assert.True(t, ts.Points[1].Bucket.Equal(day.Add(24*time.Hour)))
 
 		// The second day alone does not see the first day's calls.
-		sum, err := GetMCPSummary(db, dayFilter(s, day.Add(24*time.Hour), day.Add(48*time.Hour-time.Second)))
+		sum, err := GetMCPSummary(db, dayFilter(s, day.Add(24*time.Hour), day.Add(48*time.Hour)))
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), sum.Calls)
+	})
+
+	// End is exclusive (midsommar-clean-7qo): a call in the last sub-second
+	// of a day counts for that day, one at the next midnight does not.
+	t.Run("end bound is exclusive at the next midnight", func(t *testing.T) {
+		db := open(t)
+		s := seedMCPEdgeBase(t, db, 0)
+		require.NoError(t, db.Create(&[]models.MCPCallRecord{
+			s.call("t", day, 1, 200, nil),
+			s.call("t", day.Add(24*time.Hour-time.Nanosecond*500), 1, 200, nil),
+			s.call("t", day.Add(24*time.Hour), 1, 200, nil),
+		}).Error)
+		sum, err := GetMCPSummary(db, dayFilter(s, day, day.Add(24*time.Hour)))
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), sum.Calls, "the day's first instant and its last sub-second")
+		sum, err = GetMCPSummary(db, dayFilter(s, day.Add(24*time.Hour), day.Add(48*time.Hour)))
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), sum.Calls, "the next midnight belongs to the next day only")
 	})
 
 	t.Run("larger random seed matches figures computed here", func(t *testing.T) {
@@ -171,7 +189,7 @@ func runMCPStatsEdgeSuite(t *testing.T, open func(t *testing.T) *gorm.DB) {
 			}
 		}
 		require.NoError(t, db.CreateInBatches(rows, 200).Error)
-		f := dayFilter(s, day, day.Add(24*time.Hour-time.Second))
+		f := dayFilter(s, day, day.Add(24*time.Hour))
 
 		got := map[string]MCPToolRow{}
 		var total int64
