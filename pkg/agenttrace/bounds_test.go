@@ -16,6 +16,8 @@ func TestFromProtoBoundsAttributes(t *testing.T) {
 		"http.request.method":        "POST",
 		"gen_ai.x":                   strings.Repeat("v", 5000),
 		"evil.key":                   "x",
+		"gen_ai.input.messages":      "secret prompt",
+		"http.request.body.content":  "secret body",
 		strings.Repeat("tyk.k", 100): "long key",
 	}
 	for i := 0; i < 100; i++ {
@@ -25,6 +27,8 @@ func TestFromProtoBoundsAttributes(t *testing.T) {
 	got := FromProto(ToProto(ev)).Attributes
 	assert.LessOrEqual(t, len(got), maxAttributes)
 	assert.NotContains(t, got, "evil.key")
+	assert.NotContains(t, got, "gen_ai.input.messages", "content never sits in attributes (jyx.161)")
+	assert.NotContains(t, got, "http.request.body.content")
 	assert.NotContains(t, got, strings.Repeat("tyk.k", 100))
 	assert.Len(t, got["gen_ai.x"], maxAttributeValue)
 	assert.Equal(t, "tools/call", got["mcp.method.name"])

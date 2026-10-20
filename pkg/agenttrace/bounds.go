@@ -63,15 +63,16 @@ const (
 // boundAttributes keeps an edge event's attributes in the namespaces the
 // gateway writes (tyk.*, gen_ai.*, mcp.*, http.*), with bounded keys and
 // values and at most maxAttributes of them (in key order, so the choice is
-// stable). Attributes go to an unbounded column; an edge is not trusted to
-// have bounded them.
+// stable). Content attributes are dropped: content travels only in payload
+// parts, sealed at rest. Attributes go to an unbounded column; an edge is
+// not trusted to have bounded them.
 func boundAttributes(in map[string]string) map[string]string {
 	if len(in) == 0 {
 		return nil
 	}
 	keys := make([]string, 0, len(in))
 	for k := range in {
-		if len(k) <= maxAttributeKey && inAttributeNamespace(k) {
+		if len(k) <= maxAttributeKey && inAttributeNamespace(k) && !IsContentAttribute(k) {
 			keys = append(keys, k)
 		}
 	}
