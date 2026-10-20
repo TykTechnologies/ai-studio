@@ -31,6 +31,10 @@ type AnalyticsHandler interface {
 
 	// RecordComplianceEvents records filter script compliance events
 	RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent)
+
+	// RecordMCPCalls records MCP calls a Tyk Gateway proxied (ingested
+	// from Tyk Pump).
+	RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord)
 }
 
 // ExchangeRecorder is implemented by handlers that record a proxied request's

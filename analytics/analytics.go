@@ -124,6 +124,21 @@ func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int,
 	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
 
+// RecordMCPCalls records MCP calls a Tyk Gateway proxied, as ingested from
+// Tyk Pump.
+func RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) {
+	if len(records) == 0 {
+		return
+	}
+
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
+	if globalHandler != nil {
+		globalHandler.RecordMCPCalls(ctx, records)
+	}
+}
+
 func RecordContentMessage(
 	mc *llms.MessageContent,
 	cr *llms.ContentResponse,

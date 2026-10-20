@@ -32,6 +32,7 @@ func (h *hostSink) SetAsGlobalHandler()                                         
 func (h *hostSink) RecordChatRecordsBatch(context.Context, []*models.LLMChatRecord)   {}
 func (h *hostSink) RecordProxyLogsBatch(context.Context, []*models.ProxyLog)          {}
 func (h *hostSink) RecordComplianceEvents(context.Context, []*models.ComplianceEvent) {}
+func (*hostSink) RecordMCPCalls(context.Context, []models.MCPCallRecord) {}
 func (h *hostSink) count() int                                                        { h.mu.Lock(); defer h.mu.Unlock(); return len(h.chats) }
 
 // A host's sink gets Studio's analytics records alongside Studio's own

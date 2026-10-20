@@ -28,6 +28,7 @@ type DatabaseHandler struct {
 	chatRecordBatchChan    chan []*models.LLMChatRecord
 	proxyLogBatchChan      chan []*models.ProxyLog
 	complianceEventChan    chan []*models.ComplianceEvent
+	mcpCallChan            chan []models.MCPCallRecord
 	recStarted          bool
 	recMutex            sync.RWMutex
 	// teams attributes spend records to their team before they are written.
@@ -132,6 +133,7 @@ func (h *DatabaseHandler) start() {
 	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
+	h.mcpCallChan = make(chan []models.MCPCallRecord, batchBufferSize)
 
 	// Start background workers. A panic writing one record loses that
 	// record, not the worker (nor the process); workerDone closes once the
@@ -259,6 +261,13 @@ func (h *DatabaseHandler) startWorker() {
 			})
 			if err != nil {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
+			}
+		case calls := <-h.mcpCallChan:
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(calls, 100).Error
+			})
+			if err != nil {
+				logger.Warnf("Error creating MCP call records (%d): %s", len(calls), sanitizeError(err))
 			}
 		case <-h.ctx.Done():
 			h.shutdown()
@@ -497,6 +506,34 @@ func (h *DatabaseHandler) RecordComplianceEvents(_ context.Context, events []*mo
 	case h.complianceEventChan <- events:
 	default:
 		logger.Warn("compliance event buffer full, dropping events")
+	}
+}
+
+// RecordMCPCalls records MCP calls asynchronously. The worker writes the
+// slice it is given, so the caller must not reuse it.
+func (h *DatabaseHandler) RecordMCPCalls(_ context.Context, records []models.MCPCallRecord) {
+	if len(records) == 0 {
+		return
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		h.recMutex.RUnlock()
+		return
+	}
+	h.recMutex.RUnlock()
+
+	for i := range records {
+		records[i].ClampLengths()
+	}
+
+	select {
+	case <-h.ctx.Done():
+		logger.Warnf("dropping MCP call records due to cancellation: %s", h.ctx.Err())
+		return
+	case h.mcpCallChan <- records:
+	default:
+		logger.Warnf("MCP call record buffer full, dropping batch, count: %d", len(records))
 	}
 }
 

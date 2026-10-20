@@ -835,6 +835,34 @@ TABLE mcp_access_grants
   index CREATE INDEX `idx_mcp_access_grants_revoked_at` ON `mcp_access_grants`(`revoked_at`)
   index CREATE INDEX `idx_mcp_access_grants_user_id` ON `mcp_access_grants`(`user_id`)
   index CREATE UNIQUE INDEX `idx_mcp_grants_open` ON `mcp_access_grants`(`app_id`,`mcp_server_id`) WHERE revoked_at IS NULL
+TABLE mcp_call_records
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `timestamp` datetime NOT NULL
+  column `connection_id` integer NOT NULL
+  column `mcp_server_id` integer
+  column `tyk_api_id` text
+  column `org_id` text
+  column `app_id` integer
+  column `credential_id` text
+  column `jsonrpc_method` text
+  column `primitive_type` text
+  column `primitive_name` text
+  column `jsonrpc_error_code` integer
+  column `response_code` integer
+  column `latency_total_ms` integer
+  column `latency_upstream_ms` integer
+  column `latency_gateway_ms` integer
+  column `bytes_in` integer
+  column `bytes_out` integer
+  column `protocol_version` text
+  column `session_id` text
+  column `trace_id` text
+  column `source` text
+  index CREATE INDEX `idx_mcp_calls_app_time` ON `mcp_call_records`(`app_id`,`timestamp`)
+  index CREATE INDEX `idx_mcp_calls_conn_time` ON `mcp_call_records`(`connection_id`,`timestamp`)
+  index CREATE INDEX `idx_mcp_calls_server_time` ON `mcp_call_records`(`mcp_server_id`,`timestamp`)
+  index CREATE INDEX `idx_mcp_calls_time` ON `mcp_call_records`(`timestamp`)
 TABLE mcp_credentials
   column `id` text
   column `app_id` integer

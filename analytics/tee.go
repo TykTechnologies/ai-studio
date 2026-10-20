@@ -193,6 +193,27 @@ func (t *Tee) RecordComplianceEvents(ctx context.Context, events []*models.Compl
 	t.toSinks(func(h AnalyticsHandler) { h.RecordComplianceEvents(context.Background(), c) })
 }
 
+func (t *Tee) RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) {
+	c := make([]models.MCPCallRecord, len(records))
+	copy(c, records)
+	for i := range c {
+		if id := c[i].MCPServerID; id != nil {
+			v := *id
+			c[i].MCPServerID = &v
+		}
+		if id := c[i].AppID; id != nil {
+			v := *id
+			c[i].AppID = &v
+		}
+		if id := c[i].CredentialID; id != nil {
+			v := *id
+			c[i].CredentialID = &v
+		}
+	}
+	t.primary.RecordMCPCalls(ctx, records)
+	t.toSinks(func(h AnalyticsHandler) { h.RecordMCPCalls(context.Background(), c) })
+}
+
 // RecordExchange keeps a proxied request's log and chat record together for
 // handlers that store them as one (ExchangeRecorder) and splits them for the
 // others, as the package-level RecordExchange does.

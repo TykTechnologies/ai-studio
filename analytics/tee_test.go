@@ -19,6 +19,7 @@ type teeRecorder struct {
 	chats     []*models.LLMChatRecord
 	logs      []*models.ProxyLog
 	exchanges int
+	mcp       []models.MCPCallRecord
 	block     chan struct{}
 	panics    bool
 }
@@ -57,6 +58,12 @@ func (h *teeRecorder) RecordProxyLogsBatch(_ context.Context, ls []*models.Proxy
 	}
 }
 func (h *teeRecorder) RecordComplianceEvents(context.Context, []*models.ComplianceEvent) {}
+func (h *teeRecorder) RecordMCPCalls(_ context.Context, rs []models.MCPCallRecord) {
+	h.wait()
+	h.mu.Lock()
+	h.mcp = append(h.mcp, rs...)
+	h.mu.Unlock()
+}
 func (h *teeRecorder) counts() (int, int) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -95,6 +102,31 @@ func TestTee_PrimaryAndSinksGetEveryRecord(t *testing.T) {
 	rec.ID = 99
 	assert.Zero(t, sink.chats[0].ID)
 	assert.Equal(t, "gpt", sink.chats[0].Name)
+}
+
+// MCP call records reach the sinks as copies: the primary writes IDs into
+// its rows, and nothing it does shows up in a sink's.
+func TestTee_MCPCalls(t *testing.T) {
+	primary, sink := &teeRecorder{}, &teeRecorder{}
+	tee := NewTee(primary, sink)
+
+	server, app := uint(7), uint(3)
+	rows := []models.MCPCallRecord{
+		{ConnectionID: 1, MCPServerID: &server, AppID: &app, PrimitiveName: "search"},
+		{ConnectionID: 1, PrimitiveName: "list"},
+	}
+	tee.RecordMCPCalls(context.Background(), rows)
+	rows[0].ID = 99
+	*rows[0].MCPServerID = 100
+	tee.Stop(time.Second)
+
+	require.Len(t, primary.mcp, 2)
+	require.Len(t, sink.mcp, 2)
+	assert.Equal(t, "search", sink.mcp[0].PrimitiveName)
+	assert.Zero(t, sink.mcp[0].ID)
+	assert.Equal(t, uint(7), *sink.mcp[0].MCPServerID)
+	assert.Equal(t, uint(3), *sink.mcp[0].AppID)
+	assert.Nil(t, sink.mcp[1].MCPServerID)
 }
 
 // A slow or stuck sink never slows the request path: its queue fills and

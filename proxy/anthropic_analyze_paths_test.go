@@ -37,6 +37,7 @@ func (h *chatRecordCounter) RecordToolCall(context.Context, string, time.Time, i
 func (h *chatRecordCounter) RecordChatRecordsBatch(context.Context, []*models.LLMChatRecord)   {}
 func (h *chatRecordCounter) RecordProxyLogsBatch(context.Context, []*models.ProxyLog)          {}
 func (h *chatRecordCounter) RecordComplianceEvents(context.Context, []*models.ComplianceEvent) {}
+func (*chatRecordCounter) RecordMCPCalls(context.Context, []models.MCPCallRecord) {}
 func (h *chatRecordCounter) SetAsGlobalHandler()                                               { analytics.SetHandler(h) }
 func (h *chatRecordCounter) count() int                                                        { h.mu.Lock(); defer h.mu.Unlock(); return len(h.records) }
 func (h *chatRecordCounter) logCount() int                                                     { h.mu.Lock(); defer h.mu.Unlock(); return len(h.logs) }
