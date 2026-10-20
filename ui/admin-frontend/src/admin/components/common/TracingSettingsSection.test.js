@@ -88,11 +88,17 @@ describe("AppTracingSection", () => {
     expect(onChange).toHaveBeenCalledWith({ ...value, session_idle_timeout: "2h" });
   });
 
-  it("lets only traces:write holders grant the owner content access", () => {
+  it("is read-only without traces:write, which every tracing change needs (jyx.99)", () => {
     setPerms("apps:write");
     const { unmount } = wrap(<AppTracingSection value={appTracingFromResponse(null)} onChange={() => {}} />);
+    expect(screen.getByTestId("tracing-read-only")).toHaveTextContent(/traces:write/);
     expect(screen.getByLabelText(/let the app's owner view captured content/i)).toBeDisabled();
-    expect(screen.getByText(/only administrators with permission to manage traces/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/session idle timeout/i)).toBeDisabled();
+    expect(screen.getByLabelText(/keep captured content/i)).toBeDisabled();
+    // The three selects: tracing on/off, content mode, request ceiling.
+    const selects = screen.getAllByRole("combobox", { hidden: true });
+    expect(selects).toHaveLength(3);
+    for (const select of selects) expect(select).toHaveAttribute("aria-disabled", "true");
     unmount();
 
     setPerms("apps:write", "traces:write");
@@ -102,6 +108,22 @@ describe("AppTracingSection", () => {
     expect(box).toBeEnabled();
     fireEvent.click(box);
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ owner_may_view_content: true }));
+  });
+
+  it("resource settings are read-only without traces:write", () => {
+    setPerms("llms:write");
+    wrap(
+      <ResourceTracingSection
+        contentModeMax=""
+        onContentModeMaxChange={() => {}}
+        propagationOptOut={false}
+        onPropagationOptOutChange={() => {}}
+        resourceLabel="LLM"
+      />
+    );
+    expect(screen.getByTestId("tracing-read-only")).toBeInTheDocument();
+    expect(screen.getByLabelText(/don't send trace context/i)).toBeDisabled();
+    expect(screen.getByRole("combobox", { hidden: true })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("shows field errors", () => {

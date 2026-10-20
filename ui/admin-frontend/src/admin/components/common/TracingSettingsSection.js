@@ -97,10 +97,22 @@ export const useTracingSettingsVisible = () => {
   return Boolean(features?.feature_agent_tracing);
 };
 
-const ModeSelect = ({ label, name, value, onChange, emptyLabel, helperText }) => (
+// Changing any tracing setting needs traces:write (the API refuses it
+// otherwise); without it the settings are shown read-only, and an unrelated
+// edit sends them back exactly as loaded.
+const READ_ONLY_NOTE = "You can view these settings. Changing them needs permission to manage traces (traces:write).";
+
+const ReadOnlyNote = () => (
+  <Typography variant="body2" color="text.secondary" paragraph data-testid="tracing-read-only">
+    {READ_ONLY_NOTE}
+  </Typography>
+);
+
+const ModeSelect = ({ label, name, value, onChange, emptyLabel, helperText, disabled }) => (
   <TextField
     select
     fullWidth
+    disabled={disabled}
     label={label}
     name={name}
     value={value || ""}
@@ -125,7 +137,9 @@ const ModeSelect = ({ label, name, value, onChange, emptyLabel, helperText }) =>
  */
 export const ResourceTracingSection = ({ contentModeMax, onContentModeMaxChange, propagationOptOut, onPropagationOptOutChange, resourceLabel }) => {
   const visible = useTracingSettingsVisible();
+  const { can } = usePermissions();
   if (!visible) return null;
+  const readOnly = !can(P.TRACES_WRITE);
   const showPropagation = typeof onPropagationOptOutChange === "function";
   return (
     <StyledAccordion data-testid="tracing-settings-section">
@@ -133,9 +147,11 @@ export const ResourceTracingSection = ({ contentModeMax, onContentModeMaxChange,
         <Typography>Tracing</Typography>
       </AccordionSummary>
       <AccordionDetails>
+        {readOnly && <ReadOnlyNote />}
         <Grid container spacing={3}>
           <Grid item xs={12}>
             <ModeSelect
+              disabled={readOnly}
               label="Maximum content mode"
               name="tracing_content_mode_max"
               value={contentModeMax}
@@ -153,6 +169,7 @@ export const ResourceTracingSection = ({ contentModeMax, onContentModeMaxChange,
                     onChange={(e) => onPropagationOptOutChange(e.target.checked)}
                     name="tracing_propagation_opt_out"
                     color="primary"
+                    disabled={readOnly}
                   />
                 }
                 label="Don't send trace context to this provider"
@@ -178,8 +195,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
   const { can } = usePermissions();
   if (!visible) return null;
   const set = (name, v) => onChange({ ...value, [name]: v });
-  // Granting the Portal owner content access needs traces:write.
-  const canGrantContent = can(P.TRACES_WRITE);
+  const readOnly = !can(P.TRACES_WRITE);
   return (
     <StyledAccordion data-testid="tracing-settings-section">
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -189,6 +205,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
         <Typography variant="body2" color="text.secondary" paragraph>
           Overrides of the global agent tracing settings for this App. Leave a field on Inherit to use the global value.
         </Typography>
+        {readOnly && <ReadOnlyNote />}
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
             <TextField
@@ -196,6 +213,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               fullWidth
               label="Tracing"
               name="enabled"
+              disabled={readOnly}
               value={value.enabled}
               onChange={(e) => set("enabled", e.target.value)}
               SelectProps={{ displayEmpty: true }}
@@ -213,6 +231,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               value={value.content_mode}
               onChange={set}
               emptyLabel="Inherit"
+              disabled={readOnly}
               helperText="What is captured of prompts, responses and tool data."
             />
           </Grid>
@@ -223,6 +242,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               value={value.max_request_override}
               onChange={set}
               emptyLabel="Inherit"
+              disabled={readOnly}
               helperText="A client can raise capture with a request header up to this mode."
             />
           </Grid>
@@ -231,6 +251,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               fullWidth
               label="Session idle timeout"
               name="session_idle_timeout"
+              disabled={readOnly}
               value={value.session_idle_timeout}
               onChange={(e) => set("session_idle_timeout", e.target.value)}
               placeholder="Inherit (for example 30m or 2h)"
@@ -245,6 +266,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               type="number"
               label="Keep captured content (days)"
               name="payload_days"
+              disabled={readOnly}
               value={value.payload_days}
               onChange={(e) => set("payload_days", e.target.value)}
               placeholder="Inherit"
@@ -261,15 +283,13 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
                   checked={value.owner_may_view_content}
                   onChange={(e) => set("owner_may_view_content", e.target.checked)}
                   name="owner_may_view_content"
-                  disabled={!canGrantContent}
+                  disabled={readOnly}
                 />
               }
               label="Let the App's owner view captured content in the Portal"
             />
             <Typography variant="caption" color="text.secondary" display="block">
-              {canGrantContent
-                ? "Off by default: owners see trace metadata only. Every content view is audited."
-                : "Only administrators with permission to manage traces can change this."}
+              Off by default: owners see trace metadata only. Every content view is audited.
             </Typography>
           </Grid>
         </Grid>
