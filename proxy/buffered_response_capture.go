@@ -63,9 +63,23 @@ func (rc *bufferedResponseCapture) ModifyHeaders(headers map[string]string) {
 		return // Too late to modify
 	}
 
-	// Clear existing headers and set new ones
-	rc.header = make(http.Header)
+	// Hooks get one value per header and return the full set, so replacing
+	// the set would keep only the first of a repeated header (Set-Cookie,
+	// Vary, Link). A key returned with the value it has now keeps all its
+	// values; a changed or new key is set; a key not returned is removed.
+	returned := make(map[string]string, len(headers))
 	for key, value := range headers {
+		returned[http.CanonicalHeaderKey(key)] = value
+	}
+	for key := range rc.header {
+		if _, ok := returned[http.CanonicalHeaderKey(key)]; !ok {
+			delete(rc.header, key)
+		}
+	}
+	for key, value := range returned {
+		if vs := rc.header.Values(key); len(vs) > 0 && vs[0] == value {
+			continue
+		}
 		rc.header.Set(key, value)
 	}
 }
