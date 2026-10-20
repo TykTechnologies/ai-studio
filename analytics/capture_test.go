@@ -81,7 +81,7 @@ func TestCaptureStagedExactlyOnce(t *testing.T) {
 		h.RecordCaptureEvents(context.Background(), []*agenttrace.Event{a, b})
 		h.RecordCaptureEvents(context.Background(), []*agenttrace.Event{dup})
 
-		require.Eventually(t, func() bool { return h.capture.depth() == 0 && len(stagedRows(t, db)) == 2 },
+		require.Eventually(t, func() bool { return h.capture.Depth() == 0 && len(stagedRows(t, db)) == 2 },
 			5*time.Second, 20*time.Millisecond)
 		time.Sleep(2 * captureFlushInterval) // nothing more arrives
 		rows := stagedRows(t, db)
@@ -98,49 +98,8 @@ func TestCaptureStagedExactlyOnce(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, agenttrace.StateDropped, ev.Parts[0].ContentState)
 		}
-		assert.Equal(t, uint64(3), h.capture.Dropped(DropNoSealer))
+		assert.Equal(t, uint64(3), h.capture.Dropped(agenttrace.DropNoSealer))
 	})
-}
-
-func TestCaptureDropOrder(t *testing.T) {
-	SetCaptureLimits(3, 1<<20)
-	t.Cleanup(func() { SetCaptureLimits(0, 0) })
-	q := newCaptureQueue()
-
-	// Plenty of room: nothing is degraded.
-	q.add([]*agenttrace.Event{captureEvent(1, "small")})
-	assert.Zero(t, q.Dropped(DropPayload))
-
-	// A payload that does not fit loses its bytes first; the span stays.
-	big := captureEvent(1, strings.Repeat("x", 2<<20))
-	q.add([]*agenttrace.Event{big})
-	assert.Equal(t, uint64(1), q.Dropped(DropPayload))
-	assert.Nil(t, big.Parts[0].Data)
-	assert.Equal(t, agenttrace.StateDropped, big.Parts[0].ContentState)
-	assert.Equal(t, "attempt=1", big.GatewayEvents[0].Detail, "details go only when the payload alone is not enough")
-
-	// Then gateway event details, then the whole span.
-	q.maxBytes = q.heldBytes + 300
-	detail := captureEvent(1, "")
-	detail.Parts = nil
-	detail.GatewayEvents[0].Detail = strings.Repeat("d", 400)
-	q.add([]*agenttrace.Event{detail})
-	assert.Equal(t, uint64(1), q.Dropped(DropGatewayEventDetail))
-	assert.Equal(t, "", detail.GatewayEvents[0].Detail)
-	assert.Equal(t, int64(3), q.depth())
-
-	// The event cap drops whole spans.
-	q.maxBytes = 1 << 30
-	q.add([]*agenttrace.Event{captureEvent(1, "a"), captureEvent(1, "b")})
-	assert.Equal(t, uint64(2), q.Dropped(DropSpan))
-	assert.Equal(t, int64(3), q.depth())
-
-	// Release frees room again.
-	b := q.take()
-	assert.Len(t, b.events, 3)
-	assert.Equal(t, int64(3), q.depth(), "taken events count until written")
-	q.release(b)
-	assert.Zero(t, q.depth())
 }
 
 // With the writer stalled, offering far more than the caps never blocks a
@@ -183,9 +142,9 @@ func TestCaptureNeverBlocksWithStalledWriter(t *testing.T) {
 	}
 	t.Logf("offered %d events in %s", offered, time.Since(start))
 
-	held := uint64(h.capture.depth())
+	held := uint64(h.capture.Depth())
 	assert.LessOrEqual(t, held, uint64(1000))
-	assert.Equal(t, uint64(offered), held+h.capture.Dropped(DropSpan), "every event is held or counted")
+	assert.Equal(t, uint64(offered), held+h.capture.Dropped(agenttrace.DropSpan), "every event is held or counted")
 }
 
 func TestCaptureOffHandlerIsInert(t *testing.T) {

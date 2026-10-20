@@ -436,6 +436,14 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to create server")
 	}
 
+	// Agent Call Tracing (Enterprise): the server set the analytics handler
+	// the capture sink feeds, so the gate runs now.
+	var captureTarget captureEnabler
+	if serviceContainer.PluginManager != nil {
+		captureTarget = serviceContainer.PluginManager
+	}
+	startAgentTracing(cfg, captureTarget, licensingService.IsValid)
+
 	// Now that server is created, set the gateway reloader on edge reload handler
 	// This enables proper LLM cache refresh after configuration sync
 	if edgeReloadHandler != nil {

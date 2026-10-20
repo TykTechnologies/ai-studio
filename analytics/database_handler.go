@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -39,9 +40,10 @@ type DatabaseHandler struct {
 	// Agent tracing capture staging (capture.go). The queue and its flusher
 	// start on the first capture event; the batch channel always exists so
 	// the worker can select on it.
-	capture          *captureQueue
+	capture          *agenttrace.Queue
+	captureKick      chan struct{}
 	captureOnce      sync.Once
-	captureBatchChan chan captureBatch
+	captureBatchChan chan agenttrace.Batch
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
@@ -138,7 +140,7 @@ func (h *DatabaseHandler) start() {
 	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
-	h.captureBatchChan = make(chan captureBatch, 4)
+	h.captureBatchChan = make(chan agenttrace.Batch, 4)
 
 	// Start background workers. A panic writing one record loses that
 	// record, not the worker (nor the process); workerDone closes once the

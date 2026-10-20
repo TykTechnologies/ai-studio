@@ -62,6 +62,10 @@ type AnalyticsPulsePlugin struct {
 	// so a retry ladder can be exercised in milliseconds.
 	retryInterval time.Duration
 
+	// capture is the agent tracing outbox (agent_trace_capture.go); nil
+	// unless the Enterprise microgateway enabled capture.
+	capture atomic.Pointer[captureOutbox]
+
 	// Statistics
 	totalRecordsSent uint64
 	totalPulsesSent  uint64
@@ -1039,6 +1043,7 @@ func (p *AnalyticsPulsePlugin) Stop() error {
 		time.Sleep(10 * time.Millisecond)
 	}
 	p.sendPulse()
+	p.stopCapture()
 
 	log.Debug().
 		Uint64("total_pulses_sent", p.totalPulsesSent).

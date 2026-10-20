@@ -2,7 +2,6 @@ package analytics
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -10,12 +9,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // CaptureRecorder is implemented by handlers that stage Agent Call Tracing
-// capture events (spec §4.1, D3). The embedded gateway reaches it through
-// the agenttrace Sink that CaptureSink returns; it is only ever called while
-// tracing is on. Implementations must never block the request.
+// capture events (spec §4.1, D3): the hub's DatabaseHandler writes them to
+// the staging table, the microgateway's handler sends them on the pulse.
+// It is only ever called while tracing is on. Implementations must never
+// block the request.
 type CaptureRecorder interface {
 	RecordCaptureEvents(ctx context.Context, events []*agenttrace.Event)
 }
@@ -37,9 +38,9 @@ func (captureSink) Enqueue(ev *agenttrace.Event) bool {
 	return true
 }
 
-// CaptureSink is the agenttrace.Sink for the hub's embedded gateway: finished
-// captures go to the global analytics handler. Studio installs it with
-// agenttrace.SetSink once the tracing start gate has passed.
+// CaptureSink is the agenttrace.Sink that sends finished captures to the
+// global analytics handler. The hub installs it with agenttrace.SetSink once
+// the tracing start gate has passed; so does the Enterprise microgateway.
 func CaptureSink() agenttrace.Sink { return captureSink{} }
 
 // Capture queue limits per node (spec §10: capture.queue_max_events and
@@ -49,150 +50,22 @@ var (
 	captureMaxBytes  atomic.Int64
 )
 
+// captureBatchSize and captureFlushInterval bound a staging write (spec §10:
+// batch <= 500, flush <= 1 s).
 const (
-	defaultCaptureMaxEvents = 10000
-	defaultCaptureMaxBytes  = 64 << 20
-	// captureBatchSize and captureFlushInterval bound a staging write
-	// (spec §10: batch <= 500, flush <= 1 s).
 	captureBatchSize     = 500
 	captureFlushInterval = time.Second
 )
 
-// SetCaptureLimits sets the capture queue caps; zero or less keeps the default.
+// SetCaptureLimits sets the capture queue caps; zero or less keeps the
+// default (10,000 events, 64 MiB). Call it before the first capture.
 func SetCaptureLimits(maxEvents int, maxBytes int64) {
 	captureMaxEvents.Store(int64(maxEvents))
 	captureMaxBytes.Store(maxBytes)
 }
 
-// Capture drop reasons (tyk_tracing_capture_dropped{reason}).
-const (
-	DropPayload            = "payload"              // payload bytes removed, span kept (§10 step 1)
-	DropGatewayEventDetail = "gateway_event_detail" // event details removed (§10 step 2)
-	DropSpan               = "span"                 // whole span dropped (§10 step 3)
-	DropNoSealer           = "no_sealer"            // payload bytes removed: no key to seal them
-	DropWriteError         = "write_error"          // the staging write failed
-)
-
-// captureQueue is the bounded queue between the request path and the
-// analytics worker. Admission never blocks: when the caps are reached the
-// incoming event is degraded in the §10 order until it fits, or dropped.
-// Events count against the caps until the worker has written them.
-type captureQueue struct {
-	mu        sync.Mutex
-	pending   []*agenttrace.Event
-	sizes     []int64
-	held      int64 // events pending or in a batch not yet written
-	heldBytes int64
-	maxEvents int64
-	maxBytes  int64
-	kick      chan struct{}
-
-	dropped sync.Map // reason -> *atomic.Uint64
-}
-
-type captureBatch struct {
-	events []*agenttrace.Event
-	bytes  int64
-}
-
-func newCaptureQueue() *captureQueue {
-	q := &captureQueue{
-		maxEvents: captureMaxEvents.Load(),
-		maxBytes:  captureMaxBytes.Load(),
-		kick:      make(chan struct{}, 1),
-	}
-	if q.maxEvents <= 0 {
-		q.maxEvents = defaultCaptureMaxEvents
-	}
-	if q.maxBytes <= 0 {
-		q.maxBytes = defaultCaptureMaxBytes
-	}
-	return q
-}
-
-func (q *captureQueue) drop(reason string, n int64) {
-	v, _ := q.dropped.LoadOrStore(reason, new(atomic.Uint64))
-	v.(*atomic.Uint64).Add(uint64(n))
+func recordCaptureDrop(reason string, n int64) {
 	metrics.RecordTracingCaptureDropped(context.Background(), reason, n)
-}
-
-// Dropped returns how many drops were counted for reason.
-func (q *captureQueue) Dropped(reason string) uint64 {
-	if v, ok := q.dropped.Load(reason); ok {
-		return v.(*atomic.Uint64).Load()
-	}
-	return 0
-}
-
-// add admits events, degrading or dropping them to fit the caps.
-func (q *captureQueue) add(events []*agenttrace.Event) {
-	q.mu.Lock()
-	for _, ev := range events {
-		if ev == nil {
-			continue
-		}
-		if q.held+1 > q.maxEvents {
-			q.drop(DropSpan, 1)
-			continue
-		}
-		size := int64(ev.ApproxSize())
-		if q.heldBytes+size > q.maxBytes && agenttrace.StripPayloadData(ev) {
-			q.drop(DropPayload, 1)
-			size = int64(ev.ApproxSize())
-		}
-		if q.heldBytes+size > q.maxBytes && agenttrace.StripGatewayEventDetail(ev) {
-			q.drop(DropGatewayEventDetail, 1)
-			size = int64(ev.ApproxSize())
-		}
-		if q.heldBytes+size > q.maxBytes {
-			q.drop(DropSpan, 1)
-			continue
-		}
-		q.pending = append(q.pending, ev)
-		q.sizes = append(q.sizes, size)
-		q.held++
-		q.heldBytes += size
-	}
-	full := len(q.pending) >= captureBatchSize
-	q.mu.Unlock()
-	if full {
-		select {
-		case q.kick <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// take removes up to captureBatchSize pending events. They stay counted
-// against the caps until release.
-func (q *captureQueue) take() captureBatch {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	n := len(q.pending)
-	if n > captureBatchSize {
-		n = captureBatchSize
-	}
-	b := captureBatch{events: make([]*agenttrace.Event, n)}
-	copy(b.events, q.pending[:n])
-	for _, s := range q.sizes[:n] {
-		b.bytes += s
-	}
-	q.pending = append(q.pending[:0], q.pending[n:]...)
-	q.sizes = append(q.sizes[:0], q.sizes[n:]...)
-	return b
-}
-
-func (q *captureQueue) release(b captureBatch) {
-	q.mu.Lock()
-	q.held -= int64(len(b.events))
-	q.heldBytes -= b.bytes
-	q.mu.Unlock()
-}
-
-func (q *captureQueue) depth() int64 {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return q.held
 }
 
 // RecordCaptureEvents queues capture events for staging. The queue and its
@@ -206,12 +79,18 @@ func (h *DatabaseHandler) RecordCaptureEvents(_ context.Context, events []*agent
 		return
 	}
 	h.captureOnce.Do(h.startCapture)
-	h.capture.add(events)
+	if h.capture.Add(events...) {
+		select {
+		case h.captureKick <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (h *DatabaseHandler) startCapture() {
-	h.capture = newCaptureQueue()
-	metrics.SetTracingQueueDepth(h.capture.depth)
+	h.capture = agenttrace.NewQueue(int(captureMaxEvents.Load()), captureMaxBytes.Load(), captureBatchSize, recordCaptureDrop)
+	h.captureKick = make(chan struct{}, 1)
+	metrics.SetTracingQueueDepth(h.capture.Depth)
 	go h.flushCapture()
 }
 
@@ -225,11 +104,11 @@ func (h *DatabaseHandler) flushCapture() {
 		case <-h.ctx.Done():
 			return
 		case <-t.C:
-		case <-h.capture.kick:
+		case <-h.captureKick:
 		}
 		for {
-			b := h.capture.take()
-			if len(b.events) == 0 {
+			b := h.capture.Take()
+			if len(b.Events) == 0 {
 				break
 			}
 			select {
@@ -237,25 +116,38 @@ func (h *DatabaseHandler) flushCapture() {
 			case <-h.ctx.Done():
 				return
 			}
-			if len(b.events) < captureBatchSize {
+			if len(b.Events) < captureBatchSize {
 				break
 			}
 		}
 	}
 }
 
-// writeCaptureBatch stages one batch (on the analytics worker).
-func (h *DatabaseHandler) writeCaptureBatch(b captureBatch) {
-	defer h.capture.release(b)
+// StageCaptureEvents writes events received from source (an edge id) to the
+// staging table synchronously, skipping duplicates, and returns how many rows
+// were inserted. The hub's pulse handler uses it so that a failed write fails
+// the pulse and the edge retries; the idempotency key makes retries safe.
+func StageCaptureEvents(db *gorm.DB, source string, events []*agenttrace.Event) (int64, error) {
+	rows := EncodeCaptureRows(source, events, recordCaptureDrop)
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	return models.InsertAgentTraceCaptureEvents(db, rows)
+}
+
+// EncodeCaptureRows turns events into staging rows for source
+// (SourceEmbedded or an edge id). The idempotency key is always rebuilt from
+// source, so an edge cannot write keys in another source's space.
+func EncodeCaptureRows(source string, events []*agenttrace.Event, onDrop func(reason string, n int64)) []models.AgentTraceCaptureEvent {
 	now := time.Now()
-	rows := make([]models.AgentTraceCaptureEvent, 0, len(b.events))
+	rows := make([]models.AgentTraceCaptureEvent, 0, len(events))
 	var noSealer int64
-	for _, ev := range b.events {
-		ev.SetIdempotencyKey(agenttrace.SourceEmbedded)
+	for _, ev := range events {
+		ev.SetIdempotencyKey(source)
 		blob, stripped, err := agenttrace.EncodeStaged(ev)
 		if err != nil {
 			logger.Warnf("Agent tracing: dropping a capture event that could not be encoded: %s", sanitizeError(err))
-			h.capture.drop(DropWriteError, 1)
+			onDrop(agenttrace.DropWriteError, 1)
 			continue
 		}
 		if stripped {
@@ -273,8 +165,15 @@ func (h *DatabaseHandler) writeCaptureBatch(b captureBatch) {
 		})
 	}
 	if noSealer > 0 {
-		h.capture.drop(DropNoSealer, noSealer)
+		onDrop(agenttrace.DropNoSealer, noSealer)
 	}
+	return rows
+}
+
+// writeCaptureBatch stages one batch (on the analytics worker).
+func (h *DatabaseHandler) writeCaptureBatch(b agenttrace.Batch) {
+	defer h.capture.Release(b)
+	rows := EncodeCaptureRows(agenttrace.SourceEmbedded, b.Events, h.capture.Drop)
 	if len(rows) == 0 {
 		return
 	}
@@ -284,7 +183,7 @@ func (h *DatabaseHandler) writeCaptureBatch(b captureBatch) {
 	})
 	if err != nil {
 		logger.Warnf("Agent tracing: error staging %d capture events: %s", len(rows), sanitizeError(err))
-		h.capture.drop(DropWriteError, int64(len(rows)))
+		h.capture.Drop(agenttrace.DropWriteError, int64(len(rows)))
 	}
 }
 

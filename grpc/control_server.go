@@ -1114,7 +1114,12 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		Int("tool_calls", len(req.ToolCalls)).
 		Msg("AI Studio control server: received analytics pulse from edge")
 
-	processedRecords := uint64(0)
+	// Agent tracing capture events first: a capture-only pulse that cannot
+	// be staged fails here, before anything else is recorded.
+	processedRecords, err := s.ingestCaptureEvents(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 
 	// Process analytics events using AI Studio's native analytics system with batch processing
 	if len(req.AnalyticsEvents) > 0 {

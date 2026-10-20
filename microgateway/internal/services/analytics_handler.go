@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -650,6 +651,18 @@ func (h *MicrogatewaAnalyticsHandler) RecordComplianceEvents(_ context.Context, 
 
 	h.pluginManager.BufferComplianceEvents(bufferEvents)
 }
+
+// RecordCaptureEvents forwards agent tracing capture events to the analytics
+// pulse plugin, which sends them to the hub on their own cadence (D3). It is
+// only called while the Enterprise edge has tracing on, and never blocks.
+func (h *MicrogatewaAnalyticsHandler) RecordCaptureEvents(_ context.Context, events []*agenttrace.Event) {
+	if len(events) == 0 || h.pluginManager == nil {
+		return
+	}
+	h.pluginManager.BufferCaptureEvents(events)
+}
+
+var _ analytics.CaptureRecorder = (*MicrogatewaAnalyticsHandler)(nil)
 
 // SetAsGlobalHandler sets this handler as the global midsommar analytics handler
 func (h *MicrogatewaAnalyticsHandler) SetAsGlobalHandler() {

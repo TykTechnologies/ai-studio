@@ -232,6 +232,12 @@ message AnalyticsPulse {
   repeated ProxyLogSummary proxy_summaries = 9;   // Summarized proxy logs (not full payloads)
   repeated ComplianceEventProto compliance_events = 13; // Script-reported compliance events
   repeated ToolCallProto tool_calls = 14;         // Per-operation tool call records
+  // Agent tracing (Enterprise, decision D3): capture events, sent in their
+  // own pulses on a 10 s / 500-event cadence in chunks of at most 4 MiB.
+  // Hubs that predate the field skip it as an unknown field.
+  repeated CaptureEventProto capture_events = 15;
+  // Capture drops on the edge since the last delivered report, by reason.
+  map<string, uint64> capture_dropped = 16;
 
   // Pulse metadata
   bool is_compressed = 10;        // Whether data is compressed
