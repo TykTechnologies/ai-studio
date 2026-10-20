@@ -202,7 +202,7 @@ All variables are read at start-up. An invalid value keeps the default and logs 
 | `AGENT_TRACING_CORRELATION_KEY_TTL` | `24h` | Lifetime of correlation index entries |
 | `AGENT_TRACING_STORE_SAMPLE_RATE` | `1.0` | Share of sessions stored, decided per session |
 | `AGENT_TRACING_EXPORTERS_FILE` | empty | OTel exporters file; empty means no export |
-| `AGENT_TRACING_EXPORT_SEMCONV_PROFILE` | `genai-1.41` | Attribute mapping profile, or a path to a mapping YAML |
+| `AGENT_TRACING_EXPORT_SEMCONV_PROFILE` | `genai-1.41` | Attribute mapping profile, or a path to a mapping YAML. An unknown profile name falls back to the default with a warning; an unreadable file turns export off. |
 | `AGENT_TRACING_EXPORT_AGENT_SPAN_MODE` | `tyk` | `semconv` names declared agents `invoke_agent {name}` |
 | `AGENT_TRACING_EXPORT_GATEWAY_EVENTS` | `events` | `spans` exports gateway decisions as child spans instead of span events |
 | `AGENT_TRACING_EXPORT_CONTENT` | `none` | Phase 2: `reference` and `inline` are not built yet. They log a warning and export metadata only. |
@@ -489,7 +489,7 @@ A bad exporters file turns export off, not tracing.
 
 ### Attributes
 
-Every `gen_ai.*` and `mcp.*` name comes from the mapping profile. A stored attribute in those namespaces that the profile does not list is dropped. The tables below are generated from the profile; do not edit them by hand.
+Every `gen_ai.*` and `mcp.*` name comes from the mapping profile. The profile is `genai-1.41` (schema 1.41.0), the lowest semantic-conventions release that defines every name the exporter uses: the `mcp.*`, cache-token, `gen_ai.request.stream` and reasoning-token attributes first appear in v1.39 to v1.41. Earlier drafts named it `genai-1.37`; that name now falls back to `genai-1.41` with a warning. A stored attribute in those namespaces that the profile does not list is dropped. The tables below are generated from the profile; do not edit them by hand.
 
 Tyk attributes use the `tyk.` prefix. Examples: `tyk.app.id`, `tyk.app.name`, `tyk.session.id`, `tyk.session.source`, `tyk.turn.index`, `tyk.span.kind`, `tyk.correlation.confidence`, `tyk.correlation.rule`, `tyk.inferred` and `tyk.duration.upper_bound`.
 
