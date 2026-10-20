@@ -95,6 +95,7 @@ import SemanticRouterForm from "./components/semantic-routers/SemanticRouterForm
 import ComplianceOverview from "./pages/ComplianceOverview";
 import AuditTrail from "./pages/AuditTrail";
 import AgentSessions from "./pages/AgentSessions";
+import AgentSessionDetail from "./pages/AgentSessionDetail";
 import Webhooks from "./pages/Webhooks";
 import WebhookDeliveries from "./pages/WebhookDeliveries";
 import TykConnections from "./pages/TykConnections";
@@ -220,6 +221,7 @@ const mainAdminRoutes = [
   { path: "audit", element: <AuditTrail />, permission: P.AUDIT_READ },
   // Agent Call Tracing (Enterprise). Always registered: a CE deep link shows the badge.
   { path: "agent-sessions", element: <AgentSessions />, permission: P.TRACES_READ },
+  { path: "agent-sessions/:sessionId", element: <AgentSessionDetail />, permission: P.TRACES_READ },
   // Webhooks (Enterprise only; pages self-gate via /webhooks/status)
   { path: "webhooks", element: <Webhooks />, permission: P.WEBHOOKS_READ },
   { path: "webhooks/deliveries", element: <WebhookDeliveries />, permission: P.WEBHOOKS_READ },

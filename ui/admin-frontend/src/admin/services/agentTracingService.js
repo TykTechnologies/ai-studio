@@ -17,6 +17,16 @@ const agentTracingService = {
     apiClient.get(`${BASE}/traces/${traceId}`, { params: { ...params, app_id: appId } }).then((r) => r.data),
   getSpan: (spanId, appId) =>
     apiClient.get(`${BASE}/spans/${spanId}`, { params: { app_id: appId } }).then((r) => r.data),
+  // Captured content of one part (audited server-side, jyx.26).
+  getPayload: (spanId, appId, part, maxBytes) =>
+    apiClient
+      .get(`${BASE}/spans/${spanId}/payloads/${part}`, { params: { app_id: appId, ...(maxBytes ? { max_bytes: maxBytes } : {}) } })
+      .then((r) => r.data),
+  // Synchronous export (jyx.27): the file as a Blob.
+  exportSession: (sessionId, format, content) =>
+    apiClient
+      .get(`${BASE}/sessions/${sessionId}/export`, { params: { format, content: Boolean(content) }, responseType: "blob" })
+      .then((r) => r.data),
   search: (sessionId, q, limit) =>
     apiClient.post(`${BASE}/sessions/${sessionId}/search`, { q, ...(limit ? { limit } : {}) }).then((r) => r.data),
 };
