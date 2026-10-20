@@ -117,6 +117,30 @@ describe("AgentSessionDetail", () => {
     expect(drawer).toHaveTextContent("Calls not offeredshell");
   });
 
+  // jyx.166: the drawer explains withheld content. The reason comes from an
+  // edge, which is not trusted: only allowlisted reasons get their wording,
+  // any other value reads "Content withheld" and is never echoed.
+  const withWithheld = (reason) => {
+    const list = spans.map((sp) => (sp.span_id === ids.client ? { ...sp, attributes: { "tyk.content.withheld": reason } } : sp));
+    agentTracingService.listSpans.mockResolvedValue({ data: list, next_cursor: null, resources: [] });
+    agentTracingService.getSpan.mockImplementation((id) => Promise.resolve({ span: list.find((sp) => sp.span_id === id), events: [], resources: [] }));
+  };
+  for (const [reason, text] of [
+    ["edge_link_unverified_tls", "Content withheld: the edge's connection to Studio is not verified TLS."],
+    ["Call support at +1 555 0100", "Content withheld."],
+  ]) {
+    it(`explains withheld content in the drawer (${reason})`, async () => {
+      withWithheld(reason);
+      renderPage();
+      await loaded();
+      fireEvent.click(row(ids.client));
+      const drawer = await screen.findByRole("dialog");
+      fireEvent.click(within(drawer).getByRole("tab", { name: "Input" }));
+      expect(await within(drawer).findByTestId("no-parts")).toHaveTextContent(text);
+      expect(drawer).not.toHaveTextContent("555 0100");
+    });
+  }
+
   it("loads content only when a content tab is shown, and renders redaction chips", async () => {
     renderPage();
     await loaded();
