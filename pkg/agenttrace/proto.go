@@ -194,6 +194,8 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 				ID: tr.Id, ResultFP: fp(tr.ResultFp), IsError: tr.IsError,
 			})
 		}
+		// An edge's lists are bounded again here, as the capture bounds its own.
+		e.Extracts.Bound()
 	}
 	for _, ge := range p.GatewayEvents {
 		e.GatewayEvents = append(e.GatewayEvents, GatewayEvent{
