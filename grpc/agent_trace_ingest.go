@@ -46,7 +46,7 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 			events = append(events, ev)
 		}
 	}
-	events, err := s.scopeCaptureEvents(ctx, req.EdgeId, events)
+	scoped, err := s.scopeCaptureEvents(ctx, req.EdgeId, events)
 	if err != nil {
 		// Like a failed write: only a capture-only pulse is retried.
 		if captureOnly(req) {
@@ -57,6 +57,7 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 		metrics.RecordTracingCaptureDropped(ctx, dropScopeUnavailable, int64(len(events)))
 		return 0, nil
 	}
+	events = scoped
 	inserted, err := analytics.StageCaptureEvents(s.db, req.EdgeId, events)
 	if err != nil {
 		logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("capture_events", len(events)).
