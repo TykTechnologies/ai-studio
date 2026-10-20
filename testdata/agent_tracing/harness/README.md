@@ -10,6 +10,14 @@ Each line in the files is one request with these fields:
 
 The skeleton keeps the structure, ids, roles, types, model names and `metadata`. Every other string becomes `<str:N>`, where N is its length. The Claude Code `device_id` and `account_uuid` are replaced by placeholders. Session ids are random and are kept.
 
+Run labels:
+- `A1` is a fresh session.
+- `A2` and `A3` continue it: resume by id, then continue the last session.
+- `B` and `C` are two parallel fresh sessions. The proxy's label is global, so both may carry the `C` label.
+- In `opencode-1.18.23/anthropic-messages.jsonl`, `A1` also holds an earlier attempt that aborted on a broken pipe, so `A1` there has two sessions. The extractor tests key on `A2`/`A3`.
+
+The tests in `pkg/agenttrace/declared` replay these files.
+
 ## What was verified
 
 | Harness | Version | API | Signal | Stability |

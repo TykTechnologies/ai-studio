@@ -23,6 +23,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/segments"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
@@ -1112,6 +1113,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		req.Header.Del("Authorization")
 		// The loopback failover marker is ours alone; never show it to a vendor.
 		stripFailoverHeaders(req.Header)
+		// Nor the X-Tyk-* agent tracing headers, in every edition.
+		declared.StripTracingHeaders(req.Header)
 		if chain.rewritesResponse() {
 			// The transport asks for gzip itself and decompresses, so the
 			// response IDs can be rewritten.
@@ -1876,6 +1879,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	upstreamReq.Header = r.Header.Clone()
 	// The loopback failover marker is ours alone; never show it to a vendor.
 	stripFailoverHeaders(upstreamReq.Header)
+	// Nor the X-Tyk-* agent tracing headers, in every edition.
+	declared.StripTracingHeaders(upstreamReq.Header)
 	if chain.rewritesResponse() {
 		upstreamReq.Header.Del("Accept-Encoding") // see the REST director
 	}
