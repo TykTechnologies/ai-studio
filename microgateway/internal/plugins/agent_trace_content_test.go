@@ -44,7 +44,9 @@ func TestCapture_MetadataOnlyDropsProcessedContent(t *testing.T) {
 		if metadataOnly {
 			assert.False(t, strings.Contains(string(wire), edgeContentCanary), "content crossed an unverified channel")
 			assert.Equal(t, agenttrace.StateDropped, ev.Parts[0].ContentState)
+			assert.Equal(t, "edge_link_unverified_tls", ev.Attributes["tyk.content.withheld"], "the reason travels with the span (jyx.164)")
 		} else {
+			assert.Empty(t, ev.Attributes["tyk.content.withheld"])
 			assert.True(t, strings.Contains(string(wire), edgeContentCanary), "verified TLS carries processed content")
 		}
 	}

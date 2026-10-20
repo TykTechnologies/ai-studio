@@ -64,7 +64,10 @@ Once tracing runs, the **Agent Sessions** page appears in the admin UI. Edge gat
 - they have a valid licence;
 - they run in hub-connected mode;
 - their analytics pulse is loaded;
-- `AGENT_TRACING_ENABLED=true` is set on the edge.
+- `AGENT_TRACING_ENABLED=true` is set on the edge;
+- Studio has tracing on (its configuration sync carries the content settings). While it does not, the edge captures nothing.
+
+An edge sends captured content only over a verified TLS connection to Studio. With `EDGE_TLS_ENABLED=false` or `EDGE_SKIP_TLS_VERIFY=true` it sends metadata only: its spans show their content as dropped, with the attribute `tyk.content.withheld=edge_link_unverified_tls`, and the edge logs a warning at start. Enable verified TLS on the edge-to-Studio connection to capture content from edges.
 
 Edges receive the content settings and the fingerprint key from Studio in their configuration sync. Studio sends the key encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, and the edge holds it in memory only.
 
@@ -224,6 +227,10 @@ Edges read only the variables below. Everything else comes from Studio.
 | `AGENT_TRACING_FLUSH_MAX_EVENTS` | `500` | Events per flush |
 | `AGENT_TRACING_CHUNK_MAX_BYTES` | 4 MiB | Largest chunk per pulse; values over 8 MiB fall back to the default |
 | `AGENT_TRACING_BAGGAGE_ALLOWLIST` | `session.id` | As on Studio |
+| `AGENT_TRACING_COMPAT_HEADERS`, `AGENT_TRACING_HARNESS_SESSION_HEADERS` | as on Studio | Declared-context sources the edge reads |
+| `AGENT_TRACING_PROPAGATE_LLM_PROVIDERS`, `AGENT_TRACING_PROPAGATE_HTTP_UPSTREAMS`, `AGENT_TRACING_PROPAGATE_MCP` | `true` | Outbound trace context, as on Studio |
+| `AGENT_TRACING_OPENAI_CLIENT_REQUEST_ID` | `true` | As on Studio |
+| `AGENT_TRACING_MAX_STREAM_BUFFER_BYTES` | 1 MiB | As on Studio |
 
 ### Per App
 
@@ -231,7 +238,7 @@ Open an App and expand **Tracing**. Any field left on *Inherit* uses the global 
 
 | Setting | Meaning |
 |---|---|
-| Tracing | *Off* turns content capture off for the App. Metadata is still recorded. |
+| Tracing | *Off* stops capture for the App entirely: nothing of its traffic is recorded. |
 | Content mode | The App's content mode; it can only lower the global default |
 | Highest mode a request may ask for | The App's request ceiling; it can only lower the global one |
 | Session idle timeout | 1m to 168h |

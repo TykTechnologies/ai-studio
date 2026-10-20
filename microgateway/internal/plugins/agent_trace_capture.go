@@ -150,8 +150,12 @@ func (p *AnalyticsPulsePlugin) chunkCapture(c *captureOutbox, events []*agenttra
 		// The content pipeline runs on the edge, off the request path; raw
 		// content never travels (ToProto ignores it).
 		agenttrace.ProcessContent(ev)
-		if c.settings.MetadataOnly {
-			agenttrace.StripPayloadData(ev)
+		if c.settings.MetadataOnly && agenttrace.StripPayloadData(ev) {
+			// Say why the content is missing (jyx.164).
+			if ev.Attributes == nil {
+				ev.Attributes = map[string]string{}
+			}
+			ev.Attributes["tyk.content.withheld"] = "edge_link_unverified_tls"
 		}
 		ev.SetIdempotencyKey(p.edgeID)
 		pe := agenttrace.ToProto(ev)
