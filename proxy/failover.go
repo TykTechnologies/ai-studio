@@ -386,6 +386,12 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 	return false
 }
 
+// StripLoopbackHeaders removes the loopback markers from h before request
+// headers are handed to an out-of-process plugin. With the hop and failover
+// tokens a plugin could dial the gateway's loopback and authenticate as any
+// App through the auth hand-off (midsommar-clean-55x).
+func StripLoopbackHeaders(h http.Header) { stripFailoverHeaders(h) }
+
 // stripFailoverHeaders removes the loopback markers (failover, router and
 // auth hand-off) before a request leaves for the vendor.
 func stripFailoverHeaders(h http.Header) {
