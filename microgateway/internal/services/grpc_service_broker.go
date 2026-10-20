@@ -753,23 +753,33 @@ func (s *MicrogatewayManagementServer) convertLLMToPB(llm *database.LLM) *pb.LLM
 		monthlyBudget = &llm.MonthlyBudget
 	}
 
+	// The same test as models.LLM.HasRequestFilters, which the proxy uses
+	hasRequestFilters := false
+	for _, f := range llm.Filters {
+		if !f.ResponseFilter {
+			hasRequestFilters = true
+			break
+		}
+	}
+
 	return &pb.LLMInfo{
-		Id:             uint32(llm.ID),
-		Name:           llm.Name,
-		Vendor:         llm.Vendor,
-		Slug:           llm.Slug,
-		Endpoint:       llm.Endpoint,
-		HasApiKey:      llm.APIKeyEncrypted != "",
-		DefaultModel:   llm.DefaultModel,
-		AllowedModels:  allowedModels,
-		IsActive:       llm.IsActive,
-		MaxTokens:      int32(llm.MaxTokens),
-		TimeoutSeconds: int32(llm.TimeoutSeconds),
-		RetryCount:     int32(llm.RetryCount),
-		MonthlyBudget:  monthlyBudget,
-		RateLimitRpm:   int32(llm.RateLimitRPM),
-		CreatedAt:      timestamppb.New(llm.CreatedAt),
-		UpdatedAt:      timestamppb.New(llm.UpdatedAt),
+		Id:                uint32(llm.ID),
+		Name:              llm.Name,
+		Vendor:            llm.Vendor,
+		Slug:              llm.Slug,
+		Endpoint:          llm.Endpoint,
+		HasApiKey:         llm.APIKeyEncrypted != "",
+		DefaultModel:      llm.DefaultModel,
+		AllowedModels:     allowedModels,
+		IsActive:          llm.IsActive,
+		MaxTokens:         int32(llm.MaxTokens),
+		TimeoutSeconds:    int32(llm.TimeoutSeconds),
+		RetryCount:        int32(llm.RetryCount),
+		MonthlyBudget:     monthlyBudget,
+		RateLimitRpm:      int32(llm.RateLimitRPM),
+		CreatedAt:         timestamppb.New(llm.CreatedAt),
+		UpdatedAt:         timestamppb.New(llm.UpdatedAt),
+		HasRequestFilters: hasRequestFilters,
 	}
 }
 

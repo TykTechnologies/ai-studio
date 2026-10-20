@@ -320,8 +320,12 @@ type LLMInfo struct {
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Metadata       map[string]string      `protobuf:"bytes,17,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Plugin-stored data
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The LLM has at least one request filter (a script or guardrail that
+	// reads request bodies), so a plugin can avoid lossy rewrites the
+	// filters would screen.
+	HasRequestFilters bool `protobuf:"varint,18,opt,name=has_request_filters,json=hasRequestFilters,proto3" json:"has_request_filters,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *LLMInfo) Reset() {
@@ -471,6 +475,13 @@ func (x *LLMInfo) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *LLMInfo) GetHasRequestFilters() bool {
+	if x != nil {
+		return x.HasRequestFilters
+	}
+	return false
 }
 
 type ListAppsRequest struct {
@@ -2253,7 +2264,7 @@ const file_proto_microgateway_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\"D\n" +
 	"\x0eGetLLMResponse\x122\n" +
-	"\x03llm\x18\x01 \x01(\v2 .microgateway_management.LLMInfoR\x03llm\"\xcb\x05\n" +
+	"\x03llm\x18\x01 \x01(\v2 .microgateway_management.LLMInfoR\x03llm\"\xfb\x05\n" +
 	"\aLLMInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -2276,7 +2287,8 @@ const file_proto_microgateway_management_proto_rawDesc = "" +
 	"created_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12J\n" +
-	"\bmetadata\x18\x11 \x03(\v2..microgateway_management.LLMInfo.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x11 \x03(\v2..microgateway_management.LLMInfo.MetadataEntryR\bmetadata\x12.\n" +
+	"\x13has_request_filters\x18\x12 \x01(\bR\x11hasRequestFilters\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
