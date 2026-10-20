@@ -21,7 +21,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
-	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 )
@@ -635,7 +634,7 @@ func (p *Proxy) nativeUpstreamRequest(ctx context.Context, llm *models.LLM, meth
 			req.Header[k] = append([]string(nil), vs...)
 		}
 	}
-	tracing.InjectOutgoing(req.Context(), req.Header)
+	injectUpstreamTrace(req.Context(), req.Header, llm)
 	if err := p.setVendorAuthHeader(req, llm); err != nil {
 		return nil, fmt.Errorf("vendor auth: %w", err)
 	}

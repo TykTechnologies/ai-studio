@@ -24,7 +24,7 @@ import (
 // the events are discarded and the pulse succeeds.
 func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.AnalyticsPulse) (uint64, error) {
 	for reason, n := range req.CaptureDropped {
-		metrics.RecordTracingCaptureDropped(ctx, "edge_"+reason, int64(n))
+		metrics.RecordTracingCaptureDropped(ctx, edgeDropLabel(reason), int64(n))
 	}
 	if len(req.CaptureEvents) == 0 {
 		return 0, nil
@@ -56,6 +56,17 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 	logger.Log.Debug().Str("edge_id", req.EdgeId).Int("capture_events", len(events)).Int64("inserted", inserted).
 		Msg("Edge capture events staged")
 	return uint64(len(events)), nil
+}
+
+// edgeDropLabel maps an edge-reported drop reason to a fixed metric label,
+// so an edge cannot choose Prometheus label values.
+func edgeDropLabel(reason string) string {
+	switch reason {
+	case agenttrace.DropPayload, agenttrace.DropGatewayEventDetail, agenttrace.DropSpan,
+		agenttrace.DropNoSealer, agenttrace.DropWriteError:
+		return "edge_" + reason
+	}
+	return "edge_other"
 }
 
 // captureOnly reports whether a pulse carries nothing but capture data.

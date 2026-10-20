@@ -1976,7 +1976,10 @@ type AnalyticsEvent struct {
 	DecisionQuestions uint32 `protobuf:"varint,43,opt,name=decision_questions,json=decisionQuestions,proto3" json:"decision_questions,omitempty"` // decision calls: questions asked
 	DecisionRefusals  uint32 `protobuf:"varint,44,opt,name=decision_refusals,json=decisionRefusals,proto3" json:"decision_refusals,omitempty"`    // decision calls: questions the model declined (answered = choices)
 	// Vendor service tier the usage was billed at ("batch", "priority", "flex"...); empty for list-price traffic.
-	ServiceTier   string `protobuf:"bytes,45,opt,name=service_tier,json=serviceTier,proto3" json:"service_tier,omitempty"`
+	ServiceTier string `protobuf:"bytes,45,opt,name=service_tier,json=serviceTier,proto3" json:"service_tier,omitempty"`
+	// Agent tracing gateway span id (16 hex) of the logical call; empty while
+	// tracing is off. Lands in proxy_logs.trace_span_id.
+	TraceSpanId   string `protobuf:"bytes,46,opt,name=trace_span_id,json=traceSpanId,proto3" json:"trace_span_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2322,6 +2325,13 @@ func (x *AnalyticsEvent) GetDecisionRefusals() uint32 {
 func (x *AnalyticsEvent) GetServiceTier() string {
 	if x != nil {
 		return x.ServiceTier
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetTraceSpanId() string {
+	if x != nil {
+		return x.TraceSpanId
 	}
 	return ""
 }
@@ -2838,6 +2848,7 @@ type CaptureEventProto struct {
 	ContentMode    string                       `protobuf:"bytes,29,opt,name=content_mode,json=contentMode,proto3" json:"content_mode,omitempty"`
 	Attributes     map[string]string            `protobuf:"bytes,30,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Attempt        uint32                       `protobuf:"varint,31,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	AttemptOf      []byte                       `protobuf:"bytes,32,opt,name=attempt_of,json=attemptOf,proto3" json:"attempt_of,omitempty"` // outer logical call's span id (inner /ai/ hop)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3087,6 +3098,13 @@ func (x *CaptureEventProto) GetAttempt() uint32 {
 		return x.Attempt
 	}
 	return 0
+}
+
+func (x *CaptureEventProto) GetAttemptOf() []byte {
+	if x != nil {
+		return x.AttemptOf
+	}
+	return nil
 }
 
 type CaptureIdentityProto struct {
@@ -4437,7 +4455,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xe2\f\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\x86\r\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -4494,7 +4512,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\frequest_kind\x18* \x01(\tR\vrequestKind\x12-\n" +
 	"\x12decision_questions\x18+ \x01(\rR\x11decisionQuestions\x12+\n" +
 	"\x11decision_refusals\x18, \x01(\rR\x10decisionRefusals\x12!\n" +
-	"\fservice_tier\x18- \x01(\tR\vserviceTier\"\xa2\x03\n" +
+	"\fservice_tier\x18- \x01(\tR\vserviceTier\x12\"\n" +
+	"\rtrace_span_id\x18. \x01(\tR\vtraceSpanId\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +
@@ -4549,7 +4568,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12 \n" +
 	"\fexec_time_ms\x18\x03 \x01(\x05R\n" +
 	"execTimeMs\x128\n" +
-	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xbe\n" +
+	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xdd\n" +
 	"\n" +
 	"\x11CaptureEventProto\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x17\n" +
@@ -4588,7 +4607,9 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x1e \x03(\v2/.microgateway.CaptureEventProto.AttributesEntryR\n" +
 	"attributes\x12\x18\n" +
-	"\aattempt\x18\x1f \x01(\rR\aattempt\x1a=\n" +
+	"\aattempt\x18\x1f \x01(\rR\aattempt\x12\x1d\n" +
+	"\n" +
+	"attempt_of\x18  \x01(\fR\tattemptOf\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe9\x01\n" +

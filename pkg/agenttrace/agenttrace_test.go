@@ -70,6 +70,7 @@ func fullEvent() *Event {
 		HTTPStatus:    502,
 		GatewayNode:   "node-a",
 		Attempt:       2,
+		AttemptOf:     SpanID{7, 7, 7, 7, 7, 7, 7, 7},
 		Usage: Usage{
 			InputTokens: 1, OutputTokens: 2, CacheReadTokens: 3, CacheWriteTokens: 4,
 			ReasoningTokens: 5, CostMicros: 6, Currency: "USD",

@@ -156,6 +156,9 @@ func ExtractIncoming(ctx context.Context, header map[string][]string) context.Co
 
 // InjectOutgoing writes the current trace context into the upstream request
 // headers so the provider (or an in-cluster model server) can continue the trace.
+// Baggage, whether injected here or copied from the client's request, is then
+// reduced to the allowlist (FilterBaggage).
 func InjectOutgoing(ctx context.Context, header map[string][]string) {
 	propagator().Inject(ctx, propagation.HeaderCarrier(header))
+	FilterBaggage(header)
 }

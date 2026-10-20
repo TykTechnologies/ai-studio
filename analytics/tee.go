@@ -217,6 +217,12 @@ func recordExchangeWith(ctx context.Context, h AnalyticsHandler, log *models.Pro
 // RecordCaptureEvents forwards agent tracing capture events to the primary
 // and to the sinks that stage them. Sinks get copies: the primary may strip
 // payloads from its events under queue pressure.
+//
+// Only trusted handlers may implement CaptureRecorder: the hub's database
+// handler, or an embedding host's own sink (hosts are already trusted with
+// proxy logs, and EncodeStaged/ProcessContent mean a sink only ever sees
+// processed, redacted content). A plugin or data-collector sink must never
+// implement it, or capture content would reach plugins.
 func (t *Tee) RecordCaptureEvents(ctx context.Context, events []*agenttrace.Event) {
 	var forSinks []*agenttrace.Event
 	if len(t.sinks) > 0 {

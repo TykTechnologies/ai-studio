@@ -23,8 +23,14 @@ import (
 func startProxySpan(r *http.Request, llm *models.LLM) (*http.Request, trace.Span) {
 	model := requestModelName(r, llm)
 
+	// With agent tracing on, the request already carries the gateway span
+	// context (beginRequestCapture), itself a child of the caller's.
+	parent := r.Context()
+	if !trace.SpanContextFromContext(parent).IsValid() {
+		parent = tracing.ExtractIncoming(parent, r.Header)
+	}
 	ctx, span := tracing.Tracer().Start(
-		tracing.ExtractIncoming(r.Context(), r.Header),
+		parent,
 		// The GenAI conventions name a span "{operation} {model}".
 		metrics.OperationChat+" "+model,
 		trace.WithSpanKind(trace.SpanKindServer),

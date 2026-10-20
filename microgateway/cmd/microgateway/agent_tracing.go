@@ -1,11 +1,14 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/rs/zerolog/log"
 )
 
@@ -22,6 +25,12 @@ type captureEnabler interface {
 func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func() bool) bool {
 	agenttrace.SetEnabled(false)
 	at := cfg.AgentTracing
+	// The baggage allowlist applies in every edition, tracing on or off.
+	allow := at.BaggageAllowlist
+	if len(allow) == 1 && strings.EqualFold(strings.TrimSpace(allow[0]), "none") {
+		allow = nil
+	}
+	tracing.SetBaggageAllowlist(allow)
 	if !at.Enabled {
 		return false
 	}

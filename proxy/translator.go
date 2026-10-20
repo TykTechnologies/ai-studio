@@ -286,6 +286,12 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// The outer hop's own span. The loopback attempts run on a detached
+	// context, so loopbackHeaders carries this span's context across the hop
+	// and the inner hop (and the vendor call) join the caller's trace.
+	r, outerSpan := startProxySpan(r, conf)
+	defer outerSpan.End()
+
 	// Validate required fields
 	if len(req.Messages) == 0 || req.Model == "" {
 		respondWithOAIError(w, http.StatusBadRequest, "missing required fields", nil, false)

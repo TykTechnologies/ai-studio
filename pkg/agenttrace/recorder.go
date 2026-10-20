@@ -94,6 +94,45 @@ func (r *Recorder) SpanID() SpanID {
 	return r.span.SpanID // set once in Begin, never written again
 }
 
+// MarkAttemptOf records that this request is one attempt of the outer
+// logical call whose span id is outer (the inner hop of the /ai/ loopback).
+func (r *Recorder) MarkAttemptOf(outer SpanID) {
+	if r == nil || outer.IsZero() {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.span.AttemptOf = outer
+}
+
+// LogicalSpanID is the span id of the logical call this request belongs to:
+// the outer call's for an attempt, otherwise its own. proxy_logs rows carry
+// it (trace_span_id), so every failover rung of one call shares it.
+func (r *Recorder) LogicalSpanID() SpanID {
+	if r == nil {
+		return SpanID{}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.span.AttemptOf.IsZero() {
+		return r.span.AttemptOf
+	}
+	return r.span.SpanID
+}
+
+// SetTraceID sets the provisional trace id (the declared one, or one the
+// gateway minted) when none is set yet.
+func (r *Recorder) SetTraceID(t TraceID) {
+	if r == nil || t.IsZero() {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.span.TraceID.IsZero() {
+		r.span.TraceID = t
+	}
+}
+
 // TraceID returns the primary span's provisional trace id.
 func (r *Recorder) TraceID() TraceID {
 	if r == nil {

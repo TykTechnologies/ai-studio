@@ -158,6 +158,11 @@ type Event struct {
 	// Attempt is the number of upstream attempts the logical call made
 	// (1 when there was no retry or fallback; §4.5).
 	Attempt uint32
+	// AttemptOf is set on the inner hop of the /ai/ loopback (and on each of
+	// its failover rungs): the span id of the outer logical call this request
+	// is one attempt of. The assembler folds such events into the outer
+	// llm_inference span as attempt gateway events (§4.5).
+	AttemptOf SpanID
 
 	// Usage and cost, copied from the existing chat-record computation
 	// (buildChatRecordFor) and never recomputed (epic deviation 6, §3.4).

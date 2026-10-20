@@ -863,6 +863,12 @@ func (s *Service) getCachedUniversalClient(tool *models.Tool, authSchemaName, au
 
 // CallToolOperation calls an operation from the tool's OpenAPI spec
 func (s *Service) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
+	return s.CallToolOperationContext(context.Background(), toolID, operationID, params, payload, headers)
+}
+
+// CallToolOperationContext is CallToolOperation bound to ctx: the upstream
+// call is cancelled with its caller and carries the caller's trace context.
+func (s *Service) CallToolOperationContext(ctx context.Context, toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
 	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
@@ -876,7 +882,7 @@ func (s *Service) CallToolOperation(toolID uint, operationID string, params map[
 		return nil, err
 	}
 
-	result, err := client.CallOperation(operationID, params, payload, headers)
+	result, err := client.CallOperationWithContext(ctx, operationID, params, payload, headers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call operation: %w", err)
 	}

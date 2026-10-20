@@ -338,6 +338,10 @@ message AnalyticsEvent {
 
   // Vendor service tier the usage was billed at ("batch", "priority", "flex"...); empty for list-price traffic.
   string service_tier = 45;
+
+  // Agent tracing gateway span id (16 hex) of the logical call; empty while
+  // tracing is off. Lands in proxy_logs.trace_span_id.
+  string trace_span_id = 46;
 }
 
 // Budget usage event for pulse batching
@@ -443,6 +447,7 @@ message CaptureEventProto {
   string content_mode = 29;
   map<string, string> attributes = 30;
   uint32 attempt = 31;
+  bytes attempt_of = 32;               // outer logical call's span id (inner /ai/ hop)
 }
 
 message CaptureIdentityProto {

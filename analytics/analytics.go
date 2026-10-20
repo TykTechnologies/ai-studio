@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -54,8 +55,21 @@ func stampIdentity(ctx context.Context, log *models.ProxyLog, rec *models.LLMCha
 	}
 }
 
+// stampTraceSpan links a proxy log to its agent tracing span: the logical
+// call's gateway span id, shared by every failover rung of an /ai/ call.
+// Nothing happens (and nothing is allocated) while tracing is off.
+func stampTraceSpan(ctx context.Context, log *models.ProxyLog) {
+	if log == nil || log.TraceSpanID != "" {
+		return
+	}
+	if rec := agenttrace.From(ctx); rec != nil {
+		log.TraceSpanID = rec.LogicalSpanID().String()
+	}
+}
+
 func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 	stampIdentity(ctx, log, nil)
+	stampTraceSpan(ctx, log)
 
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
@@ -73,6 +87,7 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 // RecordProxyLog followed by RecordChatRecord, as before.
 func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
 	stampIdentity(ctx, log, rec)
+	stampTraceSpan(ctx, log)
 
 	// The proxy paths build chat records without a latency; the gateway put
 	// the request's start on the context (WithRequestStart).

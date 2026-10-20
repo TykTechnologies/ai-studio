@@ -44,8 +44,9 @@ func IsEnterpriseAvailable() bool {
 //
 // Tracing runs only when the Enterprise factory is registered, the existing
 // Enterprise licence is valid and AGENT_TRACING_ENABLED=true (no separate
-// licence entitlement). Only then does it build the Enterprise service and
-// turn the process flag (agenttrace.Enabled) on. Otherwise the flag is off,
+// licence entitlement). Only then does it build the Enterprise service; the
+// caller turns the process flag (agenttrace.Enabled) on once Start succeeded
+// (see GateOpen). Otherwise the flag is off,
 // the result answers queries with ErrEnterpriseFeature (Community) or
 // ErrDisabled (Enterprise, gated), and nothing is captured or written.
 func NewService(deps Deps) Service {
@@ -68,6 +69,13 @@ func NewService(deps Deps) Service {
 		log.Error().Msg("Agent Call Tracing: the Enterprise factory returned no service; tracing stays off")
 		return communityService{err: ErrDisabled, enterprise: true}
 	}
-	agenttrace.SetEnabled(true)
 	return svc
+}
+
+// GateOpen reports whether NewService built the Enterprise service (the
+// start gate passed). The caller starts it and only then enables capture,
+// so capture is never on without a working service and its keys.
+func GateOpen(svc Service) bool {
+	_, inert := svc.(communityService)
+	return svc != nil && !inert
 }

@@ -444,6 +444,9 @@ func New(opts Options) (_ *Studio, err error) {
 
 	// Agent Call Tracing (Enterprise): the start gate sets the gateway's
 	// capture flag before the proxy serves its first request.
+	// Baggage reaching LLM and tool upstreams is cut to the allowlist in
+	// every edition (decision Q11).
+	tracing.SetBaggageAllowlist(conf.AgentTracing.BaggageAllowlist)
 	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
 	if agenttrace.Enabled() {
 		// The embedded gateway's captures are staged by the analytics handler.

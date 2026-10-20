@@ -287,6 +287,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyL
 				ShadowRoute:         event.ShadowRoute,
 				OnBehalfOf:          event.OnBehalfOf,
 				ActingAgent:         event.ActingAgent,
+				TraceSpanID:         proxyLog.TraceSpanID,
 				RequestKind:         string(record.RequestKind),
 				DecisionQuestions:   record.DecisionQuestions,
 				DecisionRefusals:    record.DecisionRefusals,

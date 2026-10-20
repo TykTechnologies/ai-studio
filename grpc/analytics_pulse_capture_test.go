@@ -159,6 +159,11 @@ func TestSendAnalyticsPulse_CaptureNeedsEdgeID(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestEdgeDropLabelAllowlist(t *testing.T) {
+	assert.Equal(t, "edge_span", edgeDropLabel(agenttrace.DropSpan))
+	assert.Equal(t, "edge_other", edgeDropLabel(`x"} 1`+"\nevil"))
+}
+
 func TestSendAnalyticsPulse_CaptureDroppedReportOnly(t *testing.T) {
 	_, server := capturePulseDB(t)
 	withHubTracing(t, true)

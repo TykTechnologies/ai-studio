@@ -1602,6 +1602,8 @@ TABLE proxy_logs
   column `acting_agent` text
   column `request_kind` text DEFAULT ""
   column `service_tier` text
+  column `trace_span_id` text
+  column `request_id` text
   index CREATE INDEX `idx_proxy_logs_app_code_time` ON `proxy_logs`(`app_id`,`response_code`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_app_time` ON `proxy_logs`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_code` ON `proxy_logs`(`response_code`)
@@ -1611,6 +1613,7 @@ TABLE proxy_logs
   index CREATE INDEX `idx_proxy_logs_request_kind` ON `proxy_logs`(`request_kind`)
   index CREATE INDEX `idx_proxy_logs_router` ON `proxy_logs`(`router_slug`)
   index CREATE INDEX `idx_proxy_logs_time` ON `proxy_logs`(`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_trace_span` ON `proxy_logs`(`trace_span_id`)
   index CREATE INDEX `idx_proxy_logs_user_id` ON `proxy_logs`(`user_id`)
 TABLE push_operations
   column `operation_id` text

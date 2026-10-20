@@ -67,6 +67,10 @@ type AgentTracingConfig struct {
 	FlushMaxEvents int           `env:"AGENT_TRACING_FLUSH_MAX_EVENTS" envDefault:"500"`
 	// ChunkMaxBytes caps one pulse's capture events (gRPC messages are 16 MiB).
 	ChunkMaxBytes int `env:"AGENT_TRACING_CHUNK_MAX_BYTES" envDefault:"4194304"`
+	// BaggageAllowlist is the W3C baggage keys forwarded to LLM and tool
+	// upstreams; the rest is removed. It applies in every edition, with
+	// tracing on or off (decision Q11). "none" forwards no baggage.
+	BaggageAllowlist []string `env:"AGENT_TRACING_BAGGAGE_ALLOWLIST" envDefault:"session.id" envSeparator:","`
 }
 
 // agentTracingChunkLimit keeps a chunk well under the 16 MiB gRPC message cap.

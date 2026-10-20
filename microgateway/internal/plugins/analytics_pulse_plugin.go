@@ -91,6 +91,7 @@ type PulsePluginConfig struct {
 // AnalyticsMetadata stores additional analytics data not in database.AnalyticsEvent
 type AnalyticsMetadata struct {
 	RequestID    string
+	TraceSpanID  string // agent tracing gateway span id; empty while tracing is off
 	ModelName    string
 	Vendor       string
 	RequestBody  string
@@ -386,6 +387,7 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 	// Store metadata for pulse transmission
 	metadata := AnalyticsMetadata{
 		RequestID:    req.RequestID,
+		TraceSpanID:  req.TraceSpanID,
 		ModelName:    req.ModelName,
 		Vendor:       req.Vendor,
 		RequestBody:  req.RequestBody,  // From analytics interface
@@ -870,6 +872,7 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 
 		analyticsEvents = append(analyticsEvents, &pb.AnalyticsEvent{
 			RequestId:               event.RequestID,
+			TraceSpanId:             eventMetadata.TraceSpanID,
 			AppId:                   uint32(event.AppID),
 			LlmId:                   llmID,
 			FailoverFromLlmId: failoverFrom,

@@ -384,6 +384,10 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 // stripFailoverHeaders removes the loopback markers (failover, router and
 // auth hand-off) before a request leaves for the vendor.
 func stripFailoverHeaders(h http.Header) {
+	// The per-process hop token and the outer hop's span id: a vendor seeing
+	// the token could replay it at this gateway's loopback.
+	h.Del(hdrInternalHop)
+	h.Del(hdrInternalSpan)
 	h.Del(hdrFailoverOrigin)
 	h.Del(hdrFailoverAttempt)
 	h.Del(hdrFailoverToken)

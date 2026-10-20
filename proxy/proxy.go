@@ -33,7 +33,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
-	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -659,8 +658,13 @@ func (p *Proxy) createHandler() http.Handler {
 // recorded for it carry its latency (total_time_ms). On the /ai/ loopback the
 // inner hop notes its own start: its row times the vendor call and the inner
 // hop's filters, which is what its row describes.
+//
+// With agent tracing on it also gives the request its gateway span id and
+// capture recorder (beginRequestCapture), finished when the request ends.
 func requestStartMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r, rec := beginRequestCapture(r)
+		defer rec.Finish()
 		next.ServeHTTP(w, r.WithContext(analytics.WithRequestStart(r.Context(), time.Now())))
 	})
 }
@@ -1108,7 +1112,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		req.Host = upstreamURL.Host
 		// Continue the trace into the upstream. Done before the vendor auth
 		// header so a vendor that rewrites headers wholesale cannot drop it.
-		tracing.InjectOutgoing(req.Context(), req.Header)
+		injectUpstreamTrace(req.Context(), req.Header, llm)
 		// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
 		req.Header.Del("Authorization")
 		// The loopback failover marker is ours alone; never show it to a vendor.
@@ -1398,7 +1402,7 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t0 := time.Now()
-	result, err := p.gatewayService.CallToolOperation(tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
+	result, err := p.callToolOperation(r.Context(), tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
 	t1 := time.Now()
 	if err != nil {
 		analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
@@ -1886,7 +1890,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	upstreamReq.Host = upstreamURL.Host
 	// Continue the trace into the upstream, as the non-streaming director does.
-	tracing.InjectOutgoing(upstreamReq.Context(), upstreamReq.Header)
+	injectUpstreamTrace(upstreamReq.Context(), upstreamReq.Header, llm)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header for streaming", err, false)
 		return
@@ -3089,7 +3093,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			params, payload = args.Parameters, args.Payload
 
 			// Call the operation using our existing service
-			result, err := p.gatewayService.CallToolOperation(
+			result, err := p.callToolOperation(ctx,
 				toolModel.ID,
 				operationID,
 				params,

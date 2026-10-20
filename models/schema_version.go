@@ -54,7 +54,9 @@ const (
 	// 15: agent tracing read API: agent_trace_sessions.duration_ms and
 	//     gateway_event_count (defaulted), indexes on sessions (started_at,
 	//     id), spans (span_id) and traces (trace_id) (additive).
-	SchemaVersion          = 15
+	// 16: proxy_logs.trace_span_id (indexed) and proxy_logs.request_id
+	//     (nullable, additive).
+	SchemaVersion          = 16
 	MinReaderSchemaVersion = 1
 )
 

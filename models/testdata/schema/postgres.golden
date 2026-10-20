@@ -1707,6 +1707,7 @@ TABLE proxy_logs
   index CREATE INDEX idx_proxy_logs_request_kind ON proxy_logs USING btree (request_kind)
   index CREATE INDEX idx_proxy_logs_router ON proxy_logs USING btree (router_slug)
   index CREATE INDEX idx_proxy_logs_time ON proxy_logs USING btree (time_stamp)
+  index CREATE INDEX idx_proxy_logs_trace_span ON proxy_logs USING btree (trace_span_id)
   index CREATE INDEX idx_proxy_logs_user_id ON proxy_logs USING btree (user_id)
   index CREATE UNIQUE INDEX proxy_logs_pkey ON proxy_logs USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('proxy_logs_id_seq'::regclass)
@@ -1738,6 +1739,8 @@ TABLE proxy_logs
   column acting_agent character varying(varchar) nullable=YES len=255
   column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
   column service_tier character varying(varchar) nullable=YES len=32
+  column trace_span_id character varying(varchar) nullable=YES len=16
+  column request_id character varying(varchar) nullable=YES len=64
 TABLE push_operations
   constraint push_operations_pkey PRIMARY KEY (operation_id)
   index CREATE INDEX idx_push_operations_completed_at ON push_operations USING btree (completed_at)

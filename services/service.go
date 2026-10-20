@@ -170,16 +170,16 @@ func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingC
 		NodeID:       nodeID,
 		Version:      version,
 	})
-	// The gate turned the capture flag on only if it built the Enterprise
-	// service; Running reports true only once Start succeeded.
-	if !agenttrace.Enabled() {
+	// Capture turns on only after the Enterprise service started (keys,
+	// sealer and content pipeline installed), never before.
+	if !agenttracing.GateOpen(s.AgentTracing) {
 		return
 	}
 	if err := s.AgentTracing.Start(ctx); err != nil {
 		logger.Errorf("Agent Call Tracing failed to start; capture stays off: %v", err)
-		agenttrace.SetEnabled(false)
 		return
 	}
+	agenttrace.SetEnabled(true)
 	logger.Info("Agent Call Tracing service started")
 }
 

@@ -80,8 +80,11 @@ func TestEnterpriseGate(t *testing.T) {
 	}
 	t.Run("licensed and enabled", func(t *testing.T) {
 		svc := NewService(deps(true, true))
-		if !agenttrace.Enabled() || !svc.Running() || called != 1 {
-			t.Fatalf("gate did not open: flag=%v running=%v called=%d", agenttrace.Enabled(), svc.Running(), called)
+		if !GateOpen(svc) || !svc.Running() || called != 1 {
+			t.Fatalf("gate did not open: running=%v called=%d", svc.Running(), called)
+		}
+		if agenttrace.Enabled() {
+			t.Fatal("capture must stay off until the caller started the service")
 		}
 	})
 }

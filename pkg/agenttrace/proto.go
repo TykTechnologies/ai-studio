@@ -47,6 +47,7 @@ func ToProto(e *Event) *pb.CaptureEventProto {
 		HttpStatus:    int32(e.HTTPStatus),
 		GatewayNode:   e.GatewayNode,
 		Attempt:       e.Attempt,
+		AttemptOf:     e.AttemptOf.Bytes(),
 		Usage: &pb.CaptureUsageProto{
 			InputTokens:      e.Usage.InputTokens,
 			OutputTokens:     e.Usage.OutputTokens,
@@ -114,6 +115,7 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 		HTTPStatus:     int(p.HttpStatus),
 		GatewayNode:    p.GatewayNode,
 		Attempt:        p.Attempt,
+		AttemptOf:      spanIDFrom(p.AttemptOf),
 		AnalyticsRef:   p.AnalyticsRef,
 		ContentMode:    p.ContentMode,
 		Attributes:     copyMap(p.Attributes),

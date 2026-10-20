@@ -367,6 +367,7 @@ func (p *Proxy) loopbackHeaders(ctx context.Context, a llmAttempt) http.Header {
 	if authHandoffHeaders(ctx, h) {
 		h.Set(hdrFailoverToken, p.failoverToken)
 	}
+	h = traceLoopbackHeaders(ctx, h)
 	if len(h) == 0 {
 		return nil
 	}

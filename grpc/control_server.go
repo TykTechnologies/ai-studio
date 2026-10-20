@@ -1179,6 +1179,9 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			// auth plugin said.
 			proxyLogs[i].OnBehalfOf = event.OnBehalfOf
 			proxyLogs[i].ActingAgent = event.ActingAgent
+			// The edge's own request id, and the agent tracing link.
+			proxyLogs[i].RequestID = event.RequestId
+			proxyLogs[i].TraceSpanID = event.TraceSpanId
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{

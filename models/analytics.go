@@ -276,4 +276,12 @@ type ProxyLog struct {
 	// ServiceTier is the vendor service tier of the call's usage, as on its
 	// chat record.
 	ServiceTier string `gorm:"size:32"`
+	// TraceSpanID is the agent tracing gateway span id (16 hex) of the logical
+	// call this row belongs to; every failover rung of one /ai/ call shares
+	// it. Empty while agent tracing is off. The span row's analytics_ref
+	// points the other way.
+	TraceSpanID string `gorm:"size:16;index:idx_proxy_logs_trace_span"`
+	// RequestID is the request id an edge gateway gave the request (edge
+	// rows only), kept so a row can be matched with the edge's own logs.
+	RequestID string `gorm:"size:64"`
 }
