@@ -12,6 +12,14 @@ var fuzzFormats = []string{FormatOpenAI, FormatOllama, FormatAnthropic, FormatGo
 func assertUnitsMapBack(t *testing.T, units []Unit) {
 	t.Helper()
 	for _, u := range units {
+		if u.whole == wholeNone {
+			// Detection-only (the model's own Responses items): never
+			// rewritten.
+			if _, ok := u.MapRewrite(u.Text); ok || len(u.Leaves) != 0 {
+				t.Fatalf("unit %d: a detection-only unit is rewritable", u.Index)
+			}
+			continue
+		}
 		if edits, ok := u.MapRewrite(u.Text); !ok || len(edits) != 0 {
 			t.Fatalf("unit %d: identity rewrite gave %v, %v", u.Index, edits, ok)
 		}

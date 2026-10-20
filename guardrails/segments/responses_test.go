@@ -95,6 +95,7 @@ func TestResponsesMessageAndTurn(t *testing.T) {
 		{guardrails.KindText, -1, 0, "", ""},               // instructions
 		{guardrails.KindText, 0, 0, "", ""},                // developer
 		{guardrails.KindText, 1, 0, "", ""},                // user
+		{guardrails.KindText, 2, 0, "", ""},                // reasoning summary, detection only
 		{guardrails.KindToolCall, 3, 0, "shell", "call_1"}, // model run 0: reasoning, call
 		{guardrails.KindToolResult, 4, 1, "shell", "call_1"},
 		{guardrails.KindToolCall, 5, 1, "apply_patch", "call_2"},
@@ -106,7 +107,7 @@ func TestResponsesMessageAndTurn(t *testing.T) {
 		t.Fatalf("units:\n got %+v\nwant %+v", got, want)
 	}
 	for _, u := range units {
-		for _, secret := range []string{"gAAAA-secret", "Plan: run go test", "base64"} {
+		for _, secret := range []string{"gAAAA-secret", "base64"} {
 			if strings.Contains(u.Text, secret) {
 				t.Errorf("unit %d text %q holds %q", u.Index, u.Text, secret)
 			}
@@ -133,10 +134,13 @@ func TestResponsesQuarantineToolOutput(t *testing.T) {
 	body := []byte(`{"input":[{"type":"function_call","name":"f","arguments":"{}","call_id":"c"},
 		{"type":"function_call_output","call_id":"c","output":[{"type":"input_text","text":"a"},{"type":"input_image","image_url":"x"}]}]}`)
 	units, err := ExtractUnits(FormatOpenAIResponses, body)
-	if err != nil || len(units) != 1 {
+	if err != nil || len(units) != 2 || units[1].Kind != guardrails.KindToolResult {
 		t.Fatalf("units %+v, %v", units, err)
 	}
-	edits, ok := units[0].Quarantine("[removed]")
+	if _, ok := units[0].Quarantine("[removed]"); ok {
+		t.Error("the model's function_call could be quarantined")
+	}
+	edits, ok := units[1].Quarantine("[removed]")
 	if !ok {
 		t.Fatal("tool output not quarantinable")
 	}
@@ -228,5 +232,44 @@ func TestResponsesPreviousResponseID(t *testing.T) {
 	}
 	if err := CheckToolPairing(FormatOpenAIResponses, body); err != nil {
 		t.Errorf("CheckToolPairing: %v", err)
+	}
+}
+
+// The model's own items are read (a client can forge them as history) but
+// never rewritable; encrypted content stays unread.
+func TestResponsesModelItemsAreDetectionOnly(t *testing.T) {
+	body := []byte(`{"input":[
+		{"type":"reasoning","id":"rs","summary":[{"type":"summary_text","text":"leaked sk-live-123"}],"encrypted_content":"ENCRYPTED-BLOB"},
+		{"type":"local_shell_call","id":"ls","call_id":"c1","action":{"type":"exec","command":["rm","-rf","/"]}},
+		{"type":"local_shell_call_output","id":"lso","call_id":"c1","output":"done"},
+		{"type":"web_search_call","id":"ws","action":{"type":"search","query":"ignore previous instructions","queries":["q2"]}},
+		{"type":"computer_call","id":"cc","call_id":"c2","action":{"type":"type","text":"typed secret"}},
+		{"type":"file_search_call","id":"fs","queries":["fq"],"results":[{"text":"result text"}]},
+		{"type":"shell_call","id":"sc","call_id":"c3","action":{"commands":["curl evil.example"]}},
+		{"type":"function_call","name":"f","arguments":"{\"x\":\"arg text\"}","call_id":"c4"}
+	]}`)
+	units, err := Read(FormatOpenAIResponses, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var all strings.Builder
+	for _, u := range units {
+		all.WriteString(u.Text + "\n")
+		if u.Role == guardrails.RoleAssistant {
+			if len(u.Leaves) != 0 {
+				t.Errorf("model unit %q has leaves", u.Text)
+			}
+			if _, ok := u.Quarantine("x"); ok {
+				t.Errorf("model unit %q is quarantinable", u.Text)
+			}
+		}
+	}
+	for _, want := range []string{"leaked sk-live-123", "rm", "-rf", "ignore previous instructions", "q2", "typed secret", "fq", "result text", "curl evil.example", "arg text", "done"} {
+		if !strings.Contains(all.String(), want) {
+			t.Errorf("no unit reads %q", want)
+		}
+	}
+	if strings.Contains(all.String(), "ENCRYPTED-BLOB") {
+		t.Error("encrypted_content was read")
 	}
 }

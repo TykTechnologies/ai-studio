@@ -14,12 +14,10 @@ var (
 	responsesTextPartTypes = map[string]bool{"input_text": true, "output_text": true, "text": true}
 )
 
-// responsesSilentItems carry no text a rewriter or guardrail reads as
-// conversation: model reasoning (summaries and encrypted content), the
-// opaque compaction of earlier turns, references to stored items, and
-// generated images.
+// responsesSilentItems carry no text at all: the opaque compaction of
+// earlier turns, references to stored items, and generated images.
 var responsesSilentItems = map[string]bool{
-	"reasoning": true, "compaction": true, "item_reference": true, "image_generation_call": true,
+	"compaction": true, "item_reference": true, "image_generation_call": true,
 }
 
 // responsesBinary names members of a tool output or unknown item that hold
@@ -36,12 +34,18 @@ func responsesBinary(key string) bool {
 // input is a string (one user message) or an array of items. Each message
 // item is a unit of its role (input_text and output_text parts; images and
 // files are not text), and each *_call_output item a tool result named by
-// the call with its call_id. The model's own items are not text units:
-// function_call and custom_tool_call arguments (tool call units with
-// Options.ToolCalls), reasoning, compaction and the built-in tools' calls.
-// The built-in tools' results (mcp_call output, file_search results,
-// code_interpreter logs) are tool results named by the tool. A stored
-// prompt's variables are the current turn's user text.
+// the call with its call_id. The built-in tools' results (mcp_call output,
+// file_search results, code_interpreter logs) are tool results named by the
+// tool. A stored prompt's variables are the current turn's user text.
+//
+// The model's own items (reasoning summaries, function and custom tool call
+// arguments, MCP and code interpreter calls, web search and file search
+// queries, computer and shell actions, and *_call items added later) are
+// assistant units of detection text only: the model reads them as earlier
+// turns, and a client can forge them, so a guardrail sees them, but they
+// have no leaves and are never rewritten. With Options.ToolCalls, function,
+// custom, MCP and code interpreter calls are tool call units instead.
+// encrypted_content and signatures are never read.
 //
 // Every item is one message: Message is its position in input, and Turn
 // counts the runs of model items (assistant messages, calls, reasoning)
@@ -143,11 +147,11 @@ func (x *extraction) responsesItem(item *node, path string) error {
 		u.adjacent = true
 		return x.responsesOutput(u, item.get("output"), outPath)
 	case typ == "function_call":
-		x.toolCall(item.get("arguments"), pointer(path, "arguments"), item.get("call_id"), item.get("name"))
+		x.responsesCall(item.get("arguments"), pointer(path, "arguments"), item.get("call_id"), item.get("name"))
 	case typ == "custom_tool_call":
-		x.toolCall(item.get("input"), pointer(path, "input"), item.get("call_id"), item.get("name"))
+		x.responsesCall(item.get("input"), pointer(path, "input"), item.get("call_id"), item.get("name"))
 	case typ == "mcp_call":
-		x.toolCall(item.get("arguments"), pointer(path, "arguments"), item.get("id"), item.get("name"))
+		x.responsesCall(item.get("arguments"), pointer(path, "arguments"), item.get("id"), item.get("name"))
 		result := x.open(path, wholeLeaves, x.toolResult(x.str(item.get("id")), x.str(item.get("name"))))
 		x.leaf(result, item.get("output"), pointer(path, "output"))
 		x.leaf(result, item.get("error"), pointer(path, "error"))
@@ -163,24 +167,48 @@ func (x *extraction) responsesItem(item *node, path string) error {
 		result := x.open(path, wholeLeaves, x.toolResult(id, x.str(item.get("server_label"))))
 		x.leaf(result, item.get("error"), pointer(path, "error"))
 	case typ == "mcp_approval_request":
-		x.toolCall(item.get("arguments"), pointer(path, "arguments"), item.get("id"), item.get("name"))
+		x.responsesCall(item.get("arguments"), pointer(path, "arguments"), item.get("id"), item.get("name"))
 	case typ == "mcp_approval_response":
 		u := x.open(path, wholeLeaves, guardrails.Segment{Role: guardrails.RoleUser})
 		x.leaf(u, item.get("reason"), pointer(path, "reason"))
 	case typ == "file_search_call":
+		x.modelText(path, guardrails.KindToolCall, x.str(item.get("id")), "file_search", item.get("queries"))
 		result := x.open(path, wholeLeaves, x.toolResult(x.str(item.get("id")), "file_search"))
 		for k, r := range item.get("results").elems() {
 			x.leaf(result, r.get("text"), pointer(pointerIndex(pointer(path, "results"), k), "text"))
 		}
 	case typ == "code_interpreter_call":
-		x.toolCall(item.get("code"), pointer(path, "code"), item.get("id"), nil)
+		x.responsesCall(item.get("code"), pointer(path, "code"), item.get("id"), nil)
 		result := x.open(path, wholeLeaves, x.toolResult(x.str(item.get("id")), "code_interpreter"))
 		for k, o := range item.get("outputs").elems() {
 			x.leaf(result, o.get("logs"), pointer(pointerIndex(pointer(path, "outputs"), k), "logs"))
 		}
-	case responsesSilentItems[typ], strings.HasSuffix(typ, "_call"):
-		// Reasoning, compaction and the model's other calls (web search,
-		// computer, shell): model output or opaque, never rewritten.
+	case typ == "reasoning":
+		// The summaries and reasoning text; encrypted_content is opaque.
+		var texts []*node
+		for _, s := range item.get("summary").elems() {
+			texts = append(texts, s.get("text"))
+		}
+		for _, c := range item.get("content").elems() {
+			texts = append(texts, c.get("text"))
+		}
+		x.modelText(path, guardrails.KindText, "", "", texts...)
+	case typ == "web_search_call":
+		action := item.get("action")
+		x.modelText(path, guardrails.KindToolCall, x.str(item.get("id")), "web_search", action.get("query"), action.get("queries"))
+	case typ == "computer_call":
+		x.modelText(path, guardrails.KindToolCall, x.str(item.get("call_id")), "computer", item.get("action").get("text"))
+	case typ == "local_shell_call":
+		x.modelText(path, guardrails.KindToolCall, x.str(item.get("call_id")), "local_shell", item.get("action").get("command"))
+	case responsesSilentItems[typ]:
+	case strings.HasSuffix(typ, "_call"):
+		// A call type added later (shell_call, apply_patch_call...): every
+		// string but ids, signatures and encrypted fields, as detection text.
+		u := x.open(path, wholeNone, guardrails.Segment{
+			Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall,
+			ToolName: strings.TrimSuffix(typ, "_call"), ToolCallID: x.str(item.get("call_id")),
+		})
+		x.detectAll(u, item, responsesBinary)
 	default:
 		// An item type added to the API later: its strings join a unit of
 		// their own rather than be skipped.
@@ -188,6 +216,59 @@ func (x *extraction) responsesItem(item *node, path string) error {
 		x.walk(u, item, path, false, responsesBinary)
 	}
 	return nil
+}
+
+// responsesCall is the model's call with its arguments args: a tool call
+// unit with Options.ToolCalls, else an assistant unit of detection text.
+func (x *extraction) responsesCall(args *node, path string, id, name *node) {
+	if x.opts.ToolCalls {
+		x.toolCall(args, path, id, name)
+		return
+	}
+	u := x.open(path, wholeNone, guardrails.Segment{
+		Role: guardrails.RoleAssistant, Kind: guardrails.KindToolCall,
+		ToolName: x.str(name), ToolCallID: x.str(id),
+	})
+	if args.is(nodeString) {
+		x.detect(u, x.str(args))
+	} else if args.is(nodeObject) || args.is(nodeArray) {
+		x.detect(u, string(x.body[args.start:args.end]))
+	}
+}
+
+// modelText opens an assistant unit of detection text for the strings in
+// nodes (strings, or arrays of strings): model output that is read but
+// never rewritten.
+func (x *extraction) modelText(path, kind, callID, tool string, nodes ...*node) {
+	u := x.open(path, wholeNone, guardrails.Segment{Role: guardrails.RoleAssistant, Kind: kind, ToolName: tool, ToolCallID: callID})
+	for _, n := range nodes {
+		if n.is(nodeArray) {
+			for _, e := range n.vals {
+				x.detect(u, x.str(e))
+			}
+			continue
+		}
+		x.detect(u, x.str(n))
+	}
+}
+
+// detectAll adds every string under n to u as detection text, skipping
+// members skip names.
+func (x *extraction) detectAll(u *Unit, n *node, skip func(string) bool) {
+	switch {
+	case n.is(nodeString):
+		x.detect(u, x.str(n))
+	case n.is(nodeObject):
+		for i, k := range n.keys {
+			if !skip(k) {
+				x.detectAll(u, n.vals[i], skip)
+			}
+		}
+	case n.is(nodeArray):
+		for _, v := range n.vals {
+			x.detectAll(u, v, skip)
+		}
+	}
 }
 
 // responsesMessage adds a message item: content is a string or an array of

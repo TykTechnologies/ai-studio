@@ -291,7 +291,15 @@ func FuzzToolCalls(f *testing.F) {
 		_ = Goal(format, body)
 		_ = Goal(FormatOpenAIResponses, body)
 		with, err := ExtractUnitsWith(format, body, Options{ToolCalls: true})
-		plain, plainErr := ExtractUnits(format, body)
+		all, plainErr := ExtractUnits(format, body)
+		// Without the option, Responses keeps the model's calls as
+		// detection-only tool call units; the rest must match.
+		var plain []Unit
+		for _, u := range all {
+			if !u.IsToolCall() {
+				plain = append(plain, u)
+			}
+		}
 		if err != nil {
 			// Reading tool calls adds case-variant checks of the fields it
 			// reads; it never makes a refused body readable.
