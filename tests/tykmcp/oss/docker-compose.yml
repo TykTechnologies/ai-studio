@@ -6,6 +6,17 @@
 #
 #   docker compose -p tyk-oss-mcp -f tests/tykmcp/oss/docker-compose.yml up -d
 #   docker compose -p tyk-oss-mcp -f tests/tykmcp/oss/docker-compose.yml up -d --scale gw3=1   # (see profile below)
+#
+# MCP analytics (features: enterprise/docs/TykMCPAnalytics.md). The gateways
+# write analytics to Redis; one Pump profile drains it into Studio's ingest
+# endpoint. Run only one of the two profiles, since Pump drains Redis:
+#
+#   analytics  Tyk Pump stdout pump (format json) + Vector, the bridge that
+#              works with any Pump 1.16+ (vector.toml)
+#   httppump   a locally built Tyk Pump with the http pump
+#              (docker build -t tyk-pump-http:local <tyk-pump checkout>)
+#
+#   MCP_INGEST_TOKEN=<token> docker compose -f tests/tykmcp/oss/docker-compose.yml --profile analytics up -d
 name: tyk-oss-mcp
 
 x-gateway: &gateway
@@ -26,6 +37,18 @@ x-gateway: &gateway
     TYK_GW_LOGLEVEL: info
     # Resolved by "$secret_env.DEMO_UPSTREAM" references in definitions.
     TYK_SECRET_DEMO_UPSTREAM: ${TYK_SECRET_DEMO_UPSTREAM:-Bearer from-env-secret}
+    # Analytics records go to Redis for Tyk Pump (MCP calls carry mcp_stats).
+    TYK_GW_ENABLEANALYTICS: "true"
+
+x-pump-storage: &pump-storage
+  TYK_PMP_OMITCONFIGFILE: "true"
+  TYK_PMP_ANALYTICSSTORAGETYPE: redis
+  TYK_PMP_ANALYTICSSTORAGECONFIG_TYPE: redis
+  TYK_PMP_ANALYTICSSTORAGECONFIG_HOST: redis
+  TYK_PMP_ANALYTICSSTORAGECONFIG_PORT: "6379"
+  TYK_PMP_PURGEDELAY: "2"
+  # no uptime pump (it defaults to Mongo)
+  TYK_PMP_DONTPURGEUPTIMEDATA: "true"
 
 services:
   redis:
@@ -46,6 +69,48 @@ services:
     <<: *gateway
     profiles: ["scale"]
     ports: ["18183:8080"]
+
+  # ---- MCP analytics, bridge: stdout pump + Vector ----
+  pump:
+    image: tykio/tyk-pump-docker-pub:${TYK_PUMP_TAG:-v1.16.0}
+    profiles: ["analytics"]
+    depends_on: [redis]
+    environment:
+      <<: *pump-storage
+      TYK_PMP_PUMPS_STDOUT_TYPE: stdout
+      TYK_PMP_PUMPS_STDOUT_OMITDETAILEDRECORDING: "true"
+      TYK_PMP_PUMPS_STDOUT_META_FORMAT: json
+
+  vector:
+    image: timberio/vector:${VECTOR_TAG:-0.49.0-alpine}
+    profiles: ["analytics"]
+    depends_on: [pump]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    command: ["--config", "/etc/vector/vector.toml"]
+    volumes:
+      - ./vector.toml:/etc/vector/vector.toml:ro
+      # docker_logs source; on Kubernetes use the kubernetes_logs source instead
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      MCP_INGEST_URL: ${MCP_INGEST_URL:-http://host.docker.internal:8094/api/v1/ingest/tyk-analytics}
+      MCP_INGEST_TOKEN: ${MCP_INGEST_TOKEN:-unset}
+
+  # ---- MCP analytics, http pump (pending upstream tyk-pump release) ----
+  pump-http:
+    image: ${TYK_PUMP_HTTP_IMAGE:-tyk-pump-http:local}
+    profiles: ["httppump"]
+    depends_on: [redis]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      <<: *pump-storage
+      TYK_PMP_PUMPS_HTTP_TYPE: http
+      TYK_PMP_PUMPS_HTTP_TIMEOUT: "20"
+      TYK_PMP_PUMPS_HTTP_OMITDETAILEDRECORDING: "true"
+      TYK_PMP_PUMPS_HTTP_META_URL: ${MCP_INGEST_URL:-http://host.docker.internal:8094/api/v1/ingest/tyk-analytics}
+      TYK_PMP_PUMPS_HTTP_META_HEADERS: "Authorization:Bearer ${MCP_INGEST_TOKEN:-unset}"
+      TYK_PMP_PUMPS_HTTP_META_GZIP: "true"
+      TYK_PMP_PUMPS_HTTP_META_MCPONLY: "true"
+      TYK_PMP_PUMPS_HTTP_META_MAXRETRIES: "3"
 
 volumes:
   gw1-apps:
