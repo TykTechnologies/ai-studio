@@ -1054,7 +1054,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if chain != nil && !chain.prepare(w, r) {
 		respStatus = chain.c.status
 		status, body := chain.c.status, chain.c.respBody
-		p.goAnalyze(func() { p.analyzeResponse(llm, app, status, body, reqBody, r) })
+		p.goAnalyzeFor(r, func() { p.analyzeResponse(llm, app, status, body, reqBody, r) })
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
@@ -1063,7 +1063,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			recordPolicyBlock(r.Context(), "budget", "budget")
 		}
 		// Error body for analytics should be constructed carefully if needed
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, r)
 		})
 		respStatus = status
@@ -1073,7 +1073,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respStatus = http.StatusBadRequest
 		recordPolicyBlock(r.Context(), "request_filter", "firewall")
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, http.StatusBadRequest, policyViolationBody(err), reqBody, r)
 		})
 		respondPolicyBlock(w, r, err)
@@ -1210,7 +1210,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				// Log with 400 status and include both the block reason and original LLM response for audit trail
 				blockedResponseBody := fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"original_response":%s}`,
 					blockMsg, string(bufferedCapture.buffer.Bytes()))
-				p.goAnalyze(func() {
+				p.goAnalyzeFor(r, func() {
 					p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
 				})
 				return
@@ -1220,13 +1220,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// AI Gateway proxy writes the final (potentially modified) response to client
 		bufferedCapture.WriteToClient()
 
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
 		})
 	} else {
 		capture := newResponseCapture(w)
 		httpProxy.ServeHTTP(capture, r)
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
 		})
 	}
@@ -1818,7 +1818,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if chain != nil && !chain.prepare(w, r) {
 		respStatus = chain.c.status
 		status, body := chain.c.status, chain.c.respBody
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, body, reqBody, nil, time.Now(), "")
 		})
 		return
@@ -1828,7 +1828,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
 			recordPolicyBlock(r.Context(), "budget", "budget")
 		}
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, nil, time.Now(), "")
 		})
 		respStatus = status
@@ -1838,7 +1838,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respStatus = http.StatusBadRequest
 		recordPolicyBlock(r.Context(), "request_filter", "firewall")
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, policyViolationBody(err), reqBody, nil, time.Now(), "")
 		})
 		respondPolicyBlock(w, r, err)
@@ -1924,7 +1924,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		// as the REST path's ErrorHandler does, so a vendor outage shows in
 		// analytics. /ai/ and the unified /v1 route through here too.
 		status := respStatus
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, upstreamFailureBody(status, err), reqBody, nil, time.Now(), "")
 		})
 		respondWithError(w, respStatus, "failed to make upstream request for streaming", err, false)
@@ -1978,6 +1978,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			if timing.markFirstChunk(time.Now()); chunkIndex == 0 {
 				if ttft, ok := timing.timeToFirstToken(); ok {
 					metrics.ObserveTimeToFirstToken(r.Context(), string(llm.Vendor), llm.Name, ttft.Seconds())
+					noteFirstToken(r, ttft)
 				}
 			}
 
@@ -2021,7 +2022,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 						}
 						isErr = true
 						blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
-						p.goAnalyze(func() {
+						p.goAnalyzeFor(r, func() {
 							p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 						})
 						return
@@ -2049,7 +2050,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					isErr = true
 					// Log with 400 status and include both the block reason and partial LLM response for audit trail
 					blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
-					p.goAnalyze(func() {
+					p.goAnalyzeFor(r, func() {
 						p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 					})
 					return
@@ -2121,7 +2122,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					}
 				}
 				blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
-				p.goAnalyze(func() {
+				p.goAnalyzeFor(r, func() {
 					p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 				})
 				return
@@ -2145,7 +2146,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			}
 			isErr = true
 			blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
-			p.goAnalyze(func() {
+			p.goAnalyzeFor(r, func() {
 				p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 			})
 			return
@@ -2158,7 +2159,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
 		})
 

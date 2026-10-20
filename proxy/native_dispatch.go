@@ -790,7 +790,11 @@ func (c *nativeCall) log() {
 		l.RequestBody, l.ResponseBody = "", ""
 	}
 	ctx := context.WithoutCancel(r.Context())
-	c.p.goAnalyze(func() { analytics.RecordExchange(ctx, l, nil) })
+	reqBody, respBody, status := c.reqBody, c.respBody, c.status
+	c.p.goAnalyzeFor(r, func() {
+		analytics.RecordExchange(ctx, l, nil)
+		captureLLM(r, llm, app, status, nil, reqBody, respBody, false)
+	})
 }
 
 // nativePublicBaseURL is the absolute base of the native route the request

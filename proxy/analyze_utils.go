@@ -67,9 +67,11 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		// The vendor recognised a call that carries no usage (Anthropic
 		// count_tokens): log it, without a chat record or budget usage.
 		analytics.RecordExchange(ctx, l, nil)
+		captureLLM(r, llm, app, statusCode, nil, reqBody, body, false)
 		return
 	}
-	analyzeExchange(service, llm, app, response, ctx, r, l, time.Now())
+	record := analyzeExchange(service, llm, app, response, ctx, r, l, time.Now())
+	captureLLM(r, llm, app, statusCode, record, reqBody, body, false)
 }
 
 func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time, contentEncoding string) {
@@ -113,17 +115,20 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		// A stream that carries no usage here (an OpenAI background
 		// response, accounted by the native reconciler): log it only.
 		analytics.RecordExchange(ctx, l, nil)
+		captureLLM(r, llm, app, statusCode, nil, reqBody, decompressedResponses, true)
 		return
 	}
-	analyzeExchange(service, llm, app, response, ctx, r, l, timestamp)
+	record := analyzeExchange(service, llm, app, response, ctx, r, l, timestamp)
+	captureLLM(r, llm, app, statusCode, record, reqBody, decompressedResponses, true)
 }
 
 // analyzeExchange records a request's proxy log and chat record in one call
 // (analytics.RecordExchange), then runs the steps that follow a chat record.
-func analyzeExchange(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, ctx context.Context, r *http.Request, l *models.ProxyLog, timestamp time.Time) {
+func analyzeExchange(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, ctx context.Context, r *http.Request, l *models.ProxyLog, timestamp time.Time) *models.LLMChatRecord {
 	rec := buildChatRecord(service, llm, app, response, r, timestamp)
 	analytics.RecordExchange(ctx, l, rec)
 	afterChatRecord(service, llm, app, rec, ctx, r, timestamp)
+	return rec
 }
 
 func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, ctx context.Context, r *http.Request, timestamp time.Time) {
