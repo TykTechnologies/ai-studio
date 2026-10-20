@@ -1,8 +1,7 @@
 import { test } from '@fixtures';
 import { expect, Page } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
 import { config } from '../config';
+import { Json, PLUGIN_KEY, api, ensurePlugin, idOf, pluginAvailable, rpc, storedConfig } from '../utils/prompt_compressor';
 
 /**
  * Prompt Compressor (community plugin): the Policies page.
@@ -16,52 +15,11 @@ import { config } from '../config';
  *
  * The page is a web component in an open shadow root; Playwright's CSS and
  * test-id locators pierce it.
- *
- * tests/compose.yml (and the dev plugin watcher) build the plugin when the
- * community submodule has it; with an older submodule pin the spec skips.
  */
 
-const PLUGIN_SOURCE = path.resolve(__dirname, '../../../community/plugins/prompt-compressor/main.go');
-
-const PLUGIN_KEY = 'plugin:com.tyk.prompt-compressor';
-const PLUGIN_COMMAND = 'file:///app/bin/plugins/prompt-compressor';
-const SECTION = 'Prompt Compressor';
 const PAGE_PATH = '/admin/prompt-compressor/policies';
 const TAG = 'prompt-compressor-policies';
 const APP_ID = '999999';
-
-type Json = Record<string, any>;
-
-async function csrfHeaders(page: Page): Promise<Record<string, string>> {
-    const origin = new URL(config.base_url).origin;
-    const originHeaders = { Origin: origin, Referer: `${origin}/` };
-    const csrf = await page.request.get(`${config.api_url}/csrf-token`, { headers: originHeaders });
-    return { ...originHeaders, 'X-CSRF-Token': csrf.headers()['x-csrf-token'] || '' };
-}
-
-async function api(page: Page, method: 'get' | 'post' | 'patch' | 'delete', path: string, data?: Json): Promise<{ status: number; body: Json }> {
-    const headers = await csrfHeaders(page);
-    const res = await page.request[method](`${config.api_url}${path}`, { headers, data });
-    let body: Json = {};
-    try { body = await res.json(); } catch { body = {}; }
-    return { status: res.status(), body };
-}
-
-/** Admin RPC through Studio: the HTTP status and the plugin's own answer. */
-async function rpc(page: Page, pluginId: string, method: string, payload: Json = {}): Promise<{ status: number; data: Json }> {
-    const { status, body } = await api(page, 'post', `/api/v1/plugins/${pluginId}/rpc/${method}`, payload);
-    return { status, data: body && body.data !== undefined ? body.data : body };
-}
-
-function idOf(body: Json): string {
-    return String(body?.data?.id ?? body?.id ?? '');
-}
-
-async function storedConfig(page: Page, pluginId: string): Promise<Json> {
-    const { body } = await api(page, 'get', `/api/v1/plugins/${pluginId}`);
-    const data = body.data ?? body;
-    return data.attributes?.config ?? data.config ?? {};
-}
 
 async function openPolicies(page: Page, adminMainPage: any) {
     await page.goto(`${config.base_url}${PAGE_PATH}`);
@@ -79,7 +37,7 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
     adminMainPage,
     adminUsersPage,
 }) => {
-    test.skip(!fs.existsSync(PLUGIN_SOURCE), 'the community submodule does not have the prompt-compressor plugin');
+    test.skip(!pluginAvailable(), 'the community submodule does not have the prompt-compressor plugin');
     test.setTimeout(300000);
     const ts = Date.now();
     const policy = `e2e-${ts}`;
@@ -88,36 +46,7 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
     await loginPage.login(config.admin_email, config.password);
     await adminMainPage.dismissQuickStartModal();
 
-    // --- plugin registration --------------------------------------------------
-    let pluginId = '';
-    {
-        const { body } = await api(page, 'get', '/api/v1/plugins?limit=100');
-        const list: Json[] = Array.isArray(body) ? body : (body.data ?? body.plugins ?? []);
-        const existing = list.find((p) => (p.attributes?.command ?? p.command) === PLUGIN_COMMAND);
-        if (existing) {
-            pluginId = String(existing.id);
-        } else {
-            const res = await api(page, 'post', '/api/v1/plugins', {
-                name: 'Prompt Compressor', description: 'E2E policies editor', command: PLUGIN_COMMAND,
-                is_active: true, load_immediately: true, config: {},
-            });
-            expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
-            pluginId = idOf(res.body);
-        }
-        expect(pluginId).not.toBe('');
-        const load = await api(page, 'post', `/api/v1/plugins/${pluginId}/validate-and-load`, { command: PLUGIN_COMMAND });
-        expect(load.status, JSON.stringify(load.body)).toBeLessThan(300);
-        const approve = await api(page, 'post', `/api/v1/plugins/${pluginId}/approve-scopes`, { approved: true });
-        expect(approve.status, JSON.stringify(approve.body)).toBeLessThan(300);
-        await api(page, 'post', `/api/v1/plugins/${pluginId}/reload`, {});
-        // The first session can run before the scopes are approved; retry
-        await expect.poll(async () => (await rpc(page, pluginId, 'getEditor')).status, { timeout: 90000, intervals: [2000] }).toBe(200);
-        await expect.poll(async () => {
-            await page.reload();
-            await adminMainPage.dismissQuickStartModal();
-            return page.getByRole('button', { name: SECTION, exact: true }).isVisible();
-        }, { timeout: 90000, intervals: [2000] }).toBe(true);
-    }
+    const pluginId = await ensurePlugin(page, adminMainPage);
     // The config as the editor shows it (engine tokens masked), which is also
     // what saveConfig accepts back for settings outside the editor
     const editorConfig = async (): Promise<Json> => (await rpc(page, pluginId, 'getEditor')).data.config ?? {};
