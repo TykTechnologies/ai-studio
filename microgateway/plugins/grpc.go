@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"github.com/hashicorp/go-plugin"
@@ -122,6 +123,7 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(pluginID uint, m
 	// The go-plugin broker handles synchronization internally - the plugin
 	// will wait for connection info when it calls Dial().
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+		opts = append(opts, pluginlimits.ServerOptions()...)
 		s := grpc.NewServer(append(opts, grpc.UnaryInterceptor(boundPluginIDInterceptor(pluginID)))...)
 
 		// Register microgateway management services on brokered server

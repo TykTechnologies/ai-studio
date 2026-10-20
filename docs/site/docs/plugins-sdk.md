@@ -692,6 +692,12 @@ func NewMyPlugin() *MyPlugin {
 
 `BasePlugin` provides default implementations for common methods, which you can override as needed.
 
+## Message Size Limit
+
+Every hook call is one gRPC message between the host and your plugin: for `HandlePostAuth` the request body plus headers and context, for `OnBeforeWrite` the whole buffered response, for `OnStreamComplete` the accumulated stream plus the request body. `plugin_sdk.Serve` (and the older `gatewayplugin` SDK's `ServePlugin`) accept messages up to 64 MiB, or `PLUGIN_GRPC_MAX_MSG_BYTES` bytes when the operator sets it.
+
+Plugins built on an SDK before 2.3.0 accept only 4 MiB, gRPC's default. On the gateway, a request-path hook (`pre_auth`, `auth`, `post_auth`) refusing a larger request makes the request fail with `413`; a response hook refusing one is skipped. **Rebuild request-path plugins on the 2.3.0 SDK.** See [Plugin message size](./plugins-deployment.md#plugin-message-size).
+
 ## Error Handling
 
 ### Blocking Requests

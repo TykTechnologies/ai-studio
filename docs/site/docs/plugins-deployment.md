@@ -429,7 +429,7 @@ AI Studio and the Microgateway start each `file://` and `oci://` plugin with an 
 - process basics and locale: `PATH`, `HOME`, `USER`, `TMPDIR`, `TZ`, `LANG`, `LC_*`
 - TLS trust and proxies: `SSL_CERT_FILE`, `SSL_CERT_DIR`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` (and their lower-case forms)
 - Go runtime tuning: `GOMAXPROCS`, `GOMEMLIMIT`, `GOGC`, `GODEBUG`, `GOTRACEBACK`
-- settings the plugin SDK and shipped plugins read: `PLUGIN_RUNTIME`, `GATEWAY_MODE`, `MICROGATEWAY_MODE`, `EDGE_ID`
+- settings the plugin SDK and shipped plugins read: `PLUGIN_RUNTIME`, `GATEWAY_MODE`, `MICROGATEWAY_MODE`, `PLUGIN_GRPC_MAX_MSG_BYTES`, `EDGE_ID`
 - any variables named in `PLUGIN_ENV_PASSTHROUGH`, set on the host
 
 `PLUGIN_ENV_PASSTHROUGH` is a comma-separated list of variable names. An entry ending in `*` matches every variable with that prefix:
@@ -451,6 +451,17 @@ Once the key reaches the plugin again, encrypted credentials are readable again.
 The pass-through applies to every plugin the host starts, so name only the variables your plugins need. Avoid passing host credentials such as database URLs or encryption keys; the host logs a warning when the pass-through matches one. A bare `*` entry is ignored. Proxy variables are passed by default, so don't put proxy credentials in them unless plugins may use that proxy too. A plugin that needs configuration should normally receive it through its plugin config rather than the environment.
 
 `grpc://` plugins run as their own processes, outside the host, so this does not apply to them.
+
+### Plugin Message Size
+
+Each request, response or stream a hook sees travels between the host and the plugin as one gRPC message: the body plus headers and context. Plugins built on the 2.3.0 SDK accept messages up to **64 MiB**, above the LLM vendors' own request limits. Set `PLUGIN_GRPC_MAX_MSG_BYTES` (in bytes) on the host to change it. The host passes it to every plugin it starts and uses it for the service API it serves them.
+
+Plugins built on an SDK before 2.3.0 keep gRPC's default of **4 MiB**. Text-only requests rarely reach that, but a few base64 screenshots or one PDF document block do. When such a plugin refuses a request for its size:
+
+- `pre_auth`, `auth` and `post_auth`: the gateway answers `413` with `request too large for plugin <name> (<bytes> bytes)` and does not forward the request. It does not skip the plugin, since a request-path plugin may enforce policy.
+- response hooks: the response goes to the client without that plugin's changes, and the gateway logs the plugin name, the size and the limit.
+
+Rebuild such plugins on the current SDK to lift the limit. `grpc://` plugins set their own server limits (`grpc.MaxRecvMsgSize`).
 
 ## Troubleshooting
 

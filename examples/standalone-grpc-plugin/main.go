@@ -240,7 +240,9 @@ func main() {
 		log.Fatalf("Failed to listen on port %s: %v", *port, err)
 	}
 
-	grpcServer := grpc.NewServer()
+	// gRPC's default 4 MiB receive limit is below LLM request sizes; match
+	// the plugin SDK's 64 MiB.
+	grpcServer := grpc.NewServer(grpc.MaxRecvMsgSize(64<<20), grpc.MaxSendMsgSize(64<<20))
 	server := &StandaloneServer{plugin: plugin}
 
 	pb.RegisterPluginServiceServer(grpcServer, server)

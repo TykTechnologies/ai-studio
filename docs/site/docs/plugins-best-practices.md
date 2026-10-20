@@ -687,6 +687,10 @@ plugin_sdk.NewBasePlugin(
 - **MINOR**: New features (backward-compatible)
 - **PATCH**: Bug fixes (backward-compatible)
 
+### Rebuild on the Current SDK
+
+Build each release against the current SDK. A plugin built on an SDK before 2.3.0 accepts at most 4 MiB per hook call, so a `post_auth` plugin built that way makes every larger request fail with `413` (long contexts, screenshots, PDFs). From 2.3.0 the limit is 64 MiB. See [Message Size Limit](./plugins-sdk.md#message-size-limit).
+
 ### Resource Cleanup
 
 Always clean up in `Shutdown()`:

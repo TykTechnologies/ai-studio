@@ -41,6 +41,7 @@ AI Studio and the Microgateway start every `file://` and `oci://` plugin with an
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` (and the lower-case forms) | Outbound proxy settings |
 | `GOMAXPROCS`, `GOMEMLIMIT`, `GOGC`, `GODEBUG`, `GOTRACEBACK` | Go runtime tuning |
 | `PLUGIN_RUNTIME`, `GATEWAY_MODE`, `MICROGATEWAY_MODE`, `EDGE_ID` | Runtime detection and edge identity, read by the SDK and shipped plugins |
+| `PLUGIN_GRPC_MAX_MSG_BYTES` | The largest gRPC message the plugin accepts (see [Plugin message size](./plugins-deployment.md#plugin-message-size)) |
 
 go-plugin adds its own handshake variables on top. Anything else in the host's environment (database settings, encryption keys, provider keys, the license and so on) is not passed to plugins.
 

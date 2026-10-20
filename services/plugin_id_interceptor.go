@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -50,7 +51,7 @@ const managementServicePrefix = "/ai_studio_management.AIStudioManagementService
 // server that serves plugin pluginID must have: the plugin ID in the context
 // (unary and streaming), then the scope check for management RPCs. Without
 // the scope check registered, management RPCs are refused rather than served
-// unchecked.
+// unchecked. It also raises the message limit to pluginlimits.MaxMsgBytes.
 func PluginBrokerServerOptions(opts []grpc.ServerOption, pluginID uint, svc *Service) []grpc.ServerOption {
 	unary := []grpc.UnaryServerInterceptor{CreatePluginIDInterceptor(pluginID)}
 	stream := []grpc.StreamServerInterceptor{createPluginIDStreamInterceptor(pluginID)}
@@ -62,6 +63,7 @@ func PluginBrokerServerOptions(opts []grpc.ServerOption, pluginID uint, svc *Ser
 		unary = append(unary, denyManagementUnary)
 		stream = append(stream, denyManagementStream)
 	}
+	opts = append(opts, pluginlimits.ServerOptions()...)
 	return append(opts, grpc.ChainUnaryInterceptor(unary...), grpc.ChainStreamInterceptor(stream...))
 }
 

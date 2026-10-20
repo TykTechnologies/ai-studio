@@ -22,10 +22,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // PluginServiceInterface defines minimal interface needed by plugin manager
@@ -662,6 +664,7 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			resp, err := plugin.GRPCClient.ProcessPreAuth(ctx, pbReq)
 			cancel()
 			if err != nil {
+				err = pluginlimits.AsTooLarge(err, plugin.Name, string(hookType), proto.Size(pbReq))
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
 
@@ -699,6 +702,10 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			resp, err := plugin.GRPCClient.ProcessPostAuth(ctx, pbReq)
 			cancel()
 			if err != nil {
+				// A plugin on an older SDK refuses bodies over 4 MiB. The
+				// chain stops either way: a post_auth plugin may enforce
+				// policy, so the request is not forwarded without it.
+				err = pluginlimits.AsTooLarge(err, plugin.Name, string(hookType), proto.Size(pbReq))
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
 

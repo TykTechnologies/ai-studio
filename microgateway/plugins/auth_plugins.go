@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // AuthPluginTimeout bounds one auth plugin's answer. Auth runs on every
@@ -84,8 +86,10 @@ func (pm *PluginManager) CallAuth(lp *LoadedPlugin, req *interfaces.AuthRequest,
 	defer cancel()
 
 	pbCtx := convertPluginContext(pluginCtx)
-	resp, err := lp.GRPCClient.Authenticate(ctx, convertAuthRequest(req, pbCtx))
+	pbReq := convertAuthRequest(req, pbCtx)
+	resp, err := lp.GRPCClient.Authenticate(ctx, pbReq)
 	if err != nil {
+		err = pluginlimits.AsTooLarge(err, lp.Name, string(interfaces.HookTypeAuth), proto.Size(pbReq))
 		return nil, fmt.Errorf("auth plugin %s: %w", lp.Name, err)
 	}
 	return convertAuthResponse(resp), nil

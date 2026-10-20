@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
@@ -132,7 +133,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		result, err := pluginManager.ExecutePluginChain(llmID, "pre_auth", pluginReq, pluginCtx)
 		if err != nil {
 			log.Error().Err(err).Msg("Pre-auth plugin chain failed")
-			respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
+			respondPluginChainError(w, err)
 			return true
 		}
 
@@ -267,10 +268,14 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 
 	answered := false
 	reason := ""
+	var tooLarge error
 	for _, lp := range loaded {
 		resp, err := a.plugins.CallAuth(lp, authReq, pluginCtx)
 		if err != nil {
 			log.Warn().Err(err).Uint("plugin_id", lp.ID).Str("plugin_name", lp.Name).Msg("Auth plugin failed; trying the next")
+			if _, ok := pluginlimits.AsTooLargeError(err); ok && tooLarge == nil {
+				tooLarge = err
+			}
 			continue
 		}
 		answered = true
@@ -301,6 +306,10 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 		}, nil
 	}
 	if !answered {
+		if tooLarge != nil {
+			// Not "retry shortly": the same request fails the same way.
+			return proxy.AuthResult{}, tooLarge
+		}
 		return proxy.AuthResult{}, fmt.Errorf("no auth plugin on %s %q answered", target.Kind, target.Slug)
 	}
 	return proxy.AuthResult{Outcome: proxy.AuthRejected, Reason: reason}, nil
@@ -433,7 +442,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		result, err := pluginManager.ExecutePluginChain(llmID, "post_auth", enrichedReq, pluginCtx)
 		if err != nil {
 			log.Error().Err(err).Msg("Post-auth plugin chain failed")
-			respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
+			respondPluginChainError(w, err)
 			return true
 		}
 
@@ -603,6 +612,19 @@ func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	}
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	return bodyBytes, nil
+}
+
+// respondPluginChainError answers a request whose pre- or post-auth plugin
+// chain failed. A plugin that refused the request for its size (one built on
+// an SDK before 2.3 accepts 4 MiB) gets a 413 naming it; anything else is a
+// 500. Either way the request is not forwarded.
+func respondPluginChainError(w http.ResponseWriter, err error) {
+	if tl, ok := pluginlimits.AsTooLargeError(err); ok {
+		respondWithError(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("request too large for plugin %s (%d bytes)", tl.Plugin, tl.Bytes), nil)
+		return
+	}
+	respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
 }
 
 func respondWithError(w http.ResponseWriter, statusCode int, message string, err error) {

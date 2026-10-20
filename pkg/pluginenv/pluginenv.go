@@ -38,8 +38,8 @@ var DefaultAllowlist = []string{
 	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
 	// Go runtime tuning.
 	"GOMAXPROCS", "GOMEMLIMIT", "GOGC", "GODEBUG", "GOTRACEBACK",
-	// Read by the plugin SDK's runtime detection.
-	"PLUGIN_RUNTIME", "GATEWAY_MODE", "MICROGATEWAY_MODE",
+	// Read by the plugin SDK's runtime detection and gRPC message limit.
+	"PLUGIN_RUNTIME", "GATEWAY_MODE", "MICROGATEWAY_MODE", "PLUGIN_GRPC_MAX_MSG_BYTES",
 	// Read by shipped plugins.
 	"EDGE_ID",
 }
