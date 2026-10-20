@@ -40,6 +40,8 @@ func TestAgentTracingContentRoutes_Annotated(t *testing.T) {
 		"DELETE /api/v1/agent-tracing/sessions/:session_id":       authz.Delete("traces"),
 		"POST /api/v1/agent-tracing/purge":                        authz.Delete("traces"),
 		"GET /api/v1/agent-tracing/config":                        authz.Read("traces"),
+		"GET /api/v1/agent-tracing/sessions/:session_id/export":   authz.Execute("traces"),
+		"GET /api/v1/agent-tracing/traces/:trace_id/export":       authz.Execute("traces"),
 	} {
 		e, ok := api.routePerms[key]
 		require.True(t, ok, key)
@@ -55,6 +57,8 @@ func TestAgentTracingContentRoutes_CommunityAnswers402(t *testing.T) {
 		{"DELETE", "/api/v1/agent-tracing/sessions/" + testSessionID},
 		{"POST", "/api/v1/agent-tracing/purge"},
 		{"GET", "/api/v1/agent-tracing/config"},
+		{"GET", "/api/v1/agent-tracing/sessions/" + testSessionID + "/export?format=json"},
+		{"GET", "/api/v1/agent-tracing/traces/" + strings.Repeat("ab", 16) + "/export?app_id=7&format=markdown"},
 	} {
 		var body any
 		if r.method == "POST" {
@@ -123,4 +127,46 @@ func TestAgentTracingPurge(t *testing.T) {
 
 	w = performRequest(api.router, "POST", "/api/v1/agent-tracing/purge", "not json")
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+type exportingTracing struct {
+	agenttracing.Service
+	q   agenttracing.ExportQuery
+	err error
+}
+
+func (e *exportingTracing) ExportSession(_ context.Context, _ agenttracing.Viewer, _ string, q agenttracing.ExportQuery, _ agenttracing.AccessMeta) (*agenttracing.ExportResult, error) {
+	e.q = q
+	if e.err != nil {
+		return nil, e.err
+	}
+	return &agenttracing.ExportResult{ContentType: "text/markdown; charset=utf-8", Filename: "agent-session-x.md", Body: []byte("# x"), ContentIncluded: q.Content}, nil
+}
+
+// Exports are attachments that browsers must not sniff or cache; bad
+// parameters never reach the service, and an unaudited export is refused.
+func TestAgentTracingExport_Handler(t *testing.T) {
+	svc := &exportingTracing{}
+	api := withTracing(t, svc)
+	path := "/api/v1/agent-tracing/sessions/" + testSessionID + "/export"
+
+	w := performRequest(api.router, "GET", path+"?format=markdown&content=true", nil)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Equal(t, agenttracing.ExportQuery{Format: "markdown", Content: true}, svc.q)
+	assert.Equal(t, `attachment; filename="agent-session-x.md"`, w.Header().Get("Content-Disposition"))
+	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+	assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+	assert.Equal(t, "included", w.Header().Get("X-Tyk-Export-Content"))
+
+	for _, bad := range []string{"?format=pdf", "?content=yes", "?format=json&content=1"} {
+		svc.q = agenttracing.ExportQuery{}
+		w = performRequest(api.router, "GET", path+bad, nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code, bad)
+		assert.Equal(t, agenttracing.ExportQuery{}, svc.q, bad)
+	}
+
+	svc.err = agenttracing.ErrAuditUnavailable
+	w = performRequest(api.router, "GET", path, nil)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.Contains(t, w.Body.String(), "requires the audit trail")
 }

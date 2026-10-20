@@ -38,4 +38,5 @@ type Service interface {
 
 	Querier
 	ContentService
+	Exporter
 }
