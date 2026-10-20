@@ -62,8 +62,12 @@ beforeEach(() => {
   agentTracingService.search.mockResolvedValue({ matches: [{ span_id: ids.tool1, field: "tool_name", snippet: "web_search" }], total: 1, truncated: false });
 });
 
+// These tests drive the shell through the plain span list, which is view 2
+// until the Timeline (jyx.31) replaces it; the Transcript has its own tests.
 const loaded = async () => {
   await screen.findByText("refund flow");
+  await screen.findByTestId("transcript");
+  fireEvent.keyDown(document.body, { key: "2" });
   await waitFor(() => expect(row(ids.client)).toBeInTheDocument());
 };
 
@@ -79,8 +83,9 @@ describe("AgentSessionDetail", () => {
     renderPage();
     await loaded();
     expect(agentTracingService.listSpans).toHaveBeenCalledTimes(2);
-    expect(agentTracingService.listSpans.mock.calls[0][1]).toEqual({ limit: 1000 });
-    expect(agentTracingService.listSpans.mock.calls[1][1]).toEqual({ limit: 1000, cursor: "p2" });
+    // A content reader asks for inline previews; the server decides.
+    expect(agentTracingService.listSpans.mock.calls[0][1]).toEqual({ limit: 1000, include: "previews" });
+    expect(agentTracingService.listSpans.mock.calls[1][1]).toEqual({ limit: 1000, include: "previews", cursor: "p2" });
     expect(screen.getByTestId("session-header")).toHaveTextContent("Support bot");
     expect(screen.getByTestId("summary-strip")).toHaveTextContent("web_search");
     expect(screen.getByTestId("timeline-strip")).toBeInTheDocument();

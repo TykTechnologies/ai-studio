@@ -37,7 +37,7 @@ export const reducer = (state, action) => {
   }
 };
 
-export const SessionDetailProvider = ({ detail, spans, resources, children, initialState }) => {
+export const SessionDetailProvider = ({ detail, spans, resources, previews = null, children, initialState }) => {
   const [state, dispatch] = useReducer(reducer, { ...initial, ...initialState });
   const index = useMemo(() => indexSpans(spans, state.range), [spans, state.range]);
   const value = useMemo(
@@ -47,11 +47,12 @@ export const SessionDetailProvider = ({ detail, spans, resources, children, init
       detail,
       spans,
       resources,
+      previews,
       index,
       appId: detail?.session?.app_id,
       viewer: detail?.viewer || {},
     }),
-    [state, detail, spans, resources, index],
+    [state, detail, spans, resources, previews, index],
   );
   return <SessionDetailContext.Provider value={value}>{children}</SessionDetailContext.Provider>;
 };

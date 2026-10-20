@@ -13,6 +13,7 @@ import TimelineStrip from "../components/agent-tracing/TimelineStrip";
 import SpanDrawer from "../components/agent-tracing/SpanDrawer";
 import FindBar from "../components/agent-tracing/FindBar";
 import SpanListView from "../components/agent-tracing/SpanListView";
+import TranscriptView from "../components/agent-tracing/TranscriptView";
 import { useEdition } from "../context/EditionContext";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 import { P } from "../rbac/permissions";
@@ -24,7 +25,7 @@ import { P } from "../rbac/permissions";
 // View registry: Transcript (jyx.30) and Timeline (jyx.31) plug in here;
 // Tree (key 3) is Phase 2 and has no tab yet.
 export const VIEWS = [
-  { value: "transcript", label: "Transcript", key: "1", Component: SpanListView },
+  { value: "transcript", label: "Transcript", key: "1", Component: TranscriptView },
   { value: "timeline", label: "Timeline", key: "2", Component: SpanListView },
 ];
 
@@ -92,7 +93,7 @@ const AgentSessionDetail = () => {
 };
 
 const Loaded = ({ sessionId, title }) => {
-  const { detail, spans, resources, loadingSpans, error } = useSessionData(sessionId);
+  const { detail, spans, resources, previews, loadingSpans, error } = useSessionData(sessionId);
   if (error && isPermissionDenied(error)) return <PermissionDeniedPanel required={P.TRACES_READ} />;
   return (
     <>
@@ -106,7 +107,7 @@ const Loaded = ({ sessionId, title }) => {
         )}
         {!detail && !error && <LinearProgress aria-label="Loading session" />}
         {detail && (
-          <SessionDetailProvider detail={detail} spans={spans} resources={resources}>
+          <SessionDetailProvider detail={detail} spans={spans} resources={resources} previews={previews}>
             <Body loadingSpans={loadingSpans} />
           </SessionDetailProvider>
         )}
