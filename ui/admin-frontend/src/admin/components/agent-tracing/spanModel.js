@@ -63,6 +63,19 @@ export const catalogueMatchText = (span) => {
   return text;
 };
 
+// Why a span carries no content although capture was on (the gateway's
+// tyk.content.withheld attribute, jyx.164).
+const WITHHELD_REASONS = {
+  edge_link_unverified_tls: "the edge's connection to Studio is not verified TLS",
+};
+
+/** The notice for a span whose content was withheld, or "" when none was. */
+export const withheldText = (span) => {
+  const reason = attrsOf(span)["tyk.content.withheld"];
+  if (!reason || typeof reason !== "string") return "";
+  return `Content withheld: ${WITHHELD_REASONS[reason] || reason.replace(/_/g, " ")}`;
+};
+
 export const attributionOf = (s) => (s && s.attribution && typeof s.attribution === "object" ? s.attribution : {});
 
 export const isProblem = (s) =>

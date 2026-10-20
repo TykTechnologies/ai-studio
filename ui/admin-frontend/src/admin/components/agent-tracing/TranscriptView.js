@@ -18,7 +18,7 @@ import {
   rowIndexOf,
   stepLatency,
 } from "./transcriptModel";
-import { attrNames, attributionOf, attrsOf, catalogueMatchText, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
+import { attrNames, attributionOf, attrsOf, catalogueMatchText, ms, partPlaceholder, resourceName, spanTimes, withheldText } from "./spanModel";
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
 import CapturedMarkdown from "./CapturedMarkdown";
@@ -31,6 +31,14 @@ const USER_LINES = 6;
 const ROW_ESTIMATE = 96;
 
 const Placeholder = ({ span, part }) => {
+  const withheld = withheldText(span);
+  if (withheld) {
+    return (
+      <Typography variant="caption" color="text.secondary" display="block" data-testid="content-withheld">
+        {withheld}
+      </Typography>
+    );
+  }
   const p = partOf(span, part);
   if (!p) return null;
   return (

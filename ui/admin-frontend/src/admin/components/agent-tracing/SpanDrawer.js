@@ -37,6 +37,7 @@ import {
   partPlaceholder,
   redactionSegments,
   resourceName,
+  withheldText,
 } from "./spanModel";
 import { formatCost, formatDuration } from "./sessionFilters";
 import agentTracingService from "../../services/agentTracingService";
@@ -216,9 +217,10 @@ export const PartView = ({ spanId, part }) => {
 const PartsPanel = ({ span, names }) => {
   const parts = (span.parts || []).filter((p) => names.includes(p.part));
   if (!parts.length) {
+    const withheld = withheldText(span);
     return (
       <Typography variant="body2" color="text.secondary" data-testid="no-parts">
-        Nothing was captured for this span ({span.content_state || "not captured"}).
+        {withheld ? `${withheld}.` : `Nothing was captured for this span (${span.content_state || "not captured"}).`}
       </Typography>
     );
   }

@@ -192,6 +192,20 @@ describe("TranscriptView", () => {
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent("candidates: tool:9, mcp_server:3"));
   });
 
+  // jyx.164/166: an edge without verified TLS to Studio sends no content;
+  // the empty blocks say why.
+  it("explains withheld content instead of showing empty blocks", () => {
+    const withheld = {
+      span_id: "00000000000000a1", trace_id: TRACE, kind: "llm_inference", name: "chat", status: "ok",
+      start_time: at(0), end_time: at(1), response_model: "gpt-4.1", content_state: "not_captured",
+      attributes: { "tyk.content.withheld": "edge_link_unverified_tls" },
+    };
+    renderTranscript({ list: [withheld] });
+    const notices = screen.getAllByTestId("content-withheld").map((n) => n.textContent);
+    expect(notices.length).toBeGreaterThan(0);
+    expect(new Set(notices)).toEqual(new Set(["Content withheld: the edge's connection to Studio is not verified TLS"]));
+  });
+
   it("explains the inferred link's rule in a tooltip", async () => {
     renderTranscript();
     fireEvent.mouseOver(screen.getByTestId("inferred-badge"));

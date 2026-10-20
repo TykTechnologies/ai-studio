@@ -8,8 +8,18 @@ import {
   sessionBounds,
 } from "./spanModel";
 import { bucketize, BUCKETS } from "./TimelineStrip";
-import { attrNames } from "./spanModel";
+import { attrNames, withheldText } from "./spanModel";
 import { T0, ids, spans, detail } from "./testFixture";
+
+describe("withheldText", () => {
+  it("explains known reasons, names unknown ones, and is empty otherwise", () => {
+    const span = (reason) => ({ attributes: { "tyk.content.withheld": reason } });
+    expect(withheldText(span("edge_link_unverified_tls"))).toBe("Content withheld: the edge's connection to Studio is not verified TLS");
+    expect(withheldText(span("policy_said_no"))).toBe("Content withheld: policy said no");
+    expect(withheldText({})).toBe("");
+    expect(withheldText(span(42))).toBe("");
+  });
+});
 
 describe("attrNames", () => {
   it("reads a JSON array string or an array of names, and nothing else", () => {
