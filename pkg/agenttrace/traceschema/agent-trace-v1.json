@@ -130,6 +130,42 @@
         "name": { "type": "string", "minLength": 1, "maxLength": 255 }
       }
     },
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$" },
+    "gateway_event": {
+      "type": "object",
+      "description": "On spans of kind gateway_event. type: attempt, fallback, retry, guardrail, policy, budget, rate_limit, auth, cache, router, overload. outcome: allowed, denied, warned, redacted, modified, exceeded, info. Values are checked by format, not by list, so a new type does not break readers.",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "$ref": "#/definitions/identifier" },
+        "outcome": { "$ref": "#/definitions/identifier" },
+        "reason": { "type": "string", "maxLength": 512 },
+        "name": { "type": "string", "maxLength": 255 },
+        "policy_id": { "type": "string", "maxLength": 255 },
+        "from_model": { "type": "string", "maxLength": 255 },
+        "to_model": { "type": "string", "maxLength": 255 },
+        "attempt_number": { "type": "integer", "minimum": 0 },
+        "attempt_total": { "type": "integer", "minimum": 0 },
+        "provider": { "type": "string", "maxLength": 64 },
+        "wait_ms": { "type": "integer", "minimum": 0 },
+        "budget_id": { "type": "string", "maxLength": 255 },
+        "budget_remaining_micros": { "type": "integer" },
+        "budget_used_pct": { "type": "number" },
+        "ratelimit_limit": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "description": "Where a tool call ran and which catalogue entry it is. via: studio_mcp, studio_rest, tyk_gateway, client, provider. catalogue_type: tool, mcp_server, datasource; catalogue_id names an entry in resources.",
+      "additionalProperties": false,
+      "properties": {
+        "via": { "$ref": "#/definitions/identifier" },
+        "in_catalogue": { "type": "boolean" },
+        "catalogue_type": { "enum": ["tool", "mcp_server", "datasource"] },
+        "catalogue_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "server": { "type": "string", "maxLength": 255 }
+      }
+    },
     "usage": {
       "type": "object",
       "additionalProperties": false,
@@ -217,6 +253,8 @@
         "analytics_ref": { "type": "string", "maxLength": 64 },
         "inferred": { "type": "boolean" },
         "content_state": { "$ref": "#/definitions/content_state" },
+        "gateway_event": { "$ref": "#/definitions/gateway_event" },
+        "attribution": { "$ref": "#/definitions/attribution" },
         "attributes": { "type": "object" },
         "links": { "type": "array", "items": { "$ref": "#/definitions/link" } },
         "parts": { "type": "array", "items": { "$ref": "#/definitions/part" } }
