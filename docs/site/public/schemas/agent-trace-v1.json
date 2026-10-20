@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:tyk:ai-studio:agent-trace:v1",
+  "title": "Tyk AI Studio agent trace export, version 1",
+  "description": "application/vnd.tyk.agent-trace+json; v=1. One agent session (or one trace of it) with its turns, agents and spans. Trace ids are 32 and span ids 16 lowercase hex characters (W3C); session and agent ids are UUIDs. Times are RFC 3339 in UTC with at most microsecond precision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["media_type", "version", "scope", "content_included", "session", "agents", "traces", "spans"],
+  "properties": {
+    "media_type": { "const": "application/vnd.tyk.agent-trace+json; v=1" },
+    "version": { "const": 1 },
+    "scope": { "enum": ["session", "trace"] },
+    "exported_at": { "$ref": "#/definitions/time" },
+    "content_included": {
+      "type": "boolean",
+      "description": "True when captured payload content is embedded in parts[].content. False for metadata exports and for the content-stripped golden form."
+    },
+    "session": { "$ref": "#/definitions/session" },
+    "agents": { "type": "array", "items": { "$ref": "#/definitions/agent" } },
+    "traces": { "type": "array", "items": { "$ref": "#/definitions/trace" } },
+    "spans": {
+      "type": "array",
+      "description": "Flat list ordered by (start_time, span_id). The tree is given by parent_span_id; gateway events are spans of kind gateway_event.",
+      "items": { "$ref": "#/definitions/span" }
+    }
+  },
+  "definitions": {
+    "time": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "confidence": { "enum": ["declared", "exact", "strong", "weak"] },
+    "rule": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$" },
+    "content_state": {
+      "enum": ["not_captured", "metadata", "hashed", "redacted", "full", "truncated", "dropped"]
+    },
+    "content_mode": { "enum": ["off", "metadata", "hashed", "redacted", "full"] },
+    "count": { "type": "integer", "minimum": 0 },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["span_count", "llm_call_count", "tool_call_count", "error_count", "input_tokens", "output_tokens", "cost_micros"],
+      "properties": {
+        "turn_count": { "$ref": "#/definitions/count" },
+        "span_count": { "$ref": "#/definitions/count" },
+        "llm_call_count": { "$ref": "#/definitions/count" },
+        "tool_call_count": { "$ref": "#/definitions/count" },
+        "error_count": { "$ref": "#/definitions/count" },
+        "dropped_count": { "$ref": "#/definitions/count" },
+        "input_tokens": { "$ref": "#/definitions/count" },
+        "output_tokens": { "$ref": "#/definitions/count" },
+        "cost_micros": { "$ref": "#/definitions/count" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "app_id", "source", "status", "started_at", "last_activity_at", "totals", "sampled", "content_mode"],
+      "properties": {
+        "id": { "$ref": "#/definitions/uuid" },
+        "app_id": { "type": "integer", "minimum": 0 },
+        "team_id": { "type": "integer", "minimum": 0 },
+        "user_id": { "type": "integer", "minimum": 0 },
+        "end_user": { "type": "string", "maxLength": 255 },
+        "external_id": { "type": "string", "maxLength": 255 },
+        "external_source": { "type": "string", "maxLength": 64 },
+        "source": { "enum": ["declared", "inferred"] },
+        "name": { "type": "string", "maxLength": 255 },
+        "status": { "enum": ["active", "closed", "error"] },
+        "started_at": { "$ref": "#/definitions/time" },
+        "last_activity_at": { "$ref": "#/definitions/time" },
+        "ended_at": { "$ref": "#/definitions/time" },
+        "totals": { "$ref": "#/definitions/totals" },
+        "min_confidence": { "$ref": "#/definitions/confidence" },
+        "sampled": { "type": "boolean" },
+        "content_mode": { "$ref": "#/definitions/content_mode" },
+        "retention_until": { "$ref": "#/definitions/time" }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "declared", "confidence", "first_seen", "last_seen"],
+      "properties": {
+        "id": { "$ref": "#/definitions/uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "declared": { "type": "boolean" },
+        "parent_agent_id": { "$ref": "#/definitions/uuid" },
+        "spawned_by_span_id": { "$ref": "#/definitions/span_id" },
+        "confidence": { "$ref": "#/definitions/confidence" },
+        "first_seen": { "$ref": "#/definitions/time" },
+        "last_seen": { "$ref": "#/definitions/time" },
+        "self_cost_micros": { "type": "integer" },
+        "total_cost_micros": { "type": "integer" },
+        "self_tokens": { "type": "integer" },
+        "total_tokens": { "type": "integer" }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_id", "turn_index", "source", "started_at", "status", "totals"],
+      "properties": {
+        "trace_id": { "$ref": "#/definitions/trace_id" },
+        "turn_index": { "type": "integer", "minimum": 0 },
+        "source": { "enum": ["client_traceparent", "tyk"] },
+        "root_span_id": { "$ref": "#/definitions/span_id" },
+        "started_at": { "$ref": "#/definitions/time" },
+        "ended_at": { "$ref": "#/definitions/time" },
+        "status": { "enum": ["in_progress", "ok", "error", "abandoned"] },
+        "totals": { "$ref": "#/definitions/totals" }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "$ref": "#/definitions/count" },
+        "output_tokens": { "$ref": "#/definitions/count" },
+        "cache_read_tokens": { "$ref": "#/definitions/count" },
+        "cache_write_tokens": { "$ref": "#/definitions/count" },
+        "reasoning_tokens": { "$ref": "#/definitions/count" },
+        "cost_micros": { "type": "integer" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "trace_id", "span_id", "confidence", "rule"],
+      "properties": {
+        "type": {
+          "enum": ["caused_by", "continues", "subagent_of", "retry_of", "provisional_context", "candidate"]
+        },
+        "trace_id": { "$ref": "#/definitions/trace_id" },
+        "span_id": { "$ref": "#/definitions/span_id" },
+        "confidence": { "$ref": "#/definitions/confidence" },
+        "rule": { "$ref": "#/definitions/rule" },
+        "detail": { "type": "object" }
+      }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["part", "content_state", "media_type"],
+      "properties": {
+        "payload_id": { "$ref": "#/definitions/uuid" },
+        "part": {
+          "enum": ["request", "response", "system_instructions", "tool_definitions", "tool_args", "tool_result", "error_body"]
+        },
+        "content_state": { "$ref": "#/definitions/content_state" },
+        "media_type": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "original_bytes": { "$ref": "#/definitions/count" },
+        "truncated": { "type": "boolean" },
+        "redaction_count": { "$ref": "#/definitions/count" },
+        "content": {
+          "type": "string",
+          "description": "The captured content: UTF-8 text, or base64 when content_encoding is base64. Present only when content_included is true and the exporting user may read content."
+        },
+        "content_encoding": { "enum": ["base64"] }
+      },
+      "dependencies": { "content_encoding": ["content"] }
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["span_id", "trace_id", "kind", "name", "start_time", "status", "inferred", "content_state"],
+      "properties": {
+        "span_id": { "$ref": "#/definitions/span_id" },
+        "trace_id": { "$ref": "#/definitions/trace_id" },
+        "parent_span_id": { "$ref": "#/definitions/span_id" },
+        "parent_confidence": { "$ref": "#/definitions/confidence" },
+        "parent_rule": { "$ref": "#/definitions/rule" },
+        "agent_id": { "$ref": "#/definitions/uuid" },
+        "kind": {
+          "enum": ["llm_inference", "tool_call", "datasource_call", "plugin_endpoint", "gateway_event", "agent", "inferred_client_tool", "client_span"]
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "start_time": { "$ref": "#/definitions/time" },
+        "end_time": { "$ref": "#/definitions/time" },
+        "status": { "enum": ["in_progress", "ok", "error"] },
+        "error_type": { "type": "string", "maxLength": 128 },
+        "error_message": { "type": "string" },
+        "credential_id": { "type": "string", "maxLength": 128 },
+        "user_id": { "type": "integer", "minimum": 0 },
+        "resource_type": { "enum": ["llm", "tool", "datasource", "plugin"] },
+        "resource_id": { "type": "string", "maxLength": 64 },
+        "provider": { "type": "string", "maxLength": 64 },
+        "operation": { "type": "string", "maxLength": 64 },
+        "request_model": { "type": "string", "maxLength": 255 },
+        "response_model": { "type": "string", "maxLength": 255 },
+        "tool_name": { "type": "string", "maxLength": 255 },
+        "tool_call_ids": { "type": "array", "items": { "type": "string" } },
+        "finish_reasons": { "type": "array", "items": { "type": "string" } },
+        "usage": { "$ref": "#/definitions/usage" },
+        "ttft_ms": { "$ref": "#/definitions/count" },
+        "http_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "gateway_node": { "type": "string", "maxLength": 128 },
+        "analytics_ref": { "type": "string", "maxLength": 64 },
+        "inferred": { "type": "boolean" },
+        "content_state": { "$ref": "#/definitions/content_state" },
+        "attributes": { "type": "object" },
+        "links": { "type": "array", "items": { "$ref": "#/definitions/link" } },
+        "parts": { "type": "array", "items": { "$ref": "#/definitions/part" } }
+      }
+    }
+  }
+}
