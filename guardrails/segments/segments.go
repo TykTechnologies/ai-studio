@@ -15,6 +15,14 @@
 // injection split across two blocks is still one text. MapRewrite maps a
 // rewrite of that text back onto the leaves.
 //
+// A rewriter that must keep the prompt cache intact edits leaves (MapRewrite,
+// or Edits built per leaf), never whole nodes: Quarantine of a unit whose
+// content is replaced as one string (a message's or a tool result's content)
+// replaces its blocks too, and with them any block-level cache_control, which
+// moves or drops the vendor's cache breakpoint. CacheBreakpoints and
+// Unit.Cached say which units lie in the cached prefix; CheckToolPairing and
+// NativeContextManagement are the other checks a rewriter needs.
+//
 // Model-generated tool call arguments (tool_use input, tool_calls arguments,
 // functionCall args), images, signatures and encrypted payloads are never
 // segments. Block or part types this package does not know are not skipped:
@@ -480,10 +488,12 @@ func (x *extraction) walk(u *Unit, n *node, path string, keys bool, skip func(st
 }
 
 // opaque names members of an unknown block that are identifiers, signatures,
-// encrypted payloads or metadata rather than text.
+// encrypted payloads or metadata rather than text. cache_control (its type
+// and ttl) is prompt-cache metadata the model never reads.
 func opaque(key string) bool {
 	return key == "type" || key == "id" || strings.HasSuffix(key, "_id") ||
-		key == "signature" || strings.HasPrefix(key, "encrypted_") || key == "page_age"
+		key == "signature" || strings.HasPrefix(key, "encrypted_") || key == "page_age" ||
+		key == "cache_control"
 }
 
 // finish drops units with no text, numbers units and leaves, and builds each
