@@ -653,7 +653,8 @@ func (h *MicrogatewaAnalyticsHandler) RecordComplianceEvents(_ context.Context, 
 
 // RecordMCPCalls implements analytics.AnalyticsHandler. Tyk MCP analytics
 // are ingested by the control plane only, so an edge has nothing to send.
-func (h *MicrogatewaAnalyticsHandler) RecordMCPCalls(_ context.Context, _ []models.MCPCallRecord) {
+func (h *MicrogatewaAnalyticsHandler) RecordMCPCalls(_ context.Context, _ []models.MCPCallRecord) error {
+	return nil
 }
 
 // SetAsGlobalHandler sets this handler as the global midsommar analytics handler

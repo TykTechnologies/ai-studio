@@ -170,12 +170,16 @@ func (r *MCPCallRecord) ClampLengths() {
 	r.Source = clampString(r.Source, 32)
 }
 
-// clampString drops invalid UTF-8 and cuts s to at most n bytes without
-// splitting a character (Postgres rejects invalid UTF-8 as well as an
-// overflow). varchar(n) counts characters, so n bytes always fits.
+// clampString drops invalid UTF-8 and NUL bytes and cuts s to at most n
+// bytes without splitting a character (Postgres rejects invalid UTF-8 and
+// NUL in text as well as an overflow). varchar(n) counts characters, so n
+// bytes always fits.
 func clampString(s string, n int) string {
 	if !utf8.ValidString(s) {
 		s = strings.ToValidUTF8(s, "")
+	}
+	if strings.IndexByte(s, 0) >= 0 {
+		s = strings.ReplaceAll(s, "\x00", "")
 	}
 	if len(s) <= n {
 		return s

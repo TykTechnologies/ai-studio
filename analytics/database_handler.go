@@ -137,12 +137,45 @@ func (h *DatabaseHandler) start() {
 
 	// Start background workers. A panic writing one record loses that
 	// record, not the worker (nor the process); workerDone closes once the
-	// worker has stopped for good.
+	// worker has stopped for good. MCP call records (ingested from Tyk Pump
+	// in batches of thousands) have a writer of their own, so a burst of
+	// them never delays, or crowds out, the chat records budgets are
+	// computed from.
 	h.workerDone = make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(2)
 	go func() {
-		defer close(h.workerDone)
+		defer workers.Done()
 		safe.Loop("analytics writer", h.ctx.Done(), h.startWorker)
 	}()
+	go func() {
+		defer workers.Done()
+		safe.Loop("analytics MCP writer", h.ctx.Done(), h.mcpWorker)
+	}()
+	go func() {
+		workers.Wait()
+		close(h.workerDone)
+	}()
+}
+
+// mcpWorker writes MCP call batches until the handler stops.
+func (h *DatabaseHandler) mcpWorker() {
+	for {
+		if h.ctx.Err() != nil {
+			return
+		}
+		select {
+		case calls := <-h.mcpCallChan:
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(calls, 100).Error
+			})
+			if err != nil {
+				logger.Warnf("Error creating MCP call records (%d): %s", len(calls), sanitizeError(err))
+			}
+		case <-h.ctx.Done():
+			return
+		}
+	}
 }
 
 // waitStopped waits, up to d, for the worker of a stopped handler (its
@@ -261,13 +294,6 @@ func (h *DatabaseHandler) startWorker() {
 			})
 			if err != nil {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
-			}
-		case calls := <-h.mcpCallChan:
-			err := h.createRecordWithRetry(func() error {
-				return h.db.CreateInBatches(calls, 100).Error
-			})
-			if err != nil {
-				logger.Warnf("Error creating MCP call records (%d): %s", len(calls), sanitizeError(err))
 			}
 		case <-h.ctx.Done():
 			h.shutdown()
@@ -509,17 +535,19 @@ func (h *DatabaseHandler) RecordComplianceEvents(_ context.Context, events []*mo
 	}
 }
 
-// RecordMCPCalls records MCP calls asynchronously. The worker writes the
-// slice it is given, so the caller must not reuse it.
-func (h *DatabaseHandler) RecordMCPCalls(_ context.Context, records []models.MCPCallRecord) {
+// RecordMCPCalls queues MCP calls for the MCP writer. The writer writes the
+// slice it is given, so the caller must not reuse it. ErrRecorderBusy means
+// the batch was not queued (buffer full, or the handler stopped): the
+// ingest endpoint answers 503 so the pump retries it.
+func (h *DatabaseHandler) RecordMCPCalls(_ context.Context, records []models.MCPCallRecord) error {
 	if len(records) == 0 {
-		return
+		return nil
 	}
 
 	h.recMutex.RLock()
 	if !h.recStarted {
 		h.recMutex.RUnlock()
-		return
+		return ErrRecorderBusy
 	}
 	h.recMutex.RUnlock()
 
@@ -529,11 +557,12 @@ func (h *DatabaseHandler) RecordMCPCalls(_ context.Context, records []models.MCP
 
 	select {
 	case <-h.ctx.Done():
-		logger.Warnf("dropping MCP call records due to cancellation: %s", h.ctx.Err())
-		return
+		return ErrRecorderBusy
 	case h.mcpCallChan <- records:
+		return nil
 	default:
-		logger.Warnf("MCP call record buffer full, dropping batch, count: %d", len(records))
+		logger.Warnf("MCP call record buffer full, refusing batch, count: %d", len(records))
+		return ErrRecorderBusy
 	}
 }
 

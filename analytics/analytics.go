@@ -125,18 +125,20 @@ func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int,
 }
 
 // RecordMCPCalls records MCP calls a Tyk Gateway proxied, as ingested from
-// Tyk Pump.
-func RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) {
+// Tyk Pump. It returns ErrRecorderBusy when the handler could not take the
+// batch; with no handler set there is nothing to record into.
+func RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error {
 	if len(records) == 0 {
-		return
+		return nil
 	}
 
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordMCPCalls(ctx, records)
+		return globalHandler.RecordMCPCalls(ctx, records)
 	}
+	return nil
 }
 
 func RecordContentMessage(

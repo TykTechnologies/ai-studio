@@ -72,7 +72,7 @@ func (h *complianceSink) RecordComplianceEvents(_ context.Context, e []*models.C
 	defer h.mu.Unlock()
 	h.events = append(h.events, e...)
 }
-func (*complianceSink) RecordMCPCalls(context.Context, []models.MCPCallRecord) {}
+func (*complianceSink) RecordMCPCalls(context.Context, []models.MCPCallRecord) error { return nil }
 
 func (h *complianceSink) take() []*models.ComplianceEvent {
 	h.mu.Lock()

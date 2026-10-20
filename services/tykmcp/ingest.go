@@ -20,6 +20,11 @@ const IngestPath = "/api/v1/ingest/tyk-analytics"
 // retrying it.
 var ErrIngestUnauthorized = errors.New("invalid ingest token")
 
+// ErrIngestBusy is returned when a batch could not be recorded right now
+// (the analytics recorder's buffer is full). The endpoint answers 503, so
+// the pump retries the batch later.
+var ErrIngestBusy = errors.New("analytics ingest is busy; retry later")
+
 // IngestTokenPrefix starts every ingest token, so secret scanners and
 // administrators can recognise one.
 const IngestTokenPrefix = "tai_ing_"

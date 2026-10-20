@@ -14,6 +14,7 @@ import (
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -74,6 +75,7 @@ func (f *fakeIngestService) GetIngestStatus(_ context.Context, id uint) (*tykmcp
 
 type ingestHarness struct {
 	r        *gin.Engine
+	svc      *services.Service
 	fake     *fakeIngestService
 	adminKey string
 	userKey  string
@@ -108,7 +110,7 @@ func setupIngestAPI(t *testing.T) *ingestHarness {
 	user.EmailVerified = true
 	require.NoError(t, user.Create(db))
 
-	return &ingestHarness{r: a.router, fake: fake, adminKey: admin.APIKey, userKey: user.APIKey}
+	return &ingestHarness{r: a.router, svc: service, fake: fake, adminKey: admin.APIKey, userKey: user.APIKey}
 }
 
 func (h *ingestHarness) ingest(t *testing.T, auth string, body []byte, headers map[string]string) *httptest.ResponseRecorder {
@@ -286,4 +288,21 @@ func TestIngestToken_AdminRoutes(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, w.Code, "%s %s", rq.method, rq.path)
 	}
 	assert.Equal(t, []uint{3}, h.fake.rotated)
+}
+
+// busyIngestService refuses every batch as the recorder would when full.
+type busyIngestService struct{ *fakeIngestService }
+
+func (busyIngestService) IngestAnalytics(context.Context, uint, []tykmcp.TykAnalyticsRecord) (*tykmcp.IngestResult, error) {
+	return nil, tykmcp.ErrIngestBusy
+}
+
+// A batch the recorder cannot take is answered 503 with Retry-After, so the
+// pump retries it instead of counting it as stored.
+func TestIngestTykAnalytics_BusyIs503(t *testing.T) {
+	h := setupIngestAPI(t)
+	h.svc.TykMCP = busyIngestService{h.fake}
+	w := h.ingest(t, "Bearer tai_ing_good", []byte(`[]`), nil)
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.NotEmpty(t, w.Header().Get("Retry-After"))
 }

@@ -193,7 +193,7 @@ func (t *Tee) RecordComplianceEvents(ctx context.Context, events []*models.Compl
 	t.toSinks(func(h AnalyticsHandler) { h.RecordComplianceEvents(context.Background(), c) })
 }
 
-func (t *Tee) RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) {
+func (t *Tee) RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error {
 	c := make([]models.MCPCallRecord, len(records))
 	copy(c, records)
 	for i := range c {
@@ -210,8 +210,13 @@ func (t *Tee) RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord
 			c[i].CredentialID = &v
 		}
 	}
-	t.primary.RecordMCPCalls(ctx, records)
-	t.toSinks(func(h AnalyticsHandler) { h.RecordMCPCalls(context.Background(), c) })
+	// A batch the primary refuses is retried by the sender, so the sinks
+	// only get the batches the primary took (no duplicates on the retry).
+	if err := t.primary.RecordMCPCalls(ctx, records); err != nil {
+		return err
+	}
+	t.toSinks(func(h AnalyticsHandler) { _ = h.RecordMCPCalls(context.Background(), c) })
+	return nil
 }
 
 // RecordExchange keeps a proxied request's log and chat record together for

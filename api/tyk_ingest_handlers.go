@@ -89,6 +89,7 @@ func (c *cappedReader) Read(p []byte) (int, error) {
 // @Failure 413 {object} models.ErrorResponse
 // @Failure 415 {object} models.ErrorResponse
 // @Failure 429 {object} models.ErrorResponse
+// @Failure 503 {object} models.ErrorResponse
 // @Router /ingest/tyk-analytics [post]
 func (a *API) ingestTykAnalytics(c *gin.Context) {
 	svc := a.tykMCPService()
@@ -131,6 +132,9 @@ func (a *API) ingestTykAnalytics(c *gin.Context) {
 			ingestUnauthorized(c)
 		case errors.Is(err, tykmcp.ErrDisabled):
 			webhookError(c, http.StatusNotFound, "Not Found", "not found")
+		case errors.Is(err, tykmcp.ErrIngestBusy):
+			c.Header("Retry-After", "5")
+			webhookError(c, http.StatusServiceUnavailable, "Service Unavailable", tykmcp.ErrIngestBusy.Error())
 		case errors.Is(err, tykmcp.ErrValidation):
 			webhookError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		default:
@@ -203,6 +207,11 @@ func decodeIngestBody(c *gin.Context) ([]tykmcp.TykAnalyticsRecord, int, error) 
 		records = append(records, r)
 	}
 	if _, err := dec.Token(); err != nil {
+		return bad(err)
+	}
+	// One array per body: anything after it but whitespace (a second
+	// array, NDJSON) would otherwise be accepted and silently lost.
+	if _, err := dec.Token(); err != io.EOF {
 		return bad(err)
 	}
 	return records, 0, nil

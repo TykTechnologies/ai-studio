@@ -19171,6 +19171,10 @@ paths:
           description: Too Many Requests
           schema:
             $ref: '#/definitions/models.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
       summary: Ingest Tyk Gateway analytics records
       tags:
       - TykMCP

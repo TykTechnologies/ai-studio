@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -33,9 +34,15 @@ type AnalyticsHandler interface {
 	RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent)
 
 	// RecordMCPCalls records MCP calls a Tyk Gateway proxied (ingested
-	// from Tyk Pump).
-	RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord)
+	// from Tyk Pump). Unlike the other methods it reports a batch it could
+	// not take (ErrRecorderBusy), because its caller can have the sender
+	// retry.
+	RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error
 }
+
+// ErrRecorderBusy is returned by RecordMCPCalls when the batch was not
+// queued: the buffer is full or the recorder has stopped.
+var ErrRecorderBusy = errors.New("analytics recorder busy")
 
 // ExchangeRecorder is implemented by handlers that record a proxied request's
 // proxy log and its chat record together. The gateway produces both for one

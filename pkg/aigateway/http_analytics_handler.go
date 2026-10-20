@@ -184,7 +184,8 @@ func (h *HTTPAnalyticsHandler) RecordComplianceEvents(_ context.Context, events 
 }
 
 // RecordMCPCalls implements analytics.AnalyticsHandler (no-op for HTTP handler)
-func (h *HTTPAnalyticsHandler) RecordMCPCalls(_ context.Context, _ []models.MCPCallRecord) {
+func (h *HTTPAnalyticsHandler) RecordMCPCalls(_ context.Context, _ []models.MCPCallRecord) error {
+	return nil
 }
 
 // SetAsGlobalHandler sets this handler as the global analytics handler

@@ -90,6 +90,7 @@ func TestMCPCallRecord_ClampLengths(t *testing.T) {
 	r := models.MCPCallRecord{
 		PrimitiveName: strings.Repeat("é", 400), // 800 bytes
 		SessionID:     "ok\xffsession",
+		TraceID:       "a\x00b",
 		CredentialID:  &cred,
 		TykAPIID:      strings.Repeat("a", 100),
 	}
@@ -97,6 +98,7 @@ func TestMCPCallRecord_ClampLengths(t *testing.T) {
 	assert.LessOrEqual(t, len(r.PrimitiveName), 512)
 	assert.Equal(t, strings.Repeat("é", 256), r.PrimitiveName)
 	assert.Equal(t, "oksession", r.SessionID)
+	assert.Equal(t, "ab", r.TraceID, "NUL fails a Postgres insert")
 	assert.Len(t, *r.CredentialID, 36)
 	assert.Len(t, r.TykAPIID, 64)
 }
@@ -106,7 +108,8 @@ func TestDatabaseHandler_RecordMCPCallsAfterStop(t *testing.T) {
 	db := mcpCallsDB(t)
 	h := NewDatabaseHandler(context.Background(), db)
 	h.Stop()
-	h.RecordMCPCalls(context.Background(), []models.MCPCallRecord{{ConnectionID: 1, Timestamp: time.Now()}})
+	err := h.RecordMCPCalls(context.Background(), []models.MCPCallRecord{{ConnectionID: 1, Timestamp: time.Now()}})
+	assert.ErrorIs(t, err, ErrRecorderBusy, "the caller learns the batch was not taken")
 	time.Sleep(100 * time.Millisecond)
 	var n int64
 	require.NoError(t, db.Model(&models.MCPCallRecord{}).Count(&n).Error)

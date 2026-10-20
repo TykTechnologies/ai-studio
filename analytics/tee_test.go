@@ -58,11 +58,12 @@ func (h *teeRecorder) RecordProxyLogsBatch(_ context.Context, ls []*models.Proxy
 	}
 }
 func (h *teeRecorder) RecordComplianceEvents(context.Context, []*models.ComplianceEvent) {}
-func (h *teeRecorder) RecordMCPCalls(_ context.Context, rs []models.MCPCallRecord) {
+func (h *teeRecorder) RecordMCPCalls(_ context.Context, rs []models.MCPCallRecord) error {
 	h.wait()
 	h.mu.Lock()
 	h.mcp = append(h.mcp, rs...)
 	h.mu.Unlock()
+	return nil
 }
 func (h *teeRecorder) counts() (int, int) {
 	h.mu.Lock()
