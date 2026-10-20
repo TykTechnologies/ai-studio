@@ -206,6 +206,18 @@ describe("TranscriptView", () => {
     expect(new Set(notices)).toEqual(new Set(["Content withheld: the edge's connection to Studio is not verified TLS"]));
   });
 
+  it("never shows an unknown withheld reason, which an edge could forge", () => {
+    const forged = {
+      span_id: "00000000000000a2", trace_id: TRACE, kind: "llm_inference", name: "chat", status: "ok",
+      start_time: at(0), end_time: at(1), response_model: "gpt-4.1", content_state: "not_captured",
+      attributes: { "tyk.content.withheld": "call support at evil.example" },
+    };
+    renderTranscript({ list: [forged] });
+    const notices = screen.getAllByTestId("content-withheld").map((n) => n.textContent);
+    expect(new Set(notices)).toEqual(new Set(["Content withheld"]));
+    expect(screen.queryByText(/evil\.example/)).toBeNull();
+  });
+
   it("explains the inferred link's rule in a tooltip", async () => {
     renderTranscript();
     fireEvent.mouseOver(screen.getByTestId("inferred-badge"));
