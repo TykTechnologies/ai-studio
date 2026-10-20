@@ -204,3 +204,23 @@ func (s *communityService) ApplyDrift(ctx context.Context, actor Actor, id strin
 func (s *communityService) AccessReport(ctx context.Context, f ReportFilter) ([]AccessReportRow, error) {
 	return nil, ErrEnterpriseFeature
 }
+
+func (s *communityService) AuthenticateIngest(ctx context.Context, token string) (uint, error) {
+	return 0, ErrEnterpriseFeature
+}
+
+func (s *communityService) IngestAnalytics(ctx context.Context, connectionID uint, records []TykAnalyticsRecord) (*IngestResult, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) RotateIngestToken(ctx context.Context, actor Actor, connectionID uint) (*RotatedIngestToken, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) RevokeIngestToken(ctx context.Context, actor Actor, connectionID uint) (*IngestStatus, error) {
+	return nil, ErrEnterpriseFeature
+}
+
+func (s *communityService) GetIngestStatus(ctx context.Context, connectionID uint) (*IngestStatus, error) {
+	return nil, ErrEnterpriseFeature
+}

@@ -17213,6 +17213,86 @@
                 }
             }
         },
+        "/ingest/tyk-analytics": {
+            "post": {
+                "description": "Machine-to-machine endpoint for Tyk Pump (the http pump, or the stdout pump through a log shipper). The body is a JSON array of Tyk AnalyticsRecord, optionally gzip-encoded (Content-Encoding: gzip). Only MCP records are kept. Authenticated with the connection's ingest token (Authorization: Bearer). A bad or revoked token gets 401 so the pump drops the batch. Enterprise Edition; 404 in Community Edition.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Ingest Tyk Gateway analytics records",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer ingest token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Analytics records",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tykmcp.TykAnalyticsRecord"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.IngestResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/llm-settings": {
             "get": {
                 "security": [
@@ -25032,6 +25112,126 @@
                 }
             }
         },
+        "/tyk-connections/{id}/ingest-status": {
+            "get": {
+                "description": "Whether an ingest token is set, when the last batch arrived and what the last 24 hours brought.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Analytics ingest status of a Tyk connection",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.IngestStatus"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tyk-connections/{id}/ingest-token": {
+            "post": {
+                "description": "Returns the new token's plaintext exactly once; only its hash is stored. The previous token stops working immediately.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Generate or rotate a Tyk connection's analytics ingest token",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.RotatedIngestToken"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TykMCP"
+                ],
+                "summary": "Revoke a Tyk connection's analytics ingest token",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Connection ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tykmcp.IngestStatus"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/tyk-connections/{id}/nodes": {
             "get": {
                 "description": "Each node's reachability, version and whether it serves the MCP proxies AI Studio owns",
@@ -29348,6 +29548,7 @@
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -37126,6 +37327,70 @@
                 }
             }
         },
+        "tykmcp.IngestResult": {
+            "type": "object",
+            "properties": {
+                "accepted": {
+                    "description": "Accepted is how many records the batch held.",
+                    "type": "integer"
+                },
+                "skipped_non_mcp": {
+                    "description": "SkippedNonMCP records were not MCP traffic.",
+                    "type": "integer"
+                },
+                "stored": {
+                    "description": "Stored is how many were recorded as MCP calls.",
+                    "type": "integer"
+                },
+                "unattributed": {
+                    "description": "Unattributed records were stored without an App: the key is not a\nbrokered credential and the alias names no App.",
+                    "type": "integer"
+                },
+                "unknown_api": {
+                    "description": "UnknownAPI records were MCP traffic for an API that is not an MCP\nserver on the token's connection; they are not stored.",
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.IngestStatus": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "integer"
+                },
+                "has_token": {
+                    "type": "boolean"
+                },
+                "ingest_path": {
+                    "type": "string"
+                },
+                "last_batch_at": {
+                    "type": "string"
+                },
+                "last_unknown_api_id": {
+                    "type": "string"
+                },
+                "records_24h": {
+                    "description": "The counters cover the last 24 hours.",
+                    "type": "integer"
+                },
+                "skipped_non_mcp_24h": {
+                    "type": "integer"
+                },
+                "token_created_at": {
+                    "type": "string"
+                },
+                "token_prefix": {
+                    "type": "string"
+                },
+                "unattributed_24h": {
+                    "type": "integer"
+                },
+                "unknown_api_24h": {
+                    "type": "integer"
+                }
+            }
+        },
         "tykmcp.MintInput": {
             "type": "object",
             "properties": {
@@ -37396,6 +37661,17 @@
                 }
             }
         },
+        "tykmcp.RotatedIngestToken": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "$ref": "#/definitions/tykmcp.IngestStatus"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "tykmcp.ServerList": {
             "type": "object",
             "properties": {
@@ -37573,6 +37849,114 @@
                 },
                 "rest_to_mcp_supported": {
                     "type": "boolean"
+                }
+            }
+        },
+        "tykmcp.TykAnalyticsRecord": {
+            "type": "object",
+            "properties": {
+                "alias": {
+                    "type": "string"
+                },
+                "api_id": {
+                    "type": "string"
+                },
+                "api_key": {
+                    "description": "APIKey is the key's hash when the Gateway runs with hash_keys (the\ndefault), and the raw key otherwise. It is used to attribute the call\nand never persisted.",
+                    "type": "string"
+                },
+                "api_name": {
+                    "type": "string"
+                },
+                "latency": {
+                    "$ref": "#/definitions/tykmcp.TykLatency"
+                },
+                "mcp_stats": {
+                    "$ref": "#/definitions/tykmcp.TykMCPStats"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "network": {
+                    "$ref": "#/definitions/tykmcp.TykNetworkStats"
+                },
+                "org_id": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "response_code": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.TykLatency": {
+            "type": "object",
+            "properties": {
+                "gateway": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "upstream": {
+                    "type": "integer"
+                }
+            }
+        },
+        "tykmcp.TykMCPStats": {
+            "type": "object",
+            "properties": {
+                "declared_protocol_version": {
+                    "type": "string"
+                },
+                "effective_protocol_version": {
+                    "type": "string"
+                },
+                "is_mcp": {
+                    "type": "boolean"
+                },
+                "jsonrpc_error_code": {
+                    "type": "integer"
+                },
+                "jsonrpc_method": {
+                    "type": "string"
+                },
+                "primitive_name": {
+                    "type": "string"
+                },
+                "primitive_type": {
+                    "type": "string"
+                },
+                "protocol_version_source": {
+                    "type": "string"
+                }
+            }
+        },
+        "tykmcp.TykNetworkStats": {
+            "type": "object",
+            "properties": {
+                "bytes_in": {
+                    "type": "integer"
+                },
+                "bytes_out": {
+                    "type": "integer"
+                },
+                "closed_connections": {
+                    "type": "integer"
+                },
+                "open_connections": {
+                    "type": "integer"
                 }
             }
         },

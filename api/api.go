@@ -97,6 +97,8 @@ type API struct {
 	// tykMCPFallback answers Tyk MCP routes when the service has no
 	// implementation attached (community stub semantics).
 	tykMCPFallback tykmcp.Service
+	// ingestLimits rate-limits Tyk analytics ingest per connection.
+	ingestLimits ingestLimiters
 	auditHandler gin.HandlerFunc
 	// pluginUpgradeOnce guards the first-use construction of the plugin
 	// upgrade service (see plugin_upgrade_handlers.go).
@@ -1157,6 +1159,11 @@ func (a *API) setupRoutes() error {
 	v1.GET("/tyk-connections/:id/policies", authz.Read("tyk-connections"), a.listTykPolicies)
 	v1.GET("/tyk-connections/:id/sync-runs", authz.Read("tyk-connections"), a.listTykSyncRuns)
 	v1.GET("/tyk-connections/:id/nodes", authz.Read("tyk-connections"), a.listTykGatewayNodes)
+	// Analytics ingest token: who holds it can write analytics for the
+	// connection, so managing it needs the permission to edit the connection.
+	v1.GET("/tyk-connections/:id/ingest-status", authz.Read("tyk-connections"), a.getTykIngestStatus)
+	v1.POST("/tyk-connections/:id/ingest-token", authz.Write("tyk-connections"), a.rotateTykIngestToken)
+	v1.DELETE("/tyk-connections/:id/ingest-token", authz.Write("tyk-connections"), a.revokeTykIngestToken)
 	// Registration helpers and the minimal policy creator: creating policies
 	// writes to the Dashboard, so it is an execute on mcp-servers.
 	v1.GET("/tyk-connections/:id/apis", authz.Read("tyk-connections"), a.listTykSourceAPIs)
@@ -1266,6 +1273,11 @@ func (a *API) setupRoutes() error {
 
 	// Branding routes
 	// Public endpoints (for frontend config loading and asset serving)
+	// Tyk analytics ingest: machine-to-machine (Tyk Pump), authenticated by
+	// the connection's ingest token rather than a session. The bearer header
+	// exempts it from CSRF.
+	public.POST(tykmcp.IngestPath, a.ingestTykAnalytics)
+
 	public.GET("/api/v1/branding/settings", a.getBrandingSettings)
 	public.GET("/api/v1/branding/logo", a.serveLogo)
 	public.GET("/api/v1/branding/favicon", a.serveFavicon)

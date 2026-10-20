@@ -1748,6 +1748,18 @@ TABLE tools
   index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)
   index CREATE INDEX `idx_tools_name` ON `tools`(`name`)
   index CREATE INDEX `idx_tools_slug` ON `tools`(`slug`)
+TABLE tyk_connection_ingests
+  column `connection_id` integer
+  column `token_hash` text
+  column `token_prefix` text
+  column `token_created_at` datetime
+  column `token_created_by` integer
+  column `last_batch_at` datetime
+  column `last_unknown_api_id` text
+  column `created_at` datetime
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`connection_id`)
+  index CREATE UNIQUE INDEX `idx_tyk_ingest_token_hash` ON `tyk_connection_ingests`(`token_hash`)
 TABLE tyk_connections
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1833,6 +1845,17 @@ TABLE tyk_gateway_nodes
   column `created_at` datetime
   column `updated_at` datetime
   index CREATE UNIQUE INDEX `idx_tyk_gateway_nodes_conn_addr` ON `tyk_gateway_nodes`(`connection_id`,`address`)
+TABLE tyk_ingest_stats
+  column `connection_id` integer
+  column `hour` datetime
+  column `received` integer NOT NULL DEFAULT 0
+  column `stored` integer NOT NULL DEFAULT 0
+  column `skipped_non_mcp` integer NOT NULL DEFAULT 0
+  column `unknown_api` integer NOT NULL DEFAULT 0
+  column `unattributed` integer NOT NULL DEFAULT 0
+  constraint PRIMARY KEY (`connection_id`,`hour`)
+  autoindex origin=pk unique=1 (connection_id, hour)
+  index CREATE INDEX `idx_tyk_ingest_stats_hour` ON `tyk_ingest_stats`(`hour`)
 TABLE tyk_policies
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
