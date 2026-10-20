@@ -154,6 +154,21 @@ func TestBinaryString(t *testing.T) {
 	_, ok = BinaryString(strings.Repeat("hello world ", 200))
 	assert.False(t, ok)
 
+	// jyx.146: an SSE body starts with "data:" and holds a comma, but is
+	// text; so is anything whose "media type" is not a type/subtype token.
+	for _, s := range []string{
+		"data: {\"id\":\"c2\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\ndata: [DONE]\n\n",
+		`data:{"id":"c2","object":"chat.completion.chunk"}`,
+		"data:text plain,x",
+		"data:not-a-type,x",
+	} {
+		_, ok = BinaryString(s)
+		assert.False(t, ok, "%q", s)
+	}
+	mt, ok = BinaryString("data:,hello")
+	assert.True(t, ok)
+	assert.Equal(t, "text/plain", mt)
+
 	assert.True(t, BinaryMediaType("image/jpeg"))
 	assert.True(t, BinaryMediaType("application/pdf"))
 	assert.False(t, BinaryMediaType("text/plain"))

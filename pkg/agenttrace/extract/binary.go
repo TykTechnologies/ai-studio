@@ -12,7 +12,10 @@ const MinBase64Bytes = 1024
 // application/octet-stream.
 func BinaryString(s string) (mediaType string, ok bool) {
 	s = strings.TrimSpace(s)
-	if len(s) > 5 && strings.EqualFold(s[:5], "data:") {
+	// A data URI is one token with a type/subtype (or no) media type. An
+	// SSE body ("data: {...}\n\n") also starts with "data:" and holds a
+	// comma; it is text, never a blob (jyx.146).
+	if len(s) > 5 && strings.EqualFold(s[:5], "data:") && !strings.ContainsAny(s, " \t\r\n") {
 		rest := s[5:]
 		meta, _, hasData := strings.Cut(rest, ",")
 		if hasData {
@@ -20,13 +23,34 @@ func BinaryString(s string) (mediaType string, ok bool) {
 			if mt == "" {
 				mt = "text/plain"
 			}
-			return strings.ToLower(mt), true
+			if mediaTypeToken(mt) {
+				return strings.ToLower(mt), true
+			}
 		}
 	}
 	if len(s) > MinBase64Bytes && isBase64(s) {
 		return "application/octet-stream", true
 	}
 	return "", false
+}
+
+// mediaTypeToken reports whether mt is type/subtype made of RFC 2045 token
+// characters.
+func mediaTypeToken(mt string) bool {
+	typ, sub, ok := strings.Cut(mt, "/")
+	if !ok || typ == "" || sub == "" || len(mt) > 127 {
+		return false
+	}
+	for i := 0; i < len(mt); i++ {
+		c := mt[i]
+		if c == '/' && i == len(typ) {
+			continue
+		}
+		if c <= ' ' || c >= 0x7f || strings.IndexByte(`()<>@,;:\"/[]?={}`, c) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // BinaryMediaType reports whether a declared media type (an image part's
