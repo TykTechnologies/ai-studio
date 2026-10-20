@@ -237,7 +237,7 @@
         "error_message": { "type": "string" },
         "credential_id": { "type": "string", "maxLength": 128 },
         "user_id": { "type": "integer", "minimum": 0 },
-        "resource_type": { "enum": ["llm", "tool", "datasource", "plugin"] },
+        "resource_type": { "enum": ["llm", "tool", "datasource", "plugin", "mcp_server"] },
         "resource_id": { "type": "string", "maxLength": 64 },
         "provider": { "type": "string", "maxLength": 64 },
         "operation": { "type": "string", "maxLength": 64 },
