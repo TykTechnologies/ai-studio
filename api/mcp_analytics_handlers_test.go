@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,8 @@ import (
 
 type mcpAnalyticsHarness struct {
 	r        *gin.Engine
+	db       *gorm.DB
+	conn     uint
 	adminKey string
 	ownerKey string
 	otherKey string
@@ -62,7 +65,7 @@ func setupMCPAnalyticsAPI(t *testing.T) *mcpAnalyticsHarness {
 	}
 	require.NoError(t, db.Create(&rows).Error)
 
-	return &mcpAnalyticsHarness{r: a.router, adminKey: admin.APIKey, ownerKey: owner.APIKey, otherKey: other.APIKey,
+	return &mcpAnalyticsHarness{r: a.router, db: db, conn: conn.ID, adminKey: admin.APIKey, ownerKey: owner.APIKey, otherKey: other.APIKey,
 		server: srv.ID, app: app.ID, q: "?start_date=2026-10-20&end_date=2026-10-20"}
 }
 
@@ -146,4 +149,20 @@ func TestMCPAnalytics_PortalAppUsage(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, getJSON(t, h.r, path, h.otherKey, nil))
 	assert.Equal(t, http.StatusNotFound, getJSON(t, h.r, "/common/apps/99999/analytics/mcp"+h.q, h.ownerKey, nil))
 	assert.Equal(t, http.StatusUnauthorized, apitest.PerformRequest(h.r, "GET", path, nil).Code)
+}
+
+// A call in the last half second of end_date is in the range: Gateway
+// timestamps carry nanoseconds, and end_date covers its whole day.
+func TestMCPAnalytics_EndDateIncludesItsLastSecond(t *testing.T) {
+	h := setupMCPAnalyticsAPI(t)
+	srv := h.server
+	late := time.Date(2026, 10, 20, 23, 59, 59, 500_000_000, time.UTC)
+	next := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, h.db.Create(&[]models.MCPCallRecord{
+		{Timestamp: late, ConnectionID: h.conn, MCPServerID: &srv, PrimitiveName: "late", ResponseCode: 200},
+		{Timestamp: next, ConnectionID: h.conn, MCPServerID: &srv, PrimitiveName: "next-day", ResponseCode: 200},
+	}).Error)
+	var sum analytics.MCPSummary
+	require.Equal(t, http.StatusOK, getJSON(t, h.r, fmt.Sprintf("/api/v1/analytics/mcp/servers/%d/summary%s", srv, h.q), h.adminKey, &sum))
+	assert.Equal(t, int64(4), sum.Calls, "the 3 seeded calls and the late one, not the next day's")
 }

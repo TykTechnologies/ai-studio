@@ -72,7 +72,7 @@ func seedMCPStats(t *testing.T, db *gorm.DB) mcpStatsSeed {
 }
 
 func (s mcpStatsSeed) filter() MCPStatsFilter {
-	return MCPStatsFilter{Start: s.day, End: s.day.Add(24*time.Hour - time.Second)}
+	return MCPStatsFilter{Start: s.day, End: s.day.Add(24 * time.Hour)}
 }
 
 func (s mcpStatsSeed) serverFilter() MCPStatsFilter {

@@ -19,8 +19,9 @@ import (
 // a successful HTTP response.
 const mcpErrorExpr = "CASE WHEN response_code >= 400 OR jsonrpc_error_code <> 0 THEN 1 ELSE 0 END"
 
-// MCPStatsFilter selects the calls a statistic covers. Start and End bound
-// the timestamp (inclusive); nil ids do not filter.
+// MCPStatsFilter selects the calls a statistic covers: Start <= timestamp
+// < End. End is exclusive so a call in the last (sub-)second of a day is
+// counted: Gateway timestamps carry nanoseconds. Nil ids do not filter.
 type MCPStatsFilter struct {
 	Start    time.Time
 	End      time.Time
@@ -29,7 +30,7 @@ type MCPStatsFilter struct {
 }
 
 func (f MCPStatsFilter) apply(q *gorm.DB) *gorm.DB {
-	q = q.Where("mcp_call_records.timestamp BETWEEN ? AND ?", f.Start.UTC(), f.End.UTC())
+	q = q.Where("mcp_call_records.timestamp >= ? AND mcp_call_records.timestamp < ?", f.Start.UTC(), f.End.UTC())
 	if f.ServerID != nil {
 		q = q.Where("mcp_call_records.mcp_server_id = ?", *f.ServerID)
 	}
