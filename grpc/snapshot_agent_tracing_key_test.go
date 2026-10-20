@@ -66,10 +66,24 @@ func TestSnapshot_AgentTracingKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, on.Checksum, rotated.Checksum, "a rotation marks edges pending")
 
+	// The content settings travel with the key while tracing runs.
+	assert.Nil(t, rotated.AgentTracingContentPolicy, "none published yet")
+	agenttrace.SetEdgeContentGlobals(&agenttrace.ContentGlobals{DefaultMode: "metadata", MaxRequestOverride: "redacted",
+		StoreCap: "full", MaxPartBytes: 4096, MaxSpanBytes: 8192, Detectors: []string{"email", "iban"}})
+	t.Cleanup(func() { agenttrace.SetEdgeContentGlobals(nil) })
+	withPolicy, err := server.getConfigurationSnapshot("default")
+	require.NoError(t, err)
+	require.NotNil(t, withPolicy.AgentTracingContentPolicy)
+	assert.Equal(t, "metadata", withPolicy.AgentTracingContentPolicy.DefaultMode)
+	assert.Equal(t, uint32(4096), withPolicy.AgentTracingContentPolicy.MaxPartBytes)
+	assert.Equal(t, []string{"email", "iban"}, withPolicy.AgentTracingContentPolicy.RedactionDetectors)
+	assert.NotEqual(t, rotated.Checksum, withPolicy.Checksum, "a settings change marks edges pending")
+
 	// A Fingerprinter that exports no key (a test fake, or a future
 	// provider) sends nothing.
 	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 9, Key: key})
 	plain, err := server.getConfigurationSnapshot("default")
 	require.NoError(t, err)
 	assert.Nil(t, plain.AgentTracingKeys)
+	assert.Nil(t, plain.AgentTracingContentPolicy, "no content settings without a running tracing service")
 }

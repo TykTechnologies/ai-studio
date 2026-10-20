@@ -71,6 +71,80 @@ type ContentProcessor interface {
 	Process(ev *Event)
 }
 
+// ContentGlobals are the install-wide content settings (spec §11): the hub's
+// configuration, which edges receive in the config snapshot.
+type ContentGlobals struct {
+	DefaultMode        string
+	MaxRequestOverride string
+	StoreCap           string
+	MaxPartBytes       int
+	MaxSpanBytes       int
+	StoreBinary        bool
+	Detectors          []string
+}
+
+// ContentOverrides are the App and resource settings of one span ("" inherits
+// or means no cap).
+type ContentOverrides struct {
+	AppMode               string
+	AppMaxRequestOverride string
+	ResourceMax           string
+}
+
+// ContentOverridesFunc looks up a span's App and resource settings: from the
+// database on the hub, from the synced configuration on an edge.
+type ContentOverridesFunc func(appID uint, resource Resource) ContentOverrides
+
+// ContentProcessorFactory builds the content pipeline. The Enterprise
+// implementation registers one; core code (the edge's config sync, the
+// hub's service) calls NewContentProcessor and installs the result.
+type ContentProcessorFactory func(globals ContentGlobals, overrides ContentOverridesFunc) ContentProcessor
+
+var (
+	contentFactory atomic.Pointer[ContentProcessorFactory]
+	edgeGlobals    atomic.Pointer[ContentGlobals]
+)
+
+// SetEdgeContentGlobals publishes the content settings the hub sends edges
+// in the config snapshot (the Enterprise service sets them while tracing
+// runs). Nil withdraws them, and edges then capture no content.
+func SetEdgeContentGlobals(g *ContentGlobals) {
+	if g == nil {
+		edgeGlobals.Store(nil)
+		return
+	}
+	c := *g
+	c.Detectors = append([]string(nil), g.Detectors...)
+	edgeGlobals.Store(&c)
+}
+
+// EdgeContentGlobals returns the published settings; ok is false when none
+// are published.
+func EdgeContentGlobals() (ContentGlobals, bool) {
+	g := edgeGlobals.Load()
+	if g == nil {
+		return ContentGlobals{}, false
+	}
+	return *g, true
+}
+
+// RegisterContentProcessorFactory is called by the Enterprise pipeline's
+// init().
+func RegisterContentProcessorFactory(f ContentProcessorFactory) {
+	contentFactory.Store(&f)
+}
+
+// NewContentProcessor builds the registered pipeline, or returns nil when
+// none is registered (Community builds), in which case content stays
+// dropped.
+func NewContentProcessor(globals ContentGlobals, overrides ContentOverridesFunc) ContentProcessor {
+	f := contentFactory.Load()
+	if f == nil || *f == nil {
+		return nil
+	}
+	return (*f)(globals, overrides)
+}
+
 type processorHolder struct{ p ContentProcessor }
 
 var currentProcessor atomic.Pointer[processorHolder]

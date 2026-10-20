@@ -2569,6 +2569,17 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		} else {
 			snapshot.AgentTracingKeys = &pb.AgentTracingKeys{KeyId: uint32(id), HmacKeyEncrypted: enc}
 		}
+		if g, ok := agenttrace.EdgeContentGlobals(); ok {
+			snapshot.AgentTracingContentPolicy = &pb.AgentTracingContentPolicy{
+				DefaultMode:        g.DefaultMode,
+				MaxRequestOverride: g.MaxRequestOverride,
+				StoreCap:           g.StoreCap,
+				MaxPartBytes:       uint32(max(g.MaxPartBytes, 0)),
+				MaxSpanBytes:       uint32(max(g.MaxSpanBytes, 0)),
+				StoreBinary:        g.StoreBinary,
+				RedactionDetectors: g.Detectors,
+			}
+		}
 	}
 
 	logger.Log.Debug().

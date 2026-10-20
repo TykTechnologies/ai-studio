@@ -68,7 +68,7 @@ func (x ConfigurationChange_ChangeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigurationChange_ChangeType.Descriptor instead.
 func (ConfigurationChange_ChangeType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{17, 0}
+	return file_proto_common_proto_rawDescGZIP(), []int{18, 0}
 }
 
 type ConfigurationChange_EntityType int32
@@ -144,7 +144,7 @@ func (x ConfigurationChange_EntityType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigurationChange_EntityType.Descriptor instead.
 func (ConfigurationChange_EntityType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{17, 1}
+	return file_proto_common_proto_rawDescGZIP(), []int{18, 1}
 }
 
 type HealthStatus_Status int32
@@ -193,7 +193,7 @@ func (x HealthStatus_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HealthStatus_Status.Descriptor instead.
 func (HealthStatus_Status) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{18, 0}
+	return file_proto_common_proto_rawDescGZIP(), []int{19, 0}
 }
 
 // LLMConfig represents an LLM configuration with embedded relationships
@@ -2480,8 +2480,12 @@ type ConfigurationSnapshot struct {
 	// Agent Call Tracing (Enterprise): the fingerprint key edges use, present
 	// only while tracing runs on the hub.
 	AgentTracingKeys *AgentTracingKeys `protobuf:"bytes,17,opt,name=agent_tracing_keys,json=agentTracingKeys,proto3" json:"agent_tracing_keys,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Agent Call Tracing (Enterprise): the install-wide content settings edges
+	// apply before capture leaves them, present only while tracing runs on
+	// the hub. Without it an edge captures no content.
+	AgentTracingContentPolicy *AgentTracingContentPolicy `protobuf:"bytes,18,opt,name=agent_tracing_content_policy,json=agentTracingContentPolicy,proto3" json:"agent_tracing_content_policy,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ConfigurationSnapshot) Reset() {
@@ -2633,6 +2637,107 @@ func (x *ConfigurationSnapshot) GetAgentTracingKeys() *AgentTracingKeys {
 	return nil
 }
 
+func (x *ConfigurationSnapshot) GetAgentTracingContentPolicy() *AgentTracingContentPolicy {
+	if x != nil {
+		return x.AgentTracingContentPolicy
+	}
+	return nil
+}
+
+// AgentTracingContentPolicy is the hub's global content capture settings
+// (spec §5.5, §11). App and resource overrides travel on their own configs.
+type AgentTracingContentPolicy struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	DefaultMode        string                 `protobuf:"bytes,1,opt,name=default_mode,json=defaultMode,proto3" json:"default_mode,omitempty"`
+	MaxRequestOverride string                 `protobuf:"bytes,2,opt,name=max_request_override,json=maxRequestOverride,proto3" json:"max_request_override,omitempty"`
+	StoreCap           string                 `protobuf:"bytes,3,opt,name=store_cap,json=storeCap,proto3" json:"store_cap,omitempty"`
+	MaxPartBytes       uint32                 `protobuf:"varint,4,opt,name=max_part_bytes,json=maxPartBytes,proto3" json:"max_part_bytes,omitempty"`
+	MaxSpanBytes       uint32                 `protobuf:"varint,5,opt,name=max_span_bytes,json=maxSpanBytes,proto3" json:"max_span_bytes,omitempty"`
+	StoreBinary        bool                   `protobuf:"varint,6,opt,name=store_binary,json=storeBinary,proto3" json:"store_binary,omitempty"`
+	RedactionDetectors []string               `protobuf:"bytes,7,rep,name=redaction_detectors,json=redactionDetectors,proto3" json:"redaction_detectors,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *AgentTracingContentPolicy) Reset() {
+	*x = AgentTracingContentPolicy{}
+	mi := &file_proto_common_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentTracingContentPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentTracingContentPolicy) ProtoMessage() {}
+
+func (x *AgentTracingContentPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentTracingContentPolicy.ProtoReflect.Descriptor instead.
+func (*AgentTracingContentPolicy) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AgentTracingContentPolicy) GetDefaultMode() string {
+	if x != nil {
+		return x.DefaultMode
+	}
+	return ""
+}
+
+func (x *AgentTracingContentPolicy) GetMaxRequestOverride() string {
+	if x != nil {
+		return x.MaxRequestOverride
+	}
+	return ""
+}
+
+func (x *AgentTracingContentPolicy) GetStoreCap() string {
+	if x != nil {
+		return x.StoreCap
+	}
+	return ""
+}
+
+func (x *AgentTracingContentPolicy) GetMaxPartBytes() uint32 {
+	if x != nil {
+		return x.MaxPartBytes
+	}
+	return 0
+}
+
+func (x *AgentTracingContentPolicy) GetMaxSpanBytes() uint32 {
+	if x != nil {
+		return x.MaxSpanBytes
+	}
+	return 0
+}
+
+func (x *AgentTracingContentPolicy) GetStoreBinary() bool {
+	if x != nil {
+		return x.StoreBinary
+	}
+	return false
+}
+
+func (x *AgentTracingContentPolicy) GetRedactionDetectors() []string {
+	if x != nil {
+		return x.RedactionDetectors
+	}
+	return nil
+}
+
 // AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing
 // fingerprints with (decision D4). It is derived from the hub's root key
 // with HKDF, never the root itself, and travels encrypted with the
@@ -2647,7 +2752,7 @@ type AgentTracingKeys struct {
 
 func (x *AgentTracingKeys) Reset() {
 	*x = AgentTracingKeys{}
-	mi := &file_proto_common_proto_msgTypes[16]
+	mi := &file_proto_common_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2659,7 +2764,7 @@ func (x *AgentTracingKeys) String() string {
 func (*AgentTracingKeys) ProtoMessage() {}
 
 func (x *AgentTracingKeys) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[16]
+	mi := &file_proto_common_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2672,7 +2777,7 @@ func (x *AgentTracingKeys) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentTracingKeys.ProtoReflect.Descriptor instead.
 func (*AgentTracingKeys) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{16}
+	return file_proto_common_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AgentTracingKeys) GetKeyId() uint32 {
@@ -2704,7 +2809,7 @@ type ConfigurationChange struct {
 
 func (x *ConfigurationChange) Reset() {
 	*x = ConfigurationChange{}
-	mi := &file_proto_common_proto_msgTypes[17]
+	mi := &file_proto_common_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2716,7 +2821,7 @@ func (x *ConfigurationChange) String() string {
 func (*ConfigurationChange) ProtoMessage() {}
 
 func (x *ConfigurationChange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[17]
+	mi := &file_proto_common_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2729,7 +2834,7 @@ func (x *ConfigurationChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationChange.ProtoReflect.Descriptor instead.
 func (*ConfigurationChange) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{17}
+	return file_proto_common_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ConfigurationChange) GetChangeType() ConfigurationChange_ChangeType {
@@ -2787,7 +2892,7 @@ type HealthStatus struct {
 
 func (x *HealthStatus) Reset() {
 	*x = HealthStatus{}
-	mi := &file_proto_common_proto_msgTypes[18]
+	mi := &file_proto_common_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2799,7 +2904,7 @@ func (x *HealthStatus) String() string {
 func (*HealthStatus) ProtoMessage() {}
 
 func (x *HealthStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[18]
+	mi := &file_proto_common_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2812,7 +2917,7 @@ func (x *HealthStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthStatus.ProtoReflect.Descriptor instead.
 func (*HealthStatus) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{18}
+	return file_proto_common_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *HealthStatus) GetStatus() HealthStatus_Status {
@@ -2857,7 +2962,7 @@ type PluginResourceAssociation struct {
 
 func (x *PluginResourceAssociation) Reset() {
 	*x = PluginResourceAssociation{}
-	mi := &file_proto_common_proto_msgTypes[19]
+	mi := &file_proto_common_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2869,7 +2974,7 @@ func (x *PluginResourceAssociation) String() string {
 func (*PluginResourceAssociation) ProtoMessage() {}
 
 func (x *PluginResourceAssociation) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[19]
+	mi := &file_proto_common_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2882,7 +2987,7 @@ func (x *PluginResourceAssociation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginResourceAssociation.ProtoReflect.Descriptor instead.
 func (*PluginResourceAssociation) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{19}
+	return file_proto_common_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *PluginResourceAssociation) GetPluginId() uint32 {
@@ -2927,7 +3032,7 @@ type ResourceInstanceSnapshot struct {
 
 func (x *ResourceInstanceSnapshot) Reset() {
 	*x = ResourceInstanceSnapshot{}
-	mi := &file_proto_common_proto_msgTypes[20]
+	mi := &file_proto_common_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2939,7 +3044,7 @@ func (x *ResourceInstanceSnapshot) String() string {
 func (*ResourceInstanceSnapshot) ProtoMessage() {}
 
 func (x *ResourceInstanceSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[20]
+	mi := &file_proto_common_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2952,7 +3057,7 @@ func (x *ResourceInstanceSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceInstanceSnapshot.ProtoReflect.Descriptor instead.
 func (*ResourceInstanceSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{20}
+	return file_proto_common_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ResourceInstanceSnapshot) GetId() string {
@@ -3265,7 +3370,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"token_hash\x18\t \x01(\tR\ttokenHash\x12\x15\n" +
 	"\x06app_id\x18\n" +
-	" \x01(\rR\x05appId\"\xc8\a\n" +
+	" \x01(\rR\x05appId\"\xb2\b\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
@@ -3284,7 +3389,16 @@ const file_proto_common_proto_rawDesc = "" +
 	"\raccess_tokens\x18\x0e \x03(\v2\x1f.microgateway.AccessTokenConfigR\faccessTokens\x12M\n" +
 	"\x10semantic_routers\x18\x0f \x03(\v2\".microgateway.SemanticRouterConfigR\x0fsemanticRouters\x12'\n" +
 	"\x0fomitted_entries\x18\x10 \x03(\tR\x0eomittedEntries\x12L\n" +
-	"\x12agent_tracing_keys\x18\x11 \x01(\v2\x1e.microgateway.AgentTracingKeysR\x10agentTracingKeys\"W\n" +
+	"\x12agent_tracing_keys\x18\x11 \x01(\v2\x1e.microgateway.AgentTracingKeysR\x10agentTracingKeys\x12h\n" +
+	"\x1cagent_tracing_content_policy\x18\x12 \x01(\v2'.microgateway.AgentTracingContentPolicyR\x19agentTracingContentPolicy\"\xad\x02\n" +
+	"\x19AgentTracingContentPolicy\x12!\n" +
+	"\fdefault_mode\x18\x01 \x01(\tR\vdefaultMode\x120\n" +
+	"\x14max_request_override\x18\x02 \x01(\tR\x12maxRequestOverride\x12\x1b\n" +
+	"\tstore_cap\x18\x03 \x01(\tR\bstoreCap\x12$\n" +
+	"\x0emax_part_bytes\x18\x04 \x01(\rR\fmaxPartBytes\x12$\n" +
+	"\x0emax_span_bytes\x18\x05 \x01(\rR\fmaxSpanBytes\x12!\n" +
+	"\fstore_binary\x18\x06 \x01(\bR\vstoreBinary\x12/\n" +
+	"\x13redaction_detectors\x18\a \x03(\tR\x12redactionDetectors\"W\n" +
 	"\x10AgentTracingKeys\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\rR\x05keyId\x12,\n" +
 	"\x12hmac_key_encrypted\x18\x02 \x01(\tR\x10hmacKeyEncrypted\"\xb5\x04\n" +
@@ -3360,7 +3474,7 @@ func file_proto_common_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_proto_common_proto_goTypes = []any{
 	(ConfigurationChange_ChangeType)(0), // 0: microgateway.ConfigurationChange.ChangeType
 	(ConfigurationChange_EntityType)(0), // 1: microgateway.ConfigurationChange.EntityType
@@ -3381,70 +3495,72 @@ var file_proto_common_proto_goTypes = []any{
 	(*OAuthClientConfig)(nil),           // 16: microgateway.OAuthClientConfig
 	(*AccessTokenConfig)(nil),           // 17: microgateway.AccessTokenConfig
 	(*ConfigurationSnapshot)(nil),       // 18: microgateway.ConfigurationSnapshot
-	(*AgentTracingKeys)(nil),            // 19: microgateway.AgentTracingKeys
-	(*ConfigurationChange)(nil),         // 20: microgateway.ConfigurationChange
-	(*HealthStatus)(nil),                // 21: microgateway.HealthStatus
-	(*PluginResourceAssociation)(nil),   // 22: microgateway.PluginResourceAssociation
-	(*ResourceInstanceSnapshot)(nil),    // 23: microgateway.ResourceInstanceSnapshot
-	nil,                                 // 24: microgateway.HealthStatus.MetricsEntry
-	(*timestamppb.Timestamp)(nil),       // 25: google.protobuf.Timestamp
+	(*AgentTracingContentPolicy)(nil),   // 19: microgateway.AgentTracingContentPolicy
+	(*AgentTracingKeys)(nil),            // 20: microgateway.AgentTracingKeys
+	(*ConfigurationChange)(nil),         // 21: microgateway.ConfigurationChange
+	(*HealthStatus)(nil),                // 22: microgateway.HealthStatus
+	(*PluginResourceAssociation)(nil),   // 23: microgateway.PluginResourceAssociation
+	(*ResourceInstanceSnapshot)(nil),    // 24: microgateway.ResourceInstanceSnapshot
+	nil,                                 // 25: microgateway.HealthStatus.MetricsEntry
+	(*timestamppb.Timestamp)(nil),       // 26: google.protobuf.Timestamp
 }
 var file_proto_common_proto_depIdxs = []int32{
-	25, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 2: microgateway.LLMConfig.resource_signing_prev_expires_at:type_name -> google.protobuf.Timestamp
-	25, // 3: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 4: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
-	22, // 5: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
-	25, // 6: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 7: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 8: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 9: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 10: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 11: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 12: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 13: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 2: microgateway.LLMConfig.resource_signing_prev_expires_at:type_name -> google.protobuf.Timestamp
+	26, // 3: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 4: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
+	23, // 5: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
+	26, // 6: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 7: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 8: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 9: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 10: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 11: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 12: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 13: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
 	11, // 14: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
-	25, // 15: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 16: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 17: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 18: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 15: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 16: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 17: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 18: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
 	12, // 19: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
 	13, // 20: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
-	25, // 21: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 22: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 23: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 24: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 25: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 26: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
-	25, // 27: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
-	25, // 28: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	25, // 29: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 21: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 22: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 23: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 24: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 25: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 26: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 27: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
+	26, // 28: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	26, // 29: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
 	3,  // 30: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
 	4,  // 31: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
 	6,  // 32: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
 	7,  // 33: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
 	8,  // 34: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
-	25, // 35: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	26, // 35: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
 	9,  // 36: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
 	14, // 37: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
 	15, // 38: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
 	16, // 39: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
 	17, // 40: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
 	10, // 41: microgateway.ConfigurationSnapshot.semantic_routers:type_name -> microgateway.SemanticRouterConfig
-	19, // 42: microgateway.ConfigurationSnapshot.agent_tracing_keys:type_name -> microgateway.AgentTracingKeys
-	0,  // 43: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
-	1,  // 44: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
-	25, // 45: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 46: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
-	25, // 47: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
-	24, // 48: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
-	23, // 49: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
-	50, // [50:50] is the sub-list for method output_type
-	50, // [50:50] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	20, // 42: microgateway.ConfigurationSnapshot.agent_tracing_keys:type_name -> microgateway.AgentTracingKeys
+	19, // 43: microgateway.ConfigurationSnapshot.agent_tracing_content_policy:type_name -> microgateway.AgentTracingContentPolicy
+	0,  // 44: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
+	1,  // 45: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
+	26, // 46: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
+	2,  // 47: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
+	26, // 48: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
+	25, // 49: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
+	24, // 50: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
+	51, // [51:51] is the sub-list for method output_type
+	51, // [51:51] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_proto_init() }
@@ -3458,7 +3574,7 @@ func file_proto_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_proto_rawDesc), len(file_proto_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   22,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

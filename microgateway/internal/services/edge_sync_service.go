@@ -211,6 +211,7 @@ func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot)
 		return nil, err
 	}
 	installAgentTracingKey(config.AgentTracingKeys)
+	installAgentTracingContent(config.AgentTracingContentPolicy, s.db)
 	for _, line := range skipped {
 		log.Error().Str("version", config.Version).Str("namespace", s.namespace).
 			Msg("Configuration entry not applied: " + line)

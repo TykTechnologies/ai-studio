@@ -360,6 +360,23 @@ message ConfigurationSnapshot {
   // Agent Call Tracing (Enterprise): the fingerprint key edges use, present
   // only while tracing runs on the hub.
   AgentTracingKeys agent_tracing_keys = 17;
+
+  // Agent Call Tracing (Enterprise): the install-wide content settings edges
+  // apply before capture leaves them, present only while tracing runs on
+  // the hub. Without it an edge captures no content.
+  AgentTracingContentPolicy agent_tracing_content_policy = 18;
+}
+
+// AgentTracingContentPolicy is the hub's global content capture settings
+// (spec §5.5, §11). App and resource overrides travel on their own configs.
+message AgentTracingContentPolicy {
+  string default_mode = 1;
+  string max_request_override = 2;
+  string store_cap = 3;
+  uint32 max_part_bytes = 4;
+  uint32 max_span_bytes = 5;
+  bool store_binary = 6;
+  repeated string redaction_detectors = 7;
 }
 
 // AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing
