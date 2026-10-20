@@ -18,7 +18,7 @@ import {
   rowIndexOf,
   stepLatency,
 } from "./transcriptModel";
-import { attributionOf, attrsOf, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
+import { attrNames, attributionOf, attrsOf, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
 import CapturedMarkdown from "./CapturedMarkdown";
@@ -153,6 +153,10 @@ const NextConnector = ({ tool, next }) => {
   );
 };
 
+// Where Studio ran the tool (span.attribution.via, jyx.51); client-side
+// calls have their own badge, unknown values none.
+const VIA_LABELS = { studio_mcp: "via Studio MCP", studio_rest: "via Studio REST tool" };
+
 const ToolCard = ({ item }) => {
   const { resources } = useSessionDetail();
   const { span, events, next } = item;
@@ -199,6 +203,7 @@ const ToolCard = ({ item }) => {
             <Chip size="small" variant="outlined" label={`datasource · ${catalogueName || resourceName(resources, span) || span.name}`} />
           )}
           {attr.via === "tyk_gateway" && <Chip size="small" variant="outlined" label="via Tyk Gateway" data-testid="via-gateway-badge" />}
+          {VIA_LABELS[attr.via] && <Chip size="small" variant="outlined" label={VIA_LABELS[attr.via]} data-testid="via-studio-badge" />}
           {attr.in_catalogue === false && (
             <Tooltip title="The model called a tool that is not in this App's catalogue">
               <Chip size="small" color="warning" variant="outlined" label="not in App catalogue" sx={{ color: "text.primary" }} data-testid="not-in-catalogue-badge" />
@@ -247,6 +252,9 @@ const AssistantStep = ({ row }) => {
   const [showReasoning, setShowReasoning] = useState(false);
   const u = s.usage || {};
   const toolsAvailable = attrsOf(s)["tyk.tools.available"];
+  // jyx.51: the tools the request offered, and calls to tools it did not.
+  const offered = attrNames(attrsOf(s)["tyk.tools.offered"]);
+  const notOffered = attrNames(attrsOf(s)["tyk.tool_calls.not_offered"]);
   return (
     <Box sx={{ mb: 1 }} data-testid="assistant-step">
       <SelectableBox span={s} sx={{ p: 1.5 }}>
@@ -302,11 +310,25 @@ const AssistantStep = ({ row }) => {
             </Typography>
           )}
           {toolsAvailable != null && (
-            <Typography variant="caption" color="text.secondary">
-              tools available: {toolsAvailable}
-            </Typography>
+            <Tooltip title={offered.length ? `Offered: ${offered.join(", ")}` : ""}>
+              <Typography variant="caption" color="text.secondary" data-testid="tools-available">
+                tools available: {toolsAvailable}
+              </Typography>
+            </Tooltip>
           )}
         </Stack>
+        {notOffered.length > 0 && (
+          <Tooltip title="The model called a tool this request did not offer it">
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              sx={{ mt: 0.5, color: "text.primary" }}
+              label={`called a tool not offered: ${notOffered.join(", ")}`}
+              data-testid="not-offered-chip"
+            />
+          </Tooltip>
+        )}
         {row.events.length > 0 && <Box sx={{ mt: 0.5 }}>{row.events.map((e) => <EventChip key={e.span_id} span={e} />)}</Box>}
       </SelectableBox>
       <Box sx={{ pl: 2 }}>

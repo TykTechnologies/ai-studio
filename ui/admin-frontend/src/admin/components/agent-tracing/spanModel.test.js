@@ -8,7 +8,18 @@ import {
   sessionBounds,
 } from "./spanModel";
 import { bucketize, BUCKETS } from "./TimelineStrip";
+import { attrNames } from "./spanModel";
 import { T0, ids, spans, detail } from "./testFixture";
+
+describe("attrNames", () => {
+  it("reads a JSON array string or an array of names, and nothing else", () => {
+    expect(attrNames('["a","b"]')).toEqual(["a", "b"]);
+    expect(attrNames(["a", 1, "", "b"])).toEqual(["a", "b"]);
+    expect(attrNames("not json")).toEqual([]);
+    expect(attrNames('{"a":1}')).toEqual([]);
+    expect(attrNames(undefined)).toEqual([]);
+  });
+});
 
 describe("indexSpans", () => {
   const index = indexSpans(spans);

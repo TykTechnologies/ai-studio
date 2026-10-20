@@ -23,6 +23,23 @@ export const durationMs = (s) => {
 export const attrsOf = (s) => (s && s.attributes && typeof s.attributes === "object" ? s.attributes : {});
 
 /**
+ * A list attribute's names: the gateway stores lists such as
+ * tyk.tools.offered as a JSON array string (jyx.51). Anything that is not a
+ * list of strings reads as empty.
+ */
+export const attrNames = (v) => {
+  let list = v;
+  if (typeof v === "string") {
+    try {
+      list = JSON.parse(v);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(list) ? list.filter((x) => typeof x === "string" && x) : [];
+};
+
+/**
  * A gateway event span's details (agent-trace JSON v1 span.gateway_event):
  * type, outcome and the optional fields of the event.
  */
