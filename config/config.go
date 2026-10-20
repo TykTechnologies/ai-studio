@@ -121,6 +121,9 @@ type AppConf struct {
 	// Tyk Dashboard MCP integration (Enterprise)
 	TykMCP TykMCPConfig
 
+	// Agent Call Tracing (Enterprise)
+	AgentTracing AgentTracingConfig
+
 	// Marketplace Configuration
 	MarketplaceEnabled      bool
 	MarketplaceIndexURL     string
@@ -826,6 +829,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	// Webhooks configuration
 	conf.Webhooks = getWebhooksConfig(getenv)
 	conf.TykMCP = getTykMCPConfig(getenv)
+	conf.AgentTracing = getAgentTracingConfig(getenv)
 
 	// Marketplace configuration
 	conf.MarketplaceEnabled = true // Enabled by default

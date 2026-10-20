@@ -27,6 +27,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
+	"github.com/TykTechnologies/midsommar/v2/services/agenttracing"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -74,6 +76,8 @@ type Service struct {
 	RBAC rbac.Service
 	// Webhooks (Enterprise; set by InitWebhooks once the event bus is wired)
 	Webhooks webhooks.Service
+	// AgentTracing is Agent Call Tracing (Enterprise; set by InitAgentTracing)
+	AgentTracing agenttracing.Service
 	// TykMCP is the Tyk Dashboard MCP integration (Enterprise; set by
 	// InitTykMCP once the event bus is wired)
 	TykMCP tykmcp.Service
@@ -144,6 +148,37 @@ func (s *Service) InitWebhooks(cfg config.WebhooksConfig, version string) {
 	if webhooks.IsEnterpriseAvailable() {
 		logger.Info("Webhooks service initialized")
 	}
+}
+
+// InitAgentTracing applies the Agent Call Tracing start gate (Enterprise
+// implementation linked in, licence valid, AGENT_TRACING_ENABLED) and starts
+// the service. Call after SetLicensingService. When the gate is closed the
+// result is inert and the gateway's capture flag stays off.
+func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingConfig, nodeID, version string) {
+	if s.AgentTracing != nil {
+		s.AgentTracing.Stop()
+	}
+	var licenseValid func() bool
+	if s.LicensingService != nil {
+		licenseValid = s.LicensingService.IsValid
+	}
+	s.AgentTracing = agenttracing.NewService(agenttracing.Deps{
+		DB:           s.DB,
+		Config:       cfg,
+		LicenseValid: licenseValid,
+		Audit:        s.Audit,
+		NodeID:       nodeID,
+		Version:      version,
+	})
+	if !s.AgentTracing.Running() {
+		return
+	}
+	if err := s.AgentTracing.Start(ctx); err != nil {
+		logger.Errorf("Agent Call Tracing failed to start; capture stays off: %v", err)
+		agenttrace.SetEnabled(false)
+		return
+	}
+	logger.Info("Agent Call Tracing service started")
 }
 
 // InitTykMCP builds the Tyk Dashboard MCP integration service (Enterprise
@@ -423,6 +458,10 @@ func (s *Service) Stop() error {
 
 	// Stop background workers that write to the database first: Cleanup
 	// closes it once Stop returns.
+	if s.AgentTracing != nil {
+		logger.Info("Stopping Agent Call Tracing service...")
+		s.AgentTracing.Stop()
+	}
 	if s.TykMCP != nil {
 		logger.Info("Stopping Tyk MCP integration service...")
 		s.TykMCP.Stop()

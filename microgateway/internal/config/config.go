@@ -46,6 +46,50 @@ type Config struct {
 
 	// Control Payload Configuration (for edge-to-control plugin data)
 	ControlPayload ControlPayloadConfig
+
+	// Agent Call Tracing capture on this gateway (Enterprise build only)
+	AgentTracing AgentTracingConfig
+}
+
+// AgentTracingConfig is the edge side of Agent Call Tracing: capture is
+// queued here and sent to the hub on the analytics pulse (decision D3: a
+// 10 s / 500-event flush, chunks of at most 4 MiB). It takes effect only in
+// the Enterprise microgateway build; the hub decides everything else.
+type AgentTracingConfig struct {
+	Enabled bool `env:"AGENT_TRACING_ENABLED" envDefault:"false"`
+	// Capture queue caps (spec §10): events and bytes held between flushes.
+	QueueMaxEvents int   `env:"AGENT_TRACING_QUEUE_MAX_EVENTS" envDefault:"10000"`
+	QueueMaxBytes  int64 `env:"AGENT_TRACING_QUEUE_MAX_BYTES" envDefault:"67108864"`
+	// MaxStreamBufferBytes caps tool-call argument buffering per streamed response.
+	MaxStreamBufferBytes int `env:"AGENT_TRACING_MAX_STREAM_BUFFER_BYTES" envDefault:"1048576"`
+	// Flush cadence: whichever of the interval or the event count comes first.
+	FlushInterval  time.Duration `env:"AGENT_TRACING_FLUSH_INTERVAL" envDefault:"10s"`
+	FlushMaxEvents int           `env:"AGENT_TRACING_FLUSH_MAX_EVENTS" envDefault:"500"`
+	// ChunkMaxBytes caps one pulse's capture events (gRPC messages are 16 MiB).
+	ChunkMaxBytes int `env:"AGENT_TRACING_CHUNK_MAX_BYTES" envDefault:"4194304"`
+}
+
+// agentTracingChunkLimit keeps a chunk well under the 16 MiB gRPC message cap.
+const agentTracingChunkLimit = 8 << 20
+
+// normalise replaces invalid values with the defaults and returns a warning
+// for each; agent tracing settings never fail start-up.
+func (a *AgentTracingConfig) normalise() []string {
+	var warnings []string
+	fix := func(bad bool, name string, got interface{}, set func()) {
+		if bad {
+			set()
+			warnings = append(warnings, fmt.Sprintf("%s=%v is invalid; using the default", name, got))
+		}
+	}
+	fix(a.QueueMaxEvents <= 0, "AGENT_TRACING_QUEUE_MAX_EVENTS", a.QueueMaxEvents, func() { a.QueueMaxEvents = 10000 })
+	fix(a.QueueMaxBytes <= 0, "AGENT_TRACING_QUEUE_MAX_BYTES", a.QueueMaxBytes, func() { a.QueueMaxBytes = 64 << 20 })
+	fix(a.MaxStreamBufferBytes <= 0, "AGENT_TRACING_MAX_STREAM_BUFFER_BYTES", a.MaxStreamBufferBytes, func() { a.MaxStreamBufferBytes = 1 << 20 })
+	fix(a.FlushInterval <= 0, "AGENT_TRACING_FLUSH_INTERVAL", a.FlushInterval, func() { a.FlushInterval = 10 * time.Second })
+	fix(a.FlushMaxEvents <= 0, "AGENT_TRACING_FLUSH_MAX_EVENTS", a.FlushMaxEvents, func() { a.FlushMaxEvents = 500 })
+	fix(a.ChunkMaxBytes <= 0 || a.ChunkMaxBytes > agentTracingChunkLimit, "AGENT_TRACING_CHUNK_MAX_BYTES", a.ChunkMaxBytes,
+		func() { a.ChunkMaxBytes = 4 << 20 })
+	return warnings
 }
 
 // ServerConfig holds HTTP server configuration
@@ -303,6 +347,10 @@ func Load(envFile string) (*Config, error) {
 
 	// Post-process OCI plugin configuration
 	cfg.postProcessOCIConfig()
+
+	for _, w := range cfg.AgentTracing.normalise() {
+		log.Warn().Msg(w)
+	}
 
 	// Cap the native API create body limit, so the effective value shows at
 	// startup (the proxy caps it too).

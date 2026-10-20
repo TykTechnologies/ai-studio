@@ -441,6 +441,10 @@ func New(opts Options) (_ *Studio, err error) {
 	s.leadership.Start()
 	s.connectReplicas()
 
+	// Agent Call Tracing (Enterprise): the start gate sets the gateway's
+	// capture flag before the proxy serves its first request.
+	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
+
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.
 
