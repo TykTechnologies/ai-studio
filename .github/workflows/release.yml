@@ -7,6 +7,8 @@ name: Release
 # - RHEL and AL (RPM)
 # - Docker Hub
 # - Cloudsmith
+# A pre-release tag (vX.Y.Z-suffix, e.g. v2.3.0-unstable.1) publishes Docker
+# images only, under that exact tag: no packages, and never latest or vX.Y.
 on:
   push:
     tags:
@@ -262,7 +264,13 @@ jobs:
             sed -i "/github.com\/TykTechnologies\/ai-studio-enterprise/d" microgateway/go.mod
           fi
           if [ "$IS_TAG" = "true" ]; then
-            goreleaser release --clean -f "$GORELEASER_CONFIG" --skip=validate
+            # A pre-release tag (vX.Y.Z-anything) ships Docker images only: its
+            # packages would land in the CE package repos, where apt/yum would
+            # upgrade 2.x users to it. They are still built (and saved below).
+            case "$TAG_NAME" in
+              *-*) goreleaser release --clean -f "$GORELEASER_CONFIG" --skip=validate,publish ;;
+              *) goreleaser release --clean -f "$GORELEASER_CONFIG" --skip=validate ;;
+            esac
           else
             goreleaser release --clean -f "$GORELEASER_CONFIG" --skip=validate,sign --snapshot
           fi' > /tmp/build.sh
@@ -271,6 +279,7 @@ jobs:
           docker run --rm --privileged -e GITHUB_TOKEN=${{ github.token }} \
           -e EDITION='${{ matrix.edition }}'                                     \
           -e IS_TAG="${{ startsWith(github.ref, 'refs/tags/') }}"                \
+          -e TAG_NAME='${{ github.ref_name }}'                                   \
           -e GORELEASER_CONFIG='${{ matrix.goreleaser }}'                         \
           -e GOPRIVATE=github.com/TykTechnologies/ai-studio-enterprise           \
           -e GOFLAGS='${{ matrix.goflags }}'                              \
