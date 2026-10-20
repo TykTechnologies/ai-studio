@@ -1176,6 +1176,12 @@ bench-unit: ## Unit tests for the benchmark tooling and Server-Timing
 	go test ./benchmarks/... ./pkg/testinfra/mockllm/ ./metrics/
 	go test ./proxy/ -run 'ServerTiming|InnerTiming'
 
+bench-agent-tracing: ## Agent tracing overhead gate (spec §10 budgets) and per-request capture cost; ENT adds full-content mode
+	go test -tags 'agenttracebench $(if $(filter enterprise,$(BENCH_EDITION)),enterprise,)' -count=1 -run TestAgentTraceOverheadGate -v ./proxy/
+	go test -tags agenttracebench -run xxx -bench 'BenchmarkAgentTrace' -benchtime 3000x ./proxy/
+
+.PHONY: bench-agent-tracing
+
 # Clean target
 clean:
 	rm -f midsommar*

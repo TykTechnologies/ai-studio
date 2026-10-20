@@ -48,6 +48,16 @@ func (r *Recorder) CaptureRaw(part, mediaType string, data []byte) {
 	if r == nil || len(data) == 0 {
 		return
 	}
+	// Content the span's mode drops is never copied: in off mode (the
+	// default) the pipeline discards raw parts whole.
+	if m, ok := CurrentContentProcessor().(contentModer); ok {
+		r.mu.Lock()
+		probe := Event{Identity: r.span.Identity, Resource: r.span.Resource, Declared: r.span.Declared}
+		r.mu.Unlock()
+		if m.Mode(&probe) == ContentOff {
+			return
+		}
+	}
 	keep := data
 	if limit := maxRawPartBytes.Load(); int64(len(keep)) > limit {
 		keep = keep[:limit]
@@ -69,6 +79,13 @@ func (r *Recorder) CaptureRaw(part, mediaType string, data []byte) {
 // ev.Parts and redacts ev.ErrorMessage; ProcessContent clears ev.Raw.
 type ContentProcessor interface {
 	Process(ev *Event)
+}
+
+// contentModer is a ContentProcessor that resolves a span's effective
+// content mode on its own (the Enterprise pipeline does), so CaptureRaw can
+// skip copying content the mode would drop.
+type contentModer interface {
+	Mode(ev *Event) string
 }
 
 // ContentGlobals are the install-wide content settings (spec §11): the hub's
