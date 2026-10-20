@@ -21,7 +21,7 @@ import {
 import { attributionOf, attrsOf, ms, partPlaceholder, resourceName, spanTimes } from "./spanModel";
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
-import MarkdownMessage from "../../../portal/components/chat/MarkdownMessage";
+import CapturedMarkdown from "./CapturedMarkdown";
 
 // The Transcript ("Trajectory") view, the default (spec §6.2 View 1): the
 // session read like a conversation, turn by turn. Rows are virtualised with
@@ -268,7 +268,7 @@ const AssistantStep = ({ row }) => {
             </Collapse>
           </Box>
         )}
-        {text != null ? <MarkdownMessage content={text} /> : <Placeholder span={s} part="response" />}
+        {text != null ? <CapturedMarkdown content={text} /> : <Placeholder span={s} part="response" />}
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }} data-testid="step-meta">
           <Typography variant="caption" color="text.secondary">
             {s.response_model || s.request_model || "model ?"}
