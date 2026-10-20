@@ -11,13 +11,22 @@ import (
 
 // agentTracingKeyCrypto decrypts the Agent Call Tracing fingerprint key in
 // config snapshots: the microgateway encryption key, as for LLM API keys.
-// The service container sets it.
+// Both service containers set it.
 var agentTracingKeyCrypto atomic.Value // cryptoHolder
+
+// pendingAgentTracingKey is the fingerprint key of the latest applied
+// snapshot. An edge applies its first snapshot before the service container
+// exists, and an identical snapshot is not applied again, so a key that
+// arrived before the crypto is installed when the crypto is set (jyx.163).
+var pendingAgentTracingKey atomic.Pointer[pb.AgentTracingKeys]
 
 type cryptoHolder struct{ c CryptoServiceInterface }
 
 func setAgentTracingKeyCrypto(c CryptoServiceInterface) {
 	agentTracingKeyCrypto.Store(cryptoHolder{c: c})
+	if k := pendingAgentTracingKey.Load(); k != nil {
+		installAgentTracingKey(k)
+	}
 }
 
 // installAgentTracingKey applies the fingerprint key of an applied snapshot
@@ -26,13 +35,16 @@ func setAgentTracingKeyCrypto(c CryptoServiceInterface) {
 // removes it, and so does a key that cannot be decrypted: the edge then
 // computes no fingerprints rather than wrong ones.
 func installAgentTracingKey(k *pb.AgentTracingKeys) {
+	pendingAgentTracingKey.Store(k)
 	if k == nil || k.KeyId == 0 || k.KeyId > 255 || k.HmacKeyEncrypted == "" {
 		agenttrace.InstallEdgeKey(0, nil)
 		return
 	}
 	h, _ := agentTracingKeyCrypto.Load().(cryptoHolder)
 	if h.c == nil {
-		log.Error().Msg("Agent Call Tracing: no decryption key for the fingerprint key in the configuration snapshot; edge fingerprints are off")
+		// Applied before the service container exists: installed when it
+		// sets the crypto.
+		log.Debug().Msg("Agent Call Tracing: fingerprint key received before the decryption key; installing it once the service container starts")
 		agenttrace.InstallEdgeKey(0, nil)
 		return
 	}

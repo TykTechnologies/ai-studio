@@ -72,6 +72,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 	// Initialize crypto service
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
+	setAgentTracingKeyCrypto(crypto)
 
 	// Always use database-backed auth since edge instances now sync to SQLite
 	authProvider := auth.NewTokenAuthProvider(db)
