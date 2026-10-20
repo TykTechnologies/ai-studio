@@ -296,6 +296,10 @@ func (p *MyPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.ResponseWriteRe
 }
 ```
 
+`OnBeforeWriteHeaders` returns the **full** header set: a header left out is removed. On the Microgateway it runs on streaming responses too (before the first event, limited to 2 seconds; past that the stream goes out with the upstream headers), where `Content-Type`, `Content-Length` and `Transfer-Encoding` cannot be changed. `OnBeforeWrite` runs only on buffered responses. The context's `LLMSlug` is the LLM's route slug, as in `HandlePostAuth`.
+
+On the `/ai/`, unified `/v1` and router endpoints the plugin runs on an internal hop, and only `X-Cache`, `X-Cache-*`, `X-Tyk-Compression` and `X-Tyk-Compression-*` response headers reach the client (at most 16 values, 4 KiB).
+
 ### 5. DataCollector
 
 Collect telemetry data (analytics, budgets, proxy logs).
