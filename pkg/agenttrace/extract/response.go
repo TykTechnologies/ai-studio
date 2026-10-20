@@ -82,6 +82,7 @@ func ParseResponse(format string, body []byte, fp agenttrace.Fingerprinter) (Res
 	default:
 		return r, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
+	r.bound()
 	return r, err
 }
 

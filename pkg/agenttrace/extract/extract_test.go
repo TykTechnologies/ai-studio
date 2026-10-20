@@ -97,7 +97,9 @@ func TestParseRequest_ResponsesToolLoopHistory(t *testing.T) {
 		return out
 	}
 	user := `{"role":"user","content":"go"}`
-	fc := func(id string) string { return `{"type":"function_call","call_id":"` + id + `","name":"f","arguments":"{}"}` }
+	fc := func(id string) string {
+		return `{"type":"function_call","call_id":"` + id + `","name":"f","arguments":"{}"}`
+	}
 	out := func(id string) string { return `{"type":"function_call_output","call_id":"` + id + `","output":"r"}` }
 
 	sequential := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,` + fc("c2") + `,` + out("c2") + `]}`
@@ -111,6 +113,42 @@ func TestParseRequest_ResponsesToolLoopHistory(t *testing.T) {
 
 	newTurn := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,{"role":"assistant","content":"done"},` + user + `]}`
 	assert.Empty(t, ids(newTurn))
+}
+
+// jyx.62: untrusted bodies cannot inflate the extracts.
+func TestParse_Bounds(t *testing.T) {
+	long := strings.Repeat("x", 3<<20)
+	var outs []string
+	for i := 0; i < 2*MaxToolCalls; i++ {
+		outs = append(outs, fmt.Sprintf(`{"type":"function_call_output","call_id":"c%d","output":"r"}`, i))
+	}
+	body := `{"previous_response_id":"` + long + `","input":[{"type":"function_call","call_id":"` + long + `","name":"` + long + `","arguments":"{}"},` +
+		`{"type":"function_call_output","call_id":"` + long + `","output":"x"},` + strings.Join(outs, ",") + `,{"role":"wizard","content":"hi"}]}`
+	r, err := ParseRequest(FormatOpenAIResponses, []byte(body), nil)
+	require.NoError(t, err)
+	assert.Empty(t, r.PreviousResponseID, "an oversized id is dropped, not cut")
+	assert.Len(t, r.ToolResults, MaxToolCalls)
+	assert.Equal(t, fmt.Sprintf("c%d", 2*MaxToolCalls-1), r.ToolResults[MaxToolCalls-1].ID, "the latest results are kept")
+	assert.Equal(t, "other", r.LastRole)
+
+	var calls []string
+	for i := 0; i < 2*MaxToolCalls; i++ {
+		calls = append(calls, fmt.Sprintf(`{"id":"c%d","function":{"name":"f","arguments":"{}"}}`, i))
+	}
+	calls = append(calls, `{"id":"`+long+`","function":{"name":"`+long+`","arguments":"{}"}}`)
+	resp := `{"id":"` + long + `","choices":[{"finish_reason":"` + long + `","message":{"tool_calls":[` + strings.Join(calls, ",") + `]}}]}`
+	rr, err := ParseResponse(FormatOpenAI, []byte(resp), nil)
+	require.NoError(t, err)
+	assert.Empty(t, rr.ID)
+	assert.Len(t, rr.ToolCalls, MaxToolCalls)
+	require.Len(t, rr.FinishReasons, 1)
+	assert.LessOrEqual(t, len(rr.FinishReasons[0]), 64)
+
+	small := `{"choices":[{"message":{"tool_calls":[{"id":"` + long[:300] + `","function":{"name":"` + long[:300] + `","arguments":"{}"}}]}}]}`
+	rr, err = ParseResponse(FormatOpenAI, []byte(small), nil)
+	require.NoError(t, err)
+	assert.Empty(t, rr.ToolCalls[0].ID)
+	assert.Len(t, rr.ToolCalls[0].Name, MaxNameBytes)
 }
 
 func assertResultError(t *testing.T, r Request, id string) {

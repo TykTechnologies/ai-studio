@@ -54,6 +54,12 @@ func (r Request) Apply(x *agenttrace.Extracts) {
 // ParseRequest extracts correlation material from an LLM request body. fp
 // may be nil: ids and names are still extracted, fingerprints are not.
 func ParseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Request, error) {
+	r, err := parseRequest(format, body, fp)
+	r.bound()
+	return r, err
+}
+
+func parseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Request, error) {
 	format = strings.ToLower(format)
 	if format == FormatOpenAIResponses {
 		return parseResponsesRequest(body, fp)
