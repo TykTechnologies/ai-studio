@@ -263,7 +263,7 @@ func TestAgentTraceRetention_ChunkedDelete(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, 1, n)
 
-		_, err = DeleteAgentTraceRowsBefore(db, AgentTraceRetentionSpanLinks, now, &app2, 10)
+		_, err = DeleteAgentTraceRowsBefore(db, AgentTraceRetentionAgents, now, &app2, 10)
 		assert.ErrorIs(t, err, ErrAgentTraceNoAppScope)
 	})
 }

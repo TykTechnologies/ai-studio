@@ -98,10 +98,10 @@ TABLE agent_trace_payloads
   constraint agent_trace_payloads_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX agent_trace_payloads_pkey ON agent_trace_payloads USING btree (id)
   index CREATE INDEX idx_agent_trace_payloads_expires ON agent_trace_payloads USING btree (expires_at)
-  index CREATE INDEX idx_agent_trace_payloads_span ON agent_trace_payloads USING btree (span_id)
+  index CREATE INDEX idx_agent_trace_payloads_span ON agent_trace_payloads USING btree (app_id, span_id)
   column id character varying(varchar) nullable=NO len=36
-  column span_id bytea(bytea) nullable=NO
   column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column span_id bytea(bytea) nullable=NO
   column part character varying(varchar) nullable=NO len=32
   column content_state character varying(varchar) nullable=NO len=16
   column media_type character varying(varchar) nullable=NO len=128
@@ -175,10 +175,11 @@ TABLE agent_trace_sessions
 TABLE agent_trace_span_links
   constraint agent_trace_span_links_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX agent_trace_span_links_pkey ON agent_trace_span_links USING btree (id)
-  index CREATE INDEX idx_agent_trace_span_links_linked ON agent_trace_span_links USING btree (linked_span_id)
-  index CREATE INDEX idx_agent_trace_span_links_span ON agent_trace_span_links USING btree (span_id)
+  index CREATE INDEX idx_agent_trace_span_links_linked ON agent_trace_span_links USING btree (app_id, linked_span_id)
+  index CREATE INDEX idx_agent_trace_span_links_span ON agent_trace_span_links USING btree (app_id, span_id)
   index CREATE INDEX idx_agent_trace_span_links_span_start ON agent_trace_span_links USING btree (span_start)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('agent_trace_span_links_id_seq'::regclass)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
   column span_id bytea(bytea) nullable=NO
   column span_start timestamp with time zone(timestamptz) nullable=NO
   column linked_trace_id bytea(bytea) nullable=NO
@@ -188,16 +189,16 @@ TABLE agent_trace_span_links
   column rule character varying(varchar) nullable=NO len=64
   column detail text(text) nullable=YES
 TABLE agent_trace_spans
-  constraint agent_trace_spans_pkey PRIMARY KEY (span_id)
-  index CREATE UNIQUE INDEX agent_trace_spans_pkey ON agent_trace_spans USING btree (span_id)
+  constraint agent_trace_spans_pkey PRIMARY KEY (app_id, span_id)
+  index CREATE UNIQUE INDEX agent_trace_spans_pkey ON agent_trace_spans USING btree (app_id, span_id)
   index CREATE INDEX idx_agent_trace_spans_app_kind_start ON agent_trace_spans USING btree (app_id, kind, start_time)
   index CREATE INDEX idx_agent_trace_spans_app_tool_start ON agent_trace_spans USING btree (app_id, tool_name, start_time)
   index CREATE INDEX idx_agent_trace_spans_session_start ON agent_trace_spans USING btree (session_id, start_time)
-  index CREATE INDEX idx_agent_trace_spans_trace_start ON agent_trace_spans USING btree (trace_id, start_time)
+  index CREATE INDEX idx_agent_trace_spans_trace_start ON agent_trace_spans USING btree (app_id, trace_id, start_time)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
   column span_id bytea(bytea) nullable=NO
   column trace_id bytea(bytea) nullable=NO
   column session_id character varying(varchar) nullable=NO len=36
-  column app_id bigint(int8) nullable=NO precision=64 scale=0
   column parent_span_id bytea(bytea) nullable=YES
   column parent_confidence character varying(varchar) nullable=YES len=16
   column parent_rule character varying(varchar) nullable=YES len=64
@@ -234,13 +235,13 @@ TABLE agent_trace_spans
   column content_state character varying(varchar) nullable=NO len=16
   column attributes text(text) nullable=YES
 TABLE agent_trace_traces
-  constraint agent_trace_traces_pkey PRIMARY KEY (trace_id)
-  index CREATE UNIQUE INDEX agent_trace_traces_pkey ON agent_trace_traces USING btree (trace_id)
+  constraint agent_trace_traces_pkey PRIMARY KEY (app_id, trace_id)
+  index CREATE UNIQUE INDEX agent_trace_traces_pkey ON agent_trace_traces USING btree (app_id, trace_id)
   index CREATE INDEX idx_agent_trace_traces_app_started ON agent_trace_traces USING btree (app_id, started_at)
   index CREATE INDEX idx_agent_trace_traces_session_turn ON agent_trace_traces USING btree (session_id, turn_index)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
   column trace_id bytea(bytea) nullable=NO
   column session_id character varying(varchar) nullable=NO len=36
-  column app_id bigint(int8) nullable=NO precision=64 scale=0
   column turn_index bigint(int8) nullable=NO precision=64 scale=0 default=0
   column source character varying(varchar) nullable=NO len=32
   column root_span_id bytea(bytea) nullable=YES

@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -114,7 +115,7 @@ func UpsertAgentTraceTraceRollup(db *gorm.DB, tr *AgentTraceTrace) error {
 	tr.StartedAt = tr.StartedAt.UTC()
 	const t = "agent_trace_traces"
 	return db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "trace_id"}},
+		Columns: []clause.Column{{Name: "app_id"}, {Name: "trace_id"}},
 		DoUpdates: addColumns(t, "span_count", "llm_call_count", "tool_call_count",
 			"error_count", "input_tokens", "output_tokens", "cost_micros"),
 	}).Create(tr).Error
@@ -144,7 +145,9 @@ func laterOf(table, col string) clause.Assignment {
 // AgentTraceRetentionTarget names a table the retention job deletes from,
 // the time column that decides expiry, and its primary key.
 type AgentTraceRetentionTarget struct {
-	Table  string
+	Table string
+	// PK is the primary key column, or a comma-separated list for a
+	// composite key.
 	PK     string
 	Column string
 	// AppColumn is the App scope column; empty when the table has none, in
@@ -157,9 +160,9 @@ type AgentTraceRetentionTarget struct {
 // and correlation keys at expires_at.
 var (
 	AgentTraceRetentionSessions        = AgentTraceRetentionTarget{"agent_trace_sessions", "id", "retention_until", "app_id"}
-	AgentTraceRetentionTraces          = AgentTraceRetentionTarget{"agent_trace_traces", "trace_id", "started_at", "app_id"}
-	AgentTraceRetentionSpans           = AgentTraceRetentionTarget{"agent_trace_spans", "span_id", "start_time", "app_id"}
-	AgentTraceRetentionSpanLinks       = AgentTraceRetentionTarget{"agent_trace_span_links", "id", "span_start", ""}
+	AgentTraceRetentionTraces          = AgentTraceRetentionTarget{"agent_trace_traces", "app_id, trace_id", "started_at", "app_id"}
+	AgentTraceRetentionSpans           = AgentTraceRetentionTarget{"agent_trace_spans", "app_id, span_id", "start_time", "app_id"}
+	AgentTraceRetentionSpanLinks       = AgentTraceRetentionTarget{"agent_trace_span_links", "id", "span_start", "app_id"}
 	AgentTraceRetentionAgents          = AgentTraceRetentionTarget{"agent_trace_agents", "id", "last_seen", ""}
 	AgentTraceRetentionPayloads        = AgentTraceRetentionTarget{"agent_trace_payloads", "id", "expires_at", "app_id"}
 	AgentTraceRetentionCorrelationKeys = AgentTraceRetentionTarget{"agent_trace_correlation_keys", "id", "expires_at", "app_id"}
@@ -206,6 +209,12 @@ func DeleteAgentTraceRowsBefore(db *gorm.DB, target AgentTraceRetentionTarget, c
 		return res.RowsAffected, res.Error
 	}
 
-	res := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE %s IN (?)", target.Table, target.PK), sub)
+	// Composite keys (traces, spans) use a row-value IN, which SQLite (3.15+)
+	// and Postgres both support.
+	pk := target.PK
+	if strings.Contains(pk, ",") {
+		pk = "(" + pk + ")"
+	}
+	res := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE %s IN (?)", target.Table, pk), sub)
 	return res.RowsAffected, res.Error
 }

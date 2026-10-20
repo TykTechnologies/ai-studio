@@ -46,7 +46,12 @@ const (
 	// 13: agent tracing settings: apps.tracing, llms/tools/datasources
 	//     tracing_content_mode_max, llms.tracing_propagation_opt_out
 	//     (nullable or defaulted, additive).
-	SchemaVersion          = 13
+	// 14: agent_trace_traces/agent_trace_spans keyed by (app_id, id),
+	//     agent_trace_span_links.app_id, App-scoped link/payload indexes.
+	//     The tables are unreleased (added in 12); AutoMigrate cannot change
+	//     a primary key, so databases created at 12 or 13 need the agent_trace
+	//     tables dropped once.
+	SchemaVersion          = 14
 	MinReaderSchemaVersion = 1
 )
 

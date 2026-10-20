@@ -99,10 +99,14 @@ type AgentTraceSessionAgent struct {
 func (AgentTraceSessionAgent) TableName() string { return "agent_trace_session_agents" }
 
 // AgentTraceTrace is one turn (or one client-defined trace) of a session.
+//
+// The key is (app_id, trace_id): trace ids are client-supplied (traceparent,
+// X-Tyk-Trace-Id) and not secret, so two Apps may send the same one and must
+// still get separate rows.
 type AgentTraceTrace struct {
+	AppID      uint       `gorm:"primaryKey;autoIncrement:false;not null;index:idx_agent_trace_traces_app_started,priority:1" json:"app_id"`
 	TraceID    []byte     `gorm:"primaryKey" json:"trace_id"` // 16 bytes
 	SessionID  string     `gorm:"size:36;not null;index:idx_agent_trace_traces_session_turn,priority:1" json:"session_id"`
-	AppID      uint       `gorm:"not null;index:idx_agent_trace_traces_app_started,priority:1" json:"app_id"`
 	TurnIndex  int        `gorm:"not null;default:0;index:idx_agent_trace_traces_session_turn,priority:2" json:"turn_index"`
 	Source     string     `gorm:"size:32;not null" json:"source"` // client_traceparent | tyk
 	RootSpanID []byte     `json:"root_span_id,omitempty"`
@@ -126,10 +130,10 @@ func (AgentTraceTrace) TableName() string { return "agent_trace_traces" }
 // Usage and cost are computed once by the existing chat-record computation
 // and copied here for rollups; AnalyticsRef points at that per-request record.
 type AgentTraceSpan struct {
+	AppID            uint    `gorm:"primaryKey;autoIncrement:false;not null;index:idx_agent_trace_spans_trace_start,priority:1;index:idx_agent_trace_spans_app_kind_start,priority:1;index:idx_agent_trace_spans_app_tool_start,priority:1" json:"app_id"`
 	SpanID           []byte  `gorm:"primaryKey" json:"span_id"` // 8 bytes
-	TraceID          []byte  `gorm:"not null;index:idx_agent_trace_spans_trace_start,priority:1" json:"trace_id"`
+	TraceID          []byte  `gorm:"not null;index:idx_agent_trace_spans_trace_start,priority:2" json:"trace_id"`
 	SessionID        string  `gorm:"size:36;not null;index:idx_agent_trace_spans_session_start,priority:1" json:"session_id"`
-	AppID            uint    `gorm:"not null;index:idx_agent_trace_spans_app_kind_start,priority:1;index:idx_agent_trace_spans_app_tool_start,priority:1" json:"app_id"`
 	ParentSpanID     []byte  `json:"parent_span_id,omitempty"`
 	ParentConfidence string  `gorm:"size:16" json:"parent_confidence,omitempty"` // declared | exact | strong | weak
 	ParentRule       string  `gorm:"size:64" json:"parent_rule,omitempty"`       // e.g. tool_call_id, mcp_name_args
@@ -137,7 +141,7 @@ type AgentTraceSpan struct {
 	Kind             string  `gorm:"size:32;not null;index:idx_agent_trace_spans_app_kind_start,priority:2" json:"kind"`
 	Name             string  `gorm:"size:255;not null" json:"name"` // OTel span name
 
-	StartTime    time.Time  `gorm:"not null;index:idx_agent_trace_spans_session_start,priority:2;index:idx_agent_trace_spans_trace_start,priority:2;index:idx_agent_trace_spans_app_kind_start,priority:3;index:idx_agent_trace_spans_app_tool_start,priority:3" json:"start_time"`
+	StartTime    time.Time  `gorm:"not null;index:idx_agent_trace_spans_session_start,priority:2;index:idx_agent_trace_spans_trace_start,priority:3;index:idx_agent_trace_spans_app_kind_start,priority:3;index:idx_agent_trace_spans_app_tool_start,priority:3" json:"start_time"`
 	EndTime      *time.Time `json:"end_time,omitempty"`
 	Status       string     `gorm:"size:16;not null" json:"status"` // in_progress | ok | error
 	ErrorType    string     `gorm:"size:128" json:"error_type,omitempty"`
@@ -177,10 +181,11 @@ func (AgentTraceSpan) TableName() string { return "agent_trace_spans" }
 // AgentTraceSpanLink is a non-parent causal edge between spans.
 type AgentTraceSpanLink struct {
 	ID            uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	SpanID        []byte    `gorm:"not null;index:idx_agent_trace_span_links_span" json:"span_id"`
+	AppID         uint      `gorm:"not null;index:idx_agent_trace_span_links_span,priority:1;index:idx_agent_trace_span_links_linked,priority:1" json:"app_id"` // links never cross Apps
+	SpanID        []byte    `gorm:"not null;index:idx_agent_trace_span_links_span,priority:2" json:"span_id"`
 	SpanStart     time.Time `gorm:"not null;index:idx_agent_trace_span_links_span_start" json:"span_start"`
 	LinkedTraceID []byte    `gorm:"not null" json:"linked_trace_id"`
-	LinkedSpanID  []byte    `gorm:"not null;index:idx_agent_trace_span_links_linked" json:"linked_span_id"`
+	LinkedSpanID  []byte    `gorm:"not null;index:idx_agent_trace_span_links_linked,priority:2" json:"linked_span_id"`
 	LinkType      string    `gorm:"size:32;not null" json:"link_type"` // caused_by | continues | subagent_of | retry_of | provisional_context | candidate
 	Confidence    string    `gorm:"size:16;not null" json:"confidence"`
 	Rule          string    `gorm:"size:64;not null" json:"rule"`
@@ -216,8 +221,8 @@ func (AgentTraceAgent) TableName() string { return "agent_trace_agents" }
 // payload retention, which never outlives the session's metadata retention.
 type AgentTracePayload struct {
 	ID           string `gorm:"primaryKey;size:36" json:"id"`
-	SpanID       []byte `gorm:"not null;index:idx_agent_trace_payloads_span" json:"span_id"`
-	AppID        uint   `gorm:"not null" json:"app_id"`
+	AppID        uint   `gorm:"not null;index:idx_agent_trace_payloads_span,priority:1" json:"app_id"`
+	SpanID       []byte `gorm:"not null;index:idx_agent_trace_payloads_span,priority:2" json:"span_id"`
 	Part         string `gorm:"size:32;not null" json:"part"`          // request | response | system_instructions | tool_definitions | tool_args | tool_result | error_body
 	ContentState string `gorm:"size:16;not null" json:"content_state"` // hashed | redacted | full | truncated
 	MediaType    string `gorm:"size:128;not null" json:"media_type"`

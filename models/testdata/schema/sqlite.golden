@@ -88,8 +88,8 @@ TABLE agent_trace_correlation_keys
   index CREATE INDEX `idx_agent_trace_correlation_keys_lookup` ON `agent_trace_correlation_keys`(`app_id`,`key_type`,`key_hash`)
 TABLE agent_trace_payloads
   column `id` text
-  column `span_id` blob NOT NULL
   column `app_id` integer NOT NULL
+  column `span_id` blob NOT NULL
   column `part` text NOT NULL
   column `content_state` text NOT NULL
   column `media_type` text NOT NULL
@@ -108,7 +108,7 @@ TABLE agent_trace_payloads
   constraint PRIMARY KEY (`id`)
   autoindex origin=pk unique=1 (id)
   index CREATE INDEX `idx_agent_trace_payloads_expires` ON `agent_trace_payloads`(`expires_at`)
-  index CREATE INDEX `idx_agent_trace_payloads_span` ON `agent_trace_payloads`(`span_id`)
+  index CREATE INDEX `idx_agent_trace_payloads_span` ON `agent_trace_payloads`(`app_id`,`span_id`)
 TABLE agent_trace_session_agents
   column `session_id` text
   column `name` text
@@ -166,6 +166,7 @@ TABLE agent_trace_sessions
   index CREATE INDEX `idx_agent_trace_sessions_team_started` ON `agent_trace_sessions`(`team_id`,`started_at`)
 TABLE agent_trace_span_links
   column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `app_id` integer NOT NULL
   column `span_id` blob NOT NULL
   column `span_start` datetime NOT NULL
   column `linked_trace_id` blob NOT NULL
@@ -174,14 +175,14 @@ TABLE agent_trace_span_links
   column `confidence` text NOT NULL
   column `rule` text NOT NULL
   column `detail` text
-  index CREATE INDEX `idx_agent_trace_span_links_linked` ON `agent_trace_span_links`(`linked_span_id`)
+  index CREATE INDEX `idx_agent_trace_span_links_linked` ON `agent_trace_span_links`(`app_id`,`linked_span_id`)
   index CREATE INDEX `idx_agent_trace_span_links_span_start` ON `agent_trace_span_links`(`span_start`)
-  index CREATE INDEX `idx_agent_trace_span_links_span` ON `agent_trace_span_links`(`span_id`)
+  index CREATE INDEX `idx_agent_trace_span_links_span` ON `agent_trace_span_links`(`app_id`,`span_id`)
 TABLE agent_trace_spans
+  column `app_id` integer NOT NULL
   column `span_id` blob
   column `trace_id` blob NOT NULL
   column `session_id` text NOT NULL
-  column `app_id` integer NOT NULL
   column `parent_span_id` blob
   column `parent_confidence` text
   column `parent_rule` text
@@ -217,16 +218,16 @@ TABLE agent_trace_spans
   column `inferred` numeric NOT NULL
   column `content_state` text NOT NULL
   column `attributes` text
-  constraint PRIMARY KEY (`span_id`)
-  autoindex origin=pk unique=1 (span_id)
+  constraint PRIMARY KEY (`app_id`,`span_id`)
+  autoindex origin=pk unique=1 (app_id, span_id)
   index CREATE INDEX `idx_agent_trace_spans_app_kind_start` ON `agent_trace_spans`(`app_id`,`kind`,`start_time`)
   index CREATE INDEX `idx_agent_trace_spans_app_tool_start` ON `agent_trace_spans`(`app_id`,`tool_name`,`start_time`)
   index CREATE INDEX `idx_agent_trace_spans_session_start` ON `agent_trace_spans`(`session_id`,`start_time`)
-  index CREATE INDEX `idx_agent_trace_spans_trace_start` ON `agent_trace_spans`(`trace_id`,`start_time`)
+  index CREATE INDEX `idx_agent_trace_spans_trace_start` ON `agent_trace_spans`(`app_id`,`trace_id`,`start_time`)
 TABLE agent_trace_traces
+  column `app_id` integer NOT NULL
   column `trace_id` blob
   column `session_id` text NOT NULL
-  column `app_id` integer NOT NULL
   column `turn_index` integer NOT NULL DEFAULT 0
   column `source` text NOT NULL
   column `root_span_id` blob
@@ -240,8 +241,8 @@ TABLE agent_trace_traces
   column `input_tokens` integer NOT NULL DEFAULT 0
   column `output_tokens` integer NOT NULL DEFAULT 0
   column `cost_micros` integer NOT NULL DEFAULT 0
-  constraint PRIMARY KEY (`trace_id`)
-  autoindex origin=pk unique=1 (trace_id)
+  constraint PRIMARY KEY (`app_id`,`trace_id`)
+  autoindex origin=pk unique=1 (app_id, trace_id)
   index CREATE INDEX `idx_agent_trace_traces_app_started` ON `agent_trace_traces`(`app_id`,`started_at`)
   index CREATE INDEX `idx_agent_trace_traces_session_turn` ON `agent_trace_traces`(`session_id`,`turn_index`)
 TABLE app_datasources
