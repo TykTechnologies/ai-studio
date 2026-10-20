@@ -15,7 +15,7 @@ describe("withheldText", () => {
   it("explains known reasons, names unknown ones, and is empty otherwise", () => {
     const span = (reason) => ({ attributes: { "tyk.content.withheld": reason } });
     expect(withheldText(span("edge_link_unverified_tls"))).toBe("Content withheld: the edge's connection to Studio is not verified TLS");
-    expect(withheldText(span("policy_said_no"))).toBe("Content withheld: policy said no");
+    expect(withheldText(span("policy_said_no"))).toBe("Content withheld");
     expect(withheldText({})).toBe("");
     expect(withheldText(span(42))).toBe("");
   });

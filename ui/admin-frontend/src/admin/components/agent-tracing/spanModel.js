@@ -73,7 +73,7 @@ const WITHHELD_REASONS = {
 export const withheldText = (span) => {
   const reason = attrsOf(span)["tyk.content.withheld"];
   if (!reason || typeof reason !== "string") return "";
-  return `Content withheld: ${WITHHELD_REASONS[reason] || reason.replace(/_/g, " ")}`;
+  return WITHHELD_REASONS[reason] ? `Content withheld: ${WITHHELD_REASONS[reason]}` : "Content withheld";
 };
 
 export const attributionOf = (s) => (s && s.attribution && typeof s.attribution === "object" ? s.attribution : {});
