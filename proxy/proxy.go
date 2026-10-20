@@ -2186,7 +2186,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if !isErr {
 		p.goAnalyzeFor(r, func() {
-			p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
+			p.analyzeStreamingResponse(llm, app, withUpstreamContentType(upstreamReq, resp), resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
 		})
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)

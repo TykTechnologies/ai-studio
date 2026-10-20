@@ -15,6 +15,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/extract"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 )
@@ -148,6 +149,9 @@ func beginMCPToolCapture(ctx context.Context, request mcp.CallToolRequest) (cont
 		sc = sc.WithSpanID(trace.SpanID(rec.SpanID()))
 		changed = true
 	}
+	if ci := mcpClientInfo(request); ci != "" {
+		rec.Update(func(ev *agenttrace.Event) { ev.Declared.ClientInfo = ci })
+	}
 	if parent := mcpMetaParent(request); parent.IsValid() {
 		traceID := agenttrace.TraceID(parent.TraceID())
 		rec.Update(func(ev *agenttrace.Event) {
@@ -174,6 +178,25 @@ func beginMCPToolCapture(ctx context.Context, request mcp.CallToolRequest) (cont
 }
 
 func noFinish() {}
+
+// mcpClientInfo is params._meta io.modelcontextprotocol/clientInfo as
+// "name/version" (the §4.2 priority 4 discriminator), parsed and bounded by
+// the declared-context extractor.
+func mcpClientInfo(request mcp.CallToolRequest) string {
+	meta := request.Params.Meta
+	if meta == nil {
+		return ""
+	}
+	ci, ok := meta.AdditionalFields["io.modelcontextprotocol/clientInfo"]
+	if !ok {
+		return ""
+	}
+	body, err := json.Marshal(map[string]any{"params": map[string]any{"_meta": map[string]any{"io.modelcontextprotocol/clientInfo": ci}}})
+	if err != nil {
+		return ""
+	}
+	return declared.Default().Headers(http.Header{}, declared.BodyMCP, body).Declared.ClientInfo
+}
 
 // mcpMetaParent parses params._meta.traceparent. It is W3C trace context by
 // definition, whatever propagator the gateway is configured with.

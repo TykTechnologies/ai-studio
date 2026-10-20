@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -57,7 +58,8 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 	var x agenttrace.Extracts
 	var serverTools int
 	if streamed {
-		res := captureStreamedResponse(r, llm, "", respBody, 0, fp)
+		ct, _ := r.Context().Value(upstreamContentTypeKey{}).(string)
+		res := captureStreamedResponse(r, llm, ct, respBody, 0, fp)
 		x, serverTools = res.Extracts, len(res.ServerToolCalls)
 	} else if resp, err := extract.ParseResponse(format, respBody, fp); err == nil {
 		resp.Apply(&x)
@@ -101,6 +103,24 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 	applyDeclaredBody(r.Context(), rec, reqBody)
 	rec.CaptureRaw(agenttrace.PartRequest, "application/json", reqBody)
 	rec.CaptureRaw(agenttrace.PartResponse, "application/json", respBody)
+}
+
+// upstreamContentTypeKey carries a streamed upstream response's Content-Type
+// to its capture, which needs it to frame a binary event stream (SSE and
+// NDJSON are recognised from the body).
+type upstreamContentTypeKey struct{}
+
+// withUpstreamContentType notes resp's Content-Type on r while tracing is
+// on; otherwise it returns r unchanged.
+func withUpstreamContentType(r *http.Request, resp *http.Response) *http.Request {
+	if agenttrace.From(r.Context()) == nil || resp == nil {
+		return r
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		return r
+	}
+	return r.WithContext(context.WithValue(r.Context(), upstreamContentTypeKey{}, ct))
 }
 
 // captureOuterCall records the /ai/ bridge's logical LLM call on the outer
