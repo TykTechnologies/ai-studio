@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 )
 
 type fakeEnabler struct {
@@ -61,5 +63,26 @@ func TestStartAgentTracingGate(t *testing.T) {
 				t.Fatalf("settings not passed: %+v", tc.enabler.settings)
 			}
 		})
+	}
+}
+
+// The start gate installs the declared-context extractor from the edge's
+// configuration, whatever the gate decides (jyx.113).
+func TestStartAgentTracingInstallsDeclaredExtractor(t *testing.T) {
+	t.Cleanup(func() { declared.SetDefault(nil) })
+	h := http.Header{"Helicone-Session-Id": {"h-1"}, "X-My-Session": {"m-1"}}
+
+	cfg := gateConfig(false, "edge")
+	cfg.AgentTracing.CompatHeaders = []string{"helicone"}
+	startAgentTracing(cfg, &fakeEnabler{}, nil)
+	if d := declared.Default().Headers(h, "", nil).Declared; d.SessionID != "h-1" || d.SessionSource != "helicone" {
+		t.Fatalf("compat family not enabled: %+v", d)
+	}
+
+	cfg.AgentTracing.CompatHeaders = nil
+	cfg.AgentTracing.HarnessSessionHeaders = []string{"x-my-session"}
+	startAgentTracing(cfg, &fakeEnabler{}, nil)
+	if d := declared.Default().Headers(h, "", nil).Declared; d.SessionID != "m-1" {
+		t.Fatalf("configured session header not read: %+v", d)
 	}
 }

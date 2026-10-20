@@ -256,6 +256,7 @@ func captureBedrock(r *http.Request, llm *models.LLM, app *models.App, modelID s
 		}
 		ev.Extracts = x
 	})
+	applyDeclaredBody(r.Context(), bt.rec, reqBody)
 	bt.rec.CaptureRaw(agenttrace.PartRequest, "application/json", reqBody)
 	bt.mu.Lock()
 	resp := bt.response

@@ -98,6 +98,7 @@ func captureLLM(r *http.Request, llm *models.LLM, app *models.App, status int, r
 			ev.Attributes["tyk.server_tool_calls"] = strconv.Itoa(serverTools)
 		}
 	})
+	applyDeclaredBody(r.Context(), rec, reqBody)
 	rec.CaptureRaw(agenttrace.PartRequest, "application/json", reqBody)
 	rec.CaptureRaw(agenttrace.PartResponse, "application/json", respBody)
 }
@@ -142,6 +143,7 @@ func (p *Proxy) captureOuterCall(r *http.Request, served llmAttempt, tried, stat
 			ev.EndTime = time.Now()
 			ev.Extracts = x
 		})
+		applyDeclaredBody(r.Context(), rec, reqBody)
 		rec.CaptureRaw(agenttrace.PartRequest, "application/json", reqBody)
 		rec.CaptureRaw(agenttrace.PartResponse, "application/json", respBody)
 	})

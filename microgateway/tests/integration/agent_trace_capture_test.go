@@ -9,8 +9,10 @@ package integration
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/mockllm"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -204,4 +207,54 @@ func TestAgentTraceCapture_EdgeLLMCallsReachThePulse(t *testing.T) {
 	assert.Equal(t, outer.TraceID, attempt.TraceID, "both hops share the trace")
 	assert.Equal(t, appID, outer.Identity.AppID)
 	assertEdgeLLMEvent(t, attempt, appID)
+}
+
+// postWithHeaders is gatewayPost with extra request headers.
+func postWithHeaders(t *testing.T, url, body string, headers map[string]string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+trafficTestToken)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+// The context a client declares reaches the hub from the edge (jyx.113):
+// X-Tyk-* headers, a coding harness's session and turn, and
+// X-Tyk-Trace-Capture.
+func TestAgentTraceCapture_EdgeDeclaredContext(t *testing.T) {
+	declared.SetDefault(declared.New(declared.Options{
+		Harness: []string{declared.HarnessClaudeCode, declared.HarnessCodexCLI, declared.HarnessOpenCode},
+	}))
+	t.Cleanup(func() { declared.SetDefault(nil) })
+	baseURL, hub, _ := setupCaptureGateway(t)
+	chatBody := `{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}`
+
+	require.Equal(t, http.StatusOK, postWithHeaders(t, baseURL+"/llm/rest/mock-openai/v1/chat/completions", chatBody, map[string]string{
+		"X-Tyk-Session-Id": "edge-s1", "X-Tyk-Agent-Name": "planner", "X-Tyk-Trace-Capture": "off",
+	}))
+	require.Equal(t, http.StatusOK, postWithHeaders(t, baseURL+"/llm/rest/mock-openai/v1/chat/completions", chatBody, map[string]string{
+		"User-Agent":            "codex_exec/0.160.1 (Mac OS)",
+		"X-Codex-Turn-Metadata": `{"session_id":"01a158d5-cb58-7a20-9c50-a33ff56877da","turn_id":"01a158d5-cc44-78c1-84bd-67edbc4e3b88"}`,
+	}))
+
+	var evs []*agenttrace.Event
+	require.Eventually(t, func() bool { evs = hub.llmEvents(); return len(evs) == 2 }, 10*time.Second, 25*time.Millisecond)
+	bySession := map[string]agenttrace.DeclaredContext{}
+	for _, e := range evs {
+		bySession[e.Declared.SessionID] = e.Declared
+	}
+	tyk := bySession["edge-s1"]
+	assert.Equal(t, "planner", tyk.AgentName)
+	assert.Equal(t, "off", tyk.CaptureMode)
+	codex := bySession["01a158d5-cb58-7a20-9c50-a33ff56877da"]
+	assert.Equal(t, declared.HarnessCodexCLI, codex.Harness)
+	assert.Equal(t, "01a158d5-cc44-78c1-84bd-67edbc4e3b88", codex.TurnID)
 }

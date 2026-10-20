@@ -460,6 +460,12 @@ func New(opts Options) (_ *Studio, err error) {
 	// every edition (decision Q11).
 	tracing.SetBaggageAllowlist(conf.AgentTracing.BaggageAllowlist)
 	declared.SetForwardTykHeaders(conf.AgentTracing.ForwardTykHeaders)
+	// What the gateway reads from a captured request's declared context.
+	declared.SetDefault(declared.New(declared.Options{
+		CompatFamilies:   conf.AgentTracing.CompatHeaders,
+		Harness:          conf.AgentTracing.HarnessSessionHeaders,
+		BaggageAllowlist: conf.AgentTracing.BaggageAllowlist,
+	}))
 	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
 	if agenttrace.Enabled() {
 		// The embedded gateway's captures are staged by the analytics handler.

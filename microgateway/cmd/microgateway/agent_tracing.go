@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/rs/zerolog/log"
 )
@@ -31,6 +32,11 @@ func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func(
 		allow = nil
 	}
 	tracing.SetBaggageAllowlist(allow)
+	declared.SetDefault(declared.New(declared.Options{
+		CompatFamilies:   at.CompatHeaders,
+		Harness:          at.HarnessSessionHeaders,
+		BaggageAllowlist: allow,
+	}))
 	if !at.Enabled {
 		return false
 	}

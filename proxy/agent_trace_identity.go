@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 )
 
@@ -18,11 +19,13 @@ import (
 const hdrInternalSpan = "X-Tyk-Internal-Span"
 
 // beginRequestCapture gives the request its canonical gateway span id when
-// agent tracing is on (spec §4.1): it attaches the capture recorder, takes
-// the trace id from the client's traceparent or mints one, and makes the
-// gateway span the current span context, so upstream calls carry it as
-// their parent. With tracing off it returns r unchanged and allocates
-// nothing.
+// agent tracing is on (spec §4.1): it attaches the capture recorder, reads
+// the context the client declared in its headers (declared.Default: trace
+// context, X-Tyk-* headers, compat families, baggage, coding-harness session
+// ids, X-Tyk-Trace-Capture), takes the trace id from it or mints one, and
+// makes the gateway span the current span context, so upstream calls carry
+// it as their parent. It runs before StripTracingHeaders removes those
+// headers. With tracing off it returns r unchanged and allocates nothing.
 func beginRequestCapture(r *http.Request) (*http.Request, *agenttrace.Recorder) {
 	ctx, rec := agenttrace.Begin(r.Context())
 	if rec == nil {
@@ -34,23 +37,30 @@ func beginRequestCapture(r *http.Request) (*http.Request, *agenttrace.Recorder) 
 		}
 	}
 
+	// Headers only: an LLM body's fields are read on the analytics
+	// goroutine (applyDeclaredBody), never on the request path.
+	res := declared.Default().Headers(r.Header, "", nil)
+	ctx = context.WithValue(ctx, declaredKey{}, &res)
+
 	ctx = tracing.ExtractIncoming(ctx, r.Header)
 	parent := trace.SpanContextFromContext(ctx)
-	traceID := agenttrace.TraceID(parent.TraceID())
-	if !parent.IsValid() {
+	traceID := res.Declared.TraceID
+	if traceID.IsZero() && parent.IsValid() {
+		// A trace context the configured propagator read and the W3C
+		// parser did not (a host's own propagator).
+		traceID = agenttrace.TraceID(parent.TraceID())
+		res.Declared.TraceID = traceID
+		res.Declared.ParentSpanID = agenttrace.SpanID(parent.SpanID())
+		res.Declared.TraceState = parent.TraceState().String()
+		res.Declared.Sampled = parent.IsSampled()
+		res.Declared.TraceSource = "traceparent"
+	}
+	if traceID.IsZero() {
 		traceID = agenttrace.NewTraceID()
 	}
 	rec.SetTraceID(traceID)
-	if parent.IsValid() {
-		parentID := agenttrace.SpanID(parent.SpanID())
-		rec.Update(func(ev *agenttrace.Event) {
-			ev.Declared.TraceID = traceID
-			ev.Declared.ParentSpanID = parentID
-			ev.Declared.TraceState = parent.TraceState().String()
-			ev.Declared.Sampled = parent.IsSampled()
-			ev.Declared.TraceSource = "traceparent"
-		})
-	}
+	d := res.Declared
+	rec.Update(func(ev *agenttrace.Event) { ev.Declared = d })
 	gateway := trace.NewSpanContext(trace.SpanContextConfig{
 		TraceID:    trace.TraceID(traceID),
 		SpanID:     trace.SpanID(rec.SpanID()),
@@ -59,6 +69,31 @@ func beginRequestCapture(r *http.Request) (*http.Request, *agenttrace.Recorder) 
 		Remote:     true,
 	})
 	return r.WithContext(trace.ContextWithRemoteSpanContext(ctx, gateway)), rec
+}
+
+// declaredKey holds the request's declared.Result while tracing is on, for
+// the body fields read after the response (applyDeclaredBody).
+type declaredKey struct{}
+
+// applyDeclaredBody adds an LLM request body's declared fields (§4.2
+// priority 4: conversation, metadata.session_id, user, and Claude Code's
+// metadata.user_id session) to the capture, below every header source. It
+// runs on the analytics goroutine.
+func applyDeclaredBody(ctx context.Context, rec *agenttrace.Recorder, body []byte) {
+	stored, _ := ctx.Value(declaredKey{}).(*declared.Result)
+	if rec == nil || stored == nil || len(body) == 0 {
+		return
+	}
+	res := *stored
+	declared.Default().ApplyBody(&res, body)
+	d := res.Declared
+	rec.Update(func(ev *agenttrace.Event) {
+		// Fields a later stage set (an MCP session hint) are kept.
+		if d.MCPSessionID == "" {
+			d.MCPSessionID = ev.Declared.MCPSessionID
+		}
+		ev.Declared = d
+	})
 }
 
 // traceSpanIDFor is the proxy_logs.trace_span_id for a request: the logical

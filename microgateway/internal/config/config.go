@@ -71,6 +71,12 @@ type AgentTracingConfig struct {
 	// upstreams; the rest is removed. It applies in every edition, with
 	// tracing on or off (decision Q11). "none" forwards no baggage.
 	BaggageAllowlist []string `env:"AGENT_TRACING_BAGGAGE_ALLOWLIST" envDefault:"session.id" envSeparator:","`
+	// CompatHeaders and HarnessSessionHeaders select what the edge reads
+	// from a request's declared context, as on the hub: the compat header
+	// families of other gateways, and the coding-harness session extractors
+	// (other entries are header names read as a session id).
+	CompatHeaders         []string `env:"AGENT_TRACING_COMPAT_HEADERS" envDefault:"helicone,portkey,openrouter,bifrost,agent_router,cloudflare,agentcore,mcp_session" envSeparator:","`
+	HarnessSessionHeaders []string `env:"AGENT_TRACING_HARNESS_SESSION_HEADERS" envDefault:"claude_code,codex_cli,opencode" envSeparator:","`
 }
 
 // agentTracingChunkLimit keeps a chunk well under the 16 MiB gRPC message cap.
