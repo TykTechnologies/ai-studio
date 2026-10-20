@@ -43,7 +43,10 @@ const (
 	//     proxy_logs service_tier (nullable, additive).
 	// 11: native_resources.screening_digest (nullable, additive).
 	// 12: agent_trace_* tables (agent tracing, new tables only).
-	SchemaVersion          = 12
+	// 13: agent tracing settings: apps.tracing, llms/tools/datasources
+	//     tracing_content_mode_max, llms.tracing_propagation_opt_out
+	//     (nullable or defaulted, additive).
+	SchemaVersion          = 13
 	MinReaderSchemaVersion = 1
 )
 

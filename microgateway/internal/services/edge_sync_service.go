@@ -480,6 +480,8 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			ResourceSigningSecretEncrypted:     pbLLM.ResourceSigningSecretEncrypted,
 			ResourceSigningSecretPrevEncrypted: pbLLM.ResourceSigningSecretPrevEncrypted,
 			VendorWorkspaceID:                  pbLLM.VendorWorkspaceId,
+			TracingContentModeMax:              pbLLM.TracingContentModeMax,
+			TracingPropagationOptOut:           pbLLM.TracingPropagationOptOut,
 		}
 		if pbLLM.ResourceSigningPrevExpiresAt != nil {
 			t := pbLLM.ResourceSigningPrevExpiresAt.AsTime()
@@ -615,6 +617,9 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig, kept []uin
 		}
 		if pbApp.Metadata != "" {
 			app.Metadata = database.JSON(pbApp.Metadata)
+		}
+		if pbApp.Tracing != "" {
+			app.Tracing = database.JSON(pbApp.Tracing)
 		}
 
 		// Serialize plugin resource associations for gateway access
@@ -1239,6 +1244,7 @@ func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 			MCPAccessDisabled:   pbTool.McpAccessDisabled,
 			Namespace:           pbTool.Namespace,
 			GovernedMetadata:    database.GovernedMetadataJSON(pbTool.GovernedMetadata),
+			TracingContentModeMax: pbTool.TracingContentModeMax,
 		})
 
 		// Collect tool_filter join table entries
@@ -1302,6 +1308,7 @@ func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.Datasou
 			Active:                pbDS.IsActive,
 			Namespace:             pbDS.Namespace,
 			GovernedMetadata:      database.GovernedMetadataJSON(pbDS.GovernedMetadata),
+			TracingContentModeMax: pbDS.TracingContentModeMax,
 		})
 	}
 

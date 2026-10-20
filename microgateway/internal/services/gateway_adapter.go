@@ -813,6 +813,8 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		ResourceSigningPrevExpiresAt: dbLLM.ResourceSigningPrevExpiresAt,
 		VendorWorkspaceID:            dbLLM.VendorWorkspaceID,
 		PriceMultipliers:             priceMultipliers,
+		TracingContentModeMax:        dbLLM.TracingContentModeMax,
+		TracingPropagationOptOut:     dbLLM.TracingPropagationOptOut,
 	}
 
 	log.Debug().
@@ -883,6 +885,15 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		semanticRouters[i] = models.SemanticRouter{ID: r.ID, Name: r.Name, Slug: r.Slug, Namespace: r.Namespace, Active: r.IsActive}
 	}
 
+	// Agent tracing overrides; the hub never sends owner_may_view_content.
+	var tracing models.AppTracingSettings
+	if len(dbApp.Tracing) > 0 {
+		if err := json.Unmarshal(dbApp.Tracing, &tracing); err != nil {
+			log.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to unmarshal app tracing settings")
+			tracing = models.AppTracingSettings{}
+		}
+	}
+
 	modelApp := models.App{
 		Model:           gorm.Model{ID: dbApp.ID, CreatedAt: dbApp.CreatedAt, UpdatedAt: dbApp.UpdatedAt},
 		ID:              dbApp.ID,
@@ -898,6 +909,7 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		Datasources:     datasources, // Include Datasource associations for access control
 		ModelRouters:    modelRouters, // Router grants (Enterprise)
 		SemanticRouters: semanticRouters,
+		Tracing:         tracing.EdgeSettings(),
 	}
 
 	log.Debug().
@@ -957,6 +969,7 @@ func (a *GatewayServiceAdapter) convertDatabaseToolToModel(dbTool *database.Tool
 		MCPAccessDisabled:   dbTool.MCPAccessDisabled,
 		Namespace:           dbTool.Namespace,
 		Filters:             filters,
+		TracingContentModeMax: dbTool.TracingContentModeMax,
 	}
 }
 
@@ -1025,6 +1038,7 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 		DBName:           dbDS.DBName,
 		Active:           dbDS.Active,
 		Namespace:        dbDS.Namespace,
+		TracingContentModeMax: dbDS.TracingContentModeMax,
 	}
 	ds.Embedder = embedder
 	return ds

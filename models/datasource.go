@@ -33,6 +33,10 @@ type Datasource struct {
 	Active    bool
 	Namespace string `json:"namespace" gorm:"default:'';index:idx_datasource_namespace"`
 
+	// TracingContentModeMax caps the agent tracing content mode for calls to
+	// this datasource; empty means no cap (Enterprise).
+	TracingContentModeMax string `json:"tracing_content_mode_max" gorm:"size:16"`
+
 	// UGC (User-Generated Content) fields
 	CommunitySubmitted bool  `json:"community_submitted" gorm:"index:idx_ds_user_community"`
 	SubmissionID       *uint `json:"submission_id"`

@@ -478,6 +478,8 @@ func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM
 		ResourceSigningPrevExpiresAt:       timeOrNil(pbLLM.ResourceSigningPrevExpiresAt),
 		VendorWorkspaceID:                  pbLLM.VendorWorkspaceId,
 		PriceMultipliers:                   jsonOrNil(pbLLM.PriceMultipliers),
+		TracingContentModeMax:              pbLLM.TracingContentModeMax,
+		TracingPropagationOptOut:           pbLLM.TracingPropagationOptOut,
 		// Note: JSON fields (Metadata, AllowedModels, AuthConfig) would need proper JSON unmarshaling
 		// For now, we'll leave them empty or implement conversion if needed
 	}
@@ -506,6 +508,7 @@ func (p *GRPCProvider) convertPBAppToDatabase(pbApp *pb.AppConfig) *database.App
 		BudgetResetDay: int(pbApp.BudgetResetDay),
 		RateLimitRPM: int(pbApp.RateLimitRpm),
 		Namespace:    pbApp.Namespace,
+		Tracing:      jsonOrNil(pbApp.Tracing),
 	}
 }
 

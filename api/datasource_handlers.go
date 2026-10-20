@@ -42,6 +42,9 @@ func (a *API) createDatasource(c *gin.Context) {
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}
+	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
+		return
+	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
@@ -95,6 +98,10 @@ func (a *API) createDatasource(c *gin.Context) {
 		input.Data.Attributes.Active,
 		input.Data.Attributes.Namespace,
 	)
+	if err == nil && input.Data.Attributes.TracingContentModeMax != nil {
+		err = a.service.SetDatasourceTracingContentModeMax(datasource.ID, *input.Data.Attributes.TracingContentModeMax)
+		datasource.TracingContentModeMax = *input.Data.Attributes.TracingContentModeMax
+	}
 	if err != nil {
 		status := datasourceWriteStatus(err)
 		c.JSON(status, ErrorResponse{
@@ -196,6 +203,9 @@ func (a *API) updateDatasource(c *gin.Context) {
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}
+	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
+		return
+	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, false) {
 		return
 	}
@@ -238,6 +248,21 @@ func (a *API) updateDatasource(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Forbidden", Detail: "Only administrators can change namespace"}}})
+			return
+		}
+	}
+
+	// Written first: UpdateDatasource reloads and saves the row, so its
+	// change event already carries the cap.
+	if input.Data.Attributes.TracingContentModeMax != nil {
+		if err := a.service.SetDatasourceTracingContentModeMax(uint(id), *input.Data.Attributes.TracingContentModeMax); err != nil {
+			status := datasourceWriteStatus(err)
+			c.JSON(status, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: http.StatusText(status), Detail: err.Error()}},
+			})
 			return
 		}
 	}
@@ -683,6 +708,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			Active           bool                `json:"active"`
 			Namespace        string              `json:"namespace"`
 			Files            []FileStoreResponse `json:"files"`
+			// Agent tracing content mode cap (Enterprise); "" is no cap.
+			TracingContentModeMax string `json:"tracing_content_mode_max"`
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -707,6 +734,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			Active:           datasource.Active,
 			Namespace:        datasource.Namespace,
 			Files:            serializeFileStores(datasource.Files),
+			TracingContentModeMax: datasource.TracingContentModeMax,
 		},
 	}
 }

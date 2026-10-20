@@ -78,6 +78,10 @@ type LLM struct {
 	// PriceMultipliers is the hub LLM's per-tier price multiplier overrides
 	// (models.LLMPriceMultipliers JSON); NULL when it has none.
 	PriceMultipliers JSON `gorm:"type:json" json:"price_multipliers"`
+	// Agent tracing (Enterprise): the hub LLM's content mode cap ("" is no
+	// cap) and whether traceparent propagation to its upstream is off.
+	TracingContentModeMax    string `json:"tracing_content_mode_max"`
+	TracingPropagationOptOut bool   `gorm:"not null;default:false" json:"tracing_propagation_opt_out"`
 
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`
@@ -102,6 +106,10 @@ type App struct {
 	AllowedIPs           JSON `gorm:"type:json" json:"allowed_ips"`
 	Metadata             JSON `gorm:"type:json" json:"metadata"`
 	PluginResourcesJSON  JSON `gorm:"type:json" json:"plugin_resources_json"` // Synced from config snapshot PluginResources
+	// Tracing is the hub App's agent tracing overrides (Enterprise;
+	// models.AppTracingSettings JSON without owner_may_view_content); NULL
+	// when the App inherits every global setting.
+	Tracing JSON `gorm:"type:json" json:"tracing"`
 
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_app_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
@@ -566,6 +574,9 @@ type Tool struct {
 	MCPAccessDisabled  bool `gorm:"not null;default:false" json:"mcp_access_disabled"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
 	GovernedMetadata JSON `gorm:"type:json" json:"governed_metadata"`
+	// TracingContentModeMax is the hub tool's agent tracing content mode cap
+	// (Enterprise); "" is no cap.
+	TracingContentModeMax string `json:"tracing_content_mode_max"`
 
 	// Relationships
 	Filters []Filter `gorm:"many2many:tool_filters;" json:"filters,omitempty"`
@@ -593,6 +604,9 @@ type Datasource struct {
 	Namespace             string `gorm:"default:'';index:idx_ds_namespace" json:"namespace"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
 	GovernedMetadata JSON `gorm:"type:json" json:"governed_metadata"`
+	// TracingContentModeMax is the hub datasource's agent tracing content
+	// mode cap (Enterprise); "" is no cap.
+	TracingContentModeMax string `json:"tracing_content_mode_max"`
 
 	// Relationships
 	Apps []App `gorm:"many2many:app_datasources;" json:"apps,omitempty"`

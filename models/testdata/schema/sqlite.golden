@@ -325,6 +325,7 @@ TABLE apps
   column `team_id` integer
   column `metadata` text
   column `namespace` text DEFAULT ""
+  column `tracing` json
   constraint CONSTRAINT `fk_apps_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
   index CREATE INDEX `idx_app_namespace` ON `apps`(`namespace`)
   index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)
@@ -625,6 +626,7 @@ TABLE datasources
   column `embedder_id` integer
   column `active` numeric
   column `namespace` text DEFAULT ""
+  column `tracing_content_mode_max` text
   column `community_submitted` numeric
   column `submission_id` integer
   column `metadata` json
@@ -927,6 +929,8 @@ TABLE llms
   column `failover` json
   column `vendor_workspace_id` text
   column `price_multipliers` json
+  column `tracing_content_mode_max` text
+  column `tracing_propagation_opt_out` numeric NOT NULL DEFAULT false
   column `resource_signing_secret` text
   column `resource_signing_secret_prev` text
   column `resource_signing_prev_expires_at` datetime
@@ -1915,6 +1919,7 @@ TABLE tools
   column `namespace` text DEFAULT ""
   column `rest_access_disabled` numeric NOT NULL DEFAULT false
   column `mcp_access_disabled` numeric NOT NULL DEFAULT false
+  column `tracing_content_mode_max` text
   column `user_id` integer
   column `community_submitted` numeric
   column `submission_id` integer

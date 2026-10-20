@@ -39,6 +39,9 @@ type ToolCreateOptions struct {
 	// (models.DefaultToolRESTAccessEnabled / DefaultToolMCPAccessEnabled).
 	RESTAccessEnabled *bool
 	MCPAccessEnabled  *bool
+	// TracingContentModeMax caps the agent tracing content mode for the
+	// tool; nil or "" is no cap. Validated by the caller.
+	TracingContentModeMax *string
 }
 
 // CreateToolWithOptions creates a tool fully configured in one step, so the
@@ -72,6 +75,9 @@ func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType
 		Active:             opts.Active == nil || *opts.Active,
 		RESTAccessDisabled: !restEnabled,
 		MCPAccessDisabled:  !mcpEnabled,
+	}
+	if opts.TracingContentModeMax != nil {
+		tool.TracingContentModeMax = *opts.TracingContentModeMax
 	}
 	for _, op := range opts.Operations {
 		tool.AddOperation(op)

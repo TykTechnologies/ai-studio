@@ -73,6 +73,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import LLMFailoverSection, { validateFailover } from "./LLMFailoverSection";
 import { listAll } from "../../utils/listAll";
 import BudgetField from "../common/BudgetField";
+import { ResourceTracingSection } from "../common/TracingSettingsSection";
 import LLMPriceMultipliersField, {
   rowsFromPriceMultipliers,
   validatePriceMultipliers,
@@ -108,6 +109,8 @@ const LLMForm = () => {
     dont_log_bodies: false, // When true, request/response bodies are not stored in logs
     failover: null, // Ordered waterfall of {llm_id, model} fallbacks; null = none
     vendor_workspace_id: "", // Anthropic only: pins every call to this workspace
+    tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
+    tracing_propagation_opt_out: false, // true: no traceparent to this provider
   });
   const [vendors, setVendors] = useState([]);
   // Every other LLM, for the failover picker (id, name, allowed models...).
@@ -297,6 +300,8 @@ const LLMForm = () => {
         dont_log_bodies: llmData.dont_log_bodies || false,
         failover: llmData.failover?.targets?.length ? llmData.failover : null,
         vendor_workspace_id: llmData.vendor_workspace_id || "",
+        tracing_content_mode_max: llmData.tracing_content_mode_max || "",
+        tracing_propagation_opt_out: Boolean(llmData.tracing_propagation_opt_out),
       });
       setOriginalName(llmData.name);
       setPriceMultiplierRows(rowsFromPriceMultipliers(llmData.price_multipliers));
@@ -978,6 +983,14 @@ const LLMForm = () => {
               </Grid>
             </AccordionDetails>
           </StyledAccordion>
+
+          <ResourceTracingSection
+            resourceLabel="LLM"
+            contentModeMax={llm.tracing_content_mode_max}
+            onContentModeMaxChange={(v) => setLLM((prev) => ({ ...prev, tracing_content_mode_max: v }))}
+            propagationOptOut={llm.tracing_propagation_opt_out}
+            onPropagationOptOutChange={(v) => setLLM((prev) => ({ ...prev, tracing_propagation_opt_out: v }))}
+          />
 
           {/* Filters Section - Enterprise Only */}
           {isEnterprise && (

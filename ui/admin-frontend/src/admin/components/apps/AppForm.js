@@ -42,6 +42,13 @@ import { listAll } from "../../utils/listAll";
 import AppTeamField from "./AppTeamField";
 import BudgetField from "../common/BudgetField";
 import { errorDetail } from "../../services/teamBudgetsService";
+import {
+  AppTracingSection,
+  appTracingFromResponse,
+  appTracingToRequest,
+  useTracingSettingsVisible,
+  validateAppTracing,
+} from "../common/TracingSettingsSection";
 
 // The app stores relationships as id arrays (llm_ids, datasource_ids,
 // tool_ids, plugin resource instance ids) and the API payload keeps that
@@ -74,6 +81,10 @@ const AppForm = () => {
     metadata: {}, // Added for custom metadata
   });
   const [metadataJSON, setMetadataJSON] = useState("{}"); // JSON string for editor
+  // Agent tracing overrides (Enterprise), edited apart from the App and sent
+  // only while the section is shown; omitted, the server keeps them.
+  const [tracing, setTracing] = useState(() => appTracingFromResponse(null));
+  const tracingVisible = useTracingSettingsVisible();
   const [metadataError, setMetadataError] = useState("");
   const [credential, setCredential] = useState(null);
   const [users, setUsers] = useState([]);
@@ -145,6 +156,7 @@ const AppForm = () => {
         metadata: metadata,
       });
       setMetadataJSON(JSON.stringify(metadata, null, 2));
+      setTracing(appTracingFromResponse(appData.tracing));
 
       // Load plugin resource selections from app response
       if (Array.isArray(appData.plugin_resources)) {
@@ -371,6 +383,7 @@ const AppForm = () => {
     const newErrors = {};
     if (!app.name.trim()) newErrors.name = "Name is required";
     if (!app.user_id) newErrors.user_id = "User ID is required";
+    if (tracingVisible) Object.assign(newErrors, validateAppTracing(tracing));
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -410,8 +423,9 @@ const AppForm = () => {
       });
 
     // team_id null keeps the resolved team.
+    const { tracing: _storedTracing, ...appFields } = app;
     const appPayload = {
-      ...app,
+      ...appFields,
       user_id: parseInt(app.user_id, 10),
       llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
@@ -422,6 +436,7 @@ const AppForm = () => {
       ...(pluginResourcesPayload.length > 0 && {
         plugin_resources: pluginResourcesPayload,
       }),
+      ...(tracingVisible && { tracing: appTracingToRequest(tracing) }),
     };
 
     const appData = {
@@ -815,6 +830,8 @@ const AppForm = () => {
               </Grid>
             </AccordionDetails>
           </StyledAccordion>
+
+          <AppTracingSection value={tracing} onChange={setTracing} errors={errors} />
 
           <Box mt={4} display="flex" gap={2}>
             <SecondaryOutlineButton onClick={handleCancel}>

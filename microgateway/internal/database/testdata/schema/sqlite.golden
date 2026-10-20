@@ -137,6 +137,7 @@ TABLE apps
   column `allowed_ips` JSON
   column `metadata` JSON
   column `plugin_resources_json` JSON
+  column `tracing` JSON
   column `namespace` text DEFAULT ""
   index CREATE INDEX `idx_app_namespace` ON `apps`(`namespace`)
   index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)
@@ -214,6 +215,7 @@ TABLE datasources
   column `active` numeric DEFAULT true
   column `namespace` text DEFAULT ""
   column `governed_metadata` JSON
+  column `tracing_content_mode_max` text
   index CREATE INDEX `idx_datasources_deleted_at` ON `datasources`(`deleted_at`)
   index CREATE INDEX `idx_ds_namespace` ON `datasources`(`namespace`)
 TABLE edge_instances
@@ -306,6 +308,8 @@ TABLE llms
   column `resource_signing_prev_expires_at` datetime
   column `vendor_workspace_id` text
   column `price_multipliers` JSON
+  column `tracing_content_mode_max` text
+  column `tracing_propagation_opt_out` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_llm_active` ON `llms`(`is_active`)
   index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
   index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)
@@ -498,6 +502,7 @@ TABLE tools
   column `rest_access_disabled` numeric NOT NULL DEFAULT false
   column `mcp_access_disabled` numeric NOT NULL DEFAULT false
   column `governed_metadata` JSON
+  column `tracing_content_mode_max` text
   index CREATE INDEX `idx_tool_namespace` ON `tools`(`namespace`)
   index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_tools_slug` ON `tools`(`slug`)

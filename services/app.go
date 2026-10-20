@@ -55,6 +55,9 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 	if err != nil {
 		return nil, err
 	}
+	if err := applyAppTracing(app, o); err != nil {
+		return nil, err
+	}
 
 	// Apply default budget if not set and default is configured
 	defaultBudget := config.Get("").DefaultAppBudget
@@ -197,6 +200,9 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 	if err != nil {
 		return nil, err
 	}
+	if err := applyAppTracing(app, o); err != nil {
+		return nil, err
+	}
 
 	// Apply default budget if not set and default is configured
 	defaultBudget := config.Get("").DefaultAppBudget
@@ -302,6 +308,9 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	}
 	if o.teamID != nil && (app.TeamID == nil || *app.TeamID != *o.teamID) {
 		app.TeamID = o.teamID
+	}
+	if err := applyAppTracing(app, o); err != nil {
+		return nil, err
 	}
 
 	app.Name = name

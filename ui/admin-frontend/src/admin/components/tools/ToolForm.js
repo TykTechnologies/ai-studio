@@ -61,6 +61,7 @@ import { usePermissions } from "../../context/PermissionsContext";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
 import ClientToolEditor from "./client/ClientToolEditor";
 import ToolAccessMethods from "./ToolAccessMethods";
+import { ResourceTracingSection } from "../common/TracingSettingsSection";
 import { listAll } from "../../utils/listAll";
 
 const SectionTitle = ({ children, tooltip }) => (
@@ -294,6 +295,7 @@ const ToolForm = () => {
     // A new tool is chat only; REST and MCP access are opt-in.
     rest_access_enabled: false,
     mcp_access_enabled: false,
+    tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
   });
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -1144,6 +1146,12 @@ const ToolForm = () => {
               </PrimaryOutlineButton>
             </AccordionDetails>
           </StyledAccordion>
+
+          <ResourceTracingSection
+            resourceLabel="tool"
+            contentModeMax={tool.tracing_content_mode_max}
+            onContentModeMaxChange={(v) => setTool((prev) => ({ ...prev, tracing_content_mode_max: v }))}
+          />
 
           {/* Governance metadata (Enterprise; hidden when no schema applies) */}
           <GovernedMetadataFields

@@ -84,6 +84,12 @@ func mergeLLMPatch(input *LLMInput, existing *models.LLM, present map[string]jso
 	if !has("price_multipliers") {
 		attrs.PriceMultipliers = existing.PriceMultipliers
 	}
+	if !has("tracing_content_mode_max") {
+		attrs.TracingContentModeMax = existing.TracingContentModeMax
+	}
+	if !has("tracing_propagation_opt_out") {
+		attrs.TracingPropagationOptOut = existing.TracingPropagationOptOut
+	}
 	if !has("monthly_budget") {
 		attrs.MonthlyBudget = existing.MonthlyBudget
 	}

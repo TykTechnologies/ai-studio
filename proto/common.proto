@@ -49,6 +49,11 @@ message LLMConfig {
   google.protobuf.Timestamp resource_signing_prev_expires_at = 29;
   string vendor_workspace_id = 30;  // Pinned vendor workspace (Anthropic: anthropic-workspace-id); empty when none
   string price_multipliers = 31;    // JSON object of per-service-tier price multiplier overrides ({"batch":0.4}); empty when none
+  // Agent tracing (Enterprise): the content mode cap for calls to this LLM
+  // (off|metadata|hashed|redacted|full; empty is no cap), and whether
+  // traceparent propagation to its upstream is switched off.
+  string tracing_content_mode_max = 32;
+  bool tracing_propagation_opt_out = 33;
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -89,6 +94,11 @@ message AppConfig {
   repeated uint32 model_router_ids = 23;
   // Semantic Router grants (Enterprise): from app_semantic_routers.
   repeated uint32 semantic_router_ids = 24;
+
+  // Agent tracing overrides (Enterprise): JSON models.AppTracingSettings
+  // without the hub-only owner_may_view_content; empty when the App
+  // inherits every global setting.
+  string tracing = 25;
 }
 
 // TokenConfig represents an API token configuration
@@ -249,6 +259,10 @@ message ToolConfig {
   // Auth plugins for /tools/{slug} and its MCP transports, in execution
   // order. When set they alone authenticate requests to the tool.
   repeated uint32 auth_plugin_ids = 21;
+
+  // Agent tracing content mode cap for calls to this tool (Enterprise);
+  // empty is no cap.
+  string tracing_content_mode_max = 22;
 }
 
 // DatasourceConfig represents a datasource configuration
@@ -281,6 +295,10 @@ message DatasourceConfig {
   // Auth plugins for /datasource/{slug}, in execution order. When set they
   // alone authenticate requests to the datasource.
   repeated uint32 auth_plugin_ids = 23;
+
+  // Agent tracing content mode cap for calls to this datasource
+  // (Enterprise); empty is no cap.
+  string tracing_content_mode_max = 24;
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)

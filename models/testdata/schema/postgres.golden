@@ -343,6 +343,7 @@ TABLE apps
   column team_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata text(text) nullable=YES
   column namespace text(text) nullable=YES default=''::text
+  column tracing json(json) nullable=YES
 TABLE attestation_templates
   constraint attestation_templates_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX attestation_templates_pkey ON attestation_templates USING btree (id)
@@ -672,6 +673,7 @@ TABLE datasources
   column embedder_id bigint(int8) nullable=YES precision=64 scale=0
   column active boolean(bool) nullable=YES
   column namespace text(text) nullable=YES default=''::text
+  column tracing_content_mode_max character varying(varchar) nullable=YES len=16
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata json(json) nullable=YES
@@ -993,6 +995,8 @@ TABLE llms
   column failover json(json) nullable=YES
   column vendor_workspace_id character varying(varchar) nullable=YES len=128
   column price_multipliers json(json) nullable=YES
+  column tracing_content_mode_max character varying(varchar) nullable=YES len=16
+  column tracing_propagation_opt_out boolean(bool) nullable=NO default=false
   column resource_signing_secret text(text) nullable=YES
   column resource_signing_secret_prev text(text) nullable=YES
   column resource_signing_prev_expires_at timestamp with time zone(timestamptz) nullable=YES
@@ -2083,6 +2087,7 @@ TABLE tools
   column namespace text(text) nullable=YES default=''::text
   column rest_access_disabled boolean(bool) nullable=NO default=false
   column mcp_access_disabled boolean(bool) nullable=NO default=false
+  column tracing_content_mode_max character varying(varchar) nullable=YES len=16
   column user_id bigint(int8) nullable=YES precision=64 scale=0
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0

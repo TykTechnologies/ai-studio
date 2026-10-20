@@ -27698,6 +27698,14 @@ const docTemplate = `{
                                         "type": "integer"
                                     }
                                 },
+                                "tracing": {
+                                    "description": "Tracing overrides the global agent tracing settings for the\nApp (Enterprise). Omitted keeps the stored settings on update;\nchanging owner_may_view_content needs traces:write.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/definitions/models.AppTracingSettings"
+                                        }
+                                    ]
+                                },
                                 "user_id": {
                                     "type": "integer"
                                 }
@@ -27884,6 +27892,14 @@ const docTemplate = `{
                             "items": {
                                 "type": "integer"
                             }
+                        },
+                        "tracing": {
+                            "description": "Agent tracing overrides (Enterprise).",
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/models.AppTracingSettings"
+                                }
+                            ]
                         },
                         "user_id": {
                             "type": "integer"
@@ -29149,6 +29165,10 @@ const docTemplate = `{
                                         "type": "string"
                                     }
                                 },
+                                "tracing_content_mode_max": {
+                                    "description": "TracingContentModeMax caps the agent tracing content mode for\nthis datasource (Enterprise); \"\" is no cap, omitted keeps the\nstored value on update.",
+                                    "type": "string"
+                                },
                                 "url": {
                                     "type": "string"
                                 },
@@ -29239,6 +29259,10 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/api.TagResponse"
                             }
+                        },
+                        "tracing_content_mode_max": {
+                            "description": "Agent tracing content mode cap (Enterprise); \"\" is no cap.",
+                            "type": "string"
                         },
                         "url": {
                             "type": "string"
@@ -29354,6 +29378,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -30067,6 +30092,14 @@ const docTemplate = `{
                                 "short_description": {
                                     "type": "string"
                                 },
+                                "tracing_content_mode_max": {
+                                    "description": "TracingContentModeMax caps the agent tracing content mode for\nthis LLM (Enterprise); \"\" is no cap. On PATCH an absent key\nkeeps the stored value.",
+                                    "type": "string"
+                                },
+                                "tracing_propagation_opt_out": {
+                                    "description": "TracingPropagationOptOut stops traceparent reaching this LLM's\nupstream (default false: it is sent).",
+                                    "type": "boolean"
+                                },
                                 "vendor": {
                                     "type": "string"
                                 },
@@ -30168,6 +30201,12 @@ const docTemplate = `{
                         },
                         "short_description": {
                             "type": "string"
+                        },
+                        "tracing_content_mode_max": {
+                            "type": "string"
+                        },
+                        "tracing_propagation_opt_out": {
+                            "type": "boolean"
                         },
                         "vendor": {
                             "type": "string"
@@ -32465,6 +32504,10 @@ const docTemplate = `{
                                 },
                                 "tool_type": {
                                     "type": "string"
+                                },
+                                "tracing_content_mode_max": {
+                                    "description": "TracingContentModeMax caps the agent tracing content mode for\nthis tool (Enterprise); \"\" is no cap, omitted keeps the stored\nvalue on update.",
+                                    "type": "string"
                                 }
                             }
                         },
@@ -32572,6 +32615,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tool_type": {
+                    "type": "string"
+                },
+                "tracing_content_mode_max": {
+                    "description": "Agent tracing content mode cap (Enterprise); \"\" is no cap.",
                     "type": "string"
                 }
             }
@@ -34200,6 +34247,35 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "start_date": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AppTracingSettings": {
+            "type": "object",
+            "properties": {
+                "content_mode": {
+                    "description": "ContentMode is the App's capture mode (off|metadata|hashed|redacted|full).",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "Enabled turns tracing on or off for the App; nil inherits.",
+                    "type": "boolean"
+                },
+                "max_request_override": {
+                    "description": "MaxRequestOverride is the highest mode a request header may raise\ncapture to for this App.",
+                    "type": "string"
+                },
+                "owner_may_view_content": {
+                    "description": "OwnerMayViewContent lets the App's Portal owner read captured content\n(Q4). Only administrators or holders of traces write may set it, and\nit is hub-only: never synced to edges.",
+                    "type": "boolean"
+                },
+                "payload_days": {
+                    "description": "PayloadDays is how long captured content is kept; nil inherits.",
+                    "type": "integer"
+                },
+                "session_idle_timeout": {
+                    "description": "SessionIdleTimeout closes a session after this long without activity\n(a Go duration, e.g. \"2h\").",
                     "type": "string"
                 }
             }

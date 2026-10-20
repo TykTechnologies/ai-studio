@@ -1712,6 +1712,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ResourceSigningPrevExpiresAt:       signingPrevExpiresAt,
 			VendorWorkspaceId:                  llm.VendorWorkspaceID,
 			PriceMultipliers:                   priceMultipliersJSON,
+			TracingContentModeMax:              llm.TracingContentModeMax,
+			TracingPropagationOptOut:           llm.TracingPropagationOptOut,
 			FilterIds:        filterIDs,
 			PluginIds:        llmPluginOrder[llm.ID],
 			CreatedAt:        timestamppb.New(llm.CreatedAt),
@@ -1833,6 +1835,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ModelRouterIds:     appModelRouterIDs(&app),
 			SemanticRouterIds:  appSemanticRouterIDs(&app),
 			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
+			Tracing:            app.Tracing.EdgeJSON(),
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
@@ -2347,6 +2350,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			FilterIds:           toolFilterMap[tool.ID],
 			AppIds:              toolAppMap[tool.ID],
 			AuthPluginIds:       endpointAuthPlugins[endpointKey{models.EndpointTypeTool, tool.ID}],
+			TracingContentModeMax: tool.TracingContentModeMax,
 			CreatedAt:           timestamppb.New(tool.CreatedAt),
 			UpdatedAt:           timestamppb.New(tool.UpdatedAt),
 		}
@@ -2471,6 +2475,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			GovernedMetadata:      s.governedMetadataJSON(models.GovernedObjectTypeDatasource, governedDatasources[models.BuiltinObjectID(ds.ID)]),
 			AppIds:                dsAppMap[ds.ID],
 			AuthPluginIds:         endpointAuthPlugins[endpointKey{models.EndpointTypeDatasource, ds.ID}],
+			TracingContentModeMax: ds.TracingContentModeMax,
 			CreatedAt:             timestamppb.New(ds.CreatedAt),
 			UpdatedAt:             timestamppb.New(ds.UpdatedAt),
 		}
@@ -3166,6 +3171,7 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		ModelRouterIds:     appModelRouterIDs(app),
 		SemanticRouterIds:  appSemanticRouterIDs(app),
 		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
+		Tracing:            app.Tracing.EdgeJSON(),
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),
 	}

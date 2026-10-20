@@ -237,8 +237,13 @@ type LLMConfig struct {
 	ResourceSigningPrevExpiresAt       *timestamppb.Timestamp `protobuf:"bytes,29,opt,name=resource_signing_prev_expires_at,json=resourceSigningPrevExpiresAt,proto3" json:"resource_signing_prev_expires_at,omitempty"`
 	VendorWorkspaceId                  string                 `protobuf:"bytes,30,opt,name=vendor_workspace_id,json=vendorWorkspaceId,proto3" json:"vendor_workspace_id,omitempty"` // Pinned vendor workspace (Anthropic: anthropic-workspace-id); empty when none
 	PriceMultipliers                   string                 `protobuf:"bytes,31,opt,name=price_multipliers,json=priceMultipliers,proto3" json:"price_multipliers,omitempty"`      // JSON object of per-service-tier price multiplier overrides ({"batch":0.4}); empty when none
-	unknownFields                      protoimpl.UnknownFields
-	sizeCache                          protoimpl.SizeCache
+	// Agent tracing (Enterprise): the content mode cap for calls to this LLM
+	// (off|metadata|hashed|redacted|full; empty is no cap), and whether
+	// traceparent propagation to its upstream is switched off.
+	TracingContentModeMax    string `protobuf:"bytes,32,opt,name=tracing_content_mode_max,json=tracingContentModeMax,proto3" json:"tracing_content_mode_max,omitempty"`
+	TracingPropagationOptOut bool   `protobuf:"varint,33,opt,name=tracing_propagation_opt_out,json=tracingPropagationOptOut,proto3" json:"tracing_propagation_opt_out,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
@@ -488,6 +493,20 @@ func (x *LLMConfig) GetPriceMultipliers() string {
 	return ""
 }
 
+func (x *LLMConfig) GetTracingContentModeMax() string {
+	if x != nil {
+		return x.TracingContentModeMax
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetTracingPropagationOptOut() bool {
+	if x != nil {
+		return x.TracingPropagationOptOut
+	}
+	return false
+}
+
 // AppConfig represents an application configuration with embedded relationships
 type AppConfig struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -522,8 +541,12 @@ type AppConfig struct {
 	ModelRouterIds []uint32 `protobuf:"varint,23,rep,packed,name=model_router_ids,json=modelRouterIds,proto3" json:"model_router_ids,omitempty"`
 	// Semantic Router grants (Enterprise): from app_semantic_routers.
 	SemanticRouterIds []uint32 `protobuf:"varint,24,rep,packed,name=semantic_router_ids,json=semanticRouterIds,proto3" json:"semantic_router_ids,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Agent tracing overrides (Enterprise): JSON models.AppTracingSettings
+	// without the hub-only owner_may_view_content; empty when the App
+	// inherits every global setting.
+	Tracing       string `protobuf:"bytes,25,opt,name=tracing,proto3" json:"tracing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AppConfig) Reset() {
@@ -722,6 +745,13 @@ func (x *AppConfig) GetSemanticRouterIds() []uint32 {
 		return x.SemanticRouterIds
 	}
 	return nil
+}
+
+func (x *AppConfig) GetTracing() string {
+	if x != nil {
+		return x.Tracing
+	}
+	return ""
 }
 
 // TokenConfig represents an API token configuration
@@ -1771,8 +1801,11 @@ type ToolConfig struct {
 	// Auth plugins for /tools/{slug} and its MCP transports, in execution
 	// order. When set they alone authenticate requests to the tool.
 	AuthPluginIds []uint32 `protobuf:"varint,21,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Agent tracing content mode cap for calls to this tool (Enterprise);
+	// empty is no cap.
+	TracingContentModeMax string `protobuf:"bytes,22,opt,name=tracing_content_mode_max,json=tracingContentModeMax,proto3" json:"tracing_content_mode_max,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ToolConfig) Reset() {
@@ -1952,6 +1985,13 @@ func (x *ToolConfig) GetAuthPluginIds() []uint32 {
 	return nil
 }
 
+func (x *ToolConfig) GetTracingContentModeMax() string {
+	if x != nil {
+		return x.TracingContentModeMax
+	}
+	return ""
+}
+
 // DatasourceConfig represents a datasource configuration
 type DatasourceConfig struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
@@ -1981,8 +2021,11 @@ type DatasourceConfig struct {
 	// Auth plugins for /datasource/{slug}, in execution order. When set they
 	// alone authenticate requests to the datasource.
 	AuthPluginIds []uint32 `protobuf:"varint,23,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Agent tracing content mode cap for calls to this datasource
+	// (Enterprise); empty is no cap.
+	TracingContentModeMax string `protobuf:"bytes,24,opt,name=tracing_content_mode_max,json=tracingContentModeMax,proto3" json:"tracing_content_mode_max,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DatasourceConfig) Reset() {
@@ -2174,6 +2217,13 @@ func (x *DatasourceConfig) GetAuthPluginIds() []uint32 {
 		return x.AuthPluginIds
 	}
 	return nil
+}
+
+func (x *DatasourceConfig) GetTracingContentModeMax() string {
+	if x != nil {
+		return x.TracingContentModeMax
+	}
+	return ""
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)
@@ -2871,7 +2921,8 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe2\t\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xda\n" +
+	"\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2911,7 +2962,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"&resource_signing_secret_prev_encrypted\x18\x1c \x01(\tR\"resourceSigningSecretPrevEncrypted\x12b\n" +
 	" resource_signing_prev_expires_at\x18\x1d \x01(\v2\x1a.google.protobuf.TimestampR\x1cresourceSigningPrevExpiresAt\x12.\n" +
 	"\x13vendor_workspace_id\x18\x1e \x01(\tR\x11vendorWorkspaceId\x12+\n" +
-	"\x11price_multipliers\x18\x1f \x01(\tR\x10priceMultipliers\"\x9b\a\n" +
+	"\x11price_multipliers\x18\x1f \x01(\tR\x10priceMultipliers\x127\n" +
+	"\x18tracing_content_mode_max\x18  \x01(\tR\x15tracingContentModeMax\x12=\n" +
+	"\x1btracing_propagation_opt_out\x18! \x01(\bR\x18tracingPropagationOptOut\"\xb5\a\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2941,7 +2994,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x0edatasource_ids\x18\x15 \x03(\rR\rdatasourceIds\x12R\n" +
 	"\x10plugin_resources\x18\x16 \x03(\v2'.microgateway.PluginResourceAssociationR\x0fpluginResources\x12(\n" +
 	"\x10model_router_ids\x18\x17 \x03(\rR\x0emodelRouterIds\x12.\n" +
-	"\x13semantic_router_ids\x18\x18 \x03(\rR\x11semanticRouterIds\"\xe8\x02\n" +
+	"\x13semantic_router_ids\x18\x18 \x03(\rR\x11semanticRouterIds\x12\x18\n" +
+	"\atracing\x18\x19 \x01(\tR\atracing\"\xe8\x02\n" +
 	"\vTokenConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x12\n" +
@@ -3059,7 +3113,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
-	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\x8a\x06\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xc3\x06\n" +
 	"\n" +
 	"ToolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -3086,7 +3140,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x11governed_metadata\x18\x12 \x01(\tR\x10governedMetadata\x120\n" +
 	"\x14rest_access_disabled\x18\x13 \x01(\bR\x12restAccessDisabled\x12.\n" +
 	"\x13mcp_access_disabled\x18\x14 \x01(\bR\x11mcpAccessDisabled\x12&\n" +
-	"\x0fauth_plugin_ids\x18\x15 \x03(\rR\rauthPluginIds\"\xde\x06\n" +
+	"\x0fauth_plugin_ids\x18\x15 \x03(\rR\rauthPluginIds\x127\n" +
+	"\x18tracing_content_mode_max\x18\x16 \x01(\tR\x15tracingContentModeMax\"\x97\a\n" +
 	"\x10DatasourceConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12+\n" +
@@ -3114,7 +3169,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"updated_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x17\n" +
 	"\aapp_ids\x18\x15 \x03(\rR\x06appIds\x12+\n" +
 	"\x11governed_metadata\x18\x16 \x01(\tR\x10governedMetadata\x12&\n" +
-	"\x0fauth_plugin_ids\x18\x17 \x03(\rR\rauthPluginIds\"\xd9\x02\n" +
+	"\x0fauth_plugin_ids\x18\x17 \x03(\rR\rauthPluginIds\x127\n" +
+	"\x18tracing_content_mode_max\x18\x18 \x01(\tR\x15tracingContentModeMax\"\xd9\x02\n" +
 	"\x11OAuthClientConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12,\n" +

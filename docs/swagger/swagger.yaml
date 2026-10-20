@@ -324,6 +324,13 @@ definitions:
                 items:
                   type: integer
                 type: array
+              tracing:
+                allOf:
+                - $ref: '#/definitions/models.AppTracingSettings'
+                description: |-
+                  Tracing overrides the global agent tracing settings for the
+                  App (Enterprise). Omitted keeps the stored settings on update;
+                  changing owner_may_view_content needs traces:write.
               user_id:
                 type: integer
             type: object
@@ -451,6 +458,10 @@ definitions:
             items:
               type: integer
             type: array
+          tracing:
+            allOf:
+            - $ref: '#/definitions/models.AppTracingSettings'
+            description: Agent tracing overrides (Enterprise).
           user_id:
             type: integer
         type: object
@@ -1326,6 +1337,12 @@ definitions:
                 items:
                   type: string
                 type: array
+              tracing_content_mode_max:
+                description: |-
+                  TracingContentModeMax caps the agent tracing content mode for
+                  this datasource (Enterprise); "" is no cap, omitted keeps the
+                  stored value on update.
+                type: string
               url:
                 type: string
               user_id:
@@ -1386,6 +1403,9 @@ definitions:
             items:
               $ref: '#/definitions/api.TagResponse'
             type: array
+          tracing_content_mode_max:
+            description: Agent tracing content mode cap (Enterprise); "" is no cap.
+            type: string
           url:
             type: string
           user_id:
@@ -1461,6 +1481,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
@@ -1946,6 +1967,17 @@ definitions:
                 type: integer
               short_description:
                 type: string
+              tracing_content_mode_max:
+                description: |-
+                  TracingContentModeMax caps the agent tracing content mode for
+                  this LLM (Enterprise); "" is no cap. On PATCH an absent key
+                  keeps the stored value.
+                type: string
+              tracing_propagation_opt_out:
+                description: |-
+                  TracingPropagationOptOut stops traceparent reaching this LLM's
+                  upstream (default false: it is sent).
+                type: boolean
               vendor:
                 type: string
               vendor_workspace_id:
@@ -2017,6 +2049,10 @@ definitions:
             type: integer
           short_description:
             type: string
+          tracing_content_mode_max:
+            type: string
+          tracing_propagation_opt_out:
+            type: boolean
           vendor:
             type: string
           vendor_workspace_id:
@@ -3596,6 +3632,12 @@ definitions:
                 type: boolean
               tool_type:
                 type: string
+              tracing_content_mode_max:
+                description: |-
+                  TracingContentModeMax caps the agent tracing content mode for
+                  this tool (Enterprise); "" is no cap, omitted keeps the stored
+                  value on update.
+                type: string
             type: object
           type:
             type: string
@@ -3676,6 +3718,9 @@ definitions:
           it from the name.
         type: string
       tool_type:
+        type: string
+      tracing_content_mode_max:
+        description: Agent tracing content mode cap (Enterprise); "" is no cap.
         type: string
     type: object
   api.UpdateBrandingSettingsRequest:
@@ -4819,6 +4864,34 @@ definitions:
       percentage:
         type: number
       start_date:
+        type: string
+    type: object
+  models.AppTracingSettings:
+    properties:
+      content_mode:
+        description: ContentMode is the App's capture mode (off|metadata|hashed|redacted|full).
+        type: string
+      enabled:
+        description: Enabled turns tracing on or off for the App; nil inherits.
+        type: boolean
+      max_request_override:
+        description: |-
+          MaxRequestOverride is the highest mode a request header may raise
+          capture to for this App.
+        type: string
+      owner_may_view_content:
+        description: |-
+          OwnerMayViewContent lets the App's Portal owner read captured content
+          (Q4). Only administrators or holders of traces write may set it, and
+          it is hub-only: never synced to edges.
+        type: boolean
+      payload_days:
+        description: PayloadDays is how long captured content is kept; nil inherits.
+        type: integer
+      session_idle_timeout:
+        description: |-
+          SessionIdleTimeout closes a session after this long without activity
+          (a Go duration, e.g. "2h").
         type: string
     type: object
   models.AuditRecord:
