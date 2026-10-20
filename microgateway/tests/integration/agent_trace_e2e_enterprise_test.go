@@ -237,9 +237,11 @@ func newEdgeE2E(t *testing.T) *edgeE2E {
 		CompatFamilies: []string{declared.FamilyHelicone, declared.FamilyMCPSession},
 		Harness:        []string{declared.HarnessClaudeCode, declared.HarnessCodexCLI, declared.HarnessOpenCode},
 	}))
+	agenttrace.SetGatewayNode(edgeE2EID)
 	agenttrace.SetSink(analytics.CaptureSink())
 	agenttrace.SetEnabled(true)
 	t.Cleanup(func() {
+		agenttrace.SetGatewayNode("")
 		agenttrace.SetEnabled(false)
 		agenttrace.SetSink(nil)
 		agenttrace.SetFingerprinter(nil)
@@ -457,7 +459,6 @@ func TestAgentTraceE2E_EdgeDemoAgent(t *testing.T) {
 	asked := llm[0]
 	assert.Equal(t, []string{"call_mcp", "call_local"}, asked.ToolCallIDs)
 	t.Run("the span names the edge that served it (jyx.150)", func(t *testing.T) {
-		t.Skip("jyx.150 open: gateway_node is never set")
 		assert.Equal(t, edgeE2EID, asked.GatewayNode)
 	})
 	if p := edgePart(asked, agenttrace.PartRequest); assert.NotNil(t, p) {
@@ -479,7 +480,6 @@ func TestAgentTraceE2E_EdgeDemoAgent(t *testing.T) {
 	assert.Equal(t, asked.TraceID, llm[1].TraceID)
 	assert.Equal(t, []string{"stop"}, llm[1].FinishReasons)
 	t.Run("streamed answer is in the transcript (jyx.146)", func(t *testing.T) {
-		t.Skip("jyx.146 open: an SSE body is taken for a data: URI and stored as a blob reference")
 		p := edgePart(llm[1], agenttrace.PartResponse)
 		require.NotNil(t, p)
 		require.NotNil(t, p.Content)
