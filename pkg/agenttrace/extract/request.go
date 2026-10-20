@@ -33,6 +33,11 @@ type Request struct {
 	// ToolResults are the trailing tool results, in body order. Earlier
 	// ones are history and are not returned.
 	ToolResults []ToolResult
+	// OfferedTools are the names of the tools the request offers the model
+	// (its tool definitions), in body order: the "tools available" of the
+	// LLM span, and the set a call to an unoffered tool is flagged against
+	// (jyx.51).
+	OfferedTools []string
 	// LastRole is the role of the last input message (system, user,
 	// assistant or tool), for turn boundaries (§3.1): a request ending in
 	// user text opens a turn, one ending in tool results continues it.
@@ -43,6 +48,7 @@ type Request struct {
 // linked by R1 and are left out, as are replayed server tool outputs.
 func (r Request) Apply(x *agenttrace.Extracts) {
 	x.PreviousResponseID = r.PreviousResponseID
+	x.OfferedTools = r.OfferedTools
 	for _, t := range r.ToolResults {
 		if t.ID == "" || t.Server {
 			continue
@@ -67,11 +73,23 @@ func parseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Requ
 	if !segments.Supports(format) {
 		return Request{}, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
-	units, err := segments.ExtractUnitsWith(format, body, segments.Options{})
+	// Tool definitions come in the same pass. A body whose definitions the
+	// segmenter refuses still yields its tool results.
+	all, err := segments.ExtractUnitsWith(format, body, segments.Options{ToolDefinitions: true})
 	if err != nil {
-		return Request{}, err
+		if all, err = segments.ExtractUnitsWith(format, body, segments.Options{}); err != nil {
+			return Request{}, err
+		}
 	}
 	var r Request
+	units := all[:0:0]
+	for _, u := range all {
+		if u.IsToolDefinition() {
+			r.OfferedTools = append(r.OfferedTools, u.ToolName)
+			continue
+		}
+		units = append(units, u)
+	}
 	current := -1
 	for _, u := range units {
 		if u.Role != guardrails.RoleAssistant && u.Turn > current {
@@ -173,11 +191,28 @@ func parseResponsesRequest(body []byte, fp agenttrace.Fingerprinter) (Request, e
 	var b struct {
 		PreviousResponseID string          `json:"previous_response_id"`
 		Input              json.RawMessage `json:"input"`
+		Tools              []struct {
+			Type        string `json:"type"`
+			Name        string `json:"name"`
+			ServerLabel string `json:"server_label"`
+		} `json:"tools"`
 	}
 	if err := unmarshal(body, &b); err != nil {
 		return Request{}, err
 	}
 	r := Request{PreviousResponseID: b.PreviousResponseID}
+	for _, t := range b.Tools {
+		// Function and custom tools are named; hosted tools (web_search,
+		// mcp, ...) by their type, an MCP server by its label.
+		switch {
+		case t.Name != "":
+			r.OfferedTools = append(r.OfferedTools, t.Name)
+		case t.Type == "mcp" && t.ServerLabel != "":
+			r.OfferedTools = append(r.OfferedTools, "mcp:"+t.ServerLabel)
+		case t.Type != "":
+			r.OfferedTools = append(r.OfferedTools, t.Type)
+		}
+	}
 	in := strings.TrimSpace(string(b.Input))
 	if in == "" || in == "null" {
 		return r, nil

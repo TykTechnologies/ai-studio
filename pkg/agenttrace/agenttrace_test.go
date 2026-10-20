@@ -106,6 +106,7 @@ func fullEvent() *Event {
 			ResponseID:         "resp_1",
 			PreviousResponseID: "resp_0",
 			FinishReasons:      []string{"tool_calls"},
+			OfferedTools:       []string{"search", "fetch"},
 			ArgsFP:             f.Fingerprint([]byte(`{"q":1}`)),
 			ResultFP:           f.Fingerprint([]byte(`"ok"`)),
 			ToolCallID:         "call_2",

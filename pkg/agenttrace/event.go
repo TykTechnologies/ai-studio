@@ -294,6 +294,9 @@ type Extracts struct {
 	PreviousResponseID string
 	// FinishReasons as the provider reported them (§3.1 turn boundary).
 	FinishReasons []string
+	// OfferedTools are the tool names the request offered the model (its
+	// tool definitions): the span's "tools available" (jyx.51).
+	OfferedTools []string
 
 	// For tool_call / datasource_call spans (R2): the canonical argument and
 	// result fingerprints of the executed call, the tool call id when the

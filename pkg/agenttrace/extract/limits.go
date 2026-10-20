@@ -20,6 +20,9 @@ const (
 	// maxReasonBytes.
 	MaxFinishReasons = 16
 	maxReasonBytes   = 64
+	// MaxOfferedTools caps the tool names kept from a request's tool
+	// definitions (the offered tool set, jyx.51).
+	MaxOfferedTools = 256
 )
 
 var knownRoles = map[string]bool{"system": true, "user": true, "assistant": true, "tool": true}
@@ -76,4 +79,27 @@ func (r *Request) bound() {
 	if r.LastRole != "" && !knownRoles[r.LastRole] {
 		r.LastRole = "other"
 	}
+	r.OfferedTools = boundNames(r.OfferedTools)
+}
+
+// boundNames dedupes names, drops empty ones, cuts each to MaxNameBytes and
+// keeps at most MaxOfferedTools.
+func boundNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		n = boundText(n, MaxNameBytes)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+		if len(out) == MaxOfferedTools {
+			break
+		}
+	}
+	return out
 }

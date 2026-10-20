@@ -529,6 +529,7 @@ message CaptureExtractsProto {
   bool tool_error = 9;
   bool stream = 10;
   bool stream_incomplete = 11;
+  repeated string offered_tools = 12;  // the request's tool definitions' names (jyx.51)
 }
 
 message CaptureGatewayEventProto {

@@ -3707,6 +3707,7 @@ type CaptureExtractsProto struct {
 	ToolError          bool                      `protobuf:"varint,9,opt,name=tool_error,json=toolError,proto3" json:"tool_error,omitempty"`
 	Stream             bool                      `protobuf:"varint,10,opt,name=stream,proto3" json:"stream,omitempty"`
 	StreamIncomplete   bool                      `protobuf:"varint,11,opt,name=stream_incomplete,json=streamIncomplete,proto3" json:"stream_incomplete,omitempty"`
+	OfferedTools       []string                  `protobuf:"bytes,12,rep,name=offered_tools,json=offeredTools,proto3" json:"offered_tools,omitempty"` // the request's tool definitions' names (jyx.51)
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -3816,6 +3817,13 @@ func (x *CaptureExtractsProto) GetStreamIncomplete() bool {
 		return x.StreamIncomplete
 	}
 	return false
+}
+
+func (x *CaptureExtractsProto) GetOfferedTools() []string {
+	if x != nil {
+		return x.OfferedTools
+	}
+	return nil
 }
 
 type CaptureGatewayEventProto struct {
@@ -4703,7 +4711,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x16CaptureToolResultProto\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tresult_fp\x18\x02 \x01(\fR\bresultFp\x12\x19\n" +
-	"\bis_error\x18\x03 \x01(\bR\aisError\"\xd8\x03\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\"\xfd\x03\n" +
 	"\x14CaptureExtractsProto\x12A\n" +
 	"\n" +
 	"tool_calls\x18\x01 \x03(\v2\".microgateway.CaptureToolCallProtoR\ttoolCalls\x12G\n" +
@@ -4720,7 +4728,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"tool_error\x18\t \x01(\bR\ttoolError\x12\x16\n" +
 	"\x06stream\x18\n" +
 	" \x01(\bR\x06stream\x12+\n" +
-	"\x11stream_incomplete\x18\v \x01(\bR\x10streamIncomplete\"\x96\x01\n" +
+	"\x11stream_incomplete\x18\v \x01(\bR\x10streamIncomplete\x12#\n" +
+	"\roffered_tools\x18\f \x03(\tR\fofferedTools\"\x96\x01\n" +
 	"\x18CaptureGatewayEventProto\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
 	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x16\n" +
