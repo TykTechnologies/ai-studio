@@ -7,6 +7,11 @@
 // and shared by every service that needs it; a second Dial, or a first one
 // made long after the host accepted, waits five seconds and fails.
 //
+// Each SDK holds its own Conn. Only one of them may be given the broker for
+// a broker ID: two Conns dialling the same ID would race for go-plugin's
+// one-shot connection info (on an edge only the Microgateway SDK has a
+// broker; in Studio only the AI Studio SDK does).
+//
 // A Conn dials at most once at a time, honours the caller's context while
 // the dial goes on in the background (so a caller that gives up does not
 // waste the connection info), remembers a failure briefly instead of
@@ -38,6 +43,7 @@ type Conn struct {
 	id      uint32
 	gen     uint64 // bumped when the broker or ID changes
 	conn    *grpc.ClientConn
+	shared  bool          // conn came from Share: its owner closes it
 	dialing chan struct{} // closed when the dial in flight ends
 	lastErr error
 	retryAt time.Time
@@ -85,7 +91,12 @@ func (c *Conn) SetID(id uint32, keepConn bool) {
 
 func (c *Conn) resetLocked() {
 	c.gen++
-	c.conn = nil
+	// A connection this Conn dialled is to a broker or ID no longer in
+	// use; close it. One that was shared stays its owner's to close.
+	if c.conn != nil && !c.shared {
+		_ = c.conn.Close()
+	}
+	c.conn, c.shared = nil, false
 	c.lastErr = nil
 	c.retryAt = time.Time{}
 	c.dialing = nil
@@ -100,7 +111,7 @@ func (c *Conn) Share(conn *grpc.ClientConn) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.conn == nil {
-		c.conn = conn
+		c.conn, c.shared = conn, true
 	}
 }
 

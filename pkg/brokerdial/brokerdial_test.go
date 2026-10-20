@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -169,6 +170,24 @@ func TestConn_WarmAndShare(t *testing.T) {
 	require.NoError(t, err)
 	assert.Same(t, shared, got)
 	assert.EqualValues(t, 1, f.calls.Load())
+}
+
+// A connection dropped for a new broker ID is closed if this Conn dialled
+// it, and left open if it was shared by its owner.
+func TestConn_ResetClosesOnlyItsOwnConnection(t *testing.T) {
+	own := testClientConn(t)
+	f := &fakeDialer{conn: own}
+	c := readyConn(f)
+	_, err := c.Get(context.Background())
+	require.NoError(t, err)
+	c.SetID(8, false)
+	assert.Equal(t, connectivity.Shutdown, own.GetState())
+
+	shared := testClientConn(t)
+	other := readyConn(&fakeDialer{})
+	other.Share(shared)
+	other.SetID(8, false)
+	assert.NotEqual(t, connectivity.Shutdown, shared.GetState())
 }
 
 func TestConn_NotReadyWithoutBrokerOrID(t *testing.T) {
