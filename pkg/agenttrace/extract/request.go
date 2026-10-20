@@ -184,19 +184,30 @@ func parseResponsesRequest(body []byte, fp agenttrace.Fingerprinter) (Request, e
 	if err := json.Unmarshal(b.Input, &items); err != nil {
 		return Request{}, fmt.Errorf("%w: input: %v", ErrUnrecognisedBody, err)
 	}
+	// Trailing results are the outputs after the last item the model produced
+	// (a call, reasoning or an assistant message): a tool loop of only
+	// function_call items resends every earlier output as history. The
+	// standard loop appends a response's calls, then their outputs, so
+	// parallel calls are all trailing; outputs interleaved with their calls
+	// read like a sequential loop and only the last is trailing: the input
+	// alone cannot tell the two apart, and re-linking history on every
+	// request is the worse error.
 	names := map[string]string{}
-	lastAssistant := -1
+	lastModel := -1
 	for i, it := range items {
 		switch it.Type {
 		case "function_call", "custom_tool_call":
 			names[it.CallID] = it.Name
+			lastModel = i
+		case "reasoning", "computer_call", "local_shell_call":
+			lastModel = i
 		case "", "message":
 			if it.Role == guardrails.RoleAssistant {
-				lastAssistant = i
+				lastModel = i
 			}
 		}
 	}
-	for i := lastAssistant + 1; i < len(items); i++ {
+	for i := lastModel + 1; i < len(items); i++ {
 		it := items[i]
 		switch it.Type {
 		case "function_call_output", "custom_tool_call_output":

@@ -30,6 +30,19 @@ func TestParseRequest_ToolFixtures(t *testing.T) {
 		t.Run(f.Name, func(t *testing.T) {
 			var want []idName
 			seen := map[idName]bool{}
+			if w, ok := responsesTrailing[f.Name]; ok {
+				// The manifest's last_user is "after the last assistant
+				// message" (guardrail scope); correlation's trailing is
+				// "after the last item the model produced" (jyx.61).
+				r, err := ParseRequest(f.Format, f.Body, testFP)
+				require.NoError(t, err)
+				var got []idName
+				for _, tr := range r.ToolResults {
+					got = append(got, idName{tr.ID, tr.Name})
+				}
+				assert.Equal(t, w, got)
+				return
+			}
 			for _, s := range f.LastUserSegments() {
 				if !s.IsTool() {
 					continue
@@ -59,6 +72,45 @@ func TestParseRequest_ToolFixtures(t *testing.T) {
 			}
 		})
 	}
+}
+
+// responsesTrailing are the trailing results of the Responses fixtures. In
+// mixed_outputs the function_call_output for call_R2build is followed by
+// another model call, so it is history.
+var responsesTrailing = map[string][]idName{
+	"openai_responses_function_call_output": {{"call_R1fetch0000000000000001", "fetch_url"}},
+	"openai_responses_mixed_outputs":        {{"call_R2gram00000000000000001", "grammar_check"}, {"mcp_R2crm000000000000000001", "find_contact"}},
+	"openai_responses_server_tools":         nil,
+}
+
+// jyx.61: a Responses tool loop with no assistant message between calls
+// resends earlier outputs as history; only the outputs after the model's
+// last call are trailing.
+func TestParseRequest_ResponsesToolLoopHistory(t *testing.T) {
+	ids := func(body string) []string {
+		r, err := ParseRequest(FormatOpenAIResponses, []byte(body), nil)
+		require.NoError(t, err)
+		var out []string
+		for _, tr := range r.ToolResults {
+			out = append(out, tr.ID)
+		}
+		return out
+	}
+	user := `{"role":"user","content":"go"}`
+	fc := func(id string) string { return `{"type":"function_call","call_id":"` + id + `","name":"f","arguments":"{}"}` }
+	out := func(id string) string { return `{"type":"function_call_output","call_id":"` + id + `","output":"r"}` }
+
+	sequential := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,` + fc("c2") + `,` + out("c2") + `]}`
+	assert.Equal(t, []string{"c2"}, ids(sequential), "c1 is history")
+
+	parallel := `{"input":[` + user + `,` + fc("c1") + `,` + fc("c2") + `,` + out("c1") + `,` + out("c2") + `]}`
+	assert.Equal(t, []string{"c1", "c2"}, ids(parallel))
+
+	reasoning := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,{"type":"reasoning","id":"rs","summary":[]},` + fc("c2") + `,` + out("c2") + `]}`
+	assert.Equal(t, []string{"c2"}, ids(reasoning))
+
+	newTurn := `{"input":[` + user + `,` + fc("c1") + `,` + out("c1") + `,{"role":"assistant","content":"done"},` + user + `]}`
+	assert.Empty(t, ids(newTurn))
 }
 
 func assertResultError(t *testing.T, r Request, id string) {
