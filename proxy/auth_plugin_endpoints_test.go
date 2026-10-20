@@ -220,7 +220,8 @@ func TestAuthPlugins_UnavailableFailsClosed(t *testing.T) {
 }
 
 // An auth plugin on an older SDK refuses a request over its 4 MiB gRPC limit.
-// That is a 413 naming the plugin, not "retry shortly", and still closed.
+// That is a 413, not "retry shortly", and still closed. The client is not
+// told which plugin.
 func TestAuthPlugins_TooLargeIs413(t *testing.T) {
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
@@ -231,7 +232,8 @@ func TestAuthPlugins_TooLargeIs413(t *testing.T) {
 	})
 	resp, body := h.post("/llm/call/primary/v1/chat/completions", failoverChatBody, "Authorization", "Bearer "+h.apiKey)
 	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode, "body: %s", body)
-	assert.Contains(t, string(body), "old-idp")
+	assert.Contains(t, string(body), "request too large for the gateway's plugins (5242930 bytes)")
+	assert.NotContains(t, string(body), "old-idp")
 	assert.Empty(t, h.primaryVendor.calls())
 }
 

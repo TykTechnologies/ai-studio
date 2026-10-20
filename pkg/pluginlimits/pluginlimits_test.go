@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net"
 	"strings"
@@ -136,5 +137,43 @@ func TestIsTooLargeIgnoresOtherErrors(t *testing.T) {
 		if AsTooLarge(err, "p", "post_auth", 1) != err {
 			t.Errorf("AsTooLarge wrapped %v", err)
 		}
+	}
+}
+
+func TestCheckSize(t *testing.T) {
+	t.Setenv(EnvMaxMsgBytes, "100")
+	if err := CheckSize("p", "post_auth", 100); err != nil {
+		t.Errorf("at the limit: %v", err)
+	}
+	err := CheckSize("cache", "post_auth", 101)
+	tl, ok := AsTooLargeError(err)
+	if !ok || !errors.Is(err, ErrRequestTooLarge) || tl.Plugin != "cache" || tl.Bytes != 101 {
+		t.Fatalf("over the limit: %v (%+v)", err, tl)
+	}
+	if !IsRequestTooLarge(err) || !strings.Contains(err.Error(), "100-byte plugin limit") {
+		t.Errorf("err = %v", err)
+	}
+	if got := ClientMessage(err); got != "request too large for the gateway's plugins (101 bytes)" || strings.Contains(got, "cache") {
+		t.Errorf("ClientMessage = %q", got)
+	}
+	plain := fmt.Errorf("body: %w", ErrRequestTooLarge)
+	if !IsRequestTooLarge(plain) || ClientMessage(plain) != "request too large for the gateway's plugins" {
+		t.Errorf("plain ErrRequestTooLarge: %v, %q", IsRequestTooLarge(plain), ClientMessage(plain))
+	}
+	if IsRequestTooLarge(errors.New("other")) || IsRequestTooLarge(nil) {
+		t.Error("IsRequestTooLarge matched an unrelated error")
+	}
+}
+
+// The host's service-API servers accept HostServiceMaxMsgBytes from plugins,
+// whatever the body limit is set to.
+func TestHostServiceServerOptions(t *testing.T) {
+	t.Setenv(EnvMaxMsgBytes, "")
+	client := dial(t, grpc.NewServer(HostServiceServerOptions()...))
+	if _, err := client.ProcessPostAuth(context.Background(), bigRequest(6<<20)); err != nil {
+		t.Fatalf("6 MiB: %v", err)
+	}
+	if _, err := client.ProcessPostAuth(context.Background(), bigRequest(HostServiceMaxMsgBytes+1)); !IsTooLarge(err) {
+		t.Fatalf("over HostServiceMaxMsgBytes: err = %v", err)
 	}
 }

@@ -306,7 +306,7 @@ func (h *E2EPluginHarness) startBrokeredServer() error {
 
 	// Tell broker to accept connections at this address
 	go h.broker.AcceptAndServe(h.brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		s := grpc.NewServer(append(opts, pluginlimits.ServerOptions()...)...)
+		s := grpc.NewServer(append(opts, pluginlimits.HostServiceServerOptions()...)...)
 		if h.runtime == plugin_sdk.RuntimeGateway {
 			gwmgmtpb.RegisterMicrogatewayManagementServiceServer(s, h.testGatewayServer)
 		} else {

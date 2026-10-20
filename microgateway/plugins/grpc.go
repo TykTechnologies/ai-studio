@@ -123,7 +123,7 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(pluginID uint, m
 	// The go-plugin broker handles synchronization internally - the plugin
 	// will wait for connection info when it calls Dial().
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		opts = append(opts, pluginlimits.ServerOptions()...)
+		opts = append(opts, pluginlimits.HostServiceServerOptions()...)
 		s := grpc.NewServer(append(opts, grpc.UnaryInterceptor(boundPluginIDInterceptor(pluginID)))...)
 
 		// Register microgateway management services on brokered server

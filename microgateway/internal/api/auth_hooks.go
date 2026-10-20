@@ -117,7 +117,12 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		}
 		sentHeaders := maps.Clone(headers)
 
-		bodyBytes, _ := readBodyWithoutConsuming(r)
+		bodyBytes, err := readBodyWithoutConsuming(r)
+		if pluginlimits.IsRequestTooLarge(err) {
+			log.Warn().Err(err).Str("llm_slug", llmSlug).Msg("Request body over the plugin limit; refusing it before the pre-auth plugins")
+			respondPluginChainError(w, err)
+			return true
+		}
 
 		// Create plugin request matching interfaces.PluginRequest structure
 		pluginReq := &interfaces.PluginRequest{
@@ -252,7 +257,11 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 			headers[key] = values[0]
 		}
 	}
-	bodyBytes, _ := readBodyWithoutConsuming(r)
+	bodyBytes, err := readBodyWithoutConsuming(r)
+	if pluginlimits.IsRequestTooLarge(err) {
+		// The proxy answers 413; no auth plugin could be sent the body.
+		return proxy.AuthResult{}, err
+	}
 	authReq := &interfaces.AuthRequest{
 		Credential: credential,
 		AuthType:   credType,
@@ -273,7 +282,7 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 		resp, err := a.plugins.CallAuth(lp, authReq, pluginCtx)
 		if err != nil {
 			log.Warn().Err(err).Uint("plugin_id", lp.ID).Str("plugin_name", lp.Name).Msg("Auth plugin failed; trying the next")
-			if _, ok := pluginlimits.AsTooLargeError(err); ok && tooLarge == nil {
+			if pluginlimits.IsRequestTooLarge(err) && tooLarge == nil {
 				tooLarge = err
 			}
 			continue
@@ -405,7 +414,12 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		}
 		sentHeaders := maps.Clone(headers)
 
-		bodyBytes, _ := readBodyWithoutConsuming(r)
+		bodyBytes, err := readBodyWithoutConsuming(r)
+		if pluginlimits.IsRequestTooLarge(err) {
+			log.Warn().Err(err).Str("llm_slug", llmSlug).Msg("Request body over the plugin limit; refusing it before the post-auth plugins")
+			respondPluginChainError(w, err)
+			return true
+		}
 
 		// Who authenticated the request, and how (proxy.AuthIdentity). The
 		// subject is set when an auth plugin said who the call is for.
@@ -602,26 +616,34 @@ func generateRequestID() string {
 	return "req_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 }
 
+// readBodyWithoutConsuming reads the body for the plugins and puts it back.
+// A body over pluginlimits.MaxMsgBytes is ErrRequestTooLarge: no plugin could
+// be sent it, and reading it whole would let one request hold that much
+// memory on the edge several times over (edge, gRPC, plugin).
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return nil, nil
 	}
-	bodyBytes, err := io.ReadAll(r.Body)
+	limit := int64(pluginlimits.MaxMsgBytes())
+	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(bodyBytes)) > limit {
+		return nil, fmt.Errorf("request body over %d bytes: %w", limit, pluginlimits.ErrRequestTooLarge)
 	}
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	return bodyBytes, nil
 }
 
 // respondPluginChainError answers a request whose pre- or post-auth plugin
-// chain failed. A plugin that refused the request for its size (one built on
-// an SDK before 2.3 accepts 4 MiB) gets a 413 naming it; anything else is a
-// 500. Either way the request is not forwarded.
+// chain failed. A request too large for a plugin (over the host's limit, or
+// refused by a plugin built on an SDK before 2.3, which accepts 4 MiB) is a
+// 413; anything else is a 500. Either way the request is not forwarded. The
+// client is not told which plugin; the log says.
 func respondPluginChainError(w http.ResponseWriter, err error) {
-	if tl, ok := pluginlimits.AsTooLargeError(err); ok {
-		respondWithError(w, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("request too large for plugin %s (%d bytes)", tl.Plugin, tl.Bytes), nil)
+	if pluginlimits.IsRequestTooLarge(err) {
+		respondWithError(w, http.StatusRequestEntityTooLarge, pluginlimits.ClientMessage(err), nil)
 		return
 	}
 	respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)

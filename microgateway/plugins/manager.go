@@ -660,6 +660,9 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertPluginRequest(pluginReq, pbCtx)
 
+			if err := pluginlimits.CheckSize(plugin.Name, string(hookType), proto.Size(pbReq)); err != nil {
+				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), pluginChainCallTimeout)
 			resp, err := plugin.GRPCClient.ProcessPreAuth(ctx, pbReq)
 			cancel()
@@ -698,6 +701,9 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertEnrichedRequest(enrichedReq, pbCtx)
 
+			if err := pluginlimits.CheckSize(plugin.Name, string(hookType), proto.Size(pbReq)); err != nil {
+				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), pluginChainCallTimeout)
 			resp, err := plugin.GRPCClient.ProcessPostAuth(ctx, pbReq)
 			cancel()

@@ -87,6 +87,9 @@ func (pm *PluginManager) CallAuth(lp *LoadedPlugin, req *interfaces.AuthRequest,
 
 	pbCtx := convertPluginContext(pluginCtx)
 	pbReq := convertAuthRequest(req, pbCtx)
+	if err := pluginlimits.CheckSize(lp.Name, string(interfaces.HookTypeAuth), proto.Size(pbReq)); err != nil {
+		return nil, fmt.Errorf("auth plugin %s: %w", lp.Name, err)
+	}
 	resp, err := lp.GRPCClient.Authenticate(ctx, pbReq)
 	if err != nil {
 		err = pluginlimits.AsTooLarge(err, lp.Name, string(interfaces.HookTypeAuth), proto.Size(pbReq))

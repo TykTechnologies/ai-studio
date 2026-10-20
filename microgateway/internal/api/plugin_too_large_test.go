@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
@@ -26,14 +28,14 @@ func tooLarge(plugin, hook string) error {
 }
 
 // A pre- or post-auth chain that failed because a plugin refused the size is
-// a 413 naming the plugin; any other failure stays a 500.
+// a 413 that does not name the plugin; any other failure stays a 500.
 func TestRespondPluginChainError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	respondPluginChainError(rec, tooLarge("old-cache", "post_auth"))
 	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	assert.Equal(t, "request too large for plugin old-cache (5242930 bytes)", body["error"])
+	assert.Equal(t, "request too large for the gateway's plugins (5242930 bytes)", body["error"])
 
 	rec = httptest.NewRecorder()
 	respondPluginChainError(rec, errors.New("plugin x execution failed: connection refused"))
@@ -63,4 +65,41 @@ func TestPluginAuthenticator_TooLargeIsReported(t *testing.T) {
 	res, err := newPluginAuthenticator(nil, pm, nil).authenticate(authRequest(), docsTarget, "tok", proxy.CredTypeBearer)
 	require.NoError(t, err)
 	assert.Equal(t, proxy.AuthAccepted, res.Outcome)
+}
+
+// The body read for the plugins stops at the plugin limit: a larger body is
+// ErrRequestTooLarge (413 from the hooks, nothing forwarded), not read whole.
+func TestReadBodyWithoutConsumingIsCapped(t *testing.T) {
+	t.Setenv(pluginlimits.EnvMaxMsgBytes, "1024")
+
+	r := httptest.NewRequest(http.MethodPost, "/llm/rest/x/v1/messages", strings.NewReader(strings.Repeat("a", 1024)))
+	body, err := readBodyWithoutConsuming(r)
+	require.NoError(t, err)
+	assert.Len(t, body, 1024)
+	again, _ := io.ReadAll(r.Body)
+	assert.Len(t, again, 1024, "the body is put back for the proxy")
+
+	r = httptest.NewRequest(http.MethodPost, "/llm/rest/x/v1/messages", strings.NewReader(strings.Repeat("a", 1025)))
+	_, err = readBodyWithoutConsuming(r)
+	require.ErrorIs(t, err, pluginlimits.ErrRequestTooLarge)
+
+	rec := httptest.NewRecorder()
+	respondPluginChainError(rec, err)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	assert.Contains(t, rec.Body.String(), "request too large for the gateway's plugins")
+}
+
+// An auth plugin is never sent a body over the limit: the authenticator
+// refuses before asking any plugin.
+func TestPluginAuthenticator_OversizeBodyAsksNoPlugin(t *testing.T) {
+	t.Setenv(pluginlimits.EnvMaxMsgBytes, "64")
+	pm := &fakeAuthPluginManager{
+		attached: map[string]int{"datasource": 1},
+		loaded:   map[string][]*plugins.LoadedPlugin{"datasource": {{ID: 1, Name: "idp"}}},
+		answers:  map[uint]func(*interfaces.AuthRequest) (*interfaces.AuthResponse, error){1: authenticated("5")},
+	}
+	r := httptest.NewRequest(http.MethodPost, "/datasource/docs", strings.NewReader(strings.Repeat("a", 65)))
+	_, err := newPluginAuthenticator(nil, pm, nil).authenticate(r, docsTarget, "tok", proxy.CredTypeBearer)
+	require.ErrorIs(t, err, pluginlimits.ErrRequestTooLarge)
+	assert.Empty(t, pm.asked)
 }

@@ -454,14 +454,18 @@ The pass-through applies to every plugin the host starts, so name only the varia
 
 ### Plugin Message Size
 
-Each request, response or stream a hook sees travels between the host and the plugin as one gRPC message: the body plus headers and context. Plugins built on the 2.3.0 SDK accept messages up to **64 MiB**, above the LLM vendors' own request limits. Set `PLUGIN_GRPC_MAX_MSG_BYTES` (in bytes) on the host to change it. The host passes it to every plugin it starts and uses it for the service API it serves them.
+Each request, response or stream a hook sees travels between the host and the plugin as one gRPC message: the body plus headers and context. Plugins built on the 2.3.0 SDK accept messages up to **64 MiB**, above the LLM vendors' own request limits. Set `PLUGIN_GRPC_MAX_MSG_BYTES` (in bytes) on the host to change it; the host passes it to every plugin it starts.
+
+The same limit caps the request bodies the Microgateway reads for its plugins. On an LLM with `pre_auth`, `auth` or `post_auth` plugins, a body over the limit is refused with `413` before any plugin is called, and is not read in full.
 
 Plugins built on an SDK before 2.3.0 keep gRPC's default of **4 MiB**. Text-only requests rarely reach that, but a few base64 screenshots or one PDF document block do. When such a plugin refuses a request for its size:
 
-- `pre_auth`, `auth` and `post_auth`: the gateway answers `413` with `request too large for plugin <name> (<bytes> bytes)` and does not forward the request. It does not skip the plugin, since a request-path plugin may enforce policy.
+- `pre_auth`, `auth` and `post_auth`: the gateway answers `413` with `request too large for the gateway's plugins (<bytes> bytes)` and does not forward the request. It does not skip the plugin, since a request-path plugin may enforce policy. The log names the plugin; the response does not.
 - response hooks: the response goes to the client without that plugin's changes, and the gateway logs the plugin name, the size and the limit.
 
 Rebuild such plugins on the current SDK to lift the limit. `grpc://` plugins set their own server limits (`grpc.MaxRecvMsgSize`).
+
+Calls from a plugin into the host's service API (KV, events, edge payloads) are limited to 8 MiB per message, whatever `PLUGIN_GRPC_MAX_MSG_BYTES` says.
 
 ## Troubleshooting
 

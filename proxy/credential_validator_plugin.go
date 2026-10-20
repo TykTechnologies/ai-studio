@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -63,13 +62,12 @@ func (cv *CredentialValidator) pluginAuth(w http.ResponseWriter, r *http.Request
 	}
 
 	result, err := cv.authHooks.CustomAuth(r, target, credential, credType)
-	if tl, ok := pluginlimits.AsTooLargeError(err); ok {
+	if pluginlimits.IsRequestTooLarge(err) {
 		log.Warn().Err(err).
 			Str("target_kind", target.Kind).
 			Str("target_slug", target.Slug).
-			Msg("Auth plugin refused the request as too large; refusing the request")
-		respondWithError(w, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("request too large for plugin %s (%d bytes)", tl.Plugin, tl.Bytes), nil, false)
+			Msg("Request too large for the auth plugins; refusing the request")
+		respondWithError(w, http.StatusRequestEntityTooLarge, pluginlimits.ClientMessage(err), nil, false)
 		return true
 	}
 	if err != nil {
