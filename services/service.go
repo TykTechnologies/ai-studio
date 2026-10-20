@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 
@@ -78,6 +79,9 @@ type Service struct {
 	Webhooks webhooks.Service
 	// AgentTracing is Agent Call Tracing (Enterprise; set by InitAgentTracing)
 	AgentTracing agenttracing.Service
+	// agentTracingStarted is set once the start gate passed and the service
+	// started; SyncAgentTracingLicence acts only then.
+	agentTracingStarted atomic.Bool
 	// TykMCP is the Tyk Dashboard MCP integration (Enterprise; set by
 	// InitTykMCP once the event bus is wired)
 	TykMCP tykmcp.Service
@@ -155,6 +159,7 @@ func (s *Service) InitWebhooks(cfg config.WebhooksConfig, version string) {
 // the service. Call after SetLicensingService. When the gate is closed the
 // result is inert and the gateway's capture flag stays off.
 func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingConfig, nodeID, version string) {
+	s.agentTracingStarted.Store(false)
 	if s.AgentTracing != nil {
 		s.AgentTracing.Stop()
 	}
@@ -181,7 +186,30 @@ func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingC
 		return
 	}
 	agenttrace.SetEnabled(true)
+	s.agentTracingStarted.Store(true)
 	logger.Info("Agent Call Tracing service started")
+}
+
+// SyncAgentTracingLicence keeps capture in step with the Enterprise licence
+// after start-up (jyx.56): capture stops while the licence is not valid and
+// resumes once a renewed one is (no restart). The standalone binaries exit
+// when a periodic re-check fails, so this matters to an embedding host that
+// keeps Studio running (Options.OnLicenceInvalid). Only a service the start
+// gate started is affected; the stored traces and the API stay as they are.
+func (s *Service) SyncAgentTracingLicence() {
+	if !s.agentTracingStarted.Load() || s.LicensingService == nil {
+		return
+	}
+	valid := s.LicensingService.IsValid()
+	if agenttrace.Enabled() == valid {
+		return
+	}
+	agenttrace.SetEnabled(valid)
+	if valid {
+		logger.Info("Enterprise licence valid again; Agent Call Tracing capture resumed")
+	} else {
+		logger.Warn("Enterprise licence no longer valid; Agent Call Tracing capture stopped")
+	}
 }
 
 // InitTykMCP builds the Tyk Dashboard MCP integration service (Enterprise

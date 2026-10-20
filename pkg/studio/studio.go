@@ -347,6 +347,17 @@ func New(opts Options) (_ *Studio, err error) {
 	})
 
 	// Licensing (Enterprise: validates the licence and starts periodic checks).
+	// A host that keeps Studio running on an invalid licence gets Agent Call
+	// Tracing capture stopped first (the standalone binary exits instead).
+	onInvalid := opts.OnLicenceInvalid
+	if onInvalid != nil {
+		onInvalid = func(err error) {
+			if s.service != nil {
+				s.service.SyncAgentTracingLicence()
+			}
+			opts.OnLicenceInvalid(err)
+		}
+	}
 	s.licensing = licensing.NewService(licensing.Config{
 		LicenseKey:           conf.LicenseKey,
 		LicenseSource:        opts.License,
@@ -355,7 +366,7 @@ func New(opts Options) (_ *Studio, err error) {
 		TelemetryDisabled:    conf.LicenseDisableTelemetry,
 		ValidityCheckPeriod:  conf.LicenseValidityPeriod,
 		TelemetryConcurrency: conf.LicenseTelemetryConcurrency,
-		OnInvalid:            opts.OnLicenceInvalid,
+		OnInvalid:            onInvalid,
 	}, s.db)
 	if err := s.licensing.Start(); err != nil {
 		return nil, fmt.Errorf("studio: start licensing: %w", err)
@@ -903,7 +914,12 @@ func cookiePath(basePath string) string {
 // licence Studio already holds in place; the host can show it.
 func (s *Studio) ReloadLicense() error {
 	if r, ok := s.licensing.(licensing.Revalidator); ok {
-		return r.Revalidate()
+		if err := r.Revalidate(); err != nil {
+			return err
+		}
+	}
+	if s.service != nil {
+		s.service.SyncAgentTracingLicence()
 	}
 	return nil
 }
