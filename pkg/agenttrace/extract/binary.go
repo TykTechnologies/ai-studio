@@ -11,7 +11,9 @@ const MinBase64Bytes = 1024
 // base64 run over MinBase64Bytes. mediaType is the data URI's type, or
 // application/octet-stream.
 func BinaryString(s string) (mediaType string, ok bool) {
-	if rest, found := strings.CutPrefix(s, "data:"); found {
+	s = strings.TrimSpace(s)
+	if len(s) > 5 && strings.EqualFold(s[:5], "data:") {
+		rest := s[5:]
 		meta, _, hasData := strings.Cut(rest, ",")
 		if hasData {
 			mt, _, _ := strings.Cut(meta, ";")
@@ -44,14 +46,28 @@ func BinaryMediaType(mt string) bool {
 	return true
 }
 
-// isBase64 accepts the standard and URL-safe alphabets, padding and line
-// breaks, and nothing else.
+// minBase64Run is the shortest whitespace-separated run of wrapped base64
+// (MIME wraps at 76): prose made only of letters and spaces has shorter
+// words, so it is never taken for binary.
+const minBase64Run = 40
+
+// isBase64 accepts the standard and URL-safe alphabets and padding, wrapped
+// by whitespace into runs of at least minBase64Run (the last may be
+// shorter), and nothing else.
 func isBase64(s string) bool {
+	run := 0
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
 		case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9':
-		case c == '+', c == '/', c == '-', c == '_', c == '=', c == '\n', c == '\r':
+			run++
+		case c == '+', c == '/', c == '-', c == '_', c == '=':
+			run++
+		case c == '\n', c == '\r', c == ' ', c == '\t':
+			if run > 0 && run < minBase64Run {
+				return false
+			}
+			run = 0
 		default:
 			return false
 		}
