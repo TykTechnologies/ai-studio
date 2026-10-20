@@ -66,6 +66,9 @@ func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func(
 		return false
 	}
 	agenttrace.SetSink(analytics.CaptureSink())
+	// Capture also waits for the hub: only while its snapshot carries the
+	// content policy (its tracing is on) are requests captured.
+	agenttrace.RequireHubTracing(true)
 	agenttrace.SetEnabled(true)
 	if !verifiedHubTLS(cfg) {
 		log.Warn().Msg("Agent Call Tracing: the connection to the hub is not verified TLS (EDGE_TLS_ENABLED=false or EDGE_SKIP_TLS_VERIFY=true); this edge sends trace metadata only, never captured content")

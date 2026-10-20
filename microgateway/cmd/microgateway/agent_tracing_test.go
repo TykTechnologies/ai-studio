@@ -34,6 +34,7 @@ func gateConfig(enabled bool, mode string) *config.Config {
 
 func TestStartAgentTracingGate(t *testing.T) {
 	t.Cleanup(func() { agenttrace.SetEnabled(false); agenttrace.SetSink(nil); resetEdgeTracingGlobals() })
+	agenttrace.SetHubTracing(true) // the hub's snapshot carried the content policy
 	yes := func() bool { return true }
 	no := func() bool { return false }
 
@@ -123,6 +124,8 @@ func TestStartAgentTracingMetadataOnlyWithoutVerifiedTLS(t *testing.T) {
 
 // resetEdgeTracingGlobals restores what startAgentTracing sets process-wide.
 func resetEdgeTracingGlobals() {
+	agenttrace.RequireHubTracing(false)
+	agenttrace.SetHubTracing(false)
 	declared.SetDefault(nil)
 	tracing.SetOutboundPropagation(true, true, true)
 	proxy.SetOpenAIClientRequestID(true)
@@ -140,5 +143,30 @@ func TestStartAgentTracingAppliesPropagation(t *testing.T) {
 	startAgentTracing(cfg, nil, nil)
 	if tracing.PropagateToLLMProviders() || !tracing.PropagateToHTTPUpstreams() || tracing.PropagateToMCP() {
 		t.Fatal("propagation settings not applied")
+	}
+}
+
+// Edge capture follows the hub: while the hub's snapshot carries no content
+// policy (its tracing is off) nothing is captured (jyx.128).
+func TestStartAgentTracingWaitsForTheHub(t *testing.T) {
+	if !aiconfig.IsEnterprise() {
+		t.Skip("capture starts only in the Enterprise build")
+	}
+	t.Cleanup(func() { agenttrace.SetEnabled(false); agenttrace.SetSink(nil); resetEdgeTracingGlobals() })
+	cfg := gateConfig(true, "edge")
+	cfg.HubSpoke.ClientTLSEnabled = true
+	if !startAgentTracing(cfg, &fakeEnabler{ok: true}, func() bool { return true }) {
+		t.Fatal("the local gate did not pass")
+	}
+	if _, rec := agenttrace.Begin(context.Background()); rec != nil || agenttrace.Enabled() {
+		t.Fatal("captured before the hub said its tracing is on")
+	}
+	agenttrace.SetHubTracing(true)
+	if _, rec := agenttrace.Begin(context.Background()); rec == nil {
+		t.Fatal("not capturing with the hub on")
+	}
+	agenttrace.SetHubTracing(false)
+	if agenttrace.Enabled() {
+		t.Fatal("still capturing after the hub turned tracing off")
 	}
 }

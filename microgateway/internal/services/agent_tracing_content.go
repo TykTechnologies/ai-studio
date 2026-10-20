@@ -23,6 +23,9 @@ func installAgentTracingContent(p *pb.AgentTracingContentPolicy, db *gorm.DB) {
 	// span id; the edge then leaves out its own live span for captured
 	// requests, as the hub does.
 	agenttrace.SetExportActive(p != nil && p.AssembledExportActive)
+	// The hub sends the policy only while its own tracing runs; without it
+	// the edge captures nothing (it would be discarded at the hub).
+	agenttrace.SetHubTracing(p != nil)
 	if p == nil {
 		agenttrace.SetContentProcessor(nil)
 		return
