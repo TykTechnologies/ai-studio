@@ -79,18 +79,19 @@ func injectUpstreamTrace(ctx context.Context, h http.Header, llm *models.LLM) {
 	tracing.InjectOutgoing(ctx, h)
 }
 
-// contextToolCaller is implemented by gateway services whose tool calls take
-// the request context (services.Service, the microgateway adapter).
-type contextToolCaller interface {
-	CallToolOperationContext(ctx context.Context, toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error)
-}
-
-// callToolOperation calls a tool operation bound to ctx, so the upstream
-// call is cancelled with the request and carries its traceparent. Services
-// without the context-aware method get the old call.
+// callToolOperation calls a tool operation with the request's trace context
+// in the call's headers, so the tool upstream continues the trace. It always
+// goes through the service's CallToolOperation: a type assertion for a
+// context-aware variant would pick a method promoted from an embedded
+// service and bypass a wrapper's override of CallToolOperation.
 func (p *Proxy) callToolOperation(ctx context.Context, toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	if c, ok := p.gatewayService.(contextToolCaller); ok {
-		return c.CallToolOperationContext(ctx, toolID, operationID, params, payload, headers)
+	if trace.SpanContextFromContext(ctx).IsValid() {
+		h := make(map[string][]string, len(headers)+2)
+		for k, v := range headers {
+			h[k] = v
+		}
+		tracing.InjectOutgoing(ctx, h)
+		headers = h
 	}
 	return p.gatewayService.CallToolOperation(toolID, operationID, params, payload, headers)
 }
