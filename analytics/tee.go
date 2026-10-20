@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 )
 
 // Tee sends every record to a primary handler (Studio's database handler:
@@ -213,5 +214,41 @@ func recordExchangeWith(ctx context.Context, h AnalyticsHandler, log *models.Pro
 	}
 }
 
+// RecordCaptureEvents forwards agent tracing capture events to the primary
+// and to the sinks that stage them. Sinks get copies: the primary may strip
+// payloads from its events under queue pressure.
+func (t *Tee) RecordCaptureEvents(ctx context.Context, events []*agenttrace.Event) {
+	var forSinks []*agenttrace.Event
+	if len(t.sinks) > 0 {
+		forSinks = make([]*agenttrace.Event, len(events))
+		for i, e := range events {
+			forSinks[i] = cloneCaptureEvent(e)
+		}
+	}
+	if cr, ok := t.primary.(CaptureRecorder); ok {
+		cr.RecordCaptureEvents(ctx, events)
+	}
+	if forSinks != nil {
+		t.toSinks(func(h AnalyticsHandler) {
+			if cr, ok := h.(CaptureRecorder); ok {
+				cr.RecordCaptureEvents(context.Background(), forSinks)
+			}
+		})
+	}
+}
+
+// cloneCaptureEvent copies an event deeply enough that stripping payloads or
+// gateway event details on one copy leaves the other intact.
+func cloneCaptureEvent(e *agenttrace.Event) *agenttrace.Event {
+	if e == nil {
+		return nil
+	}
+	c := *e
+	c.Parts = append([]agenttrace.PayloadPart(nil), e.Parts...)
+	c.GatewayEvents = append([]agenttrace.GatewayEvent(nil), e.GatewayEvents...)
+	return &c
+}
+
 var _ AnalyticsHandler = (*Tee)(nil)
 var _ ExchangeRecorder = (*Tee)(nil)
+var _ CaptureRecorder = (*Tee)(nil)

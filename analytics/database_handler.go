@@ -36,6 +36,12 @@ type DatabaseHandler struct {
 	cancel              context.CancelFunc
 	// workerDone is closed when the worker has returned.
 	workerDone chan struct{}
+	// Agent tracing capture staging (capture.go). The queue and its flusher
+	// start on the first capture event; the batch channel always exists so
+	// the worker can select on it.
+	capture          *captureQueue
+	captureOnce      sync.Once
+	captureBatchChan chan captureBatch
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
@@ -132,6 +138,7 @@ func (h *DatabaseHandler) start() {
 	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
+	h.captureBatchChan = make(chan captureBatch, 4)
 
 	// Start background workers. A panic writing one record loses that
 	// record, not the worker (nor the process); workerDone closes once the
@@ -260,6 +267,8 @@ func (h *DatabaseHandler) startWorker() {
 			if err != nil {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
 			}
+		case b := <-h.captureBatchChan:
+			h.writeCaptureBatch(b)
 		case <-h.ctx.Done():
 			h.shutdown()
 			return

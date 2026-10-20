@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -444,6 +445,11 @@ func New(opts Options) (_ *Studio, err error) {
 	// Agent Call Tracing (Enterprise): the start gate sets the gateway's
 	// capture flag before the proxy serves its first request.
 	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
+	if agenttrace.Enabled() {
+		// The embedded gateway's captures are staged by the analytics handler.
+		analytics.SetCaptureLimits(conf.AgentTracing.QueueMaxEvents, conf.AgentTracing.QueueMaxBytes)
+		agenttrace.SetSink(analytics.CaptureSink())
+	}
 
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.
