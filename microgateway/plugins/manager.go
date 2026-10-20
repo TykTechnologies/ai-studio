@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -629,6 +630,9 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 	return result, nil
 }
 
+// pluginChainCallTimeout bounds each plugin call in ExecutePluginChain.
+const pluginChainCallTimeout = 30 * time.Second
+
 // ExecutePluginChain executes a chain of plugins for a specific LLM and hook type
 func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error) {
 	plugins, err := pm.GetPluginsForLLM(llmID, hookType)
@@ -644,9 +648,6 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 	result := input
 
 	for _, plugin := range plugins {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
 		switch hookType {
 		case interfaces.HookTypePreAuth:
 			pluginReq, ok := result.(*interfaces.PluginRequest)
@@ -657,7 +658,9 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertPluginRequest(pluginReq, pbCtx)
 
+			ctx, cancel := context.WithTimeout(context.Background(), pluginChainCallTimeout)
 			resp, err := plugin.GRPCClient.ProcessPreAuth(ctx, pbReq)
+			cancel()
 			if err != nil {
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
@@ -692,7 +695,9 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertEnrichedRequest(enrichedReq, pbCtx)
 
+			ctx, cancel := context.WithTimeout(context.Background(), pluginChainCallTimeout)
 			resp, err := plugin.GRPCClient.ProcessPostAuth(ctx, pbReq)
+			cancel()
 			if err != nil {
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
@@ -714,9 +719,16 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 					Int("modified_body_len", len(resp.Body)).
 					Msg("🔄 Post-auth plugin modified request, updating for next plugin")
 
-				// Update the request fields with modifications
+				// Update the request fields with modifications. A plugin
+				// may return only the headers it sets, so lay them over
+				// the ones the next plugin would otherwise not see.
 				if len(resp.Headers) > 0 {
-					enrichedReq.PluginRequest.Headers = resp.Headers
+					headers := maps.Clone(enrichedReq.PluginRequest.Headers)
+					if headers == nil {
+						headers = make(map[string]string, len(resp.Headers))
+					}
+					maps.Copy(headers, resp.Headers)
+					enrichedReq.PluginRequest.Headers = headers
 				}
 				if len(resp.Body) > 0 {
 					enrichedReq.PluginRequest.Body = resp.Body

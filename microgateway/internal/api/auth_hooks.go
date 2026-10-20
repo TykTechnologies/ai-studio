@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -113,6 +114,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 				headers[key] = values[0]
 			}
 		}
+		sentHeaders := maps.Clone(headers)
 
 		bodyBytes, _ := readBodyWithoutConsuming(r)
 
@@ -144,9 +146,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 			// Apply modifications if the plugin modified the request
 			if pluginResp.Modified {
 				// Apply header modifications
-				for key, value := range pluginResp.Headers {
-					r.Header.Set(key, value)
-				}
+				applyPluginHeaders(r.Header, sentHeaders, pluginResp.Headers)
 				// Apply body modifications
 				if len(pluginResp.Body) > 0 {
 					r.Body = io.NopCloser(bytes.NewReader(pluginResp.Body))
@@ -311,7 +311,13 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 // ===================================
 // Executes AFTER successful authentication, HAS access to authenticated user/app data
 
-func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
+// postAuthChain is what the post-auth hook needs from the plugin manager.
+type postAuthChain interface {
+	GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*plugins.LoadedPlugin, error)
+	ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
+}
+
+func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager postAuthChain, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
 	return func(w http.ResponseWriter, r *http.Request, appID uint) bool {
 		// Only for LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -388,6 +394,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 				headers[key] = values[0]
 			}
 		}
+		sentHeaders := maps.Clone(headers)
 
 		bodyBytes, _ := readBodyWithoutConsuming(r)
 
@@ -440,9 +447,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			// Apply modifications if the plugin modified the request
 			if pluginResp.Modified {
 				// Apply header modifications
-				for key, value := range pluginResp.Headers {
-					r.Header.Set(key, value)
-				}
+				applyPluginHeaders(r.Header, sentHeaders, pluginResp.Headers)
 				// Apply body modifications
 				if len(pluginResp.Body) > 0 {
 					r.Body = io.NopCloser(bytes.NewReader(pluginResp.Body))
@@ -466,10 +471,9 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			// Handle EnrichedRequest from post-auth chain (new behavior for chained plugins)
 			// Apply modifications from the plugin chain
 			if modifiedEnrichedReq.PluginRequest != nil {
-				// Apply header modifications
-				for key, value := range modifiedEnrichedReq.PluginRequest.Headers {
-					r.Header.Set(key, value)
-				}
+				// Apply header modifications. The chain hands back the
+				// request even when no plugin changed it.
+				applyPluginHeaders(r.Header, sentHeaders, modifiedEnrichedReq.PluginRequest.Headers)
 				// Apply body modifications
 				if len(modifiedEnrichedReq.PluginRequest.Body) > 0 {
 					r.Body = io.NopCloser(bytes.NewReader(modifiedEnrichedReq.PluginRequest.Body))
@@ -546,6 +550,24 @@ func (l *hookLLMLookup) get(slug string) (interface{}, error) {
 		return nil, err
 	}
 	return database.DeepCopy(llm), nil
+}
+
+// applyPluginHeaders sets the request headers a plugin changed. Plugins are
+// sent only the first value of each header and hand a map back, so setting
+// every key it holds would drop the later values of a repeated header
+// (anthropic-beta, Accept). A key whose value is the one the plugin was sent
+// is left alone; a changed or new key replaces all of that header's values.
+func applyPluginHeaders(h http.Header, sent, returned map[string]string) {
+	for key, value := range returned {
+		old, ok := sent[key]
+		if !ok {
+			old, ok = sent[http.CanonicalHeaderKey(key)]
+		}
+		if ok && old == value {
+			continue
+		}
+		h.Set(key, value)
+	}
 }
 
 func extractLLMSlugFromPath(path string) string {
