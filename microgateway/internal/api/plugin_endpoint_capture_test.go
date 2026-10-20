@@ -69,6 +69,36 @@ func TestPluginEndpoint_AgentTraceCapture(t *testing.T) {
 	assert.Empty(t, ev.Parts, "the body is not captured")
 }
 
+// An App whose hub settings switch agent tracing off leaves no
+// plugin_endpoint event (jyx.116).
+func TestPluginEndpoint_AppTracingOff(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	agenttrace.SetEnabled(true)
+	sink := &endpointSink{}
+	agenttrace.SetSink(sink)
+	t.Cleanup(func() { agenttrace.SetSink(nil); agenttrace.SetEnabled(false) })
+	endpointAppCache.set(7103, &pb.App{Id: 7103, Name: "untraced", IsActive: true}, true)
+
+	pluginAuth := func(*http.Request, proxy.AuthTarget, string, string) (proxy.AuthResult, error) {
+		return proxy.AuthResult{Outcome: proxy.AuthAccepted, AppID: 7103}, nil
+	}
+	pm := &endpointPluginManager{route: &EndpointRouteInfo{PluginID: 33, PluginName: "my-ep", RequireAuth: true}}
+	router := gin.New()
+	router.Any("/plugins/*path", handlePluginEndpoint(&RouterConfig{PluginManager: pm, PluginAuth: pluginAuth}))
+	req := httptest.NewRequest(http.MethodGet, "/plugins/my-ep/things", nil)
+	req.Header.Set("Authorization", "Bearer jwt")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	assert.Empty(t, sink.events)
+	assert.True(t, appTracingOff([]byte(`{"enabled":false}`)))
+	assert.False(t, appTracingOff([]byte(`{"content_mode":"full"}`)))
+	assert.False(t, appTracingOff(nil))
+}
+
 // A refused request is an errored plugin_endpoint event; with tracing off
 // nothing is captured.
 func TestPluginEndpoint_AgentTraceRefusedAndOff(t *testing.T) {

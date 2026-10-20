@@ -31,6 +31,8 @@ const appCacheTTL = 30 * time.Second // How long App objects are cached
 type cachedAppEntry struct {
 	app       *pb.App
 	expiresAt time.Time
+	// tracingOff: the hub App switched agent tracing off.
+	tracingOff bool
 }
 
 // pluginAppCache caches pb.App objects by AppID to avoid hitting the DB on every
@@ -53,10 +55,34 @@ func (c *pluginAppCache) get(appID uint) (*pb.App, bool) {
 	return entry.app, true
 }
 
-func (c *pluginAppCache) set(appID uint, app *pb.App) {
+func (c *pluginAppCache) set(appID uint, app *pb.App, tracingOff ...bool) {
+	e := &cachedAppEntry{app: app, expiresAt: time.Now().Add(appCacheTTL)}
+	if len(tracingOff) > 0 {
+		e.tracingOff = tracingOff[0]
+	}
 	c.mu.Lock()
-	c.items[appID] = &cachedAppEntry{app: app, expiresAt: time.Now().Add(appCacheTTL)}
+	c.items[appID] = e
 	c.mu.Unlock()
+}
+
+// tracingOff reports whether the cached App switched agent tracing off.
+func (c *pluginAppCache) tracingOff(appID uint) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	e, ok := c.items[appID]
+	return ok && e.tracingOff
+}
+
+// appTracingOff reads the hub App's synced tracing settings: true when they
+// switch agent tracing off for the App.
+func appTracingOff(raw []byte) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var t struct {
+		Enabled *bool `json:"enabled"`
+	}
+	return json.Unmarshal(raw, &t) == nil && t.Enabled != nil && !*t.Enabled
 }
 
 // RequestIDMiddleware generates a canonical request ID for every request
@@ -625,10 +651,15 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 							}
 						}
 
-						endpointAppCache.set(appID, pbApp)
+						endpointAppCache.set(appID, pbApp, appTracingOff(dbApp.Tracing))
 						endpointReq.App = pbApp
 					}
 				}
+			}
+
+			// An App with agent tracing switched off is not captured.
+			if endpointAppCache.tracingOff(appID) {
+				capture.Discard()
 			}
 
 			// An auth plugin authenticates; the app it names must exist and be

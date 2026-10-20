@@ -406,6 +406,10 @@ func (c PluginEndpointCapture) SetApp(appID uint) {
 	c.rec.Update(func(ev *agenttrace.Event) { ev.Identity.AppID = appID })
 }
 
+// Discard ends the capture without recording anything (the App switched
+// agent tracing off).
+func (c PluginEndpointCapture) Discard() { c.rec.Discard() }
+
 // Finish completes the capture with the status the client got.
 func (c PluginEndpointCapture) Finish(status int) {
 	if c.rec == nil {
