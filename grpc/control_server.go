@@ -1532,13 +1532,14 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 
 	token := tokens[0]
 
-	// Check current token
-	if s.config.AuthToken != "" && token == "Bearer "+s.config.AuthToken {
+	// Check current token (constant-time: the token is the only edge
+	// credential, jyx.67)
+	if s.config.AuthToken != "" && bearerMatches(token, s.config.AuthToken) {
 		return nil
 	}
 
 	// Check next token (for rotation)
-	if s.config.NextAuthToken != "" && token == "Bearer "+s.config.NextAuthToken {
+	if s.config.NextAuthToken != "" && bearerMatches(token, s.config.NextAuthToken) {
 		logger.Log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
 		return nil
 	}

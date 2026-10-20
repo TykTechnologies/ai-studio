@@ -2,12 +2,15 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -43,6 +46,10 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 			events = append(events, ev)
 		}
 	}
+	events, err := s.scopeCaptureEvents(ctx, req.EdgeId, events)
+	if err != nil {
+		return 0, err
+	}
 	inserted, err := analytics.StageCaptureEvents(s.db, req.EdgeId, events)
 	if err != nil {
 		logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("capture_events", len(events)).
@@ -67,6 +74,74 @@ func edgeDropLabel(reason string) string {
 		return "edge_" + reason
 	}
 	return "edge_other"
+}
+
+// Capture drop reasons at ingest (jyx.67).
+const (
+	dropUnregisteredEdge = "edge_unregistered"
+	dropAppOutOfScope    = "edge_app_out_of_scope"
+)
+
+// scopeCaptureEvents keeps the events an edge may report. Every edge shares
+// one bearer token, so the pulse's own edge id and namespace prove nothing
+// (jyx.67). The hub therefore looks the edge up in its registry and takes
+// the namespace it recorded at registration. It keeps only events for Apps
+// that namespace serves (the Apps the edge's snapshot carries) and events
+// with no App. An edge id the hub never registered reports nothing.
+func (s *ControlServer) scopeCaptureEvents(ctx context.Context, edgeID string, events []*agenttrace.Event) ([]*agenttrace.Event, error) {
+	if len(events) == 0 {
+		return events, nil
+	}
+	var edge models.EdgeInstance
+	if err := edge.GetByEdgeID(s.db, edgeID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			metrics.RecordTracingCaptureDropped(ctx, dropUnregisteredEdge, int64(len(events)))
+			logger.Log.Warn().Str("edge_id", edgeID).Int("capture_events", len(events)).
+				Msg("Capture events from an unregistered edge id; discarded")
+			return nil, nil
+		}
+		return nil, status.Error(codes.Unavailable, "edge registry unavailable; retry")
+	}
+	ids := map[uint]bool{}
+	for _, ev := range events {
+		if ev.Identity.AppID != 0 {
+			ids[ev.Identity.AppID] = false
+		}
+	}
+	if len(ids) > 0 {
+		want := make([]uint, 0, len(ids))
+		for id := range ids {
+			want = append(want, id)
+		}
+		q := s.db.Model(&models.App{}).Where("id IN ?", want)
+		if edge.Namespace == "" {
+			q = q.Where("namespace = ''")
+		} else {
+			q = q.Where("(namespace = '' OR namespace = ?)", edge.Namespace)
+		}
+		var allowed []uint
+		if err := q.Pluck("id", &allowed).Error; err != nil {
+			return nil, status.Error(codes.Unavailable, "app lookup failed; retry")
+		}
+		for _, id := range allowed {
+			ids[id] = true
+		}
+	}
+	kept := events[:0]
+	dropped := 0
+	for _, ev := range events {
+		if ev.Identity.AppID != 0 && !ids[ev.Identity.AppID] {
+			dropped++
+			continue
+		}
+		kept = append(kept, ev)
+	}
+	if dropped > 0 {
+		metrics.RecordTracingCaptureDropped(ctx, dropAppOutOfScope, int64(dropped))
+		logger.Log.Warn().Str("edge_id", edgeID).Str("namespace", edge.Namespace).Int("dropped", dropped).
+			Msg("Capture events for Apps outside the edge's namespace; discarded")
+	}
+	return kept, nil
 }
 
 // captureOnly reports whether a pulse carries nothing but capture data.

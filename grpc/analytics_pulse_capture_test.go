@@ -18,6 +18,14 @@ func capturePulseDB(t *testing.T) (*gorm.DB, *ControlServer) {
 	t.Helper()
 	db := setupPulseTestDB(t)
 	require.NoError(t, db.AutoMigrate(models.AgentTraceModels()...))
+	require.NoError(t, db.AutoMigrate(&models.App{}, &models.EdgeInstance{}))
+	// The hub accepts capture only from a registered edge, for Apps its
+	// namespace serves (jyx.67): edge-1 serves "default"; Apps 7 and 8 are
+	// in it, App 9 is global, App 10 belongs to another namespace.
+	require.NoError(t, db.Create(&models.EdgeInstance{EdgeID: "edge-1", Namespace: "default"}).Error)
+	for id, ns := range map[uint]string{7: "default", 8: "default", 9: "", 10: "other"} {
+		require.NoError(t, db.Exec("INSERT INTO apps (id, name, namespace) VALUES (?, ?, ?)", id, "app", ns).Error)
+	}
 	return db, setupControlServer(t, db)
 }
 
@@ -172,4 +180,39 @@ func TestSendAnalyticsPulse_CaptureDroppedReportOnly(t *testing.T) {
 	resp, err := server.SendAnalyticsPulse(context.Background(), p)
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
+}
+
+// jyx.67: every edge shares one bearer token, so the pulse's own edge id and
+// namespace prove nothing. Capture from an edge id the hub never registered
+// is discarded, and so are events for Apps outside the namespace the hub
+// recorded for that edge, whatever the pulse claims.
+func TestSendAnalyticsPulse_CaptureScopedToRegisteredEdge(t *testing.T) {
+	db, server := capturePulseDB(t)
+	withHubTracing(t, true)
+
+	p := capturePulse(1, edgeCaptureEvent(1, 7), edgeCaptureEvent(2, 9), edgeCaptureEvent(3, 10), edgeCaptureEvent(4, 0), edgeCaptureEvent(5, 404))
+	p.EdgeNamespace = "other" // a claim, not the registered namespace
+	resp, err := server.SendAnalyticsPulse(context.Background(), p)
+	require.NoError(t, err)
+	require.True(t, resp.Success)
+	var apps []uint
+	for _, r := range stagedCapture(t, db) {
+		apps = append(apps, r.AppID)
+	}
+	assert.ElementsMatch(t, []uint{7, 9, 0}, apps, "namespace App, global App and no App kept; other namespace and unknown App dropped")
+
+	spoof := capturePulse(2, edgeCaptureEvent(6, 7))
+	spoof.EdgeId = "edge-never-registered"
+	resp, err = server.SendAnalyticsPulse(context.Background(), spoof)
+	require.NoError(t, err, "a spoofed edge id is discarded, not retried")
+	require.True(t, resp.Success)
+	assert.Len(t, stagedCapture(t, db), 3)
+}
+
+func TestBearerMatches(t *testing.T) {
+	assert.True(t, bearerMatches("Bearer s3cret", "s3cret"))
+	assert.False(t, bearerMatches("Bearer s3cret ", "s3cret"))
+	assert.False(t, bearerMatches("bearer s3cret", "s3cret"))
+	assert.False(t, bearerMatches("Bearer s3cre", "s3cret"))
+	assert.False(t, bearerMatches("", "s3cret"))
 }
