@@ -14,6 +14,9 @@ import (
 var (
 	tracingCaptureDropped otelmetric.Int64Counter
 	tracingQueueDepthFn   atomic.Pointer[func() int64]
+	// tyk_tracing_export_attributes_dropped_total{reason}: stored attributes
+	// the OTel export refused (jyx.171).
+	tracingExportAttrsDropped otelmetric.Int64Counter
 )
 
 func initAgentTracing(meter otelmetric.Meter) {
@@ -23,6 +26,12 @@ func initAgentTracing(meter otelmetric.Meter) {
 	)
 	if err != nil {
 		panic("failed to create tracingCaptureDropped counter: " + err.Error())
+	}
+	tracingExportAttrsDropped, err = meter.Int64Counter("tyk_tracing_export_attributes_dropped",
+		otelmetric.WithDescription("Stored span attributes the agent tracing OTel export refused, by reason (unregistered_tyk)"),
+	)
+	if err != nil {
+		panic("failed to create tracingExportAttrsDropped counter: " + err.Error())
 	}
 	_, err = meter.Int64ObservableGauge("tyk_tracing_queue_depth",
 		otelmetric.WithDescription("Agent tracing capture events waiting to be written on this node"),
@@ -44,6 +53,15 @@ func RecordTracingCaptureDropped(ctx context.Context, reason string, n int64) {
 		return
 	}
 	tracingCaptureDropped.Add(ctx, n, otelmetric.WithAttributes(attribute.String("reason", reason)))
+}
+
+// RecordTracingExportAttributeDropped counts one stored attribute the OTel
+// export refused for reason.
+func RecordTracingExportAttributeDropped(ctx context.Context, reason string) {
+	if !initialized.Load() {
+		return
+	}
+	tracingExportAttrsDropped.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("reason", reason)))
 }
 
 // SetTracingQueueDepth sets the function the queue depth gauge reads.

@@ -41,12 +41,19 @@ func (s *ControlServer) ingestCaptureEvents(ctx context.Context, req *pb.Analyti
 		return 0, status.Error(codes.InvalidArgument, "capture events need an edge id")
 	}
 	events := make([]*agenttrace.Event, 0, len(req.CaptureEvents))
+	boundDropped := 0
 	for _, p := range req.CaptureEvents {
 		if ev := agenttrace.FromProto(p); ev != nil && !ev.SpanID.IsZero() {
 			// The authenticated edge served it, whatever the event says.
 			ev.GatewayNode = req.EdgeId
+			boundDropped += ev.GatewayEventsDropped()
 			events = append(events, ev)
 		}
+	}
+	if boundDropped > 0 {
+		metrics.RecordTracingCaptureDropped(ctx, dropGatewayEventBounds, int64(boundDropped))
+		logger.Log.Warn().Str("edge_id", req.EdgeId).Int("dropped", boundDropped).
+			Msg("Edge gateway events out of bounds (unknown type or outcome, or over the per-span cap); discarded")
 	}
 	scoped, err := s.scopeCaptureEvents(ctx, req.EdgeId, events)
 	if err != nil {
@@ -91,6 +98,8 @@ const (
 	dropUnregisteredEdge = "edge_unregistered"
 	dropAppOutOfScope    = "edge_app_out_of_scope"
 	dropScopeUnavailable = "edge_scope_unavailable"
+	// dropGatewayEventBounds counts gateway events, not spans (jyx.171).
+	dropGatewayEventBounds = "edge_gateway_event_bounds"
 )
 
 // scopeCaptureEvents keeps the events an edge may report. Every edge shares

@@ -623,9 +623,11 @@ From the Tyk Weaver registry the exporter is checked against:
 | `tyk.app.name` | string | Name of that App. |
 | `tyk.attempt.number` | string | Number of a provider attempt of an /ai/ call. |
 | `tyk.attempt.provider` | string | Provider of that attempt. |
+| `tyk.attempt.total` | string | Number of provider attempts the call made. |
 | `tyk.attribution.candidates` | string | JSON array of type:id catalogue candidates of a weak attribution. |
 | `tyk.attribution.confidence` | string | Confidence of the catalogue attribution. |
 | `tyk.attribution.rule` | string | Rule of the catalogue attribution. |
+| `tyk.budget.id` | string | Budget a budget event applied to. |
 | `tyk.content.withheld` | string | Why a span carries no content although capture was on, e.g. edge_link_unverified_tls. |
 | `tyk.correlation.confidence` | string | Confidence of the parent link: declared, exact, strong or weak. |
 | `tyk.correlation.rule` | string | Correlation rule that produced the parent link. |
@@ -646,11 +648,13 @@ From the Tyk Weaver registry the exporter is checked against:
 | `tyk.llm.id` | string | Studio catalogue id of the LLM. |
 | `tyk.mcp.server` | string | MCP server the tool belongs to. |
 | `tyk.openai.previous_response_id` | string | OpenAI Responses previous_response_id the request chained to. |
+| `tyk.policy.id` | string | Policy of a policy event. |
 | `tyk.rollup.cost_micros` | int | Cost under an agent span, in micro-units. |
 | `tyk.rollup.errors` | int | Errors under an agent span. |
 | `tyk.rollup.llm_calls` | int | LLM calls under an agent span. |
 | `tyk.rollup.tokens` | int | Tokens under an agent span. |
 | `tyk.rollup.tool_calls` | int | Tool calls under an agent span. |
+| `tyk.server_tool_calls` | string | Number of server-side tool calls (run by the provider) in the response. |
 | `tyk.session.id` | string | Agent session id (declared or inferred). |
 | `tyk.session.source` | string | How the session was formed: declared or inferred. |
 | `tyk.span.kind` | string | Tyk span kind: llm_inference, tool_call, datasource_call, inferred_client_tool, plugin_endpoint, gateway_event, agent, attempt. |
@@ -664,6 +668,7 @@ From the Tyk Weaver registry the exporter is checked against:
 | `tyk.tool_calls.not_offered` | string | JSON array of tools the model called that the request did not offer. |
 | `tyk.tools.available` | string | Number of tools the request offered. |
 | `tyk.tools.offered` | string | JSON array of the tool names the request offered. |
+| `tyk.tools.offered_truncated` | string | "true" when tyk.tools.offered lists only the first 64 offered tools. |
 | `tyk.ttft_ms` | int | Time to first token in milliseconds. |
 | `tyk.turn.index` | int | Zero-based turn of the span within its session. |
 | `tyk.upstream.request_id` | string | Upstream provider's request id. |
@@ -686,6 +691,7 @@ These metrics are on the Prometheus endpoint, and pushed over OTLP to exporter e
 | `tyk_tracing_coverage_ratio` | gauge: share of LLM calls attributed to a session with at least `exact` confidence | `tyk.app.id` |
 | `tyk_tracing_export_failures_total` | counter | `exporter` |
 | `tyk_tracing_capture_dropped_total` | counter | `reason` |
+| `tyk_tracing_export_attributes_dropped_total` | counter: stored `tyk.*` attributes the OTel export refused because the Tyk registry does not list them | `reason` |
 | `tyk_tracing_queue_depth` | gauge | none |
 
 - Metrics never carry session, trace, user or tool-call ids.

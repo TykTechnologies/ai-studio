@@ -173,7 +173,8 @@ Changing any of them needs `traces:write` (jyx.99).
 **Behaviour today**
 - Late inference results are not added as links.
 - There is no OTel Collector nightly compatibility job.
-- `tyk_tracing_capture_dropped` and `tyk_tracing_queue_depth` are on Prometheus only, not the OTLP meter.
+- `tyk_tracing_capture_dropped`, `tyk_tracing_export_attributes_dropped` and `tyk_tracing_queue_depth` are on Prometheus only, not the OTLP meter.
+- The hub bounds an edge's gateway events at ingest (jyx.171): it keeps only known types and outcomes, at most 64 per span, and drops an over-long name. Drops count as `tyk_tracing_capture_dropped{reason="edge_gateway_event_bounds"}`. The OTel export passes a stored `tyk.*` attribute only if `weaver/model/tyk.yaml` lists it.
 - `owner_may_view_content` is stored but not yet consumed (Portal views, .42).
 - The default Auditor role does not get `trace-content`. This is pending a product confirmation; restoring it is one line in `enterprise/features/rbac/seed.go`.
 - Several configuration variables are parsed but not yet used. The operator guide lists the ones that work.

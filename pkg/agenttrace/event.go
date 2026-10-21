@@ -180,6 +180,9 @@ type Event struct {
 	// GatewayEvents are policy outcomes, attempts and fallbacks on this span
 	// (§3.2 gateway_event, §4.5). The assembler renders each as a child.
 	GatewayEvents []GatewayEvent
+	// gatewayEventsDropped counts the gateway events FromProto dropped as
+	// out of bounds (GatewayEventsDropped).
+	gatewayEventsDropped int
 	// Parts are the captured payloads, already through the content pipeline
 	// (§3.4 payloads, §5.5). Empty in off mode.
 	Parts []PayloadPart

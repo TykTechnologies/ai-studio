@@ -197,10 +197,14 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 		// An edge's lists are bounded again here, as the capture bounds its own.
 		e.Extracts.Bound()
 	}
+	// An edge's gateway events are bounded like its attributes (jyx.171).
 	for _, ge := range p.GatewayEvents {
-		e.GatewayEvents = append(e.GatewayEvents, GatewayEvent{
-			Type: ge.Type, Outcome: ge.Outcome, Name: ge.Name, Detail: ge.Detail, At: fromUnixNano(ge.AtUnixNano),
-		})
+		g := GatewayEvent{Type: ge.Type, Outcome: ge.Outcome, Name: ge.Name, Detail: ge.Detail, At: fromUnixNano(ge.AtUnixNano)}
+		if len(e.GatewayEvents) == maxGatewayEvents || !boundGatewayEvent(&g) {
+			e.gatewayEventsDropped++
+			continue
+		}
+		e.GatewayEvents = append(e.GatewayEvents, g)
 	}
 	for _, part := range p.Parts {
 		e.Parts = append(e.Parts, PayloadPart{

@@ -51,6 +51,47 @@ func (x *Extracts) Bound() {
 	}
 }
 
+// Gateway event bounds at ingest (jyx.171). Each gateway event becomes a
+// stored span, and its type the span name, so an edge's events are kept
+// only with a known type and outcome, up to maxGatewayEvents per event.
+const (
+	maxGatewayEvents           = 64
+	maxGatewayEventNameBytes   = 255
+	maxGatewayEventDetailBytes = 256 // the capture's own cap (proxy maxEventDetail)
+)
+
+var (
+	gatewayEventTypes = map[string]bool{
+		GatewayEventAttempt: true, GatewayEventFallback: true, GatewayEventGuardrail: true,
+		GatewayEventFilter: true, GatewayEventBudget: true, GatewayEventRateLimit: true,
+		GatewayEventAuth: true, GatewayEventPolicy: true, GatewayEventRouter: true,
+		GatewayEventOverload: true, GatewayEventCache: true,
+	}
+	gatewayEventOutcomes = map[string]bool{
+		OutcomeAllow: true, OutcomeBlock: true, OutcomeModify: true, OutcomeSkip: true,
+		OutcomeError: true, OutcomeSuccess: true, OutcomeShadow: true,
+	}
+)
+
+// boundGatewayEvent reports whether ge has a known type and outcome, and
+// bounds it: an over-long name is dropped (a cut name could name another
+// filter or model), the detail is cut.
+func boundGatewayEvent(ge *GatewayEvent) bool {
+	if !gatewayEventTypes[ge.Type] || !gatewayEventOutcomes[ge.Outcome] {
+		return false
+	}
+	if len(ge.Name) > maxGatewayEventNameBytes {
+		ge.Name = ""
+	}
+	ge.Detail = cutText(ge.Detail, maxGatewayEventDetailBytes)
+	return true
+}
+
+// GatewayEventsDropped is how many of a received event's gateway events
+// FromProto dropped as out of bounds (an unknown type or outcome, or over
+// maxGatewayEvents).
+func (e *Event) GatewayEventsDropped() int { return e.gatewayEventsDropped }
+
 // Attributes a gateway capture writes, and the values each may hold. The
 // hub keeps only these from an edge event (jyx.160, jyx.167): every other
 // tyk.* attribute is the hub's own statement (the correlator's attribution,

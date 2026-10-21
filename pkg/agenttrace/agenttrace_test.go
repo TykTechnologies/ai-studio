@@ -127,14 +127,16 @@ func fullEvent() *Event {
 }
 
 // notOnTheWire are Event fields that never cross a process boundary: raw
-// content before the content pipeline, and the pipeline's run-once marker.
-var notOnTheWire = map[string]bool{"Event.Raw": true, "Event.contentProcessed": true}
+// content before the content pipeline, the pipeline's run-once marker, and
+// the decoder's count of gateway events it dropped.
+var notOnTheWire = map[string]bool{"Event.Raw": true, "Event.contentProcessed": true, "Event.gatewayEventsDropped": true}
 
 // sameOnTheWire compares two events as the wire carries them.
 func sameOnTheWire(a, b *Event) bool {
 	ac, bc := *a, *b
 	ac.Raw, bc.Raw = nil, nil
 	ac.contentProcessed, bc.contentProcessed = false, false
+	ac.gatewayEventsDropped, bc.gatewayEventsDropped = 0, 0
 	return reflect.DeepEqual(&ac, &bc)
 }
 
