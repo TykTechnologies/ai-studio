@@ -331,11 +331,12 @@ func TestGoogleThoughtSignatureIsNotText(t *testing.T) {
 }
 
 // Tool results the vendor produced (and the client replays) are marked
-// ServerTool; the client's own tool results are not.
+// ServerTool, with the type that carried them; the client's own tool
+// results are not.
 func TestServerToolResults(t *testing.T) {
 	for _, tc := range []struct {
 		name, format, body string
-		server             map[string]bool // tool call id -> ServerTool
+		server             map[string]string // tool call id -> ServerToolType, "" for the client's
 	}{
 		{"anthropic", FormatAnthropic, `{"messages":[
 			{"role":"assistant","content":[
@@ -349,19 +350,19 @@ func TestServerToolResults(t *testing.T) {
 				{"type":"mcp_tool_result","tool_use_id":"m1","content":[{"type":"text","text":"mcp"}]},
 				{"type":"tool_use","id":"c1","name":"f","input":{}}]},
 			{"role":"user","content":[{"type":"tool_result","tool_use_id":"c1","content":"client"}]}]}`,
-			map[string]bool{"s1": true, "s2": true, "s3": true, "m1": true, "c1": false}},
+			map[string]string{"s1": "web_search_tool_result", "s2": "web_fetch_tool_result", "s3": "code_execution_tool_result", "m1": "mcp_tool_result", "c1": ""}},
 		{"responses", FormatOpenAIResponses, `{"input":[
 			{"type":"file_search_call","id":"fs","queries":["q"],"results":[{"text":"r"}]},
 			{"type":"code_interpreter_call","id":"ci","code":"x","outputs":[{"type":"logs","logs":"l"}]},
 			{"type":"mcp_call","id":"mc","name":"n","arguments":"{}","output":"o"},
 			{"type":"function_call","name":"f","call_id":"c1","arguments":"{}"},
 			{"type":"function_call_output","call_id":"c1","output":"client"}]}`,
-			map[string]bool{"fs": true, "ci": true, "mc": true, "c1": false}},
+			map[string]string{"fs": "file_search_call", "ci": "code_interpreter_call", "mc": "mcp_call", "c1": ""}},
 		{"google", FormatGoogleAI, `{"contents":[{"role":"model","parts":[{"codeExecutionResult":{"outcome":"OUTCOME_OK","output":"o"}}]},
 			{"role":"user","parts":[{"functionResponse":{"name":"f","response":{"r":"client"}}}]}]}`,
-			map[string]bool{"": true, "f": false}},
+			map[string]string{"": "codeExecutionResult", "f": ""}},
 		{"bedrock and openai results are the client's", FormatBedrock, `{"messages":[{"role":"user","content":[{"toolResult":{"toolUseId":"b1","content":[{"text":"client"}]}}]}]}`,
-			map[string]bool{"b1": false}},
+			map[string]string{"b1": ""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			units, err := ExtractUnits(tc.format, []byte(tc.body))
@@ -385,8 +386,8 @@ func TestServerToolResults(t *testing.T) {
 					continue
 				}
 				seen[key] = true
-				if u.ServerTool != want {
-					t.Errorf("result %q (%s): ServerTool = %v, want %v", key, u.Text, u.ServerTool, want)
+				if u.ServerTool != (want != "") || u.ServerToolType != want {
+					t.Errorf("result %q (%s): ServerTool = %v (%q), want %q", key, u.Text, u.ServerTool, u.ServerToolType, want)
 				}
 			}
 			for key := range tc.server {

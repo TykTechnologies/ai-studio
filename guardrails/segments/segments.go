@@ -122,6 +122,12 @@ type Unit struct {
 	// a rewriter should leave it alone, since the vendor may check it
 	// against the encrypted or signed parts it came with.
 	ServerTool bool
+	// ServerToolType is the block or item type that carried a ServerTool
+	// result (web_search_tool_result, bash_code_execution_tool_result,
+	// mcp_tool_result, file_search_call, code_interpreter_call, mcp_call,
+	// mcp_list_tools, codeExecutionResult), so a rewriter can tell the
+	// kinds a vendor is known to accept edited apart from the rest.
+	ServerToolType string
 
 	pieces   []piece
 	sep      string
