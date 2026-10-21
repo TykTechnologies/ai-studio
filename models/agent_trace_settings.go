@@ -30,9 +30,10 @@ type AppTracingSettings struct {
 	SessionIdleTimeout string `json:"session_idle_timeout,omitempty"`
 	// PayloadDays is how long captured content is kept; nil inherits.
 	PayloadDays *int `json:"payload_days,omitempty"`
-	// OwnerMayViewContent lets the App's Portal owner read captured content
-	// (Q4). Only administrators or holders of traces write may set it, and
-	// it is hub-only: never synced to edges.
+	// OwnerMayViewContent will let the App's Portal owner read captured
+	// content (Q4) once the Portal trace views exist (jyx.42). Until then it
+	// is always false: Validate refuses true and Scan reads a stored true as
+	// false (jyx.175). Hub-only: never synced to edges.
 	OwnerMayViewContent bool `json:"owner_may_view_content,omitempty"`
 }
 
@@ -73,6 +74,9 @@ func (s AppTracingSettings) Validate() error {
 	if s.PayloadDays != nil && (*s.PayloadDays < 0 || *s.PayloadDays > MaxTracingPayloadDays) {
 		return fmt.Errorf("tracing.payload_days: must be between 0 and %d", MaxTracingPayloadDays)
 	}
+	if s.OwnerMayViewContent {
+		return fmt.Errorf("tracing.owner_may_view_content: not available yet; App owners cannot view captured content until the Portal trace views ship")
+	}
 	return nil
 }
 
@@ -103,7 +107,13 @@ func (s *AppTracingSettings) Scan(value interface{}) error {
 	if value == nil {
 		return nil
 	}
-	return JSONScan(value, s)
+	if err := JSONScan(value, s); err != nil {
+		return err
+	}
+	// Not available until the Portal trace views (jyx.175): a grant stored
+	// before then reads, and is saved back, as false.
+	s.OwnerMayViewContent = false
+	return nil
 }
 
 // Value implements driver.Valuer. No overrides is stored as NULL.

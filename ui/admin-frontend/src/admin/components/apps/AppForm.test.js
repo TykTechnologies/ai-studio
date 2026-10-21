@@ -80,7 +80,7 @@ const appPayload = () => ({
         namespace: "",
         metadata: {},
         credential_id: 9,
-        tracing: { content_mode: "redacted", owner_may_view_content: true },
+        tracing: { content_mode: "redacted" },
       },
     },
   },
@@ -319,7 +319,6 @@ describe("AppForm relationships and commit semantics", () => {
     expect(apiClient.patch.mock.calls[0][1].data.attributes.tracing).toEqual({
       content_mode: "redacted",
       session_idle_timeout: "2h",
-      owner_may_view_content: true,
     });
   });
 

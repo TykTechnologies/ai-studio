@@ -92,7 +92,6 @@ describe("AppTracingSection", () => {
     setPerms("apps:write");
     const { unmount } = wrap(<AppTracingSection value={appTracingFromResponse(null)} onChange={() => {}} />);
     expect(screen.getByTestId("tracing-read-only")).toHaveTextContent(/traces:write/);
-    expect(screen.getByLabelText(/let the app's owner view captured content/i)).toBeDisabled();
     expect(screen.getByLabelText(/session idle timeout/i)).toBeDisabled();
     expect(screen.getByLabelText(/keep captured content/i)).toBeDisabled();
     // The three selects: tracing on/off, content mode, request ceiling.
@@ -100,14 +99,14 @@ describe("AppTracingSection", () => {
     expect(selects).toHaveLength(3);
     for (const select of selects) expect(select).toHaveAttribute("aria-disabled", "true");
     unmount();
+  });
 
-    setPerms("apps:write", "traces:write");
-    const onChange = jest.fn();
-    wrap(<AppTracingSection value={appTracingFromResponse(null)} onChange={onChange} />);
-    const box = screen.getByLabelText(/let the app's owner view captured content/i);
-    expect(box).toBeEnabled();
-    fireEvent.click(box);
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ owner_may_view_content: true }));
+  // jyx.175: App owners cannot view captured content until the Portal trace
+  // views ship, so the form does not offer it.
+  it("does not offer owner content access", () => {
+    wrap(<AppTracingSection value={appTracingFromResponse(null)} onChange={() => {}} />);
+    expect(screen.queryByLabelText(/owner view captured content/i)).toBeNull();
+    expect(document.body).not.toHaveTextContent(/Portal/);
   });
 
   it("resource settings are read-only without traces:write", () => {
@@ -146,9 +145,10 @@ describe("App settings helpers", () => {
       max_request_override: "redacted",
       session_idle_timeout: "45m",
       payload_days: 0,
-      owner_may_view_content: true,
     };
     expect(appTracingToRequest(appTracingFromResponse(stored))).toEqual(stored);
+    // A stray owner grant from the API is never sent back (jyx.175).
+    expect(appTracingToRequest(appTracingFromResponse({ ...stored, owner_may_view_content: true }))).toEqual(stored);
     expect(appTracingToRequest(appTracingFromResponse(null))).toEqual({});
     expect(appTracingToRequest(appTracingFromResponse({ enabled: true }))).toEqual({ enabled: true });
   });

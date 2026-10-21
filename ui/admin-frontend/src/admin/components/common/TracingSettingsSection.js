@@ -2,7 +2,6 @@ import React from "react";
 import {
   AccordionDetails,
   AccordionSummary,
-  Checkbox,
   FormControlLabel,
   Grid,
   MenuItem,
@@ -49,7 +48,6 @@ export const appTracingFromResponse = (tracing) => ({
   max_request_override: tracing?.max_request_override || "",
   session_idle_timeout: tracing?.session_idle_timeout || "",
   payload_days: tracing?.payload_days ?? "",
-  owner_may_view_content: Boolean(tracing?.owner_may_view_content),
 });
 
 /** The request body's tracing object; fields left on "inherit" are omitted. */
@@ -63,7 +61,6 @@ export const appTracingToRequest = (form) => {
   if (form.payload_days !== "" && form.payload_days !== null && form.payload_days !== undefined) {
     out.payload_days = Number(form.payload_days);
   }
-  if (form.owner_may_view_content) out.owner_may_view_content = true;
   return out;
 };
 
@@ -275,23 +272,6 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               error={Boolean(errors.payload_days)}
               helperText={errors.payload_days || "Content is deleted sooner than trace metadata."}
             />
-          </Grid>
-          <Grid item xs={12}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={value.owner_may_view_content}
-                  onChange={(e) => set("owner_may_view_content", e.target.checked)}
-                  name="owner_may_view_content"
-                  disabled={readOnly}
-                />
-              }
-              label="Let the App's owner view captured content in the Portal"
-            />
-            <Typography variant="caption" color="text.secondary" display="block">
-              Takes effect when Portal trace views ship; the Portal shows no traces yet. Off by default: owners will
-              see trace metadata only, and every content view is audited.
-            </Typography>
           </Grid>
         </Grid>
       </AccordionDetails>

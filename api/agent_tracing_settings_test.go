@@ -76,7 +76,7 @@ func TestAppTracingAttribute(t *testing.T) {
 	require.NoError(t, user.Create(db))
 
 	tracing := map[string]any{"enabled": true, "content_mode": "redacted", "max_request_override": "redacted",
-		"session_idle_timeout": "2h", "payload_days": 3, "owner_may_view_content": true}
+		"session_idle_timeout": "2h", "payload_days": 3, "owner_may_view_content": false}
 	body := map[string]any{"data": map[string]any{"type": "app", "attributes": map[string]any{
 		"name": "Tracing App", "description": "d", "user_id": user.ID, "tracing": tracing,
 	}}}
@@ -90,7 +90,7 @@ func TestAppTracingAttribute(t *testing.T) {
 	days := 3
 	enabled := true
 	want := models.AppTracingSettings{Enabled: &enabled, ContentMode: "redacted", MaxRequestOverride: "redacted",
-		SessionIdleTimeout: "2h", PayloadDays: &days, OwnerMayViewContent: true}
+		SessionIdleTimeout: "2h", PayloadDays: &days}
 	assert.Equal(t, want, stored.Tracing)
 
 	path := "/api/v1/apps/" + idStr(stored.ID)
@@ -109,6 +109,8 @@ func TestAppTracingAttribute(t *testing.T) {
 		{"session_idle_timeout": "soon"},
 		{"session_idle_timeout": "10s"},
 		{"payload_days": 1000},
+		// jyx.175: not available until the Portal trace views.
+		{"owner_may_view_content": true},
 	} {
 		w = update(map[string]any{"tracing": bad})
 		assert.Equal(t, http.StatusBadRequest, w.Code, "%v: %s", bad, w.Body.String())
@@ -116,6 +118,7 @@ func TestAppTracingAttribute(t *testing.T) {
 
 	w = update(map[string]any{"tracing": map[string]any{}})
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "owner_may_view_content", "never in responses")
 	var raw *string
 	require.NoError(t, db.Raw("SELECT tracing FROM apps WHERE id = ?", stored.ID).Scan(&raw).Error)
 	assert.Nil(t, raw, "no overrides is stored as NULL")

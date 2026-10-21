@@ -46,7 +46,7 @@ func TestAppTracingSettingsStorageAndEdgeForm(t *testing.T) {
 	require.NoError(t, err)
 	var out AppTracingSettings
 	require.NoError(t, out.Scan(v))
-	assert.Equal(t, in, out, "the hub stores the grant")
+	assert.Equal(t, AppTracingSettings{ContentMode: "redacted"}, out, "a stored grant reads as false until the Portal trace views (jyx.175)")
 	require.NoError(t, out.Scan(nil))
 	assert.Equal(t, AppTracingSettings{}, out)
 }

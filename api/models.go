@@ -529,7 +529,8 @@ type AppInput struct {
 			TeamID *uint `json:"team_id,omitempty"`
 			// Tracing overrides the global agent tracing settings for the
 			// App (Enterprise). Omitted keeps the stored settings on update;
-			// changing owner_may_view_content needs traces:write.
+			// changing any of them needs traces:write. owner_may_view_content
+			// must be false until the Portal trace views ship (400 if true).
 			Tracing *models.AppTracingSettings `json:"tracing,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
