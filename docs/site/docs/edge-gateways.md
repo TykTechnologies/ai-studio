@@ -311,7 +311,7 @@ Treat the token and `MICROGATEWAY_ENCRYPTION_KEY` as secrets for the whole hub, 
 If an edge host is compromised:
 
 - rotate the edge token, with `GRPC_AUTH_TOKEN_NEXT`, and `MICROGATEWAY_ENCRYPTION_KEY`;
-- in every namespace the edge served, rotate the LLM provider keys, tool, datasource, embedder and guardrail provider credentials, and any secrets in plugin configuration;
+- in every namespace the edge served, rotate the LLM provider keys and each LLM's resource-signing secrets, tool, datasource, embedder and guardrail provider credentials, and any secrets in plugin configuration;
 - revoke the OAuth access tokens issued to MCP clients in those namespaces;
 - optionally, rotate `AGENT_TRACING_KEY` (keeping the old value as `AGENT_TRACING_KEY_PREVIOUS` until payload retention has passed) if forged links into genuine agent sessions matter to you. Fingerprints and exported `user.id` pseudonyms change at the rotation, so sessions that span it lose cross-gateway correlation.
 
