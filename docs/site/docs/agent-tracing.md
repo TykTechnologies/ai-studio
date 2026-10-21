@@ -71,6 +71,10 @@ An edge sends captured content only over a verified TLS connection to Studio. Wi
 
 Edges receive the content settings and the fingerprint key from Studio in their configuration sync. Studio sends the key encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, and the edge holds it in memory only.
 
+::: warning Edge trust
+All edges share one token (`EDGE_AUTH_TOKEN`, matching Studio's `GRPC_AUTH_TOKEN`). Anyone holding it can register as any edge ID and namespace, and report captures and analytics for that namespace's Apps. Those captures then appear in Agent Sessions as that namespace's traffic. Treat the edge token as a secret for the whole hub: see [the edge token](/docs/edge-gateways#the-edge-token-is-a-hub-wide-secret). Per-edge credentials are planned separately.
+:::
+
 ### Keys and rotation
 
 The root key is never used directly. Studio derives two keys from it with HKDF-SHA256:

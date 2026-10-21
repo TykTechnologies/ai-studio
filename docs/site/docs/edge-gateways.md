@@ -288,6 +288,22 @@ The paths and the response envelope are unchanged, and every attribute 2.2 retur
 
 ## Connection Settings
 
+### The edge token is a hub-wide secret
+
+Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on the edge, matching `GRPC_AUTH_TOKEN` (or `GRPC_AUTH_TOKEN_NEXT` during a rotation) on AI Studio. The token is not bound to an edge or a namespace, so whoever holds it can:
+
+- register under any edge ID, including one that already exists;
+- claim any namespace;
+- report analytics, budget usage and agent-trace captures for that namespace's Apps.
+
+Treat the token as a secret for the whole hub, not for one edge:
+
+- give it only to edges you control;
+- store it like a database password;
+- rotate it with `GRPC_AUTH_TOKEN_NEXT` if an edge host is compromised.
+
+Per-edge credentials, bound to an edge ID and an admin-assigned namespace, are planned separately.
+
 ### TLS
 
 AI Studio serves the control connection with TLS unless `GRPC_TLS_INSECURE=true`, using `GRPC_TLS_CERT_PATH` and `GRPC_TLS_KEY_PATH`. The edge checks that certificate as follows:
