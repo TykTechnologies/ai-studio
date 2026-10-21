@@ -192,6 +192,52 @@ func TestBedrockNativeStream_RunsResponseHooks(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode, string(body))
 	assert.JSONEq(t, `{"message":"bad request"}`, string(body))
 	assert.Equal(t, "applied", resp.Header.Get("X-Tyk-Compression"))
+	select {
+	case got := <-hook.done:
+		assert.Equal(t, http.StatusBadRequest, got.StatusCode)
+		assert.JSONEq(t, `{"message":"bad request"}`, string(got.AccumulatedResponse))
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnStreamComplete was not called for the vendor error")
+	}
+}
+
+// A plugin that holds per-request state until the stream completes (a load
+// balancer's or rate limiter's in-flight count, a cache's pending entry)
+// gets the completion for every native Bedrock stream, with its usage, and
+// for a vendor error, so its count returns to zero (04k).
+func TestBedrockNativeStream_CompletionReleasesInFlightState(t *testing.T) {
+	rec := &bedrockRecorder{reply: bedrockStream(t, "hi", "{}")}
+	h := bedrockHarness(t, rec)
+	hook := &streamCompleteHook{done: make(chan *StreamCompleteRequest, 16)}
+	h.proxy.AddResponseHook(hook)
+
+	inFlight := 0 // what a post_auth hook would have counted
+	for i := 0; i < 5; i++ {
+		inFlight++
+		resp, body := h.postBedrock("/llm/stream/primary/model/anthropic.claude-3/converse-stream", richConverse)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	}
+	rec.mu.Lock()
+	rec.status, rec.reply = http.StatusTooManyRequests, []byte(`{"message":"throttled"}`)
+	rec.mu.Unlock()
+	inFlight++
+	resp, body := h.postBedrock("/llm/stream/primary/model/anthropic.claude-3/converse-stream", richConverse)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode, string(body))
+
+	completed := map[int]int{}
+	for inFlight > 0 {
+		select {
+		case got := <-hook.done:
+			inFlight--
+			completed[got.StatusCode]++
+			if got.StatusCode == http.StatusOK {
+				assert.Contains(t, string(got.AccumulatedResponse), `"inputTokens":10`, "the usage reaches the hook")
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d streams never completed", inFlight)
+		}
+	}
+	assert.Equal(t, map[int]int{http.StatusOK: 5, http.StatusTooManyRequests: 1}, completed)
 }
 
 // The body's modelId (not a Converse field) names the model and is not

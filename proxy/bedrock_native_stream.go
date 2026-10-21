@@ -120,7 +120,14 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			p.executeStreamingHeaderHooks(w.Header(), r, llm, app)
 		}
 		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, io.LimitReader(resp.Body, 1<<20))
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		_, _ = w.Write(errBody)
+		// As on every other stream, an upstream error completes the stream
+		// too: plugins that hold per-request state (a load balancer's or rate
+		// limiter's in-flight count, a cache's pending entry) release it here.
+		if hooks {
+			go p.executeOnStreamComplete(r, resp, llm, app, errBody, reqBody, 0)
+		}
 		return
 	}
 
