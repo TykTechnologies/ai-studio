@@ -97,7 +97,9 @@ func TestBufferedResponseFilters_ToolCalls(t *testing.T) {
 			blocked, msg, err := ExecuteBufferedResponseFilters(&models.LLM{Vendor: tc.vendor, Filters: []*models.Filter{exfilResponseGuardrail(true)}}, nil, resp, 200, r)
 			require.NoError(t, err)
 			assert.True(t, blocked, "a flagged tool call in the response must refuse it")
-			assert.Equal(t, guardrails.DefaultResponseBlockMsg, msg)
+			// The block message, then why (bsf.1): the tool, never its arguments.
+			assert.True(t, strings.HasPrefix(msg, guardrails.DefaultResponseBlockMsg+". Reason: "), msg)
+			assert.Contains(t, msg, "a call to the tool send (guardrail_detected)")
 			// The arguments as the body holds them, and their decoded view
 			// (keys and strings with escapes read), as for tool results.
 			calls := exfilInstance.calls()[before:]

@@ -47,7 +47,10 @@ const (
 	//     the analytics ingest token (hash only) and hourly counters.
 	// 14: proxy_logs request_id (indexed) and client_request_id (nullable,
 	//     additive): the gateway's request id (pkg/requestid) and the caller's.
-	SchemaVersion          = 14
+	// 15: compliance_events.owner_visible (defaulted false, indexed with
+	//     app_id and time_stamp; additive): guardrail events shared with App
+	//     owners in the portal.
+	SchemaVersion          = 15
 	MinReaderSchemaVersion = 1
 )
 

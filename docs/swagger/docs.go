@@ -11607,6 +11607,62 @@ const docTemplate = `{
                 }
             }
         },
+        "/common/apps/{id}/guardrail-blocks": {
+            "get": {
+                "description": "The requests of an App that guardrail filters shared with App owners (evidence.share_with_app_owners) blocked, quarantined or changed in the last days (default 7, at most 90): when, the filter, the action, the reason code and sentence the caller got, and the request id. Never the text. Newest first, at most 100.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Portal"
+                ],
+                "summary": "List the guardrail blocks of one of the user's Apps",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "How many days back (1-90, default 7)",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.GuardrailBlock"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/common/apps/{id}/mcp": {
             "get": {
                 "produces": [
@@ -30151,6 +30207,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -30775,6 +30832,29 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "api.GuardrailBlock": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "filter": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
                 }
             }
         },

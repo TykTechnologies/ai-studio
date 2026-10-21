@@ -252,8 +252,37 @@ func (g *guardrailRunner) RunScript(input *ScriptInput, svc services.ServiceInte
 		if r := recover(); r != nil {
 			out, err = g.panicked(input, r), nil
 		}
+		markOwnerVisible(g.filter.Config, out)
 	}()
 	return g.run(input, svc)
+}
+
+// OwnerVisibleKey marks, in a compliance event's metadata, an event the App's
+// owners may see in the portal (evidence.share_with_app_owners).
+const OwnerVisibleKey = "owner_visible"
+
+// markOwnerVisible marks the events of a filter that shares with App owners,
+// for the requests it acted on (blocked, quarantined, removed, redacted):
+// a log-only finding is an administrator's concern.
+func markOwnerVisible(config map[string]any, out *ScriptOutput) {
+	if out == nil || len(out.ComplianceEvents) == 0 {
+		return
+	}
+	ev, _ := config["evidence"].(map[string]any)
+	if share, _ := ev["share_with_app_owners"].(bool); !share {
+		return
+	}
+	for i := range out.ComplianceEvents {
+		m := out.ComplianceEvents[i].Metadata
+		if m == nil {
+			continue
+		}
+		action, _ := m["action"].(string)
+		blocked, _ := m["blocked"].(bool)
+		if blocked || (action != "" && action != guardrails.ActionLog) {
+			m[OwnerVisibleKey] = true
+		}
+	}
 }
 
 // panicked is the output of a guardrail run that panicked. The panic value
@@ -271,6 +300,8 @@ func (g *guardrailRunner) panicked(input *ScriptInput, r any) *ScriptOutput {
 		severity = "critical"
 		out.Block = true
 		out.Payload = ""
+		out.ReasonCode = ReasonUnavailable
+		out.Reason = "the guardrail failed internally while checking this request"
 		out.Message = guardrails.DefaultRequestBlockMessage
 		if input.IsResponse {
 			out.Message = guardrails.DefaultResponseBlockMsg
@@ -417,6 +448,7 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		out.Payload = ""
 		out.Messages = nil
 		out.Message = cfg.BlockMessage
+		out.ReasonCode, out.Reason = blockReason(cfg, sel.segments, o, res.unscanned)
 	case guardrails.ActionQuarantine:
 		out.Message = "guardrail quarantined content"
 	case guardrails.ActionRemove:
@@ -761,6 +793,8 @@ func (g *guardrailRunner) failed(input *ScriptInput, cfg guardrails.Config, err 
 		out.Block = true
 		out.Payload = ""
 		out.Message = cfg.BlockMessage
+		out.ReasonCode = ReasonUnavailable
+		out.Reason = "the guardrail provider could not be reached or did not answer in time, and this guardrail blocks when it is unavailable (fail_mode closed)"
 	}
 	out.ComplianceEvents = []ComplianceEventOutput{{
 		EventType:   "guardrail.error",
@@ -785,6 +819,8 @@ func (g *guardrailRunner) refused(input *ScriptInput, cfg guardrails.Config, rea
 	out.Block = true
 	out.Payload = ""
 	out.Message = "the request has duplicate or case-variant JSON keys and cannot be screened"
+	out.ReasonCode = ReasonUnreadableRequest
+	out.Reason = out.Message
 	out.ComplianceEvents = []ComplianceEventOutput{{
 		EventType:   "guardrail.unreadable_request",
 		Severity:    "critical",
@@ -1494,6 +1530,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		}
 		if len(g.refs) > 0 {
 			metadata["segments"] = g.refs
+		}
+		if action == guardrails.ActionBlock {
+			metadata["reason_code"] = ReasonDetected
 		}
 		if ec.requestID != "" {
 			metadata["request_id"] = ec.requestID

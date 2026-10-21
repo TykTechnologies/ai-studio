@@ -11,7 +11,7 @@ import (
 // silent failures, etc.) by setting compliance_events in their output object.
 type ComplianceEvent struct {
 	gorm.Model
-	AppID       uint      `json:"app_id" gorm:"index:idx_ce_app_time,priority:1"`
+	AppID       uint      `json:"app_id" gorm:"index:idx_ce_app_time,priority:1;index:idx_ce_app_owner_time,priority:1"`
 	UserID      uint      `json:"user_id" gorm:"index"`
 	LLMID       uint      `json:"llm_id" gorm:"index"`
 	FilterName  string    `json:"filter_name" gorm:"index"`
@@ -22,5 +22,9 @@ type ComplianceEvent struct {
 	Metadata    string    `json:"metadata"`                  // JSON blob for arbitrary key-value data
 	Vendor      string    `json:"vendor"`
 	ModelName   string    `json:"model_name"`
-	TimeStamp   time.Time `json:"timestamp" gorm:"index:idx_ce_time;index:idx_ce_app_time,priority:2"`
+	TimeStamp   time.Time `json:"timestamp" gorm:"index:idx_ce_time;index:idx_ce_app_time,priority:2;index:idx_ce_app_owner_time,priority:3"`
+	// OwnerVisible is set from the event's metadata (owner_visible, a
+	// guardrail filter with evidence.share_with_app_owners): the App's
+	// owners may see the event's summary in the portal.
+	OwnerVisible bool `json:"owner_visible" gorm:"index:idx_ce_app_owner_time,priority:2"`
 }

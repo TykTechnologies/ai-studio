@@ -163,6 +163,8 @@ const FilterDetails = () => {
                 (config.on_detect === "quarantine" || (scansToolResults(config) && effectiveToolAction(config) === "quarantine")) &&
                 row("Quarantine placeholder", config.quarantine?.placeholder || DEFAULT_QUARANTINE_PLACEHOLDER)}
               {!attrs.response_filter && config.cache === false && row("Verdict cache", "Off")}
+              {config.evidence?.share_with_app_owners &&
+                row("Shown to app owners", "Blocks and changes appear on the app's portal page (reason and request ID, no text)")}
               {config.evidence?.excerpt &&
                 row(
                   "Flagged text in compliance events",

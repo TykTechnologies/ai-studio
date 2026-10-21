@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import AppMCPConnect from "./AppMCPConnect";
 import AppToolAccess from "./AppToolAccess";
+import AppGuardrailBlocks from "./AppGuardrailBlocks";
 import { toolMcpEnabled } from "../utils/toolEndpoints";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import {
@@ -562,6 +563,8 @@ const AppDetailView = () => {
           boundServers={app.attributes?.mcp_servers || []}
         />
       )}
+
+      <AppGuardrailBlocks client={pubClient} appId={id} />
 
       {/* Main App Details Paper */}
       <Paper sx={{ p: 3, mb: 3 }}>

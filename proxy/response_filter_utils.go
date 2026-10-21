@@ -246,6 +246,7 @@ func runResponseFilters(
 			if msg == "" {
 				msg = fmt.Sprintf("Response blocked by filter: %s", filter.Name)
 			}
+			msg = responseBlockMessage(r, msg, output)
 			slog.Info("response blocked by filter", "filter_name", filter.Name, "message", msg, "is_chunk", isChunk, "is_final", isFinal)
 			return true, msg, nil
 		}

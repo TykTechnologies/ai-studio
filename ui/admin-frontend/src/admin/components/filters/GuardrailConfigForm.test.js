@@ -480,4 +480,15 @@ describe("guardrail config helpers", () => {
     fireEvent.click(screen.getByTestId("guardrail-evidence-excerpt"));
     expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].evidence).toBeUndefined();
   });
+
+  it("shares a filter's blocks with app owners independently of the excerpt", async () => {
+    apiClient.get.mockResolvedValue({ data: providers });
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), detectors: [{ name: "secrets" }] }} onChange={onChange} />);
+
+    fireEvent.click(await screen.findByTestId("guardrail-share-with-owners"));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ evidence: { share_with_app_owners: true } }));
+    fireEvent.click(screen.getByTestId("guardrail-share-with-owners"));
+    expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].evidence).toBeUndefined();
+  });
 });

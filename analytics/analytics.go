@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -356,6 +357,16 @@ func RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry) {
 func RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent) {
 	if len(events) == 0 {
 		return
+	}
+	// The portal shows an App's owners the events marked for them: on the
+	// hub this covers events recorded here and those an edge sent.
+	for _, e := range events {
+		if e != nil && !e.OwnerVisible && strings.Contains(e.Metadata, `"owner_visible":true`) {
+			var m map[string]any
+			if json.Unmarshal([]byte(e.Metadata), &m) == nil {
+				e.OwnerVisible, _ = m["owner_visible"].(bool)
+			}
+		}
 	}
 
 	handlerMu.RLock()

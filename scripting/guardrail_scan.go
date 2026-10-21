@@ -906,18 +906,30 @@ func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails
 		maxChars int
 		roles    map[string]bool
 		kinds    map[string]bool
+		segments []map[string]any
 	}
 	groups := map[string]*group{}
-	for i, reason := range unscanned {
+	for _, i := range slices.Sorted(maps.Keys(unscanned)) {
+		reason := unscanned[i]
 		g := groups[reason]
 		if g == nil {
 			g = &group{roles: map[string]bool{}, kinds: map[string]bool{}}
 			groups[reason] = g
 		}
+		chars := utf8.RuneCountInString(segs[i].Text)
 		g.count++
-		g.maxChars = max(g.maxChars, utf8.RuneCountInString(segs[i].Text))
+		g.maxChars = max(g.maxChars, chars)
 		g.roles[segs[i].Role] = true
 		g.kinds[segmentKind(segs[i])] = true
+		// Which messages or tool results were not checked: never their text.
+		if len(g.segments) < maxEvidenceSegments {
+			ref := map[string]any{"index": i, "role": segs[i].Role, "kind": segmentKind(segs[i]), "chars": chars,
+				"sha256": guardrails.TextSHA256(segs[i].Text)}
+			if name := safeLabel(segs[i].ToolName); name != "" {
+				ref["tool"] = name
+			}
+			g.segments = append(g.segments, ref)
+		}
 	}
 	reasons := make([]string, 0, len(groups))
 	for r := range groups {
@@ -942,14 +954,20 @@ func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails
 			"action":    action,
 			"roles":     roles,
 			"kinds":     kinds,
+			"segments":  g.segments,
+			// The code the caller was answered with when this blocked.
+			"reason_code": unscannedReasonCode(reason),
 		}
 		switch reason {
 		case unscannedSize:
 			meta["limit"] = cfg.Budget.MaxScanChars
+			meta["setting"] = "budget.max_scan_chars"
 		case unscannedPieces:
 			meta["limit"] = cfg.Budget.MaxPieces
+			meta["setting"] = "budget.max_pieces"
 		case unscannedTimeBudget:
 			meta["limit"] = cfg.Budget.TimeMs
+			meta["setting"] = "budget.time_ms"
 		}
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + unscannedDetector,
