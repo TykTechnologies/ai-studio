@@ -2462,11 +2462,24 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 // plugin built before 2.3 dials lazily, retrying for about 25 s and reading
 // the current broker ID on each attempt, and can only connect within five
 // seconds of the host accepting on an ID, so it connects on the first host
-// call that overlaps a renewal.
+// call that overlaps a renewal. After fastUnconnectedRenewals short sessions
+// (about five minutes) a plugin that still makes no host calls gets normal
+// sessions, each still on a fresh ID so that a late first call can connect.
 const (
 	sessionTimeoutMs            = int32(30000)
 	unconnectedSessionTimeoutMs = int32(10000)
+	fastUnconnectedRenewals     = 30
 )
+
+// sessionTimeout is the length of a renewal's session: short while the
+// plugin has not connected to brokerID, for the first
+// fastUnconnectedRenewals renewals.
+func sessionTimeout(client *MicrogatewayPluginClient, brokerID uint32, renewal int) int32 {
+	if brokerID != 0 && !client.BrokerConnected(brokerID) && renewal < fastUnconnectedRenewals {
+		return unconnectedSessionTimeoutMs
+	}
+	return sessionTimeoutMs
+}
 
 // renewSessionBroker returns the broker ID for the plugin's next session.
 // go-plugin hands a plugin a broker ID's connection info once, when the host
@@ -2502,7 +2515,7 @@ func (pm *PluginManager) renewSessionBroker(pluginID uint, client *MicrogatewayP
 	}
 	client.StopBroker(current)
 	ev := log.Debug()
-	if renewal <= 3 {
+	if renewal <= 3 || renewal == fastUnconnectedRenewals {
 		ev = log.Info()
 	}
 	ev.Uint("plugin_id", pluginID).
@@ -2556,10 +2569,7 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 
 		// Call OpenSession - this blocks until timeout or explicit close.
 		// Sessions are short while the plugin has not connected.
-		timeoutMs := sessionTimeoutMs
-		if brokerID != 0 && !client.BrokerConnected(brokerID) {
-			timeoutMs = unconnectedSessionTimeoutMs
-		}
+		timeoutMs := sessionTimeout(client, brokerID, renewal)
 		resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
 			ServiceBrokerId: brokerID,
 			PluginId:        uint32(pluginID),

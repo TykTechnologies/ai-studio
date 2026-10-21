@@ -97,3 +97,17 @@ func TestBrokerConnectionInfoExpires(t *testing.T) {
 	require.NoError(t, err)
 	_ = conn.Close()
 }
+
+// eac.67: a plugin that makes no host calls at all gets short sessions for
+// the first fastUnconnectedRenewals renewals, then normal ones, each still
+// on a fresh ID so that a late first call can connect.
+func TestSessionTimeout_BacksOffForAPluginThatNeverCalls(t *testing.T) {
+	host, _ := brokerPair(t)
+	pm := &PluginManager{managementServer: &testMgmtServer{}}
+	id, err := host.SetupServiceBroker(7, pm.managementServer)
+	require.NoError(t, err)
+
+	assert.Equal(t, unconnectedSessionTimeoutMs, sessionTimeout(host, id, fastUnconnectedRenewals-1))
+	assert.Equal(t, sessionTimeoutMs, sessionTimeout(host, id, fastUnconnectedRenewals))
+	assert.NotEqual(t, id, pm.renewSessionBroker(7, host, id, fastUnconnectedRenewals+1), "still offered a fresh ID after backing off")
+}
