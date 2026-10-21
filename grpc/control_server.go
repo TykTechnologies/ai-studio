@@ -24,6 +24,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/snapshotguard"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -1206,6 +1207,10 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			// the tier's multiplier; the tier lets analytics break it down.
 			proxyLogs[i].ServiceTier = event.ServiceTier
 			chatRecords[i].ServiceTier = event.ServiceTier
+			// The gateway's request id (and the caller's), for matching a
+			// compliance event's request_id to its log row.
+			proxyLogs[i].RequestID = requestid.SanitizeClient(event.GatewayRequestId)
+			proxyLogs[i].ClientRequestID = requestid.SanitizeClient(event.ClientRequestId)
 			if kind == models.DecisionRequest {
 				chatRecords[i].Choices = int(event.Choices)
 				chatRecords[i].DecisionQuestions = int(event.DecisionQuestions)
@@ -1223,9 +1228,18 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				Msg("Analytics event processed for batch")
 		}
 
+		// A request with no usage (a policy block, an error) is a request
+		// log row only: no chat record, so it adds no interaction or spend.
+		withUsage := chatRecords[:0]
+		for i, event := range req.AnalyticsEvents {
+			if !event.NoUsage {
+				withUsage = append(withUsage, chatRecords[i])
+			}
+		}
+
 		// Use batch processing for improved performance
 		analytics.RecordProxyLogsBatch(ctx, proxyLogs)
-		analytics.RecordChatRecordsBatch(ctx, chatRecords)
+		analytics.RecordChatRecordsBatch(ctx, withUsage)
 		processedRecords += uint64(len(req.AnalyticsEvents))
 
 		logger.Log.Debug().

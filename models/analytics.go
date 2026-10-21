@@ -266,6 +266,8 @@ type ProxyLogAttributes struct {
 	ShadowRoute       string    `json:"shadow_route,omitempty"`
 	OnBehalfOf        string    `json:"on_behalf_of,omitempty"`
 	ActingAgent       string    `json:"acting_agent,omitempty"`
+	RequestID         string    `json:"request_id,omitempty"`
+	ClientRequestID   string    `json:"client_request_id,omitempty"`
 }
 
 // NewProxyLogResponse serialises one ProxyLog row for the proxy-log
@@ -298,6 +300,8 @@ func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
 			ShadowRoute:       log.ShadowRoute,
 			OnBehalfOf:        log.OnBehalfOf,
 			ActingAgent:       log.ActingAgent,
+			RequestID:         log.RequestID,
+			ClientRequestID:   log.ClientRequestID,
 		},
 	}
 }
@@ -370,4 +374,10 @@ type ProxyLog struct {
 	// ServiceTier is the vendor service tier of the call's usage, as on its
 	// chat record.
 	ServiceTier string `gorm:"size:32"`
+	// RequestID is the gateway's id for the request (pkg/requestid: the
+	// X-Tyk-AI-Request-ID it answered with, and the request_id of the
+	// request's compliance events). Every failover attempt of one request
+	// shares it. ClientRequestID is the caller's own X-Request-ID, sanitised.
+	RequestID       string `gorm:"size:64;index:idx_proxy_logs_request_id"`
+	ClientRequestID string `gorm:"size:128"`
 }

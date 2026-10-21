@@ -162,8 +162,10 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 		// For batch processing, create skeleton events
 		// These are typically from edge pulse reception where we don't get corresponding ChatRecords
 		event := &database.AnalyticsEvent{
-			RequestID:    fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
-			AppID:        proxyLog.AppID,
+			RequestID:        fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+			GatewayRequestID: proxyLog.RequestID,
+			ClientRequestID:  proxyLog.ClientRequestID,
+			AppID:            proxyLog.AppID,
 			UserID:       proxyLog.UserID,
 			Vendor:       proxyLog.Vendor,
 			StatusCode:   proxyLog.ResponseCode,
@@ -291,10 +293,50 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyL
 				DecisionQuestions:   record.DecisionQuestions,
 				DecisionRefusals:    record.DecisionRefusals,
 				ServiceTier:         record.ServiceTier,
+				GatewayRequestID:    proxyLog.RequestID,
+				ClientRequestID:     proxyLog.ClientRequestID,
 			}
 			if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
 				log.Error().Err(err).Msg("Failed to execute analytics plugins for exchange")
 			}
+		}
+	} else if h.pluginManager != nil {
+		// A request with no usage (a policy block, an error) reaches the
+		// analytics plugins too, marked NoUsage, so the hub's request logs
+		// show it and a compliance event's request id finds its row.
+		analyticsData := &interfaces.AnalyticsData{
+			LLMID:               proxyLog.LLMID,
+			ModelName:           proxyLog.ModelName,
+			Vendor:              proxyLog.Vendor,
+			AppID:               proxyLog.AppID,
+			UserID:              proxyLog.UserID,
+			Timestamp:           proxyLog.TimeStamp,
+			TotalTimeMS:         event.TotalTimeMS,
+			RequestID:           requestID,
+			StatusCode:          event.StatusCode,
+			RequestBody:         event.RequestBody,
+			ResponseBody:        event.ResponseBody,
+			FailoverFromLLMID:   event.FailoverFromLLMID,
+			FailoverAttempt:     event.FailoverAttempt,
+			RouterKind:          event.RouterKind,
+			RouterSlug:          event.RouterSlug,
+			RouterPool:          event.RouterPoolName,
+			Route:               event.Route,
+			RouteReason:         event.RouteReason,
+			RouterSourceModel:   event.RouterSourceModel,
+			RouterTargetModel:   event.RouterTargetModel,
+			RouterSelectionAlgo: event.RouterSelectionAlgo,
+			RouteScore:          event.RouteScore,
+			ShadowRoute:         event.ShadowRoute,
+			OnBehalfOf:          event.OnBehalfOf,
+			ActingAgent:         event.ActingAgent,
+			RequestKind:         string(proxyLog.RequestKind),
+			GatewayRequestID:    proxyLog.RequestID,
+			ClientRequestID:     proxyLog.ClientRequestID,
+			NoUsage:             true,
+		}
+		if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
+			log.Error().Err(err).Msg("Failed to execute analytics plugins for a request with no usage")
 		}
 	}
 
@@ -424,6 +466,8 @@ func (h *MicrogatewaAnalyticsHandler) eventFromProxyLog(proxyLog *models.ProxyLo
 	event.ActingAgent = proxyLog.ActingAgent
 	event.RequestKind = string(proxyLog.RequestKind)
 	event.ServiceTier = proxyLog.ServiceTier
+	event.GatewayRequestID = proxyLog.RequestID
+	event.ClientRequestID = proxyLog.ClientRequestID
 	return event
 }
 

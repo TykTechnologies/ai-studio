@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -54,8 +55,24 @@ func stampIdentity(ctx context.Context, log *models.ProxyLog, rec *models.LLMCha
 	}
 }
 
+// stampRequestIDs records on a proxy log the gateway's request id and the
+// caller's (pkg/requestid), from the request context. Values a writer
+// already set are kept (the hub sets an edge's from the pulse).
+func stampRequestIDs(ctx context.Context, log *models.ProxyLog) {
+	if log == nil {
+		return
+	}
+	if log.RequestID == "" {
+		log.RequestID = requestid.FromContext(ctx)
+	}
+	if log.ClientRequestID == "" {
+		log.ClientRequestID = requestid.ClientFromContext(ctx)
+	}
+}
+
 func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 	stampIdentity(ctx, log, nil)
+	stampRequestIDs(ctx, log)
 
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
@@ -73,6 +90,7 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 // RecordProxyLog followed by RecordChatRecord, as before.
 func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
 	stampIdentity(ctx, log, rec)
+	stampRequestIDs(ctx, log)
 
 	// The proxy paths build chat records without a latency; the gateway put
 	// the request's start on the context (WithRequestStart).

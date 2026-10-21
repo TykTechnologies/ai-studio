@@ -404,7 +404,8 @@ high-entropy tokens.
 **See what was flagged.** In AI Studio, **Compliance → Filter events**, expand
 an event: **Flagged text** lists each flagged message or tool result with the
 SHA-256 of the text the guardrail scored and the request id (the
-`X-Request-ID` the gateway answered with). Turn on **Show flagged text in
+`X-Tyk-AI-Request-ID` the gateway answered with; **Open the request log**
+goes to its row). Turn on **Show flagged text in
 compliance events** on the filters to record a 200-character excerpt as well,
 with credentials and personal data masked; Wolf Defender gives no position
 inside the text, so the excerpt is the start of the flagged message or tool

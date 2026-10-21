@@ -6,14 +6,13 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -118,8 +117,9 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 			TraceContext: make(map[string]string),
 		}
 
-		// Set request ID header for tracking
-		c.Header("X-Request-ID", pluginCtx.RequestID)
+		// The request id is answered in X-Tyk-AI-Request-ID (RequestIDMiddleware);
+		// the caller's X-Request-ID is theirs and is left alone.
+		c.Header(requestid.Header, pluginCtx.RequestID)
 
 		// Execute pre-auth plugins
 		if pluginResp := executePreAuthPlugins(config.PluginManager, llmID, c, pluginCtx); pluginResp != nil {
@@ -324,5 +324,5 @@ func extractLLMSlug(path string) string {
 }
 
 func generateRequestID() string {
-	return "req_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	return requestid.New()
 }

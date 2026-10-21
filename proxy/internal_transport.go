@@ -108,6 +108,7 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// respondPolicyBlock). The marker changes only the error body's shape,
 	// never what is enforced, so it needs no trust.
 	req.Header.Set(hdrInternalHop, internalHopToken)
+	setLoopbackRequestIDs(req)
 
 	resp, err := loopbackRoundTrip(t.underlying, req)
 	if relay := loopbackRelayFrom(req.Context()); relay != nil {

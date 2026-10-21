@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/gin-gonic/gin"
@@ -59,30 +60,20 @@ func (c *pluginAppCache) set(appID uint, app *pb.App) {
 	c.mu.Unlock()
 }
 
-// RequestIDMiddleware generates a canonical request ID for every request
-// This MUST be the first middleware in the chain to ensure all downstream code uses the same ID
-// The request ID is stored in request context and available to all handlers, middleware, and plugins
+// RequestIDMiddleware gives every request the gateway's request id
+// (pkg/requestid). It MUST be the first middleware in the chain so all
+// downstream code uses the same id: it is stored in the request context and
+// answered in X-Tyk-AI-Request-ID. A client cannot choose it; on the
+// gateway's own loopback hop the outer hop's id is kept (proxy.RequestIDs).
+// The caller's X-Request-ID is left alone, and recorded as the client
+// request id.
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check if request ID already exists (shouldn't, but defensive)
-		if existingID := c.Request.Context().Value("request_id"); existingID != nil {
-			log.Warn().Str("existing_id", existingID.(string)).Msg("⚠️ Request ID already in context - skipping regeneration")
-			c.Next()
-			return
-		}
+		requestID, clientID := proxy.RequestIDs(c.Request)
+		c.Request = c.Request.WithContext(requestid.WithID(c.Request.Context(), requestID, clientID))
+		c.Header(requestid.Header, requestID)
 
-		// Generate canonical request ID - ignore any client-provided X-Request-ID header for security
-		requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
-
-		// Store in request context so all middleware/handlers/plugins can access it
-		ctx := context.WithValue(c.Request.Context(), "request_id", requestID)
-		c.Request = c.Request.WithContext(ctx)
-
-		// Set as response header for client observability and distributed tracing
-		c.Header("X-Request-ID", requestID)
-
-		log.Debug().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
-		log.Debug().Str("body length is", fmt.Sprintf("%d", c.Request.ContentLength)).Msg("📦 Request body length")
+		log.Debug().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("Request ID for request")
 
 		// Continue processing
 		c.Next()

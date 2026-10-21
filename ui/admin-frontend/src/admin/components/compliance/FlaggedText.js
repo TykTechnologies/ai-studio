@@ -1,11 +1,13 @@
 import React from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, Link, Typography } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 
 // What a guardrail compliance event says about the text it flagged
 // (scripting/filter_runner.go): metadata.segments lists the flagged segments
 // with the SHA-256 of the text the provider was sent (the key a provider such
 // as Wolf Defender logs by) and, when the filter's "Show flagged text" is on,
-// a masked excerpt; metadata.request_id is the gateway's X-Request-ID.
+// a masked excerpt; metadata.request_id is the gateway's X-Tyk-AI-Request-ID
+// (the request log's request ID), client_request_id the caller's X-Request-ID.
 const ROLE_LABELS = {
   user: "User message",
   system: "System prompt",
@@ -24,9 +26,10 @@ export const segmentLabel = (seg) => {
 
 const mono = { fontFamily: "monospace", fontSize: "0.75rem", wordBreak: "break-all" };
 
-const FlaggedText = ({ metadata }) => {
+const FlaggedText = ({ metadata, appId }) => {
   const segments = Array.isArray(metadata?.segments) ? metadata.segments.filter((s) => s && typeof s === "object") : [];
   const requestId = typeof metadata?.request_id === "string" ? metadata.request_id : "";
+  const clientId = typeof metadata?.client_request_id === "string" ? metadata.client_request_id : "";
   if (segments.length === 0 && !requestId) return null;
 
   return (
@@ -37,6 +40,23 @@ const FlaggedText = ({ metadata }) => {
       {requestId && (
         <Typography variant="body2" sx={{ mt: 0.5 }}>
           Request ID: <Box component="span" sx={mono}>{requestId}</Box>
+          {appId ? (
+            <>
+              {" "}
+              <Link
+                component={RouterLink}
+                to={`/admin/apps/${appId}?log_search=${encodeURIComponent(requestId)}`}
+                data-testid="flagged-request-log"
+              >
+                Open the request log
+              </Link>
+            </>
+          ) : null}
+        </Typography>
+      )}
+      {clientId && (
+        <Typography variant="body2">
+          Client request ID: <Box component="span" sx={mono}>{clientId}</Box>
         </Typography>
       )}
       {segments.map((seg, i) => (

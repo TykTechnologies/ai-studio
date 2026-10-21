@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -404,7 +405,7 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		}
 	}
 
-	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), excerptChars: job.excerptChars})...)
+	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars})...)
 	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res.unscanned, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
@@ -1338,8 +1339,9 @@ func meta(input *ScriptInput) map[string]any {
 // evidenceContext is what complianceEvents needs from the request to point
 // at the flagged text.
 type evidenceContext struct {
-	requestID    string
-	excerptChars int
+	requestID       string
+	clientRequestID string
+	excerptChars    int
 }
 
 // maxEvidenceSegments bounds the segments one compliance event lists; count
@@ -1358,26 +1360,24 @@ func excerptChars(cfg guardrails.Config, input *ScriptInput) int {
 	return cfg.Evidence.ExcerptLimit()
 }
 
-// requestIDOf is the gateway's id for the request (the X-Request-ID it
-// answers with, and the request_id providers are sent), "" when unknown.
+// requestIDOf is the gateway's id for the request (pkg/requestid: the
+// X-Tyk-AI-Request-ID it answers with, and the request_id providers are
+// sent), "" when unknown.
 func requestIDOf(input *ScriptInput) string {
 	id, _ := input.Context["request_id"].(string)
 	return safeRef(id)
 }
 
-// safeRef keeps an identifier to 128 characters of letters, digits and
-// _ . : -, like safeLabel, so a client-chosen id cannot write into an event.
+// clientRequestIDOf is the caller's own X-Request-ID, "" when it sent none.
+func clientRequestIDOf(input *ScriptInput) string {
+	id, _ := input.Context["client_request_id"].(string)
+	return safeRef(id)
+}
+
+// safeRef keeps an identifier to what requestid.SanitizeClient allows, so a
+// client-chosen id cannot write into an event.
 func safeRef(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if b.Len() >= 128 {
-			break
-		}
-		if r == '_' || r == '.' || r == ':' || r == '-' || ('a' <= r && r <= 'z') || ('A' <= r && r <= 'Z') || ('0' <= r && r <= '9') {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return requestid.SanitizeClient(s)
 }
 
 // segmentEvidence is one flagged segment as a compliance event lists it.
@@ -1497,6 +1497,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		}
 		if ec.requestID != "" {
 			metadata["request_id"] = ec.requestID
+		}
+		if ec.clientRequestID != "" {
+			metadata["client_request_id"] = ec.clientRequestID
 		}
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + strings.ReplaceAll(det, "/", "."),

@@ -5570,6 +5570,8 @@ definitions:
         type: string
       app_id:
         type: integer
+      client_request_id:
+        type: string
       failover_attempt:
         type: integer
       failover_from_llm_id:
@@ -5581,6 +5583,8 @@ definitions:
       on_behalf_of:
         type: string
       request_body:
+        type: string
+      request_id:
         type: string
       response_body:
         type: string

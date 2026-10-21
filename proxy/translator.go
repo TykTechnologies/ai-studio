@@ -130,6 +130,8 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	if rt := timingFrom(r.Context()); rt != nil {
 		ctx = withRequestTiming(ctx, rt)
 	}
+	// And the request ids, so the inner hop logs under the client's id.
+	ctx = withRequestIDsFrom(ctx, r)
 	if relay != nil {
 		ctx = withLoopbackRelay(ctx, relay)
 	}
