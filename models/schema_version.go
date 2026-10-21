@@ -58,7 +58,11 @@ const (
 	//     (nullable, additive).
 	// 17: agent_trace_traces.exported_at (nullable) and its index: the OTel
 	//     exporter marks the turns it has sent (additive).
-	SchemaVersion          = 17
+	// 18: partial indexes on agent_trace_traces over in-progress turns:
+	//     idx_agent_trace_traces_open (app_id, session_id, turn_index) for
+	//     gateway turns and idx_agent_trace_traces_idle (started_at)
+	//     (additive).
+	SchemaVersion          = 18
 	MinReaderSchemaVersion = 1
 )
 

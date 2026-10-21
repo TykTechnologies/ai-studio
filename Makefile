@@ -1176,11 +1176,16 @@ bench-unit: ## Unit tests for the benchmark tooling and Server-Timing
 	go test ./benchmarks/... ./pkg/testinfra/mockllm/ ./metrics/
 	go test ./proxy/ -run 'ServerTiming|InnerTiming'
 
-bench-agent-tracing: ## Agent tracing overhead gate (spec §10 budgets) and per-request capture cost; ENT adds full-content mode
-	go test -tags 'agenttracebench $(if $(filter enterprise,$(BENCH_EDITION)),enterprise,)' -count=1 -run TestAgentTraceOverheadGate -v ./proxy/
-	go test -tags agenttracebench -run xxx -bench 'BenchmarkAgentTrace' -benchtime 3000x ./proxy/
+bench-agent-tracing: ## Agent tracing overhead (added p50 gated; quiet machine) and per-request capture cost; BENCH_EDITION=enterprise adds full content
+	scripts/agent-tracing-bench-gate.sh overhead $(or $(BENCH_EDITION),ce)
 
-.PHONY: bench-agent-tracing
+bench-agent-tracing-ci: ## The blocking CI perf gate: allocations, write amplification, overhead reported
+	scripts/agent-tracing-bench-gate.sh ci $(or $(BENCH_EDITION),ce)
+
+bench-agent-tracing-soak: ## One-hour assembler soak at GOMAXPROCS=2, >= 2,000 spans/s (needs DATABASE_URL, Postgres limited to 2 CPUs)
+	scripts/agent-tracing-bench-gate.sh soak enterprise
+
+.PHONY: bench-agent-tracing bench-agent-tracing-ci bench-agent-tracing-soak
 
 # Clean target
 clean:

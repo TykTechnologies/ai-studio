@@ -243,6 +243,8 @@ TABLE agent_trace_traces
   index CREATE UNIQUE INDEX agent_trace_traces_pkey ON agent_trace_traces USING btree (app_id, trace_id)
   index CREATE INDEX idx_agent_trace_traces_app_started ON agent_trace_traces USING btree (app_id, started_at)
   index CREATE INDEX idx_agent_trace_traces_export ON agent_trace_traces USING btree (exported_at)
+  index CREATE INDEX idx_agent_trace_traces_idle ON agent_trace_traces USING btree (started_at) WHERE ((status)::text = 'in_progress'::text)
+  index CREATE INDEX idx_agent_trace_traces_open ON agent_trace_traces USING btree (app_id, session_id, turn_index) WHERE (((status)::text = 'in_progress'::text) AND ((source)::text = 'tyk'::text))
   index CREATE INDEX idx_agent_trace_traces_session_turn ON agent_trace_traces USING btree (session_id, turn_index)
   index CREATE INDEX idx_agent_trace_traces_trace_id ON agent_trace_traces USING btree (trace_id)
   column app_id bigint(int8) nullable=NO precision=64 scale=0

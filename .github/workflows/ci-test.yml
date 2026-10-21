@@ -534,6 +534,76 @@ jobs:
           go test -tags enterprise -v -race -count=1 -run '_Postgres' ./features/webhooks/
 
   # ==========================================================================
+  # Agent tracing performance gate (spec §10, bead jyx.34). Deterministic
+  # checks only: allocations with tracing off (zero) and on (budgets), and
+  # the assembler's write amplification (<= 3 rows per span) in a short run.
+  # Gateway overhead is reported, not gated; the one-hour throughput soak is
+  # make bench-agent-tracing-soak. See scripts/agent-tracing-bench-gate.sh.
+  # ==========================================================================
+  agent-tracing-bench:
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
+    name: Agent Tracing Perf Gate
+    runs-on: warp-ubuntu-latest-arm64-4x
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agenttrace_bench
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: ${{ env.FORK_PR != 'true' }}
+          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
+
+      - name: Create enterprise stub for fork pull requests
+        if: env.FORK_PR == 'true'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/ai-studio-enterprise/v2
+
+          go 1.26.5
+          EOF
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Create placeholders for embeds
+        run: |
+          mkdir -p docs/site/dist ui/admin-frontend/build
+          echo "placeholder" > docs/site/dist/index.html
+          echo "placeholder" > ui/admin-frontend/build/index.html
+          cp dev/.env.dev .env
+
+      - name: Link enterprise tests of core packages
+        if: env.FORK_PR != 'true'
+        run: make ent-link
+
+      - name: Community Edition gate
+        if: env.FORK_PR == 'true'
+        run: scripts/agent-tracing-bench-gate.sh ci ce
+
+      - name: Enterprise gate
+        if: env.FORK_PR != 'true'
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_bench?sslmode=disable
+        run: scripts/agent-tracing-bench-gate.sh ci enterprise
+
+  # ==========================================================================
   # gorm copy: third_party/gorm.io is exactly what third_party/gorm-pin
   # produces, and no module imports gorm.io (see third_party/README.md)
   # ==========================================================================
@@ -718,7 +788,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build]
+    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build, agent-tracing-bench]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -737,6 +807,7 @@ jobs:
             Frontend Tests=${{ needs.frontend-tests.result }}
             Go Unit Tests=${{ needs.go-unit-tests.result }}
             Go Postgres Tests=${{ needs.go-postgres-tests.result }}
+            Agent Tracing Perf Gate=${{ needs.agent-tracing-bench.result }}
             gorm Copy Verification=${{ needs.gorm-verify.result }}
             Module Zip Check=${{ needs.module-check.result }}
             Host Compatibility=${{ needs.host-compat.result }}
@@ -782,6 +853,7 @@ jobs:
           !contains(fromJSON('["success","skipped"]'), needs.frontend-tests.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.go-unit-tests.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.go-postgres-tests.result) ||
+          !contains(fromJSON('["success","skipped"]'), needs.agent-tracing-bench.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.gorm-verify.result)
         run: |
           echo "Some checks failed!"

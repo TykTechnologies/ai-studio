@@ -250,6 +250,8 @@ TABLE agent_trace_traces
   autoindex origin=pk unique=1 (app_id, trace_id)
   index CREATE INDEX `idx_agent_trace_traces_app_started` ON `agent_trace_traces`(`app_id`,`started_at`)
   index CREATE INDEX `idx_agent_trace_traces_export` ON `agent_trace_traces`(`exported_at`)
+  index CREATE INDEX `idx_agent_trace_traces_idle` ON `agent_trace_traces`(`started_at`) WHERE status = 'in_progress'
+  index CREATE INDEX `idx_agent_trace_traces_open` ON `agent_trace_traces`(`app_id`,`session_id`,`turn_index`) WHERE status = 'in_progress' AND source = 'tyk'
   index CREATE INDEX `idx_agent_trace_traces_session_turn` ON `agent_trace_traces`(`session_id`,`turn_index`)
   index CREATE INDEX `idx_agent_trace_traces_trace_id` ON `agent_trace_traces`(`trace_id`)
 TABLE app_datasources

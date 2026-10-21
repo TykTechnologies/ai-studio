@@ -109,13 +109,16 @@ func (AgentTraceSessionAgent) TableName() string { return "agent_trace_session_a
 // X-Tyk-Trace-Id) and not secret, so two Apps may send the same one and must
 // still get separate rows.
 type AgentTraceTrace struct {
-	AppID      uint       `gorm:"primaryKey;autoIncrement:false;not null;index:idx_agent_trace_traces_app_started,priority:1" json:"app_id"`
+	AppID      uint       `gorm:"primaryKey;autoIncrement:false;not null;index:idx_agent_trace_traces_app_started,priority:1;index:idx_agent_trace_traces_open,priority:1,where:status = 'in_progress' AND source = 'tyk'" json:"app_id"`
 	TraceID    []byte     `gorm:"primaryKey;index:idx_agent_trace_traces_trace_id" json:"trace_id"` // 16 bytes; the index serves lookups by id alone
-	SessionID  string     `gorm:"size:36;not null;index:idx_agent_trace_traces_session_turn,priority:1" json:"session_id"`
-	TurnIndex  int        `gorm:"not null;default:0;index:idx_agent_trace_traces_session_turn,priority:2" json:"turn_index"`
+	SessionID  string     `gorm:"size:36;not null;index:idx_agent_trace_traces_session_turn,priority:1;index:idx_agent_trace_traces_open,priority:2,where:status = 'in_progress' AND source = 'tyk'" json:"session_id"`
+	// idx_agent_trace_traces_open finds a session's open gateway turn without
+	// walking its finished ones; the assembler repeats the predicate literally.
+	TurnIndex  int        `gorm:"not null;default:0;index:idx_agent_trace_traces_session_turn,priority:2;index:idx_agent_trace_traces_open,priority:3,where:status = 'in_progress' AND source = 'tyk'" json:"turn_index"`
 	Source     string     `gorm:"size:32;not null" json:"source"` // client_traceparent | tyk
 	RootSpanID []byte     `json:"root_span_id,omitempty"`
-	StartedAt  time.Time  `gorm:"not null;index:idx_agent_trace_traces_app_started,priority:2" json:"started_at"`
+	// idx_agent_trace_traces_idle serves the idle-turn sweep.
+	StartedAt  time.Time  `gorm:"not null;index:idx_agent_trace_traces_app_started,priority:2;index:idx_agent_trace_traces_idle,where:status = 'in_progress'" json:"started_at"`
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
 	Status     string     `gorm:"size:16;not null" json:"status"` // in_progress | ok | error | abandoned
 	// ExportedAt is when the OTel exporter sent the turn (Enterprise, spec
