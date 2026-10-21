@@ -536,7 +536,8 @@ jobs:
   # ==========================================================================
   # Agent tracing performance gate (spec §10, bead jyx.34). Deterministic
   # checks only: allocations with tracing off (zero) and on (budgets), and
-  # the assembler's write amplification (<= 3 rows per span) in a short run.
+  # the assembler's write amplification (<= 3 rows per span) and round trips
+  # (<= 0.05 statements per span on Postgres) in a short run.
   # Gateway overhead is reported, not gated; the one-hour throughput soak is
   # make bench-agent-tracing-soak. See scripts/agent-tracing-bench-gate.sh.
   # ==========================================================================

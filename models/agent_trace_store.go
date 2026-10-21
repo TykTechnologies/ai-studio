@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,6 +39,58 @@ func InsertAgentTraceCaptureEvents(db *gorm.DB, events []AgentTraceCaptureEvent)
 		DoNothing: true,
 	}).Create(&events)
 	return res.RowsAffected, res.Error
+}
+
+// Rows per multi-row statement of the batched writes below: well under the
+// bind-parameter limits of Postgres (65,535) and SQLite (32,766) for the
+// widest of these tables (sessions, about 30 columns).
+const (
+	agentTraceRowsPerUpsert  = 500
+	agentTraceNamesPerInsert = 2000
+)
+
+// UpsertAgentTraceSessions writes sessions whole, new and existing alike, in
+// id order and multi-row statements: a new row is inserted, an existing one
+// overwritten column by column (as Save does). The assembler is the only
+// writer of these rows (it holds the lease), so its in-memory rows are
+// authoritative; the fixed order keeps concurrent writers from deadlocking.
+func UpsertAgentTraceSessions(db *gorm.DB, rows []*AgentTraceSession) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	sorted := append([]*AgentTraceSession(nil), rows...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	return db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, UpdateAll: true}).
+		CreateInBatches(&sorted, agentTraceRowsPerUpsert).Error
+}
+
+// UpsertAgentTraceTraces is UpsertAgentTraceSessions for turns, keyed and
+// ordered by (app_id, trace_id).
+func UpsertAgentTraceTraces(db *gorm.DB, rows []*AgentTraceTrace) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	sorted := append([]*AgentTraceTrace(nil), rows...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].AppID != sorted[j].AppID {
+			return sorted[i].AppID < sorted[j].AppID
+		}
+		return string(sorted[i].TraceID) < string(sorted[j].TraceID)
+	})
+	return db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "app_id"}, {Name: "trace_id"}}, UpdateAll: true}).
+		CreateInBatches(&sorted, agentTraceRowsPerUpsert).Error
+}
+
+// InsertAgentTraceSessionNames adds session/name rows (models, tools or
+// agents of sessions) that are not there yet, in key order and multi-row
+// statements. rows is a slice of AgentTraceSessionModel, AgentTraceSessionTool
+// or AgentTraceSessionAgent.
+func InsertAgentTraceSessionNames[T AgentTraceSessionModel | AgentTraceSessionTool | AgentTraceSessionAgent](db *gorm.DB, rows []T, key func(T) string) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	sort.Slice(rows, func(i, j int) bool { return key(rows[i]) < key(rows[j]) })
+	return db.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(&rows, agentTraceNamesPerInsert).Error
 }
 
 // ListAgentTraceCaptureEventsAfter returns up to limit staged events with an

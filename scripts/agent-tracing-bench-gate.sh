@@ -5,7 +5,8 @@
 #   - TestAgentTraceAllocGate: tracing off allocates nothing on any capture
 #     hook; tracing on stays within per-request allocation and byte budgets.
 #   - Enterprise with DATABASE_URL: a short assembler soak gating write
-#     amplification (<= 3 rows per span); its spans/s is reported.
+#     amplification (<= 3 rows per span) and round trips (<= 0.05
+#     statements per span on Postgres); its spans/s is reported.
 #   - Gateway overhead (tracing on vs off in one process) is reported, not
 #     gated: shared runners vary too much for timing budgets.
 # soak (manual or nightly, make bench-agent-tracing-soak):
