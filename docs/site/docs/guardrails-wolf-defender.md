@@ -401,6 +401,8 @@ high-entropy tokens.
 
 ## 9. Operate it
 
+**Why was a request blocked?** The caller's `400` says: the reason code and sentence after "Reason:", and the request id. See [When a guardrail blocks a request](/docs/guardrails#when-a-guardrail-blocks-a-request) for the codes. The most common surprise is `guardrail_too_large_to_scan`: a tool result longer than the filter's `budget.max_scan_chars` is never sent to Wolf Defender, so even an App the policy skips is blocked. Raise the limit on the filters (2,000,000 is a reasonable value; long text is scored in pieces). To let an App's owner see their own blocks, turn on **Show this filter's blocks to app owners** on the filters.
+
 **See what was flagged.** In AI Studio, **Compliance → Filter events**, expand
 an event: **Flagged text** lists each flagged message or tool result with the
 SHA-256 of the text the guardrail scored and the request id (the

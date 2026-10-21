@@ -346,6 +346,8 @@ TABLE compliance_events
   column `vendor` text
   column `model_name` text
   column `time_stamp` datetime
+  column `owner_visible` numeric
+  index CREATE INDEX `idx_ce_app_owner_time` ON `compliance_events`(`app_id`,`owner_visible`,`time_stamp`)
   index CREATE INDEX `idx_ce_app_time` ON `compliance_events`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_ce_time` ON `compliance_events`(`time_stamp`)
   index CREATE INDEX `idx_compliance_events_deleted_at` ON `compliance_events`(`deleted_at`)

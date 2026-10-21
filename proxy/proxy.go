@@ -62,6 +62,12 @@ type ErrorResponse struct {
 	Status  int    `json:"status"`
 	Message string `json:"message"`
 	Error   string `json:"error,omitempty"`
+	// A guardrail block's reason (PolicyBlockError): why, which filter, and
+	// the request id to quote.
+	ReasonCode string `json:"reason_code,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+	Filter     string `json:"filter,omitempty"`
+	RequestID  string `json:"request_id,omitempty"`
 }
 
 type SearchQuery struct {
@@ -873,11 +879,25 @@ const hdrInternalHop = "X-Tyk-Internal-Hop"
 // the loopback hop so the outer /ai/ handler can relay the reason, the
 // pass-through's ErrorResponse shape for direct callers.
 func respondPolicyBlock(w http.ResponseWriter, r *http.Request, err error) {
+	pb := policyBlockOf(err)
+	if pb != nil && pb.Code != "" {
+		w.Header().Set(hdrGuardrailReason, pb.Code)
+	}
 	if r.Header.Get(hdrInternalHop) != "" {
 		respondWithOAIError(w, http.StatusBadRequest, "policy_violation", err, false)
 		return
 	}
-	respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+	if pb == nil || pb.Code == "" {
+		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+		return
+	}
+	slog.Error("api client error", "message", err.Error(), "status", http.StatusBadRequest, "reason_code", pb.Code)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(ErrorResponse{
+		Status: http.StatusBadRequest, Message: err.Error(), Error: err.Error(),
+		ReasonCode: pb.Code, Reason: pb.Reason, Filter: pb.Filter, RequestID: pb.RequestID,
+	})
 }
 
 func respondWithError(w http.ResponseWriter, status int, message string, err error, wwwAuthenticate bool) {
@@ -2501,11 +2521,7 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 
 		// Check if request should be blocked
 		if output.Block {
-			msg := output.Message
-			if msg == "" {
-				msg = "blocked by policy"
-			}
-			return nil, fmt.Errorf("Policy error: %s - %s", filter.Name, msg)
+			return nil, newPolicyBlock(r, filter.Name, output)
 		}
 
 		// Apply modifications to the request body for next filter

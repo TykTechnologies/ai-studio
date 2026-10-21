@@ -1593,6 +1593,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
@@ -2015,6 +2016,21 @@ definitions:
           type:
             type: string
         type: object
+    type: object
+  api.GuardrailBlock:
+    properties:
+      action:
+        type: string
+      filter:
+        type: string
+      reason:
+        type: string
+      reason_code:
+        type: string
+      request_id:
+        type: string
+      timestamp:
+        type: string
     type: object
   api.LLMInput:
     description: LLM input model
@@ -15197,6 +15213,47 @@ paths:
       summary: Get app usage analytics for portal user
       tags:
       - portal-analytics
+  /common/apps/{id}/guardrail-blocks:
+    get:
+      description: 'The requests of an App that guardrail filters shared with App
+        owners (evidence.share_with_app_owners) blocked, quarantined or changed in
+        the last days (default 7, at most 90): when, the filter, the action, the reason
+        code and sentence the caller got, and the request id. Never the text. Newest
+        first, at most 100.'
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: How many days back (1-90, default 7)
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.GuardrailBlock'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List the guardrail blocks of one of the user's Apps
+      tags:
+      - Portal
   /common/apps/{id}/mcp:
     get:
       parameters:

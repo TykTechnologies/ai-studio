@@ -9,6 +9,7 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -105,6 +106,24 @@ type ScriptOutput struct {
 	Messages         []map[string]interface{} // Modified messages array (alternative to Payload)
 	Message          string                   // Optional blocking reason or log message
 	ComplianceEvents []ComplianceEventOutput  // Compliance events to record (enterprise only)
+	// ReasonCode and Reason explain a guardrail block to the caller: a
+	// stable code (scripting.Reason*) and a sentence naming the cause and
+	// where it was, never what was matched. Empty for script filters.
+	ReasonCode string
+	Reason     string
+}
+
+// Explain appends a guardrail block's reason to msg: "msg. Reason: <reason>
+// (<code>)." It returns msg unchanged for a script filter's block.
+func (o *ScriptOutput) Explain(msg string) string {
+	if o == nil || o.ReasonCode == "" {
+		return msg
+	}
+	msg = strings.TrimSpace(msg)
+	if msg != "" && !strings.HasSuffix(msg, ".") {
+		msg += "."
+	}
+	return strings.TrimSpace(msg + " Reason: " + o.Reason + " (" + o.ReasonCode + ").")
 }
 
 // Func runs one filter script: source against input. svc gives the script

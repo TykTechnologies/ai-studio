@@ -294,6 +294,11 @@ type Evidence struct {
 	Excerpt bool `json:"excerpt,omitempty"`
 	// ExcerptChars caps each excerpt; 0 means DefaultExcerptChars.
 	ExcerptChars int `json:"excerpt_chars,omitempty"`
+	// ShareWithAppOwners lets the owners of an App see, in the portal, the
+	// requests of their App this filter blocked, quarantined or changed:
+	// when, why (the reason the caller got), the filter and the request id,
+	// never the text or the event's metadata. Off by default.
+	ShareWithAppOwners bool `json:"share_with_app_owners,omitempty"`
 }
 
 // ExcerptLimit is the most characters of one excerpt.

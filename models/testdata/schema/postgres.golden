@@ -358,6 +358,7 @@ TABLE cluster_nodes
 TABLE compliance_events
   constraint compliance_events_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX compliance_events_pkey ON compliance_events USING btree (id)
+  index CREATE INDEX idx_ce_app_owner_time ON compliance_events USING btree (app_id, owner_visible, time_stamp)
   index CREATE INDEX idx_ce_app_time ON compliance_events USING btree (app_id, time_stamp)
   index CREATE INDEX idx_ce_time ON compliance_events USING btree (time_stamp)
   index CREATE INDEX idx_compliance_events_deleted_at ON compliance_events USING btree (deleted_at)
@@ -382,6 +383,7 @@ TABLE compliance_events
   column vendor text(text) nullable=YES
   column model_name text(text) nullable=YES
   column time_stamp timestamp with time zone(timestamptz) nullable=YES
+  column owner_visible boolean(bool) nullable=YES
 TABLE credentials
   constraint credentials_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX credentials_pkey ON credentials USING btree (id)

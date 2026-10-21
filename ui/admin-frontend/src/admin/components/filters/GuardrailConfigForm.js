@@ -887,6 +887,21 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             was sent. With this on it also records a short excerpt of that text, with credentials and personal data
             masked. Never recorded for an LLM set not to log bodies.
           </FormHelperText>
+          <FormControlLabel
+            sx={{ mt: 1, display: "flex" }}
+            control={
+              <Checkbox
+                checked={!!config.evidence?.share_with_app_owners}
+                onChange={(e) => setEvidence({ share_with_app_owners: e.target.checked || undefined })}
+                inputProps={{ "data-testid": "guardrail-share-with-owners" }}
+              />
+            }
+            label="Show this filter's blocks to app owners"
+          />
+          <FormHelperText>
+            In the portal, an app's owners see the requests of their app this filter blocked, quarantined or changed:
+            when, why (the reason the caller got), the filter and the request ID. Never the flagged text.
+          </FormHelperText>
           {config.evidence?.excerpt && (
             <TextField
               sx={{ mt: 1, maxWidth: 260 }}
