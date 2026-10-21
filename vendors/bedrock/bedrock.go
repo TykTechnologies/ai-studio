@@ -107,6 +107,12 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 		})
 	}
 
+	// Wrapped last, after the config (CA bundle, proxy) and the client's
+	// defaults mode have built the SDK's own HTTP client (sdkHTTPClient).
+	opts = append(opts, func(o *bedrockruntime.Options) {
+		o.HTTPClient = newSDKHTTPClient(o.HTTPClient)
+	})
+
 	client := bedrockruntime.NewFromConfig(cfg, opts...)
 	clientCache.Store(llm.ID, &clientCacheEntry{client: client, fingerprint: fp})
 	return client, nil
