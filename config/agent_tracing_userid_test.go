@@ -19,6 +19,8 @@ func TestAgentTracingUserIDMode(t *testing.T) {
 		{map[string]string{"AGENT_TRACING_EXPORT_USER_ID_MODE": "off", "AGENT_TRACING_EXPORT_INCLUDE_USER_ID": "true"}, "off", 0},
 		{map[string]string{"AGENT_TRACING_EXPORT_USER_ID_MODE": "HASHED"}, "hashed", 0},
 		{map[string]string{"AGENT_TRACING_EXPORT_USER_ID_MODE": "plain"}, "hashed", 1},
+		// jyx.178: an unparsable legacy value keeps hashed, with a warning.
+		{map[string]string{"AGENT_TRACING_EXPORT_INCLUDE_USER_ID": "yes"}, "hashed", 1},
 	}
 	for _, c := range cases {
 		cfg, warnings := parseAgentTracingConfig(func(k string) string { return c.env[k] })

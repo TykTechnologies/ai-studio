@@ -262,11 +262,17 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 	p.enum("AGENT_TRACING_EXPORT_CONVERSATION_ID_FALLBACK", &cfg.ExportConversationIDFallback, "never", "inferred")
 	// The earlier boolean still applies when the mode is not set:
 	// true keeps the raw value, false turns it off (jyx.173).
+	// An unparsable legacy value keeps the default, hashed (jyx.178).
 	if _, set := p.get("AGENT_TRACING_EXPORT_USER_ID_MODE"); !set {
-		legacy := true
-		if _, had := p.get("AGENT_TRACING_EXPORT_INCLUDE_USER_ID"); had {
-			p.boolean("AGENT_TRACING_EXPORT_INCLUDE_USER_ID", &legacy)
-			cfg.ExportUserIDMode = map[bool]string{true: "raw", false: "off"}[legacy]
+		if v, had := p.get("AGENT_TRACING_EXPORT_INCLUDE_USER_ID"); had {
+			switch b, err := strconv.ParseBool(v); {
+			case err != nil:
+				p.warn("Invalid AGENT_TRACING_EXPORT_INCLUDE_USER_ID value %q; using AGENT_TRACING_EXPORT_USER_ID_MODE=%s", v, cfg.ExportUserIDMode)
+			case b:
+				cfg.ExportUserIDMode = "raw"
+			default:
+				cfg.ExportUserIDMode = "off"
+			}
 		}
 	}
 	p.enum("AGENT_TRACING_EXPORT_USER_ID_MODE", &cfg.ExportUserIDMode, "off", "hashed", "raw")
