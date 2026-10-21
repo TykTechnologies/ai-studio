@@ -720,7 +720,7 @@ These metrics are on the Prometheus endpoint, and pushed over OTLP to exporter e
   - sessions, turns and spans after `AGENT_TRACING_METADATA_RETENTION_DAYS` of inactivity;
   - captured content after the payload retention: the global value, or the App's **Keep captured content**.
 - **Sampling.** `AGENT_TRACING_STORE_SAMPLE_RATE` stores a share of sessions, decided per session. Unsampled sessions keep their summary row, with counts and cost, but no spans or content.
-- **Purge a session.** `DELETE /api/v1/agent-tracing/sessions/{id}` removes its spans, links, content and correlation keys.
+- **Purge a session.** `DELETE /api/v1/agent-tracing/sessions/{id}` removes its spans, links, content and correlation keys, and the captures still waiting to be assembled for a declared session. An inferred session's waiting captures carry no session id, so they stay and are assembled into a new session; erase by end user to remove them when they name one. A purge never races the assembler: calls it already read are not written back.
 - **Erase an end user.** `POST /api/v1/agent-tracing/purge` with `{"end_user": "..."}` removes every session declared for that end user. The audit trail records the session ids and an HMAC of the end user, not the value itself.
 
 ### Privacy and erasure
