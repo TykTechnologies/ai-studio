@@ -101,6 +101,8 @@ Data sealed under either key stays readable. Nothing re-encrypts old content, so
 
 The default Viewer, Editor and Auditor roles do not include `trace-content:read`. Grant it deliberately.
 
+End users and external session ids are client-declared and may be personal data (an email address). Callers without `trace-content:read` see each one as a pseudonym: 32 hex characters from a keyed HMAC, stable for the same id. This applies to the list, session detail, search results and both export formats; the OTel export shows the same end-user pseudonym. Filtering by `end_user` or `external_id` still takes the real id and finds its sessions, and the answer stays pseudonymised. A pseudonym is not accepted as a filter. Studio users (`user_id`, the user's name) are the organisation's own accounts and are shown as they are.
+
 ### Content access needs the audit trail
 
 Every read of captured content is written to the [Audit Trail](/docs/audit-trail) **before** the content is returned. This covers payloads, previews, content search and exports, even exports without content. Purges are recorded the same way.
