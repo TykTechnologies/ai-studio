@@ -611,6 +611,12 @@ message LLMInfo {
     // guardrail) is attached; which filters is not exposed. Always set by
     // hosts that know it: absent means an older host, so unknown.
     optional bool has_request_filters = 17;
+    // stores_request_bodies is true when the host may keep this LLM's
+    // request bodies (analytics), false when the LLM is set not to
+    // (dont_log_bodies), so a plugin can keep request text out of its own
+    // storage too. Always set by hosts that know it: absent means an older
+    // host, which a plugin treats as not stored.
+    optional bool stores_request_bodies = 18;
 }
 
 // LLM CRUD Messages

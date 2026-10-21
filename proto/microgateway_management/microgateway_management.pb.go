@@ -325,8 +325,13 @@ type LLMInfo struct {
 	// filters would screen. Always set by hosts that know it: absent means
 	// an older host, so unknown.
 	HasRequestFilters *bool `protobuf:"varint,18,opt,name=has_request_filters,json=hasRequestFilters,proto3,oneof" json:"has_request_filters,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The gateway may keep this LLM's request bodies: ANALYTICS_STORE_REQUESTS
+	// is on and the LLM is not set not to (dont_log_bodies), so a plugin can
+	// keep request text out of its own storage too. Always set by hosts
+	// that know it: absent means an older host, treated as not stored.
+	StoresRequestBodies *bool `protobuf:"varint,19,opt,name=stores_request_bodies,json=storesRequestBodies,proto3,oneof" json:"stores_request_bodies,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *LLMInfo) Reset() {
@@ -481,6 +486,13 @@ func (x *LLMInfo) GetMetadata() map[string]string {
 func (x *LLMInfo) GetHasRequestFilters() bool {
 	if x != nil && x.HasRequestFilters != nil {
 		return *x.HasRequestFilters
+	}
+	return false
+}
+
+func (x *LLMInfo) GetStoresRequestBodies() bool {
+	if x != nil && x.StoresRequestBodies != nil {
+		return *x.StoresRequestBodies
 	}
 	return false
 }
@@ -2265,7 +2277,7 @@ const file_proto_microgateway_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\"D\n" +
 	"\x0eGetLLMResponse\x122\n" +
-	"\x03llm\x18\x01 \x01(\v2 .microgateway_management.LLMInfoR\x03llm\"\x98\x06\n" +
+	"\x03llm\x18\x01 \x01(\v2 .microgateway_management.LLMInfoR\x03llm\"\xeb\x06\n" +
 	"\aLLMInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -2289,12 +2301,14 @@ const file_proto_microgateway_management_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12J\n" +
 	"\bmetadata\x18\x11 \x03(\v2..microgateway_management.LLMInfo.MetadataEntryR\bmetadata\x123\n" +
-	"\x13has_request_filters\x18\x12 \x01(\bH\x01R\x11hasRequestFilters\x88\x01\x01\x1a;\n" +
+	"\x13has_request_filters\x18\x12 \x01(\bH\x01R\x11hasRequestFilters\x88\x01\x01\x127\n" +
+	"\x15stores_request_bodies\x18\x13 \x01(\bH\x02R\x13storesRequestBodies\x88\x01\x01\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
 	"\x0f_monthly_budgetB\x16\n" +
-	"\x14_has_request_filters\"\xad\x01\n" +
+	"\x14_has_request_filtersB\x18\n" +
+	"\x16_stores_request_bodies\"\xad\x01\n" +
 	"\x0fListAppsRequest\x12@\n" +
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12 \n" +
 	"\tis_active\x18\x02 \x01(\bH\x00R\bisActive\x88\x01\x01\x12\x12\n" +

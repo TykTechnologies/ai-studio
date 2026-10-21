@@ -101,6 +101,11 @@ message LLMInfo {
     // filters would screen. Always set by hosts that know it: absent means
     // an older host, so unknown.
     optional bool has_request_filters = 18;
+    // The gateway may keep this LLM's request bodies: ANALYTICS_STORE_REQUESTS
+    // is on and the LLM is not set not to (dont_log_bodies), so a plugin can
+    // keep request text out of its own storage too. Always set by hosts
+    // that know it: absent means an older host, treated as not stored.
+    optional bool stores_request_bodies = 19;
 }
 
 // App Management Messages

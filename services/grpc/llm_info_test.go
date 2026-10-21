@@ -71,3 +71,21 @@ func TestLLMHasRequestFilters(t *testing.T) {
 	assert.False(t, (&models.LLM{Filters: []*models.Filter{nil, {ResponseFilter: true}}}).HasRequestFilters())
 	assert.True(t, (&models.LLM{Filters: []*models.Filter{{ResponseFilter: true}, {ResponseFilter: false}}}).HasRequestFilters())
 }
+
+// Plugins see whether Studio keeps an LLM's request bodies: not when the
+// LLM is set not to log them (eac.66).
+func TestLLMInfoStoresRequestBodies(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, models.InitModels(db))
+	server := NewLLMManagementServer(services.NewService(db))
+
+	for name, dontLog := range map[string]bool{"Logged": false, "Not Logged": true} {
+		llm := &models.LLM{Name: name, Vendor: models.OPENAI, APIEndpoint: "https://api.openai.com/v1", DefaultModel: "gpt-4o", Active: true, DontLogBodies: dontLog}
+		require.NoError(t, llm.Create(db), name)
+		one, err := server.GetLLM(context.Background(), &pb.GetLLMRequest{LlmId: uint32(llm.ID)})
+		require.NoError(t, err)
+		assert.NotNil(t, one.GetLlm().StoresRequestBodies, "stores_request_bodies is always set, so absent means an older host")
+		assert.Equal(t, !dontLog, one.GetLlm().GetStoresRequestBodies(), name)
+	}
+}

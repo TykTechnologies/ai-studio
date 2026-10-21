@@ -3635,8 +3635,14 @@ type LLMInfo struct {
 	// guardrail) is attached; which filters is not exposed. Always set by
 	// hosts that know it: absent means an older host, so unknown.
 	HasRequestFilters *bool `protobuf:"varint,17,opt,name=has_request_filters,json=hasRequestFilters,proto3,oneof" json:"has_request_filters,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// stores_request_bodies is true when the host may keep this LLM's
+	// request bodies (analytics), false when the LLM is set not to
+	// (dont_log_bodies), so a plugin can keep request text out of its own
+	// storage too. Always set by hosts that know it: absent means an older
+	// host, which a plugin treats as not stored.
+	StoresRequestBodies *bool `protobuf:"varint,18,opt,name=stores_request_bodies,json=storesRequestBodies,proto3,oneof" json:"stores_request_bodies,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *LLMInfo) Reset() {
@@ -3784,6 +3790,13 @@ func (x *LLMInfo) GetSlug() string {
 func (x *LLMInfo) GetHasRequestFilters() bool {
 	if x != nil && x.HasRequestFilters != nil {
 		return *x.HasRequestFilters
+	}
+	return false
+}
+
+func (x *LLMInfo) GetStoresRequestBodies() bool {
+	if x != nil && x.StoresRequestBodies != nil {
+		return *x.StoresRequestBodies
 	}
 	return false
 }
@@ -17169,7 +17182,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\"S\n" +
 	"\x15GetLLMPluginsResponse\x12:\n" +
-	"\aplugins\x18\x01 \x03(\v2 .ai_studio_management.PluginInfoR\aplugins\"\xf8\x05\n" +
+	"\aplugins\x18\x01 \x03(\v2 .ai_studio_management.PluginInfoR\aplugins\"\xcb\x06\n" +
 	"\aLLMInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -17190,12 +17203,14 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12G\n" +
 	"\bmetadata\x18\x0f \x03(\v2+.ai_studio_management.LLMInfo.MetadataEntryR\bmetadata\x12\x12\n" +
 	"\x04slug\x18\x10 \x01(\tR\x04slug\x123\n" +
-	"\x13has_request_filters\x18\x11 \x01(\bH\x01R\x11hasRequestFilters\x88\x01\x01\x1a;\n" +
+	"\x13has_request_filters\x18\x11 \x01(\bH\x01R\x11hasRequestFilters\x88\x01\x01\x127\n" +
+	"\x15stores_request_bodies\x18\x12 \x01(\bH\x02R\x13storesRequestBodies\x88\x01\x01\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
 	"\x0f_monthly_budgetB\x16\n" +
-	"\x14_has_request_filters\"\xba\x04\n" +
+	"\x14_has_request_filtersB\x18\n" +
+	"\x16_stores_request_bodies\"\xba\x04\n" +
 	"\x10CreateLLMRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +

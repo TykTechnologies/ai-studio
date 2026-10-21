@@ -166,6 +166,8 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		crypto,
 	)
 
+	managementServer.SetStoreRequestBodies(cfg.Analytics.StoreRequestBodies)
+
 	// Connect management server to plugin manager for bidirectional plugin communication
 	pluginManager.SetManagementServer(managementServer)
 	log.Debug().Msg("✅ Management server connected to plugin manager - plugins can now access service API")

@@ -428,5 +428,7 @@ func convertLLMToPB(llm *models.LLM) *pb.LLMInfo {
 		// The gateway routes and names the LLM by this slug
 		Slug:              models.LLMRouteSlug(llm.Name),
 		HasRequestFilters: proto.Bool(llm.HasRequestFilters()),
+		// Studio keeps request bodies unless the LLM opts out
+		StoresRequestBodies: proto.Bool(!llm.DontLogBodies),
 	}
 }

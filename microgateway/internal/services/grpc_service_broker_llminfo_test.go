@@ -32,3 +32,25 @@ func TestLLMInfoHasRequestFilters(t *testing.T) {
 		assert.NotNil(t, info.HasRequestFilters, "has_request_filters is always set, so absent means an older host")
 	}
 }
+
+// LLMInfo says whether the gateway keeps the LLM's request bodies: only
+// with ANALYTICS_STORE_REQUESTS on and the LLM not opting out (eac.66).
+func TestLLMInfoStoresRequestBodies(t *testing.T) {
+	db, server := setupStoreAppTestDB(t)
+	defer database.Close(db)
+
+	createTestLLM(t, db, 1, "logged")
+	createTestLLM(t, db, 2, "not-logged")
+	require.NoError(t, db.Model(&database.LLM{}).Where("id = ?", 2).Update("dont_log_bodies", true).Error)
+
+	for _, store := range []bool{false, true} {
+		server.SetStoreRequestBodies(store)
+		for id, want := range map[uint]bool{1: store, 2: false} {
+			llm, err := server.managementService.GetLLM(id)
+			require.NoError(t, err)
+			info := server.convertLLMToPB(llm)
+			assert.Equal(t, want, info.GetStoresRequestBodies(), "LLM %d, ANALYTICS_STORE_REQUESTS %v", id, store)
+			assert.NotNil(t, info.StoresRequestBodies, "stores_request_bodies is always set, so absent means an older host")
+		}
+	}
+}

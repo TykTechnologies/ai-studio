@@ -40,6 +40,9 @@ type MicrogatewayManagementServer struct {
 	cryptoService         CryptoServiceInterface
 	controlPayloadQueue   ControlPayloadQueueInterface
 	licensingService      LicensingServiceInterface
+	// storeRequestBodies is ANALYTICS_STORE_REQUESTS: whether this gateway
+	// keeps request bodies at all (LLMInfo.stores_request_bodies).
+	storeRequestBodies bool
 }
 
 // NewMicrogatewayManagementServer creates a new service broker server
@@ -62,6 +65,12 @@ func NewMicrogatewayManagementServer(
 // SetControlPayloadQueue sets the control payload queue for edge-to-control communication
 func (s *MicrogatewayManagementServer) SetControlPayloadQueue(queue ControlPayloadQueueInterface) {
 	s.controlPayloadQueue = queue
+}
+
+// SetStoreRequestBodies says whether the gateway keeps request bodies
+// (ANALYTICS_STORE_REQUESTS), which LLMInfo reports to plugins.
+func (s *MicrogatewayManagementServer) SetStoreRequestBodies(store bool) {
+	s.storeRequestBodies = store
 }
 
 // SetLicensingService sets the licensing service for license info queries
@@ -781,6 +790,9 @@ func (s *MicrogatewayManagementServer) convertLLMToPB(llm *database.LLM) *pb.LLM
 		CreatedAt:         timestamppb.New(llm.CreatedAt),
 		UpdatedAt:         timestamppb.New(llm.UpdatedAt),
 		HasRequestFilters: proto.Bool(hasRequestFilters),
+		// Bodies are kept only when the gateway stores them and the LLM
+		// does not opt out, as in the analytics handler.
+		StoresRequestBodies: proto.Bool(s.storeRequestBodies && !llm.DontLogBodies),
 	}
 }
 
