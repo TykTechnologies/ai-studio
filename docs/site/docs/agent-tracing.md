@@ -719,6 +719,6 @@ These metrics are on the Prometheus endpoint, and pushed over OTLP to exporter e
   - `hashed` (default): a pseudonym, an HMAC-SHA-256 of the end user under a key derived from `AGENT_TRACING_KEY` for this purpose only, 32 hex characters. It is the same on every replica and after restarts, so a backend can still group a user's sessions; it changes when the key is rotated. **A pseudonym is still personal data**: anyone who holds the key, or can guess and hash candidate values, can link it back.
   - `raw`: the end user as declared, which may be an email address.
   - `off`: no `user.id`.
-- `gen_ai.conversation.id` carries the client's declared session id (`X-Tyk-Session-Id` and its compatible headers) verbatim, whatever `AGENT_TRACING_EXPORT_USER_ID_MODE` says. Clients should not put personal data, such as an email address, in their session ids.
+- `gen_ai.conversation.id` carries the client's declared session id (`X-Tyk-Session-Id` and its compatible headers) verbatim, whatever `AGENT_TRACING_EXPORT_USER_ID_MODE` says; with `AGENT_TRACING_EXPORT_CONVERSATION_ID_FALLBACK=inferred` it also carries inferred session ids. Clients should not put personal data, such as an email address, in their session ids.
 - **A purge or erasure does not reach spans already exported.** Send erasure requests to your OTel backends too.
 - Exporter credentials must travel over TLS. Use `env:` or `file:` references in the exporters file, not literal secrets.
