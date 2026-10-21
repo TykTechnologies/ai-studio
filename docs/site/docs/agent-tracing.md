@@ -491,7 +491,7 @@ A bad exporters file turns export off, not tracing.
 
 Every `gen_ai.*` and `mcp.*` name comes from the mapping profile. The profile is `genai-1.41` (schema 1.41.0), the lowest semantic-conventions release that defines every name the exporter uses: the `mcp.*`, cache-token, `gen_ai.request.stream` and reasoning-token attributes first appear in v1.39 to v1.41. Earlier drafts named it `genai-1.37`; that name now falls back to `genai-1.41` with a warning. A stored attribute in those namespaces that the profile does not list is dropped. The tables below are generated from the profile; do not edit them by hand.
 
-Tyk attributes use the `tyk.` prefix. Examples: `tyk.app.id`, `tyk.app.name`, `tyk.session.id`, `tyk.session.source`, `tyk.turn.index`, `tyk.span.kind`, `tyk.correlation.confidence`, `tyk.correlation.rule`, `tyk.inferred` and `tyk.duration.upper_bound`.
+Tyk attributes use the `tyk.` prefix. Examples: `tyk.app.id`, `tyk.app.name`, `tyk.session.id`, `tyk.session.source`, `tyk.turn.index`, `tyk.span.kind`, `tyk.correlation.confidence`, `tyk.correlation.rule`, `tyk.inferred` and `tyk.duration.upper_bound`. The full list, generated from the Tyk Weaver registry the export is checked against, closes the tables below. Gateway decisions export their type as `tyk.event.type`, the exported name of the stored `tyk.event`.
 
 <!-- BEGIN GENERATED: agent-tracing OTel attributes (make agent-tracing-docs) -->
 
@@ -611,6 +611,62 @@ A stored attribute under `gen_ai.*` or `mcp.*` is exported only if it is listed 
 - `mcp.protocol.version`
 - `mcp.resource.uri`
 - `mcp.session.id`
+
+#### Tyk attributes
+
+From the Tyk Weaver registry the exporter is checked against:
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `tyk.agent.declared` | boolean | The agent was declared by the client. |
+| `tyk.app.id` | string | Tyk AI Studio App the call belongs to. |
+| `tyk.app.name` | string | Name of that App. |
+| `tyk.attempt.number` | string | Number of a provider attempt of an /ai/ call. |
+| `tyk.attempt.provider` | string | Provider of that attempt. |
+| `tyk.attribution.candidates` | string | JSON array of type:id catalogue candidates of a weak attribution. |
+| `tyk.attribution.confidence` | string | Confidence of the catalogue attribution. |
+| `tyk.attribution.rule` | string | Rule of the catalogue attribution. |
+| `tyk.content.withheld` | string | Why a span carries no content although capture was on, e.g. edge_link_unverified_tls. |
+| `tyk.correlation.confidence` | string | Confidence of the parent link: declared, exact, strong or weak. |
+| `tyk.correlation.rule` | string | Correlation rule that produced the parent link. |
+| `tyk.cost.currency` | string | Currency of the cost. |
+| `tyk.cost.micros` | int | Cost of the call in micro-units of tyk.cost.currency. |
+| `tyk.credential.id` | string | Opaque id of the credential that made the call. |
+| `tyk.datasource.id` | string | Studio catalogue id of the datasource. |
+| `tyk.duration.upper_bound` | string | "true" when the duration is an upper bound (an inferred client-side tool). |
+| `tyk.event.name` | string | Name of the policy, filter or target of the event. |
+| `tyk.event.outcome` | string | Outcome of the gateway event: allow, block, skip, ... |
+| `tyk.event.reason` | string | Reason given for the gateway event. |
+| `tyk.event.type` | string | Gateway event type: budget, filter, fallback, router, attempt, ... Stored (and in JSON v1 exports) as tyk.event; exported under this name because tyk.event is the namespace of the other tyk.event.* attributes. |
+| `tyk.external.trace_id` | string | Original non-W3C trace id a client declared. |
+| `tyk.gateway.node` | string | Gateway node that served the call. |
+| `tyk.guardrail.name` | string | Guardrail that acted. |
+| `tyk.inferred` | boolean | The span was inferred from LLM traffic rather than observed. |
+| `tyk.link.type` | string | Type of a span link: caused_by, continues, provisional_context, candidate. |
+| `tyk.llm.id` | string | Studio catalogue id of the LLM. |
+| `tyk.mcp.server` | string | MCP server the tool belongs to. |
+| `tyk.openai.previous_response_id` | string | OpenAI Responses previous_response_id the request chained to. |
+| `tyk.rollup.cost_micros` | int | Cost under an agent span, in micro-units. |
+| `tyk.rollup.errors` | int | Errors under an agent span. |
+| `tyk.rollup.llm_calls` | int | LLM calls under an agent span. |
+| `tyk.rollup.tokens` | int | Tokens under an agent span. |
+| `tyk.rollup.tool_calls` | int | Tool calls under an agent span. |
+| `tyk.session.id` | string | Agent session id (declared or inferred). |
+| `tyk.session.source` | string | How the session was formed: declared or inferred. |
+| `tyk.span.kind` | string | Tyk span kind: llm_inference, tool_call, datasource_call, inferred_client_tool, plugin_endpoint, gateway_event, agent, attempt. |
+| `tyk.stream` | string | "true" for a streamed response. |
+| `tyk.stream.incomplete` | string | "true" when the stream ended early. |
+| `tyk.tool.catalogue_type` | string | Catalogue entry type: tool, mcp_server or datasource. |
+| `tyk.tool.id` | string | Studio catalogue id of the tool. |
+| `tyk.tool.in_catalogue` | string | "true" when the tool is in the App catalogue. |
+| `tyk.tool.via` | string | Where the tool ran: client, tyk_gateway, studio_mcp or studio_rest. |
+| `tyk.tool_call.ids` | string[] | Tool call ids of the span. |
+| `tyk.tool_calls.not_offered` | string | JSON array of tools the model called that the request did not offer. |
+| `tyk.tools.available` | string | Number of tools the request offered. |
+| `tyk.tools.offered` | string | JSON array of the tool names the request offered. |
+| `tyk.ttft_ms` | int | Time to first token in milliseconds. |
+| `tyk.turn.index` | int | Zero-based turn of the span within its session. |
+| `tyk.upstream.request_id` | string | Upstream provider's request id. |
 
 <!-- END GENERATED: agent-tracing OTel attributes -->
 
