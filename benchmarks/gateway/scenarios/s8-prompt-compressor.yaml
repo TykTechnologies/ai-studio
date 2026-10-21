@@ -1,0 +1,61 @@
+name: s8-prompt-compressor
+title: "S8 · Prompt Compressor overhead, small and typical bodies"
+description: >
+  The time the Prompt Compressor plugin adds per request on the edge, for a small (~4 KB) and a typical agent body (~160 KB of tool output).
+  One request at a time against the instant mock; every arm goes through
+  the same edge and differs only in the plugin attached to its LLM (seed
+  -compressor): none, attached with mode off, audit at level 1, and enforce
+  at levels 1, 2 and 3 (level 3 with old-turn masking on). The compressor's
+  cost is an arm's overhead minus the none arm's. Each cell sends the same
+  body every time, so after the first request the compressor answers from
+  its memo: this is the warm cost (the memo-miss cost comes from the
+  plugin's Go benchmarks). Needs make bench-seed with -compressor and the
+  plugin binary mounted (compose/prompt-compressor.yaml).
+mode: closed
+baseline: direct
+timeout: 60s
+closed:
+  concurrency: 1
+  requests: 1400
+  warmup_requests: 140
+cells:
+  - name: small-rest
+    body: {format: openai, model: mock-model, max_tokens: 16, agent: {turns: 2, tool_bytes: 4096}}
+    arms:
+      - {name: none, target: gateway, path: /llm/rest/mock-pc-none/v1/chat/completions}
+      - {name: attached-off, target: gateway, path: /llm/rest/mock-pc-attached/v1/chat/completions}
+      - {name: audit, target: gateway, path: /llm/rest/mock-pc-audit/v1/chat/completions}
+      - {name: l1, target: gateway, path: /llm/rest/mock-pc-l1/v1/chat/completions}
+      - {name: l2, target: gateway, path: /llm/rest/mock-pc-l2/v1/chat/completions}
+      - {name: l3-mask, target: gateway, path: /llm/rest/mock-pc-l3/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: small-stream
+    body: {format: openai, stream: true, model: mock-model, max_tokens: 16, agent: {turns: 2, tool_bytes: 4096}}
+    arms:
+      - {name: none, target: gateway, path: /llm/stream/mock-pc-none/v1/chat/completions}
+      - {name: attached-off, target: gateway, path: /llm/stream/mock-pc-attached/v1/chat/completions}
+      - {name: audit, target: gateway, path: /llm/stream/mock-pc-audit/v1/chat/completions}
+      - {name: l1, target: gateway, path: /llm/stream/mock-pc-l1/v1/chat/completions}
+      - {name: l2, target: gateway, path: /llm/stream/mock-pc-l2/v1/chat/completions}
+      - {name: l3-mask, target: gateway, path: /llm/stream/mock-pc-l3/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: typical-rest
+    body: {format: openai, model: mock-model, max_tokens: 16, agent: {turns: 12, tool_bytes: 163840}}
+    arms:
+      - {name: none, target: gateway, path: /llm/rest/mock-pc-none/v1/chat/completions}
+      - {name: attached-off, target: gateway, path: /llm/rest/mock-pc-attached/v1/chat/completions}
+      - {name: audit, target: gateway, path: /llm/rest/mock-pc-audit/v1/chat/completions}
+      - {name: l1, target: gateway, path: /llm/rest/mock-pc-l1/v1/chat/completions}
+      - {name: l2, target: gateway, path: /llm/rest/mock-pc-l2/v1/chat/completions}
+      - {name: l3-mask, target: gateway, path: /llm/rest/mock-pc-l3/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: typical-stream
+    body: {format: openai, stream: true, model: mock-model, max_tokens: 16, agent: {turns: 12, tool_bytes: 163840}}
+    arms:
+      - {name: none, target: gateway, path: /llm/stream/mock-pc-none/v1/chat/completions}
+      - {name: attached-off, target: gateway, path: /llm/stream/mock-pc-attached/v1/chat/completions}
+      - {name: audit, target: gateway, path: /llm/stream/mock-pc-audit/v1/chat/completions}
+      - {name: l1, target: gateway, path: /llm/stream/mock-pc-l1/v1/chat/completions}
+      - {name: l2, target: gateway, path: /llm/stream/mock-pc-l2/v1/chat/completions}
+      - {name: l3-mask, target: gateway, path: /llm/stream/mock-pc-l3/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}

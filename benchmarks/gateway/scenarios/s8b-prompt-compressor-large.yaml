@@ -1,0 +1,41 @@
+name: s8b-prompt-compressor-large
+title: "S8b · Prompt Compressor overhead, large bodies"
+description: >
+  The time the Prompt Compressor plugin adds per request on the edge, for a large agent body (~4 MiB, just under the plugin's max_body_bytes).
+  One request at a time against the instant mock; every arm goes through
+  the same edge and differs only in the plugin attached to its LLM (seed
+  -compressor): none, attached with mode off, audit at level 1, and enforce
+  at levels 1, 2 and 3 (level 3 with old-turn masking on). The compressor's
+  cost is an arm's overhead minus the none arm's. Each cell sends the same
+  body every time, so after the first request the compressor answers from
+  its memo: this is the warm cost (the memo-miss cost comes from the
+  plugin's Go benchmarks). Needs make bench-seed with -compressor and the
+  plugin binary mounted (compose/prompt-compressor.yaml).
+mode: closed
+baseline: direct
+timeout: 60s
+closed:
+  concurrency: 1
+  requests: 210
+  warmup_requests: 21
+cells:
+  - name: large-rest
+    body: {format: openai, model: mock-model, max_tokens: 16, agent: {turns: 40, tool_bytes: 3900000}}
+    arms:
+      - {name: none, target: gateway, path: /llm/rest/mock-pc-none/v1/chat/completions}
+      - {name: attached-off, target: gateway, path: /llm/rest/mock-pc-attached/v1/chat/completions}
+      - {name: audit, target: gateway, path: /llm/rest/mock-pc-audit/v1/chat/completions}
+      - {name: l1, target: gateway, path: /llm/rest/mock-pc-l1/v1/chat/completions}
+      - {name: l2, target: gateway, path: /llm/rest/mock-pc-l2/v1/chat/completions}
+      - {name: l3-mask, target: gateway, path: /llm/rest/mock-pc-l3/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
+  - name: large-stream
+    body: {format: openai, stream: true, model: mock-model, max_tokens: 16, agent: {turns: 40, tool_bytes: 3900000}}
+    arms:
+      - {name: none, target: gateway, path: /llm/stream/mock-pc-none/v1/chat/completions}
+      - {name: attached-off, target: gateway, path: /llm/stream/mock-pc-attached/v1/chat/completions}
+      - {name: audit, target: gateway, path: /llm/stream/mock-pc-audit/v1/chat/completions}
+      - {name: l1, target: gateway, path: /llm/stream/mock-pc-l1/v1/chat/completions}
+      - {name: l2, target: gateway, path: /llm/stream/mock-pc-l2/v1/chat/completions}
+      - {name: l3-mask, target: gateway, path: /llm/stream/mock-pc-l3/v1/chat/completions}
+      - {name: direct, target: mock, path: "{mock:fast}/v1/chat/completions"}
