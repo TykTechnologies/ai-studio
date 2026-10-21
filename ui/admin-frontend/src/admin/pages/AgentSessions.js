@@ -26,6 +26,7 @@ import EnterpriseFeatureBadge from "../components/common/EnterpriseFeatureBadge"
 import PermissionDeniedPanel from "../components/rbac/PermissionDeniedPanel";
 import CorrelationQualityBar from "../components/agent-tracing/CorrelationQualityBar";
 import CaptureSettingsDialog from "../components/agent-tracing/CaptureSettingsDialog";
+import SessionUser from "../components/agent-tracing/SessionUser";
 import {
   PAGE_SIZE,
   RANGES,
@@ -48,6 +49,7 @@ import { useEdition } from "../context/EditionContext";
 import useSystemFeatures from "../hooks/useSystemFeatures";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 import { P } from "../rbac/permissions";
+import { usePermissions } from "../context/PermissionsContext";
 
 // Agent sessions list (spec §6.1; Enterprise). See sessionFilters.js for
 // which filters may live in the URL.
@@ -91,6 +93,8 @@ const triState = (label, value, onChange, name) => (
 
 const AgentSessions = () => {
   const { isEnterprise } = useEdition();
+  const { can } = usePermissions();
+  const canReadContent = can(P.TRACE_CONTENT_READ);
   const { features, loading: featuresLoading } = useSystemFeatures();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -210,7 +214,7 @@ const AgentSessions = () => {
       {
         field: "user",
         headerName: "User",
-        renderCell: (s) => s.user_name || s.end_user || (s.user_id ? `User ${s.user_id}` : "—"),
+        renderCell: (s) => <SessionUser session={s} masked={!canReadContent} />,
       },
       {
         field: "agents",
@@ -258,7 +262,7 @@ const AgentSessions = () => {
         renderCell: (s) => <CorrelationQualityBar counts={s.confidence_counts} />,
       },
     ],
-    [],
+    [canReadContent],
   );
 
   const [captureOpen, setCaptureOpen] = useState(false);

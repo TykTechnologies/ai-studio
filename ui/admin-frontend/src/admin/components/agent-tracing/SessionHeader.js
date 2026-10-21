@@ -4,6 +4,7 @@ import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import LinkIcon from "@mui/icons-material/Link";
 import { useSessionDetail } from "./SessionDetailContext";
 import CorrelationQualityBar from "./CorrelationQualityBar";
+import SessionUser from "./SessionUser";
 import { formatCost, formatDuration, formatTokens, shortId } from "./sessionFilters";
 import agentTracingService from "../../services/agentTracingService";
 import { copyToClipboard } from "../../utils/clipboardUtils";
@@ -106,7 +107,9 @@ export const SessionHeader = ({ onNotify }) => {
       </Stack>
       <Stack direction="row" spacing={4} sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
         <Fact label="App">{s.app_name || `App ${s.app_id}`}</Fact>
-        <Fact label="User">{s.user_name || s.end_user || (s.user_id ? `User ${s.user_id}` : "—")}</Fact>
+        <Fact label="User">
+          <SessionUser session={s} masked={!viewer.can_read_content} />
+        </Fact>
         <Fact label="Started">{new Date(s.started_at).toLocaleString()}</Fact>
         <Fact label="Duration">{formatDuration(s.duration_ms)}</Fact>
         <Fact label="Tokens">{formatTokens((s.totals?.input_tokens || 0) + (s.totals?.output_tokens || 0))}</Fact>

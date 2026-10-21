@@ -10,6 +10,7 @@ import { useEdition } from "../context/EditionContext";
 import useSystemFeatures from "../hooks/useSystemFeatures";
 import { listAll } from "../utils/listAll";
 import { PermissionDeniedError } from "../utils/apiErrors";
+import PermissionsContext from "../context/PermissionsContext";
 
 jest.mock("../services/agentTracingService", () => ({
   __esModule: true,
@@ -133,6 +134,33 @@ describe("AgentSessions", () => {
       "aria-label",
       "Correlation: Declared 1, Exact 2, Inferred 1",
     );
+  });
+
+  it("labels a pseudonymised end user for a viewer without trace-content:read", async () => {
+    agentTracingService.listSessions.mockResolvedValue({
+      data: [session({ user_name: "", user_id: null, end_user: "0123456789abcdef0123456789abcdef" })],
+      next_cursor: null,
+    });
+    renderPage();
+    expect(await screen.findByTestId("end-user-pseudonym")).toHaveTextContent("0123456789abcdef0123456789abcdef (pseudonym)");
+  });
+
+  it("shows the end user unlabelled to a viewer with trace-content:read", async () => {
+    agentTracingService.listSessions.mockResolvedValue({
+      data: [session({ user_name: "", user_id: null, end_user: "alice@example.com" })],
+      next_cursor: null,
+    });
+    render(
+      <PermissionsContext.Provider value={{ can: (perm) => perm === "trace-content:read" }}>
+        <ThemeProvider theme={testTheme}>
+          <MemoryRouter initialEntries={["/admin/agent-sessions"]}>
+            <AgentSessions />
+          </MemoryRouter>
+        </ThemeProvider>
+      </PermissionsContext.Provider>,
+    );
+    expect(await screen.findByText("alice@example.com")).toBeInTheDocument();
+    expect(screen.queryByTestId("end-user-pseudonym")).not.toBeInTheDocument();
   });
 
   it("warns when sessions are incomplete because captures were dropped", async () => {
