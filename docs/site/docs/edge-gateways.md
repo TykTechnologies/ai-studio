@@ -293,14 +293,27 @@ The paths and the response envelope are unchanged, and every attribute 2.2 retur
 Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on the edge, matching `GRPC_AUTH_TOKEN` (or `GRPC_AUTH_TOKEN_NEXT` during a rotation) on AI Studio. The token is not bound to an edge or a namespace, so whoever holds it can:
 
 - register under any edge ID, including one that already exists;
-- claim any namespace;
+- claim any namespace and receive that namespace's configuration snapshot;
 - report analytics, budget usage and agent-trace captures for that namespace's Apps.
 
-Treat the token as a secret for the whole hub, not for one edge:
+The snapshot carries the namespace's secrets. Most are encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, which every edge also holds, so the token plus that key decrypts them:
 
-- give it only to edges you control;
-- store it like a database password;
-- rotate it with `GRPC_AUTH_TOKEN_NEXT` if an edge host is compromised.
+- LLM provider API keys, and each LLM's resource-signing secrets;
+- tool authentication keys;
+- datasource connection strings, vector store keys and embedder API keys, including semantic router embedders;
+- OAuth access tokens issued to MCP clients;
+- while agent tracing runs, the tracing fingerprint (HMAC) key.
+
+Guardrail provider credentials and plugin configuration travel without that encryption, protected only by the connection, so the token alone is enough for them. OAuth client secrets (stored as hashes) and App API tokens are not in the snapshot.
+
+Treat the token and `MICROGATEWAY_ENCRYPTION_KEY` as secrets for the whole hub, not for one edge: give them only to edges you control, and store them like a database password.
+
+If an edge host is compromised:
+
+- rotate the edge token, with `GRPC_AUTH_TOKEN_NEXT`, and `MICROGATEWAY_ENCRYPTION_KEY`;
+- in every namespace the edge served, rotate the LLM provider keys, tool, datasource, embedder and guardrail provider credentials, and any secrets in plugin configuration;
+- revoke the OAuth access tokens issued to MCP clients in those namespaces;
+- optionally, rotate `AGENT_TRACING_KEY` (keeping the old value as `AGENT_TRACING_KEY_PREVIOUS` until payload retention has passed) if forged links into genuine agent sessions matter to you. Fingerprints and exported `user.id` pseudonyms change at the rotation, so sessions that span it lose cross-gateway correlation.
 
 Per-edge credentials, bound to an edge ID and an admin-assigned namespace, are planned separately.
 
