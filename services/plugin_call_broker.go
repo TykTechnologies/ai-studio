@@ -23,14 +23,19 @@ var callBrokerGrace = 10 * time.Second
 // connected to it. It is the server's stats handler.
 type trackedBroker struct {
 	connected atomic.Bool
-	mu        sync.Mutex
-	server    *grpc.Server
-	stopped   bool
+	// anyConnected is the plugin client's hostConnected, set with connected.
+	anyConnected *atomic.Bool
+	mu           sync.Mutex
+	server       *grpc.Server
+	stopped      bool
 }
 
 func (b *trackedBroker) HandleConn(_ context.Context, s stats.ConnStats) {
 	if _, ok := s.(*stats.ConnBegin); ok {
 		b.connected.Store(true)
+		if b.anyConnected != nil {
+			b.anyConnected.Store(true)
+		}
 	}
 }
 
@@ -65,7 +70,7 @@ func (b *trackedBroker) stop() {
 // is up (or waitBrokeredServer gave up on it).
 func (c *AIStudioPluginClient) startTrackedBroker(pluginID uint, purpose string) (uint32, *trackedBroker) {
 	brokerID := c.broker.NextId()
-	tracked := &trackedBroker{}
+	tracked := &trackedBroker{anyConnected: &c.hostConnected}
 	service, evtServer := c.service, c.eventServer
 	ready := make(chan struct{})
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {

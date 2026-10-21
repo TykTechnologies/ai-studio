@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -204,6 +205,10 @@ type AIStudioPluginClient struct {
 	pluginStub  pb.PluginServiceClient
 	service     *Service           // Reference to AI Studio service for brokered servers
 	eventServer *PluginEventServer // Reference to plugin event server for pub/sub
+	// hostConnected: the plugin connected to one of its brokered servers
+	// (session or per-call). An SDK before 2.3 keeps its first connection
+	// for good, so the session loop stops offering fresh IDs then.
+	hostConnected atomic.Bool
 }
 
 // SetupServiceBroker serves AI Studio services to plugin pluginID on a fresh
@@ -940,11 +945,23 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 // broker, sessions are short so that a fresh broker ID is offered often: a
 // plugin built before 2.3 dials lazily, retrying for about 25 s, and can only
 // connect to an ID within five seconds of the host accepting on it, so it
-// connects on the first host call that overlaps a renewal.
+// connects on the first host call that overlaps a renewal. After
+// fastUnconnectedRenewals short sessions (about five minutes) a plugin that
+// still makes no host calls gets normal sessions, each still on a fresh ID.
 const (
 	sessionTimeoutMs            = 30000
 	unconnectedSessionTimeoutMs = 10000
+	fastUnconnectedRenewals     = 30
 )
+
+// unconnected reports whether the plugin has reached neither broker, its
+// session broker, nor any of its brokered servers. An SDK before 2.3 keeps
+// the first connection it makes (often to a per-call server, for an edge
+// payload) and never dials a later session broker, so a connection to any
+// of them ends the offers.
+func (c *AIStudioPluginClient) unconnected(broker *trackedBroker) bool {
+	return broker != nil && !broker.connected.Load() && !c.hostConnected.Load()
+}
 
 // renewSessionBroker returns the session broker for the plugin's next
 // session. go-plugin hands a plugin a broker ID's connection info once, when
@@ -954,9 +971,10 @@ const (
 // reach host services. When the plugin has not connected to the current
 // session broker, this serves it on a fresh ID, stops the unused server and
 // records the new ID as the plugin's SessionBrokerID; the next OpenSession
-// hands it to the plugin, whose SDK dials it.
+// hands it to the plugin, whose SDK dials it. A plugin that connected to any
+// of its brokered servers keeps its broker (unconnected).
 func (m *AIStudioPluginManager) renewSessionBroker(pluginID uint, client *AIStudioPluginClient, current uint32, broker *trackedBroker, renewal int) (uint32, *trackedBroker) {
-	if broker == nil || broker.connected.Load() || client.broker == nil || client.service == nil {
+	if !client.unconnected(broker) || client.broker == nil || client.service == nil {
 		return current, broker
 	}
 	next, nextBroker := client.startTrackedBroker(pluginID, "plugin services")
@@ -967,7 +985,7 @@ func (m *AIStudioPluginManager) renewSessionBroker(pluginID uint, client *AIStud
 	}
 	m.mu.Unlock()
 	ev := log.Debug()
-	if renewal <= 3 {
+	if renewal <= 3 || renewal == fastUnconnectedRenewals {
 		ev = log.Info()
 	}
 	ev.Uint("plugin_id", pluginID).
@@ -975,6 +993,15 @@ func (m *AIStudioPluginManager) renewSessionBroker(pluginID uint, client *AIStud
 		Uint32("broker_id", next).
 		Msg("Plugin has not connected to its service broker; serving it on a fresh broker ID")
 	return next, nextBroker
+}
+
+// sessionTimeout is the length of a renewal's session: short while the
+// plugin is unconnected, for the first fastUnconnectedRenewals renewals.
+func sessionTimeout(client *AIStudioPluginClient, broker *trackedBroker, renewal int) int32 {
+	if client.unconnected(broker) && renewal < fastUnconnectedRenewals {
+		return unconnectedSessionTimeoutMs
+	}
+	return sessionTimeoutMs
 }
 
 // runPluginSessionLoop maintains a long-lived session for plugins that need persistent
@@ -1015,10 +1042,7 @@ func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AISt
 			}
 			// Open session (long-polling pattern), short while the
 			// plugin has not connected (see unconnectedSessionTimeoutMs)
-			timeoutMs := int32(sessionTimeoutMs)
-			if broker != nil && !broker.connected.Load() {
-				timeoutMs = unconnectedSessionTimeoutMs
-			}
+			timeoutMs := sessionTimeout(client, broker, renewal)
 			resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
 				ServiceBrokerId: brokerID,
 				PluginId:        uint32(pluginID),

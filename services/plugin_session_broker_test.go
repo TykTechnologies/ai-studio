@@ -63,3 +63,44 @@ func TestRenewSessionBroker_RecoversALateDialler(t *testing.T) {
 	require.NoError(t, err)
 	_ = conn.Close()
 }
+
+// eac.67: a plugin built before 2.3 keeps the first connection it makes,
+// often to a per-call server (an edge payload), and never dials a later
+// session broker. Once it connected to any of its brokered servers, the
+// session loop stops offering fresh IDs and returns to normal sessions.
+func TestRenewSessionBroker_StopsOnceAnyBrokerConnected(t *testing.T) {
+	host, pluginSide := studioBrokerPair(t)
+	m := &AIStudioPluginManager{loadedPlugins: map[uint]*LoadedAIStudioPlugin{7: {ID: 7}}}
+	session, sessionBroker := host.startTrackedBroker(7, "plugin services")
+	m.loadedPlugins[7].SessionBrokerID = session
+	require.Equal(t, int32(unconnectedSessionTimeoutMs), sessionTimeout(host, sessionBroker, 1))
+
+	// The plugin connects to an edge payload's server, not the session's.
+	call := host.startCallBroker(7, "edge payload")
+	conn, err := pluginSide.Dial(call)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	_, _ = mgmtpb.NewAIStudioManagementServiceClient(conn).ListPlugins(context.Background(), &mgmtpb.ListPluginsRequest{})
+	require.Eventually(t, host.hostConnected.Load, 2*time.Second, 10*time.Millisecond)
+
+	next, nextBroker := m.renewSessionBroker(7, host, session, sessionBroker, 1)
+	assert.Equal(t, session, next, "no fresh ID once the plugin reached host services")
+	assert.Same(t, sessionBroker, nextBroker)
+	assert.Equal(t, session, m.loadedPlugins[7].SessionBrokerID)
+	assert.Equal(t, int32(sessionTimeoutMs), sessionTimeout(host, sessionBroker, 2))
+}
+
+// A plugin that makes no host calls at all gets short sessions for the
+// first fastUnconnectedRenewals renewals, then normal ones, each still on a
+// fresh ID so that a late first call can connect.
+func TestSessionTimeout_BacksOffForAPluginThatNeverCalls(t *testing.T) {
+	host, _ := studioBrokerPair(t)
+	m := &AIStudioPluginManager{loadedPlugins: map[uint]*LoadedAIStudioPlugin{7: {ID: 7}}}
+	id, broker := host.startTrackedBroker(7, "plugin services")
+
+	assert.Equal(t, int32(unconnectedSessionTimeoutMs), sessionTimeout(host, broker, fastUnconnectedRenewals-1))
+	assert.Equal(t, int32(sessionTimeoutMs), sessionTimeout(host, broker, fastUnconnectedRenewals))
+
+	next, _ := m.renewSessionBroker(7, host, id, broker, fastUnconnectedRenewals+1)
+	assert.NotEqual(t, id, next, "still offered a fresh ID after backing off")
+}
