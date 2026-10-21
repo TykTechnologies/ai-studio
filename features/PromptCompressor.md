@@ -31,8 +31,10 @@ starting with tool outputs. A Community Edition plugin
   text into a match the filter would otherwise not see. An LLM whose filter
   state is unknown (host older than 2.3, or not looked up yet) is treated as
   filtered (eac.64).
-- **Client bypass defaults to on.** `X-Tyk-Compression: off` can only turn
-  compression off; no header picks a policy or raises a level.
+- **Client bypass defaults to off** (eac.82, Martin, 2026-10-21; it was on).
+  With `allow_client_bypass` set, `X-Tyk-Compression: off` can only turn
+  compression (and drop_tools) off; no header picks a policy or raises a
+  level.
 - **An App's unknown metadata means pass-through.** The App may have opted
   out, so the request is forwarded unchanged (`app_scope_missing` when the
   host refuses `GetApp`, `app_policy_unknown` while pending).

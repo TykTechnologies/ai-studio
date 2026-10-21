@@ -161,7 +161,7 @@ Agents often send the definitions of many tools on every request and call only a
 - Changing the list changes the tools every App on the policy sends, so each of their sessions misses the prompt cache once. Bind a separate policy to an App to change only that App.
 
 ::: warning drop_tools is not an access control
-It saves tokens; it cannot keep a tool from a model. The client decides whether a tool survives: by naming it in its own conversation history or in `tool_choice`, by sending `X-Tyk-Compression: off` while `allow_client_bypass` is on (it is off by default), and whenever a request passes through uncompressed (`audit` mode, an App whose metadata is not known yet, a body over `max_body_bytes`, any error). To keep a tool away from a model, don't give the App access to it, or block its calls with a [filter](/docs/filters) or a [guardrail](/docs/guardrails) on tool calls.
+It saves tokens; it cannot keep a tool from a model. The client decides whether a tool survives: by naming it in its own conversation history or in `tool_choice`, by sending `X-Tyk-Compression: off` where an admin has turned on `allow_client_bypass`, and whenever a request passes through uncompressed (`audit` mode, an App whose metadata is not known yet, a body over `max_body_bytes`, any error). To keep a tool away from a model, don't give the App access to it, or block its calls with a [filter](/docs/filters) or a [guardrail](/docs/guardrails) on tool calls.
 :::
 
 ## Headers
