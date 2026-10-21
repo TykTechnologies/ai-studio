@@ -91,7 +91,7 @@ type AgentTracingConfig struct {
 	ExportMaxDelay                   time.Duration
 	ExportInferredSessionAsSessionID bool
 	ExportConversationIDFallback     string // never | inferred
-	ExportIncludeUserID              bool
+	ExportUserIDMode                 string // user.id to exporters: off | hashed (keyed pseudonym, default) | raw (jyx.173)
 	ExportersFile                    string
 
 	// Agent metrics (§5.7).
@@ -170,7 +170,7 @@ func DefaultAgentTracingConfig() AgentTracingConfig {
 		ExportMaxDelay:                   30 * time.Second,
 		ExportInferredSessionAsSessionID: true,
 		ExportConversationIDFallback:     "never",
-		ExportIncludeUserID:              true,
+		ExportUserIDMode:                 "hashed",
 
 		MetricsEnabled:        true,
 		MetricsIncludeAppID:   true,
@@ -260,7 +260,16 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 	p.positiveDuration("AGENT_TRACING_EXPORT_MAX_DELAY", &cfg.ExportMaxDelay)
 	p.boolean("AGENT_TRACING_EXPORT_INFERRED_SESSION_AS_SESSION_ID", &cfg.ExportInferredSessionAsSessionID)
 	p.enum("AGENT_TRACING_EXPORT_CONVERSATION_ID_FALLBACK", &cfg.ExportConversationIDFallback, "never", "inferred")
-	p.boolean("AGENT_TRACING_EXPORT_INCLUDE_USER_ID", &cfg.ExportIncludeUserID)
+	// The earlier boolean still applies when the mode is not set:
+	// true keeps the raw value, false turns it off (jyx.173).
+	if _, set := p.get("AGENT_TRACING_EXPORT_USER_ID_MODE"); !set {
+		legacy := true
+		if _, had := p.get("AGENT_TRACING_EXPORT_INCLUDE_USER_ID"); had {
+			p.boolean("AGENT_TRACING_EXPORT_INCLUDE_USER_ID", &legacy)
+			cfg.ExportUserIDMode = map[bool]string{true: "raw", false: "off"}[legacy]
+		}
+	}
+	p.enum("AGENT_TRACING_EXPORT_USER_ID_MODE", &cfg.ExportUserIDMode, "off", "hashed", "raw")
 	cfg.ExportersFile = strings.TrimSpace(getenv("AGENT_TRACING_EXPORTERS_FILE"))
 
 	p.boolean("AGENT_TRACING_METRICS_ENABLED", &cfg.MetricsEnabled)

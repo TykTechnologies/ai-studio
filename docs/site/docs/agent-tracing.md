@@ -214,7 +214,7 @@ All variables are read at start-up. An invalid value keeps the default and logs 
 | `AGENT_TRACING_EXPORT_MAX_DELAY` | `30s` | Longest a finished turn waits before export |
 | `AGENT_TRACING_EXPORT_INFERRED_SESSION_AS_SESSION_ID` | `true` | Put inferred sessions' ids in `session.id` |
 | `AGENT_TRACING_EXPORT_CONVERSATION_ID_FALLBACK` | `never` | `inferred` also fills `gen_ai.conversation.id` from inferred sessions |
-| `AGENT_TRACING_EXPORT_INCLUDE_USER_ID` | `true` | Send the declared end user as `user.id`; see [Privacy](#privacy-and-erasure) |
+| `AGENT_TRACING_EXPORT_USER_ID_MODE` | `hashed` | How the end user is sent as `user.id`: `off`, `hashed` (a keyed pseudonym) or `raw`; see [Privacy](#privacy-and-erasure). The earlier `AGENT_TRACING_EXPORT_INCLUDE_USER_ID` still applies when this is unset: `true` means `raw`, `false` means `off`. |
 | `AGENT_TRACING_METRICS_INCLUDE_APP_ID` | `true` | Add `tyk.app.id` to the metrics |
 | `AGENT_TRACING_METRICS_EXPORT_INTERVAL` | `30s` | OTLP metric push interval |
 | `AGENT_TRACING_UI_MAX_PAYLOAD_VIEW_BYTES` | 2 MiB | Largest content shown in the UI |
@@ -715,6 +715,9 @@ These metrics are on the Prometheus endpoint, and pushed over OTLP to exporter e
 
 ### Privacy and erasure
 
-- `AGENT_TRACING_EXPORT_INCLUDE_USER_ID` is `true` by default. The declared end user (`X-Tyk-User-Id`, baggage `user.id`, the body `user` field, or the IdP subject) is then sent as `user.id` to **every** OTel exporter, including third parties such as Langfuse or Datadog. If end-user ids can be email addresses or other personal data, turn this off or check your agreements with those backends.
+- The end user (`X-Tyk-User-Id`, baggage `user.id`, the body `user` field, the IdP subject, or else the Studio user) reaches **every** OTel exporter as `user.id`, including third parties such as Langfuse or Datadog. `AGENT_TRACING_EXPORT_USER_ID_MODE` decides how:
+  - `hashed` (default): a pseudonym, an HMAC-SHA-256 of the end user under a key derived from `AGENT_TRACING_KEY` for this purpose only, 32 hex characters. It is the same on every replica and after restarts, so a backend can still group a user's sessions; it changes when the key is rotated. **A pseudonym is still personal data**: anyone who holds the key, or can guess and hash candidate values, can link it back.
+  - `raw`: the end user as declared, which may be an email address.
+  - `off`: no `user.id`.
 - **A purge or erasure does not reach spans already exported.** Send erasure requests to your OTel backends too.
 - Exporter credentials must travel over TLS. Use `env:` or `file:` references in the exporters file, not literal secrets.
