@@ -106,7 +106,8 @@ The plugin has one configuration for every LLM it is attached to. Named **polici
 | `allow_client_bypass` | `true` | Honour the request header `X-Tyk-Compression: off`. |
 | `failure_mode` | `open` | What an external engine failure does: `open` forwards the unit uncompressed, `closed` answers 502 (enforce mode only). Every other failure always forwards the request. |
 | `lossy_with_request_filters` | `false` | Run level 3 and engines on LLMs with request filters. |
-| `max_body_bytes` | `4194304` | Larger bodies pass through. Limits are by size, never by time, so load never changes the output. |
+| `max_body_bytes` | `4194304` | Larger bodies pass through, at most 16 MiB. Limits are by size, never by time. |
+| `max_in_flight_bytes` | `16777216` | The body bytes compressed at once, all requests together (at most 256 MiB, at least `max_body_bytes`). A request that would go over it passes through unchanged with reason `over_budget`, so memory stays bounded under load; that request may cost a prompt-cache rewrite. Not editable on the Policies page. |
 | `cache_drop_alert` | `0.25` | The dashboard warns when the cache-read share falls by more than this fraction within an hour of a policy change. |
 | `engine_NAME_url`, `engine_NAME_token` | | Credentials for an external engine named `NAME`. `$SECRET/` references work. |
 

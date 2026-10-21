@@ -1,16 +1,16 @@
 # Overlay for the Prompt Compressor scenarios (s8-*): mounts a Linux build
-# of the plugin into Studio and the edge at /opt/plugins (a safe plugin
-# directory), so `gwbench seed -compressor file:///opt/plugins/prompt-compressor`
-# can register it. Build the binary for the Docker host's architecture:
-#
-#   cd community/plugins/prompt-compressor
-#   GOOS=linux GOARCH=arm64 CGO_ENABLED=0 GOWORK=off go build -o <dir>/prompt-compressor .
-#
-# then pass the directory as PC_PLUGIN_DIR (see README, Prompt Compressor).
+# of the plugin into Studio and the edge at /opt/microgateway/plugins (the
+# edge's plugin directory; Studio is told to allow it), so
+# `gwbench seed -compressor file:///opt/microgateway/plugins/prompt-compressor`
+# can register it. `make bench-plugin-compressor` builds the binary; the
+# Makefile adds this file when PC_PLUGIN_DIR is set (README, Prompt
+# Compressor).
 services:
   studio:
+    environment:
+      AI_STUDIO_PLUGIN_ALLOWED_DIRS: /opt/microgateway/plugins
     volumes:
-      - ${PC_PLUGIN_DIR:?set PC_PLUGIN_DIR to the directory holding the prompt-compressor binary}:/opt/plugins:ro
+      - ${PC_PLUGIN_DIR:?set PC_PLUGIN_DIR to the directory holding the prompt-compressor binary}:/opt/microgateway/plugins:ro
   gateway:
     volumes:
-      - ${PC_PLUGIN_DIR:?set PC_PLUGIN_DIR to the directory holding the prompt-compressor binary}:/opt/plugins:ro
+      - ${PC_PLUGIN_DIR:?set PC_PLUGIN_DIR to the directory holding the prompt-compressor binary}:/opt/microgateway/plugins:ro

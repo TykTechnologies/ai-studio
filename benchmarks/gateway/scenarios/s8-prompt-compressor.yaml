@@ -9,8 +9,8 @@ description: >
   cost is an arm's overhead minus the none arm's. Each cell sends the same
   body every time, so after the first request the compressor answers from
   its memo: this is the warm cost (the memo-miss cost comes from the
-  plugin's Go benchmarks). Needs make bench-seed with -compressor and the
-  plugin binary mounted (compose/prompt-compressor.yaml).
+  plugin's Go benchmarks). Run it with make bench-compressor (README,
+  Prompt Compressor), which seeds the plugin and mounts its binary.
 mode: closed
 baseline: direct
 timeout: 60s

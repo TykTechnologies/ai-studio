@@ -93,7 +93,7 @@ func (s *Studio) EnsurePlugin(ctx context.Context, name, command string, config 
 		}
 		id = created.Data.ID
 	} else {
-		body := map[string]any{"config": config, "is_active": true}
+		body := map[string]any{"command": command, "config": config, "is_active": true}
 		if err := s.mustOK(ctx, http.MethodPatch, "/api/v1/plugins/"+id, body, nil, http.StatusOK); err != nil {
 			return 0, err
 		}

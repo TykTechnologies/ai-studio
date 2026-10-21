@@ -91,7 +91,7 @@ func cmdSeed(ctx context.Context, args []string) error {
 	mockUpstream := fs.String("mock-upstream", env("GWBENCH_MOCK_UPSTREAM_URL", "http://mockllm:9999"), "mock base URL as the *gateway* reaches it")
 	vendors := fs.Bool("vendors", false, "also seed real OpenAI/Anthropic LLMs from test-secrets/vendors.env")
 	minimal := fs.Bool("minimal", false, "also seed the minimal-configuration app and LLM (no budget, unpriced model, instant mock)")
-	compressor := fs.String("compressor", "", "also seed the Prompt Compressor scenario with the plugin at this command (e.g. file:///plugins/prompt-compressor)")
+	compressor := fs.String("compressor", "", "also seed the Prompt Compressor scenario with the plugin at this command (e.g. file:///opt/microgateway/plugins/prompt-compressor)")
 	minEdges := fs.Int("min-edges", 1, "edges that must be registered before pushing config")
 	timeout := fs.Duration("sync-timeout", 3*time.Minute, "how long to wait for edges to sync")
 	_ = fs.Parse(args)

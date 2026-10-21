@@ -1108,10 +1108,14 @@ perf-clean:
 BENCH_DIR          := benchmarks/gateway
 BENCH_ENV_FILE     ?= dev/.env.secrets
 BENCH_VENDORS_DIR  ?= $(CURDIR)/test-secrets
+# PC_PLUGIN_DIR (a directory holding a Linux prompt-compressor binary, see
+# bench-plugin-compressor) mounts the plugin for the S8 compressor scenarios.
 BENCH_COMPOSE       = GWBENCH_GIT_SHA=$$(git rev-parse HEAD) \
 	GWBENCH_GIT_DIRTY=$$(test -n "$$(git status --porcelain --untracked-files=no)" && echo true || echo false) \
 	VENDORS_ENV_DIR=$(BENCH_VENDORS_DIR) \
-	docker compose --env-file $(BENCH_ENV_FILE) -f $(BENCH_DIR)/compose/docker-compose.yml
+	$(if $(PC_PLUGIN_DIR),PC_PLUGIN_DIR=$(abspath $(PC_PLUGIN_DIR))) \
+	docker compose --env-file $(BENCH_ENV_FILE) -f $(BENCH_DIR)/compose/docker-compose.yml \
+	$(if $(PC_PLUGIN_DIR),-f $(BENCH_DIR)/compose/prompt-compressor.yaml)
 BENCH_RUN           = $(BENCH_COMPOSE) run --rm gwbench
 BENCH_SCENARIOS     = /bench/$(BENCH_DIR)/scenarios
 
@@ -1148,6 +1152,15 @@ bench-spike: ## S6 burst (size with BENCH_RATE_SCALE=<S4 sustained rps / 200>)
 bench-soak: ## S7 one-hour soak (size with BENCH_RATE_SCALE=<S4 sustained rps / 200>)
 	$(BENCH_RUN) run -rate-scale $(or $(BENCH_RATE_SCALE),1) $(BENCH_SCENARIOS)/s7-soak.yaml
 
+bench-plugin-compressor: ## Build the Prompt Compressor for the bench stack into PC_PLUGIN_DIR (default .state/plugins)
+	cd community/plugins/prompt-compressor && GOOS=linux GOARCH=$$(go env GOARCH) CGO_ENABLED=0 GOWORK=off \
+		go build -o $(abspath $(or $(PC_PLUGIN_DIR),$(BENCH_DIR)/.state/plugins))/prompt-compressor .
+
+bench-compressor: ## S8 + S8b Prompt Compressor overhead (run bench-up and this with PC_PLUGIN_DIR set)
+	@test -n "$(PC_PLUGIN_DIR)" || { echo "set PC_PLUGIN_DIR (see make bench-plugin-compressor) for bench-up and bench-compressor"; exit 1; }
+	$(BENCH_RUN) seed -compressor file:///opt/microgateway/plugins/prompt-compressor
+	$(BENCH_RUN) run $(BENCH_SCENARIOS)/s8-prompt-compressor.yaml $(BENCH_SCENARIOS)/s8b-prompt-compressor-large.yaml
+
 bench-build-gateway: ## Build an edge image from another checkout: make bench-build-gateway SRC=<path> TAG=<tag>
 	@test -n "$(SRC)" && test -n "$(TAG)" || { echo "usage: make bench-build-gateway SRC=<checkout path> TAG=<tag>"; exit 1; }
 	docker build -f "$(SRC)/microgateway/deployments/Dockerfile" --build-arg "EDITION=$(or $(EDITION),ent)" -t "gwbench-microgateway:$(TAG)" "$(SRC)"
@@ -1161,7 +1174,8 @@ bench-report: ## Regenerate reports: make bench-report RUN=<results dir name>
 	$(BENCH_RUN) report /bench/$(BENCH_DIR)/results/$(RUN)
 
 .PHONY: bench-up bench-down bench-seed bench-seed-vendors bench-smoke bench-overhead bench-real \
-	bench-stress bench-spike bench-soak bench-report bench-unit bench-build-gateway bench-swap
+	bench-stress bench-spike bench-soak bench-report bench-unit bench-build-gateway bench-swap \
+	bench-plugin-compressor bench-compressor
 
 bench-unit: ## Unit tests for the benchmark tooling and Server-Timing
 	go test ./benchmarks/... ./pkg/testinfra/mockllm/ ./metrics/
