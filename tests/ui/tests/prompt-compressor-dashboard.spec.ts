@@ -29,7 +29,12 @@ test('Prompt Compressor dashboard loads and shows its empty state', async ({ pag
     // The RPC answers with aggregates for the range asked
     const res = await rpc(page, pluginId, 'getSavings', { range_hours: 168 });
     expect(res.status).toBe(200);
-    expect(res.data.to - res.data.from).toBe(167);
+    // A week reads in 6-hour buckets, so from is aligned down to a bucket
+    // start: the range covers 168 hours plus up to 5 of alignment.
+    expect(res.data.bucket_hours).toBe(6);
+    expect(res.data.from % 6).toBe(0);
+    expect(res.data.to - res.data.from).toBeGreaterThanOrEqual(167);
+    expect(res.data.to - res.data.from).toBeLessThanOrEqual(172);
     expect(res.data.totals).toBeTruthy();
     expect(Array.isArray(res.data.series)).toBe(true);
     expect(Array.isArray(res.data.markers)).toBe(true);
