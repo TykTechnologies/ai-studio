@@ -457,7 +457,8 @@ func clip(s string) string {
 	return s
 }
 
-// serveMock is a scripted OpenAI-shaped vendor: the first step of a turn
+// serveMock is a scripted OpenAI-shaped vendor (and, under /tool/, a Studio
+// tool upstream with weather and advice operations): the first step of a turn
 // asks for every offered tool (first MCP tool with {} and read_file),
 // a step carrying tool results answers (streamed when asked), Responses
 // requests get ids that chain, and anything else gets "done".
@@ -473,6 +474,16 @@ func serveMock(w http.ResponseWriter, r *http.Request) {
 			} `json:"function"`
 		} `json:"tools"`
 		PreviousResponseID string `json:"previous_response_id"`
+	}
+	if strings.HasPrefix(r.URL.Path, "/tool/") { // a Studio tool's upstream
+		w.Header().Set("Content-Type", "application/json")
+		switch strings.TrimPrefix(r.URL.Path, "/tool/") {
+		case "weather":
+			fmt.Fprint(w, `{"forecast":"sunny","high_c":19}`)
+		default:
+			fmt.Fprint(w, `{"advice":"take an umbrella"}`)
+		}
+		return
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	usage := `"usage":{"prompt_tokens":20,"completion_tokens":8,"total_tokens":28}`
@@ -497,8 +508,8 @@ func serveMock(w http.ResponseWriter, r *http.Request) {
 			args := "{}"
 			if t.Function.Name == "read_file" {
 				args = `{\"path\":\"notes.txt\"}`
-			} else if i > 1 {
-				continue // one MCP tool is enough
+			} else if i > 2 {
+				continue // two MCP tools are enough
 			}
 			calls = append(calls, fmt.Sprintf(`{"id":"call_%d","type":"function","function":{"name":%q,"arguments":"%s"}}`, i, t.Function.Name, args))
 		}
