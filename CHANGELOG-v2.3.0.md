@@ -193,6 +193,23 @@ Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](ht
 - **Usage views.** An MCP server's **Usage** tab (calls and errors over time, p50 and p95 latency, per-tool table, top Apps), MCP usage on the App pages (admin and portal: an App's owner sees their own App only) and an **MCP traffic** panel on the Dashboard. API: `GET /api/v1/analytics/mcp/overview`, `/analytics/mcp/servers/{id}/summary|timeseries|tools|apps`, `/analytics/mcp/apps/{id}` (`analytics` read) and `GET /common/apps/{id}/analytics/mcp`. An error is an HTTP status of 400 or more or a JSON-RPC error the Gateway detected.
 - **Recorder.** AI Studio's database handler writes MCP calls through a writer of their own, so an ingest burst never delays the chat records budgets are computed from. Recording them is the optional `analytics.MCPCallRecorder` interface (`RecordMCPCalls(ctx, []models.MCPCallRecord) error`): `pkg/studio` analytics sinks that implement it receive the calls, and existing `AnalyticsHandler` implementations compile unchanged.
 
+### Prompt Compressor (community plugin)
+- **A new community plugin, `com.tyk.prompt-compressor`, shrinks LLM request bodies on edge gateways** (Community and Enterprise) before they reach the vendor, starting with tool outputs ([#813](https://github.com/TykTechnologies/ai-studio/pull/813), [ai-studio-community-plugins#31](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/31)).
+  - **Cache-safe:** the output depends only on the text and the policy, so a compressed conversation prefix stays byte-identical and the vendor's prompt cache keeps hitting.
+  - **Levels:** 1 is lossless (JSON compaction, ANSI codes, progress frames, whitespace). 2 reduces noise in test runs, logs, listings and long JSON arrays, keeping every failure. 3 cuts to a size budget, masks old tool results and can call an external engine (Headroom or LLMLingua-2).
+  - **Modes:** `audit` (the default) records what would be saved and forwards the original; `enforce` forwards the compressed body. Any failure forwards the request unchanged.
+  - **Policies** per LLM or App, and per App through the `prompt_compressor.policy` metadata key. A client can turn compression off for one request with `X-Tyk-Compression: off`; responses carry `X-Tyk-Compression`, `-Tokens-Saved` and `-Policy`.
+  - **Studio pages:** a savings dashboard (tokens and cost saved at the input and cache-read price, cache-read share, policy-change markers and a cache-drop warning), a Policies editor, and a preview tool. Each has its own plugin permission.
+  - Covers OpenAI Chat Completions and Responses, Anthropic, Google AI, Vertex, Bedrock Converse and Ollama bodies on `/llm/`, and the `/ai/`, unified `/v1` and `/router/` endpoints for non-Bedrock LLMs. Not covered: the Bedrock bridges, Studio Chat and Studio's embedded gateway.
+  - See `docs/site/docs/prompt-compressor.md`.
+- **Core changes the plugin relies on**, available to every plugin:
+  - response header hooks run on streaming responses and get the real LLM slug;
+  - the `/ai/` bridges relay `X-Tyk-Compression*` response headers, and the `X-Tyk-Compression` request header is removed before the vendor;
+  - multi-value request and response headers survive plugin hooks;
+  - the plugin gRPC message limit is 64 MiB, and edge `/llm/` request bodies are capped;
+  - the plugin management API's LLM info carries the LLM's slug and whether it has request filters;
+  - `guardrails/segments` reads OpenAI Responses bodies, and `pkg/requestformat` exports the request-format resolver.
+
 ### Platform and console
 - **Request IDs.** Every gateway request (AI Studio's and every edge's) has an id of its own, `tyai_` and a UUIDv7, so ids from different nodes never collide, answered in **`X-Tyk-AI-Request-ID`**. One request keeps one id across the `/ai/` and `/anthropic/` bridges' loopback hop and every failover attempt; a client cannot set it. The caller's own `X-Request-ID` is never overwritten and is recorded beside it as the client request id. Both are on request log rows (App and LLM pages, where the search matches either), on guardrail compliance events (whose details link to the request log), in an HTTP classifier's `meta`, and on the pulse from edges.
 - **`$SECRET/` references in plugin configuration** ([#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A plugin's config fields can name a stored secret, which is resolved for the plugin and stays masked in the config form. Adding one needs `secrets:read`.

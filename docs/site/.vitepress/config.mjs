@@ -52,7 +52,8 @@ export default defineConfig({
           { text: 'Embedders', link: '/docs/embedders' },
           { text: 'Filters & Policies', link: '/docs/filters' },
           { text: 'Guardrails', link: '/docs/guardrails' },
-          { text: 'Wolf Defender guardrail', link: '/docs/guardrails-wolf-defender' }
+          { text: 'Wolf Defender guardrail', link: '/docs/guardrails-wolf-defender' },
+          { text: 'Prompt Compressor', link: '/docs/prompt-compressor' } // Community plugin, edge gateways
         ]
       },
       {
