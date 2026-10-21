@@ -65,10 +65,23 @@ func UpsertAgentTraceSessions(db *gorm.DB, rows []*AgentTraceSession) error {
 }
 
 // UpsertAgentTraceTraces is UpsertAgentTraceSessions for turns, keyed and
-// ordered by (app_id, trace_id).
+// ordered by (app_id, trace_id), except that an existing turn's exported_at
+// is never overwritten: MarkAgentTraceExported is its only writer, so a
+// batch holding an older copy of the turn cannot clear the stamp and have
+// it exported twice (jyx.181).
 func UpsertAgentTraceTraces(db *gorm.DB, rows []*AgentTraceTrace) error {
 	if len(rows) == 0 {
 		return nil
+	}
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(&AgentTraceTrace{}); err != nil {
+		return err
+	}
+	var update []string
+	for _, f := range stmt.Schema.Fields {
+		if f.DBName != "" && !f.PrimaryKey && f.DBName != "exported_at" {
+			update = append(update, f.DBName)
+		}
 	}
 	sorted := append([]*AgentTraceTrace(nil), rows...)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -77,7 +90,8 @@ func UpsertAgentTraceTraces(db *gorm.DB, rows []*AgentTraceTrace) error {
 		}
 		return string(sorted[i].TraceID) < string(sorted[j].TraceID)
 	})
-	return db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "app_id"}, {Name: "trace_id"}}, UpdateAll: true}).
+	return db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "app_id"}, {Name: "trace_id"}},
+		DoUpdates: clause.AssignmentColumns(update)}).
 		CreateInBatches(&sorted, agentTraceRowsPerUpsert).Error
 }
 
