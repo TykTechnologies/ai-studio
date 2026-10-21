@@ -90,6 +90,31 @@ func TestRenewSessionBroker_StopsOnceAnyBrokerConnected(t *testing.T) {
 	assert.Equal(t, int32(sessionTimeoutMs), sessionTimeout(host, sessionBroker, 2))
 }
 
+// eac.67: while the plugin has reached none of its brokered servers, a UI
+// or portal RPC hands it a broker accepted for that call, which a lazily
+// dialling plugin (an SDK before 2.3) can reach from inside the call, long
+// after the session broker's five seconds have passed. Once it connected,
+// RPCs name the session broker again.
+func TestRPCBrokerID_FreshUntilConnected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for go-plugin's five-second window")
+	}
+	host, pluginSide := studioBrokerPair(t)
+	session, _ := host.startTrackedBroker(7, "plugin services")
+	lp := &LoadedAIStudioPlugin{ID: 7, GRPCClient: host, SessionBrokerID: session}
+
+	time.Sleep(6 * time.Second) // the session broker's connection info is gone
+	id := lp.rpcBrokerID("ui rpc")
+	require.NotEqual(t, session, id, "an unconnected plugin gets a broker accepted for the call")
+	conn, err := pluginSide.Dial(id)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	_, _ = mgmtpb.NewAIStudioManagementServiceClient(conn).ListPlugins(context.Background(), &mgmtpb.ListPluginsRequest{})
+	require.Eventually(t, host.hostConnected.Load, 2*time.Second, 10*time.Millisecond)
+
+	assert.Equal(t, session, lp.rpcBrokerID("ui rpc"), "a connected plugin's RPCs use the session broker")
+}
+
 // A plugin that makes no host calls at all gets short sessions for the
 // first fastUnconnectedRenewals renewals, then normal ones, each still on a
 // fresh ID so that a late first call can connect.

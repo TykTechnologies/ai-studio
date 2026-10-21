@@ -97,6 +97,19 @@ type LoadedAIStudioPlugin struct {
 	LastPing        time.Time
 }
 
+// rpcBrokerID is the broker ID a UI or portal RPC hands the plugin for host
+// services: the session broker's, or, while the plugin has reached none of
+// its brokered servers, a per-call one accepted now (startCallBroker). A
+// plugin built before 2.3 dials in the call, and only within five seconds
+// of an ID's accept, which the session broker is usually past: its first
+// RPC used to wait out the SDK's dial retries (about 50 s) and fail.
+func (lp *LoadedAIStudioPlugin) rpcBrokerID(purpose string) uint32 {
+	if c, ok := lp.GRPCClient.(*AIStudioPluginClient); ok && !c.hostConnected.Load() && c.broker != nil && c.service != nil {
+		return c.startCallBroker(lp.ID, purpose)
+	}
+	return lp.SessionBrokerID
+}
+
 // NewAIStudioPluginManager creates a new AI Studio plugin manager
 func NewAIStudioPluginManager(db *gorm.DB, ociClient *ociplugins.OCIPluginClient) *AIStudioPluginManager {
 	return &AIStudioPluginManager{
@@ -1260,9 +1273,9 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 		return nil, fmt.Errorf("failed to marshal RPC payload: %w", err)
 	}
 
-	// Use the long-lived session broker ID (set up during plugin load)
-	// The session broker is already running and serves all RPC calls for this plugin
-	serviceBrokerID := loadedPlugin.SessionBrokerID
+	// The long-lived session broker serves RPC calls, once the plugin has
+	// connected to a broker (rpcBrokerID)
+	serviceBrokerID := loadedPlugin.rpcBrokerID("ui rpc")
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1332,7 +1345,7 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 		return nil, fmt.Errorf("failed to marshal portal RPC payload: %w", err)
 	}
 
-	serviceBrokerID := loadedPlugin.SessionBrokerID
+	serviceBrokerID := loadedPlugin.rpcBrokerID("portal rpc")
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
