@@ -31,6 +31,7 @@ func installAgentTracingContent(p *pb.AgentTracingContentPolicy, db *gorm.DB) {
 		return
 	}
 	g := agenttrace.ContentGlobals{
+		Ceiling:            p.Ceiling, // "" from an older hub resolves to off
 		DefaultMode:        p.DefaultMode,
 		MaxRequestOverride: p.MaxRequestOverride,
 		StoreCap:           p.StoreCap,
@@ -41,6 +42,10 @@ func installAgentTracingContent(p *pb.AgentTracingContentPolicy, db *gorm.DB) {
 	}
 	agenttrace.SetContentProcessor(agenttrace.NewContentProcessor(g, newEdgeContentOverrides(db).Lookup))
 }
+
+// appOff is a span whose App cannot be read, is unknown or has tracing off:
+// no content, and no request header may raise it (jyx.172).
+var appOff = agenttrace.ContentOverrides{AppMode: agenttrace.ContentOff, AppMaxRequestOverride: agenttrace.ContentOff}
 
 // edgeOverridesTTL bounds how stale a cached setting can be; a sync installs
 // a fresh cache anyway.
@@ -92,12 +97,12 @@ func (e *edgeContentOverrides) get(key string, load func() agenttrace.ContentOve
 
 func (e *edgeContentOverrides) app(id uint) agenttrace.ContentOverrides {
 	if id == 0 || e.db == nil {
-		return agenttrace.ContentOverrides{AppMode: agenttrace.ContentOff}
+		return appOff
 	}
 	return e.get("app:"+strconv.FormatUint(uint64(id), 10), func() agenttrace.ContentOverrides {
 		var app database.App
 		if err := e.db.Select("id", "tracing").First(&app, id).Error; err != nil {
-			return agenttrace.ContentOverrides{AppMode: agenttrace.ContentOff}
+			return appOff
 		}
 		var t struct {
 			Enabled            *bool  `json:"enabled"`
@@ -106,11 +111,11 @@ func (e *edgeContentOverrides) app(id uint) agenttrace.ContentOverrides {
 		}
 		if len(app.Tracing) > 0 && string(app.Tracing) != "null" {
 			if err := json.Unmarshal(app.Tracing, &t); err != nil {
-				return agenttrace.ContentOverrides{AppMode: agenttrace.ContentOff}
+				return appOff
 			}
 		}
 		if t.Enabled != nil && !*t.Enabled {
-			return agenttrace.ContentOverrides{AppMode: agenttrace.ContentOff}
+			return appOff
 		}
 		return agenttrace.ContentOverrides{AppMode: t.ContentMode, AppMaxRequestOverride: t.MaxRequestOverride}
 	})

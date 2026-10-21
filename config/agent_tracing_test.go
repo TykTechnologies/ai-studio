@@ -90,6 +90,39 @@ func TestAgentTracingConfigParse(t *testing.T) {
 			},
 		},
 		{
+			name: "content ceiling unset is the higher of default and override",
+			env:  map[string]string{"AGENT_TRACING_CONTENT_DEFAULT_MODE": "off", "AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE": "redacted"},
+			check: func(t *testing.T, c AgentTracingConfig) {
+				if c.ContentCeiling != "" || c.EffectiveContentCeiling() != "redacted" {
+					t.Fatalf("ceiling %q effective %q", c.ContentCeiling, c.EffectiveContentCeiling())
+				}
+				c.ContentMaxRequestOverride = "off"
+				c.ContentDefaultMode = "metadata"
+				if c.EffectiveContentCeiling() != "metadata" {
+					t.Fatalf("effective %q", c.EffectiveContentCeiling())
+				}
+			},
+		},
+		{
+			name: "content ceiling set",
+			env:  map[string]string{"AGENT_TRACING_CONTENT_CEILING": "Full", "AGENT_TRACING_CONTENT_DEFAULT_MODE": "metadata"},
+			check: func(t *testing.T, c AgentTracingConfig) {
+				if c.EffectiveContentCeiling() != "full" || c.ContentDefaultMode != "metadata" {
+					t.Fatalf("got %+v", c)
+				}
+			},
+		},
+		{
+			name:     "content default above the ceiling is clamped",
+			env:      map[string]string{"AGENT_TRACING_CONTENT_CEILING": "metadata", "AGENT_TRACING_CONTENT_DEFAULT_MODE": "full"},
+			warnings: 1,
+			check: func(t *testing.T, c AgentTracingConfig) {
+				if c.ContentDefaultMode != "metadata" || c.EffectiveContentCeiling() != "metadata" {
+					t.Fatalf("got default %q ceiling %q", c.ContentDefaultMode, c.EffectiveContentCeiling())
+				}
+			},
+		},
+		{
 			name:     "payload retention capped at metadata retention",
 			env:      map[string]string{"AGENT_TRACING_METADATA_RETENTION_DAYS": "5", "AGENT_TRACING_PAYLOAD_RETENTION_DAYS": "9"},
 			warnings: 1,

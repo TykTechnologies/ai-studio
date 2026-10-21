@@ -381,6 +381,9 @@ message AgentTracingContentPolicy {
   // assembled agent-trace spans under the gateway span id; edges then leave
   // out their own live proxy span for captured requests (one call, one span).
   bool assembled_export_active = 8;
+  // ceiling is the highest content mode any App, request header or the
+  // default may reach (jyx.172). Missing (an older hub) is off.
+  string ceiling = 9;
 }
 
 // AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing

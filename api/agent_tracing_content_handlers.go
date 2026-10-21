@@ -235,7 +235,7 @@ func (a *API) purgeAgentEndUser(c *gin.Context) {
 }
 
 // @Summary Agent tracing settings
-// @Description The effective content and retention settings (from AGENT_TRACING_* environment variables; Apps, LLMs, tools and datasources override them). Never includes keys.
+// @Description The effective content and retention settings (from AGENT_TRACING_* environment variables; Apps, LLMs, tools and datasources override them). content_ceiling bounds every App, default and request header; content_default_mode applies to Apps without their own mode. Never includes keys.
 // @Tags agent-tracing
 // @Produce json
 // @Success 200 {object} map[string]interface{}

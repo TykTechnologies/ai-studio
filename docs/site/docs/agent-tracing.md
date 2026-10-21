@@ -137,14 +137,17 @@ Binary content is replaced by a reference unless `AGENT_TRACING_PAYLOAD_STORE_BI
 
 ### How the mode for a call is decided
 
-1. Start from the stricter of the global default (`AGENT_TRACING_CONTENT_DEFAULT_MODE`) and the App's content mode. An App can only lower the global default.
-2. A request may ask for a different mode with the `X-Tyk-Trace-Capture` header.
+1. Start from the App's content mode. An App without one uses the global default (`AGENT_TRACING_CONTENT_DEFAULT_MODE`).
+2. Cap it at the global ceiling (`AGENT_TRACING_CONTENT_CEILING`). Nothing goes above the ceiling: not an App, not the default, not a request header.
+3. A request may ask for a different mode with the `X-Tyk-Trace-Capture` header.
    - It can always **lower** the mode.
-   - It can **raise** it only up to the request ceiling: the global `AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE`, or the App's ceiling if that is lower.
-3. Cap the result by the resource's maximum: the LLM, tool or datasource **Maximum content mode**.
-4. Cap that by `AGENT_TRACING_STORE_CONTENT_MODE_CAP`.
+   - It can **raise** it only up to the request ceiling: the global `AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE`, or the App's ceiling if that is lower. It never goes above the global ceiling.
+4. Cap the result by the resource's maximum: the LLM, tool or datasource **Maximum content mode**. This applies to a raised header too.
+5. Cap that by `AGENT_TRACING_STORE_CONTENT_MODE_CAP`, the operator's hard limit.
 
-A call that has no App, or whose settings cannot be read, captures no content.
+When `AGENT_TRACING_CONTENT_CEILING` is not set, the ceiling is the higher of the default and the request ceiling. With the shipped settings that is `metadata`, so a header can still raise capture to `metadata`. At start-up, Studio logs the Apps whose own mode is above the default and that now capture at it. A default above the ceiling is lowered to the ceiling, with a warning.
+
+A call that has no App, or whose App or settings cannot be read, captures no content, and no header can raise it.
 
 ### The content-mode matrix
 
@@ -153,7 +156,9 @@ These are the effective modes with the default global settings: default `off`, r
 | App content mode | Request header | Resource maximum | Stored as |
 |---|---|---|---|
 | inherit | none | none | `off` |
-| inherit | `full` | none | `metadata` (the ceiling) |
+| inherit | `full` | none | `metadata` (the request ceiling) |
+| `redacted` | none | none | `metadata` (the global ceiling) |
+| `redacted` (ceiling `full`) | none | none | `redacted` (the App's own mode) |
 | `redacted` (with the global default raised to `redacted`) | none | none | `redacted` |
 | `redacted` (global default `redacted`) | `off` | none | `off` (a request can always lower) |
 | `full` (global default `full`) | none | `metadata` | `metadata` (the resource cap) |
@@ -186,7 +191,8 @@ All variables are read at start-up. An invalid value keeps the default and logs 
 | `AGENT_TRACING_KEY_PREVIOUS` | empty | The previous root key, during a rotation |
 | `AGENT_TRACING_QUEUE_MAX_EVENTS` | `10000` | In-memory capture queue, events |
 | `AGENT_TRACING_QUEUE_MAX_BYTES` | 64 MiB | In-memory capture queue, bytes |
-| `AGENT_TRACING_CONTENT_DEFAULT_MODE` | `off` | Global content mode |
+| `AGENT_TRACING_CONTENT_CEILING` | the higher of the default and the request ceiling | Highest mode any App, default or request header may reach |
+| `AGENT_TRACING_CONTENT_DEFAULT_MODE` | `off` | Content mode for Apps without their own; at most the ceiling |
 | `AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE` | `metadata` | Highest mode `X-Tyk-Trace-Capture` may ask for |
 | `AGENT_TRACING_STORE_CONTENT_MODE_CAP` | `full` | Highest mode ever stored |
 | `AGENT_TRACING_REDACTION_DETECTORS` | `email,phone,payment_card,iban,us_ssn,jwt,bearer_token,api_key,private_key` | PII and secret detectors for `redacted` |

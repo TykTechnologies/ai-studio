@@ -51,7 +51,7 @@ func TestEdgeSync_InstallsContentPipeline(t *testing.T) {
 		},
 		Llms: []*pb.LLMConfig{{Id: 41, Name: "capped", Vendor: "openai", IsActive: true, Namespace: "ns", TracingContentModeMax: "metadata"}},
 		AgentTracingContentPolicy: &pb.AgentTracingContentPolicy{
-			DefaultMode: "metadata", MaxRequestOverride: "redacted", StoreCap: "full",
+			Ceiling: "redacted", DefaultMode: "metadata", MaxRequestOverride: "redacted", StoreCap: "full",
 			MaxPartBytes: 1000, MaxSpanBytes: 5000, RedactionDetectors: []string{"email"},
 		},
 	}
@@ -59,7 +59,7 @@ func TestEdgeSync_InstallsContentPipeline(t *testing.T) {
 
 	proc, ok := agenttrace.CurrentContentProcessor().(*recordingProcessor)
 	require.True(t, ok, "the pipeline is installed")
-	assert.Equal(t, agenttrace.ContentGlobals{DefaultMode: "metadata", MaxRequestOverride: "redacted", StoreCap: "full",
+	assert.Equal(t, agenttrace.ContentGlobals{Ceiling: "redacted", DefaultMode: "metadata", MaxRequestOverride: "redacted", StoreCap: "full",
 		MaxPartBytes: 1000, MaxSpanBytes: 5000, Detectors: []string{"email"}}, proc.globals)
 
 	llm := agenttrace.Resource{Type: agenttrace.ResourceLLM, ID: "41"}
@@ -67,9 +67,9 @@ func TestEdgeSync_InstallsContentPipeline(t *testing.T) {
 	assert.Equal(t, agenttrace.ContentOverrides{}, proc.overrides(32, agenttrace.Resource{}))
 	// Fail closed: tracing off for the App, an App the edge does not have,
 	// no App, an unknown resource.
-	assert.Equal(t, "off", proc.overrides(33, agenttrace.Resource{}).AppMode)
-	assert.Equal(t, "off", proc.overrides(999, agenttrace.Resource{}).AppMode)
-	assert.Equal(t, "off", proc.overrides(0, agenttrace.Resource{}).AppMode)
+	assert.Equal(t, appOff, proc.overrides(33, agenttrace.Resource{}))
+	assert.Equal(t, appOff, proc.overrides(999, agenttrace.Resource{}))
+	assert.Equal(t, appOff, proc.overrides(0, agenttrace.Resource{}))
 	assert.Equal(t, "off", proc.overrides(32, agenttrace.Resource{Type: agenttrace.ResourceTool, ID: "77"}).ResourceMax)
 
 	require.NoError(t, sync.SyncConfiguration(&pb.ConfigurationSnapshot{Version: "2", EdgeNamespace: "ns", SnapshotTime: timestamppb.Now()}))

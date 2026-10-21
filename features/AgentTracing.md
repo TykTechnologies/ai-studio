@@ -22,6 +22,7 @@ These are from the SPEC preface; where the original draft disagrees, they win.
 
 Also recorded:
 - **FIPS readiness.** Stdlib crypto only.
+- **Content ceiling and default (§5.5 amendment, jyx.172).** `AGENT_TRACING_CONTENT_CEILING` bounds every App, default and header. `AGENT_TRACING_CONTENT_DEFAULT_MODE` applies to Apps without their own mode. Unset, the ceiling is the higher of the default and the request override. The resource maximum and the store cap bound everything. Both settings are environment-only until jyx.79, and edges get the ceiling in the snapshot (missing is off).
 - **Header precedence (§4.2).** For session, user and agent, explicit `X-Tyk-*` headers and compatibility headers win over W3C baggage. `traceparent` still wins for the trace id and the parent span id.
 
 ## Data flow

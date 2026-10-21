@@ -20,7 +20,7 @@ import (
 // pulse.
 func TestCapture_EdgeContentRedactedBeforeThePulse(t *testing.T) {
 	proc := agenttrace.NewContentProcessor(agenttrace.ContentGlobals{
-		DefaultMode: "redacted", MaxRequestOverride: "metadata", StoreCap: "full",
+		Ceiling: "redacted", DefaultMode: "redacted", MaxRequestOverride: "metadata", StoreCap: "full",
 		Detectors: []string{"email"},
 	}, func(uint, agenttrace.Resource) agenttrace.ContentOverrides { return agenttrace.ContentOverrides{} })
 	require.NotNil(t, proc, "the Enterprise pipeline registers its factory")

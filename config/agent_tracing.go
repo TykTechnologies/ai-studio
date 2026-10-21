@@ -37,6 +37,12 @@ type AgentTracingConfig struct {
 	MaxStreamBufferBytes int
 
 	// Content capture (§5.5). Modes: off < metadata < hashed < redacted < full.
+	// ContentCeiling is the highest mode any App, request header or the
+	// default may reach; ContentDefaultMode applies to Apps without their
+	// own mode and never exceeds the ceiling (jyx.172). An unset ceiling is
+	// the higher of the default mode and the request override
+	// (EffectiveContentCeiling).
+	ContentCeiling            string
 	ContentDefaultMode        string
 	ContentMaxRequestOverride string
 	// StoreContentModeCap is the highest mode ever persisted, whatever the
@@ -115,6 +121,20 @@ func AgentTracingContentModeRank(mode string) int {
 		}
 	}
 	return -1
+}
+
+// EffectiveContentCeiling is the content ceiling in force: the configured
+// one or, when none is set, the higher of the default mode and the request
+// override, so a header may still raise capture as far as before the split
+// (jyx.172).
+func (c AgentTracingConfig) EffectiveContentCeiling() string {
+	if c.ContentCeiling != "" {
+		return c.ContentCeiling
+	}
+	if AgentTracingContentModeRank(c.ContentMaxRequestOverride) > AgentTracingContentModeRank(c.ContentDefaultMode) {
+		return c.ContentMaxRequestOverride
+	}
+	return c.ContentDefaultMode
 }
 
 // DefaultAgentTracingConfig returns the §11 defaults (as amended by D5 and Q11).
@@ -203,6 +223,12 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 	p.positiveInt("AGENT_TRACING_MAX_STREAM_BUFFER_BYTES", &cfg.MaxStreamBufferBytes)
 
 	p.enum("AGENT_TRACING_CONTENT_DEFAULT_MODE", &cfg.ContentDefaultMode, agentTracingContentModes...)
+	p.enum("AGENT_TRACING_CONTENT_CEILING", &cfg.ContentCeiling, agentTracingContentModes...)
+	if cfg.ContentCeiling != "" && AgentTracingContentModeRank(cfg.ContentDefaultMode) > AgentTracingContentModeRank(cfg.ContentCeiling) {
+		p.warn("AGENT_TRACING_CONTENT_DEFAULT_MODE (%s) is above AGENT_TRACING_CONTENT_CEILING (%s); using the ceiling",
+			cfg.ContentDefaultMode, cfg.ContentCeiling)
+		cfg.ContentDefaultMode = cfg.ContentCeiling
+	}
 	p.enum("AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE", &cfg.ContentMaxRequestOverride, agentTracingContentModes...)
 	p.enum("AGENT_TRACING_STORE_CONTENT_MODE_CAP", &cfg.StoreContentModeCap, agentTracingContentModes...)
 	p.list("AGENT_TRACING_REDACTION_DETECTORS", &cfg.RedactionDetectors)

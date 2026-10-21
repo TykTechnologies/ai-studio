@@ -68,12 +68,13 @@ func TestSnapshot_AgentTracingKey(t *testing.T) {
 
 	// The content settings travel with the key while tracing runs.
 	assert.Nil(t, rotated.AgentTracingContentPolicy, "none published yet")
-	agenttrace.SetEdgeContentGlobals(&agenttrace.ContentGlobals{DefaultMode: "metadata", MaxRequestOverride: "redacted",
+	agenttrace.SetEdgeContentGlobals(&agenttrace.ContentGlobals{Ceiling: "redacted", DefaultMode: "metadata", MaxRequestOverride: "redacted",
 		StoreCap: "full", MaxPartBytes: 4096, MaxSpanBytes: 8192, Detectors: []string{"email", "iban"}})
 	t.Cleanup(func() { agenttrace.SetEdgeContentGlobals(nil) })
 	withPolicy, err := server.getConfigurationSnapshot("default")
 	require.NoError(t, err)
 	require.NotNil(t, withPolicy.AgentTracingContentPolicy)
+	assert.Equal(t, "redacted", withPolicy.AgentTracingContentPolicy.Ceiling, "the ceiling travels with the default (jyx.172)")
 	assert.Equal(t, "metadata", withPolicy.AgentTracingContentPolicy.DefaultMode)
 	assert.Equal(t, uint32(4096), withPolicy.AgentTracingContentPolicy.MaxPartBytes)
 	assert.Equal(t, []string{"email", "iban"}, withPolicy.AgentTracingContentPolicy.RedactionDetectors)

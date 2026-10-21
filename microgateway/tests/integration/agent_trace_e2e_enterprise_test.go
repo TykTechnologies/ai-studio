@@ -229,7 +229,7 @@ func newEdgeE2E(t *testing.T) *edgeE2E {
 	// What the edge's start gate and an applied snapshot install.
 	kid, key := k.EdgeKey()
 	agenttrace.InstallEdgeKey(kid, key)
-	globals := agenttrace.ContentGlobals{DefaultMode: agenttrace.ContentRedacted, MaxRequestOverride: agenttrace.ContentRedacted, StoreCap: agenttrace.ContentFull}
+	globals := agenttrace.ContentGlobals{Ceiling: agenttrace.ContentRedacted, DefaultMode: agenttrace.ContentRedacted, MaxRequestOverride: agenttrace.ContentRedacted, StoreCap: agenttrace.ContentFull}
 	p := agenttrace.NewContentProcessor(globals, func(uint, agenttrace.Resource) agenttrace.ContentOverrides { return agenttrace.ContentOverrides{} })
 	require.NotNil(t, p, "the Enterprise content pipeline is registered")
 	agenttrace.SetContentProcessor(p)

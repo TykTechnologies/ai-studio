@@ -99,6 +99,9 @@ type contentModer interface {
 // ContentGlobals are the install-wide content settings (spec §11): the hub's
 // configuration, which edges receive in the config snapshot.
 type ContentGlobals struct {
+	// Ceiling bounds every span's mode; DefaultMode applies to Apps without
+	// their own (jyx.172). An empty ceiling is off.
+	Ceiling            string
 	DefaultMode        string
 	MaxRequestOverride string
 	StoreCap           string

@@ -21,7 +21,7 @@ import (
 func TestAgentTraceCapture_EdgeCaptureHeaderOff(t *testing.T) {
 	baseURL, hub, _ := setupCaptureGateway(t)
 	p := agenttrace.NewContentProcessor(agenttrace.ContentGlobals{
-		DefaultMode: agenttrace.ContentFull, MaxRequestOverride: agenttrace.ContentFull, StoreCap: agenttrace.ContentFull,
+		Ceiling: agenttrace.ContentFull, DefaultMode: agenttrace.ContentFull, MaxRequestOverride: agenttrace.ContentFull, StoreCap: agenttrace.ContentFull,
 	}, func(uint, agenttrace.Resource) agenttrace.ContentOverrides { return agenttrace.ContentOverrides{} })
 	require.NotNil(t, p, "the Enterprise content pipeline is registered")
 	agenttrace.SetContentProcessor(p)

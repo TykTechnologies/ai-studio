@@ -145,7 +145,7 @@ func TestAgentTraceOverheadGate(t *testing.T) {
 
 	pipeline := func(mode string) agenttrace.ContentProcessor {
 		return agenttrace.NewContentProcessor(agenttrace.ContentGlobals{
-			DefaultMode: mode, MaxRequestOverride: mode, StoreCap: agenttrace.ContentFull,
+			Ceiling: mode, DefaultMode: mode, MaxRequestOverride: mode, StoreCap: agenttrace.ContentFull,
 			MaxPartBytes: 256 << 10, MaxSpanBytes: 1 << 20,
 		}, func(uint, agenttrace.Resource) agenttrace.ContentOverrides { return agenttrace.ContentOverrides{} })
 	}

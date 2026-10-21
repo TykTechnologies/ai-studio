@@ -2576,6 +2576,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 		if g, ok := agenttrace.EdgeContentGlobals(); ok {
 			snapshot.AgentTracingContentPolicy = &pb.AgentTracingContentPolicy{
+				Ceiling:            g.Ceiling,
 				DefaultMode:        g.DefaultMode,
 				MaxRequestOverride: g.MaxRequestOverride,
 				StoreCap:           g.StoreCap,

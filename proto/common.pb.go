@@ -2659,8 +2659,11 @@ type AgentTracingContentPolicy struct {
 	// assembled agent-trace spans under the gateway span id; edges then leave
 	// out their own live proxy span for captured requests (one call, one span).
 	AssembledExportActive bool `protobuf:"varint,8,opt,name=assembled_export_active,json=assembledExportActive,proto3" json:"assembled_export_active,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// ceiling is the highest content mode any App, request header or the
+	// default may reach (jyx.172). Missing (an older hub) is off.
+	Ceiling       string `protobuf:"bytes,9,opt,name=ceiling,proto3" json:"ceiling,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentTracingContentPolicy) Reset() {
@@ -2747,6 +2750,13 @@ func (x *AgentTracingContentPolicy) GetAssembledExportActive() bool {
 		return x.AssembledExportActive
 	}
 	return false
+}
+
+func (x *AgentTracingContentPolicy) GetCeiling() string {
+	if x != nil {
+		return x.Ceiling
+	}
+	return ""
 }
 
 // AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing
@@ -3401,7 +3411,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x10semantic_routers\x18\x0f \x03(\v2\".microgateway.SemanticRouterConfigR\x0fsemanticRouters\x12'\n" +
 	"\x0fomitted_entries\x18\x10 \x03(\tR\x0eomittedEntries\x12L\n" +
 	"\x12agent_tracing_keys\x18\x11 \x01(\v2\x1e.microgateway.AgentTracingKeysR\x10agentTracingKeys\x12h\n" +
-	"\x1cagent_tracing_content_policy\x18\x12 \x01(\v2'.microgateway.AgentTracingContentPolicyR\x19agentTracingContentPolicy\"\xe5\x02\n" +
+	"\x1cagent_tracing_content_policy\x18\x12 \x01(\v2'.microgateway.AgentTracingContentPolicyR\x19agentTracingContentPolicy\"\xff\x02\n" +
 	"\x19AgentTracingContentPolicy\x12!\n" +
 	"\fdefault_mode\x18\x01 \x01(\tR\vdefaultMode\x120\n" +
 	"\x14max_request_override\x18\x02 \x01(\tR\x12maxRequestOverride\x12\x1b\n" +
@@ -3410,7 +3420,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x0emax_span_bytes\x18\x05 \x01(\rR\fmaxSpanBytes\x12!\n" +
 	"\fstore_binary\x18\x06 \x01(\bR\vstoreBinary\x12/\n" +
 	"\x13redaction_detectors\x18\a \x03(\tR\x12redactionDetectors\x126\n" +
-	"\x17assembled_export_active\x18\b \x01(\bR\x15assembledExportActive\"W\n" +
+	"\x17assembled_export_active\x18\b \x01(\bR\x15assembledExportActive\x12\x18\n" +
+	"\aceiling\x18\t \x01(\tR\aceiling\"W\n" +
 	"\x10AgentTracingKeys\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\rR\x05keyId\x12,\n" +
 	"\x12hmac_key_encrypted\x18\x02 \x01(\tR\x10hmacKeyEncrypted\"\xb5\x04\n" +
