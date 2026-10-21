@@ -27,7 +27,8 @@ import (
 
 // historyKey is the conversation array of a format and the role value of
 // its assistant messages, as the segmenter reads them; "" when the format
-// is not trimmed.
+// is not trimmed. The Responses API (its own parser) is not: its input
+// items are typed by "type", and only some carry a role.
 func historyKey(format string) (key, assistant string) {
 	switch format {
 	case FormatOpenAI, FormatOllama, FormatAnthropic, FormatBedrock:
