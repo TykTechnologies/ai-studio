@@ -182,7 +182,7 @@ Stored content is compressed and sealed with AES-256-GCM. Each payload is bound 
 
 ## Configuration reference
 
-All variables are read at start-up. An invalid value keeps the default and logs a warning. Lists are comma-separated, and `none` means an empty list.
+All variables are read at start-up. An invalid value keeps the default and logs a warning, except that an invalid content mode (`AGENT_TRACING_CONTENT_CEILING`, `_CONTENT_DEFAULT_MODE`, `_CONTENT_MAX_REQUEST_OVERRIDE`, `_STORE_CONTENT_MODE_CAP`) is `off`. Lists are comma-separated, and `none` means an empty list.
 
 ### Studio (hub)
 

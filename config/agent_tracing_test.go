@@ -113,6 +113,30 @@ func TestAgentTracingConfigParse(t *testing.T) {
 			},
 		},
 		{
+			// jyx.180: a typo never falls back to a wider mode.
+			name: "invalid content modes are off",
+			env: map[string]string{"AGENT_TRACING_CONTENT_CEILING": "metdata", "AGENT_TRACING_CONTENT_DEFAULT_MODE": "metadata",
+				"AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE": "ful", "AGENT_TRACING_STORE_CONTENT_MODE_CAP": "everything"},
+			warnings: 4, // three invalid values, then the default clamped to the off ceiling
+			check: func(t *testing.T, c AgentTracingConfig) {
+				if c.ContentCeiling != "off" || c.EffectiveContentCeiling() != "off" || c.ContentDefaultMode != "off" ||
+					c.ContentMaxRequestOverride != "off" || c.StoreContentModeCap != "off" {
+					t.Fatalf("got ceiling %q default %q override %q cap %q", c.ContentCeiling, c.ContentDefaultMode,
+						c.ContentMaxRequestOverride, c.StoreContentModeCap)
+				}
+			},
+		},
+		{
+			name:     "invalid ceiling with a full request override stays off",
+			env:      map[string]string{"AGENT_TRACING_CONTENT_CEILING": "metdata", "AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE": "full"},
+			warnings: 1,
+			check: func(t *testing.T, c AgentTracingConfig) {
+				if c.EffectiveContentCeiling() != "off" {
+					t.Fatalf("effective ceiling %q", c.EffectiveContentCeiling())
+				}
+			},
+		},
+		{
 			name:     "content default above the ceiling is clamped",
 			env:      map[string]string{"AGENT_TRACING_CONTENT_CEILING": "metadata", "AGENT_TRACING_CONTENT_DEFAULT_MODE": "full"},
 			warnings: 1,

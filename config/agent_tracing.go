@@ -222,15 +222,17 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 	p.positiveInt64("AGENT_TRACING_QUEUE_MAX_BYTES", &cfg.QueueMaxBytes)
 	p.positiveInt("AGENT_TRACING_MAX_STREAM_BUFFER_BYTES", &cfg.MaxStreamBufferBytes)
 
-	p.enum("AGENT_TRACING_CONTENT_DEFAULT_MODE", &cfg.ContentDefaultMode, agentTracingContentModes...)
-	p.enum("AGENT_TRACING_CONTENT_CEILING", &cfg.ContentCeiling, agentTracingContentModes...)
+	// Content modes fail closed: an invalid value is off, never a default
+	// that may capture more (jyx.180).
+	p.contentMode("AGENT_TRACING_CONTENT_DEFAULT_MODE", &cfg.ContentDefaultMode)
+	p.contentMode("AGENT_TRACING_CONTENT_CEILING", &cfg.ContentCeiling)
 	if cfg.ContentCeiling != "" && AgentTracingContentModeRank(cfg.ContentDefaultMode) > AgentTracingContentModeRank(cfg.ContentCeiling) {
 		p.warn("AGENT_TRACING_CONTENT_DEFAULT_MODE (%s) is above AGENT_TRACING_CONTENT_CEILING (%s); using the ceiling",
 			cfg.ContentDefaultMode, cfg.ContentCeiling)
 		cfg.ContentDefaultMode = cfg.ContentCeiling
 	}
-	p.enum("AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE", &cfg.ContentMaxRequestOverride, agentTracingContentModes...)
-	p.enum("AGENT_TRACING_STORE_CONTENT_MODE_CAP", &cfg.StoreContentModeCap, agentTracingContentModes...)
+	p.contentMode("AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE", &cfg.ContentMaxRequestOverride)
+	p.contentMode("AGENT_TRACING_STORE_CONTENT_MODE_CAP", &cfg.StoreContentModeCap)
 	p.list("AGENT_TRACING_REDACTION_DETECTORS", &cfg.RedactionDetectors)
 
 	p.enum("AGENT_TRACING_PAYLOAD_BACKEND", &cfg.PayloadBackend, "db", "postgres", "filesystem")
@@ -414,6 +416,20 @@ func (p *atParser) enum(key string, dst *string, allowed ...string) {
 			}
 		}
 		p.warn("Invalid %s value %q (want one of %s); using default %s", key, v, strings.Join(allowed, ", "), *dst)
+	}
+}
+
+// contentMode reads a content mode. An invalid one is off, with a warning
+// naming it: unlike other settings it never falls back to a default that
+// could capture more.
+func (p *atParser) contentMode(key string, dst *string) {
+	if v, ok := p.get(key); ok {
+		v = strings.ToLower(v)
+		if AgentTracingContentModeRank(v) < 0 {
+			p.warn("Invalid %s value %q (want one of %s); using off", key, v, strings.Join(agentTracingContentModes, ", "))
+			v = "off"
+		}
+		*dst = v
 	}
 }
 

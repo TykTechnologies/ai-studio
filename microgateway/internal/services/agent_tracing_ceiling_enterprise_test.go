@@ -87,4 +87,12 @@ func TestEdgeContentCeilingMatrix(t *testing.T) {
 	})))
 	assert.Equal(t, "off", mode(2, "", "full"))
 	assert.Equal(t, "off", mode(1, "", ""))
+
+	// A ceiling the edge does not know (a typo, a newer mode) is off
+	// (jyx.180).
+	require.NoError(t, sync.SyncConfiguration(snap(&pb.AgentTracingContentPolicy{
+		Ceiling: "metdata", DefaultMode: "metadata", MaxRequestOverride: "full", StoreCap: "full",
+	})))
+	assert.Equal(t, "off", mode(2, "", "full"))
+	assert.Equal(t, "off", mode(1, "", "full"))
 }
