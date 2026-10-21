@@ -13,7 +13,7 @@ import { PermissionDeniedError } from "../utils/apiErrors";
 
 jest.mock("../services/agentTracingService", () => ({
   __esModule: true,
-  default: { listSessions: jest.fn() },
+  default: { listSessions: jest.fn(), getConfig: jest.fn() },
 }));
 jest.mock("../context/EditionContext");
 jest.mock("../hooks/useSystemFeatures");
@@ -91,6 +91,16 @@ describe("AgentSessions", () => {
     renderPage();
     expect(screen.getByText("Agent Call Tracing")).toBeInTheDocument();
     expect(agentTracingService.listSessions).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Capture settings" })).toBeNull();
+  });
+
+  // jyx.172: the install-wide capture settings open from the page header.
+  it("opens the capture settings from the header", async () => {
+    agentTracingService.getConfig.mockResolvedValue({ content_ceiling: "full", content_default_mode: "off" });
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Capture settings" }));
+    expect(await screen.findByRole("dialog", { name: "Content capture" })).toBeInTheDocument();
+    expect(agentTracingService.getConfig).toHaveBeenCalled();
   });
 
   it("says tracing is off when the feature is not running, without calling the API", () => {

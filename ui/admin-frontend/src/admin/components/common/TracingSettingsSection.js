@@ -232,7 +232,7 @@ export const AppTracingSection = ({ value, onChange, errors = {} }) => {
               onChange={set}
               emptyLabel="Inherit"
               disabled={readOnly}
-              helperText="What is captured of prompts, responses and tool data."
+              helperText="What is captured of prompts, responses and tool data, up to the global ceiling. Inherit uses the global default."
             />
           </Grid>
           <Grid item xs={12} md={6}>

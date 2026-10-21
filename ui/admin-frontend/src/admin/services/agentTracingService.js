@@ -27,6 +27,9 @@ const agentTracingService = {
     apiClient
       .get(`${BASE}/sessions/${sessionId}/export`, { params: { format, content: Boolean(content) }, responseType: "blob" })
       .then((r) => r.data),
+  // Install-wide tracing settings, read-only (environment variables), e.g.
+  // the content ceiling and default (jyx.172).
+  getConfig: () => apiClient.get(`${BASE}/config`).then((r) => r.data),
   search: (sessionId, q, limit) =>
     apiClient.post(`${BASE}/sessions/${sessionId}/search`, { q, ...(limit ? { limit } : {}) }).then((r) => r.data),
 };

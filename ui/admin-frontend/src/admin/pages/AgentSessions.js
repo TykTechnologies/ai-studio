@@ -25,6 +25,7 @@ import DateRangePicker from "../components/common/DateRangePicker";
 import EnterpriseFeatureBadge from "../components/common/EnterpriseFeatureBadge";
 import PermissionDeniedPanel from "../components/rbac/PermissionDeniedPanel";
 import CorrelationQualityBar from "../components/agent-tracing/CorrelationQualityBar";
+import CaptureSettingsDialog from "../components/agent-tracing/CaptureSettingsDialog";
 import {
   PAGE_SIZE,
   RANGES,
@@ -260,9 +261,16 @@ const AgentSessions = () => {
     [],
   );
 
+  const [captureOpen, setCaptureOpen] = useState(false);
   const title = (
     <TitleBox top="var(--studio-header-height)">
       <Typography variant="headingXLarge">Agent sessions</Typography>
+      {isEnterprise && tracingOn && (
+        <Button variant="outlined" onClick={() => setCaptureOpen(true)}>
+          Capture settings
+        </Button>
+      )}
+      <CaptureSettingsDialog open={captureOpen} onClose={() => setCaptureOpen(false)} />
     </TitleBox>
   );
 
