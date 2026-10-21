@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -61,19 +62,26 @@ const richConverse = `{"messages":[` +
 	`"additionalModelRequestFields":{"thinking":{"type":"enabled","budget_tokens":1024}},"inferenceConfig":{"maxTokens":64}}`
 
 type bedrockRecorder struct {
-	mu    sync.Mutex
-	path  string
-	body  []byte
-	auth  string
-	reply []byte
+	mu     sync.Mutex
+	path   string
+	body   []byte
+	auth   string
+	reply  []byte
+	status int // answer with this status and reply as JSON, when set
 }
 
 func (b *bedrockRecorder) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	b.mu.Lock()
 	b.path, b.body, b.auth = r.URL.Path, body, r.Header.Get("Authorization")
-	reply := b.reply
+	reply, status := b.reply, b.status
 	b.mu.Unlock()
+	if status != 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(reply)
+		return
+	}
 	w.Header().Set("Content-Type", "application/vnd.amazon.eventstream")
 	for i := 0; i < len(reply); i += 13 {
 		w.Write(reply[i:min(i+13, len(reply))])
@@ -136,6 +144,54 @@ func TestBedrockNativeStream_Lossless(t *testing.T) {
 	assert.Equal(t, "/model/anthropic.claude-3/converse-stream", rec.path)
 	assert.JSONEq(t, richConverse, string(rec.body))
 	assert.True(t, strings.HasPrefix(rec.auth, "AWS4-HMAC-SHA256 Credential=AKIDTEST/"), rec.auth)
+}
+
+// streamCompleteHook is a headerHook that also hands over what
+// OnStreamComplete gets.
+type streamCompleteHook struct {
+	headerHook
+	done chan *StreamCompleteRequest
+}
+
+func (h *streamCompleteHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	h.done <- req
+	return &StreamCompleteResponse{}, nil
+}
+
+// Response hooks run on the native Bedrock stream as on every other stream
+// (eac.83): the header phase sets headers (never the framing ones), the
+// frames still go out byte for byte, and OnStreamComplete gets them with
+// the client's request body. A vendor error gets the header phase too.
+func TestBedrockNativeStream_RunsResponseHooks(t *testing.T) {
+	rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}
+	h := bedrockHarness(t, rec)
+	hook := &streamCompleteHook{
+		headerHook: headerHook{set: map[string]string{"X-Tyk-Compression": "applied", "Content-Type": "text/plain"}},
+		done:       make(chan *StreamCompleteRequest, 1),
+	}
+	h.proxy.AddResponseHook(hook)
+
+	resp, body := h.postBedrock("/llm/stream/primary/model/anthropic.claude-3/converse-stream", richConverse)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	assert.Equal(t, rec.reply, body, "frames relayed byte for byte")
+	assert.Equal(t, "applied", resp.Header.Get("X-Tyk-Compression"))
+	assert.Equal(t, "application/vnd.amazon.eventstream", resp.Header.Get("Content-Type"))
+	select {
+	case got := <-hook.done:
+		assert.Equal(t, rec.reply, got.AccumulatedResponse)
+		assert.JSONEq(t, richConverse, string(got.RequestBody))
+		assert.Equal(t, http.StatusOK, got.StatusCode)
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnStreamComplete was not called")
+	}
+
+	rec.mu.Lock()
+	rec.status, rec.reply = http.StatusBadRequest, []byte(`{"message":"bad request"}`)
+	rec.mu.Unlock()
+	resp, body = h.postBedrock("/llm/stream/primary/model/anthropic.claude-3/converse-stream", richConverse)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode, string(body))
+	assert.JSONEq(t, `{"message":"bad request"}`, string(body))
+	assert.Equal(t, "applied", resp.Header.Get("X-Tyk-Compression"))
 }
 
 // The body's modelId (not a Converse field) names the model and is not
