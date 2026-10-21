@@ -489,7 +489,7 @@ A bad exporters file turns export off, not tracing.
 - A turn is exported once, after it closes and settles. Spans that arrive later are stored, not resent.
 - The exported LLM span carries the gateway span id the provider already saw as its parent.
 - While export runs, Studio and edge gateways leave out their own live proxy span for captured calls, so each call appears once.
-- An edge that sends its own OTel spans to a **different collector** than Studio's export (a regional backend, say) would then get nothing for captured calls. Set `AGENT_TRACING_KEEP_LIVE_SPAN=true` on that edge: it keeps its live span, under its own span id and with a link to the gateway span id the assembled span is exported under, carrying metadata only. Do not set it when the edge and Studio export to the same collector, or each call appears twice.
+- An edge that sends its own OTel spans to a **different collector** than Studio's export (a regional backend, say) would then get nothing for captured calls. Set `AGENT_TRACING_KEEP_LIVE_SPAN=true` on that edge: it keeps its live span, under its own span id and with a link to the gateway span id the assembled span is exported under, carrying metadata only. The kept span has no failover or fallback attributes; the assembled span carries those. Do not set it when the edge and Studio export to the same collector, or each call appears twice.
 
 **Content is never exported.** Export sends metadata only: `AGENT_TRACING_EXPORT_CONTENT` is `none`, and content export is Phase 2. Every attribute that can carry content is dropped. This covers the `gen_ai` message and tool content attributes, `tyk.error.body`, `http.*.body.content`, datasource queries and results, and plugin content.
 
