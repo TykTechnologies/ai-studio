@@ -17,7 +17,9 @@ import (
 type ToolResult struct {
 	// ID is the tool call id the result answers; empty where the format
 	// carries none (Gemini without ids, Ollama). R1 needs it.
-	ID   string
+	ID string
+	// Name is the called tool's, when the body names it. A result answering
+	// a call made before the model's last message may have none (jyx.57).
 	Name string
 	// ResultFP is nil without a Fingerprinter or when the result has no text.
 	ResultFP agenttrace.Fingerprint
@@ -73,15 +75,33 @@ func parseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Requ
 	if !segments.Supports(format) {
 		return Request{}, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
+	// Only the units after the last assistant message are returned, so the
+	// history before it need not be segmented (jyx.57). The trimmed body
+	// gives the same result when it still holds a non-assistant unit after
+	// that message; otherwise, or when it fails, the whole body is parsed.
+	if trimmed, ok := trimHistory(format, body); ok {
+		if r, settled, err := parseUnits(format, trimmed, fp); err == nil && settled {
+			return r, nil
+		}
+	}
+	r, _, err := parseUnits(format, body, fp)
+	return r, err
+}
+
+// parseUnits segments a supported body. settled reports a non-assistant
+// unit after the first message, which makes a trimmed body's result the
+// whole body's (trimHistory).
+func parseUnits(format string, body []byte, fp agenttrace.Fingerprinter) (Request, bool, error) {
 	// Tool definitions come in the same pass. A body whose definitions the
 	// segmenter refuses still yields its tool results.
 	all, err := segments.ExtractUnitsWith(format, body, segments.Options{ToolDefinitions: true})
 	if err != nil {
 		if all, err = segments.ExtractUnitsWith(format, body, segments.Options{}); err != nil {
-			return Request{}, err
+			return Request{}, false, err
 		}
 	}
 	var r Request
+	settled := false
 	units := all[:0:0]
 	for _, u := range all {
 		if u.IsToolDefinition() {
@@ -94,6 +114,9 @@ func parseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Requ
 	for _, u := range units {
 		if u.Role != guardrails.RoleAssistant && u.Turn > current {
 			current = u.Turn
+		}
+		if u.Role != guardrails.RoleAssistant && u.Message >= 1 && inHistory(format, u.Path) {
+			settled = true
 		}
 	}
 	if n := len(units); n > 0 {
@@ -125,7 +148,7 @@ func parseRequest(format string, body []byte, fp agenttrace.Fingerprinter) (Requ
 			format == FormatBedrock && bytes.Contains(body, []byte(`"status"`))) {
 		markErrors(body, msgs, r.ToolResults)
 	}
-	return r, nil
+	return r, settled, nil
 }
 
 // markErrors sets IsError from Anthropic tool_result is_error and Bedrock
