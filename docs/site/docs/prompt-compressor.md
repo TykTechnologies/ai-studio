@@ -126,6 +126,7 @@ The plugin has one configuration for every LLM it is attached to. Named **polici
 | `mask_after_turns` | `0` | Level 3 masks tool results older than this many turns; `0` turns masking off. Each masking step rewrites the cached prefix, so it pays where cached input is not much cheaper than input (OpenAI chat models with a 50% cache discount) and costs more than it saves where cache reads are very cheap (Anthropic, GPT-5). |
 | `mask_step_tokens` | `20000` | Level 3 moves the masking boundary only when it masks at least this many more tokens. |
 | `engine` | | An external engine (`name`, `kind` of `headroom` or `llmlingua2`, `timeout_ms`) for what levels 1 to 3 selected. |
+| `drop_tools` | `[]` | Tool definitions to remove from requests, by name or by a prefix ending in `*`, at any level. A token-cost setting, not an access control: see [Dropping tool definitions](#dropping-tool-definitions). |
 
 Token counts are estimates (UTF-8 bytes divided by 4), so they depend only on the text.
 
@@ -150,6 +151,18 @@ A level-3 policy can send what it selected to a Headroom (`POST /v1/compress`) o
 - The plugin refuses link-local addresses, including cloud metadata endpoints, after name resolution. Loopback and private addresses are allowed, for sidecars. Proxy settings are ignored and redirects are not followed.
 - The **Policies** page cannot change engine credentials. Edit them in the plugin's own configuration form, which needs plugin edit rights.
 
+### Dropping tool definitions
+
+Agents often send the definitions of many tools on every request and call only a few. A policy's `drop_tools` removes the definitions it names (`["legacy_*", "browser_screenshot"]`) from OpenAI Chat Completions, Responses, Anthropic, Google and Bedrock Converse requests, at any level. The dashboard's **Tool definitions** panel lists the tools each App offered but never called, and the **Policies** page suggests them.
+
+- A tool named by a tool call in the conversation, or by `tool_choice`, is kept, and a list that would remove every tool while the conversation holds tool calls is ignored, so a request never becomes invalid.
+- The kept definitions, and the rest of the body, are sent byte for byte.
+- Changing the list changes the tools every App on the policy sends, so each of their sessions misses the prompt cache once. Bind a separate policy to an App to change only that App.
+
+::: warning drop_tools is not an access control
+It saves tokens; it cannot keep a tool from a model. The client decides whether a tool survives: by naming it in its own conversation history or in `tool_choice`, by sending `X-Tyk-Compression: off` while `allow_client_bypass` is on (the default), and whenever a request passes through uncompressed (`audit` mode, an App whose metadata is not known yet, a body over `max_body_bytes`, any error). To keep a tool away from a model, don't give the App access to it, or block its calls with a [filter](/docs/filters) or a [guardrail](/docs/guardrails) on tool calls.
+:::
+
 ## Headers
 
 | Header | Direction | Meaning |
@@ -169,7 +182,7 @@ The plugin adds a **Prompt Compressor** section to the admin sidebar. Each page 
 |---|---|---|
 | Savings | Compression savings: read | The dashboard. |
 | Policies | Compression policies: read, write | Edit the mode, the policies and their bindings. Validates before saving and warns that a change makes every affected session miss the prompt cache once. Edge gateways apply the change after the next configuration push. |
-| Preview | Compression preview: execute | Paste or upload a request body or a tool output, pick a policy, and see the output with every change marked and each strategy's decision. Nothing is stored and no engine is called. |
+| Preview | Compression preview: execute | Paste or upload a request body or a tool output, pick a policy, and see the output with every change marked, each strategy's decision, and which tool definitions `drop_tools` removed or kept and why. Nothing is stored and no engine is called. |
 
 ### The savings dashboard
 
@@ -182,6 +195,7 @@ The dashboard shows, for a range from 24 hours to 90 days and optionally one App
 - **Cost saved, cache-adjusted.** Saved tokens priced at the cache-read price in proportion to the cache-read share. Real savings lie between the two figures.
 - **Cache-read share**: cache reads as a share of prompt tokens, over time, with a marker at every policy change.
 - A **cache-drop warning** when the cache-read share falls by more than `cache_drop_alert` within an hour of a policy change.
+- **Tool definitions**, per App: the tokens tool definitions take and their share of prompt tokens, how many tool-list versions were sent (each change misses the cache once), the tools offered but never called, and what dropping those would have saved at the input and cache-read price.
 - Savings by strategy, requests not compressed by reason, and the latency the plugin added.
 
 ## Prompt caching

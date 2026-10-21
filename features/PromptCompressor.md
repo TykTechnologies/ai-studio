@@ -140,6 +140,28 @@ manifest's `rbac.rpc_methods`, which the host enforces
   engine is called; inputs are not stored or logged. Traces carry unit text,
   so they never go into records or logs.
 
+## 4a. Tool definitions (eac.39, eac.40)
+
+- Edge records carry per request the tool definitions offered (count,
+  bytes/4 tokens, list hash, per-tool tokens) and the tool names the model
+  called; only names the request offered count as called (eac.71), others
+  fold into "other". Names are shape-checked and capped (64 per row, 8
+  list versions). `getSavings` returns a per-App `tools` section: definition
+  tokens and share, never-called tools and the estimated saving at input
+  and cache-read price. Dashboard panel `pc-tools`.
+- A policy's `drop_tools` (names or `prefix*`, at most 256) removes those
+  definitions by byte span. Kept regardless: tools named by a tool call in
+  the history or by `tool_choice`, and the whole array when the list would
+  empty it while the history holds tool calls. The preview reports each
+  tool's decision; the Policies page suggests never-called tools and warns
+  about the one-off cache miss.
+- **Not an access control (eac.75).** The client writes the history and
+  `tool_choice`, can send the bypass header (`allow_client_bypass` defaults
+  to true), and every pass-through keeps the full list. The docs page, the
+  README and the Policies page say so and point to App tool access, filters
+  and guardrails. Whether bypass should default to false is open (lead /
+  Martin).
+
 ## 5. Core changes made for this plugin
 
 - `pkg/requestformat`: exported request-format resolver (eac.8).
