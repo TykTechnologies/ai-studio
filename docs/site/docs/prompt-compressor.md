@@ -238,6 +238,10 @@ Level 1 is lossless and is the default policy level, on correctness tests, a cos
 - SWE-bench Verified, 200 tasks with 3 seeds each, within 5 points, with no more than 10% more turns per task;
 - cost, including the effect on caching.
 
-Results pending eac.24: the evaluation of off, level 1 and level 2 on these workloads will be published here.
+The [evaluation report](https://github.com/TykTechnologies/ai-studio-community-plugins/blob/main/plugins/prompt-compressor/docs/eval-levels-1-2.md) has the offline and end-to-end results:
+
+- **Level 1** passes its gate and stays the default. It cuts session cost by 0.4%, and output is byte-exact end to end.
+- **Level 2** cuts the cost of a 30-turn agent session by 11.4%, including cache effects, with no cache breaks. It stays opt-in until the quality suites above have run.
+- **Level 3's `mask_after_turns`** pays only on OpenAI Chat pricing.
 
 Before enforcing level 2 or 3, run it in `audit` mode first and compare the dashboard with your own quality signals.
