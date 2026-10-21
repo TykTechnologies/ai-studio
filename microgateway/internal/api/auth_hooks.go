@@ -10,13 +10,13 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
@@ -568,7 +568,7 @@ func isEmptySlice(v interface{}) bool {
 }
 
 func generateRequestID() string {
-	return "req_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	return requestid.New()
 }
 
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {

@@ -1416,12 +1416,15 @@ TABLE proxy_logs
   column `acting_agent` text
   column `request_kind` text DEFAULT ""
   column `service_tier` text
+  column `request_id` text
+  column `client_request_id` text
   index CREATE INDEX `idx_proxy_logs_app_code_time` ON `proxy_logs`(`app_id`,`response_code`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_app_time` ON `proxy_logs`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_code` ON `proxy_logs`(`response_code`)
   index CREATE INDEX `idx_proxy_logs_deleted_at` ON `proxy_logs`(`deleted_at`)
   index CREATE INDEX `idx_proxy_logs_failover_from` ON `proxy_logs`(`failover_from_llm_id`)
   index CREATE INDEX `idx_proxy_logs_llm_time` ON `proxy_logs`(`llm_id`,`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_request_id` ON `proxy_logs`(`request_id`)
   index CREATE INDEX `idx_proxy_logs_request_kind` ON `proxy_logs`(`request_kind`)
   index CREATE INDEX `idx_proxy_logs_router` ON `proxy_logs`(`router_slug`)
   index CREATE INDEX `idx_proxy_logs_time` ON `proxy_logs`(`time_stamp`)

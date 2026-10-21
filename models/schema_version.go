@@ -45,7 +45,9 @@ const (
 	// 12: mcp_call_records (new table, additive): MCP analytics from Tyk Pump.
 	// 13: tyk_connection_ingests and tyk_ingest_stats (new tables, additive):
 	//     the analytics ingest token (hash only) and hourly counters.
-	SchemaVersion          = 13
+	// 14: proxy_logs request_id (indexed) and client_request_id (nullable,
+	//     additive): the gateway's request id (pkg/requestid) and the caller's.
+	SchemaVersion          = 14
 	MinReaderSchemaVersion = 1
 )
 

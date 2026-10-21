@@ -264,7 +264,8 @@ func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFu
 	p := NewProxy(service, &Config{Port: h.port}, budgetSvc)
 	require.NoError(t, p.loadResources())
 	h.proxy = p
-	srv := &http.Server{Handler: p.createHandler()}
+	// Handler, as Studio and the Microgateway mount it (request ids included).
+	srv := &http.Server{Handler: p.Handler()}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
 		// Shutdown (not Close) waits for in-flight handlers. A streaming inner

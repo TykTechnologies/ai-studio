@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -197,7 +198,8 @@ func runResponseFilters(
 		Context: map[string]interface{}{
 			"llm_id":          int64(llm.ID),
 			"app_id":          appID,
-			"request_id":      filterRequestID(r),
+			"request_id":        filterRequestID(r),
+			"client_request_id": requestid.ClientFromContext(r.Context()),
 			"dont_log_bodies": llm.DontLogBodies,
 		},
 		IsChat:        false,

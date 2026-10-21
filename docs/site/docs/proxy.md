@@ -285,6 +285,27 @@ The Developer Portal reads the **hub's** value when it advertises the Main Ingre
 
 The `{llmSlug}` in the endpoint path is automatically generated from the LLM configuration name when you create it. For example, an LLM named "My OpenAI Config" would have a slug like `my-openai-config`.
 
+## Request IDs
+
+Every request through the gateway (AI Studio's and every Microgateway's) gets an id of its own, returned in the **`X-Tyk-AI-Request-ID`** response header, for example `X-Tyk-AI-Request-ID: tyai_0192d8a4f6b37c1e9a5b2d4c6e8f0a1b`.
+
+- **One id per request.** The `/ai/` and `/anthropic/` bridges route through the gateway's own `/llm/call/` hop, and a failover waterfall makes one attempt per rung; all of them carry the id the client was answered with.
+- **No collisions.** The id is `tyai_` followed by a UUIDv7 (time-ordered, 74 random bits), so ids from different edges and Studio replicas never collide, and the prefix tells them apart from other systems' ids in shared logs.
+- **Your `X-Request-ID` is left alone.** The gateway never sets or overwrites `X-Request-ID`, which belongs to the caller and to proxies in front of the gateway. When a request carries one, it is recorded beside the gateway's id as the *client request id* (up to 128 characters of letters, digits and `- _ . : /`).
+- **A client cannot choose the gateway's id.** An `X-Tyk-AI-Request-ID` sent by a client is ignored.
+
+Where the id appears:
+
+| Where | Field |
+|---|---|
+| Request logs (App and LLM pages, `GET /api/v1/analytics/proxy-logs-for-app`) | `request_id`, `client_request_id`; the log search matches either exactly |
+| Guardrail and filter compliance events | `request_id`, `client_request_id` in the metadata; **Open the request log** in the event's details |
+| HTTP guardrail classifiers | `meta.request_id` in the classify request |
+| Plugins and hooks | the `request_id` value of the request context, `PluginContext.RequestID` |
+| Analytics plugins on edges | `gateway_request_id`, `client_request_id` on `AnalyticsData` (`request_id` there is the analytics row's own key) |
+
+Requests that produce no usage (a policy block, a vendor or gateway error) are request log rows too, from edges as well as from AI Studio's gateway: an edge sends them to AI Studio on the analytics pulse marked `no_usage`, and AI Studio records them without a chat record or spend.
+
 ## Configuration & Security
 
 The behavior of the Proxy for a specific route is determined by the corresponding [LLM Configuration](./llm-management.md), which includes details about the backend vendor, model access, budget limits, and associated filters.

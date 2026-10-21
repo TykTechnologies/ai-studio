@@ -35907,6 +35907,9 @@ const docTemplate = `{
                 "app_id": {
                     "type": "integer"
                 },
+                "client_request_id": {
+                    "type": "string"
+                },
                 "failover_attempt": {
                     "type": "integer"
                 },
@@ -35923,6 +35926,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "request_body": {
+                    "type": "string"
+                },
+                "request_id": {
                     "type": "string"
                 },
                 "response_body": {

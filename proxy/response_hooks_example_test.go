@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 )
 
 func TestNewExampleResponseHook(t *testing.T) {
@@ -34,7 +36,7 @@ func TestExampleResponseHook_OnBeforeWriteHeaders(t *testing.T) {
 		assert.True(t, resp.Modified)
 		assert.Equal(t, "v2.0", resp.Headers["X-Gateway-Version"])
 		assert.Equal(t, "my-hook", resp.Headers["X-Hook-Applied"])
-		assert.Equal(t, "req-123", resp.Headers["X-Request-ID"])
+		assert.Equal(t, "req-123", resp.Headers[requestid.Header])
 		assert.Equal(t, "application/json", resp.Headers["Content-Type"]) // Original preserved
 	})
 }
