@@ -316,6 +316,10 @@ type Plugin struct {
 	HookTypesCustomized bool           `gorm:"default:false" json:"hook_types_customized"`          // True if user overrode manifest hooks
 	IsActive            bool           `gorm:"index:idx_plugins_is_active" json:"is_active"`
 	ServiceScopes       JSON `gorm:"type:json" json:"service_scopes"`                     // Service API scopes (e.g., ["llms.read", "apps.read"])
+	// ConfigSecretsEncrypted holds the values of Config's top-level $SECRET/
+	// references, by key, encrypted as the hub sent them; they are decrypted
+	// only for the plugin's Initialize config, never echoed.
+	ConfigSecretsEncrypted JSON `gorm:"type:json" json:"-"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
 	DeletedAt           gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`

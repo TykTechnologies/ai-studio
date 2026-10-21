@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -60,7 +61,9 @@ func Serve(userPlugin Plugin) {
 			"plugin": &grpcPluginImpl{wrapper: wrapper},
 			"config": &configPluginImpl{wrapper: wrapper},
 		},
-		GRPCServer: goplugin.DefaultGRPCServer,
+		// Not goplugin.DefaultGRPCServer: that keeps gRPC's 4 MiB receive
+		// limit, which large request bodies exceed.
+		GRPCServer: pluginlimits.GRPCServer,
 		Logger:     pluginLogger,
 	})
 }

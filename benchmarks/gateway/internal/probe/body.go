@@ -16,6 +16,9 @@ type BodySpec struct {
 	// whose answer reliably runs to max_tokens, so output length (and with it
 	// total time) is the same in both arms.
 	Prompt string `yaml:"prompt" json:"prompt,omitempty"`
+	// Agent, when set, replaces the prompt with an agent conversation whose
+	// tool results are noisy shell output (agent.go).
+	Agent *AgentSpec `yaml:"agent" json:"agent,omitempty"`
 	// Extra is merged into the top level of the body last. A null value
 	// deletes a key, e.g. {max_tokens: null, max_completion_tokens: 512,
 	// reasoning_effort: none} for OpenAI reasoning models.
@@ -43,6 +46,9 @@ func (b BodySpec) Build() Request {
 		"model":      b.Model,
 		"messages":   messages,
 		"max_tokens": maxTokens,
+	}
+	if b.Agent != nil {
+		body["messages"] = b.Agent.messages()
 	}
 	if b.Stream {
 		body["stream"] = true

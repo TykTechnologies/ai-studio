@@ -860,6 +860,12 @@ func shouldEvaluateChunk(input *ScriptInput, every int) bool {
 	return cur/every > prev/every
 }
 
+// segmentedForGuardrails reports whether guardrails read a proxy request in
+// format through guardrails/segments.
+func segmentedForGuardrails(format string) bool {
+	return segments.Supports(format) && !strings.EqualFold(format, segments.FormatOpenAIResponses)
+}
+
 // buildSegments picks the text the provider sees.
 func buildSegments(input *ScriptInput, cfg guardrails.Config) selection {
 	if input.IsResponse {
@@ -883,9 +889,15 @@ func buildSegments(input *ScriptInput, cfg guardrails.Config) selection {
 
 	// Proxy requests: read the body block by block, unless the format has
 	// its own extractor that found the text (decisions, Responses,
-	// embeddings), whose reconstructor writes a rewrite back.
-	if input.Format != "" && (segments.Supports(input.Format) || !anyMessageText(input.Messages)) {
-		units, err := segments.ReadWith(input.Format, []byte(input.RawInput), segments.Options{ToolCalls: cfg.ScansToolCalls(), ToolDefinitions: cfg.ScansToolDefinitions()})
+	// embeddings), whose reconstructor writes a rewrite back. Responses
+	// has a segmenter too (for body rewriters), but its guardrails keep
+	// the extractor, which refuses item types it does not know.
+	if input.Format != "" && (segmentedForGuardrails(input.Format) || !anyMessageText(input.Messages)) {
+		format := input.Format
+		if !segmentedForGuardrails(format) {
+			format = "" // no text found by the extractor: read every string, as Generic
+		}
+		units, err := segments.ReadWith(format, []byte(input.RawInput), segments.Options{ToolCalls: cfg.ScansToolCalls(), ToolDefinitions: cfg.ScansToolDefinitions()})
 		switch {
 		case errors.Is(err, segments.ErrDuplicateKey):
 			return selection{refuse: err}

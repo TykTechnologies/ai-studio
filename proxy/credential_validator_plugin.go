@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	"github.com/rs/zerolog/log"
 )
 
@@ -61,6 +62,14 @@ func (cv *CredentialValidator) pluginAuth(w http.ResponseWriter, r *http.Request
 	}
 
 	result, err := cv.authHooks.CustomAuth(r, target, credential, credType)
+	if pluginlimits.IsRequestTooLarge(err) {
+		log.Warn().Err(err).
+			Str("target_kind", target.Kind).
+			Str("target_slug", target.Slug).
+			Msg("Request too large for the auth plugins; refusing the request")
+		respondWithError(w, http.StatusRequestEntityTooLarge, pluginlimits.ClientMessage(err), nil, false)
+		return true
+	}
 	if err != nil {
 		log.Warn().Err(err).
 			Str("target_kind", target.Kind).

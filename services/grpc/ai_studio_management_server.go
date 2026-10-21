@@ -17,7 +17,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/google/uuid"
-	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1071,7 +1070,7 @@ func (s *AIStudioManagementServer) CallLLM(req *pb.CallLLMRequest, stream pb.AIS
 	}
 
 	// Generate slug from LLM name
-	llmSlug := slug.Make(llm.Name)
+	llmSlug := models.LLMRouteSlug(llm.Name)
 
 	// Build OpenAI-compatible request body from proto request
 	requestBody := map[string]interface{}{

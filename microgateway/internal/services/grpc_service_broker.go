@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -39,6 +40,9 @@ type MicrogatewayManagementServer struct {
 	cryptoService         CryptoServiceInterface
 	controlPayloadQueue   ControlPayloadQueueInterface
 	licensingService      LicensingServiceInterface
+	// storeRequestBodies is ANALYTICS_STORE_REQUESTS: whether this gateway
+	// keeps request bodies at all (LLMInfo.stores_request_bodies).
+	storeRequestBodies bool
 }
 
 // NewMicrogatewayManagementServer creates a new service broker server
@@ -61,6 +65,12 @@ func NewMicrogatewayManagementServer(
 // SetControlPayloadQueue sets the control payload queue for edge-to-control communication
 func (s *MicrogatewayManagementServer) SetControlPayloadQueue(queue ControlPayloadQueueInterface) {
 	s.controlPayloadQueue = queue
+}
+
+// SetStoreRequestBodies says whether the gateway keeps request bodies
+// (ANALYTICS_STORE_REQUESTS), which LLMInfo reports to plugins.
+func (s *MicrogatewayManagementServer) SetStoreRequestBodies(store bool) {
+	s.storeRequestBodies = store
 }
 
 // SetLicensingService sets the licensing service for license info queries
@@ -753,23 +763,36 @@ func (s *MicrogatewayManagementServer) convertLLMToPB(llm *database.LLM) *pb.LLM
 		monthlyBudget = &llm.MonthlyBudget
 	}
 
+	// The same test as models.LLM.HasRequestFilters, which the proxy uses
+	hasRequestFilters := false
+	for _, f := range llm.Filters {
+		if !f.ResponseFilter {
+			hasRequestFilters = true
+			break
+		}
+	}
+
 	return &pb.LLMInfo{
-		Id:             uint32(llm.ID),
-		Name:           llm.Name,
-		Vendor:         llm.Vendor,
-		Slug:           llm.Slug,
-		Endpoint:       llm.Endpoint,
-		HasApiKey:      llm.APIKeyEncrypted != "",
-		DefaultModel:   llm.DefaultModel,
-		AllowedModels:  allowedModels,
-		IsActive:       llm.IsActive,
-		MaxTokens:      int32(llm.MaxTokens),
-		TimeoutSeconds: int32(llm.TimeoutSeconds),
-		RetryCount:     int32(llm.RetryCount),
-		MonthlyBudget:  monthlyBudget,
-		RateLimitRpm:   int32(llm.RateLimitRPM),
-		CreatedAt:      timestamppb.New(llm.CreatedAt),
-		UpdatedAt:      timestamppb.New(llm.UpdatedAt),
+		Id:                uint32(llm.ID),
+		Name:              llm.Name,
+		Vendor:            llm.Vendor,
+		Slug:              llm.Slug,
+		Endpoint:          llm.Endpoint,
+		HasApiKey:         llm.APIKeyEncrypted != "",
+		DefaultModel:      llm.DefaultModel,
+		AllowedModels:     allowedModels,
+		IsActive:          llm.IsActive,
+		MaxTokens:         int32(llm.MaxTokens),
+		TimeoutSeconds:    int32(llm.TimeoutSeconds),
+		RetryCount:        int32(llm.RetryCount),
+		MonthlyBudget:     monthlyBudget,
+		RateLimitRpm:      int32(llm.RateLimitRPM),
+		CreatedAt:         timestamppb.New(llm.CreatedAt),
+		UpdatedAt:         timestamppb.New(llm.UpdatedAt),
+		HasRequestFilters: proto.Bool(hasRequestFilters),
+		// Bodies are kept only when the gateway stores them and the LLM
+		// does not opt out, as in the analytics handler.
+		StoresRequestBodies: proto.Bool(s.storeRequestBodies && !llm.DontLogBodies),
 	}
 }
 

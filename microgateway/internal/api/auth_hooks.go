@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
@@ -113,8 +115,14 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 				headers[key] = values[0]
 			}
 		}
+		sentHeaders := maps.Clone(headers)
 
-		bodyBytes, _ := readBodyWithoutConsuming(r)
+		bodyBytes, err := readBodyWithoutConsuming(r)
+		if pluginlimits.IsRequestTooLarge(err) {
+			log.Warn().Err(err).Str("llm_slug", llmSlug).Msg("Request body over the plugin limit; refusing it before the pre-auth plugins")
+			respondPluginChainError(w, err)
+			return true
+		}
 
 		// Create plugin request matching interfaces.PluginRequest structure
 		pluginReq := &interfaces.PluginRequest{
@@ -130,7 +138,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		result, err := pluginManager.ExecutePluginChain(llmID, "pre_auth", pluginReq, pluginCtx)
 		if err != nil {
 			log.Error().Err(err).Msg("Pre-auth plugin chain failed")
-			respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
+			respondPluginChainError(w, err)
 			return true
 		}
 
@@ -144,9 +152,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 			// Apply modifications if the plugin modified the request
 			if pluginResp.Modified {
 				// Apply header modifications
-				for key, value := range pluginResp.Headers {
-					r.Header.Set(key, value)
-				}
+				applyPluginHeaders(r.Header, sentHeaders, pluginResp.Headers)
 				// Apply body modifications
 				if len(pluginResp.Body) > 0 {
 					r.Body = io.NopCloser(bytes.NewReader(pluginResp.Body))
@@ -251,7 +257,11 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 			headers[key] = values[0]
 		}
 	}
-	bodyBytes, _ := readBodyWithoutConsuming(r)
+	bodyBytes, err := readBodyWithoutConsuming(r)
+	if pluginlimits.IsRequestTooLarge(err) {
+		// The proxy answers 413; no auth plugin could be sent the body.
+		return proxy.AuthResult{}, err
+	}
 	authReq := &interfaces.AuthRequest{
 		Credential: credential,
 		AuthType:   credType,
@@ -267,10 +277,14 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 
 	answered := false
 	reason := ""
+	var tooLarge error
 	for _, lp := range loaded {
 		resp, err := a.plugins.CallAuth(lp, authReq, pluginCtx)
 		if err != nil {
 			log.Warn().Err(err).Uint("plugin_id", lp.ID).Str("plugin_name", lp.Name).Msg("Auth plugin failed; trying the next")
+			if pluginlimits.IsRequestTooLarge(err) && tooLarge == nil {
+				tooLarge = err
+			}
 			continue
 		}
 		answered = true
@@ -301,6 +315,10 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 		}, nil
 	}
 	if !answered {
+		if tooLarge != nil {
+			// Not "retry shortly": the same request fails the same way.
+			return proxy.AuthResult{}, tooLarge
+		}
 		return proxy.AuthResult{}, fmt.Errorf("no auth plugin on %s %q answered", target.Kind, target.Slug)
 	}
 	return proxy.AuthResult{Outcome: proxy.AuthRejected, Reason: reason}, nil
@@ -311,7 +329,13 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 // ===================================
 // Executes AFTER successful authentication, HAS access to authenticated user/app data
 
-func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
+// postAuthChain is what the post-auth hook needs from the plugin manager.
+type postAuthChain interface {
+	GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*plugins.LoadedPlugin, error)
+	ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
+}
+
+func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager postAuthChain, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
 	return func(w http.ResponseWriter, r *http.Request, appID uint) bool {
 		// Only for LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -388,8 +412,14 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 				headers[key] = values[0]
 			}
 		}
+		sentHeaders := maps.Clone(headers)
 
-		bodyBytes, _ := readBodyWithoutConsuming(r)
+		bodyBytes, err := readBodyWithoutConsuming(r)
+		if pluginlimits.IsRequestTooLarge(err) {
+			log.Warn().Err(err).Str("llm_slug", llmSlug).Msg("Request body over the plugin limit; refusing it before the post-auth plugins")
+			respondPluginChainError(w, err)
+			return true
+		}
 
 		// Who authenticated the request, and how (proxy.AuthIdentity). The
 		// subject is set when an auth plugin said who the call is for.
@@ -426,7 +456,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		result, err := pluginManager.ExecutePluginChain(llmID, "post_auth", enrichedReq, pluginCtx)
 		if err != nil {
 			log.Error().Err(err).Msg("Post-auth plugin chain failed")
-			respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
+			respondPluginChainError(w, err)
 			return true
 		}
 
@@ -440,9 +470,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			// Apply modifications if the plugin modified the request
 			if pluginResp.Modified {
 				// Apply header modifications
-				for key, value := range pluginResp.Headers {
-					r.Header.Set(key, value)
-				}
+				applyPluginHeaders(r.Header, sentHeaders, pluginResp.Headers)
 				// Apply body modifications
 				if len(pluginResp.Body) > 0 {
 					r.Body = io.NopCloser(bytes.NewReader(pluginResp.Body))
@@ -466,10 +494,9 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			// Handle EnrichedRequest from post-auth chain (new behavior for chained plugins)
 			// Apply modifications from the plugin chain
 			if modifiedEnrichedReq.PluginRequest != nil {
-				// Apply header modifications
-				for key, value := range modifiedEnrichedReq.PluginRequest.Headers {
-					r.Header.Set(key, value)
-				}
+				// Apply header modifications. The chain hands back the
+				// request even when no plugin changed it.
+				applyPluginHeaders(r.Header, sentHeaders, modifiedEnrichedReq.PluginRequest.Headers)
 				// Apply body modifications
 				if len(modifiedEnrichedReq.PluginRequest.Body) > 0 {
 					r.Body = io.NopCloser(bytes.NewReader(modifiedEnrichedReq.PluginRequest.Body))
@@ -548,6 +575,24 @@ func (l *hookLLMLookup) get(slug string) (interface{}, error) {
 	return database.DeepCopy(llm), nil
 }
 
+// applyPluginHeaders sets the request headers a plugin changed. Plugins are
+// sent only the first value of each header and hand a map back, so setting
+// every key it holds would drop the later values of a repeated header
+// (anthropic-beta, Accept). A key whose value is the one the plugin was sent
+// is left alone; a changed or new key replaces all of that header's values.
+func applyPluginHeaders(h http.Header, sent, returned map[string]string) {
+	for key, value := range returned {
+		old, ok := sent[key]
+		if !ok {
+			old, ok = sent[http.CanonicalHeaderKey(key)]
+		}
+		if ok && old == value {
+			continue
+		}
+		h.Set(key, value)
+	}
+}
+
 func extractLLMSlugFromPath(path string) string {
 	// /llm/{mode}/{slug}/...
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
@@ -571,16 +616,37 @@ func generateRequestID() string {
 	return requestid.New()
 }
 
+// readBodyWithoutConsuming reads the body for the plugins and puts it back.
+// A body over pluginlimits.MaxMsgBytes is ErrRequestTooLarge: no plugin could
+// be sent it, and reading it whole would let one request hold that much
+// memory on the edge several times over (edge, gRPC, plugin).
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return nil, nil
 	}
-	bodyBytes, err := io.ReadAll(r.Body)
+	limit := int64(pluginlimits.MaxMsgBytes())
+	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
 	if err != nil {
 		return nil, err
 	}
+	if int64(len(bodyBytes)) > limit {
+		return nil, fmt.Errorf("request body over %d bytes: %w", limit, pluginlimits.ErrRequestTooLarge)
+	}
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	return bodyBytes, nil
+}
+
+// respondPluginChainError answers a request whose pre- or post-auth plugin
+// chain failed. A request too large for a plugin (over the host's limit, or
+// refused by a plugin built on an SDK before 2.3, which accepts 4 MiB) is a
+// 413; anything else is a 500. Either way the request is not forwarded. The
+// client is not told which plugin; the log says.
+func respondPluginChainError(w http.ResponseWriter, err error) {
+	if pluginlimits.IsRequestTooLarge(err) {
+		respondWithError(w, http.StatusRequestEntityTooLarge, pluginlimits.ClientMessage(err), nil)
+		return
+	}
+	respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
 }
 
 func respondWithError(w http.ResponseWriter, statusCode int, message string, err error) {

@@ -87,6 +87,17 @@ func (l *LLM) Get(db *gorm.DB, id uint) error {
 	return withFilterOrder(db, db.Preload("Filters").Preload("Plugins").First(l, id).Error, l)
 }
 
+// HasRequestFilters reports whether at least one request-side filter (a
+// script or a guardrail) is attached. Filters must be loaded.
+func (l *LLM) HasRequestFilters() bool {
+	for _, f := range l.Filters {
+		if f != nil && !f.ResponseFilter {
+			return true
+		}
+	}
+	return false
+}
+
 // BeforeSave refuses a name whose slug another LLM already has
 // (*SlugConflictError), when the LLM itself is created or saved.
 func (l *LLM) BeforeSave(tx *gorm.DB) error {

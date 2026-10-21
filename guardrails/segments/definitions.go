@@ -74,6 +74,11 @@ func (x *extraction) definitions(format string, root *node) error {
 				x.definition(d, arr, j, x.str(d.get("name")))
 			}
 		}
+	case FormatOpenAIResponses:
+		if err := x.strict(root, "", "tools"); err != nil {
+			return err
+		}
+		x.responsesDefinitions(root)
 	case FormatBedrock:
 		if root.get("anthropic_version") != nil {
 			return x.definitions(FormatAnthropic, root)
@@ -103,14 +108,18 @@ func ResponsesToolDefinitions(body []byte) ([]Unit, error) {
 	}
 	x := newExtraction(body)
 	x.opts.ToolDefinitions = true
+	x.responsesDefinitions(root)
+	x.finish()
+	return x.result(), nil
+}
+
+func (x *extraction) responsesDefinitions(root *node) {
 	for i, t := range root.get("tools").elems() {
 		switch x.str(t.get("type")) {
 		case "function", "custom":
 			x.definition(t, "/tools", i, x.str(t.get("name")))
 		}
 	}
-	x.finish()
-	return x.result(), nil
 }
 
 // RemovalEdits are the edits that drop the definition units from their

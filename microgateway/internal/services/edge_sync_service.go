@@ -984,6 +984,15 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig, l
 			}
 		}
 
+		// Config secret values stay encrypted at rest.
+		if len(pbPlugin.ConfigSecretsEncrypted) > 0 {
+			secretsJSON, err := json.Marshal(pbPlugin.ConfigSecretsEncrypted)
+			if err != nil {
+				return fmt.Errorf("failed to encode Plugin %d config secrets: %w", pbPlugin.Id, err)
+			}
+			plugin.ConfigSecretsEncrypted = database.JSON(secretsJSON)
+		}
+
 		if err := tx.Create(plugin).Error; err != nil {
 			return fmt.Errorf("failed to insert Plugin %d: %w", pbPlugin.Id, err)
 		}

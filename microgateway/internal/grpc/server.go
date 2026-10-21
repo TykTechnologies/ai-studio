@@ -1265,6 +1265,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
 			LlmIds:      llmIDs, // Which LLMs use this plugin
 		}
+		// Passed on still encrypted, like LLM API keys.
+		if len(plugin.ConfigSecretsEncrypted) > 0 {
+			var configSecrets map[string]string
+			if err := json.Unmarshal([]byte(plugin.ConfigSecretsEncrypted), &configSecrets); err == nil {
+				snapshot.Plugins[i].ConfigSecretsEncrypted = configSecrets
+			}
+		}
 
 		log.Debug().
 			Uint("plugin_id", plugin.ID).

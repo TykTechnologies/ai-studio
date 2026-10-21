@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -33,6 +34,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
+	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -1229,6 +1232,89 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// responsePluginContext is the plugin context of a response hook. LLMSlug is
+// the LLM's route slug, as post_auth plugins get it, so a plugin can match
+// the two phases of one request.
+func responsePluginContext(requestID string, r *http.Request, llm *models.LLM, app *models.App) *PluginContext {
+	return &PluginContext{
+		RequestID:   requestID,
+		LLMSlug:     slug.Make(llm.Name),
+		LLMID:       llm.ID,
+		AppID:       app.ID,
+		UserID:      app.UserID,
+		Metadata:    make(map[string]string),
+		Vendor:      string(llm.Vendor),
+		RequestKind: decisions.KindForPath(r.URL.Path),
+	}
+}
+
+// streamHeaderHookTimeout bounds the response hooks' header phase on a
+// streaming response: it runs before the client's first byte, so a slow
+// plugin delays every stream. Past it the stream goes out with the upstream
+// headers.
+var streamHeaderHookTimeout = 2 * time.Second
+
+// streamFramingHeaders frame the event stream; the header phase of a
+// streaming response cannot change them.
+var streamFramingHeaders = map[string]bool{
+	"Content-Type":      true,
+	"Content-Length":    true,
+	"Transfer-Encoding": true,
+}
+
+// executeStreamingHeaderHooks runs the response hooks' header phase on a
+// streaming response's headers h before they are written, with the buffered
+// path's contract: the hooks return the full header set. Keys a hook changed
+// or added are set and keys it dropped are deleted; keys it left alone keep
+// every value, so a repeated header is not collapsed. The framing headers
+// never change. An error, a panic or the timeout leaves h as it was.
+func (p *Proxy) executeStreamingHeaderHooks(h http.Header, r *http.Request, llm *models.LLM, app *models.App) {
+	requestID, _ := r.Context().Value("request_id").(string)
+	sent := make(map[string]string, len(h))
+	for k, v := range h {
+		if len(v) > 0 {
+			sent[k] = v[0]
+		}
+	}
+	req := &HeadersRequest{Headers: maps.Clone(sent), Context: responsePluginContext(requestID, r, llm, app)}
+
+	ctx, cancel := context.WithTimeout(r.Context(), streamHeaderHookTimeout)
+	defer cancel()
+	done := make(chan *HeadersResponse, 1)
+	safe.Go("stream-header-hooks", func() {
+		resp, err := p.responseHookManager.ExecuteOnBeforeWriteHeaders(ctx, req)
+		if err != nil {
+			logger.Errorf("Streaming response header hooks failed: %v", err)
+			resp = nil
+		}
+		done <- resp
+	})
+	var resp *HeadersResponse
+	select {
+	case resp = <-done:
+	case <-ctx.Done():
+		logger.Warnf("Streaming response header hooks for LLM %s did not answer within %s; sending the upstream headers", llm.Name, streamHeaderHookTimeout)
+		return
+	}
+	if resp == nil || !resp.Modified {
+		return
+	}
+	for k, v := range resp.Headers {
+		if streamFramingHeaders[http.CanonicalHeaderKey(k)] {
+			continue
+		}
+		if old, ok := sent[k]; ok && old == v {
+			continue
+		}
+		h.Set(k, v)
+	}
+	for k := range sent {
+		if _, kept := resp.Headers[k]; !kept && !streamFramingHeaders[http.CanonicalHeaderKey(k)] {
+			h.Del(k)
+		}
+	}
+}
+
 // executeBufferedResponseHooks executes response hooks on the buffered response (REST-only)
 func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, llm *models.LLM, app *models.App, r *http.Request) error {
 	if p.responseHookManager == nil {
@@ -1246,17 +1332,7 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		return fmt.Errorf("request ID not found in context - requestIDMiddleware not configured")
 	}
 
-	// Create plugin context
-	pluginCtx := &PluginContext{
-		RequestID:   requestID, // Use canonical request ID from context
-		LLMSlug:     llm.Name,
-		LLMID:       llm.ID,
-		AppID:       app.ID,
-		UserID:      app.UserID,
-		Metadata:    make(map[string]string),
-		Vendor:      string(llm.Vendor),
-		RequestKind: decisions.KindForPath(r.URL.Path),
-	}
+	pluginCtx := responsePluginContext(requestID, r, llm, app)
 
 	ctx := context.Background()
 
@@ -1937,6 +2013,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		// so the upstream's length is not the client's.
 		w.Header().Del("Content-Length")
 	}
+	if p.responseHookManager != nil && p.hasResponseHooks() {
+		p.executeStreamingHeaderHooks(w.Header(), r, llm, app)
+	}
 	respStatus = resp.StatusCode
 	w.WriteHeader(resp.StatusCode)
 	if f, ok := w.(http.Flusher); ok {
@@ -2201,17 +2280,7 @@ func (p *Proxy) executeOnStreamComplete(r *http.Request, resp *http.Response, ll
 		requestID = reqID.(string)
 	}
 
-	// Create plugin context
-	pluginCtx := &PluginContext{
-		RequestID:   requestID,
-		LLMSlug:     llm.Name,
-		LLMID:       llm.ID,
-		AppID:       app.ID,
-		UserID:      app.UserID,
-		Metadata:    make(map[string]string),
-		Vendor:      string(llm.Vendor),
-		RequestKind: decisions.KindForPath(r.URL.Path),
-	}
+	pluginCtx := responsePluginContext(requestID, r, llm, app)
 
 	// Add vendor to metadata for SSE format detection
 	pluginCtx.Metadata["vendor"] = string(llm.Vendor)
@@ -2373,8 +2442,8 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 // Anthropic-shaped bodies to a Bedrock LLM and must say so, or the filters
 // would be handed a Converse-format extractor for an OpenAI body.
 const (
-	requestFilterFormatOpenAI    = "openai"
-	requestFilterFormatAnthropic = "anthropic"
+	requestFilterFormatOpenAI    = requestformat.OpenAI
+	requestFilterFormatAnthropic = requestformat.Anthropic
 )
 
 // requestFilterFormatFor is the filter format of a request on the native
@@ -2382,26 +2451,15 @@ const (
 // (not chat-shaped whatever its vendor; see decisions_filters.go), or the
 // format a native chain hook names when the body is not the vendor's chat
 // shape (OpenAI's Responses API). A buffered response is read in the same
-// format.
+// format. requestformat.For decides, so gateway plugins resolve the same
+// format from the vendor, method, path and endpoint.
 func requestFilterFormatFor(r *http.Request, llm *models.LLM) string {
-	format := string(llm.Vendor)
-	if df := decisionFilterFormat(r.URL.Path); df != "" {
-		format = df
-	}
-	if hook := nativeChainHookFor(r, llm); hook != nil && hook.FilterFormat != "" {
-		format = hook.FilterFormat
-	}
-	return format
+	return requestformat.For(string(llm.Vendor), r.Method, r.URL.Path, switches.UpstreamEndpoint(llm))
 }
 
 // hasRequestFilters reports whether llm has at least one request-side filter.
 func (p *Proxy) hasRequestFilters(llm *models.LLM) bool {
-	for _, filter := range llm.Filters {
-		if !filter.ResponseFilter {
-			return true
-		}
-	}
-	return false
+	return llm.HasRequestFilters()
 }
 
 // runRequestFilters runs llm's request filters (response filters are skipped)

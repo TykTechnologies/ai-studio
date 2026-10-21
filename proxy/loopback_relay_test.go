@@ -104,6 +104,14 @@ func TestIsRelayedLoopbackHeader(t *testing.T) {
 		"X-Cached":       false,
 		"Content-Length": false,
 		"X-Request-Id":   false,
+		"X-Tyk-Compression":              true,
+		"X-Tyk-Compression-Saved-Tokens": true,
+		"x-tyk-compression-policy":       true,
+		"X-Tyk-Compression-":             false,
+		"X-Tyk-Compressionx":             false,
+		"X-Tyk-Failover-Token":           false,
+		"X-Tyk-Auth-App":                 false,
+		"X-Tyk-Internal-Timing":          false,
 	} {
 		assert.Equal(t, want, isRelayedLoopbackHeader(key), key)
 	}

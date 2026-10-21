@@ -146,6 +146,7 @@ publishable numbers.
 | S5 | Poisson, +100 req/s per 30s | mock, 20ms | `/llm/call` REST | request-rate ceiling |
 | S6 | base → 3× for 30s → base | mock, realistic | `/llm/call` streaming | burst absorption and recovery |
 | S7 | 1h constant at ~70% of S4 | mock, realistic | `/llm/call` streaming | latency drift, memory and goroutine growth, analytics loss |
+| S8, S8b | 1 request at a time | mock, instant | `/llm/rest`, `/llm/stream` with the Prompt Compressor attached | plugin cost per level and body size (see below) |
 
 Scenario files live in `scenarios/`. They are plain YAML; `{mock:<profile>}`
 expands to the mock upstream's profile path and `{model:<vendor>}` to the seeded
@@ -163,6 +164,28 @@ GWBENCH_LABEL="token cache off" make bench-overhead
 Use the same pattern for `ENABLE_TRACING=true`, or for an LLM with a filter or
 guardrail attached (add it in Studio after seeding, then push config). Compare
 the reports with the default run.
+
+### Prompt Compressor (S8, S8b)
+
+`s8-prompt-compressor.yaml` (small ~4 KB and typical ~160 KB agent bodies) and
+`s8b-prompt-compressor-large.yaml` (~3.5 MB) measure what the Prompt Compressor
+plugin adds per request on the edge, buffered and streaming. Each cell sends
+the same body through LLMs that differ only in the plugin attached: none,
+attached with mode off, audit, and enforce at levels 1, 2 and 3 (3 with
+old-turn masking on). An arm's cost is its overhead minus the `none` arm's.
+After the first request the plugin answers from its memo, so these are warm
+costs; the memo-miss cost comes from the plugin's Go benchmarks
+(`BenchmarkAgentBody` in `community/plugins/prompt-compressor/compress`).
+
+```bash
+export PC_PLUGIN_DIR=$PWD/benchmarks/gateway/.state/plugins
+make bench-plugin-compressor   # Linux build of community/plugins/prompt-compressor
+make bench-up                  # with PC_PLUGIN_DIR set: mounts it into Studio and the edge
+make bench-compressor          # seed -compressor, then S8 + S8b
+```
+
+`PC_PLUGIN_DIR` must stay set for every target on that stack, because the
+overlay (`compose/prompt-compressor.yaml`) is only added when it is.
 
 ## Reading a report
 

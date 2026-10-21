@@ -1135,8 +1135,12 @@ type PluginConfig struct {
 	// Auth plugins for this plugin's /plugins/{slug}/ endpoints, in execution
 	// order. Set only for custom_endpoint plugins that have any.
 	AuthPluginIds []uint32 `protobuf:"varint,15,rep,packed,name=auth_plugin_ids,json=authPluginIds,proto3" json:"auth_plugin_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Top-level config values that are a $SECRET/ reference, resolved on the
+	// hub and encrypted with the edge encryption key, by config key. The
+	// reference itself stays in config; edges lay these values over it.
+	ConfigSecretsEncrypted map[string]string `protobuf:"bytes,16,rep,name=config_secrets_encrypted,json=configSecretsEncrypted,proto3" json:"config_secrets_encrypted,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *PluginConfig) Reset() {
@@ -1270,6 +1274,13 @@ func (x *PluginConfig) GetHookTypes() []string {
 func (x *PluginConfig) GetAuthPluginIds() []uint32 {
 	if x != nil {
 		return x.AuthPluginIds
+	}
+	return nil
+}
+
+func (x *PluginConfig) GetConfigSecretsEncrypted() map[string]string {
+	if x != nil {
+		return x.ConfigSecretsEncrypted
 	}
 	return nil
 }
@@ -2992,7 +3003,7 @@ const file_proto_common_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
 	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\x12\x12\n" +
 	"\x04kind\x18\f \x01(\tR\x04kind\x12\x16\n" +
-	"\x06config\x18\r \x01(\tR\x06config\"\xf7\x03\n" +
+	"\x06config\x18\r \x01(\tR\x06config\"\xb4\x05\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -3012,7 +3023,11 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x0eservice_scopes\x18\r \x03(\tR\rserviceScopes\x12\x1d\n" +
 	"\n" +
 	"hook_types\x18\x0e \x03(\tR\thookTypes\x12&\n" +
-	"\x0fauth_plugin_ids\x18\x0f \x03(\rR\rauthPluginIds\"\x9a\x03\n" +
+	"\x0fauth_plugin_ids\x18\x0f \x03(\rR\rauthPluginIds\x12p\n" +
+	"\x18config_secrets_encrypted\x18\x10 \x03(\v26.microgateway.PluginConfig.ConfigSecretsEncryptedEntryR\x16configSecretsEncrypted\x1aI\n" +
+	"\x1bConfigSecretsEncryptedEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x03\n" +
 	"\x11ModelRouterConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3234,7 +3249,7 @@ func file_proto_common_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_proto_common_proto_goTypes = []any{
 	(ConfigurationChange_ChangeType)(0), // 0: microgateway.ConfigurationChange.ChangeType
 	(ConfigurationChange_EntityType)(0), // 1: microgateway.ConfigurationChange.EntityType
@@ -3259,64 +3274,66 @@ var file_proto_common_proto_goTypes = []any{
 	(*HealthStatus)(nil),                // 20: microgateway.HealthStatus
 	(*PluginResourceAssociation)(nil),   // 21: microgateway.PluginResourceAssociation
 	(*ResourceInstanceSnapshot)(nil),    // 22: microgateway.ResourceInstanceSnapshot
-	nil,                                 // 23: microgateway.HealthStatus.MetricsEntry
-	(*timestamppb.Timestamp)(nil),       // 24: google.protobuf.Timestamp
+	nil,                                 // 23: microgateway.PluginConfig.ConfigSecretsEncryptedEntry
+	nil,                                 // 24: microgateway.HealthStatus.MetricsEntry
+	(*timestamppb.Timestamp)(nil),       // 25: google.protobuf.Timestamp
 }
 var file_proto_common_proto_depIdxs = []int32{
-	24, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 2: microgateway.LLMConfig.resource_signing_prev_expires_at:type_name -> google.protobuf.Timestamp
-	24, // 3: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 4: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 2: microgateway.LLMConfig.resource_signing_prev_expires_at:type_name -> google.protobuf.Timestamp
+	25, // 3: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 4: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
 	21, // 5: microgateway.AppConfig.plugin_resources:type_name -> microgateway.PluginResourceAssociation
-	24, // 6: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 7: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 8: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 9: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 10: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 11: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 12: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 13: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
-	11, // 14: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
-	24, // 15: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 16: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 17: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 18: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	12, // 19: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
-	13, // 20: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
-	24, // 21: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 22: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 23: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 24: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 25: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 26: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 27: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
-	24, // 28: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	24, // 29: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 30: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
-	4,  // 31: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
-	6,  // 32: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
-	7,  // 33: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
-	8,  // 34: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
-	24, // 35: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	9,  // 36: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
-	14, // 37: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
-	15, // 38: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
-	16, // 39: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
-	17, // 40: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
-	10, // 41: microgateway.ConfigurationSnapshot.semantic_routers:type_name -> microgateway.SemanticRouterConfig
-	0,  // 42: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
-	1,  // 43: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
-	24, // 44: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 45: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
-	24, // 46: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
-	23, // 47: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
-	22, // 48: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
-	49, // [49:49] is the sub-list for method output_type
-	49, // [49:49] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	25, // 6: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 7: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 8: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 9: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 10: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 11: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 12: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 13: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
+	23, // 14: microgateway.PluginConfig.config_secrets_encrypted:type_name -> microgateway.PluginConfig.ConfigSecretsEncryptedEntry
+	11, // 15: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
+	25, // 16: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 17: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 18: microgateway.SemanticRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 19: microgateway.SemanticRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 20: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
+	13, // 21: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
+	25, // 22: microgateway.ToolConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 23: microgateway.ToolConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 24: microgateway.DatasourceConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 25: microgateway.DatasourceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 26: microgateway.OAuthClientConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 27: microgateway.OAuthClientConfig.updated_at:type_name -> google.protobuf.Timestamp
+	25, // 28: microgateway.AccessTokenConfig.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 29: microgateway.AccessTokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	25, // 30: microgateway.AccessTokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 31: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
+	4,  // 32: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
+	6,  // 33: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
+	7,  // 34: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
+	8,  // 35: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
+	25, // 36: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	9,  // 37: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
+	14, // 38: microgateway.ConfigurationSnapshot.tools:type_name -> microgateway.ToolConfig
+	15, // 39: microgateway.ConfigurationSnapshot.datasources:type_name -> microgateway.DatasourceConfig
+	16, // 40: microgateway.ConfigurationSnapshot.oauth_clients:type_name -> microgateway.OAuthClientConfig
+	17, // 41: microgateway.ConfigurationSnapshot.access_tokens:type_name -> microgateway.AccessTokenConfig
+	10, // 42: microgateway.ConfigurationSnapshot.semantic_routers:type_name -> microgateway.SemanticRouterConfig
+	0,  // 43: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
+	1,  // 44: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
+	25, // 45: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
+	2,  // 46: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
+	25, // 47: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
+	24, // 48: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
+	22, // 49: microgateway.PluginResourceAssociation.instances:type_name -> microgateway.ResourceInstanceSnapshot
+	50, // [50:50] is the sub-list for method output_type
+	50, // [50:50] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_proto_init() }
@@ -3330,7 +3347,7 @@ func file_proto_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_proto_rawDesc), len(file_proto_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   21,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

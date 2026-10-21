@@ -157,6 +157,10 @@ message PluginConfig {
   // Auth plugins for this plugin's /plugins/{slug}/ endpoints, in execution
   // order. Set only for custom_endpoint plugins that have any.
   repeated uint32 auth_plugin_ids = 15;
+  // Top-level config values that are a $SECRET/ reference, resolved on the
+  // hub and encrypted with the edge encryption key, by config key. The
+  // reference itself stays in config; edges lay these values over it.
+  map<string, string> config_secrets_encrypted = 16;
 }
 
 // ModelRouterConfig represents a model router configuration (Enterprise)

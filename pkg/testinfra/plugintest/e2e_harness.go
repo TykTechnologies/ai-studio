@@ -16,6 +16,7 @@ import (
 
 	gwmgmtpb "github.com/TykTechnologies/midsommar/v2/proto/microgateway_management"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
@@ -305,7 +306,7 @@ func (h *E2EPluginHarness) startBrokeredServer() error {
 
 	// Tell broker to accept connections at this address
 	go h.broker.AcceptAndServe(h.brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		s := grpc.NewServer(opts...)
+		s := grpc.NewServer(append(opts, pluginlimits.HostServiceServerOptions()...)...)
 		if h.runtime == plugin_sdk.RuntimeGateway {
 			gwmgmtpb.RegisterMicrogatewayManagementServiceServer(s, h.testGatewayServer)
 		} else {

@@ -1014,7 +1014,7 @@ Returns all apps accessible to the gateway. Type assert to `*gwmgmt.ListAppsResp
 llm, err := ctx.Services.Gateway().GetLLM(ctx, llmID)
 ```
 
-Returns LLM configuration. Type assert to `*gwmgmt.GetLLMResponse`.
+Returns LLM configuration. Type assert to `*gwmgmt.GetLLMResponse`. `Llm.HasRequestFilters` is true when the LLM has a request filter (script or guardrail), so a plugin that rewrites request bodies can stay lossless where the filters would screen them.
 
 ### List LLMs
 

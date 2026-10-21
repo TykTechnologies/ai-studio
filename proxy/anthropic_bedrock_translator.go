@@ -302,11 +302,9 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 		request:   r,
 	}
 
+	// Every event received is handled; a stream error is checked after the
+	// loop (see bedrockPumpStream).
 	for event := range stream.Events() {
-		if err := stream.Err(); err != nil {
-			log.Error().Err(err).Msg("Bedrock Anthropic stream error")
-			break
-		}
 		st.handleEvent(event)
 		if screen != nil && screen.Blocked() {
 			return // the screen ended the stream with an error event

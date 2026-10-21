@@ -201,12 +201,24 @@ func loopbackRelayFrom(ctx context.Context) *loopbackRelay {
 	return relay
 }
 
+// relayedLoopbackHeaders are the plugin response headers passed on from the
+// inner hop to the /ai/ client, each name alone and as a "name-" prefix: the
+// cache plugins' X-Cache and the Prompt Compressor's X-Tyk-Compression.
+// Vendor and transport headers describe the loopback response, not the
+// translated one, and other X-Tyk- headers are internal (the failover token
+// is a per-process secret), so the list stays exact.
+var relayedLoopbackHeaders = []string{"X-Cache", "X-Tyk-Compression"}
+
 // isRelayedLoopbackHeader reports whether an inner-hop response header is
-// passed on to the /ai/ client. Only the cache headers are: vendor and
-// transport headers describe the loopback response, not the translated one.
+// passed on to the /ai/ client.
 func isRelayedLoopbackHeader(key string) bool {
-	return strings.EqualFold(key, "X-Cache") ||
-		len(key) > len("X-Cache-") && strings.EqualFold(key[:len("X-Cache-")], "X-Cache-")
+	for _, name := range relayedLoopbackHeaders {
+		if strings.EqualFold(key, name) ||
+			len(key) > len(name)+1 && strings.EqualFold(key[:len(name)+1], name+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 // Relayed headers can come from a vendor (or a CDN in front of it) as well as

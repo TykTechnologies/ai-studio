@@ -75,6 +75,13 @@ services:
           mkdir -p /app/bin/plugins;
           (cd /app/enterprise/plugins/asset-catalog && go mod tidy && CGO_ENABLED=0 go build -tags enterprise -o /app/bin/plugins/asset-catalog .) || exit 1;
         fi;
+        # The prompt-compressor policies spec registers this community plugin
+        # the same way. It runs when the community submodule has it.
+        if [ -d /app/community/plugins/prompt-compressor ]; then
+          echo "Building prompt-compressor plugin...";
+          mkdir -p /app/bin/plugins;
+          (cd /app/community/plugins/prompt-compressor && go mod tidy && CGO_ENABLED=0 go build -o /app/bin/plugins/prompt-compressor .) || exit 1;
+        fi;
         echo "Starting AI Studio...";
         exec /app/tmp/studio -env=/app/dev/.env
       '

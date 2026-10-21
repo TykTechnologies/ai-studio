@@ -35,7 +35,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
-	"github.com/gosimple/slug"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -1607,7 +1606,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	for _, llm := range llms {
 		// Same slug the proxy routes /llm/.../{slug}/ by; edges look the LLM
 		// up by this value (post-auth plugins, model-router rewrites).
-		llmSlug := slug.Make(llm.Name)
+		llmSlug := models.LLMRouteSlug(llm.Name)
 
 		// Get filter IDs for this LLM
 		filterIDs := make([]uint32, len(llm.Filters))
@@ -2131,6 +2130,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			AuthPluginIds: endpointAuthPlugins[endpointKey{models.EndpointTypePlugin, plugin.ID}],
 			CreatedAt:     timestamppb.New(plugin.CreatedAt),
 			UpdatedAt:     timestamppb.New(plugin.UpdatedAt),
+			// Deterministic ciphertext (encryptForMicrogateway), so the
+			// snapshot checksum changes when a referenced secret does and
+			// edges show as pending until the change is pushed.
+			ConfigSecretsEncrypted: s.pluginConfigSecretsForEdge(&plugin, cfg),
 		})
 	}
 
@@ -2177,7 +2180,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			for _, vendor := range pool.Vendors {
 				llmSlug := ""
 				if vendor.LLM != nil {
-					llmSlug = slug.Make(vendor.LLM.Name)
+					llmSlug = models.LLMRouteSlug(vendor.LLM.Name)
 				}
 				pbVendor := &pb.PoolVendorConfig{
 					Id:       uint32(vendor.ID),
@@ -2992,6 +2995,12 @@ const (
 	// Governed metadata (Enterprise): gateway-visible fields are part of the snapshot.
 	topicGovernedMetadataUpdated = "system.governed_metadata.updated"
 	topicGovernedMetadataDeleted = "system.governed_metadata.deleted"
+
+	// Secrets: referenced values (LLM keys, plugin config secrets) travel
+	// in the snapshot, so a secret change can change it.
+	topicSecretCreated = "system.secret.created"
+	topicSecretUpdated = "system.secret.updated"
+	topicSecretDeleted = "system.secret.deleted"
 )
 
 // subscribeToConfigChanges sets up event subscriptions for configuration changes.
@@ -3013,6 +3022,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicToolCreated, topicToolUpdated, topicToolDeleted,
 		topicEmbedderCreated, topicEmbedderUpdated, topicEmbedderDeleted,
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
+		topicSecretCreated, topicSecretUpdated, topicSecretDeleted,
 	}
 
 	for _, topic := range configTopics {

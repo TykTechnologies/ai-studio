@@ -261,7 +261,7 @@ func (p *Proxy) decisionAttempt(ctx context.Context, r *http.Request, a llmAttem
 		loopReq.Header.Set(requestid.ClientHeader, id)
 	}
 
-	client := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.loopbackHeaders(r.Context(), a))
+	client := p.newInternalRoutingClient(r.Header.Get("Authorization"), withClientLoopbackHeaders(r, p.loopbackHeaders(r.Context(), a)))
 	resp, err := client.Do(loopReq)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
