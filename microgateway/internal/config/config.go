@@ -63,6 +63,12 @@ type AgentTracingConfig struct {
 	// MaxStreamBufferBytes caps tool-call argument buffering per streamed response.
 	MaxStreamBufferBytes int `env:"AGENT_TRACING_MAX_STREAM_BUFFER_BYTES" envDefault:"1048576"`
 	// Flush cadence: whichever of the interval or the event count comes first.
+	// KeepLiveSpan keeps this edge's live proxy span for captured calls
+	// while the hub exports assembled spans (jyx.176): for an edge whose
+	// OTel collector is not the hub's export target. With a shared
+	// collector each call appears twice.
+	KeepLiveSpan bool `env:"AGENT_TRACING_KEEP_LIVE_SPAN" envDefault:"false"`
+
 	FlushInterval  time.Duration `env:"AGENT_TRACING_FLUSH_INTERVAL" envDefault:"10s"`
 	FlushMaxEvents int           `env:"AGENT_TRACING_FLUSH_MAX_EVENTS" envDefault:"500"`
 	// ChunkMaxBytes caps one pulse's capture events (gRPC messages are 16 MiB).

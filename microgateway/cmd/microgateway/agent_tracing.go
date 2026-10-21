@@ -42,6 +42,7 @@ func startAgentTracing(cfg *config.Config, pm captureEnabler, licenseValid func(
 	proxy.SetOpenAIClientRequestID(at.OpenAIClientRequestID)
 	proxy.SetAgentTraceStreamBufferBytes(at.MaxStreamBufferBytes)
 	agenttrace.SetGatewayNode(cfg.HubSpoke.EdgeID)
+	agenttrace.SetKeepLiveSpan(at.KeepLiveSpan)
 	if !at.Enabled {
 		return false
 	}

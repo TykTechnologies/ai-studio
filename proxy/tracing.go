@@ -26,7 +26,20 @@ func startProxySpan(r *http.Request, llm *models.LLM) (*http.Request, trace.Span
 	// under the gateway span id the upstream already sees as its parent; a
 	// live span here would describe the same call twice (jyx.32).
 	if agenttrace.ExportActive() && agenttrace.From(r.Context()) != nil {
-		return r, trace.SpanFromContext(r.Context())
+		if !agenttrace.KeepLiveSpan() {
+			return r, trace.SpanFromContext(r.Context())
+		}
+		// An edge that keeps its live span (jyx.176, its own collector): the
+		// span gets its own id and a link to the gateway span id, and the
+		// request keeps the gateway span as current, so the upstream's
+		// parent stays the id the assembled span is exported under.
+		gateway := trace.SpanContextFromContext(r.Context())
+		_, span := tracing.Tracer().Start(r.Context(), metrics.OperationChat+" "+requestModelName(r, llm),
+			trace.WithSpanKind(trace.SpanKindServer),
+			trace.WithLinks(trace.Link{SpanContext: gateway}),
+			trace.WithAttributes(liveSpanAttributes(r, llm)...),
+		)
+		return r, span
 	}
 	model := requestModelName(r, llm)
 
@@ -41,13 +54,19 @@ func startProxySpan(r *http.Request, llm *models.LLM) (*http.Request, trace.Span
 		// The GenAI conventions name a span "{operation} {model}".
 		metrics.OperationChat+" "+model,
 		trace.WithSpanKind(trace.SpanKindServer),
-		trace.WithAttributes(
-			attribute.String("gen_ai.operation.name", metrics.OperationChat),
-			attribute.String("gen_ai.provider.name", metrics.GenAIProviderName(string(llm.Vendor))),
-			attribute.String("gen_ai.request.model", model),
-		),
+		trace.WithAttributes(liveSpanAttributes(r, llm)...),
 	)
 	return r.WithContext(ctx), span
+}
+
+// liveSpanAttributes are the live span's metadata attributes; it never
+// carries content.
+func liveSpanAttributes(r *http.Request, llm *models.LLM) []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.String("gen_ai.operation.name", metrics.OperationChat),
+		attribute.String("gen_ai.provider.name", metrics.GenAIProviderName(string(llm.Vendor))),
+		attribute.String("gen_ai.request.model", requestModelName(r, llm)),
+	}
 }
 
 // endProxySpan records the outcome and closes the span.
