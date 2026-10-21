@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -29,6 +31,11 @@ type node struct {
 	start, end int // byte span of the whole value in the body
 	keys       []string
 	vals       []*node // object member values (parallel to keys) or array elements
+	// str is a string node's decoded value once text has read it, so a Doc
+	// read several ways decodes each string once. A tree is read by one
+	// goroutine at a time.
+	str     string
+	decoded bool
 }
 
 // get returns the object member named key, or nil.
@@ -239,9 +246,83 @@ func decodeString(raw []byte) string {
 	if bytes.IndexByte(inner, '\\') < 0 && utf8.Valid(inner) {
 		return string(inner)
 	}
-	var s string
-	_ = json.Unmarshal(raw, &s) // the token passed json.Valid
-	return s
+	return unquote(inner)
+}
+
+// unquote decodes the inside of a string token json.Valid accepted exactly
+// as encoding/json does, without validating it again (that cost a request
+// body's whole size once more per read): escapes decoded, a surrogate
+// escape that does not pair and each byte of invalid UTF-8 becoming U+FFFD.
+func unquote(s []byte) string {
+	b := make([]byte, 0, len(s))
+	for r := 0; r < len(s); {
+		c := s[r]
+		switch {
+		case c == '\\' && r+1 < len(s):
+			switch e := s[r+1]; e {
+			case 'b':
+				b = append(b, '\b')
+			case 'f':
+				b = append(b, '\f')
+			case 'n':
+				b = append(b, '\n')
+			case 'r':
+				b = append(b, '\r')
+			case 't':
+				b = append(b, '\t')
+			case 'u':
+				rr := getu4(s[r:])
+				r += 6
+				if utf16.IsSurrogate(rr) {
+					if dec := utf16.DecodeRune(rr, getu4(s[r:])); dec != unicode.ReplacementChar {
+						b = utf8.AppendRune(b, dec)
+						r += 6
+						continue
+					}
+					rr = unicode.ReplacementChar
+				}
+				b = utf8.AppendRune(b, rr)
+				continue
+			default: // '"', '\\' and '/', the only other escapes json.Valid allows
+				b = append(b, e)
+			}
+			r += 2
+		case c < utf8.RuneSelf:
+			b = append(b, c)
+			r++
+		default:
+			rr, size := utf8.DecodeRune(s[r:])
+			if rr == utf8.RuneError && size == 1 {
+				b = utf8.AppendRune(b, utf8.RuneError)
+			} else {
+				b = append(b, s[r:r+size]...)
+			}
+			r += size
+		}
+	}
+	return string(b)
+}
+
+// getu4 reads the \uXXXX escape at the start of s, or returns -1.
+func getu4(s []byte) rune {
+	if len(s) < 6 || s[0] != '\\' || s[1] != 'u' {
+		return -1
+	}
+	var r rune
+	for _, c := range s[2:6] {
+		switch {
+		case '0' <= c && c <= '9':
+			c -= '0'
+		case 'a' <= c && c <= 'f':
+			c = c - 'a' + 10
+		case 'A' <= c && c <= 'F':
+			c = c - 'A' + 10
+		default:
+			return -1
+		}
+		r = r*16 + rune(c)
+	}
+	return r
 }
 
 // text returns the decoded value of a string node.
@@ -249,7 +330,10 @@ func (n *node) text(body []byte) (string, bool) {
 	if n == nil || n.kind != nodeString {
 		return "", false
 	}
-	return decodeString(body[n.start:n.end]), true
+	if !n.decoded {
+		n.str, n.decoded = decodeString(body[n.start:n.end]), true
+	}
+	return n.str, true
 }
 
 // encodeString is the JSON string token for s. HTML characters are kept as
@@ -334,6 +418,15 @@ func Apply(body []byte, edits []Edit) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	out, _, err := applyTree(body, root, edits)
+	return out, err
+}
+
+// applyTree is Apply on a body already parsed into root. leavesOnly reports
+// that every edit replaced a string leaf with a string, so the result is
+// valid JSON with the body's keys and structure.
+func applyTree(body []byte, root *node, edits []Edit) (out []byte, leavesOnly bool, err error) {
+	leavesOnly = true
 	type splice struct {
 		start, end int
 		with       []byte
@@ -343,23 +436,24 @@ func Apply(body []byte, edits []Edit) ([]byte, error) {
 		target := root.resolve(e.Path)
 		if e.Value != nil {
 			if target == nil || !json.Valid(e.Value) {
-				return nil, fmt.Errorf("segments: cannot replace %q with the given value", e.Path)
+				return nil, false, fmt.Errorf("segments: cannot replace %q with the given value", e.Path)
 			}
+			leavesOnly = false
 			splices = append(splices, splice{start: target.start, end: target.end, with: e.Value})
 			continue
 		}
 		if target == nil || target.kind != nodeString {
-			return nil, fmt.Errorf("segments: %q is not a string in the body", e.Path)
+			return nil, false, fmt.Errorf("segments: %q is not a string in the body", e.Path)
 		}
 		if old, _ := target.text(body); old != e.Old {
-			return nil, fmt.Errorf("segments: %q no longer holds the text that was classified", e.Path)
+			return nil, false, fmt.Errorf("segments: %q no longer holds the text that was classified", e.Path)
 		}
 		splices = append(splices, splice{start: target.start, end: target.end, with: encodeString(e.New)})
 	}
 	sort.Slice(splices, func(i, j int) bool { return splices[i].start < splices[j].start })
 	for i := 1; i < len(splices); i++ {
 		if splices[i].start < splices[i-1].end {
-			return nil, fmt.Errorf("segments: two edits touch the same part of the body")
+			return nil, false, fmt.Errorf("segments: two edits touch the same part of the body")
 		}
 	}
 
@@ -367,12 +461,12 @@ func Apply(body []byte, edits []Edit) ([]byte, error) {
 	for _, s := range splices {
 		grow += len(s.with) - (s.end - s.start)
 	}
-	out := make([]byte, 0, len(body)+max(grow, 0))
+	out = make([]byte, 0, len(body)+max(grow, 0))
 	at := 0
 	for _, s := range splices {
 		out = append(out, body[at:s.start]...)
 		out = append(out, s.with...)
 		at = s.end
 	}
-	return append(out, body[at:]...), nil
+	return append(out, body[at:]...), leavesOnly, nil
 }

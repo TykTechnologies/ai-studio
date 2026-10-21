@@ -341,13 +341,21 @@ func CheckKeys(body []byte) error {
 }
 
 func extract(format string, body []byte, opts Options) (*extraction, error) {
-	fn, ok := extractors[strings.ToLower(format)]
-	if !ok {
+	if !Supports(format) {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	root, err := parseTree(body)
 	if err != nil {
 		return nil, err
+	}
+	return extractTree(format, body, root, opts)
+}
+
+// extractTree is extract on a body already parsed into root.
+func extractTree(format string, body []byte, root *node, opts Options) (*extraction, error) {
+	fn, ok := extractors[strings.ToLower(format)]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	if root.kind != nodeObject {
 		return nil, fmt.Errorf("%w: not a JSON object", ErrUnrecognisedBody)

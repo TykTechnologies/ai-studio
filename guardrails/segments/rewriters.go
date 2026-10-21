@@ -47,6 +47,11 @@ func CheckToolPairing(format string, body []byte) error {
 	if err != nil {
 		return err
 	}
+	return toolPairing(format, body, root)
+}
+
+// toolPairing is CheckToolPairing on a body already parsed into root.
+func toolPairing(format string, body []byte, root *node) error {
 	if root.kind != nodeObject {
 		return fmt.Errorf("%w: not a JSON object", ErrUnrecognisedBody)
 	}
@@ -283,6 +288,12 @@ func CacheBreakpoints(format string, body []byte) ([]Breakpoint, error) {
 	if err != nil {
 		return nil, err
 	}
+	return cacheBreakpoints(f, root)
+}
+
+// cacheBreakpoints is CacheBreakpoints for an Anthropic or Bedrock body
+// already parsed into root; f is the lower-cased format.
+func cacheBreakpoints(f string, root *node) ([]Breakpoint, error) {
 	if root.kind != nodeObject {
 		return nil, fmt.Errorf("%w: not a JSON object", ErrUnrecognisedBody)
 	}
@@ -461,7 +472,16 @@ func promptPosition(p string) (Breakpoint, bool) {
 // Other formats, and bodies that cannot be read, report false.
 func NativeContextManagement(format string, body []byte) bool {
 	root, err := parseTree(body)
-	if err != nil || root.kind != nodeObject {
+	if err != nil {
+		return false
+	}
+	return nativeContext(format, body, root)
+}
+
+// nativeContext is NativeContextManagement on a body already parsed into
+// root.
+func nativeContext(format string, body []byte, root *node) bool {
+	if root.kind != nodeObject {
 		return false
 	}
 	x := newExtraction(body)
