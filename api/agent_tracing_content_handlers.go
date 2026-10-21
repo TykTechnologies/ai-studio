@@ -186,7 +186,7 @@ func (a *API) getAgentPayload(c *gin.Context) {
 }
 
 // @Summary Purge an agent session
-// @Description Deletes a session and everything captured for it: spans, links, payloads, correlation keys, agents and staged events (right to erasure). Audited; refused (503) when the audit trail cannot record it.
+// @Description Deletes a session and everything captured for it: spans, links, payloads, correlation keys, agents and, for a declared session, its staged events (right to erasure). An inferred session's events still waiting to be assembled carry no session id and are not deleted: the event that completes the session may re-create it. To erase a data subject completely, use POST /agent-tracing/purge with their end_user, which also deletes their staged events. Audited; refused (503) when the audit trail cannot record it.
 // @Tags agent-tracing
 // @Produce json
 // @Param session_id path string true "Session id (UUID)"
