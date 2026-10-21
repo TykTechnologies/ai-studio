@@ -63,7 +63,7 @@ Levels are cumulative: each one applies everything below it.
 | 0 | off | Nothing. |
 | 1 | lossless | JSON is compacted on its bytes, keeping key order, duplicate keys, number spelling and escapes. Text loses ANSI escape codes, carriage-return progress frames (rendered as a terminal shows them), trailing whitespace and runs of blank lines. |
 | 2 | noise reduction | Level 1, then a reducer for text with a shape it knows. Test runners (pytest, jest, go test, cargo test, Maven surefire, Gradle) keep every failure with its message and location, and the totals. Logs and listings (terraform plan, kubectl, git diff, grep and ripgrep, directory listings, build logs, stack traces) keep every line that mentions an error. Long JSON arrays keep their first and last 5 items and every item that failed or stands out. Text no reducer recognises, such as prose or code, gets level 1 only. |
-| 3 | aggressive | Level 2, then outputs still over the size budget (`max_unit_tokens`, default 6000) are cut to their head and tail. Tool results older than `mask_after_turns` turns become a placeholder. Optionally, an external engine compresses what is left. |
+| 3 | aggressive | Level 2, then outputs still over the size budget (`max_unit_tokens`, default 6000) are cut to their head and tail. With `mask_after_turns` set, tool results older than that many turns become a placeholder (off by default). Optionally, an external engine compresses what is left. |
 
 Every cut leaves an inline marker in a fixed format, so the model knows something was removed:
 
@@ -123,7 +123,7 @@ The plugin has one configuration for every LLM it is attached to. Named **polici
 | `tool_overrides` | | By tool name: `exclude`, or a `level` or `max_unit_tokens` for that tool. |
 | `protect_patterns` | | RE2 regular expressions whose matches lossy levels keep. |
 | `max_unit_tokens` | `6000` | Level 3's size budget per tool output. |
-| `mask_after_turns` | `8` | Level 3 masks tool results older than this many turns. |
+| `mask_after_turns` | `0` | Level 3 masks tool results older than this many turns; `0` turns masking off. Each masking step rewrites the cached prefix, so it pays where cached input is not much cheaper than input (OpenAI chat models with a 50% cache discount) and costs more than it saves where cache reads are very cheap (Anthropic, GPT-5). |
 | `mask_step_tokens` | `20000` | Level 3 moves the masking boundary only when it masks at least this many more tokens. |
 | `engine` | | An external engine (`name`, `kind` of `headroom` or `llmlingua2`, `timeout_ms`) for what levels 1 to 3 selected. |
 
@@ -191,7 +191,7 @@ Vendors bill cached prompt tokens at a fraction of the input price, so a compres
 - **Deterministic output.** A unit compresses to the same bytes every time, so the compressed prefix of a conversation is identical from one turn to the next. Engine answers are remembered for the same reason.
 - **Policy changes cost one miss.** Changing a policy changes the bytes of every affected conversation's prefix once. Change policies outside busy hours, and watch the cache-read share marker afterwards.
 - **`skip_cached`** leaves everything up to the request's last cache breakpoint alone, for clients that set breakpoints and want only the new part compressed.
-- **Masking moves in steps.** Level 3 moves its masking boundary only when that masks at least `mask_step_tokens` more, so each one-off cache rewrite buys a large saving.
+- **Masking is off by default.** When `mask_after_turns` is set, level 3 moves its masking boundary only when that masks at least `mask_step_tokens` more, so each one-off cache rewrite buys a large saving. With vendors whose cache reads are very cheap (Anthropic, GPT-5) a rewrite still costs more than it saves; leave it off there.
 - **Edges and engines.** The engine memo is per edge. If one session's requests go to several edges and the engine is not deterministic, the edges may compress a unit differently.
 
 ## Plugin order with the cache plugins
