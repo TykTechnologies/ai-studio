@@ -183,6 +183,30 @@ describe("AgentSessions", () => {
     expect(new URLSearchParams(lastLocation.search).get("errors")).toBe("yes");
   });
 
+  it("hints under the id filters that results show pseudonyms, only without trace-content:read", async () => {
+    const hint = "Matches the exact id sent by the client; results show pseudonyms.";
+    const { unmount } = renderPage();
+    await screen.findByText("refund flow");
+    fireEvent.click(screen.getByText("More filters"));
+    expect(screen.getAllByText(hint)).toHaveLength(2);
+    unmount();
+
+    render(
+      <PermissionsContext.Provider value={{ can: (perm) => perm === "trace-content:read" }}>
+        <ThemeProvider theme={testTheme}>
+          <MemoryRouter initialEntries={["/admin/agent-sessions"]}>
+            <AgentSessions />
+          </MemoryRouter>
+        </ThemeProvider>
+      </PermissionsContext.Provider>,
+    );
+    await screen.findByText("refund flow");
+    fireEvent.click(screen.getByText("More filters"));
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+    expect(screen.getByText("The user id the client declared")).toBeInTheDocument();
+    expect(screen.getByText("Exact match")).toBeInTheDocument();
+  });
+
   it("keeps name, end-user and external-id filters out of the URL", async () => {
     renderPage();
     await screen.findByText("refund flow");

@@ -54,6 +54,10 @@ import { usePermissions } from "../context/PermissionsContext";
 // Agent sessions list (spec §6.1; Enterprise). See sessionFilters.js for
 // which filters may live in the URL.
 
+// Without trace-content:read the end-user and external-id filters still
+// match the raw id, but results show pseudonyms (jyx.174, option B).
+const PSEUDONYM_FILTER_HINT = "Matches the exact id sent by the client; results show pseudonyms.";
+
 const LIVE_REFRESH_MS = 5000;
 
 const STATUS_COLOURS = { active: "info", closed: "default", error: "error" };
@@ -423,7 +427,7 @@ const AgentSessions = () => {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") applyIdSearch();
                 }}
-                helperText="Exact match"
+                helperText={canReadContent ? "Exact match" : PSEUDONYM_FILTER_HINT}
               />
               <Button variant="outlined" onClick={applyIdSearch} sx={{ alignSelf: "flex-start" }}>
                 Find
@@ -449,7 +453,7 @@ const AgentSessions = () => {
               </Grid>
               <Grid item xs={12} md={4}>
                 <TextField fullWidth size="small" label="End user" name="endUser" value={state.endUser} onChange={setStateField("endUser")}
-                  helperText="The user id the client declared" />
+                  helperText={canReadContent ? "The user id the client declared" : PSEUDONYM_FILTER_HINT} />
               </Grid>
               {[
                 ["costMin", "Minimum cost"],
