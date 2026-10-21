@@ -156,11 +156,11 @@ manifest's `rbac.rpc_methods`, which the host enforces
   tool's decision; the Policies page suggests never-called tools and warns
   about the one-off cache miss.
 - **Not an access control (eac.75).** The client writes the history and
-  `tool_choice`, can send the bypass header (`allow_client_bypass` defaults
-  to true), and every pass-through keeps the full list. The docs page, the
+  `tool_choice`, can send the bypass header where `allow_client_bypass` is
+  on, and every pass-through keeps the full list. The docs page, the
   README and the Policies page say so and point to App tool access, filters
-  and guardrails. Whether bypass should default to false is open (lead /
-  Martin).
+  and guardrails. `allow_client_bypass` defaults to false (eac.82, Martin's
+  decision); a stored config with an explicit true keeps it.
 
 ## 5. Core changes made for this plugin
 

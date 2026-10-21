@@ -103,7 +103,7 @@ The plugin has one configuration for every LLM it is attached to. Named **polici
 | `default_policy` | `default` | The policy for requests no binding matches. `default` means the built-in defaults when no policy of that name exists; `off` turns compression off. |
 | `policies` | `{}` | Named policies. Each starts from the defaults and lists only what it changes. `off` is reserved. |
 | `bindings` | `{}` | Keys `llm:` plus a slug, `llm_id:` plus an ID, or `app:` plus an ID; values are a policy name or `off`. |
-| `allow_client_bypass` | `true` | Honour the request header `X-Tyk-Compression: off`. |
+| `allow_client_bypass` | `false` | Honour the request header `X-Tyk-Compression: off`, so a client can skip compression for its own requests. |
 | `failure_mode` | `open` | What an external engine failure does: `open` forwards the unit uncompressed, `closed` answers 502 (enforce mode only). Every other failure always forwards the request. |
 | `lossy_with_request_filters` | `false` | Run level 3 and engines on LLMs with request filters. |
 | `max_body_bytes` | `4194304` | Larger bodies pass through, at most 16 MiB. Limits are by size, never by time. |
@@ -161,7 +161,7 @@ Agents often send the definitions of many tools on every request and call only a
 - Changing the list changes the tools every App on the policy sends, so each of their sessions misses the prompt cache once. Bind a separate policy to an App to change only that App.
 
 ::: warning drop_tools is not an access control
-It saves tokens; it cannot keep a tool from a model. The client decides whether a tool survives: by naming it in its own conversation history or in `tool_choice`, by sending `X-Tyk-Compression: off` while `allow_client_bypass` is on (the default), and whenever a request passes through uncompressed (`audit` mode, an App whose metadata is not known yet, a body over `max_body_bytes`, any error). To keep a tool away from a model, don't give the App access to it, or block its calls with a [filter](/docs/filters) or a [guardrail](/docs/guardrails) on tool calls.
+It saves tokens; it cannot keep a tool from a model. The client decides whether a tool survives: by naming it in its own conversation history or in `tool_choice`, by sending `X-Tyk-Compression: off` while `allow_client_bypass` is on (it is off by default), and whenever a request passes through uncompressed (`audit` mode, an App whose metadata is not known yet, a body over `max_body_bytes`, any error). To keep a tool away from a model, don't give the App access to it, or block its calls with a [filter](/docs/filters) or a [guardrail](/docs/guardrails) on tool calls.
 :::
 
 ## Headers
