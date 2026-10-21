@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 )
 
 // ExampleResponseHook demonstrates how to create a custom response hook
@@ -33,7 +34,7 @@ func (h *ExampleResponseHook) OnBeforeWriteHeaders(ctx context.Context, req *Hea
 	// Add custom headers
 	modifiedHeaders["X-Gateway-Version"] = "v2.0"
 	modifiedHeaders["X-Hook-Applied"] = h.name
-	modifiedHeaders["X-Request-ID"] = req.Context.RequestID
+	modifiedHeaders[requestid.Header] = req.Context.RequestID
 	
 	return &HeadersResponse{
 		Modified: true,

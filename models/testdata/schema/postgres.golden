@@ -901,6 +901,36 @@ TABLE mcp_access_grants
   column granted_by_user_id bigint(int8) nullable=YES precision=64 scale=0
   column revoked_at timestamp with time zone(timestamptz) nullable=YES
   column revoke_reason character varying(varchar) nullable=YES len=255
+TABLE mcp_call_records
+  constraint mcp_call_records_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_mcp_calls_app_time ON mcp_call_records USING btree (app_id, "timestamp")
+  index CREATE INDEX idx_mcp_calls_conn_time ON mcp_call_records USING btree (connection_id, "timestamp")
+  index CREATE INDEX idx_mcp_calls_server_time ON mcp_call_records USING btree (mcp_server_id, "timestamp")
+  index CREATE INDEX idx_mcp_calls_time ON mcp_call_records USING btree ("timestamp")
+  index CREATE UNIQUE INDEX mcp_call_records_pkey ON mcp_call_records USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('mcp_call_records_id_seq'::regclass)
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column timestamp timestamp with time zone(timestamptz) nullable=NO
+  column connection_id bigint(int8) nullable=NO precision=64 scale=0
+  column mcp_server_id bigint(int8) nullable=YES precision=64 scale=0
+  column tyk_api_id character varying(varchar) nullable=YES len=64
+  column org_id character varying(varchar) nullable=YES len=64
+  column app_id bigint(int8) nullable=YES precision=64 scale=0
+  column credential_id character varying(varchar) nullable=YES len=36
+  column jsonrpc_method character varying(varchar) nullable=YES len=128
+  column primitive_type character varying(varchar) nullable=YES len=32
+  column primitive_name character varying(varchar) nullable=YES len=512
+  column jsonrpc_error_code bigint(int8) nullable=YES precision=64 scale=0
+  column response_code bigint(int8) nullable=YES precision=64 scale=0
+  column latency_total_ms bigint(int8) nullable=YES precision=64 scale=0
+  column latency_upstream_ms bigint(int8) nullable=YES precision=64 scale=0
+  column latency_gateway_ms bigint(int8) nullable=YES precision=64 scale=0
+  column bytes_in bigint(int8) nullable=YES precision=64 scale=0
+  column bytes_out bigint(int8) nullable=YES precision=64 scale=0
+  column protocol_version character varying(varchar) nullable=YES len=32
+  column session_id character varying(varchar) nullable=YES len=128
+  column trace_id character varying(varchar) nullable=YES len=128
+  column source character varying(varchar) nullable=YES len=32
 TABLE mcp_credentials
   constraint fk_mcp_credentials_app FOREIGN KEY (app_id) REFERENCES apps(id)
   constraint fk_mcp_credentials_connection FOREIGN KEY (connection_id) REFERENCES tyk_connections(id)
@@ -1484,6 +1514,7 @@ TABLE proxy_logs
   index CREATE INDEX idx_proxy_logs_deleted_at ON proxy_logs USING btree (deleted_at)
   index CREATE INDEX idx_proxy_logs_failover_from ON proxy_logs USING btree (failover_from_llm_id)
   index CREATE INDEX idx_proxy_logs_llm_time ON proxy_logs USING btree (llm_id, time_stamp)
+  index CREATE INDEX idx_proxy_logs_request_id ON proxy_logs USING btree (request_id)
   index CREATE INDEX idx_proxy_logs_request_kind ON proxy_logs USING btree (request_kind)
   index CREATE INDEX idx_proxy_logs_router ON proxy_logs USING btree (router_slug)
   index CREATE INDEX idx_proxy_logs_time ON proxy_logs USING btree (time_stamp)
@@ -1518,6 +1549,8 @@ TABLE proxy_logs
   column acting_agent character varying(varchar) nullable=YES len=255
   column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
   column service_tier character varying(varchar) nullable=YES len=32
+  column request_id character varying(varchar) nullable=YES len=64
+  column client_request_id character varying(varchar) nullable=YES len=128
 TABLE push_operations
   constraint push_operations_pkey PRIMARY KEY (operation_id)
   index CREATE INDEX idx_push_operations_completed_at ON push_operations USING btree (completed_at)
@@ -1877,6 +1910,19 @@ TABLE tools
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata json(json) nullable=YES
+TABLE tyk_connection_ingests
+  constraint tyk_connection_ingests_pkey PRIMARY KEY (connection_id)
+  index CREATE UNIQUE INDEX idx_tyk_ingest_token_hash ON tyk_connection_ingests USING btree (token_hash)
+  index CREATE UNIQUE INDEX tyk_connection_ingests_pkey ON tyk_connection_ingests USING btree (connection_id)
+  column connection_id bigint(int8) nullable=NO precision=64 scale=0
+  column token_hash character varying(varchar) nullable=YES len=64
+  column token_prefix character varying(varchar) nullable=YES len=32
+  column token_created_at timestamp with time zone(timestamptz) nullable=YES
+  column token_created_by bigint(int8) nullable=YES precision=64 scale=0
+  column last_batch_at timestamp with time zone(timestamptz) nullable=YES
+  column last_unknown_api_id character varying(varchar) nullable=YES len=64
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE tyk_connections
   constraint tyk_connections_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_tyk_connections_deleted_at ON tyk_connections USING btree (deleted_at)
@@ -1968,6 +2014,17 @@ TABLE tyk_gateway_nodes
   column gone_at timestamp with time zone(timestamptz) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE tyk_ingest_stats
+  constraint tyk_ingest_stats_pkey PRIMARY KEY (connection_id, hour)
+  index CREATE INDEX idx_tyk_ingest_stats_hour ON tyk_ingest_stats USING btree (hour)
+  index CREATE UNIQUE INDEX tyk_ingest_stats_pkey ON tyk_ingest_stats USING btree (connection_id, hour)
+  column connection_id bigint(int8) nullable=NO precision=64 scale=0
+  column hour timestamp with time zone(timestamptz) nullable=NO
+  column received bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column stored bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column skipped_non_mcp bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column unknown_api bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column unattributed bigint(int8) nullable=NO precision=64 scale=0 default=0
 TABLE tyk_policies
   constraint tyk_policies_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX idx_tyk_policies_conn_pol ON tyk_policies USING btree (connection_id, tyk_policy_id)

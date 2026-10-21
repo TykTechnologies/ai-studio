@@ -11,7 +11,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -19,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
@@ -613,7 +613,7 @@ func isEmptySlice(v interface{}) bool {
 }
 
 func generateRequestID() string {
-	return "req_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	return requestid.New()
 }
 
 // readBodyWithoutConsuming reads the body for the plugins and puts it back.

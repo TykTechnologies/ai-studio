@@ -128,7 +128,9 @@ shares the one-instance-per-process rule with `New`. See
   budgets and spend are computed from it. To also ship records into the
   host's pipeline, pass `AnalyticsSinks`: each sink gets a copy of every
   record through its own bounded queue, and records a slow sink cannot take
-  are dropped (and logged) rather than slowing requests.
+  are dropped (and logged) rather than slowing requests. Tyk MCP analytics
+  calls go only to sinks that also implement `analytics.MCPCallRecorder`
+  (`RecordMCPCalls`); other sinks are skipped for them.
 - **Replace directives.** Go ignores `replace` directives in dependencies,
   and a host needs to copy none of this repository's. The only one left, `./enterprise`, points
   this repository's own builds at the submodule; an enterprise host requires

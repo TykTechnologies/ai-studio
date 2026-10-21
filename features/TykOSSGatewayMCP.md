@@ -22,7 +22,8 @@ that enforce this.
 Out of scope for v1:
 - REST-to-MCP proxies (Tyk Enterprise Edition gateway feature).
 - Gateway analytics (OSS writes analytics to Redis for Tyk Pump; there is no
-  Dashboard to read them from).
+  Dashboard to read them from). Since added: Tyk Pump delivers the MCP
+  records to a Studio ingest endpoint; see `features/TykMCPAnalytics.md`.
 - Upstream OAuth and token exchange (Gateway EE features).
 
 ## 2. What the OSS Gateway offers (verified in source)
@@ -450,8 +451,8 @@ broker mode or higher, and not partial. No pin is needed.
 - The Dashboard integration does not set `stripAuthorizationData` either. Its
   Studio-minted keys reach third-party upstreams. Decide separately; it
   changes existing proxies.
-- The Gateway's own MCP analytics are not read; OSS writes them to Redis for
-  Tyk Pump.
+- ~~The Gateway's own MCP analytics are not read.~~ They now arrive through
+  Tyk Pump (`features/TykMCPAnalytics.md`).
 - The scale-up 404 window remains when storage is not shared (see the docs).
 - `TestHostConnection_HostMovesToAnUnreachableDashboard` is flaky on `main`
   too (5/8 failures on the base commit). The test's explicit `reconcileHost`

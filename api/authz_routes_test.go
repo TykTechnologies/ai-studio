@@ -28,6 +28,9 @@ var publicV1Routes = map[string]bool{
 	"GET /api/v1/branding/settings": true,
 	"GET /api/v1/branding/logo":     true,
 	"GET /api/v1/branding/favicon":  true,
+	// Tyk Pump delivers analytics with the connection's ingest token, not a
+	// session; the service authenticates the token.
+	"POST /api/v1/ingest/tyk-analytics": true,
 }
 
 func assertRoutesAnnotated(t *testing.T, api *API) {

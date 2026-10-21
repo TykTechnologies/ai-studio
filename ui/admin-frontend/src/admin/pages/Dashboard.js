@@ -33,6 +33,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import CircularProgress from "@mui/material/CircularProgress";
 import DataUsageIcon from "@mui/icons-material/DataUsage";
 import ChatRoomWizard from "../components/wizards/ChatRoomWizard";
+import MCPTrafficPanel from "../components/mcp-analytics/MCPTrafficPanel";
+import useTykMCPEnabled from "../components/mcp-analytics/useTykMCPEnabled";
 
 import {
   Chart as ChartJS,
@@ -165,6 +167,10 @@ const Dashboard = () => {
   );
   const [interactionType, setInteractionType] = useState(null);
 
+  // The MCP traffic panel follows the applied range, not every keystroke.
+  const [mcpRange, setMcpRange] = useState({ startDate, endDate });
+  const tykMCPEnabled = useTykMCPEnabled();
+
   const handleInteractionTypeChange = (event, newValue) => {
     setInteractionType(newValue);
   };
@@ -283,6 +289,7 @@ const Dashboard = () => {
 
   const handleDateChange = () => {
     fetchData();
+    setMcpRange({ startDate, endDate });
   };
 
   const chartOptions = useMemo(() => ({
@@ -786,6 +793,21 @@ const Dashboard = () => {
               </Grid>
             </Grid>
           </Box>
+
+          {tykMCPEnabled && (
+            <>
+              <Divider sx={{ my: 4 }} />
+              <Box sx={{ p: 3 }} data-testid="dashboard-mcp-traffic">
+                <SectionTitle
+                  title="MCP traffic"
+                  helpText="Calls to MCP servers through Tyk Gateways, sent to AI Studio by Tyk Pump"
+                />
+                <ChartPaper elevation={3} sx={{ height: "auto", pb: 3 }}>
+                  <MCPTrafficPanel startDate={mcpRange.startDate} endDate={mcpRange.endDate} />
+                </ChartPaper>
+              </Box>
+            </>
+          )}
         </>
       )}
 

@@ -462,4 +462,22 @@ describe("guardrail config helpers", () => {
     );
     expect(budgetErrors({ budget: { single_call_chars: 32768 } })).toEqual({});
   });
+
+  it("turns the flagged-text excerpt on and off, keeping the length only while on", async () => {
+    apiClient.get.mockResolvedValue({ data: providers });
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), detectors: [{ name: "secrets" }] }} onChange={onChange} />);
+
+    const excerpt = await screen.findByTestId("guardrail-evidence-excerpt");
+    expect(excerpt).not.toBeChecked();
+    expect(screen.queryByTestId("guardrail-evidence-chars")).not.toBeInTheDocument();
+
+    fireEvent.click(excerpt);
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ evidence: { excerpt: true } }));
+    fireEvent.change(screen.getByTestId("guardrail-evidence-chars"), { target: { value: "400" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ evidence: { excerpt: true, excerpt_chars: 400 } }));
+
+    fireEvent.click(screen.getByTestId("guardrail-evidence-excerpt"));
+    expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].evidence).toBeUndefined();
+  });
 });

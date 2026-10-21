@@ -11,5 +11,6 @@ func AnalyticsModels() []interface{} {
 		&ToolCallRecord{},
 		&ProxyLog{},
 		&ComplianceEvent{},
+		&MCPCallRecord{},
 	}
 }

@@ -2,7 +2,9 @@ package models
 
 import (
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -101,6 +103,98 @@ type ToolCallRecord struct {
 	TimeStamp time.Time
 }
 
+// MCP call record sources.
+const (
+	// MCPCallSourceTykPump is a record a Tyk Pump delivered to the ingest
+	// endpoint (the http pump, or the stdout pump through a log shipper).
+	MCPCallSourceTykPump = "tyk_pump"
+)
+
+// MCPCallRecord is one MCP request a Tyk Gateway proxied for a server Studio
+// brokers. Studio never sees that traffic, so the rows come from the
+// Gateway's analytics records, delivered through Tyk Pump.
+//
+// By design there is no column for a raw API key, a request or response
+// body, or a client IP: the ingester attributes the call to an App and
+// credential and drops the rest.
+type MCPCallRecord struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	// Timestamp is when the Gateway handled the request.
+	Timestamp time.Time `gorm:"not null;index:idx_mcp_calls_time;index:idx_mcp_calls_server_time,priority:2;index:idx_mcp_calls_app_time,priority:2;index:idx_mcp_calls_conn_time,priority:2" json:"timestamp"`
+
+	ConnectionID uint `gorm:"not null;index:idx_mcp_calls_conn_time,priority:1" json:"connection_id"`
+	// MCPServerID is nil when the record could not be tied to a server.
+	MCPServerID *uint  `gorm:"index:idx_mcp_calls_server_time,priority:1" json:"mcp_server_id"`
+	TykAPIID    string `gorm:"size:64" json:"tyk_api_id"`
+	OrgID       string `gorm:"size:64" json:"org_id"`
+	// AppID and CredentialID are set when the call's key is a brokered
+	// credential (or its alias names the App); nil otherwise.
+	AppID        *uint   `gorm:"index:idx_mcp_calls_app_time,priority:1" json:"app_id"`
+	CredentialID *string `gorm:"size:36" json:"credential_id"`
+
+	JSONRPCMethod    string `gorm:"column:jsonrpc_method;size:128" json:"jsonrpc_method"`
+	PrimitiveType    string `gorm:"size:32" json:"primitive_type"`
+	PrimitiveName    string `gorm:"size:512" json:"primitive_name"`
+	JSONRPCErrorCode int    `gorm:"column:jsonrpc_error_code" json:"jsonrpc_error_code"`
+	ResponseCode     int    `json:"response_code"`
+
+	LatencyTotalMs    int64 `json:"latency_total_ms"`
+	LatencyUpstreamMs int64 `json:"latency_upstream_ms"`
+	LatencyGatewayMs  int64 `json:"latency_gateway_ms"`
+	BytesIn           int64 `json:"bytes_in"`
+	BytesOut          int64 `json:"bytes_out"`
+
+	ProtocolVersion string `gorm:"size:32" json:"protocol_version"`
+	SessionID       string `gorm:"size:128" json:"session_id"`
+	TraceID         string `gorm:"size:128" json:"trace_id"`
+	Source          string `gorm:"size:32" json:"source"`
+}
+
+// ClampLengths cuts the string fields to their column sizes, so one
+// oversized value from a Gateway cannot fail the insert of a whole batch
+// (Postgres rejects a varchar overflow).
+func (r *MCPCallRecord) ClampLengths() {
+	r.TykAPIID = clampString(r.TykAPIID, 64)
+	r.OrgID = clampString(r.OrgID, 64)
+	if r.CredentialID != nil {
+		c := clampString(*r.CredentialID, 36)
+		r.CredentialID = &c
+	}
+	r.JSONRPCMethod = clampString(r.JSONRPCMethod, 128)
+	r.PrimitiveType = clampString(r.PrimitiveType, 32)
+	r.PrimitiveName = clampString(r.PrimitiveName, 512)
+	r.ProtocolVersion = clampString(r.ProtocolVersion, 32)
+	r.SessionID = clampString(r.SessionID, 128)
+	r.TraceID = clampString(r.TraceID, 128)
+	r.Source = clampString(r.Source, 32)
+}
+
+// clampString drops invalid UTF-8 and NUL bytes and cuts s to at most n
+// bytes without splitting a character (Postgres rejects invalid UTF-8 and
+// NUL in text as well as an overflow). varchar(n) counts characters, so n
+// bytes always fits.
+func clampString(s string, n int) string {
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "")
+	}
+	if strings.IndexByte(s, 0) >= 0 {
+		s = strings.ReplaceAll(s, "\x00", "")
+	}
+	if len(s) <= n {
+		return s
+	}
+	s = s[:n]
+	for len(s) > 0 {
+		r, size := utf8.DecodeLastRuneInString(s)
+		if r != utf8.RuneError || size != 1 {
+			break
+		}
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
 // ChartData represents data for charts
 type ChartData struct {
 	Labels []string  `json:"labels"`
@@ -172,6 +266,8 @@ type ProxyLogAttributes struct {
 	ShadowRoute       string    `json:"shadow_route,omitempty"`
 	OnBehalfOf        string    `json:"on_behalf_of,omitempty"`
 	ActingAgent       string    `json:"acting_agent,omitempty"`
+	RequestID         string    `json:"request_id,omitempty"`
+	ClientRequestID   string    `json:"client_request_id,omitempty"`
 }
 
 // NewProxyLogResponse serialises one ProxyLog row for the proxy-log
@@ -204,6 +300,8 @@ func NewProxyLogResponse(log ProxyLog) ProxyLogResponse {
 			ShadowRoute:       log.ShadowRoute,
 			OnBehalfOf:        log.OnBehalfOf,
 			ActingAgent:       log.ActingAgent,
+			RequestID:         log.RequestID,
+			ClientRequestID:   log.ClientRequestID,
 		},
 	}
 }
@@ -276,4 +374,10 @@ type ProxyLog struct {
 	// ServiceTier is the vendor service tier of the call's usage, as on its
 	// chat record.
 	ServiceTier string `gorm:"size:32"`
+	// RequestID is the gateway's id for the request (pkg/requestid: the
+	// X-Tyk-AI-Request-ID it answered with, and the request_id of the
+	// request's compliance events). Every failover attempt of one request
+	// shares it. ClientRequestID is the caller's own X-Request-ID, sanitised.
+	RequestID       string `gorm:"size:64;index:idx_proxy_logs_request_id"`
+	ClientRequestID string `gorm:"size:128"`
 }

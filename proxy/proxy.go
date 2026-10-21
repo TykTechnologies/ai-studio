@@ -25,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/segments"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -513,7 +514,7 @@ func (p *Proxy) Reload() error {
 // Handler returns the HTTP handler for the proxy, allowing it to be used
 // with existing HTTP servers instead of starting its own server
 func (p *Proxy) Handler() http.Handler {
-	return fixDoubleSlash(p.createHandler())
+	return withRequestID(fixDoubleSlash(p.createHandler()))
 }
 
 func (p *Proxy) loadResources() error {
@@ -2456,6 +2457,14 @@ type requestFilterRunner struct {
 	runner scripting.FilterRunner
 }
 
+// filterRequestID is the request id filters see: the gateway's own
+// (pkg/requestid, answered in X-Tyk-AI-Request-ID), so a compliance event and
+// a guardrail provider's log name the request the client saw.
+func filterRequestID(r *http.Request) string {
+	id, _ := RequestIDs(r)
+	return id
+}
+
 // requestFilterRunners builds llm's request filters (response filters are
 // skipped) in chain order. The runners may be built once and reused for many
 // bodies, including from several goroutines at once, such as for every item of
@@ -2513,7 +2522,10 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 	}
 	scriptCtx["llm_id"] = int64(llm.ID) // Convert uint to int64 for Tengo
 	scriptCtx["app_id"] = int64(appID)  // Convert uint to int64 for Tengo
-	scriptCtx["request_id"] = r.Header.Get("X-Request-ID")
+	scriptCtx["request_id"] = filterRequestID(r)
+	scriptCtx["client_request_id"] = requestid.ClientFromContext(r.Context())
+	// Guardrail compliance events carry no excerpt of a body the LLM keeps out of the logs.
+	scriptCtx["dont_log_bodies"] = llm.DontLogBodies
 	// "decision" for decision-model requests, "" otherwise.
 	scriptCtx["request_kind"] = string(requestKindForPath(r.URL.Path))
 

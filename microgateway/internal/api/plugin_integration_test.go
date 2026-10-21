@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -354,9 +355,9 @@ func TestGenerateRequestID(t *testing.T) {
 	time.Sleep(time.Nanosecond) // Ensure different timestamps
 	id2 := generateRequestID()
 
-	// Should start with "req_"
-	assert.True(t, strings.HasPrefix(id1, "req_"))
-	assert.True(t, strings.HasPrefix(id2, "req_"))
+	// The gateway's own id shape (pkg/requestid)
+	assert.True(t, strings.HasPrefix(id1, requestid.Prefix) && requestid.Valid(id1), id1)
+	assert.True(t, requestid.Valid(id2), id2)
 
 	// Should be unique
 	assert.NotEqual(t, id1, id2)

@@ -137,6 +137,8 @@ func InitModels(db *gorm.DB) error {
 		&MCPCredential{},       // Tyk keys minted for Apps (ledger; plaintext never stored)
 		&TykGatewayNode{},       // Nodes of Tyk OSS Gateway connections
 		&TykGatewayDefinition{}, // Desired MCP proxies Studio owns on Tyk OSS Gateways (encrypted)
+		&TykConnectionIngest{},  // Analytics ingest tokens (hash only) and state per connection
+		&TykIngestStat{},        // Hourly analytics ingest counters per connection
 		// Team budgets (Enterprise; tables exist in CE for team cost reporting)
 		&TeamBudget{},         // Per-team budget, allocation pool and enforcement
 		&TeamBudgetSettings{}, // Global team budget switch

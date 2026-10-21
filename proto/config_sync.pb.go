@@ -1956,7 +1956,15 @@ type AnalyticsEvent struct {
 	DecisionQuestions uint32 `protobuf:"varint,43,opt,name=decision_questions,json=decisionQuestions,proto3" json:"decision_questions,omitempty"` // decision calls: questions asked
 	DecisionRefusals  uint32 `protobuf:"varint,44,opt,name=decision_refusals,json=decisionRefusals,proto3" json:"decision_refusals,omitempty"`    // decision calls: questions the model declined (answered = choices)
 	// Vendor service tier the usage was billed at ("batch", "priority", "flex"...); empty for list-price traffic.
-	ServiceTier   string `protobuf:"bytes,45,opt,name=service_tier,json=serviceTier,proto3" json:"service_tier,omitempty"`
+	ServiceTier string `protobuf:"bytes,45,opt,name=service_tier,json=serviceTier,proto3" json:"service_tier,omitempty"`
+	// The gateway's request id (pkg/requestid, the X-Tyk-AI-Request-ID the edge
+	// answered with); request_id above is the edge's row key. client_request_id
+	// is the caller's own X-Request-ID, sanitised.
+	GatewayRequestId string `protobuf:"bytes,46,opt,name=gateway_request_id,json=gatewayRequestId,proto3" json:"gateway_request_id,omitempty"`
+	ClientRequestId  string `protobuf:"bytes,47,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
+	// no_usage marks a request that produced no usage (a policy block, an
+	// error): the hub records its request log row, but no chat record or spend.
+	NoUsage       bool `protobuf:"varint,48,opt,name=no_usage,json=noUsage,proto3" json:"no_usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2304,6 +2312,27 @@ func (x *AnalyticsEvent) GetServiceTier() string {
 		return x.ServiceTier
 	}
 	return ""
+}
+
+func (x *AnalyticsEvent) GetGatewayRequestId() string {
+	if x != nil {
+		return x.GatewayRequestId
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetClientRequestId() string {
+	if x != nil {
+		return x.ClientRequestId
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetNoUsage() bool {
+	if x != nil {
+		return x.NoUsage
+	}
+	return false
 }
 
 // Budget usage event for pulse batching
@@ -3262,7 +3291,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xe2\f\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xd7\r\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -3319,7 +3348,10 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\frequest_kind\x18* \x01(\tR\vrequestKind\x12-\n" +
 	"\x12decision_questions\x18+ \x01(\rR\x11decisionQuestions\x12+\n" +
 	"\x11decision_refusals\x18, \x01(\rR\x10decisionRefusals\x12!\n" +
-	"\fservice_tier\x18- \x01(\tR\vserviceTier\"\xa2\x03\n" +
+	"\fservice_tier\x18- \x01(\tR\vserviceTier\x12,\n" +
+	"\x12gateway_request_id\x18. \x01(\tR\x10gatewayRequestId\x12*\n" +
+	"\x11client_request_id\x18/ \x01(\tR\x0fclientRequestId\x12\x19\n" +
+	"\bno_usage\x180 \x01(\bR\anoUsage\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

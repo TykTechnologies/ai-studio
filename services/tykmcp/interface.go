@@ -580,6 +580,23 @@ type Service interface {
 	ApplyDrift(ctx context.Context, actor Actor, id string) (*models.MCPCredentialResponse, error)
 	AccessReport(ctx context.Context, f ReportFilter) ([]AccessReportRow, error)
 
+	// Analytics ingest (Tyk Pump delivers the Gateway's analytics records)
+	// AuthenticateIngest resolves an ingest token to its connection, in
+	// constant time against the stored hash. A missing, unknown or revoked
+	// token, or one whose connection is disabled, is ErrIngestUnauthorized.
+	AuthenticateIngest(ctx context.Context, token string) (connectionID uint, err error)
+	// IngestAnalytics records the MCP calls in a batch for an authenticated
+	// connection. Records are resolved against that connection's servers
+	// only, so a token can never write rows for another connection.
+	IngestAnalytics(ctx context.Context, connectionID uint, records []TykAnalyticsRecord) (*IngestResult, error)
+	// RotateIngestToken generates a connection's ingest token, replacing any
+	// previous one, and returns the plaintext exactly once.
+	RotateIngestToken(ctx context.Context, actor Actor, connectionID uint) (*RotatedIngestToken, error)
+	// RevokeIngestToken removes a connection's ingest token.
+	RevokeIngestToken(ctx context.Context, actor Actor, connectionID uint) (*IngestStatus, error)
+	// GetIngestStatus reports what a connection's ingest has seen.
+	GetIngestStatus(ctx context.Context, connectionID uint) (*IngestStatus, error)
+
 	// Lifecycle
 	Status() Status
 	Stop()

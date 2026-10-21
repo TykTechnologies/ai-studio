@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Autocomplete,
@@ -15,11 +15,13 @@ import {
   Grid,
   MenuItem,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Typography,
   Link,
@@ -35,6 +37,8 @@ import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import RelationshipPicker from "../components/common/relationship-picker";
 import { P } from "../rbac/permissions";
 import MCPKeyAccessEditor from "./MCPKeyAccessEditor";
+import MCPServerUsage from "../components/mcp-analytics/MCPServerUsage";
+import { usePermissions } from "../context/PermissionsContext";
 import {
   TitleBox,
   ContentBox,
@@ -335,6 +339,11 @@ const MCPServerDetail = () => {
   const [handoff, setHandoff] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteForce, setDeleteForce] = useState(false);
+  const { can } = usePermissions();
+  const canReadAnalytics = can(P.ANALYTICS_READ);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = canReadAnalytics && searchParams.get("tab") === "usage" ? "usage" : "details";
+  const setTab = (v) => setSearchParams(v === "usage" ? { tab: "usage" } : {}, { replace: true });
 
   const load = useCallback(async () => {
     setError(null);
@@ -553,6 +562,17 @@ const MCPServerDetail = () => {
           </Alert>
         )}
 
+        {canReadAnalytics && (
+          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+            <Tab value="details" label="Details" data-testid="tab-details" />
+            <Tab value="usage" label="Usage" data-testid="tab-usage" />
+          </Tabs>
+        )}
+
+        {tab === "usage" && <MCPServerUsage serverId={server.id} connectionId={server.connection_id} />}
+
+        {tab === "details" && (
+        <>
         {server.dashboard_state === "pending_platform" && (
           <Section
             title="Awaiting the platform team"
@@ -860,6 +880,8 @@ const MCPServerDetail = () => {
               </DangerOutlineButton>
             </Section>
           </Can>
+        )}
+        </>
         )}
       </ContentBox>
 

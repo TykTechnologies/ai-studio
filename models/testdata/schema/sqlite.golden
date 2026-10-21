@@ -835,6 +835,34 @@ TABLE mcp_access_grants
   index CREATE INDEX `idx_mcp_access_grants_revoked_at` ON `mcp_access_grants`(`revoked_at`)
   index CREATE INDEX `idx_mcp_access_grants_user_id` ON `mcp_access_grants`(`user_id`)
   index CREATE UNIQUE INDEX `idx_mcp_grants_open` ON `mcp_access_grants`(`app_id`,`mcp_server_id`) WHERE revoked_at IS NULL
+TABLE mcp_call_records
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `timestamp` datetime NOT NULL
+  column `connection_id` integer NOT NULL
+  column `mcp_server_id` integer
+  column `tyk_api_id` text
+  column `org_id` text
+  column `app_id` integer
+  column `credential_id` text
+  column `jsonrpc_method` text
+  column `primitive_type` text
+  column `primitive_name` text
+  column `jsonrpc_error_code` integer
+  column `response_code` integer
+  column `latency_total_ms` integer
+  column `latency_upstream_ms` integer
+  column `latency_gateway_ms` integer
+  column `bytes_in` integer
+  column `bytes_out` integer
+  column `protocol_version` text
+  column `session_id` text
+  column `trace_id` text
+  column `source` text
+  index CREATE INDEX `idx_mcp_calls_app_time` ON `mcp_call_records`(`app_id`,`timestamp`)
+  index CREATE INDEX `idx_mcp_calls_conn_time` ON `mcp_call_records`(`connection_id`,`timestamp`)
+  index CREATE INDEX `idx_mcp_calls_server_time` ON `mcp_call_records`(`mcp_server_id`,`timestamp`)
+  index CREATE INDEX `idx_mcp_calls_time` ON `mcp_call_records`(`timestamp`)
 TABLE mcp_credentials
   column `id` text
   column `app_id` integer
@@ -1388,12 +1416,15 @@ TABLE proxy_logs
   column `acting_agent` text
   column `request_kind` text DEFAULT ""
   column `service_tier` text
+  column `request_id` text
+  column `client_request_id` text
   index CREATE INDEX `idx_proxy_logs_app_code_time` ON `proxy_logs`(`app_id`,`response_code`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_app_time` ON `proxy_logs`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_proxy_logs_code` ON `proxy_logs`(`response_code`)
   index CREATE INDEX `idx_proxy_logs_deleted_at` ON `proxy_logs`(`deleted_at`)
   index CREATE INDEX `idx_proxy_logs_failover_from` ON `proxy_logs`(`failover_from_llm_id`)
   index CREATE INDEX `idx_proxy_logs_llm_time` ON `proxy_logs`(`llm_id`,`time_stamp`)
+  index CREATE INDEX `idx_proxy_logs_request_id` ON `proxy_logs`(`request_id`)
   index CREATE INDEX `idx_proxy_logs_request_kind` ON `proxy_logs`(`request_kind`)
   index CREATE INDEX `idx_proxy_logs_router` ON `proxy_logs`(`router_slug`)
   index CREATE INDEX `idx_proxy_logs_time` ON `proxy_logs`(`time_stamp`)
@@ -1720,6 +1751,18 @@ TABLE tools
   index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)
   index CREATE INDEX `idx_tools_name` ON `tools`(`name`)
   index CREATE INDEX `idx_tools_slug` ON `tools`(`slug`)
+TABLE tyk_connection_ingests
+  column `connection_id` integer
+  column `token_hash` text
+  column `token_prefix` text
+  column `token_created_at` datetime
+  column `token_created_by` integer
+  column `last_batch_at` datetime
+  column `last_unknown_api_id` text
+  column `created_at` datetime
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`connection_id`)
+  index CREATE UNIQUE INDEX `idx_tyk_ingest_token_hash` ON `tyk_connection_ingests`(`token_hash`)
 TABLE tyk_connections
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1805,6 +1848,17 @@ TABLE tyk_gateway_nodes
   column `created_at` datetime
   column `updated_at` datetime
   index CREATE UNIQUE INDEX `idx_tyk_gateway_nodes_conn_addr` ON `tyk_gateway_nodes`(`connection_id`,`address`)
+TABLE tyk_ingest_stats
+  column `connection_id` integer
+  column `hour` datetime
+  column `received` integer NOT NULL DEFAULT 0
+  column `stored` integer NOT NULL DEFAULT 0
+  column `skipped_non_mcp` integer NOT NULL DEFAULT 0
+  column `unknown_api` integer NOT NULL DEFAULT 0
+  column `unattributed` integer NOT NULL DEFAULT 0
+  constraint PRIMARY KEY (`connection_id`,`hour`)
+  autoindex origin=pk unique=1 (connection_id, hour)
+  index CREATE INDEX `idx_tyk_ingest_stats_hour` ON `tyk_ingest_stats`(`hour`)
 TABLE tyk_policies
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

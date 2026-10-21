@@ -259,6 +259,12 @@ type AnalyticsEvent struct {
 	// ("batch", "priority"...), as on the hub's LLMChatRecord.
 	ServiceTier string `gorm:"size:32"`
 
+	// GatewayRequestID is the gateway's request id (pkg/requestid, the
+	// X-Tyk-AI-Request-ID the edge answered with); RequestID is this row's
+	// key, unique per attempt. ClientRequestID is the caller's X-Request-ID.
+	GatewayRequestID string `gorm:"size:64;index:idx_analytics_gateway_request"`
+	ClientRequestID  string `gorm:"size:128"`
+
 	// Timestamps
 	TimeStamp      time.Time      `gorm:"index:idx_analytics_timestamp"` // Match LLMChatRecord field name
 	CreatedAt      time.Time      `gorm:"index:idx_analytics_app"`
