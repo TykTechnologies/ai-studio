@@ -42,21 +42,44 @@ func TestArgsFingerprint_FlattenCollision(t *testing.T) {
 	}
 }
 
+// Canonicalizing many keys scales close to linearly (the key sort is
+// n log n): 4x the keys may take at most 10x as long, where a quadratic sort
+// would take ~16x. Both sizes are timed in the same run, best of three, so
+// a slow or loaded machine (CI under -race) slows both alike.
 func TestCanonicalize_ManyKeysFast(t *testing.T) {
-	var b strings.Builder
-	b.WriteString("{")
-	for i := 0; i < 200000; i++ {
-		if i > 0 {
-			b.WriteString(",")
+	object := func(n int) []byte {
+		var b strings.Builder
+		b.WriteString("{")
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `"k%07d":%d`, n-1-i, i)
 		}
-		fmt.Fprintf(&b, `"k%07d":%d`, 199999-i, i)
+		b.WriteString("}")
+		return []byte(b.String())
 	}
-	b.WriteString("}")
-	start := time.Now()
-	out, err := Canonicalize([]byte(b.String()))
+	best := func(in []byte) time.Duration {
+		var min time.Duration
+		for i := 0; i < 3; i++ {
+			start := time.Now()
+			_, err := Canonicalize(in)
+			require.NoError(t, err)
+			if d := time.Since(start); i == 0 || d < min {
+				min = d
+			}
+		}
+		return min
+	}
+	const n = 25000
+	small, large := object(n), object(4*n)
+	out, err := Canonicalize(large)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(out), `{"k0000000":199999,`))
-	assert.Less(t, time.Since(start), 2*time.Second)
+	assert.True(t, strings.HasPrefix(string(out), `{"k0000000":99999,`))
+
+	ts, tl := best(small), best(large)
+	t.Logf("%d keys: %v, %d keys: %v (ratio %.1f)", n, ts, 4*n, tl, float64(tl)/float64(ts))
+	assert.Less(t, float64(tl), 10*float64(ts), "4x the keys took %v vs %v", tl, ts)
 }
 
 func TestArgsFingerprint_StringEncodedEqualsObject(t *testing.T) {
