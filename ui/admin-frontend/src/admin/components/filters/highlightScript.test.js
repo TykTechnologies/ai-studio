@@ -26,4 +26,32 @@ function filter(input) {
   it("escapes markup in the script", () => {
     expect(highlightScript('"<img src=x>"')).toContain("&lt;img src=x>");
   });
+
+  // Security review of the editor highlighter: script text never becomes
+  // markup, wherever the grammar puts it.
+  describe("hostile payloads", () => {
+    const payloads = ["</span><img src=x onerror=alert(1)>", "<script>alert(1)</script>"];
+    const places = {
+      comment: (p) => `// ${p}\n/* ${p} */`,
+      string: (p) => `const a = "${p}"; const b = '${p}';`,
+      template: (p) => `const t = \`${p} \${x} ${p}\`;`,
+      regex: (p) => `const r = /${p.replace(/\//g, "\\/")}/g;`,
+      bare: (p) => p,
+    };
+    const cases = payloads.flatMap((payload) =>
+      Object.entries(places).map(([place, wrap]) => [place, payload, wrap(payload)]),
+    );
+
+    it.each(cases)("in a %s, %s, matches Prism.highlight", (_place, _payload, script) => {
+      expect(highlightScript(script)).toBe(highlight(script, languages.js, "javascript"));
+    });
+
+    it.each(cases)("in a %s, %s, renders as text only", (_place, _payload, script) => {
+      const div = document.createElement("div");
+      div.innerHTML = highlightScript(script);
+      // eslint-disable-next-line testing-library/no-node-access
+      expect(div.querySelector("img, script")).toBeNull();
+      expect(div.textContent).toBe(script);
+    });
+  });
 });
