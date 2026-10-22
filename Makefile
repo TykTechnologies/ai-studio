@@ -536,6 +536,15 @@ module-check: ## Check the Go proxy would accept HEAD as a module zip (commit fi
 ent-link: ## Link enterprise tests of core packages in from enterprise/_coretests (no-op without the submodule)
 	@scripts/enterprise-link-tests.sh
 
+.PHONY: agent-tracing-docs agent-tracing-docs-verify
+agent-tracing-docs: ## Regenerate the OTel attribute tables in docs/site/docs/agent-tracing.md from the enterprise mapping profile
+	@cd enterprise && UPDATE_DOCS=1 go test -tags enterprise -count=1 -run TestAttributeTableDocInSync ./features/agenttracing/otelexport/
+
+agent-tracing-docs-verify: ## Check those tables match the mapping profile (no-op without the enterprise submodule)
+	@if [ -d enterprise/features/agenttracing/otelexport ]; then \
+		cd enterprise && go test -tags enterprise -count=1 -run TestAttributeTableDocInSync ./features/agenttracing/otelexport/; \
+	else echo "agent-tracing-docs-verify: no enterprise submodule, skipped"; fi
+
 .PHONY: enterprise-import-guard
 enterprise-import-guard: ## Check no public package imports the private enterprise module
 	@scripts/enterprise-import-guard.sh
@@ -1180,6 +1189,17 @@ bench-report: ## Regenerate reports: make bench-report RUN=<results dir name>
 bench-unit: ## Unit tests for the benchmark tooling and Server-Timing
 	go test ./benchmarks/... ./pkg/testinfra/mockllm/ ./metrics/
 	go test ./proxy/ -run 'ServerTiming|InnerTiming'
+
+bench-agent-tracing: ## Agent tracing overhead (added p50 gated; quiet machine) and per-request capture cost; BENCH_EDITION=enterprise adds full content
+	scripts/agent-tracing-bench-gate.sh overhead $(or $(BENCH_EDITION),ce)
+
+bench-agent-tracing-ci: ## The blocking CI perf gate: allocations, write amplification, overhead reported
+	scripts/agent-tracing-bench-gate.sh ci $(or $(BENCH_EDITION),ce)
+
+bench-agent-tracing-soak: ## Assembler gate: seed ~4M spans, then 15 min at GOMAXPROCS=2, every minute >= 2,000 spans/s (AGENT_TRACE_SOAK=1h on Linux/CI; needs DATABASE_URL, Postgres limited to 2 CPUs)
+	scripts/agent-tracing-bench-gate.sh soak enterprise
+
+.PHONY: bench-agent-tracing bench-agent-tracing-ci bench-agent-tracing-soak
 
 # Clean target
 clean:

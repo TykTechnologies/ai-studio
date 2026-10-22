@@ -1,0 +1,203 @@
+// Recording reverse proxy for the harness session-id capture (jyx.52). Copy it
+// to main.go in a scratch dir outside the repo to build it. Forwards
+// /anthropic/* and /openai/* to the vendors and appends one JSON line per
+// request with redacted headers and a content-stripped body skeleton.
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
+	"strings"
+	"sync"
+	"time"
+)
+
+var secretHeaders = map[string]bool{
+	"authorization": true, "x-api-key": true, "api-key": true, "cookie": true,
+	"openai-organization": true, "openai-project": true, "chatgpt-account-id": true,
+}
+
+// keepKeys are body keys whose string values are kept verbatim (ids,
+// enums, routing); every other string becomes "<str:N>".
+var keepKeys = map[string]bool{
+	"model": true, "role": true, "type": true, "id": true, "name": true,
+	"tool_use_id": true, "tool_call_id": true, "call_id": true,
+	"user_id": true, "user": true, "session_id": true, "conversation_id": true,
+	"previous_response_id": true, "prompt_cache_key": true, "safety_identifier": true,
+	"conversation": true, "store": true, "stream": true, "tool_choice": true,
+	"cache_control": true, "ttl": true, "effort": true, "reasoning": true,
+	"service_tier": true, "truncation": true, "finish_reason": true, "stop_reason": true,
+	"media_type": true, "format": true, "summary": true,
+}
+
+var (
+	mu  sync.Mutex
+	out *os.File
+	seq int
+)
+
+func skeleton(v interface{}, key string, depth int) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		m := map[string]interface{}{}
+		for k, vv := range t {
+			// metadata maps are kept whole (that is what we are looking for),
+			// but long strings inside are still clipped.
+			if k == "metadata" {
+				m[k] = clip(vv)
+				continue
+			}
+			m[k] = skeleton(vv, k, depth+1)
+		}
+		return m
+	case []interface{}:
+		// Keep at most 50 items so huge histories stay readable.
+		n := len(t)
+		lim := n
+		if lim > 50 {
+			lim = 50
+		}
+		arr := make([]interface{}, 0, lim+1)
+		for _, x := range t[:lim] {
+			arr = append(arr, skeleton(x, key, depth+1))
+		}
+		if n > lim {
+			arr = append(arr, fmt.Sprintf("<+%d more>", n-lim))
+		}
+		return arr
+	case string:
+		if keepKeys[key] && len(t) <= 300 {
+			return t
+		}
+		return fmt.Sprintf("<str:%d>", len(t))
+	default:
+		return t
+	}
+}
+
+func clip(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		m := map[string]interface{}{}
+		for k, vv := range t {
+			m[k] = clip(vv)
+		}
+		return m
+	case string:
+		if len(t) > 400 {
+			return t[:400] + fmt.Sprintf("<+%d>", len(t)-400)
+		}
+		return t
+	default:
+		return t
+	}
+}
+
+func redactHeaders(h http.Header) map[string]string {
+	m := map[string]string{}
+	for k, vs := range h {
+		v := strings.Join(vs, ", ")
+		if secretHeaders[strings.ToLower(k)] {
+			v = fmt.Sprintf("<redacted:%d>", len(v))
+		}
+		m[k] = v
+	}
+	return m
+}
+
+func main() {
+	addr := flag.String("addr", "127.0.0.1:47911", "listen address")
+	file := flag.String("out", "capture.jsonl", "output file")
+	label := flag.String("label", "", "default run label (overridden by /label)")
+	flag.Parse()
+	var err error
+	out, err = os.OpenFile(*file, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cur := *label
+
+	targets := map[string]*url.URL{
+		"/anthropic": mustURL("https://api.anthropic.com"),
+		"/openai":    mustURL("https://api.openai.com"),
+	}
+	http.HandleFunc("/__label", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		cur = r.URL.Query().Get("l")
+		mu.Unlock()
+		fmt.Fprintln(w, "ok")
+	})
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		var prefix string
+		var target *url.URL
+		for p, u := range targets {
+			if strings.HasPrefix(r.URL.Path, p+"/") {
+				prefix, target = p, u
+			}
+		}
+		if target == nil {
+			http.Error(w, "unknown route", 404)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		rec := map[string]interface{}{
+			"t":       time.Now().UTC().Format(time.RFC3339Nano),
+			"method":  r.Method,
+			"path":    r.URL.Path,
+			"query":   r.URL.RawQuery,
+			"headers": redactHeaders(r.Header),
+			"bytes":   len(body),
+		}
+		var parsed interface{}
+		if json.Unmarshal(body, &parsed) == nil {
+			rec["body"] = skeleton(parsed, "", 0)
+		}
+		proxy := &httputil.ReverseProxy{
+			Director: func(req *http.Request) {
+				req.URL.Scheme = target.Scheme
+				req.URL.Host = target.Host
+				req.URL.Path = strings.TrimPrefix(req.URL.Path, prefix)
+				req.Host = target.Host
+			},
+			FlushInterval: -1,
+			ModifyResponse: func(resp *http.Response) error {
+				rec["status"] = resp.StatusCode
+				rh := map[string]string{}
+				for _, k := range []string{"Content-Type", "Request-Id", "X-Request-Id", "Openai-Processing-Ms", "Anthropic-Organization-Id"} {
+					if v := resp.Header.Get(k); v != "" {
+						rh[k] = v
+					}
+				}
+				rec["resp_headers"] = rh
+				return nil
+			},
+		}
+		proxy.ServeHTTP(w, r)
+		mu.Lock()
+		seq++
+		rec["seq"] = seq
+		rec["label"] = cur
+		b, _ := json.Marshal(rec)
+		out.Write(append(b, '\n'))
+		mu.Unlock()
+	})
+	log.Printf("listening on %s", *addr)
+	log.Fatal(http.ListenAndServe(*addr, nil))
+}
+
+func mustURL(s string) *url.URL {
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}

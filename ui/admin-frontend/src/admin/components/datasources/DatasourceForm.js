@@ -64,6 +64,7 @@ import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
 import { listAll } from "../../utils/listAll";
+import { ResourceTracingSection } from "../common/TracingSettingsSection";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -89,6 +90,7 @@ const DatasourceForm = () => {
     db_name: "",
     user_id: "",
     namespace: "",
+    tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
   });
 
   const [users, setUsers] = useState([]);
@@ -129,6 +131,7 @@ const DatasourceForm = () => {
               ? datasourceData.tags.map((tag) => tag.attributes.name)
               : [],
             user_id: datasourceData.user_id.toString(),
+            tracing_content_mode_max: datasourceData.tracing_content_mode_max || "",
           });
           setFiles(datasourceData.files || []);
           setGovernedMetadata(response.data.data.governed_metadata || {});
@@ -790,6 +793,12 @@ const DatasourceForm = () => {
               </AccordionDetails>
             </StyledAccordion>
           )}
+
+          <ResourceTracingSection
+            resourceLabel="data source"
+            contentModeMax={datasource.tracing_content_mode_max}
+            onContentModeMaxChange={(v) => setDatasource((prev) => ({ ...prev, tracing_content_mode_max: v }))}
+          />
 
           {/* Governance metadata (Enterprise; hidden when no schema applies) */}
           <GovernedMetadataFields

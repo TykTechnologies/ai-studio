@@ -32,6 +32,8 @@ type appOptions struct {
 	// teamID attributes the App to this team instead of the owner's
 	// resolved budget team (see WithAppTeam).
 	teamID *uint
+	// tracing replaces the App's agent tracing overrides when set.
+	tracing *models.AppTracingSettings
 }
 
 func resolveAppOptions(opts []AppOption) appOptions {

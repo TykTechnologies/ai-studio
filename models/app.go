@@ -38,6 +38,9 @@ type App struct {
 	// SemanticRouters the App may call (Enterprise), granted like ModelRouters.
 	SemanticRouters []SemanticRouter `json:"-" gorm:"many2many:app_semantic_routers;"`
 	Tags        []Tag        `json:"tags" gorm:"many2many:app_tags;"`
+	// Tracing overrides the global agent tracing settings for this App
+	// (Enterprise; see AppTracingSettings).
+	Tracing AppTracingSettings `json:"tracing" gorm:"type:json"`
 }
 
 type Apps []App

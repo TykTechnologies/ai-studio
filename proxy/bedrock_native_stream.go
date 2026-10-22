@@ -11,6 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/rs/zerolog/log"
@@ -99,6 +100,8 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 	upReq.Header.Set("Content-Type", "application/json")
 	upReq.Header.Set("Accept", "application/vnd.amazon.eventstream")
+	// Trace context first: SigV4 then signs it (see agent_trace_sigv4_test).
+	injectUpstreamTrace(upReq.Context(), upReq.Header, llm)
 	if err := switches.SetVendorAuthHeader(upReq, llm); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to sign Bedrock request", err, false)
 		return
@@ -152,6 +155,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		hold = newToolCallHold(dialect)
 	}
 	var textBuffer strings.Builder
+	bt := newBedrockTrace(r, "bedrock")
+	defer bt.abandon()
+	var capture *streamCapture
+	if bt != nil {
+		capture = newStreamCapture("application/vnd.amazon.eventstream", dialect, 0, agenttrace.CurrentFingerprinter())
+	}
+	ttftSeen := false
 	var inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens int
 	usageFrom := func(ev streamEvent) {
 		if ev.name != "metadata" {
@@ -171,7 +181,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	block := func(msg string) {
-		metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+		recordPolicyBlock(r.Context(), "response_filter", "filter")
 		log.Warn().Str("reason", msg).Msg("Bedrock stream blocked by filter")
 		markStreamBlocked(w, r, msg)
 		_, _ = w.Write(dialect.blockEvent(framer, msg))
@@ -187,6 +197,14 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			chunk := append([]byte(nil), buf[:n]...)
+			if !ttftSeen {
+				ttftSeen = true
+				bt.firstToken()
+				metrics.ObserveTimeToFirstToken(r.Context(), string(llm.Vendor), llm.Name, time.Since(startTime).Seconds())
+			}
+			if capture != nil {
+				capture.Feed(chunk)
+			}
 			if hooks {
 				full.Write(chunk)
 			}
@@ -297,8 +315,12 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 
 	if !isErr && (inputTokens > 0 || outputTokens > 0) {
 		responseText := textBuffer.String()
+		if capture != nil {
+			bt.setExtracts(capture.Finish().Extracts)
+		}
+		bt.handOff()
 		go func() {
-			recordBedrockStreamAnalytics(p, llm, app, modelID, reqBody, responseText, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens, r, startTime)
+			recordBedrockStreamAnalytics(p, llm, app, modelID, reqBody, responseText, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens, r, startTime, bt)
 		}()
 	}
 	if !isErr && hooks {

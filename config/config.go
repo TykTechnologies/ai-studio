@@ -121,6 +121,9 @@ type AppConf struct {
 	// Tyk Dashboard MCP integration (Enterprise)
 	TykMCP TykMCPConfig
 
+	// Agent Call Tracing (Enterprise)
+	AgentTracing AgentTracingConfig
+
 	// Marketplace Configuration
 	MarketplaceEnabled      bool
 	MarketplaceIndexURL     string
@@ -826,6 +829,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	// Webhooks configuration
 	conf.Webhooks = getWebhooksConfig(getenv)
 	conf.TykMCP = getTykMCPConfig(getenv)
+	conf.AgentTracing = getAgentTracingConfig(getenv)
 
 	// Marketplace configuration
 	conf.MarketplaceEnabled = true // Enabled by default
@@ -898,6 +902,8 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	}
 
 	conf.SecretKey = getenv("TYK_AI_SECRET_KEY")
+	// Agent tracing keys fall back to the secrets key (D4).
+	conf.AgentTracing.FallbackKey = conf.SecretKey
 	conf.MicrogatewayEncryptionKey = getenv("MICROGATEWAY_ENCRYPTION_KEY")
 	conf.CSRFTrustedOrigins = getenv("CSRF_TRUSTED_ORIGINS")
 	conf.CSRFKey = getenv("CSRF_KEY")

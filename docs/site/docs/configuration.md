@@ -172,6 +172,21 @@ Every action on the management API is recorded for incident reconstruction. On b
 
 See [Audit Trail](./audit-trail.md) for the record schema, redaction rules and API.
 
+### Agent Call Tracing (Enterprise)
+Turns gateway traffic into sessions, turns and span trees. Off by default. It runs only in Enterprise Edition with a valid licence and `AGENT_TRACING_ENABLED=true`; in Community Edition the setting is ignored with a warning. Invalid values log a warning at start-up and fall back to the default.
+
+*   Enable (`AGENT_TRACING_ENABLED`): default `false`
+*   Key (`AGENT_TRACING_KEY`): root key for fingerprints and payload encryption; falls back to `TYK_AI_SECRET_KEY`
+*   Capture queue (`AGENT_TRACING_QUEUE_MAX_EVENTS`, `AGENT_TRACING_QUEUE_MAX_BYTES`, `AGENT_TRACING_MAX_STREAM_BUFFER_BYTES`): defaults `10000`, `67108864`, `1048576`
+*   Content (`AGENT_TRACING_CONTENT_DEFAULT_MODE`, `AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE`, `AGENT_TRACING_STORE_CONTENT_MODE_CAP`): `off`, `metadata`, `hashed`, `redacted` or `full`; defaults `off`, `metadata`, `full`
+*   Correlation timeouts (`AGENT_TRACING_TURN_IDLE_TIMEOUT`, `AGENT_TRACING_SESSION_IDLE_TIMEOUT`): defaults `5m`, `30m`
+*   Retention (`AGENT_TRACING_METADATA_RETENTION_DAYS`, `AGENT_TRACING_PAYLOAD_RETENTION_DAYS`): defaults `30`, `7`; payloads never outlive metadata
+*   OTel exporters (`AGENT_TRACING_EXPORTERS_FILE`): path to a YAML file with an `exporters:` list
+
+Microgateway edges also read `AGENT_TRACING_ENABLED`, the queue caps, and the flush cadence (`AGENT_TRACING_FLUSH_INTERVAL`, default `10s`; `AGENT_TRACING_FLUSH_MAX_EVENTS`, default `500`; `AGENT_TRACING_CHUNK_MAX_BYTES`, default `4194304`).
+
+The complete variable list, including correlation, propagation and export settings, is in `config/agent_tracing.go` until the Agent Call Tracing guide is published.
+
 ### Message Queue Configuration
 *   Queue Type (`QUEUE_TYPE`): `inmemory` (default), `nats`, or `postgres`
 *   Buffer Size (`QUEUE_BUFFER_SIZE`): Default 100

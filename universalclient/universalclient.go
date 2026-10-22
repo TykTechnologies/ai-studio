@@ -354,14 +354,21 @@ func (c *Client) CallOperationWithContext(ctx context.Context, operationId strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	// Continue the caller's trace into the tool. Done before the caller's own
-	// headers are applied so an explicit traceparent from a filter wins.
-	tracing.InjectOutgoing(ctx, req.Header)
+	// Continue the caller's trace into the tool (unless
+	// AGENT_TRACING_PROPAGATE_HTTP_UPSTREAMS is off). Done before the
+	// caller's own headers are applied so an explicit traceparent from a
+	// filter wins.
+	if tracing.PropagateToHTTPUpstreams() {
+		tracing.InjectOutgoing(ctx, req.Header)
+	}
 
 	// Set headers
 	for k, v := range headers {
 		req.Header[k] = v
 	}
+	// Caller-supplied baggage is reduced to the allowlist like injected
+	// baggage (decision Q11), and a caller's tracestate is not forwarded.
+	tracing.FilterTraceContext(req.Header)
 
 	// Set content type if not provided
 	if _, ok := req.Header["Content-Type"]; !ok && payload != nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/segments"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
@@ -36,7 +37,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
-	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -668,8 +668,23 @@ func (p *Proxy) createHandler() http.Handler {
 // recorded for it carry its latency (total_time_ms). On the /ai/ loopback the
 // inner hop notes its own start: its row times the vendor call and the inner
 // hop's filters, which is what its row describes.
+//
+// With agent tracing on it also gives the request its gateway span id and
+// capture recorder (beginRequestCapture), finished when the request ends.
 func requestStartMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r, rec := beginRequestCapture(r)
+		var sw *captureStatusWriter
+		if rec != nil {
+			sw = &captureStatusWriter{ResponseWriter: w}
+			w = sw
+		}
+		defer func() {
+			if rec != nil {
+				finishCapture(rec, r, sw.status)
+			}
+			rec.Finish()
+		}()
 		next.ServeHTTP(w, r.WithContext(analytics.WithRequestStart(r.Context(), time.Now())))
 	})
 }
@@ -1063,16 +1078,16 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if chain != nil && !chain.prepare(w, r) {
 		respStatus = chain.c.status
 		status, body := chain.c.status, chain.c.respBody
-		p.goAnalyze(func() { p.analyzeResponse(llm, app, status, body, reqBody, r) })
+		p.goAnalyzeFor(r, func() { p.analyzeResponse(llm, app, status, body, reqBody, r) })
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
-			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+			recordPolicyBlock(r.Context(), "budget", "budget")
 		}
 		// Error body for analytics should be constructed carefully if needed
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, r)
 		})
 		respStatus = status
@@ -1081,8 +1096,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respStatus = http.StatusBadRequest
-		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
-		p.goAnalyze(func() {
+		recordPolicyBlock(r.Context(), "request_filter", "firewall")
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, http.StatusBadRequest, policyViolationBody(err), reqBody, r)
 		})
 		respondPolicyBlock(w, r, err)
@@ -1131,11 +1146,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		req.Host = upstreamURL.Host
 		// Continue the trace into the upstream. Done before the vendor auth
 		// header so a vendor that rewrites headers wholesale cannot drop it.
-		tracing.InjectOutgoing(req.Context(), req.Header)
+		injectUpstreamTrace(req.Context(), req.Header, llm)
 		// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
 		req.Header.Del("Authorization")
 		// The loopback failover marker is ours alone; never show it to a vendor.
 		stripFailoverHeaders(req.Header)
+		// Nor the X-Tyk-* agent tracing headers, in every edition.
+		declared.StripTracingHeaders(req.Header)
 		if chain.rewritesResponse() {
 			// The transport asks for gzip itself and decompresses, so the
 			// response IDs can be rewritten.
@@ -1211,13 +1228,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				logger.Errorf("Response filter execution failed: %v", err)
 				// Fail open on error - allow response through
 			} else if blocked {
-				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+				recordPolicyBlock(r.Context(), "response_filter", "filter")
 				// Response was blocked by filter - return error instead
 				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
 				// Log with 400 status and include both the block reason and original LLM response for audit trail
 				blockedResponseBody := fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"original_response":%s}`,
 					blockMsg, string(bufferedCapture.buffer.Bytes()))
-				p.goAnalyze(func() {
+				p.goAnalyzeFor(r, func() {
 					p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
 				})
 				return
@@ -1227,13 +1244,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// AI Gateway proxy writes the final (potentially modified) response to client
 		bufferedCapture.WriteToClient()
 
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
 		})
 	} else {
 		capture := newResponseCapture(w)
 		httpProxy.ServeHTTP(capture, r)
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
 		})
 	}
@@ -1478,6 +1495,13 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "operation_id is required", nil, false)
 		return
 	}
+	// With agent tracing on, the call is captured as a tool_call with the
+	// arguments as the client sent them, whichever way it ends (spec §3.2).
+	var capture *restCapture // nil with tracing off: nothing escapes
+	if capturing(r.Context()) {
+		capture = &restCapture{sent: input}
+		defer p.finishRESTCapture(r.Context(), w, tool, capture)
+	}
 	// Only whitelisted operations may be called, as on the MCP endpoint and in
 	// chat. Checked before the filters so a refused call never reaches them;
 	// the filters cannot change the operation afterwards (RunToolInputFilters
@@ -1499,7 +1523,7 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t0 := time.Now()
-	result, err := p.gatewayService.CallToolOperation(tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
+	result, err := p.callToolOperation(r.Context(), tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
 	t1 := time.Now()
 	if err != nil {
 		analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
@@ -1527,6 +1551,9 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		result = applyFilteredToolResult(result, body, filtered)
+	}
+	if capture != nil {
+		capture.result = result
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1600,6 +1627,7 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	if ds == nil {
 		return // Error already written by prepareDatasourceRequest
 	}
+	noteDatasourceCall(r.Context(), ds, "search")
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
 	var query SearchQuery
 	if err := json.Unmarshal(body, &query); err != nil {
@@ -1623,6 +1651,9 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
+	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "search", body, resJSON, http.StatusOK))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -1693,6 +1724,7 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 	if ds == nil {
 		return
 	}
+	noteDatasourceCall(r.Context(), ds, "vector_search")
 	var query VectorSearchQuery
 	if err := json.Unmarshal(body, &query); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
@@ -1734,6 +1766,9 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
 	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "vector_search", body, resJSON, http.StatusOK))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resJSON)
@@ -1744,6 +1779,7 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 	if ds == nil {
 		return
 	}
+	noteDatasourceCall(r.Context(), ds, "metadata_query")
 	var query MetadataQuery
 	if err := json.Unmarshal(body, &query); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
@@ -1789,6 +1825,9 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
 	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "metadata_query", body, resJSON, http.StatusOK))
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(resJSON)
@@ -1799,6 +1838,7 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 	if ds == nil {
 		return
 	}
+	noteDatasourceCall(r.Context(), ds, "embeddings")
 
 	if embed := ds.EmbedFields(false); embed.Vendor == "" || embed.Model == "" {
 		respondWithError(w, http.StatusBadRequest, "datasource does not have an embedder configured", nil, false)
@@ -1830,6 +1870,9 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
+	}
+	if capturing(r.Context()) {
+		p.captureTool(r.Context(), datasourceCapture(ds, "embeddings", body, nil, http.StatusOK))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -1898,7 +1941,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if chain != nil && !chain.prepare(w, r) {
 		respStatus = chain.c.status
 		status, body := chain.c.status, chain.c.respBody
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, body, reqBody, nil, time.Now(), "")
 		})
 		return
@@ -1906,9 +1949,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		status, msg := budgetDenial(err, "Budget limit exceeded")
 		if status == http.StatusForbidden && !errors.Is(err, services.ErrAppInactive) {
-			metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
+			recordPolicyBlock(r.Context(), "budget", "budget")
 		}
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, []byte(fmt.Sprintf(`{"error":%q}`, msg+": "+err.Error())), reqBody, nil, time.Now(), "")
 		})
 		respStatus = status
@@ -1917,8 +1960,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respStatus = http.StatusBadRequest
-		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
-		p.goAnalyze(func() {
+		recordPolicyBlock(r.Context(), "request_filter", "firewall")
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, policyViolationBody(err), reqBody, nil, time.Now(), "")
 		})
 		respondPolicyBlock(w, r, err)
@@ -1980,12 +2023,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	upstreamReq.Header = r.Header.Clone()
 	// The loopback failover marker is ours alone; never show it to a vendor.
 	stripFailoverHeaders(upstreamReq.Header)
+	// Nor the X-Tyk-* agent tracing headers, in every edition.
+	declared.StripTracingHeaders(upstreamReq.Header)
 	if chain.rewritesResponse() {
 		upstreamReq.Header.Del("Accept-Encoding") // see the REST director
 	}
 	upstreamReq.Host = upstreamURL.Host
 	// Continue the trace into the upstream, as the non-streaming director does.
-	tracing.InjectOutgoing(upstreamReq.Context(), upstreamReq.Header)
+	injectUpstreamTrace(upstreamReq.Context(), upstreamReq.Header, llm)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header for streaming", err, false)
 		return
@@ -2002,7 +2047,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		// as the REST path's ErrorHandler does, so a vendor outage shows in
 		// analytics. /ai/ and the unified /v1 route through here too.
 		status := respStatus
-		p.goAnalyze(func() {
+		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, upstreamFailureBody(status, err), reqBody, nil, time.Now(), "")
 		})
 		respondWithError(w, respStatus, "failed to make upstream request for streaming", err, false)
@@ -2059,6 +2104,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			if timing.markFirstChunk(time.Now()); chunkIndex == 0 {
 				if ttft, ok := timing.timeToFirstToken(); ok {
 					metrics.ObserveTimeToFirstToken(r.Context(), string(llm.Vendor), llm.Name, ttft.Seconds())
+					noteFirstToken(r, ttft)
 				}
 			}
 
@@ -2092,7 +2138,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					}
 					if tcBlocked {
 						// The flagged call's events are never sent.
-						metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+						recordPolicyBlock(r.Context(), "response_filter", "filter")
 						logger.Warnf("Streamed tool call blocked by filter: %s", tcMsg)
 						w.Write(release)
 						markStreamBlocked(w, r, tcMsg)
@@ -2102,7 +2148,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 						}
 						isErr = true
 						blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
-						p.goAnalyze(func() {
+						p.goAnalyzeFor(r, func() {
 							p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 						})
 						return
@@ -2118,7 +2164,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					logger.Errorf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
 					// Fail open on error - continue streaming
 				} else if blocked {
-					metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+					recordPolicyBlock(r.Context(), "response_filter", "filter")
 					// Blocked mid-stream: the event that tripped it is never
 					// sent; the stream ends with the vendor's error event.
 					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
@@ -2130,7 +2176,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					isErr = true
 					// Log with 400 status and include both the block reason and partial LLM response for audit trail
 					blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
-					p.goAnalyze(func() {
+					p.goAnalyzeFor(r, func() {
 						p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 					})
 					return
@@ -2193,7 +2239,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 				logger.Errorf("Tool call filter error at end of stream: %v", tcErr)
 			}
 			if tcBlocked {
-				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+				recordPolicyBlock(r.Context(), "response_filter", "filter")
 				if !clientGone {
 					markStreamBlocked(w, r, tcMsg)
 					w.Write(dialect.blockEvent(framer, tcMsg))
@@ -2202,7 +2248,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					}
 				}
 				blockedResponseBody := buildFilterBlockedAnalyticsBody(tcMsg, chunkIndex, fullResponse.String())
-				p.goAnalyze(func() {
+				p.goAnalyzeFor(r, func() {
 					p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 				})
 				return
@@ -2215,7 +2261,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		if filterErr != nil {
 			logger.Errorf("Response filter execution error at end of stream: %v", filterErr)
 		} else if blocked {
-			metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
+			recordPolicyBlock(r.Context(), "response_filter", "filter")
 			logger.Warnf("Streaming response blocked by filter at end of stream: %s", blockMsg)
 			if !clientGone {
 				markStreamBlocked(w, r, blockMsg)
@@ -2226,7 +2272,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			}
 			isErr = true
 			blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
-			p.goAnalyze(func() {
+			p.goAnalyzeFor(r, func() {
 				p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 			})
 			return
@@ -2239,8 +2285,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		p.goAnalyze(func() {
-			p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
+		p.goAnalyzeFor(r, func() {
+			p.analyzeStreamingResponse(llm, app, withUpstreamContentType(upstreamReq, resp), resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
 		})
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
@@ -3111,7 +3157,9 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 		mcpTool := mcp.NewTool(llmsTool.Function.Name, toolOptions...)
 
 		// Create a handler that forwards the call to our existing tool operation
-		mcpServer.AddTool(mcpTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// With agent tracing on, the call is captured as a tool_call
+		// whichever way it ends (spec §3.2).
+		mcpServer.AddTool(mcpTool, p.withMCPToolCapture(toolModel, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Record start time for analytics
 			t0 := time.Now()
 
@@ -3177,7 +3225,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			params, payload = args.Parameters, args.Payload
 
 			// Call the operation using our existing service
-			result, err := p.gatewayService.CallToolOperation(
+			result, err := p.callToolOperation(ctx,
 				toolModel.ID,
 				operationID,
 				params,
@@ -3229,7 +3277,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 			// Convert the result to MCP format
 			return mcpToolResultFromValue(operationID, result), nil
-		})
+		}))
 	}
 
 	// Create both SSE and StreamableHTTP servers that will handle this tool's MCP format
@@ -3337,7 +3385,7 @@ func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	// Hand the handler the tool as loaded for this request, so filters
 	// never run from the copy captured when the MCP server was cached.
-	cache.SSEServer.MessageHandler().ServeHTTP(w, withResolvedTool(r, tool))
+	cache.SSEServer.MessageHandler().ServeHTTP(w, markMCPDetached(withResolvedTool(r, tool)))
 }
 func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) {
 	tool := p.authorizedMCPTool(w, r)

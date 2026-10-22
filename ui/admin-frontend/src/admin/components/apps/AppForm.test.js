@@ -18,9 +18,10 @@ jest.mock("../../utils/apiClient", () => ({
   appToolAPI: { listAvailableTools: jest.fn() },
 }));
 jest.mock("../../context/EditionContext");
+let mockFeatures = {};
 jest.mock("../../hooks/useSystemFeatures", () => ({
   __esModule: true,
-  default: () => ({ features: {} }),
+  default: () => ({ features: mockFeatures }),
 }));
 jest.mock("../../../components/common/Icon", () => {
   return function MockIcon(props) {
@@ -79,6 +80,7 @@ const appPayload = () => ({
         namespace: "",
         metadata: {},
         credential_id: 9,
+        tracing: { content_mode: "redacted" },
       },
     },
   },
@@ -127,6 +129,7 @@ describe("AppForm relationships and commit semantics", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = { id: "5" };
+    mockFeatures = {};
     useEdition.mockReturnValue({ isEnterprise: false });
     apiClient.get.mockImplementation((url) => {
       if (url === "/users") return Promise.resolve({ data: { data: users } });
@@ -294,6 +297,41 @@ describe("AppForm relationships and commit semantics", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/admin/apps", expect.anything());
   });
 
+  // Agent tracing (Enterprise): hidden and never sent while the feature is
+  // off, so the stored overrides are kept; shown and sent when it is on.
+  it("leaves the tracing overrides out when agent tracing is off", async () => {
+    renderForm();
+    await waitForLoaded();
+    expect(screen.queryByTestId("tracing-settings-section")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(apiClient.patch.mock.calls[0][1].data.attributes).not.toHaveProperty("tracing");
+  });
+
+  it("sends the edited tracing overrides when agent tracing is on", async () => {
+    mockFeatures = { feature_agent_tracing: true };
+    renderForm();
+    await waitForLoaded();
+    expect(screen.getByTestId("tracing-settings-section")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/session idle timeout/i), { target: { value: "2h" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(apiClient.patch.mock.calls[0][1].data.attributes.tracing).toEqual({
+      content_mode: "redacted",
+      session_idle_timeout: "2h",
+    });
+  });
+
+  it("refuses an invalid tracing timeout before saving", async () => {
+    mockFeatures = { feature_agent_tracing: true };
+    renderForm();
+    await waitForLoaded();
+    fireEvent.change(screen.getByLabelText(/session idle timeout/i), { target: { value: "soon" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    expect(await screen.findByText(/use a duration such as 30m/i)).toBeInTheDocument();
+    expect(apiClient.patch).not.toHaveBeenCalled();
+  });
+
   // F-03: the credential switch commits on click while the rest of the form
   // waits for Update. It stays that way, but says so, and must not count as
   // an unsaved change.
@@ -365,6 +403,7 @@ describe("AppForm team budgets (Enterprise)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockParams = { id: "5" };
+    mockFeatures = {};
     useEdition.mockReturnValue({ isEnterprise: true });
     const payload = appPayload();
     Object.assign(payload.data.data.attributes, { team_id: 3, monthly_budget: 20 });

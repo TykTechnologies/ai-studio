@@ -50,6 +50,9 @@ func (a *API) createLLM(c *gin.Context) {
 		input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)) {
 		return
 	}
+	if !a.requireTracingWrite(c, input.Data.Attributes.TracingContentModeMax != "" || input.Data.Attributes.TracingPropagationOptOut) {
+		return
+	}
 
 	// Creating a provider already active is the publish action on llms, and
 	// needs every "required to publish" metadata field.
@@ -91,6 +94,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.Failover,
 			services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
 			services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
+			services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
 		)
 	} else {
 		llm, err = a.service.CreateLLM(
@@ -113,6 +117,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.Failover,
 			services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
 			services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
+			services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
 		)
 	}
 	if err != nil {
@@ -240,6 +245,10 @@ func (a *API) updateLLM(c *gin.Context) {
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}
+	if !a.requireTracingWrite(c, input.Data.Attributes.TracingContentModeMax != thisLLM.TracingContentModeMax ||
+		input.Data.Attributes.TracingPropagationOptOut != thisLLM.TracingPropagationOptOut) {
+		return
+	}
 
 	// Flipping the active switch is the publish action on llms; editing an
 	// already-active provider without touching the switch is plain write.
@@ -284,6 +293,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.Failover,
 		services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
 		services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
+		services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
 	)
 	if err != nil {
 		respondLLMServiceError(c, err)
@@ -305,6 +315,8 @@ func (a *API) updateLLM(c *gin.Context) {
 			failoverChanged(thisLLM.Failover, input.Data.Attributes.Failover) ||
 			thisLLM.VendorWorkspaceID != input.Data.Attributes.VendorWorkspaceID ||
 			!maps.Equal(thisLLM.PriceMultipliers, input.Data.Attributes.PriceMultipliers) ||
+			thisLLM.TracingContentModeMax != input.Data.Attributes.TracingContentModeMax ||
+			thisLLM.TracingPropagationOptOut != input.Data.Attributes.TracingPropagationOptOut ||
 			metadataChanged)
 
 		if activeStateChanged || (input.Data.Attributes.Active && hasChanges) {
@@ -727,6 +739,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Failover         *models.LLMFailover    `json:"failover,omitempty"`
 			VendorWorkspaceID string `json:"vendor_workspace_id"`
 			PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
+			TracingContentModeMax    string `json:"tracing_content_mode_max"`
+			TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
 		}{
 			Name:             llm.Name,
 			APIKey:           services.REDACTED_VALUE,
@@ -753,6 +767,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Failover:         failoverForResponse(llm.Failover),
 			VendorWorkspaceID: llm.VendorWorkspaceID,
 			PriceMultipliers:  llm.PriceMultipliers,
+			TracingContentModeMax:    llm.TracingContentModeMax,
+			TracingPropagationOptOut: llm.TracingPropagationOptOut,
 		},
 	}
 }
@@ -855,6 +871,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Failover         *models.LLMFailover    `json:"failover,omitempty"`
 				VendorWorkspaceID string `json:"vendor_workspace_id"`
 				PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
+				TracingContentModeMax    string `json:"tracing_content_mode_max"`
+				TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
 			}{
 				Name:             llm.Name,
 				APIKey:           services.REDACTED_VALUE,
@@ -881,6 +899,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Failover:         failoverForResponse(llm.Failover),
 				VendorWorkspaceID: llm.VendorWorkspaceID,
 				PriceMultipliers:  llm.PriceMultipliers,
+				TracingContentModeMax:    llm.TracingContentModeMax,
+				TracingPropagationOptOut: llm.TracingPropagationOptOut,
 			},
 		}
 	}

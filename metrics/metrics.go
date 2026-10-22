@@ -94,6 +94,8 @@ func registerInstruments(meter otelmetric.Meter) {
 	// before the aistudio_* ones, so legacyNames is set for every recorder below.
 	initGenAI(meter)
 	initNative(meter)
+	initAgentTracing(meter)
+	initAgentMetrics(meter)
 
 	// Register counters
 	requestsTotal, err = meter.Int64Counter("aistudio_llm_requests_total",

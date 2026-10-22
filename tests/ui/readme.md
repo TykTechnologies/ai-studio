@@ -60,6 +60,26 @@ The framework includes several npm scripts to run different types of tests:
    npm run gui
    ```
 
+### Agent Call Tracing specs
+
+`tests/agent-tracing.spec.ts` seeds sessions through a JSON v1 import route that exists only in DEVMODE. Run it against an Enterprise backend started with:
+
+```
+DEVMODE=true
+AGENT_TRACING_ENABLED=true
+AGENT_TRACING_CONTENT_DEFAULT_MODE=redacted   # the live redaction case
+ALLOW_INTERNAL_NETWORK_ACCESS=true            # its in-test mock upstream
+```
+
+```bash
+TEST_BASE_URL=http://localhost:8080 TEST_PROXY_URL=http://localhost:9090 \
+  npx playwright test tests/agent-tracing.spec.ts --project=chromium
+```
+
+Without `TEST_PROXY_URL` (the embedded gateway, `PROXY_PORT`), the live capture case is skipped. It waits out the assembler's 30-second settle window. When Studio runs in a container, set `TEST_MOCK_UPSTREAM_HOST=host.docker.internal` so it can reach the test's mock LLM upstream (CI does).
+
+`tests/agent-tracing-ce.spec.ts` checks that the Community Edition hides the feature. Run it against a CE build with `TEST_EDITION=ce`; global setup then accepts the CE backend, and the Enterprise specs skip.
+
 ## Framework Structure
 
 The UI testing framework follows the Page Object Model (POM) pattern and is organized as follows:

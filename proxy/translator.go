@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/google/uuid"
@@ -288,6 +289,12 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// The outer hop's own span. The loopback attempts run on a detached
+	// context, so loopbackHeaders carries this span's context across the hop
+	// and the inner hop (and the vendor call) join the caller's trace.
+	r, outerSpan := startProxySpan(r, conf)
+	defer outerSpan.End()
+
 	// Validate required fields
 	if len(req.Messages) == 0 || req.Model == "" {
 		respondWithOAIError(w, http.StatusBadRequest, "missing required fields", nil, false)
@@ -320,7 +327,9 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		last     attemptFailure
 		relay    *loopbackRelay // the served rung's cache headers
 	)
+	tried := 0
 	for i, a := range plan.attempts {
+		tried++
 		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
 		if a.conf.Vendor == models.BEDROCK {
 			var fail attemptFailure
@@ -365,6 +374,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		// reporting it as our 500 tells the caller to retry a request that can
 		// never succeed, and hides a client error as a server one.
 		respondAttemptFailure(w, last, "failed to generate content")
+		p.captureOuterCall(r, llmAttempt{}, tried, last.statusOr(http.StatusBadGateway), reqBody, nil)
 		return
 	}
 	setServedHeaders(w, served)
@@ -392,6 +402,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(respBody)
+	p.captureOuterCall(r, served, tried, http.StatusOK, reqBody, respBody)
 }
 
 func handleOptions(req *CreateCompletionRequest) []llms.CallOption {
@@ -567,7 +578,9 @@ func (p *Proxy) handleChatCompletionStream(
 		served llmAttempt
 		last   attemptFailure
 	)
+	tried := 0
 	for i, a := range plan.attempts {
+		tried++
 		gen := i
 		attemptGen, servedModel = gen, a.model
 		setServedHeaders(w, a) // header map is still open: nothing written yet
@@ -629,6 +642,7 @@ func (p *Proxy) handleChatCompletionStream(
 	}
 	if resp == nil {
 		p.failStreamAttempt(w, flusher, framesSent, last, "LLM call failed")
+		p.captureOuterCall(r, llmAttempt{}, tried, last.statusOr(http.StatusBadGateway), reqBody, nil)
 		return
 	}
 	conf = served.conf
@@ -687,6 +701,13 @@ func (p *Proxy) handleChatCompletionStream(
 		Int("tool_calls", toolCalls).
 		Int("frames", framesSent).
 		Msg("streamed chat completion")
+
+	if agenttrace.From(r.Context()) != nil {
+		// The stream was relayed as it came; the capture reads the answer
+		// the driver assembled, in the non-streamed shape.
+		answer, _ := json.Marshal(NewChatCompletionResponse(resp, servedModel, req.CompletionCount()))
+		p.captureOuterCall(r, served, tried, http.StatusOK, reqBody, answer)
+	}
 }
 
 // toolCallDelta renders one fully-accumulated tool call as a streamed fragment.
@@ -757,7 +778,7 @@ func respondStreamBlocked(w http.ResponseWriter, msg string) {
 // blocked: before the first frame with an HTTP 400, after it with an OpenAI
 // error chunk and [DONE].
 func (p *Proxy) failStreamBlocked(w http.ResponseWriter, flusher http.Flusher, framesSent int, msg string) {
-	metrics.RecordPolicyBlock(context.Background(), "response_filter", "filter")
+	recordPolicyBlock(context.Background(), "response_filter", "filter")
 	if framesSent == 0 {
 		respondStreamBlocked(w, msg)
 		return

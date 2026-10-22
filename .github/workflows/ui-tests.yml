@@ -179,6 +179,10 @@ jobs:
         env:
           BOOTSTRAP_ADMIN_EMAIL: admin@tyk.io
           BOOTSTRAP_ADMIN_PASSWORD: Admin#2025
+          # Agent tracing live capture: the gateway, and the runner's mock
+          # LLM upstream as the studio container sees it.
+          TEST_PROXY_URL: http://localhost:9090
+          TEST_MOCK_UPSTREAM_HOST: host.docker.internal
           DEBUG: pw:api
           PWDEBUG: 0
         run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000

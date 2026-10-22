@@ -94,6 +94,13 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
+		return
+	}
+	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, "")) {
+		return
+	}
+
 	// Refuse an impossible access-method request before anything is written.
 	if err := applyToolAccessInput(&models.Tool{ToolType: input.Data.Attributes.ToolType},
 		input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled); err != nil {
@@ -161,6 +168,7 @@ func (a *API) createTool(c *gin.Context) {
 			Active:            &wantActive,
 			RESTAccessEnabled: input.Data.Attributes.RESTAccessEnabled,
 			MCPAccessEnabled:  input.Data.Attributes.MCPAccessEnabled,
+			TracingContentModeMax: input.Data.Attributes.TracingContentModeMax,
 		},
 	)
 	if respondToolSlugConflict(c, err) {
@@ -324,6 +332,16 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 	tool.Namespace = input.Data.Attributes.Namespace
+
+	if !validateTracingContentModeMax(c, input.Data.Attributes.TracingContentModeMax) {
+		return
+	}
+	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, tool.TracingContentModeMax)) {
+		return
+	}
+	if input.Data.Attributes.TracingContentModeMax != nil {
+		tool.TracingContentModeMax = *input.Data.Attributes.TracingContentModeMax
+	}
 
 	// Access methods; an omitted switch keeps its value.
 	if err := applyToolAccessInput(tool, input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled); err != nil {
@@ -1189,6 +1207,8 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointers(dependencies, db),
+
+			TracingContentModeMax: tool.TracingContentModeMax,
 
 			ToolGatewayAccess: toolGatewayAccess(tool),
 		},

@@ -121,6 +121,9 @@ func (a *API) featureSet() map[string]interface{} {
 	featureSet["feature_webhooks"] = webhooks.IsEnterpriseAvailable()
 	featureSet["feature_tyk_mcp"] = a.tykMCPService().Status().Enabled
 	featureSet["feature_rbac"] = a.service.Authz().Enabled()
+	// Agent Call Tracing: true only when the start gate passed (Enterprise,
+	// valid licence, AGENT_TRACING_ENABLED). Its nav entry is hidden otherwise.
+	featureSet["feature_agent_tracing"] = a.service.AgentTracing != nil && a.service.AgentTracing.Running()
 
 	// New assistant-ui chat front end; CHAT_UI_V2_ENABLED=false falls back to the v1 chat UI.
 	featureSet["chat_ui_v2"] = chatUIV2Enabled()

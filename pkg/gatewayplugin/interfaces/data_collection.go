@@ -85,6 +85,7 @@ type AnalyticsData struct {
 	ShadowRoute            string    `json:"shadow_route,omitempty"` // Semantic Router shadow mode: the route the classifier picked
 	OnBehalfOf             string    `json:"on_behalf_of,omitempty"` // who the call was for, when an auth plugin said (audit only)
 	ActingAgent            string    `json:"acting_agent,omitempty"` // the agent that made it, when an auth plugin said (audit only)
+	TraceSpanID            string    `json:"trace_span_id,omitempty"` // agent tracing gateway span id (16 hex); empty while tracing is off
 
 	// Model class ("" generative, "decision") and, for a decision call, the
 	// questions asked and the ones the model declined (answered = Choices).

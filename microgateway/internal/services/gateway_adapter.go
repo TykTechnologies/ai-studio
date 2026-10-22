@@ -2,6 +2,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"crypto/sha256"
 	"encoding/base64"
@@ -532,6 +533,12 @@ func (a *GatewayServiceAdapter) GetToolBySlug(slug string) (*models.Tool, error)
 
 // CallToolOperation executes a tool operation using the universalclient
 func (a *GatewayServiceAdapter) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
+	return a.CallToolOperationContext(context.Background(), toolID, operationID, params, payload, headers)
+}
+
+// CallToolOperationContext is CallToolOperation bound to ctx: the upstream
+// call is cancelled with its caller and carries the caller's trace context.
+func (a *GatewayServiceAdapter) CallToolOperationContext(ctx context.Context, toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
 	tool, err := a.GetToolByID(toolID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
@@ -562,7 +569,7 @@ func (a *GatewayServiceAdapter) CallToolOperation(toolID uint, operationID strin
 		return nil, fmt.Errorf("failed to create universal client for tool %d: %w", toolID, err)
 	}
 
-	result, err := client.CallOperation(operationID, params, payload, headers)
+	result, err := client.CallOperationWithContext(ctx, operationID, params, payload, headers)
 	if err != nil {
 		return nil, fmt.Errorf("tool operation %s failed: %w", operationID, err)
 	}
@@ -813,6 +820,8 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		ResourceSigningPrevExpiresAt: dbLLM.ResourceSigningPrevExpiresAt,
 		VendorWorkspaceID:            dbLLM.VendorWorkspaceID,
 		PriceMultipliers:             priceMultipliers,
+		TracingContentModeMax:        dbLLM.TracingContentModeMax,
+		TracingPropagationOptOut:     dbLLM.TracingPropagationOptOut,
 	}
 
 	log.Debug().
@@ -883,6 +892,15 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		semanticRouters[i] = models.SemanticRouter{ID: r.ID, Name: r.Name, Slug: r.Slug, Namespace: r.Namespace, Active: r.IsActive}
 	}
 
+	// Agent tracing overrides; the hub never sends owner_may_view_content.
+	var tracing models.AppTracingSettings
+	if len(dbApp.Tracing) > 0 {
+		if err := json.Unmarshal(dbApp.Tracing, &tracing); err != nil {
+			log.Error().Err(err).Uint("app_id", dbApp.ID).Msg("Failed to unmarshal app tracing settings")
+			tracing = models.AppTracingSettings{}
+		}
+	}
+
 	modelApp := models.App{
 		Model:           gorm.Model{ID: dbApp.ID, CreatedAt: dbApp.CreatedAt, UpdatedAt: dbApp.UpdatedAt},
 		ID:              dbApp.ID,
@@ -898,6 +916,7 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		Datasources:     datasources, // Include Datasource associations for access control
 		ModelRouters:    modelRouters, // Router grants (Enterprise)
 		SemanticRouters: semanticRouters,
+		Tracing:         tracing.EdgeSettings(),
 	}
 
 	log.Debug().
@@ -957,6 +976,7 @@ func (a *GatewayServiceAdapter) convertDatabaseToolToModel(dbTool *database.Tool
 		MCPAccessDisabled:   dbTool.MCPAccessDisabled,
 		Namespace:           dbTool.Namespace,
 		Filters:             filters,
+		TracingContentModeMax: dbTool.TracingContentModeMax,
 	}
 }
 
@@ -1025,6 +1045,7 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 		DBName:           dbDS.DBName,
 		Active:           dbDS.Active,
 		Namespace:        dbDS.Namespace,
+		TracingContentModeMax: dbDS.TracingContentModeMax,
 	}
 	ds.Embedder = embedder
 	return ds

@@ -109,12 +109,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		}
 
 		// Create plugin request
-		headers := make(map[string]string)
-		for key, values := range r.Header {
-			if len(values) > 0 {
-				headers[key] = values[0]
-			}
-		}
+		headers := pluginHeaders(r)
 		sentHeaders := maps.Clone(headers)
 
 		bodyBytes, err := readBodyWithoutConsuming(r)
@@ -251,12 +246,7 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 		}
 	}
 
-	headers := make(map[string]string)
-	for key, values := range r.Header {
-		if len(values) > 0 {
-			headers[key] = values[0]
-		}
-	}
+	headers := pluginHeaders(r)
 	bodyBytes, err := readBodyWithoutConsuming(r)
 	if pluginlimits.IsRequestTooLarge(err) {
 		// The proxy answers 413; no auth plugin could be sent the body.
@@ -406,12 +396,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		}
 
 		// Create enriched request
-		headers := make(map[string]string)
-		for key, values := range r.Header {
-			if len(values) > 0 {
-				headers[key] = values[0]
-			}
-		}
+		headers := pluginHeaders(r)
 		sentHeaders := maps.Clone(headers)
 
 		bodyBytes, err := readBodyWithoutConsuming(r)
@@ -614,6 +599,23 @@ func isEmptySlice(v interface{}) bool {
 
 func generateRequestID() string {
 	return requestid.New()
+}
+
+// pluginHeaders is the first value of each request header, for a plugin
+// request. The gateway's loopback markers are left out: plugins run as
+// separate, possibly third-party processes on this host, and with the hop
+// and failover tokens one could authenticate as any App on the loopback
+// (midsommar-clean-55x).
+func pluginHeaders(r *http.Request) map[string]string {
+	h := r.Header.Clone()
+	proxy.StripLoopbackHeaders(h)
+	headers := make(map[string]string, len(h))
+	for key, values := range h {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+	return headers
 }
 
 // readBodyWithoutConsuming reads the body for the plugins and puts it back.

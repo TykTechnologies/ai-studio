@@ -1,0 +1,22 @@
+{
+  "id": "chatcmpl-par1",
+  "object": "chat.completion",
+  "created": 1792491768,
+  "model": "gpt-4o-2024-08-06",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {"id": "call_search", "type": "function", "function": {"name": "search", "arguments": "{\"query\":\"agent tracing\",\"limit\":5}"}},
+          {"id": "call_fetch", "type": "function", "function": {"name": "fetch_url", "arguments": "{\"url\": \"https://example.com/a?b=1\"}"}},
+          {"id": "call_local", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\":\"notes.txt\"}"}}
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {"prompt_tokens": 120, "completion_tokens": 61, "total_tokens": 181}
+}

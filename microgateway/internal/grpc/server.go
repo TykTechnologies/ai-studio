@@ -1006,6 +1006,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ResourceSigningSecretPrevEncrypted: llm.ResourceSigningSecretPrevEncrypted,
 			VendorWorkspaceId:                  llm.VendorWorkspaceID,
 			PriceMultipliers:                   string(llm.PriceMultipliers),
+			TracingContentModeMax:              llm.TracingContentModeMax,
+			TracingPropagationOptOut:           llm.TracingPropagationOptOut,
 			
 			// Embedded relationship data
 			AppIds:    appIDs,    // Which apps can access this LLM
@@ -1129,6 +1131,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			BudgetStartDate: budgetStartDate,
 			AllowedIps:      string(app.AllowedIPs),
 			Metadata:        string(app.Metadata),
+			Tracing:         string(app.Tracing),
 			
 			// Embedded relationship data - THE CRITICAL FIX
 			LlmIds:        llmIDs,        // From app_llms join table - enables LLM access validation

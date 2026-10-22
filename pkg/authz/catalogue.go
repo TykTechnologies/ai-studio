@@ -326,6 +326,12 @@ func init() {
 		Description: "Usage, cost and token dashboards."})
 	Register(Resource{Key: "proxy-logs", Label: "Proxy logs", Group: "Analytics", Actions: readOnly, Sensitive: true,
 		Description: "Raw gateway request and response logs, including prompt and completion bodies."})
+	// Agent Call Tracing (Enterprise). Metadata and content are split so
+	// read can be withheld on the content alone (spec §9.1).
+	Register(Resource{Key: "traces", Label: "Agent traces", Group: "Analytics", Actions: crudx,
+		Description: "Agent sessions, traces and spans: timings, tokens, cost, tool names and gateway events. End users and external ids appear as pseudonyms. Write changes tracing settings, delete purges sessions, execute exports."})
+	Register(Resource{Key: "trace-content", Label: "Agent trace content", Group: "Analytics", Actions: readOnly, Sensitive: true,
+		Description: "Raw end-user and external ids, plus captured prompts, responses and tool data in agent traces (subject to each App's content mode). Every view is audited."})
 
 	// Plugins
 	Register(Resource{Key: "plugins", Label: "Installed plugins", Group: "Plugins", Actions: crudxp, Privileged: true,

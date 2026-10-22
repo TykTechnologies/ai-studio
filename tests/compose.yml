@@ -96,6 +96,10 @@ services:
       - ${STUDIO_GOMODCACHE:-go_cache}:/root/go/pkg/mod
       - ${STUDIO_GOCACHE:-go_build_cache}:/root/.cache/go-build
       - studio_data:/app/data
+    # The agent tracing live-capture spec runs a mock LLM upstream on the
+    # runner; Studio reaches it as host.docker.internal.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8081:8080" # backend API (kept for debugging; tests use the frontend)
       - "9090:9090" # embedded gateway / proxy
@@ -116,6 +120,11 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_AI_KEY: ${ANTHROPIC_AI_KEY:-}
       ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      # Agent Call Tracing (Enterprise) for tests/ui/tests/agent-tracing.spec.ts,
+      # which seeds sessions through the DEVMODE import; redacted is the
+      # highest content mode its live-capture case asks for.
+      AGENT_TRACING_ENABLED: "true"
+      AGENT_TRACING_CONTENT_DEFAULT_MODE: redacted
       # Plugin binaries built by the command above; file:// plugin commands
       # outside this directory are refused by the path validator.
       AI_STUDIO_PLUGIN_ALLOWED_DIRS: /app/bin/plugins

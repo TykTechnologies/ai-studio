@@ -135,6 +135,15 @@ async function assertEnterpriseEdition(page: Page): Promise<void> {
   const { edition, version } = await response.json();
   console.log(`Backend edition: ${edition} (version: ${version || 'unknown'})`);
 
+  // TEST_EDITION=ce runs the Community Edition specs (*-ce.spec.ts) against
+  // a CE build; they check that Enterprise features stay hidden there.
+  if (process.env.TEST_EDITION === 'ce') {
+    if (edition === 'enterprise') {
+      throw new Error('TEST_EDITION=ce, but the backend is the Enterprise build.');
+    }
+    return;
+  }
+
   if (edition !== 'enterprise') {
     throw new Error(
       `This suite requires the Enterprise build, but the backend reports edition="${edition}".\n` +

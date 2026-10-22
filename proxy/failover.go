@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
@@ -124,6 +125,10 @@ func (p *Proxy) planFailover(primary *models.LLM, requestedModel string, r *http
 			Int("target_index", i+1).
 			Str("reason", reason).
 			Msg("failover target skipped")
+		recordGatewayEvent(r.Context(), agenttrace.GatewayEvent{
+			Type: agenttrace.GatewayEventFallback, Outcome: agenttrace.OutcomeSkip,
+			Name: strconv.FormatUint(uint64(t.LLMID), 10), Detail: reason,
+		})
 	}
 
 	for i, t := range primary.Failover.Targets {
@@ -381,15 +386,33 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 	return false
 }
 
-// stripFailoverHeaders removes the loopback markers (failover, router and
-// auth hand-off) and the client's instructions to gateway plugins
-// (X-Tyk-Compression) before a request leaves for the vendor.
-func stripFailoverHeaders(h http.Header) {
+// StripLoopbackHeaders removes the loopback markers from h before request
+// headers are handed to an out-of-process plugin. With the hop and failover
+// tokens a plugin could dial the gateway's loopback and authenticate as any
+// App through the auth hand-off (midsommar-clean-55x).
+// The client's instructions to gateway plugins (X-Tyk-Compression) are kept:
+// they are meant for the plugins.
+func StripLoopbackHeaders(h http.Header) { stripLoopbackMarkers(h) }
+
+// stripLoopbackMarkers removes the loopback markers: failover, router and
+// auth hand-off.
+func stripLoopbackMarkers(h http.Header) {
+	// The per-process hop token and the outer hop's span id: a vendor seeing
+	// the token could replay it at this gateway's loopback.
+	h.Del(hdrInternalHop)
+	h.Del(hdrInternalSpan)
 	h.Del(hdrFailoverOrigin)
 	h.Del(hdrFailoverAttempt)
 	h.Del(hdrFailoverToken)
 	stripRouterHeaders(h)
 	stripAuthHandoffHeaders(h)
+}
+
+// stripFailoverHeaders removes the loopback markers and the client's
+// instructions to gateway plugins (X-Tyk-Compression) before a request
+// leaves for the vendor.
+func stripFailoverHeaders(h http.Header) {
+	stripLoopbackMarkers(h)
 	stripCompressionHeaders(h)
 }
 

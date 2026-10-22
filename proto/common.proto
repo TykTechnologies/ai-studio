@@ -49,6 +49,11 @@ message LLMConfig {
   google.protobuf.Timestamp resource_signing_prev_expires_at = 29;
   string vendor_workspace_id = 30;  // Pinned vendor workspace (Anthropic: anthropic-workspace-id); empty when none
   string price_multipliers = 31;    // JSON object of per-service-tier price multiplier overrides ({"batch":0.4}); empty when none
+  // Agent tracing (Enterprise): the content mode cap for calls to this LLM
+  // (off|metadata|hashed|redacted|full; empty is no cap), and whether
+  // traceparent propagation to its upstream is switched off.
+  string tracing_content_mode_max = 32;
+  bool tracing_propagation_opt_out = 33;
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -89,6 +94,11 @@ message AppConfig {
   repeated uint32 model_router_ids = 23;
   // Semantic Router grants (Enterprise): from app_semantic_routers.
   repeated uint32 semantic_router_ids = 24;
+
+  // Agent tracing overrides (Enterprise): JSON models.AppTracingSettings
+  // without the hub-only owner_may_view_content; empty when the App
+  // inherits every global setting.
+  string tracing = 25;
 }
 
 // TokenConfig represents an API token configuration
@@ -253,6 +263,10 @@ message ToolConfig {
   // Auth plugins for /tools/{slug} and its MCP transports, in execution
   // order. When set they alone authenticate requests to the tool.
   repeated uint32 auth_plugin_ids = 21;
+
+  // Agent tracing content mode cap for calls to this tool (Enterprise);
+  // empty is no cap.
+  string tracing_content_mode_max = 22;
 }
 
 // DatasourceConfig represents a datasource configuration
@@ -285,6 +299,10 @@ message DatasourceConfig {
   // Auth plugins for /datasource/{slug}, in execution order. When set they
   // alone authenticate requests to the datasource.
   repeated uint32 auth_plugin_ids = 23;
+
+  // Agent tracing content mode cap for calls to this datasource
+  // (Enterprise); empty is no cap.
+  string tracing_content_mode_max = 24;
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)
@@ -342,6 +360,43 @@ message ConfigurationSnapshot {
   // store them (a key edges keep unique, such as a tool slug, used twice),
   // one line each. Edges report them with their own (pkg/snapshotguard).
   repeated string omitted_entries = 16;
+
+  // Agent Call Tracing (Enterprise): the fingerprint key edges use, present
+  // only while tracing runs on the hub.
+  AgentTracingKeys agent_tracing_keys = 17;
+
+  // Agent Call Tracing (Enterprise): the install-wide content settings edges
+  // apply before capture leaves them, present only while tracing runs on
+  // the hub. Without it an edge captures no content.
+  AgentTracingContentPolicy agent_tracing_content_policy = 18;
+}
+
+// AgentTracingContentPolicy is the hub's global content capture settings
+// (spec §5.5, §11). App and resource overrides travel on their own configs.
+message AgentTracingContentPolicy {
+  string default_mode = 1;
+  string max_request_override = 2;
+  string store_cap = 3;
+  uint32 max_part_bytes = 4;
+  uint32 max_span_bytes = 5;
+  bool store_binary = 6;
+  repeated string redaction_detectors = 7;
+  // assembled_export_active is set while the hub's OTel exporter exports
+  // assembled agent-trace spans under the gateway span id; edges then leave
+  // out their own live proxy span for captured requests (one call, one span).
+  bool assembled_export_active = 8;
+  // ceiling is the highest content mode any App, request header or the
+  // default may reach (jyx.172). Missing (an older hub) is off.
+  string ceiling = 9;
+}
+
+// AgentTracingKeys carries the HMAC key edges compute Agent Call Tracing
+// fingerprints with (decision D4). It is derived from the hub's root key
+// with HKDF, never the root itself, and travels encrypted with the
+// microgateway encryption key. Edges hold it in memory only.
+message AgentTracingKeys {
+  uint32 key_id = 1;                  // 1..255, the first byte of every fingerprint
+  string hmac_key_encrypted = 2;      // base64 key, encrypted like LLM API keys
 }
 
 // ConfigurationChange represents a single configuration change

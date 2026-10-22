@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 
@@ -27,6 +28,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/team_budget"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
+	"github.com/TykTechnologies/midsommar/v2/services/agenttracing"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -74,6 +77,11 @@ type Service struct {
 	RBAC rbac.Service
 	// Webhooks (Enterprise; set by InitWebhooks once the event bus is wired)
 	Webhooks webhooks.Service
+	// AgentTracing is Agent Call Tracing (Enterprise; set by InitAgentTracing)
+	AgentTracing agenttracing.Service
+	// agentTracingStarted is set once the start gate passed and the service
+	// started; SyncAgentTracingLicence acts only then.
+	agentTracingStarted atomic.Bool
 	// TykMCP is the Tyk Dashboard MCP integration (Enterprise; set by
 	// InitTykMCP once the event bus is wired)
 	TykMCP tykmcp.Service
@@ -143,6 +151,64 @@ func (s *Service) InitWebhooks(cfg config.WebhooksConfig, version string) {
 	})
 	if webhooks.IsEnterpriseAvailable() {
 		logger.Info("Webhooks service initialized")
+	}
+}
+
+// InitAgentTracing applies the Agent Call Tracing start gate (Enterprise
+// implementation linked in, licence valid, AGENT_TRACING_ENABLED) and starts
+// the service. Call after SetLicensingService. When the gate is closed the
+// result is inert and the gateway's capture flag stays off.
+func (s *Service) InitAgentTracing(ctx context.Context, cfg config.AgentTracingConfig, nodeID, version string) {
+	s.agentTracingStarted.Store(false)
+	if s.AgentTracing != nil {
+		s.AgentTracing.Stop()
+	}
+	var licenseValid func() bool
+	if s.LicensingService != nil {
+		licenseValid = s.LicensingService.IsValid
+	}
+	s.AgentTracing = agenttracing.NewService(agenttracing.Deps{
+		DB:           s.DB,
+		Config:       cfg,
+		LicenseValid: licenseValid,
+		Audit:        s.Audit,
+		Bus:          func() eventbridge.Bus { return s.EventBus },
+		NodeID:       nodeID,
+		Version:      version,
+	})
+	// Capture turns on only after the Enterprise service started (keys,
+	// sealer and content pipeline installed), never before.
+	if !agenttracing.GateOpen(s.AgentTracing) {
+		return
+	}
+	if err := s.AgentTracing.Start(ctx); err != nil {
+		logger.Errorf("Agent Call Tracing failed to start; capture stays off: %v", err)
+		return
+	}
+	agenttrace.SetEnabled(true)
+	s.agentTracingStarted.Store(true)
+	logger.Info("Agent Call Tracing service started")
+}
+
+// SyncAgentTracingLicence keeps capture in step with the Enterprise licence
+// after start-up (jyx.56): capture stops while the licence is not valid and
+// resumes once a renewed one is (no restart). The standalone binaries exit
+// when a periodic re-check fails, so this matters to an embedding host that
+// keeps Studio running (Options.OnLicenceInvalid). Only a service the start
+// gate started is affected; the stored traces and the API stay as they are.
+func (s *Service) SyncAgentTracingLicence() {
+	if !s.agentTracingStarted.Load() || s.LicensingService == nil {
+		return
+	}
+	valid := s.LicensingService.IsValid()
+	if agenttrace.Enabled() == valid {
+		return
+	}
+	agenttrace.SetEnabled(valid)
+	if valid {
+		logger.Info("Enterprise licence valid again; Agent Call Tracing capture resumed")
+	} else {
+		logger.Warn("Enterprise licence no longer valid; Agent Call Tracing capture stopped")
 	}
 }
 
@@ -423,6 +489,10 @@ func (s *Service) Stop() error {
 
 	// Stop background workers that write to the database first: Cleanup
 	// closes it once Stop returns.
+	if s.AgentTracing != nil {
+		logger.Info("Stopping Agent Call Tracing service...")
+		s.AgentTracing.Stop()
+	}
 	if s.TykMCP != nil {
 		logger.Info("Stopping Tyk MCP integration service...")
 		s.TykMCP.Stop()

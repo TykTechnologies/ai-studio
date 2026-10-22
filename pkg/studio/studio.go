@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -45,6 +46,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -345,6 +347,17 @@ func New(opts Options) (_ *Studio, err error) {
 	})
 
 	// Licensing (Enterprise: validates the licence and starts periodic checks).
+	// A host that keeps Studio running on an invalid licence gets Agent Call
+	// Tracing capture stopped first (the standalone binary exits instead).
+	onInvalid := opts.OnLicenceInvalid
+	if onInvalid != nil {
+		onInvalid = func(err error) {
+			if s.service != nil {
+				s.service.SyncAgentTracingLicence()
+			}
+			opts.OnLicenceInvalid(err)
+		}
+	}
 	s.licensing = licensing.NewService(licensing.Config{
 		LicenseKey:           conf.LicenseKey,
 		LicenseSource:        opts.License,
@@ -353,7 +366,7 @@ func New(opts Options) (_ *Studio, err error) {
 		TelemetryDisabled:    conf.LicenseDisableTelemetry,
 		ValidityCheckPeriod:  conf.LicenseValidityPeriod,
 		TelemetryConcurrency: conf.LicenseTelemetryConcurrency,
-		OnInvalid:            opts.OnLicenceInvalid,
+		OnInvalid:            onInvalid,
 	}, s.db)
 	if err := s.licensing.Start(); err != nil {
 		return nil, fmt.Errorf("studio: start licensing: %w", err)
@@ -440,6 +453,31 @@ func New(opts Options) (_ *Studio, err error) {
 	})
 	s.leadership.Start()
 	s.connectReplicas()
+
+	// Agent Call Tracing (Enterprise): the start gate sets the gateway's
+	// capture flag before the proxy serves its first request.
+	// Baggage reaching LLM and tool upstreams is cut to the allowlist in
+	// every edition (decision Q11).
+	tracing.SetBaggageAllowlist(conf.AgentTracing.BaggageAllowlist)
+	declared.SetForwardTykHeaders(conf.AgentTracing.ForwardTykHeaders)
+	// What the gateway reads from a captured request's declared context.
+	declared.SetDefault(declared.New(declared.Options{
+		CompatFamilies:   conf.AgentTracing.CompatHeaders,
+		Harness:          conf.AgentTracing.HarnessSessionHeaders,
+		BaggageAllowlist: conf.AgentTracing.BaggageAllowlist,
+	}))
+	tracing.SetOutboundPropagation(conf.AgentTracing.PropagateLLMProviders,
+		conf.AgentTracing.PropagateHTTPUpstreams, conf.AgentTracing.PropagateMCP)
+	proxy.SetOpenAIClientRequestID(conf.AgentTracing.OpenAIClientRequestID)
+	proxy.SetAgentTraceStreamBufferBytes(conf.AgentTracing.MaxStreamBufferBytes)
+	metrics.SetAgentMetricsEnabled(conf.AgentTracing.MetricsEnabled)
+	agenttrace.SetGatewayNode(nodeID)
+	service.InitAgentTracing(backgroundCtx, conf.AgentTracing, nodeID, opts.Version)
+	if agenttrace.Enabled() {
+		// The embedded gateway's captures are staged by the analytics handler.
+		analytics.SetCaptureLimits(conf.AgentTracing.QueueMaxEvents, conf.AgentTracing.QueueMaxBytes)
+		agenttrace.SetSink(analytics.CaptureSink())
+	}
 
 	// Plugin loading waits until the event bus is wired (below), so plugins
 	// can subscribe to events during initialization.
@@ -888,7 +926,12 @@ func cookiePath(basePath string) string {
 // licence Studio already holds in place; the host can show it.
 func (s *Studio) ReloadLicense() error {
 	if r, ok := s.licensing.(licensing.Revalidator); ok {
-		return r.Revalidate()
+		if err := r.Revalidate(); err != nil {
+			return err
+		}
+	}
+	if s.service != nil {
+		s.service.SyncAgentTracingLicence()
 	}
 	return nil
 }

@@ -71,6 +71,13 @@
       ]
     },
     {
+      "id": "agent-sessions",
+      "text": "Agent sessions",
+      "path": "/admin/agent-sessions",
+      "icon": "account-tree",
+      "permission": "traces:read"
+    },
+    {
       "id": "llm-management",
       "text": "LLM management",
       "icon": "microchip-ai",

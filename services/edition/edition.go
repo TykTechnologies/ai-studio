@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/scripting/engine"
+	"github.com/TykTechnologies/midsommar/v2/services/agenttracing"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/compliance"
@@ -37,6 +38,7 @@ type feature struct {
 }
 
 var enterpriseFeatures = []feature{
+	{"agent_tracing", agenttracing.IsEnterpriseAvailable},
 	{"audit", audit.IsEnterpriseAvailable},
 	{"budget", budget.IsEnterpriseAvailable},
 	{"compliance", compliance.IsEnterpriseAvailable},

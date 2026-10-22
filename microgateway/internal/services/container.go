@@ -68,6 +68,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 	// Initialize crypto service
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
+	setAgentTracingKeyCrypto(crypto)
 
 	// Initialize auth provider (no caching)
 	authProvider := auth.NewTokenAuthProvider(db)

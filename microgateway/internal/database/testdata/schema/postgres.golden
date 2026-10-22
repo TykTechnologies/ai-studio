@@ -152,6 +152,7 @@ TABLE apps
   column allowed_ips jsonb(jsonb) nullable=YES
   column metadata jsonb(jsonb) nullable=YES
   column plugin_resources_json jsonb(jsonb) nullable=YES
+  column tracing jsonb(jsonb) nullable=YES
   column namespace text(text) nullable=YES default=''::text
 TABLE budget_blocks
   constraint budget_blocks_pkey PRIMARY KEY (app_id)
@@ -236,6 +237,7 @@ TABLE datasources
   column active boolean(bool) nullable=YES default=true
   column namespace text(text) nullable=YES default=''::text
   column governed_metadata jsonb(jsonb) nullable=YES
+  column tracing_content_mode_max text(text) nullable=YES
 TABLE edge_instances
   constraint edge_instances_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX edge_instances_pkey ON edge_instances USING btree (id)
@@ -336,6 +338,8 @@ TABLE llms
   column resource_signing_prev_expires_at timestamp with time zone(timestamptz) nullable=YES
   column vendor_workspace_id text(text) nullable=YES
   column price_multipliers jsonb(jsonb) nullable=YES
+  column tracing_content_mode_max text(text) nullable=YES
+  column tracing_propagation_opt_out boolean(bool) nullable=NO default=false
 TABLE model_mappings
   constraint fk_pool_vendors_mappings FOREIGN KEY (vendor_id) REFERENCES pool_vendors(id) ON DELETE CASCADE
   constraint model_mappings_pkey PRIMARY KEY (id)
@@ -552,3 +556,4 @@ TABLE tools
   column rest_access_disabled boolean(bool) nullable=NO default=false
   column mcp_access_disabled boolean(bool) nullable=NO default=false
   column governed_metadata jsonb(jsonb) nullable=YES
+  column tracing_content_mode_max text(text) nullable=YES

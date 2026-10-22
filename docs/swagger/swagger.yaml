@@ -456,6 +456,14 @@ definitions:
                 items:
                   type: integer
                 type: array
+              tracing:
+                allOf:
+                - $ref: '#/definitions/models.AppTracingSettings'
+                description: |-
+                  Tracing overrides the global agent tracing settings for the
+                  App (Enterprise). Omitted keeps the stored settings on update;
+                  changing any of them needs traces:write. owner_may_view_content
+                  must be false until the Portal trace views ship (400 if true).
               user_id:
                 type: integer
             type: object
@@ -583,6 +591,10 @@ definitions:
             items:
               type: integer
             type: array
+          tracing:
+            allOf:
+            - $ref: '#/definitions/models.AppTracingSettings'
+            description: Agent tracing overrides (Enterprise).
           user_id:
             type: integer
         type: object
@@ -1458,6 +1470,12 @@ definitions:
                 items:
                   type: string
                 type: array
+              tracing_content_mode_max:
+                description: |-
+                  TracingContentModeMax caps the agent tracing content mode for
+                  this datasource (Enterprise); "" is no cap, omitted keeps the
+                  stored value on update.
+                type: string
               url:
                 type: string
               user_id:
@@ -1518,6 +1536,9 @@ definitions:
             items:
               $ref: '#/definitions/api.TagResponse'
             type: array
+          tracing_content_mode_max:
+            description: Agent tracing content mode cap (Enterprise); "" is no cap.
+            type: string
           url:
             type: string
           user_id:
@@ -2094,6 +2115,17 @@ definitions:
                 type: integer
               short_description:
                 type: string
+              tracing_content_mode_max:
+                description: |-
+                  TracingContentModeMax caps the agent tracing content mode for
+                  this LLM (Enterprise); "" is no cap. On PATCH an absent key
+                  keeps the stored value.
+                type: string
+              tracing_propagation_opt_out:
+                description: |-
+                  TracingPropagationOptOut stops traceparent reaching this LLM's
+                  upstream (default false: it is sent).
+                type: boolean
               vendor:
                 type: string
               vendor_workspace_id:
@@ -2165,6 +2197,10 @@ definitions:
             type: integer
           short_description:
             type: string
+          tracing_content_mode_max:
+            type: string
+          tracing_propagation_opt_out:
+            type: boolean
           vendor:
             type: string
           vendor_workspace_id:
@@ -3125,6 +3161,11 @@ definitions:
       type:
         type: string
     type: object
+  api.PurgeBody:
+    properties:
+      end_user:
+        type: string
+    type: object
   api.RegisterInput:
     description: Register input model
     properties:
@@ -3576,6 +3617,61 @@ definitions:
       role:
         type: string
     type: object
+  api.SessionQueryBody:
+    properties:
+      agent:
+        type: string
+      app_id:
+        type: integer
+      cost_max_micros:
+        type: integer
+      cost_min_micros:
+        type: integer
+      cursor:
+        type: string
+      duration_max_ms:
+        type: integer
+      duration_min_ms:
+        type: integer
+      end_user:
+        type: string
+      external_id:
+        type: string
+      from:
+        type: string
+      has_errors:
+        type: boolean
+      has_gateway_events:
+        type: boolean
+      limit:
+        type: integer
+      model:
+        type: string
+      session_id:
+        type: string
+      sort:
+        description: a SessionSorts column, "-" prefix for descending
+        type: string
+      source:
+        type: string
+      status:
+        type: string
+      to:
+        type: string
+      tool:
+        type: string
+      user_id:
+        type: integer
+      weak_links:
+        type: boolean
+    type: object
+  api.SessionSearchBody:
+    properties:
+      limit:
+        type: integer
+      q:
+        type: string
+    type: object
   api.SimplifiedDataSourceResponse:
     properties:
       id:
@@ -3780,6 +3876,12 @@ definitions:
                 type: boolean
               tool_type:
                 type: string
+              tracing_content_mode_max:
+                description: |-
+                  TracingContentModeMax caps the agent tracing content mode for
+                  this tool (Enterprise); "" is no cap, omitted keeps the stored
+                  value on update.
+                type: string
             type: object
           type:
             type: string
@@ -3860,6 +3962,9 @@ definitions:
           it from the name.
         type: string
       tool_type:
+        type: string
+      tracing_content_mode_max:
+        description: Agent tracing content mode cap (Enterprise); "" is no cap.
         type: string
     type: object
   api.UpdateBrandingSettingsRequest:
@@ -5003,6 +5108,35 @@ definitions:
       percentage:
         type: number
       start_date:
+        type: string
+    type: object
+  models.AppTracingSettings:
+    properties:
+      content_mode:
+        description: ContentMode is the App's capture mode (off|metadata|hashed|redacted|full).
+        type: string
+      enabled:
+        description: Enabled turns tracing on or off for the App; nil inherits.
+        type: boolean
+      max_request_override:
+        description: |-
+          MaxRequestOverride is the highest mode a request header may raise
+          capture to for this App.
+        type: string
+      owner_may_view_content:
+        description: |-
+          OwnerMayViewContent will let the App's Portal owner read captured
+          content (Q4) once the Portal trace views exist (jyx.42). Until then it
+          is always false: Validate refuses true and Scan reads a stored true as
+          false (jyx.175). Hub-only: never synced to edges.
+        type: boolean
+      payload_days:
+        description: PayloadDays is how long captured content is kept; nil inherits.
+        type: integer
+      session_idle_timeout:
+        description: |-
+          SessionIdleTimeout closes a session after this long without activity
+          (a Go duration, e.g. "2h").
         type: string
     type: object
   models.AuditRecord:
@@ -7683,6 +7817,570 @@ paths:
       summary: OAuth Authorization Server Metadata
       tags:
       - oauth
+  /agent-tracing/config:
+    get:
+      description: The effective content and retention settings (from AGENT_TRACING_*
+        environment variables; Apps, LLMs, tools and datasources override them). content_ceiling
+        bounds every App, default and request header; content_default_mode applies
+        to Apps without their own mode. Never includes keys.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Agent tracing settings
+      tags:
+      - agent-tracing
+  /agent-tracing/purge:
+    post:
+      consumes:
+      - application/json
+      description: Deletes every session whose declared end user is end_user (right
+        to erasure). Audited by session ids, never by the end user itself.
+      parameters:
+      - description: What to erase
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.PurgeBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Purge an end user's agent sessions
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions:
+    get:
+      description: 'Sessions in a time range (default the last 24 h), newest first,
+        with the spec §6.1 filters and cursor pagination. end_user and external_id
+        are refused here: use POST /agent-tracing/sessions/query so they stay out
+        of URLs.'
+      parameters:
+      - description: RFC 3339 start (default 24 h before to)
+        in: query
+        name: from
+        type: string
+      - description: RFC 3339 end (default now)
+        in: query
+        name: to
+        type: string
+      - description: App
+        in: query
+        name: app_id
+        type: integer
+      - description: Studio user
+        in: query
+        name: user_id
+        type: integer
+      - description: Exact session id
+        in: query
+        name: session_id
+        type: string
+      - description: Agent name
+        in: query
+        name: agent
+        type: string
+      - description: Model
+        in: query
+        name: model
+        type: string
+      - description: Tool called
+        in: query
+        name: tool
+        type: string
+      - description: active, closed or error
+        in: query
+        name: status
+        type: string
+      - description: declared or inferred
+        in: query
+        name: source
+        type: string
+      - description: Only sessions with weak links
+        in: query
+        name: weak_links
+        type: boolean
+      - description: Has errors
+        in: query
+        name: has_errors
+        type: boolean
+      - description: Has gateway events
+        in: query
+        name: has_gateway_events
+        type: boolean
+      - description: Minimum cost (micros)
+        in: query
+        name: cost_min_micros
+        type: integer
+      - description: Maximum cost (micros)
+        in: query
+        name: cost_max_micros
+        type: integer
+      - description: Minimum duration (ms)
+        in: query
+        name: duration_min_ms
+        type: integer
+      - description: Maximum duration (ms)
+        in: query
+        name: duration_max_ms
+        type: integer
+      - description: started_at, cost, duration, tokens, turns, llm_calls, tool_calls
+          or errors; prefix - for descending (default -started_at)
+        in: query
+        name: sort
+        type: string
+      - description: next_cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (1-200, default 50)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{data: [session], next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List agent sessions (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}:
+    delete:
+      description: 'Deletes a session and everything captured for it: spans, links,
+        payloads, correlation keys, agents and staged events (right to erasure). Audited;
+        refused (503) when the audit trail cannot record it.'
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Purge an agent session
+      tags:
+      - agent-tracing
+    get:
+      description: The session with its agents and turns, and what the caller may
+        do with it (viewer).
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{session, agents, traces, viewer}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get an agent session (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}/export:
+    get:
+      description: JSON (application/vnd.tyk.agent-trace+json; v=1) or a Markdown
+        transcript of one session. content=true includes captured content when the
+        caller holds trace-content read; otherwise the export is content-stripped
+        (X-Tyk-Export-Content says which). Every export is audited; it is refused
+        (503) when the audit trail cannot record it.
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: json (default) or markdown
+        in: query
+        name: format
+        type: string
+      - description: Include captured content
+        in: query
+        name: content
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export an agent session
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}/search:
+    post:
+      consumes:
+      - application/json
+      description: Matches span names, tool names, models, operations and error types.
+        The term is in the body so it never reaches a URL.
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Find term (1-256 characters)
+        in: body
+        name: query
+        required: true
+        schema:
+          $ref: '#/definitions/api.SessionSearchBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{matches: [{span_id, field, snippet}], total, truncated}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Find in a session (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/{session_id}/spans:
+    get:
+      description: The span skeleton (no content), keyset-paged by (start_time, span_id).
+      parameters:
+      - description: Session id (UUID)
+        in: path
+        name: session_id
+        required: true
+        type: string
+      - description: Span kind
+        in: query
+        name: kind
+        type: string
+      - description: Span status
+        in: query
+        name: status
+        type: string
+      - description: Agent id
+        in: query
+        name: agent_id
+        type: string
+      - description: RFC 3339
+        in: query
+        name: from
+        type: string
+      - description: RFC 3339
+        in: query
+        name: to
+        type: string
+      - description: 'previews: ask for inline content previews'
+        in: query
+        name: include
+        type: string
+      - description: next_cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (1-1000, default 1000)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{data: [span], next_cursor, previews}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: List a session's spans (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/sessions/query:
+    post:
+      consumes:
+      - application/json
+      description: The sessions list with every filter in the body, including end_user
+        and external_id.
+      parameters:
+      - description: Filters
+        in: body
+        name: query
+        required: true
+        schema:
+          $ref: '#/definitions/api.SessionQueryBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{data: [session], next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Query agent sessions (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/spans/{span_id}:
+    get:
+      description: One span with all its links (candidates included) and gateway events.
+        No content.
+      parameters:
+      - description: Span id (16 lowercase hex)
+        in: path
+        name: span_id
+        required: true
+        type: string
+      - description: App the span belongs to (ids are unique per App)
+        in: query
+        name: app_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{span, events, session_id}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get an agent span (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/spans/{span_id}/payloads/{part}:
+    get:
+      description: One captured part of a span (request, response, system_instructions,
+        tool_definitions, tool_args, tool_result, error_body), as stored after the
+        content pipeline. Needs trace-content read; every read is audited, and the
+        content is refused (503) when the audit trail cannot record it. Content over
+        max_bytes (and the UI view cap) comes back truncated.
+      parameters:
+      - description: Span id (16 lowercase hex)
+        in: path
+        name: span_id
+        required: true
+        type: string
+      - description: Payload part
+        in: path
+        name: part
+        required: true
+        type: string
+      - description: The span's App (span ids are unique only within an App)
+        in: query
+        name: app_id
+        required: true
+        type: integer
+      - description: Cap on the returned content
+        in: query
+        name: max_bytes
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Read a captured payload part
+      tags:
+      - agent-tracing
+  /agent-tracing/traces/{trace_id}:
+    get:
+      description: One turn with its first page of spans (keyset-paged like the session
+        spans).
+      parameters:
+      - description: Trace id (32 lowercase hex)
+        in: path
+        name: trace_id
+        required: true
+        type: string
+      - description: App the trace belongs to (ids are unique per App)
+        in: query
+        name: app_id
+        required: true
+        type: integer
+      - description: next_cursor of the previous page
+        in: query
+        name: cursor
+        type: string
+      - description: Page size (1-1000, default 1000)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: '{trace, session_id, spans, next_cursor}'
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get an agent trace (Enterprise)
+      tags:
+      - agent-tracing
+  /agent-tracing/traces/{trace_id}/export:
+    get:
+      description: As the session export, for one trace of one App.
+      parameters:
+      - description: Trace id (32 lowercase hex)
+        in: path
+        name: trace_id
+        required: true
+        type: string
+      - description: The trace's App
+        in: query
+        name: app_id
+        required: true
+        type: integer
+      - description: json (default) or markdown
+        in: query
+        name: format
+        type: string
+      - description: Include captured content
+        in: query
+        name: content
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export an agent trace (turn)
+      tags:
+      - agent-tracing
   /analytics/app-interactions-over-time:
     get:
       consumes:

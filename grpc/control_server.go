@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
@@ -1114,7 +1115,12 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		Int("tool_calls", len(req.ToolCalls)).
 		Msg("AI Studio control server: received analytics pulse from edge")
 
-	processedRecords := uint64(0)
+	// Agent tracing capture events first: a capture-only pulse that cannot
+	// be staged fails here, before anything else is recorded.
+	processedRecords, err := s.ingestCaptureEvents(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 
 	// Process analytics events using AI Studio's native analytics system with batch processing
 	if len(req.AnalyticsEvents) > 0 {
@@ -1173,6 +1179,9 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			// auth plugin said.
 			proxyLogs[i].OnBehalfOf = event.OnBehalfOf
 			proxyLogs[i].ActingAgent = event.ActingAgent
+			// The agent tracing link, kept only when well-formed (edge
+			// values are untrusted).
+			proxyLogs[i].TraceSpanID = edgeTraceSpanID(event.TraceSpanId)
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{
@@ -1207,8 +1216,15 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			proxyLogs[i].ServiceTier = event.ServiceTier
 			chatRecords[i].ServiceTier = event.ServiceTier
 			// The gateway's request id (and the caller's), for matching a
-			// compliance event's request_id to its log row.
-			proxyLogs[i].RequestID = requestid.SanitizeClient(event.GatewayRequestId)
+			// compliance event's request_id to its log row. Edge values are
+			// untrusted: the gateway id is kept only in the shape
+			// requestid mints (the column is 64 wide), else the edge's own
+			// request id as before #821 (older edges), bounded.
+			if requestid.Valid(event.GatewayRequestId) {
+				proxyLogs[i].RequestID = event.GatewayRequestId
+			} else {
+				proxyLogs[i].RequestID = edgeRequestID(event.RequestId)
+			}
 			proxyLogs[i].ClientRequestID = requestid.SanitizeClient(event.ClientRequestId)
 			if kind == models.DecisionRequest {
 				chatRecords[i].Choices = int(event.Choices)
@@ -1536,13 +1552,14 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 
 	token := tokens[0]
 
-	// Check current token
-	if s.config.AuthToken != "" && token == "Bearer "+s.config.AuthToken {
+	// Check current token (constant-time: the token is the only edge
+	// credential, jyx.67)
+	if s.config.AuthToken != "" && bearerMatches(token, s.config.AuthToken) {
 		return nil
 	}
 
 	// Check next token (for rotation)
-	if s.config.NextAuthToken != "" && token == "Bearer "+s.config.NextAuthToken {
+	if s.config.NextAuthToken != "" && bearerMatches(token, s.config.NextAuthToken) {
 		logger.Log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
 		return nil
 	}
@@ -1725,6 +1742,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ResourceSigningPrevExpiresAt:       signingPrevExpiresAt,
 			VendorWorkspaceId:                  llm.VendorWorkspaceID,
 			PriceMultipliers:                   priceMultipliersJSON,
+			TracingContentModeMax:              llm.TracingContentModeMax,
+			TracingPropagationOptOut:           llm.TracingPropagationOptOut,
 			FilterIds:        filterIDs,
 			PluginIds:        llmPluginOrder[llm.ID],
 			CreatedAt:        timestamppb.New(llm.CreatedAt),
@@ -1846,6 +1865,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			ModelRouterIds:     appModelRouterIDs(&app),
 			SemanticRouterIds:  appSemanticRouterIDs(&app),
 			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
+			Tracing:            app.Tracing.EdgeJSON(),
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
@@ -2364,6 +2384,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			FilterIds:           toolFilterMap[tool.ID],
 			AppIds:              toolAppMap[tool.ID],
 			AuthPluginIds:       endpointAuthPlugins[endpointKey{models.EndpointTypeTool, tool.ID}],
+			TracingContentModeMax: tool.TracingContentModeMax,
 			CreatedAt:           timestamppb.New(tool.CreatedAt),
 			UpdatedAt:           timestamppb.New(tool.UpdatedAt),
 		}
@@ -2488,6 +2509,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			GovernedMetadata:      s.governedMetadataJSON(models.GovernedObjectTypeDatasource, governedDatasources[models.BuiltinObjectID(ds.ID)]),
 			AppIds:                dsAppMap[ds.ID],
 			AuthPluginIds:         endpointAuthPlugins[endpointKey{models.EndpointTypeDatasource, ds.ID}],
+			TracingContentModeMax: ds.TracingContentModeMax,
 			CreatedAt:             timestamppb.New(ds.CreatedAt),
 			UpdatedAt:             timestamppb.New(ds.UpdatedAt),
 		}
@@ -2563,6 +2585,33 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			UpdatedAt:      timestamppb.New(token.UpdatedAt),
 		}
 		snapshot.AccessTokens = append(snapshot.AccessTokens, pbToken)
+	}
+
+	// Agent Call Tracing (Enterprise): edges fingerprint with the hub's
+	// derived HMAC key (D4), sent encrypted like LLM API keys; a key that
+	// cannot be encrypted is left out, never sent in plaintext.
+	if id, key, ok := agenttrace.EdgeKey(); ok {
+		enc, err := s.encryptForMicrogateway(base64.StdEncoding.EncodeToString(key))
+		if err != nil {
+			logger.Log.Error().Err(err).Msg("Failed to encrypt the agent tracing fingerprint key - leaving it out of the snapshot")
+		} else {
+			snapshot.AgentTracingKeys = &pb.AgentTracingKeys{KeyId: uint32(id), HmacKeyEncrypted: enc}
+		}
+		if g, ok := agenttrace.EdgeContentGlobals(); ok {
+			snapshot.AgentTracingContentPolicy = &pb.AgentTracingContentPolicy{
+				Ceiling:            g.Ceiling,
+				DefaultMode:        g.DefaultMode,
+				MaxRequestOverride: g.MaxRequestOverride,
+				StoreCap:           g.StoreCap,
+				MaxPartBytes:       uint32(max(g.MaxPartBytes, 0)),
+				MaxSpanBytes:       uint32(max(g.MaxSpanBytes, 0)),
+				StoreBinary:        g.StoreBinary,
+				RedactionDetectors: g.Detectors,
+				// While the hub exports assembled spans, edges leave out
+				// their live proxy span too (jyx.90).
+				AssembledExportActive: agenttrace.ExportActive(),
+			}
+		}
 	}
 
 	logger.Log.Debug().
@@ -3190,6 +3239,7 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		ModelRouterIds:     appModelRouterIDs(app),
 		SemanticRouterIds:  appSemanticRouterIDs(app),
 		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
+		Tracing:            app.Tracing.EdgeJSON(),
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),
 	}

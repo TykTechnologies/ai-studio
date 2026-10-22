@@ -1575,6 +1575,12 @@ type AnalyticsPulse struct {
 	ProxySummaries   []*ProxyLogSummary      `protobuf:"bytes,9,rep,name=proxy_summaries,json=proxySummaries,proto3" json:"proxy_summaries,omitempty"`        // Summarized proxy logs (not full payloads)
 	ComplianceEvents []*ComplianceEventProto `protobuf:"bytes,13,rep,name=compliance_events,json=complianceEvents,proto3" json:"compliance_events,omitempty"` // Script-reported compliance events
 	ToolCalls        []*ToolCallProto        `protobuf:"bytes,14,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`                      // Per-operation tool call records
+	// Agent tracing (Enterprise, decision D3): capture events, sent in their
+	// own pulses on a 10 s / 500-event cadence in chunks of at most 4 MiB.
+	// Hubs that predate the field skip it as an unknown field.
+	CaptureEvents []*CaptureEventProto `protobuf:"bytes,15,rep,name=capture_events,json=captureEvents,proto3" json:"capture_events,omitempty"`
+	// Capture drops on the edge since the last delivered report, by reason.
+	CaptureDropped map[string]uint64 `protobuf:"bytes,16,rep,name=capture_dropped,json=captureDropped,proto3" json:"capture_dropped,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	// Pulse metadata
 	IsCompressed  bool   `protobuf:"varint,10,opt,name=is_compressed,json=isCompressed,proto3" json:"is_compressed,omitempty"`      // Whether data is compressed
 	TotalRecords  uint32 `protobuf:"varint,11,opt,name=total_records,json=totalRecords,proto3" json:"total_records,omitempty"`      // Total number of records in pulse
@@ -1686,6 +1692,20 @@ func (x *AnalyticsPulse) GetComplianceEvents() []*ComplianceEventProto {
 func (x *AnalyticsPulse) GetToolCalls() []*ToolCallProto {
 	if x != nil {
 		return x.ToolCalls
+	}
+	return nil
+}
+
+func (x *AnalyticsPulse) GetCaptureEvents() []*CaptureEventProto {
+	if x != nil {
+		return x.CaptureEvents
+	}
+	return nil
+}
+
+func (x *AnalyticsPulse) GetCaptureDropped() map[string]uint64 {
+	if x != nil {
+		return x.CaptureDropped
 	}
 	return nil
 }
@@ -1964,7 +1984,10 @@ type AnalyticsEvent struct {
 	ClientRequestId  string `protobuf:"bytes,47,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
 	// no_usage marks a request that produced no usage (a policy block, an
 	// error): the hub records its request log row, but no chat record or spend.
-	NoUsage       bool `protobuf:"varint,48,opt,name=no_usage,json=noUsage,proto3" json:"no_usage,omitempty"`
+	NoUsage bool `protobuf:"varint,48,opt,name=no_usage,json=noUsage,proto3" json:"no_usage,omitempty"`
+	// Agent tracing gateway span id (16 hex) of the logical call; empty while
+	// tracing is off. Lands in proxy_logs.trace_span_id.
+	TraceSpanId   string `protobuf:"bytes,49,opt,name=trace_span_id,json=traceSpanId,proto3" json:"trace_span_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2333,6 +2356,13 @@ func (x *AnalyticsEvent) GetNoUsage() bool {
 		return x.NoUsage
 	}
 	return false
+}
+
+func (x *AnalyticsEvent) GetTraceSpanId() string {
+	if x != nil {
+		return x.TraceSpanId
+	}
+	return ""
 }
 
 // Budget usage event for pulse batching
@@ -2808,6 +2838,1199 @@ func (x *ToolCallProto) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
+// Agent tracing capture events (Enterprise; pkg/agenttrace holds the Go
+// contract and the field docs). One CaptureEventProto is one observed span
+// as the gateway saw it; the hub's assembler turns events into sessions,
+// turns and span trees. Times are Unix nanoseconds (0 = unset). Ids are raw
+// bytes: trace 16, span 8. Fingerprints are a 1-byte key id then the HMAC.
+// The AnalyticsPulse field that carries these is wired by the edge transport.
+type CaptureEventProto struct {
+	state          protoimpl.MessageState       `protogen:"open.v1"`
+	Kind           string                       `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	SpanId         []byte                       `protobuf:"bytes,2,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
+	TraceId        []byte                       `protobuf:"bytes,3,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`                  // provisional
+	ParentSpanId   []byte                       `protobuf:"bytes,4,opt,name=parent_span_id,json=parentSpanId,proto3" json:"parent_span_id,omitempty"` // declared parent
+	Seq            uint32                       `protobuf:"varint,5,opt,name=seq,proto3" json:"seq,omitempty"`
+	IdempotencyKey string                       `protobuf:"bytes,6,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Source         string                       `protobuf:"bytes,7,opt,name=source,proto3" json:"source,omitempty"` // "embedded" or the edge id
+	Identity       *CaptureIdentityProto        `protobuf:"bytes,8,opt,name=identity,proto3" json:"identity,omitempty"`
+	Resource       *CaptureResourceProto        `protobuf:"bytes,9,opt,name=resource,proto3" json:"resource,omitempty"`
+	Provider       string                       `protobuf:"bytes,10,opt,name=provider,proto3" json:"provider,omitempty"`
+	Operation      string                       `protobuf:"bytes,11,opt,name=operation,proto3" json:"operation,omitempty"`
+	RequestModel   string                       `protobuf:"bytes,12,opt,name=request_model,json=requestModel,proto3" json:"request_model,omitempty"`
+	ResponseModel  string                       `protobuf:"bytes,13,opt,name=response_model,json=responseModel,proto3" json:"response_model,omitempty"`
+	ToolName       string                       `protobuf:"bytes,14,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	StartUnixNano  int64                        `protobuf:"varint,15,opt,name=start_unix_nano,json=startUnixNano,proto3" json:"start_unix_nano,omitempty"`
+	EndUnixNano    int64                        `protobuf:"varint,16,opt,name=end_unix_nano,json=endUnixNano,proto3" json:"end_unix_nano,omitempty"`
+	TtftNanos      int64                        `protobuf:"varint,17,opt,name=ttft_nanos,json=ttftNanos,proto3" json:"ttft_nanos,omitempty"`
+	Status         string                       `protobuf:"bytes,18,opt,name=status,proto3" json:"status,omitempty"`
+	ErrorType      string                       `protobuf:"bytes,19,opt,name=error_type,json=errorType,proto3" json:"error_type,omitempty"`
+	ErrorMessage   string                       `protobuf:"bytes,20,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	HttpStatus     int32                        `protobuf:"varint,21,opt,name=http_status,json=httpStatus,proto3" json:"http_status,omitempty"`
+	GatewayNode    string                       `protobuf:"bytes,22,opt,name=gateway_node,json=gatewayNode,proto3" json:"gateway_node,omitempty"`
+	Usage          *CaptureUsageProto           `protobuf:"bytes,23,opt,name=usage,proto3" json:"usage,omitempty"`
+	AnalyticsRef   string                       `protobuf:"bytes,24,opt,name=analytics_ref,json=analyticsRef,proto3" json:"analytics_ref,omitempty"`
+	Declared       *CaptureDeclaredContextProto `protobuf:"bytes,25,opt,name=declared,proto3" json:"declared,omitempty"`
+	Extracts       *CaptureExtractsProto        `protobuf:"bytes,26,opt,name=extracts,proto3" json:"extracts,omitempty"`
+	GatewayEvents  []*CaptureGatewayEventProto  `protobuf:"bytes,27,rep,name=gateway_events,json=gatewayEvents,proto3" json:"gateway_events,omitempty"`
+	Parts          []*CapturePayloadPartProto   `protobuf:"bytes,28,rep,name=parts,proto3" json:"parts,omitempty"`
+	ContentMode    string                       `protobuf:"bytes,29,opt,name=content_mode,json=contentMode,proto3" json:"content_mode,omitempty"`
+	Attributes     map[string]string            `protobuf:"bytes,30,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Attempt        uint32                       `protobuf:"varint,31,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	AttemptOf      []byte                       `protobuf:"bytes,32,opt,name=attempt_of,json=attemptOf,proto3" json:"attempt_of,omitempty"` // outer logical call's span id (inner /ai/ hop)
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CaptureEventProto) Reset() {
+	*x = CaptureEventProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureEventProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureEventProto) ProtoMessage() {}
+
+func (x *CaptureEventProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureEventProto.ProtoReflect.Descriptor instead.
+func (*CaptureEventProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CaptureEventProto) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetSpanId() []byte {
+	if x != nil {
+		return x.SpanId
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetTraceId() []byte {
+	if x != nil {
+		return x.TraceId
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetParentSpanId() []byte {
+	if x != nil {
+		return x.ParentSpanId
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetSeq() uint32 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *CaptureEventProto) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetIdentity() *CaptureIdentityProto {
+	if x != nil {
+		return x.Identity
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetResource() *CaptureResourceProto {
+	if x != nil {
+		return x.Resource
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetRequestModel() string {
+	if x != nil {
+		return x.RequestModel
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetResponseModel() string {
+	if x != nil {
+		return x.ResponseModel
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetStartUnixNano() int64 {
+	if x != nil {
+		return x.StartUnixNano
+	}
+	return 0
+}
+
+func (x *CaptureEventProto) GetEndUnixNano() int64 {
+	if x != nil {
+		return x.EndUnixNano
+	}
+	return 0
+}
+
+func (x *CaptureEventProto) GetTtftNanos() int64 {
+	if x != nil {
+		return x.TtftNanos
+	}
+	return 0
+}
+
+func (x *CaptureEventProto) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetErrorType() string {
+	if x != nil {
+		return x.ErrorType
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetHttpStatus() int32 {
+	if x != nil {
+		return x.HttpStatus
+	}
+	return 0
+}
+
+func (x *CaptureEventProto) GetGatewayNode() string {
+	if x != nil {
+		return x.GatewayNode
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetUsage() *CaptureUsageProto {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetAnalyticsRef() string {
+	if x != nil {
+		return x.AnalyticsRef
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetDeclared() *CaptureDeclaredContextProto {
+	if x != nil {
+		return x.Declared
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetExtracts() *CaptureExtractsProto {
+	if x != nil {
+		return x.Extracts
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetGatewayEvents() []*CaptureGatewayEventProto {
+	if x != nil {
+		return x.GatewayEvents
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetParts() []*CapturePayloadPartProto {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetContentMode() string {
+	if x != nil {
+		return x.ContentMode
+	}
+	return ""
+}
+
+func (x *CaptureEventProto) GetAttributes() map[string]string {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+func (x *CaptureEventProto) GetAttempt() uint32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *CaptureEventProto) GetAttemptOf() []byte {
+	if x != nil {
+		return x.AttemptOf
+	}
+	return nil
+}
+
+type CaptureIdentityProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppId         uint64                 `protobuf:"varint,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	TeamId        uint64                 `protobuf:"varint,2,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	CredentialId  string                 `protobuf:"bytes,3,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	UserId        uint64                 `protobuf:"varint,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	EndUserId     string                 `protobuf:"bytes,5,opt,name=end_user_id,json=endUserId,proto3" json:"end_user_id,omitempty"`
+	OnBehalfOf    string                 `protobuf:"bytes,6,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"`
+	ActingAgent   string                 `protobuf:"bytes,7,opt,name=acting_agent,json=actingAgent,proto3" json:"acting_agent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureIdentityProto) Reset() {
+	*x = CaptureIdentityProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureIdentityProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureIdentityProto) ProtoMessage() {}
+
+func (x *CaptureIdentityProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureIdentityProto.ProtoReflect.Descriptor instead.
+func (*CaptureIdentityProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CaptureIdentityProto) GetAppId() uint64 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *CaptureIdentityProto) GetTeamId() uint64 {
+	if x != nil {
+		return x.TeamId
+	}
+	return 0
+}
+
+func (x *CaptureIdentityProto) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
+}
+
+func (x *CaptureIdentityProto) GetUserId() uint64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *CaptureIdentityProto) GetEndUserId() string {
+	if x != nil {
+		return x.EndUserId
+	}
+	return ""
+}
+
+func (x *CaptureIdentityProto) GetOnBehalfOf() string {
+	if x != nil {
+		return x.OnBehalfOf
+	}
+	return ""
+}
+
+func (x *CaptureIdentityProto) GetActingAgent() string {
+	if x != nil {
+		return x.ActingAgent
+	}
+	return ""
+}
+
+type CaptureResourceProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureResourceProto) Reset() {
+	*x = CaptureResourceProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureResourceProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureResourceProto) ProtoMessage() {}
+
+func (x *CaptureResourceProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureResourceProto.ProtoReflect.Descriptor instead.
+func (*CaptureResourceProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CaptureResourceProto) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *CaptureResourceProto) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CaptureResourceProto) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CaptureUsageProto struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	InputTokens      int64                  `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens     int64                  `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	CacheReadTokens  int64                  `protobuf:"varint,3,opt,name=cache_read_tokens,json=cacheReadTokens,proto3" json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int64                  `protobuf:"varint,4,opt,name=cache_write_tokens,json=cacheWriteTokens,proto3" json:"cache_write_tokens,omitempty"`
+	ReasoningTokens  int64                  `protobuf:"varint,5,opt,name=reasoning_tokens,json=reasoningTokens,proto3" json:"reasoning_tokens,omitempty"`
+	CostMicros       int64                  `protobuf:"varint,6,opt,name=cost_micros,json=costMicros,proto3" json:"cost_micros,omitempty"`
+	Currency         string                 `protobuf:"bytes,7,opt,name=currency,proto3" json:"currency,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CaptureUsageProto) Reset() {
+	*x = CaptureUsageProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureUsageProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureUsageProto) ProtoMessage() {}
+
+func (x *CaptureUsageProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureUsageProto.ProtoReflect.Descriptor instead.
+func (*CaptureUsageProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *CaptureUsageProto) GetInputTokens() int64 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *CaptureUsageProto) GetOutputTokens() int64 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *CaptureUsageProto) GetCacheReadTokens() int64 {
+	if x != nil {
+		return x.CacheReadTokens
+	}
+	return 0
+}
+
+func (x *CaptureUsageProto) GetCacheWriteTokens() int64 {
+	if x != nil {
+		return x.CacheWriteTokens
+	}
+	return 0
+}
+
+func (x *CaptureUsageProto) GetReasoningTokens() int64 {
+	if x != nil {
+		return x.ReasoningTokens
+	}
+	return 0
+}
+
+func (x *CaptureUsageProto) GetCostMicros() int64 {
+	if x != nil {
+		return x.CostMicros
+	}
+	return 0
+}
+
+func (x *CaptureUsageProto) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+type CaptureDeclaredContextProto struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TraceId         []byte                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	ParentSpanId    []byte                 `protobuf:"bytes,2,opt,name=parent_span_id,json=parentSpanId,proto3" json:"parent_span_id,omitempty"`
+	TraceState      string                 `protobuf:"bytes,3,opt,name=trace_state,json=traceState,proto3" json:"trace_state,omitempty"`
+	Sampled         bool                   `protobuf:"varint,4,opt,name=sampled,proto3" json:"sampled,omitempty"`
+	TraceSource     string                 `protobuf:"bytes,5,opt,name=trace_source,json=traceSource,proto3" json:"trace_source,omitempty"`
+	SessionId       string                 `protobuf:"bytes,6,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionSource   string                 `protobuf:"bytes,7,opt,name=session_source,json=sessionSource,proto3" json:"session_source,omitempty"`
+	SessionName     string                 `protobuf:"bytes,8,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
+	AgentName       string                 `protobuf:"bytes,9,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	AgentId         string                 `protobuf:"bytes,10,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	AgentPath       string                 `protobuf:"bytes,11,opt,name=agent_path,json=agentPath,proto3" json:"agent_path,omitempty"`
+	ClientSpanId    string                 `protobuf:"bytes,12,opt,name=client_span_id,json=clientSpanId,proto3" json:"client_span_id,omitempty"`
+	EndUserId       string                 `protobuf:"bytes,13,opt,name=end_user_id,json=endUserId,proto3" json:"end_user_id,omitempty"`
+	CaptureMode     string                 `protobuf:"bytes,14,opt,name=capture_mode,json=captureMode,proto3" json:"capture_mode,omitempty"`
+	ExternalTraceId string                 `protobuf:"bytes,15,opt,name=external_trace_id,json=externalTraceId,proto3" json:"external_trace_id,omitempty"`
+	ConversationId  string                 `protobuf:"bytes,16,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	McpSessionId    string                 `protobuf:"bytes,17,opt,name=mcp_session_id,json=mcpSessionId,proto3" json:"mcp_session_id,omitempty"`
+	ClientInfo      string                 `protobuf:"bytes,18,opt,name=client_info,json=clientInfo,proto3" json:"client_info,omitempty"`
+	Baggage         map[string]string      `protobuf:"bytes,19,rep,name=baggage,proto3" json:"baggage,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Coding-harness declarations (bead jyx.52): the turn id a harness
+	// declares (Codex CLI), its sub-agent instance id (Claude Code) and the
+	// harness name (claude_code, codex_cli, opencode).
+	TurnId        string `protobuf:"bytes,20,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	SubAgentId    string `protobuf:"bytes,21,opt,name=sub_agent_id,json=subAgentId,proto3" json:"sub_agent_id,omitempty"`
+	Harness       string `protobuf:"bytes,22,opt,name=harness,proto3" json:"harness,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureDeclaredContextProto) Reset() {
+	*x = CaptureDeclaredContextProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureDeclaredContextProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureDeclaredContextProto) ProtoMessage() {}
+
+func (x *CaptureDeclaredContextProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureDeclaredContextProto.ProtoReflect.Descriptor instead.
+func (*CaptureDeclaredContextProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *CaptureDeclaredContextProto) GetTraceId() []byte {
+	if x != nil {
+		return x.TraceId
+	}
+	return nil
+}
+
+func (x *CaptureDeclaredContextProto) GetParentSpanId() []byte {
+	if x != nil {
+		return x.ParentSpanId
+	}
+	return nil
+}
+
+func (x *CaptureDeclaredContextProto) GetTraceState() string {
+	if x != nil {
+		return x.TraceState
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetSampled() bool {
+	if x != nil {
+		return x.Sampled
+	}
+	return false
+}
+
+func (x *CaptureDeclaredContextProto) GetTraceSource() string {
+	if x != nil {
+		return x.TraceSource
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetSessionSource() string {
+	if x != nil {
+		return x.SessionSource
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetSessionName() string {
+	if x != nil {
+		return x.SessionName
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetAgentName() string {
+	if x != nil {
+		return x.AgentName
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetAgentPath() string {
+	if x != nil {
+		return x.AgentPath
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetClientSpanId() string {
+	if x != nil {
+		return x.ClientSpanId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetEndUserId() string {
+	if x != nil {
+		return x.EndUserId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetCaptureMode() string {
+	if x != nil {
+		return x.CaptureMode
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetExternalTraceId() string {
+	if x != nil {
+		return x.ExternalTraceId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetMcpSessionId() string {
+	if x != nil {
+		return x.McpSessionId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetClientInfo() string {
+	if x != nil {
+		return x.ClientInfo
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetBaggage() map[string]string {
+	if x != nil {
+		return x.Baggage
+	}
+	return nil
+}
+
+func (x *CaptureDeclaredContextProto) GetTurnId() string {
+	if x != nil {
+		return x.TurnId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetSubAgentId() string {
+	if x != nil {
+		return x.SubAgentId
+	}
+	return ""
+}
+
+func (x *CaptureDeclaredContextProto) GetHarness() string {
+	if x != nil {
+		return x.Harness
+	}
+	return ""
+}
+
+type CaptureToolCallProto struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name            string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	ArgsFp          []byte                 `protobuf:"bytes,3,opt,name=args_fp,json=argsFp,proto3" json:"args_fp,omitempty"`
+	ArgsUnavailable bool                   `protobuf:"varint,4,opt,name=args_unavailable,json=argsUnavailable,proto3" json:"args_unavailable,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CaptureToolCallProto) Reset() {
+	*x = CaptureToolCallProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureToolCallProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureToolCallProto) ProtoMessage() {}
+
+func (x *CaptureToolCallProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureToolCallProto.ProtoReflect.Descriptor instead.
+func (*CaptureToolCallProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CaptureToolCallProto) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CaptureToolCallProto) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CaptureToolCallProto) GetArgsFp() []byte {
+	if x != nil {
+		return x.ArgsFp
+	}
+	return nil
+}
+
+func (x *CaptureToolCallProto) GetArgsUnavailable() bool {
+	if x != nil {
+		return x.ArgsUnavailable
+	}
+	return false
+}
+
+type CaptureToolResultProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ResultFp      []byte                 `protobuf:"bytes,2,opt,name=result_fp,json=resultFp,proto3" json:"result_fp,omitempty"`
+	IsError       bool                   `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureToolResultProto) Reset() {
+	*x = CaptureToolResultProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureToolResultProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureToolResultProto) ProtoMessage() {}
+
+func (x *CaptureToolResultProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureToolResultProto.ProtoReflect.Descriptor instead.
+func (*CaptureToolResultProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CaptureToolResultProto) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CaptureToolResultProto) GetResultFp() []byte {
+	if x != nil {
+		return x.ResultFp
+	}
+	return nil
+}
+
+func (x *CaptureToolResultProto) GetIsError() bool {
+	if x != nil {
+		return x.IsError
+	}
+	return false
+}
+
+type CaptureExtractsProto struct {
+	state              protoimpl.MessageState    `protogen:"open.v1"`
+	ToolCalls          []*CaptureToolCallProto   `protobuf:"bytes,1,rep,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	ToolResults        []*CaptureToolResultProto `protobuf:"bytes,2,rep,name=tool_results,json=toolResults,proto3" json:"tool_results,omitempty"`
+	ResponseId         string                    `protobuf:"bytes,3,opt,name=response_id,json=responseId,proto3" json:"response_id,omitempty"`
+	PreviousResponseId string                    `protobuf:"bytes,4,opt,name=previous_response_id,json=previousResponseId,proto3" json:"previous_response_id,omitempty"`
+	FinishReasons      []string                  `protobuf:"bytes,5,rep,name=finish_reasons,json=finishReasons,proto3" json:"finish_reasons,omitempty"`
+	ArgsFp             []byte                    `protobuf:"bytes,6,opt,name=args_fp,json=argsFp,proto3" json:"args_fp,omitempty"`
+	ResultFp           []byte                    `protobuf:"bytes,7,opt,name=result_fp,json=resultFp,proto3" json:"result_fp,omitempty"`
+	ToolCallId         string                    `protobuf:"bytes,8,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	ToolError          bool                      `protobuf:"varint,9,opt,name=tool_error,json=toolError,proto3" json:"tool_error,omitempty"`
+	Stream             bool                      `protobuf:"varint,10,opt,name=stream,proto3" json:"stream,omitempty"`
+	StreamIncomplete   bool                      `protobuf:"varint,11,opt,name=stream_incomplete,json=streamIncomplete,proto3" json:"stream_incomplete,omitempty"`
+	OfferedTools       []string                  `protobuf:"bytes,12,rep,name=offered_tools,json=offeredTools,proto3" json:"offered_tools,omitempty"` // the request's tool definitions' names (jyx.51)
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *CaptureExtractsProto) Reset() {
+	*x = CaptureExtractsProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureExtractsProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureExtractsProto) ProtoMessage() {}
+
+func (x *CaptureExtractsProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureExtractsProto.ProtoReflect.Descriptor instead.
+func (*CaptureExtractsProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CaptureExtractsProto) GetToolCalls() []*CaptureToolCallProto {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return nil
+}
+
+func (x *CaptureExtractsProto) GetToolResults() []*CaptureToolResultProto {
+	if x != nil {
+		return x.ToolResults
+	}
+	return nil
+}
+
+func (x *CaptureExtractsProto) GetResponseId() string {
+	if x != nil {
+		return x.ResponseId
+	}
+	return ""
+}
+
+func (x *CaptureExtractsProto) GetPreviousResponseId() string {
+	if x != nil {
+		return x.PreviousResponseId
+	}
+	return ""
+}
+
+func (x *CaptureExtractsProto) GetFinishReasons() []string {
+	if x != nil {
+		return x.FinishReasons
+	}
+	return nil
+}
+
+func (x *CaptureExtractsProto) GetArgsFp() []byte {
+	if x != nil {
+		return x.ArgsFp
+	}
+	return nil
+}
+
+func (x *CaptureExtractsProto) GetResultFp() []byte {
+	if x != nil {
+		return x.ResultFp
+	}
+	return nil
+}
+
+func (x *CaptureExtractsProto) GetToolCallId() string {
+	if x != nil {
+		return x.ToolCallId
+	}
+	return ""
+}
+
+func (x *CaptureExtractsProto) GetToolError() bool {
+	if x != nil {
+		return x.ToolError
+	}
+	return false
+}
+
+func (x *CaptureExtractsProto) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
+}
+
+func (x *CaptureExtractsProto) GetStreamIncomplete() bool {
+	if x != nil {
+		return x.StreamIncomplete
+	}
+	return false
+}
+
+func (x *CaptureExtractsProto) GetOfferedTools() []string {
+	if x != nil {
+		return x.OfferedTools
+	}
+	return nil
+}
+
+type CaptureGatewayEventProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Outcome       string                 `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`
+	Detail        string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	AtUnixNano    int64                  `protobuf:"varint,4,opt,name=at_unix_nano,json=atUnixNano,proto3" json:"at_unix_nano,omitempty"`
+	Name          string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureGatewayEventProto) Reset() {
+	*x = CaptureGatewayEventProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureGatewayEventProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureGatewayEventProto) ProtoMessage() {}
+
+func (x *CaptureGatewayEventProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureGatewayEventProto.ProtoReflect.Descriptor instead.
+func (*CaptureGatewayEventProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *CaptureGatewayEventProto) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *CaptureGatewayEventProto) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *CaptureGatewayEventProto) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *CaptureGatewayEventProto) GetAtUnixNano() int64 {
+	if x != nil {
+		return x.AtUnixNano
+	}
+	return 0
+}
+
+func (x *CaptureGatewayEventProto) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CapturePayloadPartProto struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Part           string                 `protobuf:"bytes,1,opt,name=part,proto3" json:"part,omitempty"`
+	ContentState   string                 `protobuf:"bytes,2,opt,name=content_state,json=contentState,proto3" json:"content_state,omitempty"`
+	MediaType      string                 `protobuf:"bytes,3,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	Bytes          int64                  `protobuf:"varint,4,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	Truncated      bool                   `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	RedactionCount int32                  `protobuf:"varint,6,opt,name=redaction_count,json=redactionCount,proto3" json:"redaction_count,omitempty"`
+	Fingerprint    []byte                 `protobuf:"bytes,7,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Data           []byte                 `protobuf:"bytes,8,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CapturePayloadPartProto) Reset() {
+	*x = CapturePayloadPartProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapturePayloadPartProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapturePayloadPartProto) ProtoMessage() {}
+
+func (x *CapturePayloadPartProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapturePayloadPartProto.ProtoReflect.Descriptor instead.
+func (*CapturePayloadPartProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *CapturePayloadPartProto) GetPart() string {
+	if x != nil {
+		return x.Part
+	}
+	return ""
+}
+
+func (x *CapturePayloadPartProto) GetContentState() string {
+	if x != nil {
+		return x.ContentState
+	}
+	return ""
+}
+
+func (x *CapturePayloadPartProto) GetMediaType() string {
+	if x != nil {
+		return x.MediaType
+	}
+	return ""
+}
+
+func (x *CapturePayloadPartProto) GetBytes() int64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+func (x *CapturePayloadPartProto) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *CapturePayloadPartProto) GetRedactionCount() int32 {
+	if x != nil {
+		return x.RedactionCount
+	}
+	return 0
+}
+
+func (x *CapturePayloadPartProto) GetFingerprint() []byte {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return nil
+}
+
+func (x *CapturePayloadPartProto) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 // PluginControlPayload represents a single payload from an edge plugin to control
 type PluginControlPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2824,7 +4047,7 @@ type PluginControlPayload struct {
 
 func (x *PluginControlPayload) Reset() {
 	*x = PluginControlPayload{}
-	mi := &file_proto_config_sync_proto_msgTypes[25]
+	mi := &file_proto_config_sync_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2836,7 +4059,7 @@ func (x *PluginControlPayload) String() string {
 func (*PluginControlPayload) ProtoMessage() {}
 
 func (x *PluginControlPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[25]
+	mi := &file_proto_config_sync_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2849,7 +4072,7 @@ func (x *PluginControlPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlPayload.ProtoReflect.Descriptor instead.
 func (*PluginControlPayload) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{25}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *PluginControlPayload) GetPluginId() uint32 {
@@ -2916,7 +4139,7 @@ type PluginControlBatch struct {
 
 func (x *PluginControlBatch) Reset() {
 	*x = PluginControlBatch{}
-	mi := &file_proto_config_sync_proto_msgTypes[26]
+	mi := &file_proto_config_sync_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2928,7 +4151,7 @@ func (x *PluginControlBatch) String() string {
 func (*PluginControlBatch) ProtoMessage() {}
 
 func (x *PluginControlBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[26]
+	mi := &file_proto_config_sync_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2941,7 +4164,7 @@ func (x *PluginControlBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlBatch.ProtoReflect.Descriptor instead.
 func (*PluginControlBatch) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{26}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *PluginControlBatch) GetEdgeId() string {
@@ -3001,7 +4224,7 @@ type PluginControlBatchResponse struct {
 
 func (x *PluginControlBatchResponse) Reset() {
 	*x = PluginControlBatchResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[27]
+	mi := &file_proto_config_sync_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3013,7 +4236,7 @@ func (x *PluginControlBatchResponse) String() string {
 func (*PluginControlBatchResponse) ProtoMessage() {}
 
 func (x *PluginControlBatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[27]
+	mi := &file_proto_config_sync_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3026,7 +4249,7 @@ func (x *PluginControlBatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlBatchResponse.ProtoReflect.Descriptor instead.
 func (*PluginControlBatchResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{27}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *PluginControlBatchResponse) GetSuccess() bool {
@@ -3083,7 +4306,7 @@ type PluginPayloadError struct {
 
 func (x *PluginPayloadError) Reset() {
 	*x = PluginPayloadError{}
-	mi := &file_proto_config_sync_proto_msgTypes[28]
+	mi := &file_proto_config_sync_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3095,7 +4318,7 @@ func (x *PluginPayloadError) String() string {
 func (*PluginPayloadError) ProtoMessage() {}
 
 func (x *PluginPayloadError) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[28]
+	mi := &file_proto_config_sync_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3108,7 +4331,7 @@ func (x *PluginPayloadError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginPayloadError.ProtoReflect.Descriptor instead.
 func (*PluginPayloadError) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{28}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PluginPayloadError) GetPluginId() uint32 {
@@ -3258,7 +4481,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x15config_version_before\x18\x06 \x01(\tR\x13configVersionBefore\x120\n" +
 	"\x14config_version_after\x18\a \x01(\tR\x12configVersionAfter\x128\n" +
 	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12'\n" +
-	"\x0fskipped_entries\x18\t \x03(\tR\x0eskippedEntries\"\x81\x06\n" +
+	"\x0fskipped_entries\x18\t \x03(\tR\x0eskippedEntries\"\xe7\a\n" +
 	"\x0eAnalyticsPulse\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12%\n" +
 	"\x0eedge_namespace\x18\x02 \x01(\tR\redgeNamespace\x12C\n" +
@@ -3271,11 +4494,16 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fproxy_summaries\x18\t \x03(\v2\x1d.microgateway.ProxyLogSummaryR\x0eproxySummaries\x12O\n" +
 	"\x11compliance_events\x18\r \x03(\v2\".microgateway.ComplianceEventProtoR\x10complianceEvents\x12:\n" +
 	"\n" +
-	"tool_calls\x18\x0e \x03(\v2\x1b.microgateway.ToolCallProtoR\ttoolCalls\x12#\n" +
+	"tool_calls\x18\x0e \x03(\v2\x1b.microgateway.ToolCallProtoR\ttoolCalls\x12F\n" +
+	"\x0ecapture_events\x18\x0f \x03(\v2\x1f.microgateway.CaptureEventProtoR\rcaptureEvents\x12Y\n" +
+	"\x0fcapture_dropped\x18\x10 \x03(\v20.microgateway.AnalyticsPulse.CaptureDroppedEntryR\x0ecaptureDropped\x12#\n" +
 	"\ris_compressed\x18\n" +
 	" \x01(\bR\fisCompressed\x12#\n" +
 	"\rtotal_records\x18\v \x01(\rR\ftotalRecords\x12&\n" +
-	"\x0fdata_size_bytes\x18\f \x01(\x04R\rdataSizeBytes\"\xac\x02\n" +
+	"\x0fdata_size_bytes\x18\f \x01(\x04R\rdataSizeBytes\x1aA\n" +
+	"\x13CaptureDroppedEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\"\xac\x02\n" +
 	"\x16AnalyticsPulseResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12+\n" +
@@ -3291,7 +4519,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xd7\r\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xfb\r\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -3351,7 +4579,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\fservice_tier\x18- \x01(\tR\vserviceTier\x12,\n" +
 	"\x12gateway_request_id\x18. \x01(\tR\x10gatewayRequestId\x12*\n" +
 	"\x11client_request_id\x18/ \x01(\tR\x0fclientRequestId\x12\x19\n" +
-	"\bno_usage\x180 \x01(\bR\anoUsage\"\xa2\x03\n" +
+	"\bno_usage\x180 \x01(\bR\anoUsage\x12\"\n" +
+	"\rtrace_span_id\x181 \x01(\tR\vtraceSpanId\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +
@@ -3406,7 +4635,150 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12 \n" +
 	"\fexec_time_ms\x18\x03 \x01(\x05R\n" +
 	"execTimeMs\x128\n" +
-	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xf9\x02\n" +
+	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xdd\n" +
+	"\n" +
+	"\x11CaptureEventProto\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x17\n" +
+	"\aspan_id\x18\x02 \x01(\fR\x06spanId\x12\x19\n" +
+	"\btrace_id\x18\x03 \x01(\fR\atraceId\x12$\n" +
+	"\x0eparent_span_id\x18\x04 \x01(\fR\fparentSpanId\x12\x10\n" +
+	"\x03seq\x18\x05 \x01(\rR\x03seq\x12'\n" +
+	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\x12\x16\n" +
+	"\x06source\x18\a \x01(\tR\x06source\x12>\n" +
+	"\bidentity\x18\b \x01(\v2\".microgateway.CaptureIdentityProtoR\bidentity\x12>\n" +
+	"\bresource\x18\t \x01(\v2\".microgateway.CaptureResourceProtoR\bresource\x12\x1a\n" +
+	"\bprovider\x18\n" +
+	" \x01(\tR\bprovider\x12\x1c\n" +
+	"\toperation\x18\v \x01(\tR\toperation\x12#\n" +
+	"\rrequest_model\x18\f \x01(\tR\frequestModel\x12%\n" +
+	"\x0eresponse_model\x18\r \x01(\tR\rresponseModel\x12\x1b\n" +
+	"\ttool_name\x18\x0e \x01(\tR\btoolName\x12&\n" +
+	"\x0fstart_unix_nano\x18\x0f \x01(\x03R\rstartUnixNano\x12\"\n" +
+	"\rend_unix_nano\x18\x10 \x01(\x03R\vendUnixNano\x12\x1d\n" +
+	"\n" +
+	"ttft_nanos\x18\x11 \x01(\x03R\tttftNanos\x12\x16\n" +
+	"\x06status\x18\x12 \x01(\tR\x06status\x12\x1d\n" +
+	"\n" +
+	"error_type\x18\x13 \x01(\tR\terrorType\x12#\n" +
+	"\rerror_message\x18\x14 \x01(\tR\ferrorMessage\x12\x1f\n" +
+	"\vhttp_status\x18\x15 \x01(\x05R\n" +
+	"httpStatus\x12!\n" +
+	"\fgateway_node\x18\x16 \x01(\tR\vgatewayNode\x125\n" +
+	"\x05usage\x18\x17 \x01(\v2\x1f.microgateway.CaptureUsageProtoR\x05usage\x12#\n" +
+	"\ranalytics_ref\x18\x18 \x01(\tR\fanalyticsRef\x12E\n" +
+	"\bdeclared\x18\x19 \x01(\v2).microgateway.CaptureDeclaredContextProtoR\bdeclared\x12>\n" +
+	"\bextracts\x18\x1a \x01(\v2\".microgateway.CaptureExtractsProtoR\bextracts\x12M\n" +
+	"\x0egateway_events\x18\x1b \x03(\v2&.microgateway.CaptureGatewayEventProtoR\rgatewayEvents\x12;\n" +
+	"\x05parts\x18\x1c \x03(\v2%.microgateway.CapturePayloadPartProtoR\x05parts\x12!\n" +
+	"\fcontent_mode\x18\x1d \x01(\tR\vcontentMode\x12O\n" +
+	"\n" +
+	"attributes\x18\x1e \x03(\v2/.microgateway.CaptureEventProto.AttributesEntryR\n" +
+	"attributes\x12\x18\n" +
+	"\aattempt\x18\x1f \x01(\rR\aattempt\x12\x1d\n" +
+	"\n" +
+	"attempt_of\x18  \x01(\fR\tattemptOf\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe9\x01\n" +
+	"\x14CaptureIdentityProto\x12\x15\n" +
+	"\x06app_id\x18\x01 \x01(\x04R\x05appId\x12\x17\n" +
+	"\ateam_id\x18\x02 \x01(\x04R\x06teamId\x12#\n" +
+	"\rcredential_id\x18\x03 \x01(\tR\fcredentialId\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\x04R\x06userId\x12\x1e\n" +
+	"\vend_user_id\x18\x05 \x01(\tR\tendUserId\x12 \n" +
+	"\fon_behalf_of\x18\x06 \x01(\tR\n" +
+	"onBehalfOf\x12!\n" +
+	"\facting_agent\x18\a \x01(\tR\vactingAgent\"N\n" +
+	"\x14CaptureResourceProto\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"\x9d\x02\n" +
+	"\x11CaptureUsageProto\x12!\n" +
+	"\finput_tokens\x18\x01 \x01(\x03R\vinputTokens\x12#\n" +
+	"\routput_tokens\x18\x02 \x01(\x03R\foutputTokens\x12*\n" +
+	"\x11cache_read_tokens\x18\x03 \x01(\x03R\x0fcacheReadTokens\x12,\n" +
+	"\x12cache_write_tokens\x18\x04 \x01(\x03R\x10cacheWriteTokens\x12)\n" +
+	"\x10reasoning_tokens\x18\x05 \x01(\x03R\x0freasoningTokens\x12\x1f\n" +
+	"\vcost_micros\x18\x06 \x01(\x03R\n" +
+	"costMicros\x12\x1a\n" +
+	"\bcurrency\x18\a \x01(\tR\bcurrency\"\xe6\x06\n" +
+	"\x1bCaptureDeclaredContextProto\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\fR\atraceId\x12$\n" +
+	"\x0eparent_span_id\x18\x02 \x01(\fR\fparentSpanId\x12\x1f\n" +
+	"\vtrace_state\x18\x03 \x01(\tR\n" +
+	"traceState\x12\x18\n" +
+	"\asampled\x18\x04 \x01(\bR\asampled\x12!\n" +
+	"\ftrace_source\x18\x05 \x01(\tR\vtraceSource\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x06 \x01(\tR\tsessionId\x12%\n" +
+	"\x0esession_source\x18\a \x01(\tR\rsessionSource\x12!\n" +
+	"\fsession_name\x18\b \x01(\tR\vsessionName\x12\x1d\n" +
+	"\n" +
+	"agent_name\x18\t \x01(\tR\tagentName\x12\x19\n" +
+	"\bagent_id\x18\n" +
+	" \x01(\tR\aagentId\x12\x1d\n" +
+	"\n" +
+	"agent_path\x18\v \x01(\tR\tagentPath\x12$\n" +
+	"\x0eclient_span_id\x18\f \x01(\tR\fclientSpanId\x12\x1e\n" +
+	"\vend_user_id\x18\r \x01(\tR\tendUserId\x12!\n" +
+	"\fcapture_mode\x18\x0e \x01(\tR\vcaptureMode\x12*\n" +
+	"\x11external_trace_id\x18\x0f \x01(\tR\x0fexternalTraceId\x12'\n" +
+	"\x0fconversation_id\x18\x10 \x01(\tR\x0econversationId\x12$\n" +
+	"\x0emcp_session_id\x18\x11 \x01(\tR\fmcpSessionId\x12\x1f\n" +
+	"\vclient_info\x18\x12 \x01(\tR\n" +
+	"clientInfo\x12P\n" +
+	"\abaggage\x18\x13 \x03(\v26.microgateway.CaptureDeclaredContextProto.BaggageEntryR\abaggage\x12\x17\n" +
+	"\aturn_id\x18\x14 \x01(\tR\x06turnId\x12 \n" +
+	"\fsub_agent_id\x18\x15 \x01(\tR\n" +
+	"subAgentId\x12\x18\n" +
+	"\aharness\x18\x16 \x01(\tR\aharness\x1a:\n" +
+	"\fBaggageEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"~\n" +
+	"\x14CaptureToolCallProto\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
+	"\aargs_fp\x18\x03 \x01(\fR\x06argsFp\x12)\n" +
+	"\x10args_unavailable\x18\x04 \x01(\bR\x0fargsUnavailable\"`\n" +
+	"\x16CaptureToolResultProto\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\tresult_fp\x18\x02 \x01(\fR\bresultFp\x12\x19\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\"\xfd\x03\n" +
+	"\x14CaptureExtractsProto\x12A\n" +
+	"\n" +
+	"tool_calls\x18\x01 \x03(\v2\".microgateway.CaptureToolCallProtoR\ttoolCalls\x12G\n" +
+	"\ftool_results\x18\x02 \x03(\v2$.microgateway.CaptureToolResultProtoR\vtoolResults\x12\x1f\n" +
+	"\vresponse_id\x18\x03 \x01(\tR\n" +
+	"responseId\x120\n" +
+	"\x14previous_response_id\x18\x04 \x01(\tR\x12previousResponseId\x12%\n" +
+	"\x0efinish_reasons\x18\x05 \x03(\tR\rfinishReasons\x12\x17\n" +
+	"\aargs_fp\x18\x06 \x01(\fR\x06argsFp\x12\x1b\n" +
+	"\tresult_fp\x18\a \x01(\fR\bresultFp\x12 \n" +
+	"\ftool_call_id\x18\b \x01(\tR\n" +
+	"toolCallId\x12\x1d\n" +
+	"\n" +
+	"tool_error\x18\t \x01(\bR\ttoolError\x12\x16\n" +
+	"\x06stream\x18\n" +
+	" \x01(\bR\x06stream\x12+\n" +
+	"\x11stream_incomplete\x18\v \x01(\bR\x10streamIncomplete\x12#\n" +
+	"\roffered_tools\x18\f \x03(\tR\fofferedTools\"\x96\x01\n" +
+	"\x18CaptureGatewayEventProto\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12 \n" +
+	"\fat_unix_nano\x18\x04 \x01(\x03R\n" +
+	"atUnixNano\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\"\x84\x02\n" +
+	"\x17CapturePayloadPartProto\x12\x12\n" +
+	"\x04part\x18\x01 \x01(\tR\x04part\x12#\n" +
+	"\rcontent_state\x18\x02 \x01(\tR\fcontentState\x12\x1d\n" +
+	"\n" +
+	"media_type\x18\x03 \x01(\tR\tmediaType\x12\x14\n" +
+	"\x05bytes\x18\x04 \x01(\x03R\x05bytes\x12\x1c\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12'\n" +
+	"\x0fredaction_count\x18\x06 \x01(\x05R\x0eredactionCount\x12 \n" +
+	"\vfingerprint\x18\a \x01(\fR\vfingerprint\x12\x12\n" +
+	"\x04data\x18\b \x01(\fR\x04data\"\xf9\x02\n" +
 	"\x14PluginControlPayload\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\rR\bpluginId\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12\x17\n" +
@@ -3467,7 +4839,7 @@ func file_proto_config_sync_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_config_sync_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
 var file_proto_config_sync_proto_goTypes = []any{
 	(ReloadPhase)(0),                    // 0: microgateway.ReloadPhase
 	(*EdgeRegistrationRequest)(nil),     // 1: microgateway.EdgeRegistrationRequest
@@ -3495,25 +4867,38 @@ var file_proto_config_sync_proto_goTypes = []any{
 	(*ProxyLogSummary)(nil),             // 23: microgateway.ProxyLogSummary
 	(*ComplianceEventProto)(nil),        // 24: microgateway.ComplianceEventProto
 	(*ToolCallProto)(nil),               // 25: microgateway.ToolCallProto
-	(*PluginControlPayload)(nil),        // 26: microgateway.PluginControlPayload
-	(*PluginControlBatch)(nil),          // 27: microgateway.PluginControlBatch
-	(*PluginControlBatchResponse)(nil),  // 28: microgateway.PluginControlBatchResponse
-	(*PluginPayloadError)(nil),          // 29: microgateway.PluginPayloadError
-	nil,                                 // 30: microgateway.EdgeRegistrationRequest.MetadataEntry
-	nil,                                 // 31: microgateway.EdgeMetrics.CustomMetricsEntry
-	nil,                                 // 32: microgateway.PluginControlPayload.MetadataEntry
-	(*HealthStatus)(nil),                // 33: microgateway.HealthStatus
-	(*ConfigurationSnapshot)(nil),       // 34: microgateway.ConfigurationSnapshot
-	(*timestamppb.Timestamp)(nil),       // 35: google.protobuf.Timestamp
-	(*ConfigurationChange)(nil),         // 36: microgateway.ConfigurationChange
-	(*AppConfig)(nil),                   // 37: microgateway.AppConfig
-	(*emptypb.Empty)(nil),               // 38: google.protobuf.Empty
+	(*CaptureEventProto)(nil),           // 26: microgateway.CaptureEventProto
+	(*CaptureIdentityProto)(nil),        // 27: microgateway.CaptureIdentityProto
+	(*CaptureResourceProto)(nil),        // 28: microgateway.CaptureResourceProto
+	(*CaptureUsageProto)(nil),           // 29: microgateway.CaptureUsageProto
+	(*CaptureDeclaredContextProto)(nil), // 30: microgateway.CaptureDeclaredContextProto
+	(*CaptureToolCallProto)(nil),        // 31: microgateway.CaptureToolCallProto
+	(*CaptureToolResultProto)(nil),      // 32: microgateway.CaptureToolResultProto
+	(*CaptureExtractsProto)(nil),        // 33: microgateway.CaptureExtractsProto
+	(*CaptureGatewayEventProto)(nil),    // 34: microgateway.CaptureGatewayEventProto
+	(*CapturePayloadPartProto)(nil),     // 35: microgateway.CapturePayloadPartProto
+	(*PluginControlPayload)(nil),        // 36: microgateway.PluginControlPayload
+	(*PluginControlBatch)(nil),          // 37: microgateway.PluginControlBatch
+	(*PluginControlBatchResponse)(nil),  // 38: microgateway.PluginControlBatchResponse
+	(*PluginPayloadError)(nil),          // 39: microgateway.PluginPayloadError
+	nil,                                 // 40: microgateway.EdgeRegistrationRequest.MetadataEntry
+	nil,                                 // 41: microgateway.EdgeMetrics.CustomMetricsEntry
+	nil,                                 // 42: microgateway.AnalyticsPulse.CaptureDroppedEntry
+	nil,                                 // 43: microgateway.CaptureEventProto.AttributesEntry
+	nil,                                 // 44: microgateway.CaptureDeclaredContextProto.BaggageEntry
+	nil,                                 // 45: microgateway.PluginControlPayload.MetadataEntry
+	(*HealthStatus)(nil),                // 46: microgateway.HealthStatus
+	(*ConfigurationSnapshot)(nil),       // 47: microgateway.ConfigurationSnapshot
+	(*timestamppb.Timestamp)(nil),       // 48: google.protobuf.Timestamp
+	(*ConfigurationChange)(nil),         // 49: microgateway.ConfigurationChange
+	(*AppConfig)(nil),                   // 50: microgateway.AppConfig
+	(*emptypb.Empty)(nil),               // 51: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
-	30, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
-	33, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
-	34, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
-	35, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
+	40, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
+	46, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
+	47, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
+	48, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
 	7,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
 	3,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
@@ -3521,66 +4906,79 @@ var file_proto_config_sync_proto_depIdxs = []int32{
 	17, // 8: microgateway.EdgeMessage.reload_response:type_name -> microgateway.ConfigurationReloadResponse
 	6,  // 9: microgateway.EdgeMessage.event:type_name -> microgateway.EventFrame
 	2,  // 10: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
-	34, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
-	36, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
+	47, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
+	49, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
 	8,  // 13: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
 	11, // 14: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
 	16, // 15: microgateway.ControlMessage.reload_request:type_name -> microgateway.ConfigurationReloadRequest
 	6,  // 16: microgateway.ControlMessage.event:type_name -> microgateway.EventFrame
-	33, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
+	46, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
 	10, // 18: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
-	35, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	31, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
-	35, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	37, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
-	35, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
+	48, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	41, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
+	48, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	50, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
+	48, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
 	0,  // 24: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
-	35, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
-	35, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
-	35, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
-	35, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
+	48, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
+	48, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
+	48, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
+	48, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
 	21, // 29: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
 	22, // 30: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
 	23, // 31: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
 	24, // 32: microgateway.AnalyticsPulse.compliance_events:type_name -> microgateway.ComplianceEventProto
 	25, // 33: microgateway.AnalyticsPulse.tool_calls:type_name -> microgateway.ToolCallProto
-	35, // 34: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
-	20, // 35: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
-	35, // 36: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
-	35, // 37: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
-	35, // 38: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
-	35, // 39: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
-	35, // 40: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
-	35, // 41: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
-	35, // 42: microgateway.ComplianceEventProto.timestamp:type_name -> google.protobuf.Timestamp
-	35, // 43: microgateway.ToolCallProto.timestamp:type_name -> google.protobuf.Timestamp
-	35, // 44: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
-	32, // 45: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
-	26, // 46: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
-	35, // 47: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
-	35, // 48: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
-	29, // 49: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
-	1,  // 50: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	3,  // 51: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	4,  // 52: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	7,  // 53: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	9,  // 54: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	14, // 55: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
-	18, // 56: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
-	27, // 57: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
-	2,  // 58: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	34, // 59: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	5,  // 60: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	8,  // 61: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	38, // 62: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	15, // 63: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
-	19, // 64: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
-	28, // 65: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
-	58, // [58:66] is the sub-list for method output_type
-	50, // [50:58] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	26, // 34: microgateway.AnalyticsPulse.capture_events:type_name -> microgateway.CaptureEventProto
+	42, // 35: microgateway.AnalyticsPulse.capture_dropped:type_name -> microgateway.AnalyticsPulse.CaptureDroppedEntry
+	48, // 36: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
+	20, // 37: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
+	48, // 38: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
+	48, // 39: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
+	48, // 40: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
+	48, // 41: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
+	48, // 42: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
+	48, // 43: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
+	48, // 44: microgateway.ComplianceEventProto.timestamp:type_name -> google.protobuf.Timestamp
+	48, // 45: microgateway.ToolCallProto.timestamp:type_name -> google.protobuf.Timestamp
+	27, // 46: microgateway.CaptureEventProto.identity:type_name -> microgateway.CaptureIdentityProto
+	28, // 47: microgateway.CaptureEventProto.resource:type_name -> microgateway.CaptureResourceProto
+	29, // 48: microgateway.CaptureEventProto.usage:type_name -> microgateway.CaptureUsageProto
+	30, // 49: microgateway.CaptureEventProto.declared:type_name -> microgateway.CaptureDeclaredContextProto
+	33, // 50: microgateway.CaptureEventProto.extracts:type_name -> microgateway.CaptureExtractsProto
+	34, // 51: microgateway.CaptureEventProto.gateway_events:type_name -> microgateway.CaptureGatewayEventProto
+	35, // 52: microgateway.CaptureEventProto.parts:type_name -> microgateway.CapturePayloadPartProto
+	43, // 53: microgateway.CaptureEventProto.attributes:type_name -> microgateway.CaptureEventProto.AttributesEntry
+	44, // 54: microgateway.CaptureDeclaredContextProto.baggage:type_name -> microgateway.CaptureDeclaredContextProto.BaggageEntry
+	31, // 55: microgateway.CaptureExtractsProto.tool_calls:type_name -> microgateway.CaptureToolCallProto
+	32, // 56: microgateway.CaptureExtractsProto.tool_results:type_name -> microgateway.CaptureToolResultProto
+	48, // 57: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
+	45, // 58: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
+	36, // 59: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
+	48, // 60: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
+	48, // 61: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
+	39, // 62: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
+	1,  // 63: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	3,  // 64: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	4,  // 65: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	7,  // 66: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	9,  // 67: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	14, // 68: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	18, // 69: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
+	37, // 70: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
+	2,  // 71: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	47, // 72: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	5,  // 73: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	8,  // 74: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	51, // 75: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	15, // 76: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	19, // 77: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
+	38, // 78: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
+	71, // [71:79] is the sub-list for method output_type
+	63, // [63:71] is the sub-list for method input_type
+	63, // [63:63] is the sub-list for extension type_name
+	63, // [63:63] is the sub-list for extension extendee
+	0,  // [0:63] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }
@@ -3612,7 +5010,7 @@ func file_proto_config_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_sync_proto_rawDesc), len(file_proto_config_sync_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   32,
+			NumMessages:   45,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

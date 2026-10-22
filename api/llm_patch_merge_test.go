@@ -39,6 +39,9 @@ func existingLLM() *models.LLM {
 		},
 		VendorWorkspaceID: "wrkspc_stored",
 		PriceMultipliers:  models.LLMPriceMultipliers{"batch": 0.4},
+
+		TracingContentModeMax:    "metadata",
+		TracingPropagationOptOut: true,
 	}
 }
 

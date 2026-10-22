@@ -44,6 +44,226 @@ TABLE agent_groups
   index CREATE UNIQUE INDEX agent_groups_pkey ON agent_groups USING btree (agent_config_id, group_id)
   column agent_config_id bigint(int8) nullable=NO precision=64 scale=0
   column group_id bigint(int8) nullable=NO precision=64 scale=0
+TABLE agent_trace_agents
+  constraint agent_trace_agents_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX agent_trace_agents_pkey ON agent_trace_agents USING btree (id)
+  index CREATE INDEX idx_agent_trace_agents_last_seen ON agent_trace_agents USING btree (last_seen)
+  index CREATE INDEX idx_agent_trace_agents_session ON agent_trace_agents USING btree (session_id)
+  column id character varying(varchar) nullable=NO len=36
+  column session_id character varying(varchar) nullable=NO len=36
+  column name character varying(varchar) nullable=NO len=255
+  column declared boolean(bool) nullable=NO
+  column parent_agent_id character varying(varchar) nullable=YES len=36
+  column spawned_by_span_id bytea(bytea) nullable=YES
+  column confidence character varying(varchar) nullable=NO len=16
+  column system_prompt_fp bytea(bytea) nullable=YES
+  column toolset_fp bytea(bytea) nullable=YES
+  column first_seen timestamp with time zone(timestamptz) nullable=NO
+  column last_seen timestamp with time zone(timestamptz) nullable=NO
+  column self_cost_micros bigint(int8) nullable=YES precision=64 scale=0
+  column total_cost_micros bigint(int8) nullable=YES precision=64 scale=0
+  column self_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column total_tokens bigint(int8) nullable=YES precision=64 scale=0
+TABLE agent_trace_capture_events
+  constraint agent_trace_capture_events_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX agent_trace_capture_events_pkey ON agent_trace_capture_events USING btree (id)
+  index CREATE UNIQUE INDEX idx_agent_trace_capture_events_idem ON agent_trace_capture_events USING btree (idempotency_key)
+  index CREATE INDEX idx_agent_trace_capture_events_received ON agent_trace_capture_events USING btree (received_at)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('agent_trace_capture_events_id_seq'::regclass)
+  column idempotency_key character varying(varchar) nullable=NO len=255
+  column source character varying(varchar) nullable=NO len=128
+  column kind character varying(varchar) nullable=NO len=32
+  column app_id bigint(int8) nullable=YES precision=64 scale=0
+  column span_id bytea(bytea) nullable=YES
+  column received_at timestamp with time zone(timestamptz) nullable=NO
+  column event bytea(bytea) nullable=NO
+  column size bigint(int8) nullable=NO precision=64 scale=0 default=0
+TABLE agent_trace_correlation_keys
+  constraint agent_trace_correlation_keys_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX agent_trace_correlation_keys_pkey ON agent_trace_correlation_keys USING btree (id)
+  index CREATE INDEX idx_agent_trace_correlation_keys_expires ON agent_trace_correlation_keys USING btree (expires_at)
+  index CREATE INDEX idx_agent_trace_correlation_keys_lookup ON agent_trace_correlation_keys USING btree (app_id, key_type, key_hash)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('agent_trace_correlation_keys_id_seq'::regclass)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column key_type character varying(varchar) nullable=NO len=32
+  column key_hash bytea(bytea) nullable=NO
+  column span_id bytea(bytea) nullable=NO
+  column trace_id bytea(bytea) nullable=NO
+  column session_id character varying(varchar) nullable=NO len=36
+  column agent_ref character varying(varchar) nullable=YES len=36
+  column attrs text(text) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=NO
+  column expires_at timestamp with time zone(timestamptz) nullable=NO
+TABLE agent_trace_payloads
+  constraint agent_trace_payloads_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX agent_trace_payloads_pkey ON agent_trace_payloads USING btree (id)
+  index CREATE INDEX idx_agent_trace_payloads_expires ON agent_trace_payloads USING btree (expires_at)
+  index CREATE INDEX idx_agent_trace_payloads_span ON agent_trace_payloads USING btree (app_id, span_id)
+  column id character varying(varchar) nullable=NO len=36
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column span_id bytea(bytea) nullable=NO
+  column part character varying(varchar) nullable=NO len=32
+  column content_state character varying(varchar) nullable=NO len=16
+  column media_type character varying(varchar) nullable=NO len=128
+  column encoding character varying(varchar) nullable=NO len=16
+  column encrypted boolean(bool) nullable=NO
+  column key_id bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column data bytea(bytea) nullable=YES
+  column blob_ref character varying(varchar) nullable=YES len=512
+  column original_bytes bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column stored_bytes bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column truncated boolean(bool) nullable=NO
+  column redaction_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column fingerprint bytea(bytea) nullable=YES
+  column created_at timestamp with time zone(timestamptz) nullable=NO
+  column expires_at timestamp with time zone(timestamptz) nullable=NO
+TABLE agent_trace_session_agents
+  constraint agent_trace_session_agents_pkey PRIMARY KEY (session_id, name)
+  index CREATE UNIQUE INDEX agent_trace_session_agents_pkey ON agent_trace_session_agents USING btree (session_id, name)
+  index CREATE INDEX idx_agent_trace_session_agents_name ON agent_trace_session_agents USING btree (name)
+  column session_id character varying(varchar) nullable=NO len=36
+  column name character varying(varchar) nullable=NO len=255
+TABLE agent_trace_session_models
+  constraint agent_trace_session_models_pkey PRIMARY KEY (session_id, name)
+  index CREATE UNIQUE INDEX agent_trace_session_models_pkey ON agent_trace_session_models USING btree (session_id, name)
+  index CREATE INDEX idx_agent_trace_session_models_name ON agent_trace_session_models USING btree (name)
+  column session_id character varying(varchar) nullable=NO len=36
+  column name character varying(varchar) nullable=NO len=255
+TABLE agent_trace_session_tools
+  constraint agent_trace_session_tools_pkey PRIMARY KEY (session_id, name)
+  index CREATE UNIQUE INDEX agent_trace_session_tools_pkey ON agent_trace_session_tools USING btree (session_id, name)
+  index CREATE INDEX idx_agent_trace_session_tools_name ON agent_trace_session_tools USING btree (name)
+  column session_id character varying(varchar) nullable=NO len=36
+  column name character varying(varchar) nullable=NO len=255
+TABLE agent_trace_sessions
+  constraint agent_trace_sessions_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX agent_trace_sessions_pkey ON agent_trace_sessions USING btree (id)
+  index CREATE INDEX idx_agent_trace_sessions_app_cost ON agent_trace_sessions USING btree (app_id, cost_micros)
+  index CREATE INDEX idx_agent_trace_sessions_app_external ON agent_trace_sessions USING btree (app_id, external_id)
+  index CREATE INDEX idx_agent_trace_sessions_app_started ON agent_trace_sessions USING btree (app_id, started_at)
+  index CREATE INDEX idx_agent_trace_sessions_app_user_started ON agent_trace_sessions USING btree (app_id, user_id, started_at)
+  index CREATE INDEX idx_agent_trace_sessions_retention ON agent_trace_sessions USING btree (retention_until)
+  index CREATE INDEX idx_agent_trace_sessions_started ON agent_trace_sessions USING btree (started_at, id)
+  index CREATE INDEX idx_agent_trace_sessions_status_activity ON agent_trace_sessions USING btree (status, last_activity_at)
+  index CREATE INDEX idx_agent_trace_sessions_team_started ON agent_trace_sessions USING btree (team_id, started_at)
+  column id character varying(varchar) nullable=NO len=36
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column team_id bigint(int8) nullable=YES precision=64 scale=0
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column end_user character varying(varchar) nullable=YES len=255
+  column external_id character varying(varchar) nullable=YES len=255
+  column external_source character varying(varchar) nullable=YES len=64
+  column source character varying(varchar) nullable=NO len=16
+  column name character varying(varchar) nullable=YES len=255
+  column status character varying(varchar) nullable=NO len=16
+  column started_at timestamp with time zone(timestamptz) nullable=NO
+  column last_activity_at timestamp with time zone(timestamptz) nullable=NO
+  column ended_at timestamp with time zone(timestamptz) nullable=YES
+  column turn_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column span_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column llm_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column tool_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column error_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column dropped_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column gateway_event_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column duration_ms bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column input_tokens bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column output_tokens bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column cost_micros bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column currency character varying(varchar) nullable=YES len=3
+  column min_confidence character varying(varchar) nullable=YES len=16
+  column sampled boolean(bool) nullable=NO
+  column content_mode character varying(varchar) nullable=NO len=16
+  column retention_until timestamp with time zone(timestamptz) nullable=NO
+TABLE agent_trace_span_links
+  constraint agent_trace_span_links_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX agent_trace_span_links_pkey ON agent_trace_span_links USING btree (id)
+  index CREATE INDEX idx_agent_trace_span_links_linked ON agent_trace_span_links USING btree (app_id, linked_span_id)
+  index CREATE INDEX idx_agent_trace_span_links_span ON agent_trace_span_links USING btree (app_id, span_id)
+  index CREATE INDEX idx_agent_trace_span_links_span_start ON agent_trace_span_links USING btree (span_start)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('agent_trace_span_links_id_seq'::regclass)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column span_id bytea(bytea) nullable=NO
+  column span_start timestamp with time zone(timestamptz) nullable=NO
+  column linked_trace_id bytea(bytea) nullable=NO
+  column linked_span_id bytea(bytea) nullable=NO
+  column link_type character varying(varchar) nullable=NO len=32
+  column confidence character varying(varchar) nullable=NO len=16
+  column rule character varying(varchar) nullable=NO len=64
+  column detail text(text) nullable=YES
+TABLE agent_trace_spans
+  constraint agent_trace_spans_pkey PRIMARY KEY (app_id, span_id)
+  index CREATE UNIQUE INDEX agent_trace_spans_pkey ON agent_trace_spans USING btree (app_id, span_id)
+  index CREATE INDEX idx_agent_trace_spans_app_kind_start ON agent_trace_spans USING btree (app_id, kind, start_time)
+  index CREATE INDEX idx_agent_trace_spans_app_tool_start ON agent_trace_spans USING btree (app_id, tool_name, start_time)
+  index CREATE INDEX idx_agent_trace_spans_session_start ON agent_trace_spans USING btree (session_id, start_time)
+  index CREATE INDEX idx_agent_trace_spans_span_id ON agent_trace_spans USING btree (span_id)
+  index CREATE INDEX idx_agent_trace_spans_trace_start ON agent_trace_spans USING btree (app_id, trace_id, start_time)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column span_id bytea(bytea) nullable=NO
+  column trace_id bytea(bytea) nullable=NO
+  column session_id character varying(varchar) nullable=NO len=36
+  column parent_span_id bytea(bytea) nullable=YES
+  column parent_confidence character varying(varchar) nullable=YES len=16
+  column parent_rule character varying(varchar) nullable=YES len=64
+  column agent_ref character varying(varchar) nullable=YES len=36
+  column kind character varying(varchar) nullable=NO len=32
+  column name character varying(varchar) nullable=NO len=255
+  column start_time timestamp with time zone(timestamptz) nullable=NO
+  column end_time timestamp with time zone(timestamptz) nullable=YES
+  column status character varying(varchar) nullable=NO len=16
+  column error_type character varying(varchar) nullable=YES len=128
+  column error_message text(text) nullable=YES
+  column credential_id character varying(varchar) nullable=YES len=128
+  column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column resource_type character varying(varchar) nullable=YES len=16
+  column resource_id character varying(varchar) nullable=YES len=64
+  column provider character varying(varchar) nullable=YES len=64
+  column operation character varying(varchar) nullable=YES len=64
+  column request_model character varying(varchar) nullable=YES len=255
+  column response_model character varying(varchar) nullable=YES len=255
+  column tool_name character varying(varchar) nullable=YES len=255
+  column tool_call_ids text(text) nullable=YES
+  column finish_reasons text(text) nullable=YES
+  column input_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column output_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column cache_read_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column cache_write_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column reasoning_tokens bigint(int8) nullable=YES precision=64 scale=0
+  column cost_micros bigint(int8) nullable=YES precision=64 scale=0
+  column ttft_ms bigint(int8) nullable=YES precision=64 scale=0
+  column http_status bigint(int8) nullable=YES precision=64 scale=0
+  column gateway_node character varying(varchar) nullable=YES len=128
+  column analytics_ref character varying(varchar) nullable=YES len=64
+  column inferred boolean(bool) nullable=NO
+  column content_state character varying(varchar) nullable=NO len=16
+  column attributes text(text) nullable=YES
+TABLE agent_trace_traces
+  constraint agent_trace_traces_pkey PRIMARY KEY (app_id, trace_id)
+  index CREATE UNIQUE INDEX agent_trace_traces_pkey ON agent_trace_traces USING btree (app_id, trace_id)
+  index CREATE INDEX idx_agent_trace_traces_app_started ON agent_trace_traces USING btree (app_id, started_at)
+  index CREATE INDEX idx_agent_trace_traces_export ON agent_trace_traces USING btree (exported_at)
+  index CREATE INDEX idx_agent_trace_traces_idle ON agent_trace_traces USING btree (started_at) WHERE ((status)::text = 'in_progress'::text)
+  index CREATE INDEX idx_agent_trace_traces_open ON agent_trace_traces USING btree (app_id, session_id, turn_index) WHERE (((status)::text = 'in_progress'::text) AND ((source)::text = 'tyk'::text))
+  index CREATE INDEX idx_agent_trace_traces_session_turn ON agent_trace_traces USING btree (session_id, turn_index)
+  index CREATE INDEX idx_agent_trace_traces_trace_id ON agent_trace_traces USING btree (trace_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column trace_id bytea(bytea) nullable=NO
+  column session_id character varying(varchar) nullable=NO len=36
+  column turn_index bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column source character varying(varchar) nullable=NO len=32
+  column root_span_id bytea(bytea) nullable=YES
+  column started_at timestamp with time zone(timestamptz) nullable=NO
+  column ended_at timestamp with time zone(timestamptz) nullable=YES
+  column status character varying(varchar) nullable=NO len=16
+  column exported_at timestamp with time zone(timestamptz) nullable=YES
+  column span_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column llm_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column tool_call_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column error_count bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column input_tokens bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column output_tokens bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column cost_micros bigint(int8) nullable=NO precision=64 scale=0 default=0
 TABLE app_datasources
   constraint app_datasources_pkey PRIMARY KEY (app_id, datasource_id)
   constraint fk_app_datasources_app FOREIGN KEY (app_id) REFERENCES apps(id)
@@ -133,6 +353,7 @@ TABLE apps
   column team_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata text(text) nullable=YES
   column namespace text(text) nullable=YES default=''::text
+  column tracing json(json) nullable=YES
 TABLE attestation_templates
   constraint attestation_templates_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX attestation_templates_pkey ON attestation_templates USING btree (id)
@@ -464,6 +685,7 @@ TABLE datasources
   column embedder_id bigint(int8) nullable=YES precision=64 scale=0
   column active boolean(bool) nullable=YES
   column namespace text(text) nullable=YES default=''::text
+  column tracing_content_mode_max character varying(varchar) nullable=YES len=16
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata json(json) nullable=YES
@@ -785,6 +1007,8 @@ TABLE llms
   column failover json(json) nullable=YES
   column vendor_workspace_id character varying(varchar) nullable=YES len=128
   column price_multipliers json(json) nullable=YES
+  column tracing_content_mode_max character varying(varchar) nullable=YES len=16
+  column tracing_propagation_opt_out boolean(bool) nullable=NO default=false
   column resource_signing_secret text(text) nullable=YES
   column resource_signing_secret_prev text(text) nullable=YES
   column resource_signing_prev_expires_at timestamp with time zone(timestamptz) nullable=YES
@@ -1520,6 +1744,7 @@ TABLE proxy_logs
   index CREATE INDEX idx_proxy_logs_request_kind ON proxy_logs USING btree (request_kind)
   index CREATE INDEX idx_proxy_logs_router ON proxy_logs USING btree (router_slug)
   index CREATE INDEX idx_proxy_logs_time ON proxy_logs USING btree (time_stamp)
+  index CREATE INDEX idx_proxy_logs_trace_span ON proxy_logs USING btree (trace_span_id)
   index CREATE INDEX idx_proxy_logs_user_id ON proxy_logs USING btree (user_id)
   index CREATE UNIQUE INDEX proxy_logs_pkey ON proxy_logs USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('proxy_logs_id_seq'::regclass)
@@ -1551,6 +1776,7 @@ TABLE proxy_logs
   column acting_agent character varying(varchar) nullable=YES len=255
   column request_kind character varying(varchar) nullable=YES len=16 default=''::character varying
   column service_tier character varying(varchar) nullable=YES len=32
+  column trace_span_id character varying(varchar) nullable=YES len=16
   column request_id character varying(varchar) nullable=YES len=64
   column client_request_id character varying(varchar) nullable=YES len=128
 TABLE push_operations
@@ -1908,6 +2134,7 @@ TABLE tools
   column namespace text(text) nullable=YES default=''::text
   column rest_access_disabled boolean(bool) nullable=NO default=false
   column mcp_access_disabled boolean(bool) nullable=NO default=false
+  column tracing_content_mode_max character varying(varchar) nullable=YES len=16
   column user_id bigint(int8) nullable=YES precision=64 scale=0
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0

@@ -1,0 +1,16 @@
+{
+  "id": "msg_01PAR",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-5",
+  "content": [
+    {"type": "thinking", "thinking": "I need the weather in two cities, in parallel.", "signature": "EqQBCgIYAhIM"},
+    {"type": "text", "text": "Checking both cities."},
+    {"type": "tool_use", "id": "toolu_01A", "name": "get_weather", "input": {"city": "Paris", "unit": "c"}},
+    {"type": "tool_use", "id": "toolu_01B", "name": "get_weather", "input": {"city": "Oslo", "unit": "c"}},
+    {"type": "server_tool_use", "id": "srvtoolu_01", "name": "web_search", "input": {"query": "weather alerts europe"}}
+  ],
+  "stop_reason": "tool_use",
+  "stop_sequence": null,
+  "usage": {"input_tokens": 410, "output_tokens": 96}
+}

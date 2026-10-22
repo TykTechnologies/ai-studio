@@ -87,6 +87,8 @@ func adminNav(in navInputs) []NavItem {
 	out := []NavItem{
 		{ID: "overview", Text: "Overview", Icon: "house", Path: "/admin", Exact: true},
 		{ID: "dashboard", Text: "Analytics", Icon: "monitor-waveform", Path: "/admin/dash", Permission: string(r("analytics"))},
+	}
+	out = append(out,
 		group("access", "Access", "users",
 			[]NavItem{page("users", "Users", "/admin/users", r("users"))},
 			when(f("feature_groups") && (!f("feature_gateway") || f("feature_portal") || f("feature_chat")),
@@ -94,7 +96,7 @@ func adminNav(in navInputs) []NavItem {
 			when(f("feature_rbac"), page("roles", "Roles", "/admin/roles", r("roles"))),
 			when(in.identityProviders, page("sso-profiles", "Identity providers", "/admin/sso-profiles", r("sso-profiles"))),
 		),
-	}
+	)
 	// Catalogs are how teams are granted providers, data sources and tools,
 	// so they sit directly after Access. They are named after the pages
 	// they open, so the menu never has two items called "Tools".
@@ -105,6 +107,11 @@ func adminNav(in navInputs) []NavItem {
 			when(f("feature_chat"), page("catalog-tools", "Tool catalogs", "/admin/catalogs/tools", r("tool-catalogues"))),
 		))
 	}
+	// Agent Call Tracing (Enterprise): only while it runs, never in CE. It
+	// follows Access and Catalogs, which stay adjacent, and leads the things
+	// being governed: what agents did with them.
+	out = append(out, when(f("feature_agent_tracing"), NavItem{ID: "agent-sessions", Text: "Agent sessions",
+		Icon: "account-tree", Path: "/admin/agent-sessions", Permission: string(r("traces"))})...)
 	mcpServers := page("mcp-servers", "MCP servers", "/admin/mcp-servers", r("mcp-servers"))
 	mcpServers.Exact = true
 	out = append(out,

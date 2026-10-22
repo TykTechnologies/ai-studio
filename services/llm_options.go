@@ -37,6 +37,19 @@ func WithPriceMultipliers(m models.LLMPriceMultipliers) LLMOption {
 	}
 }
 
+// WithLLMTracing sets the LLM's agent tracing content mode cap ("" for no
+// cap) and whether traceparent propagation to its upstream is switched off.
+func WithLLMTracing(contentModeMax string, propagationOptOut bool) LLMOption {
+	return func(l *models.LLM) error {
+		if err := models.ValidateTracingContentMode("tracing_content_mode_max", contentModeMax); err != nil {
+			return &LLMValidationError{Err: err}
+		}
+		l.TracingContentModeMax = contentModeMax
+		l.TracingPropagationOptOut = propagationOptOut
+		return nil
+	}
+}
+
 // LLMValidationError is an LLM attribute the caller got wrong (a 400).
 type LLMValidationError struct{ Err error }
 

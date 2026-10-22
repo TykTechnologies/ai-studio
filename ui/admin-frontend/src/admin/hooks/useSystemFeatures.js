@@ -13,6 +13,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
     feature_model_router: false, // Enterprise-only model routing
     feature_semantic_router: false, // Enterprise-only semantic (prompt-classifying) routing
     feature_webhooks: false, // Enterprise-only outbound webhooks
+    feature_agent_tracing: false, // Enterprise-only Agent Call Tracing (AGENT_TRACING_ENABLED + licence)
     chat_ui_v2: false, // assistant-ui based chat pages (CHAT_UI_V2_ENABLED)
   });
   const [loading, setLoading] = useState(!skipInitialFetch);

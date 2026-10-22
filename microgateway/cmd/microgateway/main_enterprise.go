@@ -13,6 +13,10 @@ import (
 	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/filters"
 	// The Semantic Router engine registers itself with pkg/semanticrouting.
 	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/semantic_router/engine"
+	// The agent tracing content pipeline registers itself with
+	// pkg/agenttrace: captured content is redacted here, at the edge, before
+	// it enters the pulse. Without it edge content is dropped.
+	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/agenttracing/content"
 )
 
 // An enterprise edge must enforce filters: fail at start rather than pass

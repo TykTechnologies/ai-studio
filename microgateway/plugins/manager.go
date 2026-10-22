@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
@@ -178,6 +179,10 @@ type PluginManager struct {
 
 	// Session management for long-lived broker connections
 	pluginSessions map[uint]context.CancelFunc // Plugin ID -> session cancel function
+
+	// agentTraceCapture is set when the Enterprise edge enabled agent tracing
+	// capture; an analytics pulse plugin loaded later is enabled with it too.
+	agentTraceCapture *plugins.CaptureSettings
 
 	// Custom endpoint routing
 	endpointRoutes  map[string]*EndpointRoute // "METHOD:pluginName/subpath" -> route
@@ -1653,6 +1658,9 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 	if err := pulsePlugin.Initialize(cfg.Config); err != nil {
 		return nil, fmt.Errorf("failed to initialize analytics pulse plugin: %w", err)
 	}
+	if pm.agentTraceCapture != nil {
+		pulsePlugin.EnableCapture(*pm.agentTraceCapture)
+	}
 
 	// Create global plugin wrapper
 	globalPlugin := &GlobalPlugin{
@@ -1825,6 +1833,45 @@ func (pm *PluginManager) BufferToolCalls(calls []plugins.ToolCallBuffer) {
 	}
 
 	log.Debug().Int("count", len(calls)).Msg("No analytics pulse plugin found for tool calls - calls dropped")
+}
+
+// analyticsPulseLocked returns the built-in analytics pulse plugin, or nil.
+// Caller holds pm.mu.
+func (pm *PluginManager) analyticsPulseLocked() *plugins.AnalyticsPulsePlugin {
+	for _, globalPlugin := range pm.globalDataPlugins {
+		if globalPlugin.LoadedPlugin == nil || globalPlugin.LoadedPlugin.BuiltinPlugin == nil {
+			continue
+		}
+		if pulsePlugin, ok := globalPlugin.LoadedPlugin.BuiltinPlugin.(*plugins.AnalyticsPulsePlugin); ok {
+			return pulsePlugin
+		}
+	}
+	return nil
+}
+
+// EnableAgentTracingCapture turns agent tracing capture on for the analytics
+// pulse (Enterprise edge only, after its start gate). It reports whether a
+// pulse plugin exists to carry the events; one loaded later is enabled too.
+func (pm *PluginManager) EnableAgentTracingCapture(s plugins.CaptureSettings) bool {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.agentTraceCapture = &s
+	if p := pm.analyticsPulseLocked(); p != nil {
+		p.EnableCapture(s)
+		return true
+	}
+	return false
+}
+
+// BufferCaptureEvents forwards agent tracing capture events to the analytics
+// pulse plugin. Without one (or with capture not enabled) they are dropped.
+func (pm *PluginManager) BufferCaptureEvents(events []*agenttrace.Event) {
+	pm.mu.RLock()
+	p := pm.analyticsPulseLocked()
+	pm.mu.RUnlock()
+	if p != nil {
+		p.BufferCaptureEvents(events)
+	}
 }
 
 // executeDataCollectionPlugin executes a specific plugin for the given data type

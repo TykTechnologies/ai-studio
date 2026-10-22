@@ -22,6 +22,7 @@ func allFeatures() map[string]bool {
 		"feature_portal": true, "feature_chat": true, "feature_gateway": true,
 		"feature_groups": true, "feature_rbac": true, "feature_model_router": true,
 		"feature_semantic_router": true, "feature_tyk_mcp": true, "feature_webhooks": true,
+		"feature_agent_tracing": true,
 	}
 }
 
@@ -50,7 +51,7 @@ func allowAll(NavItem) bool { return true }
 func TestAdminNavGroupOrder(t *testing.T) {
 	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), allowAll)
 	assert.Equal(t, []string{
-		"Overview", "Analytics", "Access", "Catalogs", "LLM management",
+		"Overview", "Analytics", "Access", "Catalogs", "Agent sessions", "LLM management",
 		"Context management", "Portal administration", "Community", "Governance",
 		"Settings", "Chat administration", "Plugins",
 	}, labels(nav))

@@ -50,7 +50,27 @@ const (
 	// 15: compliance_events.owner_visible (defaulted false, indexed with
 	//     app_id and time_stamp; additive): guardrail events shared with App
 	//     owners in the portal.
-	SchemaVersion          = 15
+	// 16: agent_trace_* tables (agent tracing, new tables only).
+	// 17: agent tracing settings: apps.tracing, llms/tools/datasources
+	//     tracing_content_mode_max, llms.tracing_propagation_opt_out
+	//     (nullable or defaulted, additive).
+	// 18: agent_trace_traces/agent_trace_spans keyed by (app_id, id),
+	//     agent_trace_span_links.app_id, App-scoped link/payload indexes.
+	//     The tables are unreleased (added in 16); AutoMigrate cannot change
+	//     a primary key, so databases created at 16 or 17 need the
+	//     agent_trace tables dropped once.
+	// 19: agent tracing read API: agent_trace_sessions.duration_ms and
+	//     gateway_event_count (defaulted), indexes on sessions (started_at,
+	//     id), spans (span_id) and traces (trace_id) (additive).
+	// 20: proxy_logs.trace_span_id (indexed, nullable, additive); the
+	//     proxy_logs.request_id agent tracing also uses is main's (14).
+	// 21: agent_trace_traces.exported_at (nullable) and its index: the OTel
+	//     exporter marks the turns it has sent (additive).
+	// 22: partial indexes on agent_trace_traces over in-progress turns:
+	//     idx_agent_trace_traces_open (app_id, session_id, turn_index) for
+	//     gateway turns and idx_agent_trace_traces_idle (started_at)
+	//     (additive).
+	SchemaVersion          = 22
 	MinReaderSchemaVersion = 1
 )
 

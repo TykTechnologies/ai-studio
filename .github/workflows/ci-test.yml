@@ -121,6 +121,9 @@ jobs:
             [ -n "$f" ] || continue
             case "$f" in
               ui/*) frontend=true ;;
+              # Its OTel attribute tables are generated from the enterprise
+              # mapping and checked by make agent-tracing-docs-verify.
+              docs/site/docs/agent-tracing.md) go=true ;;
               docs/* | features/* | read/*) ;;
               */*) go=true ;;
               *.md) ;;
@@ -320,9 +323,11 @@ jobs:
           CGO_ENABLED=0 go build -o /dev/null \
             -tags "studio_noui ${{ matrix.edition == 'ent' && 'enterprise' || '' }}" ./pkg/studio/...
 
+      # -timeout: the proxy package alone takes ~10 min under -race, past go
+      # test's per-package default of 10m.
       - name: Run AI Studio Unit Tests
         run: |
-          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short \
+          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short -timeout 25m \
             ${{ steps.flags.outputs.FULL }} \
             ${{ env.MODE == 'full' && format('-coverprofile=coverage-studio-{0}.out', matrix.edition) || '' }} \
             ./...
@@ -499,6 +504,28 @@ jobs:
         run: |
           go test -v -race -count=1 ./tests/cluster/
 
+      # Agent Call Tracing on Postgres, in a database of its own: the store
+      # and capture staging in core, and the enterprise assembler,
+      # correlation goldens, JSON v1 and content API (purge). Their gates
+      # read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN, so both are set.
+      # A Postgres-only bug (jyx.126) must not pass by skipping.
+      - name: Run agent tracing Postgres tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+          AGENT_TRACE_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE agenttrace_test'
+          go test -v -race -p 1 -count=1 -run 'AgentTrace|Capture' ./models/ ./analytics/
+
+      - name: Run enterprise agent tracing Postgres tests
+        if: env.FORK_PR != 'true'
+        working-directory: enterprise
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+          AGENT_TRACE_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
+        run: |
+          go test -tags enterprise -v -race -p 1 -count=1 ./features/agenttracing/...
+
       - name: Run enterprise audit and webhooks Postgres tests
         if: env.FORK_PR != 'true'
         working-directory: enterprise
@@ -507,6 +534,77 @@ jobs:
         run: |
           go test -tags enterprise -v -race -count=1 ./features/audit/...
           go test -tags enterprise -v -race -count=1 -run '_Postgres' ./features/webhooks/
+
+  # ==========================================================================
+  # Agent tracing performance gate (spec §10, bead jyx.34). Deterministic
+  # checks only: allocations with tracing off (zero) and on (budgets), and
+  # the assembler's write amplification (<= 3 rows per span) and round trips
+  # (<= 0.05 statements per span on Postgres) in a short run.
+  # Gateway overhead is reported, not gated; the one-hour throughput soak is
+  # make bench-agent-tracing-soak. See scripts/agent-tracing-bench-gate.sh.
+  # ==========================================================================
+  agent-tracing-bench:
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
+    name: Agent Tracing Perf Gate
+    runs-on: warp-ubuntu-latest-arm64-4x
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agenttrace_bench
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: ${{ env.FORK_PR != 'true' }}
+          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
+
+      - name: Create enterprise stub for fork pull requests
+        if: env.FORK_PR == 'true'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/ai-studio-enterprise/v2
+
+          go 1.26.5
+          EOF
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Create placeholders for embeds
+        run: |
+          mkdir -p docs/site/dist ui/admin-frontend/build
+          echo "placeholder" > docs/site/dist/index.html
+          echo "placeholder" > ui/admin-frontend/build/index.html
+          cp dev/.env.dev .env
+
+      - name: Link enterprise tests of core packages
+        if: env.FORK_PR != 'true'
+        run: make ent-link
+
+      - name: Community Edition gate
+        if: env.FORK_PR == 'true'
+        run: scripts/agent-tracing-bench-gate.sh ci ce
+
+      - name: Enterprise gate
+        if: env.FORK_PR != 'true'
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_bench?sslmode=disable
+        run: scripts/agent-tracing-bench-gate.sh ci enterprise
 
   # ==========================================================================
   # gorm copy: third_party/gorm.io is exactly what third_party/gorm-pin
@@ -564,6 +662,12 @@ jobs:
 
       - name: Check the control plane logs only through the logger package
         run: make logging-guard
+
+      # The Agent Call Tracing operator guide's OTel attribute tables are
+      # generated from the enterprise mapping profile.
+      - name: Check the agent tracing OTel attribute tables are current
+        if: env.FORK_PR != 'true'
+        run: make agent-tracing-docs-verify
 
       # Plugin modules replace midsommar/v2 with this tree, so a root go.mod
       # raise must be followed there or `go build` stops at "updates to go.mod
@@ -687,7 +791,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build]
+    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build, agent-tracing-bench]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -706,6 +810,7 @@ jobs:
             Frontend Tests=${{ needs.frontend-tests.result }}
             Go Unit Tests=${{ needs.go-unit-tests.result }}
             Go Postgres Tests=${{ needs.go-postgres-tests.result }}
+            Agent Tracing Perf Gate=${{ needs.agent-tracing-bench.result }}
             gorm Copy Verification=${{ needs.gorm-verify.result }}
             Module Zip Check=${{ needs.module-check.result }}
             Host Compatibility=${{ needs.host-compat.result }}
@@ -751,6 +856,7 @@ jobs:
           !contains(fromJSON('["success","skipped"]'), needs.frontend-tests.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.go-unit-tests.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.go-postgres-tests.result) ||
+          !contains(fromJSON('["success","skipped"]'), needs.agent-tracing-bench.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.gorm-verify.result)
         run: |
           echo "Some checks failed!"

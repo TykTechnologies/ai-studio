@@ -22,7 +22,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
-	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 )
@@ -524,7 +523,7 @@ func (c *nativeCall) requestBody(w http.ResponseWriter) ([]byte, bool) {
 		}); err != nil {
 			switch {
 			case errors.Is(err, errNativeScreenedElsewhere):
-				metrics.RecordPolicyBlock(c.r.Context(), "request_filter", "firewall")
+				recordPolicyBlock(c.r.Context(), "request_filter", "firewall")
 				c.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, nativeScreenedElsewhereMsg)
 			case errors.Is(err, errNativeScreeningUnchecked):
 				c.fail(w, http.StatusServiceUnavailable, nativeErrAPI, "the input file could not be checked; retry shortly")
@@ -624,7 +623,7 @@ func (p *Proxy) nativeUpstreamRequest(ctx context.Context, llm *models.LLM, meth
 			req.Header[k] = append([]string(nil), vs...)
 		}
 	}
-	tracing.InjectOutgoing(req.Context(), req.Header)
+	injectUpstreamTrace(req.Context(), req.Header, llm)
 	if err := p.setVendorAuthHeader(req, llm); err != nil {
 		return nil, fmt.Errorf("vendor auth: %w", err)
 	}
@@ -780,7 +779,11 @@ func (c *nativeCall) log() {
 		l.RequestBody, l.ResponseBody = "", ""
 	}
 	ctx := context.WithoutCancel(r.Context())
-	c.p.goAnalyze(func() { analytics.RecordExchange(ctx, l, nil) })
+	reqBody, respBody, status := c.reqBody, c.respBody, c.status
+	c.p.goAnalyzeFor(r, func() {
+		analytics.RecordExchange(ctx, l, nil)
+		captureLLM(r, llm, app, status, nil, reqBody, respBody, false)
+	})
 }
 
 // nativePublicBaseURL is the absolute base of the native route the request

@@ -107,6 +107,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedderID       *uint    `json:"embedder_id,omitempty"`
 				Active           bool     `json:"active"`
 				Namespace        string   `json:"namespace"`
+				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
@@ -131,6 +132,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedderID       *uint    `json:"embedder_id,omitempty"`
 				Active           bool     `json:"active"`
 				Namespace        string   `json:"namespace"`
+				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:             "Test Datasource",

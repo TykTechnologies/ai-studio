@@ -156,6 +156,7 @@ func (cv *CredentialValidator) completeAuth(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		ctx = context.WithValue(ctx, "app", app)
+		captureApp(ctx, app)
 		next.ServeHTTP(w, r.WithContext(WithAuthIdentity(ctx, id)))
 		return
 	}
@@ -165,6 +166,8 @@ func (cv *CredentialValidator) completeAuth(w http.ResponseWriter, r *http.Reque
 	}
 
 	ctx := context.WithValue(r.Context(), "app", app)
+
+	captureApp(ctx, app)
 	r = r.WithContext(WithAuthIdentity(ctx, id))
 
 	if cv.authHooks != nil && cv.authHooks.PostAuth != nil {

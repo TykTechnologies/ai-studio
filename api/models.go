@@ -188,6 +188,13 @@ type LLMInput struct {
 			// service tier ({"batch": 0.4}). On PATCH an absent key keeps the
 			// stored value and null or {} removes the overrides.
 			PriceMultipliers models.LLMPriceMultipliers `json:"price_multipliers"`
+			// TracingContentModeMax caps the agent tracing content mode for
+			// this LLM (Enterprise); "" is no cap. On PATCH an absent key
+			// keeps the stored value.
+			TracingContentModeMax string `json:"tracing_content_mode_max"`
+			// TracingPropagationOptOut stops traceparent reaching this LLM's
+			// upstream (default false: it is sent).
+			TracingPropagationOptOut bool `json:"tracing_propagation_opt_out"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -249,6 +256,8 @@ type LLMResponse struct {
 		Failover         *models.LLMFailover    `json:"failover,omitempty"`
 		VendorWorkspaceID string `json:"vendor_workspace_id"`
 		PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
+		TracingContentModeMax    string `json:"tracing_content_mode_max"`
+		TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
 	} `json:"attributes"`
 }
 
@@ -351,6 +360,10 @@ type DatasourceInput struct {
 			EmbedderID *uint  `json:"embedder_id,omitempty"`
 			Active     bool   `json:"active"`
 			Namespace  string `json:"namespace"`
+			// TracingContentModeMax caps the agent tracing content mode for
+			// this datasource (Enterprise); "" is no cap, omitted keeps the
+			// stored value on update.
+			TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
@@ -389,6 +402,8 @@ type DatasourceResponse struct {
 		Active           bool                `json:"active"`
 		Namespace        string              `json:"namespace"`
 		Files            []FileStoreResponse `json:"files"`
+		// Agent tracing content mode cap (Enterprise); "" is no cap.
+		TracingContentModeMax string `json:"tracing_content_mode_max"`
 	} `json:"attributes"`
 }
 
@@ -512,6 +527,11 @@ type AppInput struct {
 			// TeamID attributes the App to a team (Enterprise team budgets).
 			// Omitted = the owner's budget team on create, unchanged on update.
 			TeamID *uint `json:"team_id,omitempty"`
+			// Tracing overrides the global agent tracing settings for the
+			// App (Enterprise). Omitted keeps the stored settings on update;
+			// changing any of them needs traces:write. owner_may_view_content
+			// must be false until the Portal trace views ship (400 if true).
+			Tracing *models.AppTracingSettings `json:"tracing,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -549,6 +569,8 @@ type AppResponse struct {
 		// Semantic Routers the app is granted (Enterprise).
 		SemanticRouterIDs []uint                    `json:"semantic_router_ids"`
 		SemanticRouters   []AppSemanticRouterOutput `json:"semantic_routers,omitempty"`
+		// Agent tracing overrides (Enterprise).
+		Tracing models.AppTracingSettings `json:"tracing"`
 	} `json:"attributes"`
 }
 
@@ -666,6 +688,10 @@ type ToolInput struct {
 			// tool is chat only (both off). Not accepted on client tools.
 			RESTAccessEnabled *bool `json:"rest_access_enabled,omitempty"`
 			MCPAccessEnabled  *bool `json:"mcp_access_enabled,omitempty"`
+			// TracingContentModeMax caps the agent tracing content mode for
+			// this tool (Enterprise); "" is no cap, omitted keeps the stored
+			// value on update.
+			TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
@@ -688,6 +714,8 @@ type ToolResponseAttributes struct {
 	FileStores     []FileStoreResponse `json:"file_stores"`
 	Filters        []FilterResponse    `json:"filters"`
 	Dependencies   []ToolResponse      `json:"dependencies"`
+	// Agent tracing content mode cap (Enterprise); "" is no cap.
+	TracingContentModeMax string `json:"tracing_content_mode_max"`
 
 	// Flattened into the attributes; see toolGatewayAccess.
 	ToolGatewayAccess

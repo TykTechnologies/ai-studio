@@ -96,6 +96,11 @@ func (a *API) createApp(c *gin.Context) {
 		}
 		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
 	}
+	tracingOpt, ok := a.appTracingOption(c, input.Data.Attributes.Tracing, models.AppTracingSettings{})
+	if !ok {
+		return
+	}
+	appOpts = append(appOpts, tracingOpt)
 
 	// Use namespace-aware service method if namespace is provided
 	var app *models.App
@@ -354,6 +359,23 @@ func (a *API) updateApp(c *gin.Context) {
 		}
 		appOpts = append(appOpts, services.WithAppTeam(*input.Data.Attributes.TeamID))
 	}
+	if input.Data.Attributes.Tracing != nil {
+		existing, err := a.service.GetAppByID(uint(id))
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
+		tracingOpt, ok := a.appTracingOption(c, input.Data.Attributes.Tracing, existing.Tracing)
+		if !ok {
+			return
+		}
+		appOpts = append(appOpts, tracingOpt)
+	}
 
 	var app *models.App
 	if len(pluginResources) > 0 {
@@ -598,6 +620,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.IsOrphaned = app.IsOrphaned
 	resp.Attributes.Metadata = app.Metadata
 	resp.Attributes.Namespace = app.Namespace
+	resp.Attributes.Tracing = app.Tracing
 	return resp
 }
 

@@ -36,6 +36,10 @@ type Tool struct {
 	RESTAccessDisabled bool `json:"rest_access_disabled" gorm:"not null;default:false"`
 	MCPAccessDisabled  bool `json:"mcp_access_disabled" gorm:"not null;default:false"`
 
+	// TracingContentModeMax caps the agent tracing content mode for calls to
+	// this tool; empty means no cap (Enterprise).
+	TracingContentModeMax string `json:"tracing_content_mode_max" gorm:"size:16"`
+
 	FileStores  []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
 	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
 	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`

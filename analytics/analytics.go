@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -56,6 +57,18 @@ func stampIdentity(ctx context.Context, log *models.ProxyLog, rec *models.LLMCha
 	}
 }
 
+// stampTraceSpan links a proxy log to its agent tracing span: the logical
+// call's gateway span id, shared by every failover rung of an /ai/ call.
+// Nothing happens (and nothing is allocated) while tracing is off.
+func stampTraceSpan(ctx context.Context, log *models.ProxyLog) {
+	if log == nil || log.TraceSpanID != "" {
+		return
+	}
+	if rec := agenttrace.From(ctx); rec != nil {
+		log.TraceSpanID = rec.LogicalSpanID().String()
+	}
+}
+
 // stampRequestIDs records on a proxy log the gateway's request id and the
 // caller's (pkg/requestid), from the request context. Values a writer
 // already set are kept (the hub sets an edge's from the pulse).
@@ -73,6 +86,7 @@ func stampRequestIDs(ctx context.Context, log *models.ProxyLog) {
 
 func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 	stampIdentity(ctx, log, nil)
+	stampTraceSpan(ctx, log)
 	stampRequestIDs(ctx, log)
 
 	handlerMu.RLock()
@@ -91,6 +105,7 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 // RecordProxyLog followed by RecordChatRecord, as before.
 func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
 	stampIdentity(ctx, log, rec)
+	stampTraceSpan(ctx, log)
 	stampRequestIDs(ctx, log)
 
 	// The proxy paths build chat records without a latency; the gateway put
@@ -139,7 +154,13 @@ func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int,
 		globalHandler.RecordToolCall(ctx, name, t, execTime, toolID)
 	}
 
-	metrics.RecordToolCall(ctx, name, fmt.Sprintf("%d", toolID))
+	// The metric's app_id is the calling App (it used to be given the tool
+	// id); empty when the context carries no App (an edge's pulse on the hub).
+	appID := ""
+	if app, ok := ctx.Value("app").(*models.App); ok && app != nil {
+		appID = fmt.Sprintf("%d", app.ID)
+	}
+	metrics.RecordToolCall(ctx, name, appID)
 	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
 

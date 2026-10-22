@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -37,6 +38,13 @@ type DatabaseHandler struct {
 	cancel              context.CancelFunc
 	// workerDone is closed when the worker has returned.
 	workerDone chan struct{}
+	// Agent tracing capture staging (capture.go). The queue and its flusher
+	// start on the first capture event; the batch channel always exists so
+	// the worker can select on it.
+	capture          *agenttrace.Queue
+	captureKick      chan struct{}
+	captureOnce      sync.Once
+	captureBatchChan chan agenttrace.Batch
 }
 
 // Security: Pattern to detect sensitive data in error messages that should be redacted
@@ -133,6 +141,7 @@ func (h *DatabaseHandler) start() {
 	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
 	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
+	h.captureBatchChan = make(chan agenttrace.Batch, 4)
 	h.mcpCallChan = make(chan []models.MCPCallRecord, batchBufferSize)
 
 	// Start background workers. A panic writing one record loses that
@@ -271,6 +280,12 @@ func (h *DatabaseHandler) startWorker() {
 			err := h.createRecordWithRetry(func() error {
 				return h.db.CreateInBatches(logs, 100).Error
 			})
+			if err != nil && len(logs) > 1 && h.ctx.Err() == nil {
+				// The batch is one transaction, so one row the database
+				// refuses (an edge value over a column's size on Postgres)
+				// lost them all: write row by row so only that row is lost.
+				err = h.createProxyLogsOneByOne(logs)
+			}
 			processingTime := time.Since(startTime)
 
 			if err != nil {
@@ -295,6 +310,8 @@ func (h *DatabaseHandler) startWorker() {
 			if err != nil {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
 			}
+		case b := <-h.captureBatchChan:
+			h.writeCaptureBatch(b)
 		case <-h.ctx.Done():
 			h.shutdown()
 			return
@@ -315,6 +332,34 @@ func (h *DatabaseHandler) shutdown() {
 }
 
 // createRecordWithRetry executes database operations with retry logic for lock errors
+// createProxyLogsOneByOne writes the rows of a proxy log batch that failed as
+// a whole, each on its own. It returns the last row error, if any row was
+// refused, and nil (having logged the refused rows) when any were written.
+func (h *DatabaseHandler) createProxyLogsOneByOne(logs []*models.ProxyLog) error {
+	var lastErr error
+	failed := 0
+	for _, l := range logs {
+		// A rolled-back batch may have assigned ids; let the database
+		// assign them again.
+		l.ID, l.Model.ID = 0, 0
+		if err := h.createRecordWithRetry(func() error { return h.db.Create(l).Error }); err != nil {
+			lastErr = err
+			failed++
+		}
+	}
+	if failed == len(logs) {
+		return lastErr
+	}
+	if failed > 0 {
+		logger.Log.Warn().
+			Str("error", sanitizeError(lastErr)).
+			Int("failed", failed).
+			Int("count", len(logs)).
+			Msg("Proxy log rows refused by the database; the rest of the batch was written")
+	}
+	return nil
+}
+
 func (h *DatabaseHandler) createRecordWithRetry(createFn func() error) error {
 	maxRetries := 5
 	baseDelay := 50 * time.Millisecond
