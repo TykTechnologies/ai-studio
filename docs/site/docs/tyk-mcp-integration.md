@@ -364,6 +364,169 @@ server, user and App, with closed grants on request. Servers AI Studio does
 not broker (OAuth, mTLS, keyless) never appear: nobody can attach them to an
 App.
 
+## MCP analytics
+
+AI Studio does not proxy the MCP traffic of Tyk-managed servers, so it takes
+the Tyk Gateway's own analytics records instead. Tyk Pump delivers them to
+an ingest endpoint on AI Studio, which keeps the MCP calls and shows calls,
+error rates, latency (p50 and p95), per-tool usage and per-App usage on the
+MCP server's **Usage** tab, on the App pages (admin and portal) and in the
+Dashboard's MCP traffic panel. It works for Dashboard and OSS Gateway
+connections alike.
+
+### Prerequisites
+
+- Tyk Gateway 5.14 or later with `enable_analytics: true`.
+- The MCP proxy must have traffic logs enabled
+  (`x-tyk-api-gateway.middleware.global.trafficLogs.enabled: true`). Proxies
+  AI Studio registers have it; proxies created by the platform team record
+  nothing until they enable it.
+- Tyk Pump 1.16 or later.
+
+### Ingest token
+
+On the Tyk connection's **Analytics** section, generate an ingest token. It
+is shown once; AI Studio stores only its hash. Tyk Pump sends it as
+`Authorization: Bearer` with every batch. Rotating it stops the old token at
+once; revoking it stops ingest for the connection. The section also shows
+when the last batch arrived and what the last 24 hours brought (records
+stored, calls to APIs that are not MCP servers on this connection, calls no
+App could be attributed to), and has copyable Pump configurations.
+
+Managing the token needs the `write` action on `tyk-connections`.
+
+The token belongs to one connection: records are matched only against that
+connection's MCP servers. Records of other APIs are counted and dropped.
+
+### Tyk Pump with the http pump
+
+Once your Tyk Pump has the `http` pump, add it to `pump.conf`:
+
+```json
+{
+  "pumps": {
+    "http": {
+      "type": "http",
+      "timeout": 30,
+      "omit_detailed_recording": true,
+      "meta": {
+        "url": "https://studio.example.com/api/v1/ingest/tyk-analytics",
+        "headers": { "Authorization": "Bearer INGEST_TOKEN" },
+        "mcp_only": true,
+        "gzip": true,
+        "batch_size": 500,
+        "max_retries": 3
+      }
+    }
+  }
+}
+```
+
+`mcp_only` sends only MCP records; without it (or a `filters.api_ids` list)
+every API's records travel to AI Studio and are dropped on arrival.
+`omit_detailed_recording` keeps raw requests and responses out of the
+batches.
+
+### Tyk Pump 1.16 with Vector (bridge)
+
+Until the `http` pump is available, use the stdout pump and let Vector post
+its output:
+
+```json
+{
+  "pumps": {
+    "stdout": {
+      "type": "stdout",
+      "omit_detailed_recording": true,
+      "meta": { "format": "json", "log_field_name": "tyk-analytics-record" }
+    }
+  }
+}
+```
+
+Set `dont_purge_uptime_data: true` in `pump.conf` unless you run an uptime
+pump; Tyk Pump 1.16.0 otherwise fails at start looking for MongoDB.
+
+`vector.toml`, with `MCP_INGEST_URL` set to
+`https://studio.example.com/api/v1/ingest/tyk-analytics` and
+`MCP_INGEST_TOKEN` to the ingest token:
+
+```toml
+# Pump's container output. On Kubernetes use a kubernetes_logs source with an
+# extra_label_selector for the Pump pods instead.
+[sources.pump]
+type = "docker_logs"
+include_labels = ["com.docker.compose.service=pump"]
+
+# Keep only analytics records of MCP traffic.
+[transforms.mcp_records]
+type = "remap"
+inputs = ["pump"]
+drop_on_error = true
+drop_on_abort = true
+source = '''
+parsed = object!(parse_json!(string!(.message)))
+record = object!(parsed."tyk-analytics-record")
+if record.mcp_stats.is_mcp != true { abort }
+. = record
+'''
+
+# A JSON array of records per request, bearer token, gzip.
+[sinks.studio]
+type = "http"
+inputs = ["mcp_records"]
+uri = "${MCP_INGEST_URL}"
+method = "post"
+compression = "gzip"
+encoding.codec = "json"
+auth.strategy = "bearer"
+auth.token = "${MCP_INGEST_TOKEN}"
+batch.max_events = 500
+batch.timeout_secs = 5
+request.retry_attempts = 5
+```
+
+Vector reads the Pump's output from the moment it attaches: output written
+while Vector is down is lost, because Pump has already drained Redis.
+
+### What the endpoint answers
+
+| Status | Meaning | Pump behaviour |
+|---|---|---|
+| 202 | Batch taken; the body counts accepted, stored, non-MCP, unknown-API and unattributed records | done |
+| 401 | Token missing, wrong or revoked, or the connection is disabled | batch dropped |
+| 400 / 413 / 415 | Not a JSON array; over 16 MiB (also after gzip) or 5000 records; unsupported encoding | batch dropped |
+| 429 / 503 | Over 20 batches a second for the connection; AI Studio busy | retried |
+| 404 | Community Edition, or the integration is disabled | batch dropped |
+
+### Attribution
+
+A call is attributed to an App when its key is one AI Studio minted for the
+App on this connection (matched by the key hash the Gateway records, or the
+key itself on a Gateway with `hash_keys` off), or, failing that, when the key
+alias names an App holding a key on this connection. OAuth, JWT, mTLS and
+keyless servers are not brokered, so their calls are counted per server
+only. AI Studio stores no API keys, request or response bodies or client
+addresses.
+
+Portal users see the MCP usage of their own Apps only. The admin views need
+the `read` action on `analytics`.
+
+### Known limits
+
+- Delivery is at least once: records carry no id, so a retried batch can be
+  counted twice.
+- The error rate counts HTTP errors and the JSON-RPC errors the Gateway
+  detects (in the first 64 KiB of the response). A tool's `isError` result,
+  and on Gateway 5.15 an upstream server's own JSON-RPC errors, arrive as
+  successful calls.
+- Gateway 5.15 writes no record for a call refused by the key's MCP access
+  rights, so tools blocked by key access do not appear. Calls refused for a
+  missing or bad key are recorded, without an App.
+- REST-to-MCP proxies report no upstream latency; use the total.
+- Calls that arrive after their server was deleted are counted as unknown
+  APIs and dropped.
+
 ## Permissions
 
 | Resource | Group | Actions | Notes |

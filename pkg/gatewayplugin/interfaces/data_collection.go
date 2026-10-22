@@ -96,6 +96,15 @@ type AnalyticsData struct {
 	// ServiceTier is the vendor service tier the usage was billed at
 	// ("batch", "priority"...); empty for list-price traffic.
 	ServiceTier string `json:"service_tier,omitempty"`
+
+	// GatewayRequestID is the gateway's id for the request (the
+	// X-Tyk-AI-Request-ID it answered with; RequestID is the analytics
+	// row's key). ClientRequestID is the caller's own X-Request-ID.
+	GatewayRequestID string `json:"gateway_request_id,omitempty"`
+	ClientRequestID  string `json:"client_request_id,omitempty"`
+	// NoUsage marks a request that produced no usage: a policy block, a
+	// vendor or gateway error. Its token and cost fields are zero.
+	NoUsage bool `json:"no_usage,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information

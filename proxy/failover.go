@@ -390,11 +390,13 @@ func (p *Proxy) failoverGrantsAccess(r *http.Request, app *models.App, target *m
 // headers are handed to an out-of-process plugin. With the hop and failover
 // tokens a plugin could dial the gateway's loopback and authenticate as any
 // App through the auth hand-off (midsommar-clean-55x).
-func StripLoopbackHeaders(h http.Header) { stripFailoverHeaders(h) }
+// The client's instructions to gateway plugins (X-Tyk-Compression) are kept:
+// they are meant for the plugins.
+func StripLoopbackHeaders(h http.Header) { stripLoopbackMarkers(h) }
 
-// stripFailoverHeaders removes the loopback markers (failover, router and
-// auth hand-off) before a request leaves for the vendor.
-func stripFailoverHeaders(h http.Header) {
+// stripLoopbackMarkers removes the loopback markers: failover, router and
+// auth hand-off.
+func stripLoopbackMarkers(h http.Header) {
 	// The per-process hop token and the outer hop's span id: a vendor seeing
 	// the token could replay it at this gateway's loopback.
 	h.Del(hdrInternalHop)
@@ -404,6 +406,14 @@ func stripFailoverHeaders(h http.Header) {
 	h.Del(hdrFailoverToken)
 	stripRouterHeaders(h)
 	stripAuthHandoffHeaders(h)
+}
+
+// stripFailoverHeaders removes the loopback markers and the client's
+// instructions to gateway plugins (X-Tyk-Compression) before a request
+// leaves for the vendor.
+func stripFailoverHeaders(h http.Header) {
+	stripLoopbackMarkers(h)
+	stripCompressionHeaders(h)
 }
 
 // applyFailoverMarker stamps a ProxyLog with the markers from ctx, if any:

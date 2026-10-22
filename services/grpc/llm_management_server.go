@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -424,5 +425,10 @@ func convertLLMToPB(llm *models.LLM) *pb.LLMInfo {
 		MonthlyBudget:    monthlyBudget,
 		CreatedAt:        timestamppb.New(llm.CreatedAt),
 		UpdatedAt:        timestamppb.New(llm.UpdatedAt),
+		// The gateway routes and names the LLM by this slug
+		Slug:              models.LLMRouteSlug(llm.Name),
+		HasRequestFilters: proto.Bool(llm.HasRequestFilters()),
+		// Studio keeps request bodies unless the LLM opts out
+		StoresRequestBodies: proto.Bool(!llm.DontLogBodies),
 	}
 }

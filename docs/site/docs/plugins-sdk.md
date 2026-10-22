@@ -296,6 +296,10 @@ func (p *MyPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.ResponseWriteRe
 }
 ```
 
+`OnBeforeWriteHeaders` returns the **full** header set: a header left out is removed. On the Microgateway it runs on streaming responses too (before the first event, limited to 2 seconds; past that the stream goes out with the upstream headers), where `Content-Type`, `Content-Length` and `Transfer-Encoding` cannot be changed. `OnBeforeWrite` runs only on buffered responses. The context's `LLMSlug` is the LLM's route slug, as in `HandlePostAuth`.
+
+On the `/ai/`, unified `/v1` and router endpoints the plugin runs on an internal hop, and only `X-Cache`, `X-Cache-*`, `X-Tyk-Compression` and `X-Tyk-Compression-*` response headers reach the client (at most 16 values, 4 KiB).
+
 ### 5. DataCollector
 
 Collect telemetry data (analytics, budgets, proxy logs).
@@ -691,6 +695,12 @@ func NewMyPlugin() *MyPlugin {
 ```
 
 `BasePlugin` provides default implementations for common methods, which you can override as needed.
+
+## Message Size Limit
+
+Every hook call is one gRPC message between the host and your plugin: for `HandlePostAuth` the request body plus headers and context, for `OnBeforeWrite` the whole buffered response, for `OnStreamComplete` the accumulated stream plus the request body. `plugin_sdk.Serve` (and the older `gatewayplugin` SDK's `ServePlugin`) accept messages up to 64 MiB, or `PLUGIN_GRPC_MAX_MSG_BYTES` bytes when the operator sets it.
+
+Plugins built on an SDK before 2.3.0 accept only 4 MiB, gRPC's default. On the gateway, a request-path hook (`pre_auth`, `auth`, `post_auth`) refusing a larger request makes the request fail with `413`; a response hook refusing one is skipped. **Rebuild request-path plugins on the 2.3.0 SDK.** See [Plugin message size](./plugins-deployment.md#plugin-message-size).
 
 ## Error Handling
 

@@ -96,6 +96,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 	// Create plugin service adapter
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
+	pluginServiceAdapter.SetCrypto(crypto)
 	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
 	// Initialize plugin manager with OCI support if configured
@@ -168,6 +169,8 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		management,
 		crypto,
 	)
+
+	managementServer.SetStoreRequestBodies(cfg.Analytics.StoreRequestBodies)
 
 	// Connect management server to plugin manager for bidirectional plugin communication
 	pluginManager.SetManagementServer(managementServer)

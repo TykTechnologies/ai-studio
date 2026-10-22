@@ -14,6 +14,7 @@ import (
 type PluginServiceAdapter struct {
 	pluginService     PluginServiceInterface
 	managementService ManagementServiceInterface
+	crypto            CryptoServiceInterface
 }
 
 // NewPluginServiceAdapter creates a new adapter for the plugin service
@@ -28,9 +29,15 @@ func (a *PluginServiceAdapter) SetManagementService(mgmt ManagementServiceInterf
 	a.managementService = mgmt
 }
 
+// SetCrypto sets the service that decrypts the config secret values the hub
+// sends with a plugin (database.Plugin.ConfigSecretsEncrypted).
+func (a *PluginServiceAdapter) SetCrypto(crypto CryptoServiceInterface) {
+	a.crypto = crypto
+}
+
 // convertDBPlugin converts a database.Plugin to plugins.PluginData.
 func (a *PluginServiceAdapter) convertDBPlugin(dbPlugin database.Plugin) plugins.PluginData {
-	configBytes, _ := json.Marshal(dbPlugin.Config)
+	configBytes := a.pluginConfigBytes(dbPlugin)
 
 	var hookTypes []string
 	if len(dbPlugin.HookTypes) > 0 {
@@ -56,25 +63,7 @@ func (a *PluginServiceAdapter) GetPlugin(id uint) (plugins.PluginData, error) {
 		return plugins.PluginData{}, err
 	}
 
-	// Convert database plugin to plugins.PluginData
-	configBytes, _ := json.Marshal(dbPlugin.Config)
-
-	// Parse hook_types from JSON
-	var hookTypes []string
-	if len(dbPlugin.HookTypes) > 0 {
-		_ = json.Unmarshal(dbPlugin.HookTypes, &hookTypes)
-	}
-
-	return plugins.PluginData{
-		ID:        dbPlugin.ID,
-		Name:      dbPlugin.Name,
-		HookType:  dbPlugin.HookType,
-		HookTypes: hookTypes,
-		Command:   dbPlugin.Command,
-		Config:    configBytes,
-		Checksum:  dbPlugin.Checksum,
-		IsActive:  dbPlugin.IsActive,
-	}, nil
+	return a.convertDBPlugin(*dbPlugin), nil
 }
 
 // GetPluginsByLLMID implements plugins.PluginServiceInterface
@@ -87,24 +76,7 @@ func (a *PluginServiceAdapter) GetPluginsByLLMID(llmID uint) ([]plugins.PluginDa
 
 	result := make([]plugins.PluginData, len(dbPlugins))
 	for i, dbPlugin := range dbPlugins {
-		configBytes, _ := json.Marshal(dbPlugin.Config)
-
-		// Parse hook_types from JSON
-		var hookTypes []string
-		if len(dbPlugin.HookTypes) > 0 {
-			_ = json.Unmarshal(dbPlugin.HookTypes, &hookTypes)
-		}
-
-		result[i] = plugins.PluginData{
-			ID:        dbPlugin.ID,
-			Name:      dbPlugin.Name,
-			HookType:  dbPlugin.HookType,
-			HookTypes: hookTypes,
-			Command:   dbPlugin.Command,
-			Config:    configBytes,
-			Checksum:  dbPlugin.Checksum,
-			IsActive:  dbPlugin.IsActive,
-		}
+		result[i] = a.convertDBPlugin(dbPlugin)
 	}
 
 	return result, nil
@@ -120,24 +92,7 @@ func (a *PluginServiceAdapter) GetAllPlugins() ([]plugins.PluginData, error) {
 
 	result := make([]plugins.PluginData, len(dbPlugins))
 	for i, dbPlugin := range dbPlugins {
-		configBytes, _ := json.Marshal(dbPlugin.Config)
-
-		// Parse hook_types from JSON
-		var hookTypes []string
-		if len(dbPlugin.HookTypes) > 0 {
-			_ = json.Unmarshal(dbPlugin.HookTypes, &hookTypes)
-		}
-
-		result[i] = plugins.PluginData{
-			ID:        dbPlugin.ID,
-			Name:      dbPlugin.Name,
-			HookType:  dbPlugin.HookType,
-			HookTypes: hookTypes,
-			Command:   dbPlugin.Command,
-			Config:    configBytes,
-			Checksum:  dbPlugin.Checksum,
-			IsActive:  dbPlugin.IsActive,
-		}
+		result[i] = a.convertDBPlugin(dbPlugin)
 	}
 
 	return result, nil
@@ -153,24 +108,7 @@ func (a *PluginServiceAdapter) GetPluginsForLLM(llmID uint) ([]plugins.PluginDat
 
 	result := make([]plugins.PluginData, len(dbPlugins))
 	for i, dbPlugin := range dbPlugins {
-		configBytes, _ := json.Marshal(dbPlugin.Config)
-
-		// Parse hook_types from JSON
-		var hookTypes []string
-		if len(dbPlugin.HookTypes) > 0 {
-			_ = json.Unmarshal(dbPlugin.HookTypes, &hookTypes)
-		}
-
-		result[i] = plugins.PluginData{
-			ID:        dbPlugin.ID,
-			Name:      dbPlugin.Name,
-			HookType:  dbPlugin.HookType,
-			HookTypes: hookTypes,
-			Command:   dbPlugin.Command,
-			Config:    configBytes,
-			Checksum:  dbPlugin.Checksum,
-			IsActive:  dbPlugin.IsActive,
-		}
+		result[i] = a.convertDBPlugin(dbPlugin)
 	}
 
 	return result, nil

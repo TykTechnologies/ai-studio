@@ -24,6 +24,7 @@ TABLE analytics_events
   index CREATE INDEX idx_analytics_app ON analytics_events USING btree (app_id, created_at)
   index CREATE UNIQUE INDEX idx_analytics_events_request_id ON analytics_events USING btree (request_id)
   index CREATE INDEX idx_analytics_failover_from ON analytics_events USING btree (failover_from_llm_id)
+  index CREATE INDEX idx_analytics_gateway_request ON analytics_events USING btree (gateway_request_id)
   index CREATE INDEX idx_analytics_request_kind ON analytics_events USING btree (request_kind)
   index CREATE INDEX idx_analytics_timestamp ON analytics_events USING btree (time_stamp)
   index CREATE INDEX idx_analytics_user ON analytics_events USING btree (user_id)
@@ -72,6 +73,8 @@ TABLE analytics_events
   column decision_questions bigint(int8) nullable=YES precision=64 scale=0
   column decision_refusals bigint(int8) nullable=YES precision=64 scale=0
   column service_tier character varying(varchar) nullable=YES len=32
+  column gateway_request_id character varying(varchar) nullable=YES len=64
+  column client_request_id character varying(varchar) nullable=YES len=128
   column time_stamp timestamp with time zone(timestamptz) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE api_tokens
@@ -479,6 +482,7 @@ TABLE plugins
   column hook_types_customized boolean(bool) nullable=YES default=false
   column is_active boolean(bool) nullable=YES
   column service_scopes jsonb(jsonb) nullable=YES
+  column config_secrets_encrypted jsonb(jsonb) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES

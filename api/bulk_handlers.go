@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
@@ -380,7 +381,11 @@ func (a *API) bulkSecrets(c *gin.Context) {
 			if !found {
 				return gorm.ErrRecordNotFound
 			}
-			return secrets.DeleteSecretByID(a.config.DB, id)
+			if err := secrets.DeleteSecretByID(a.config.DB, id); err != nil {
+				return err
+			}
+			a.emitSecretChanged(c, services.TopicSecretDeleted, "deleted", id)
+			return nil
 		},
 	})
 }

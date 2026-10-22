@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -67,9 +69,25 @@ func stampTraceSpan(ctx context.Context, log *models.ProxyLog) {
 	}
 }
 
+// stampRequestIDs records on a proxy log the gateway's request id and the
+// caller's (pkg/requestid), from the request context. Values a writer
+// already set are kept (the hub sets an edge's from the pulse).
+func stampRequestIDs(ctx context.Context, log *models.ProxyLog) {
+	if log == nil {
+		return
+	}
+	if log.RequestID == "" {
+		log.RequestID = requestid.FromContext(ctx)
+	}
+	if log.ClientRequestID == "" {
+		log.ClientRequestID = requestid.ClientFromContext(ctx)
+	}
+}
+
 func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 	stampIdentity(ctx, log, nil)
 	stampTraceSpan(ctx, log)
+	stampRequestIDs(ctx, log)
 
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
@@ -88,6 +106,7 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMChatRecord) {
 	stampIdentity(ctx, log, rec)
 	stampTraceSpan(ctx, log)
+	stampRequestIDs(ctx, log)
 
 	// The proxy paths build chat records without a latency; the gateway put
 	// the request's start on the context (WithRequestStart).
@@ -144,6 +163,30 @@ func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int,
 	metrics.RecordToolCall(ctx, name, appID)
 	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
+
+// RecordMCPCalls records MCP calls a Tyk Gateway proxied, as ingested from
+// Tyk Pump. It returns ErrRecorderBusy when the handler could not take the
+// batch, so the sender retries it. With no handler, or one that does not
+// record MCP calls (MCPCallRecorder), there is nothing to record into and a
+// retry would never succeed: the batch is dropped (logged once).
+func RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
+	if r, ok := globalHandler.(MCPCallRecorder); ok {
+		return r.RecordMCPCalls(ctx, records)
+	}
+	noMCPRecorderOnce.Do(func() {
+		logger.Warnf("The analytics handler does not record MCP calls (%T); Tyk MCP analytics are dropped", globalHandler)
+	})
+	return nil
+}
+
+var noMCPRecorderOnce sync.Once
 
 func RecordContentMessage(
 	mc *llms.MessageContent,
@@ -335,6 +378,16 @@ func RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry) {
 func RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent) {
 	if len(events) == 0 {
 		return
+	}
+	// The portal shows an App's owners the events marked for them: on the
+	// hub this covers events recorded here and those an edge sent.
+	for _, e := range events {
+		if e != nil && !e.OwnerVisible && strings.Contains(e.Metadata, `"owner_visible":true`) {
+			var m map[string]any
+			if json.Unmarshal([]byte(e.Metadata), &m) == nil {
+				e.OwnerVisible, _ = m["owner_visible"].(bool)
+			}
+		}
 	}
 
 	handlerMu.RLock()

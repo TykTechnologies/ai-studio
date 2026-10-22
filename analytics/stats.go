@@ -1198,8 +1198,16 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	return result, nil
 }
 
+// proxyLogSearch filters proxy logs by a search term: an exact request id
+// (ours or the caller's) or text in the request or response body.
+func proxyLogSearch(query *gorm.DB, search string) *gorm.DB {
+	searchPattern := "%" + search + "%"
+	return query.Where("request_id = ? OR client_request_id = ? OR request_body LIKE ? OR response_body LIKE ?",
+		search, search, searchPattern, searchPattern)
+}
+
 // GetProxyLogsForAppID returns paginated proxy logs for a specific app
-// Optional search parameter searches request_body and response_body fields
+// Optional search parameter: a request id, or text in request_body or response_body
 func GetProxyLogsForAppID(db *gorm.DB, startDate, endDate time.Time, appID uint, page, pageSize int, search string) ([]models.ProxyLog, int64, error) {
 	var proxyLogs []models.ProxyLog
 	var totalCount int64
@@ -1210,8 +1218,7 @@ func GetProxyLogsForAppID(db *gorm.DB, startDate, endDate time.Time, appID uint,
 
 	// Add search filter if provided
 	if search != "" {
-		searchPattern := "%" + search + "%"
-		query = query.Where("request_body LIKE ? OR response_body LIKE ?", searchPattern, searchPattern)
+		query = proxyLogSearch(query, search)
 	}
 
 	// Count total records
@@ -1248,8 +1255,7 @@ func GetProxyLogsForLLM(db *gorm.DB, startDate, endDate time.Time, llmID uint, p
 
 	// Add search filter if provided
 	if search != "" {
-		searchPattern := "%" + search + "%"
-		query = query.Where("request_body LIKE ? OR response_body LIKE ?", searchPattern, searchPattern)
+		query = proxyLogSearch(query, search)
 	}
 
 	// Count total records

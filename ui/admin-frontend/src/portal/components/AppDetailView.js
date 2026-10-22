@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import AppMCPConnect from "./AppMCPConnect";
 import AppToolAccess from "./AppToolAccess";
+import AppGuardrailBlocks from "./AppGuardrailBlocks";
 import { toolMcpEnabled } from "../utils/toolEndpoints";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import {
@@ -39,6 +40,8 @@ import pubClient from "../../admin/utils/pubClient";
 import AppStatusChip, { getAppStatusFromApp } from "./AppStatusChip";
 import { Line } from "react-chartjs-2";
 import DateRangePicker from "../../admin/components/common/DateRangePicker";
+import AppMCPUsage from "../../admin/components/mcp-analytics/AppMCPUsage";
+import { portalAppPath } from "../../admin/components/mcp-analytics/mcpAnalytics";
 
 import {
   Chart as ChartJS,
@@ -550,6 +553,18 @@ const AppDetailView = () => {
           }}
         />
       </Box>
+
+      {app && (
+        <AppMCPUsage
+          client={pubClient}
+          path={portalAppPath(id)}
+          startDate={startDate}
+          endDate={endDate}
+          boundServers={app.attributes?.mcp_servers || []}
+        />
+      )}
+
+      <AppGuardrailBlocks client={pubClient} appId={id} />
 
       {/* Main App Details Paper */}
       <Paper sx={{ p: 3, mb: 3 }}>

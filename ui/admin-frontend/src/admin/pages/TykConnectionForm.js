@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -45,6 +45,7 @@ import {
   ProbePanel,
 } from "./tykShared";
 import TykGatewayNodes from "./TykGatewayNodes";
+import TykIngestAnalytics from "./TykIngestAnalytics";
 
 // The form pieces the Tools import wizard shares live in tykShared; they
 // stay exported from here for existing imports and tests.
@@ -58,9 +59,11 @@ export { emptyForm, formToInput, connectionToForm, ProbePanel };
 const TykConnectionForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { hash } = useLocation();
   const editing = Boolean(id);
   const { can } = usePermissions();
   const canExecute = can(P.TYK_CONNECTIONS_EXECUTE);
+  const canWrite = can(P.TYK_CONNECTIONS_WRITE);
   const { notify, snackbarProps } = useFeedbackSnackbar();
 
   const [status, setStatus] = useState(null);
@@ -96,6 +99,13 @@ const TykConnectionForm = () => {
     };
     load();
   }, [id, loadConnection]);
+
+  // MCP usage empty states link to #analytics: scroll there once loaded.
+  useEffect(() => {
+    if (!loading && connection && hash === "#analytics") {
+      document.getElementById("analytics")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+  }, [loading, connection, hash]);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   const setBool = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.checked }));
@@ -251,6 +261,17 @@ const TykConnectionForm = () => {
             data-testid="gateway-nodes-section"
           >
             <TykGatewayNodes connectionId={id} refreshKey={connection.last_sync_at} />
+          </Section>
+        )}
+
+        {editing && connection && (
+          <Section
+            title="Analytics"
+            description="MCP calls through this connection's Gateways, sent to AI Studio by Tyk Pump. Requires Gateway 5.14+ with analytics enabled."
+            id="analytics"
+            data-testid="analytics-section"
+          >
+            <TykIngestAnalytics connectionId={id} canWrite={canWrite} notify={notify} />
           </Section>
         )}
 

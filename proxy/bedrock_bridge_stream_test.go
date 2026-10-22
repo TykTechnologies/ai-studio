@@ -11,25 +11,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-// postBridge posts to a Bedrock bridge, retrying (at most twice) a stream
-// that failed before its first frame. On CI runners the AWS SDK's
-// connection to the test's fake Bedrock is occasionally closed under its
-// first read ("use of closed network connection"); it has never reproduced
-// locally (midsommar-clean-q0z.26). A stream that breaks after frames, as
-// TestBedrockBridgeStreams_StreamErrorReachesTheClient plants, is never
-// retried.
+// postBridge posts to a Bedrock bridge. It used to retry a stream that
+// failed before its first frame: midsommar-clean-q0z.26 found the SDK's
+// connection closed under load by its own request-body handling
+// (vendors/bedrock sdkHTTPClient) and events dropped when the stream's error
+// was checked per event, both fixed.
 func postBridge(t *testing.T, h *failoverHarness, path, body string, headers ...string) (*http.Response, []byte) {
 	t.Helper()
-	for attempt := 0; ; attempt++ {
-		resp, got := h.post(path, body, headers...)
-		s := string(got)
-		early := strings.HasPrefix(s, `data: {"error":{"message":"the Bedrock stream failed before it completed"`) ||
-			strings.HasPrefix(s, "event: error\ndata: {\"error\":{\"message\":\"the Bedrock stream failed before it completed\"")
-		if !early || attempt == 2 {
-			return resp, got
-		}
-		t.Logf("retrying a Bedrock bridge stream that failed before its first frame (q0z.26): %s", s)
-	}
+	return h.post(path, body, headers...)
 }
 
 // The /ai/ and /anthropic/ bridges to Bedrock re-encode the Converse stream

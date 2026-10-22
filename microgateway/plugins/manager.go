@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -22,10 +23,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // PluginServiceInterface defines minimal interface needed by plugin manager
@@ -634,6 +637,9 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 	return result, nil
 }
 
+// pluginChainCallTimeout bounds each plugin call in ExecutePluginChain.
+const pluginChainCallTimeout = 30 * time.Second
+
 // ExecutePluginChain executes a chain of plugins for a specific LLM and hook type
 func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error) {
 	plugins, err := pm.GetPluginsForLLM(llmID, hookType)
@@ -649,9 +655,6 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 	result := input
 
 	for _, plugin := range plugins {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
 		switch hookType {
 		case interfaces.HookTypePreAuth:
 			pluginReq, ok := result.(*interfaces.PluginRequest)
@@ -662,8 +665,14 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertPluginRequest(pluginReq, pbCtx)
 
+			if err := pluginlimits.CheckSize(plugin.Name, string(hookType), proto.Size(pbReq)); err != nil {
+				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), pluginChainCallTimeout)
 			resp, err := plugin.GRPCClient.ProcessPreAuth(ctx, pbReq)
+			cancel()
 			if err != nil {
+				err = pluginlimits.AsTooLarge(err, plugin.Name, string(hookType), proto.Size(pbReq))
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
 
@@ -697,8 +706,17 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertEnrichedRequest(enrichedReq, pbCtx)
 
+			if err := pluginlimits.CheckSize(plugin.Name, string(hookType), proto.Size(pbReq)); err != nil {
+				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), pluginChainCallTimeout)
 			resp, err := plugin.GRPCClient.ProcessPostAuth(ctx, pbReq)
+			cancel()
 			if err != nil {
+				// A plugin on an older SDK refuses bodies over 4 MiB. The
+				// chain stops either way: a post_auth plugin may enforce
+				// policy, so the request is not forwarded without it.
+				err = pluginlimits.AsTooLarge(err, plugin.Name, string(hookType), proto.Size(pbReq))
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
 
@@ -719,9 +737,16 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 					Int("modified_body_len", len(resp.Body)).
 					Msg("🔄 Post-auth plugin modified request, updating for next plugin")
 
-				// Update the request fields with modifications
+				// Update the request fields with modifications. A plugin
+				// may return only the headers it sets, so lay them over
+				// the ones the next plugin would otherwise not see.
 				if len(resp.Headers) > 0 {
-					enrichedReq.PluginRequest.Headers = resp.Headers
+					headers := maps.Clone(enrichedReq.PluginRequest.Headers)
+					if headers == nil {
+						headers = make(map[string]string, len(resp.Headers))
+					}
+					maps.Copy(headers, resp.Headers)
+					enrichedReq.PluginRequest.Headers = headers
 				}
 				if len(resp.Body) > 0 {
 					enrichedReq.PluginRequest.Body = resp.Body
@@ -2479,6 +2504,74 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 	return summary
 }
 
+// Session lengths. While the plugin has not connected to its service
+// broker, sessions are short so that a fresh broker ID is offered often: a
+// plugin built before 2.3 dials lazily, retrying for about 25 s and reading
+// the current broker ID on each attempt, and can only connect within five
+// seconds of the host accepting on an ID, so it connects on the first host
+// call that overlaps a renewal. After fastUnconnectedRenewals short sessions
+// (about five minutes) a plugin that still makes no host calls gets normal
+// sessions, each still on a fresh ID so that a late first call can connect.
+const (
+	sessionTimeoutMs            = int32(30000)
+	unconnectedSessionTimeoutMs = int32(10000)
+	fastUnconnectedRenewals     = 30
+)
+
+// sessionTimeout is the length of a renewal's session: short while the
+// plugin has not connected to brokerID, for the first
+// fastUnconnectedRenewals renewals.
+func sessionTimeout(client *MicrogatewayPluginClient, brokerID uint32, renewal int) int32 {
+	if brokerID != 0 && !client.BrokerConnected(brokerID) && renewal < fastUnconnectedRenewals {
+		return unconnectedSessionTimeoutMs
+	}
+	return sessionTimeoutMs
+}
+
+// renewSessionBroker returns the broker ID for the plugin's next session.
+// go-plugin hands a plugin a broker ID's connection info once, when the host
+// accepts on it, and keeps it only five seconds, so a plugin whose SDK
+// dials lazily (every plugin built before AI Studio 2.3) and whose first
+// host call came later could never reach host services. When the plugin
+// has not connected to the current brokered server, this sets up a fresh
+// one on a new ID, stops the unused one, and the next OpenSession hands the
+// plugin the new ID (the SDK drops its client when the ID changes and dials
+// the new one).
+func (pm *PluginManager) renewSessionBroker(pluginID uint, client *MicrogatewayPluginClient, current uint32, renewal int) uint32 {
+	if current == 0 || client.BrokerConnected(current) {
+		return current
+	}
+	pm.mu.RLock()
+	mgmt, events := pm.managementServer, pm.eventServer
+	pm.mu.RUnlock()
+	if mgmt == nil {
+		return current
+	}
+	var (
+		next uint32
+		err  error
+	)
+	if events != nil {
+		next, err = client.SetupServiceBrokerWithEvents(pluginID, mgmt, events)
+	} else {
+		next, err = client.SetupServiceBroker(pluginID, mgmt)
+	}
+	if err != nil {
+		log.Warn().Err(err).Uint("plugin_id", pluginID).Msg("Could not set up a fresh service broker for the plugin")
+		return current
+	}
+	client.StopBroker(current)
+	ev := log.Debug()
+	if renewal <= 3 || renewal == fastUnconnectedRenewals {
+		ev = log.Info()
+	}
+	ev.Uint("plugin_id", pluginID).
+		Uint32("old_broker_id", current).
+		Uint32("broker_id", next).
+		Msg("Plugin has not connected to its service broker; serving it on a fresh broker ID")
+	return next
+}
+
 // runPluginSessionLoop runs the session loop for a plugin.
 // This keeps calling OpenSession in a loop to maintain broker connectivity.
 // The loop exits when the session is explicitly closed or the plugin is unloaded.
@@ -2502,9 +2595,7 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 		Uint32("broker_id", brokerID).
 		Msg("Starting plugin session loop")
 
-	sessionTimeoutMs := int32(30000) // 30 second sessions
-
-	for {
+	for renewal := 0; ; renewal++ {
 		select {
 		case <-ctx.Done():
 			log.Debug().
@@ -2514,16 +2605,22 @@ func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *Microgatewa
 		default:
 		}
 
+		if renewal > 0 {
+			brokerID = pm.renewSessionBroker(pluginID, client, brokerID, renewal)
+		}
+
 		log.Debug().
 			Uint("plugin_id", pluginID).
 			Uint32("broker_id", brokerID).
 			Msg("Calling OpenSession RPC on plugin")
 
-		// Call OpenSession - this blocks until timeout or explicit close
+		// Call OpenSession - this blocks until timeout or explicit close.
+		// Sessions are short while the plugin has not connected.
+		timeoutMs := sessionTimeout(client, brokerID, renewal)
 		resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
 			ServiceBrokerId: brokerID,
 			PluginId:        uint32(pluginID),
-			TimeoutMs:       sessionTimeoutMs,
+			TimeoutMs:       timeoutMs,
 		})
 
 		log.Debug().

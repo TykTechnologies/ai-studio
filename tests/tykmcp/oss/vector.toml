@@ -1,0 +1,44 @@
+# Vector bridge from the Tyk Pump stdout pump to AI Studio's MCP analytics
+# ingest endpoint. Works with any Tyk Pump 1.16+, until the http pump ships.
+#
+# Pump settings (pump.conf "pumps" entry, or the TYK_PMP_PUMPS_STDOUT_* env):
+#   "stdout": {"type": "stdout", "omit_detailed_recording": true,
+#              "meta": {"format": "json", "log_field_name": "tyk-analytics-record"}}
+#
+# Environment:
+#   MCP_INGEST_URL    https://<studio>/api/v1/ingest/tyk-analytics
+#   MCP_INGEST_TOKEN  the Tyk connection's ingest token
+
+# Pump's container output. On Kubernetes use a kubernetes_logs source with an
+# extra_label_selector for the Pump pods instead.
+[sources.pump]
+type = "docker_logs"
+include_labels = ["com.docker.compose.service=pump"]
+
+# Keep only analytics records of MCP traffic. Pump's own log lines (and
+# anything else that is not a JSON record) are dropped.
+[transforms.mcp_records]
+type = "remap"
+inputs = ["pump"]
+drop_on_error = true
+drop_on_abort = true
+source = '''
+parsed = object!(parse_json!(string!(.message)))
+record = object!(parsed."tyk-analytics-record")
+if record.mcp_stats.is_mcp != true { abort }
+. = record
+'''
+
+# A JSON array of records per request, bearer token, gzip.
+[sinks.studio]
+type = "http"
+inputs = ["mcp_records"]
+uri = "${MCP_INGEST_URL}"
+method = "post"
+compression = "gzip"
+encoding.codec = "json"
+auth.strategy = "bearer"
+auth.token = "${MCP_INGEST_TOKEN}"
+batch.max_events = 500
+batch.timeout_secs = 5
+request.retry_attempts = 5

@@ -42,27 +42,35 @@ const (
 	//     vendor_workspace_id and price_multipliers, llm_chat_records and
 	//     proxy_logs service_tier (nullable, additive).
 	// 11: native_resources.screening_digest (nullable, additive).
-	// 12: agent_trace_* tables (agent tracing, new tables only).
-	// 13: agent tracing settings: apps.tracing, llms/tools/datasources
+	// 12: mcp_call_records (new table, additive): MCP analytics from Tyk Pump.
+	// 13: tyk_connection_ingests and tyk_ingest_stats (new tables, additive):
+	//     the analytics ingest token (hash only) and hourly counters.
+	// 14: proxy_logs request_id (indexed) and client_request_id (nullable,
+	//     additive): the gateway's request id (pkg/requestid) and the caller's.
+	// 15: compliance_events.owner_visible (defaulted false, indexed with
+	//     app_id and time_stamp; additive): guardrail events shared with App
+	//     owners in the portal.
+	// 16: agent_trace_* tables (agent tracing, new tables only).
+	// 17: agent tracing settings: apps.tracing, llms/tools/datasources
 	//     tracing_content_mode_max, llms.tracing_propagation_opt_out
 	//     (nullable or defaulted, additive).
-	// 14: agent_trace_traces/agent_trace_spans keyed by (app_id, id),
+	// 18: agent_trace_traces/agent_trace_spans keyed by (app_id, id),
 	//     agent_trace_span_links.app_id, App-scoped link/payload indexes.
-	//     The tables are unreleased (added in 12); AutoMigrate cannot change
-	//     a primary key, so databases created at 12 or 13 need the agent_trace
-	//     tables dropped once.
-	// 15: agent tracing read API: agent_trace_sessions.duration_ms and
+	//     The tables are unreleased (added in 16); AutoMigrate cannot change
+	//     a primary key, so databases created at 16 or 17 need the
+	//     agent_trace tables dropped once.
+	// 19: agent tracing read API: agent_trace_sessions.duration_ms and
 	//     gateway_event_count (defaulted), indexes on sessions (started_at,
 	//     id), spans (span_id) and traces (trace_id) (additive).
-	// 16: proxy_logs.trace_span_id (indexed) and proxy_logs.request_id
-	//     (nullable, additive).
-	// 17: agent_trace_traces.exported_at (nullable) and its index: the OTel
+	// 20: proxy_logs.trace_span_id (indexed, nullable, additive); the
+	//     proxy_logs.request_id agent tracing also uses is main's (14).
+	// 21: agent_trace_traces.exported_at (nullable) and its index: the OTel
 	//     exporter marks the turns it has sent (additive).
-	// 18: partial indexes on agent_trace_traces over in-progress turns:
+	// 22: partial indexes on agent_trace_traces over in-progress turns:
 	//     idx_agent_trace_traces_open (app_id, session_id, turn_index) for
 	//     gateway turns and idx_agent_trace_traces_idle (started_at)
 	//     (additive).
-	SchemaVersion          = 18
+	SchemaVersion          = 22
 	MinReaderSchemaVersion = 1
 )
 

@@ -179,6 +179,22 @@ Dashboard, with these differences:
   `$secret_env.WEATHER_TOKEN` (read from the gateway's `TYK_SECRET_WEATHER_TOKEN`
   environment variable), over a literal token.
 
+## MCP analytics
+
+An OSS Gateway writes its analytics to Redis for Tyk Pump. Point a Tyk Pump
+at that Redis and have it deliver the MCP records to AI Studio, exactly as
+for a Dashboard connection: generate the connection's ingest token on its
+**Analytics** section and configure the `http` pump, or the stdout pump with
+Vector. See [MCP analytics](./tyk-mcp-integration.md#mcp-analytics) for the
+configurations, attribution and limits.
+
+On the gateways, set `enable_analytics: true` (`TYK_GW_ENABLEANALYTICS`).
+The proxies AI Studio writes to the nodes have traffic logs enabled;
+proxies you add to the nodes yourself need
+`x-tyk-api-gateway.middleware.global.trafficLogs.enabled: true` to be
+recorded. `tests/tykmcp/oss/docker-compose.yml` has an `analytics` profile
+(stdout pump and Vector) and an `httppump` profile for trying it locally.
+
 ## API
 
 | Endpoint | Purpose |
@@ -186,6 +202,8 @@ Dashboard, with these differences:
 | `POST /api/v1/tyk-connections` with `"kind": "gateway"` | Create a Tyk Gateway connection (`gateway_discovery`, `gateway_node_urls`, `gateway_shared_storage`). |
 | `GET /api/v1/tyk-connections/{id}/nodes` | The nodes and their state. |
 | `PUT /api/v1/mcp-servers/{id}/key-access` | Set a server's key access (`allowed_tools`, `rate`, `per`, `quota_max`, `quota_renewal_rate`). |
+| `POST` / `DELETE /api/v1/tyk-connections/{id}/ingest-token`, `GET .../ingest-status` | Generate (shown once), revoke and inspect the analytics ingest token. |
+| `POST /api/v1/ingest/tyk-analytics` | Where Tyk Pump delivers analytics batches (bearer ingest token). |
 
 ## Local development
 

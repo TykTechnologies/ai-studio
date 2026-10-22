@@ -247,9 +247,13 @@ func (x *extraction) anthropicBlock(u *Unit, b *node, path string) error {
 	case "tool_result", "mcp_tool_result":
 		result := x.open(contentPath, wholeString, x.toolResult(x.str(b.get("tool_use_id")), ""))
 		result.adjacent = true
+		if typ == "mcp_tool_result" {
+			result.ServerTool, result.ServerToolType = true, typ
+		}
 		return x.anthropicContent(result, b.get("content"), contentPath)
 	case "web_fetch_tool_result":
 		result := x.open(contentPath, wholeLeaves, x.toolResult(x.str(b.get("tool_use_id")), ""))
+		result.ServerTool, result.ServerToolType = true, typ
 		c := b.get("content")
 		if x.str(c.get("type")) == "web_fetch_result" && c.get("content").is(nodeObject) {
 			x.leaf(result, c.get("url"), pointer(contentPath, "url"))
@@ -262,6 +266,7 @@ func (x *extraction) anthropicBlock(u *Unit, b *node, path string) error {
 			// encrypted), the code execution results (stdout, stderr, file
 			// text) and result types added later.
 			result := x.open(contentPath, wholeLeaves, x.toolResult(x.str(b.get("tool_use_id")), ""))
+			result.ServerTool, result.ServerToolType = true, typ
 			x.walk(result, b.get("content"), contentPath, false, opaque)
 			return nil
 		}
@@ -411,6 +416,7 @@ func (x *extraction) googlePart(u *Unit, part *node, path string) error {
 				return err
 			}
 			result := x.open(memberPath, wholeLeaves, x.toolResult("", "code_execution"))
+			result.ServerTool, result.ServerToolType = true, "codeExecutionResult"
 			x.leaf(result, cer.get("output"), pointer(memberPath, "output"))
 		case googlePartData[key]:
 		default:

@@ -313,8 +313,16 @@ func TestAdversarial_ChainedRewrites(t *testing.T) {
 					second[s.Path] = "" // shorter: removes the whole leaf text
 				}
 			}
-			if len(second) != len(f.PIISegments()) {
-				t.Fatalf("second filter found %d PII segments, want %d", len(second), len(f.PIISegments()))
+			// A PII segment the first filter also rewrote (it carried an
+			// injection too) has no PII left for the second.
+			wantPII := 0
+			for _, s := range f.PIISegments() {
+				if !s.Injection {
+					wantPII++
+				}
+			}
+			if len(second) != wantPII {
+				t.Fatalf("second filter found %d PII segments, want %d", len(second), wantPII)
 			}
 			out, err := Rewrite(mid, second)
 			if err != nil {

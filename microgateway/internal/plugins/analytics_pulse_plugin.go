@@ -96,6 +96,8 @@ type AnalyticsMetadata struct {
 	Vendor       string
 	RequestBody  string
 	ResponseBody string
+	// NoUsage marks a request that produced no usage (a block, an error).
+	NoUsage bool
 }
 
 // Buffer structures for batching data
@@ -382,6 +384,10 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 
 		// Vendor service tier the usage was billed at
 		ServiceTier:            req.ServiceTier,
+
+		// The gateway's request id and the caller's
+		GatewayRequestID:       req.GatewayRequestID,
+		ClientRequestID:        req.ClientRequestID,
 	}
 
 	// Store metadata for pulse transmission
@@ -392,6 +398,7 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		Vendor:       req.Vendor,
 		RequestBody:  req.RequestBody,  // From analytics interface
 		ResponseBody: req.ResponseBody, // From analytics interface
+		NoUsage:      req.NoUsage,
 	}
 
 	p.analyticsBuffer = append(p.analyticsBuffer, event)
@@ -781,6 +788,12 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 
 	// Build and send pulse
 	pulse := p.buildPulseMessage(snap.analytics, snap.metadata, snap.budget, snap.proxy, snap.compliance, snap.toolCalls, sequenceNum)
+	if n := makeValidUTF8(pulse.ProtoReflect()); n > 0 {
+		log.Warn().
+			Uint64("sequence", sequenceNum).
+			Int("strings", n).
+			Msg("Analytics pulse: replaced invalid UTF-8 so the pulse can be sent")
+	}
 
 	log.Debug().
 		Uint64("sequence", sequenceNum).
@@ -893,6 +906,9 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			DecisionQuestions: uint32(event.DecisionQuestions),
 			DecisionRefusals:  uint32(event.DecisionRefusals),
 			ServiceTier:       event.ServiceTier,
+			GatewayRequestId:  event.GatewayRequestID,
+			ClientRequestId:   event.ClientRequestID,
+			NoUsage:           eventMetadata.NoUsage,
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

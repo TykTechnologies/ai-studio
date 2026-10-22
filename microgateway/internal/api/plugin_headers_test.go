@@ -27,6 +27,7 @@ func innerHopRequest() *http.Request {
 		r.Header.Set(h, "secret-"+h)
 	}
 	r.Header.Set("X-Request-Source", "client")
+	r.Header.Set("X-Tyk-Compression", "off")
 	return r
 }
 
@@ -37,6 +38,9 @@ func TestPluginHeaders_LeaveOutLoopbackMarkers(t *testing.T) {
 		assert.NotContains(t, got, h, "%s reached a plugin", h)
 	}
 	assert.Equal(t, "client", got["X-Request-Source"], "other headers still reach plugins")
+	// The client's instruction to the Prompt Compressor is meant for plugins
+	// (it is stripped only before the vendor).
+	assert.Equal(t, "off", got["X-Tyk-Compression"])
 	assert.Equal(t, "secret-X-Tyk-Internal-Hop", r.Header.Get("X-Tyk-Internal-Hop"), "the request itself keeps its markers")
 }
 

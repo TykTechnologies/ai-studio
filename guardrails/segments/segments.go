@@ -15,6 +15,14 @@
 // injection split across two blocks is still one text. MapRewrite maps a
 // rewrite of that text back onto the leaves.
 //
+// A rewriter that must keep the prompt cache intact edits leaves (MapRewrite,
+// or Edits built per leaf), never whole nodes: Quarantine of a unit whose
+// content is replaced as one string (a message's or a tool result's content)
+// replaces its blocks too, and with them any block-level cache_control, which
+// moves or drops the vendor's cache breakpoint. CacheBreakpoints and
+// Unit.Cached say which units lie in the cached prefix; CheckToolPairing and
+// NativeContextManagement are the other checks a rewriter needs.
+//
 // Model-generated tool call arguments (tool_use input, tool_calls arguments,
 // functionCall args), images, signatures and encrypted payloads are never
 // segments. Block or part types this package does not know are not skipped:
@@ -107,6 +115,19 @@ type Unit struct {
 	// larger than maxDecodedText): the unit cannot be read in full, and the
 	// runner treats it as not scanned.
 	Undecodable bool
+	// ServerTool marks a tool result the vendor produced and the client
+	// replays (Anthropic's web search, web fetch, code execution and MCP
+	// connector results, Google's codeExecutionResult, the Responses
+	// built-in tools' results). A guardrail reads it like any tool result;
+	// a rewriter should leave it alone, since the vendor may check it
+	// against the encrypted or signed parts it came with.
+	ServerTool bool
+	// ServerToolType is the block or item type that carried a ServerTool
+	// result (web_search_tool_result, bash_code_execution_tool_result,
+	// mcp_tool_result, file_search_call, code_interpreter_call, mcp_call,
+	// mcp_list_tools, codeExecutionResult), so a rewriter can tell the
+	// kinds a vendor is known to accept edited apart from the rest.
+	ServerToolType string
 
 	pieces   []piece
 	sep      string
@@ -240,6 +261,8 @@ var extractors = map[string]func(x *extraction, root *node) error{
 	FormatGoogleAI:  extractGoogle,
 	FormatVertex:    extractGoogle,
 	FormatBedrock:   extractBedrock,
+
+	FormatOpenAIResponses: extractResponses,
 }
 
 // ExtractUnits returns the units of body: each message's text and each tool
@@ -324,13 +347,21 @@ func CheckKeys(body []byte) error {
 }
 
 func extract(format string, body []byte, opts Options) (*extraction, error) {
-	fn, ok := extractors[strings.ToLower(format)]
-	if !ok {
+	if !Supports(format) {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	root, err := parseTree(body)
 	if err != nil {
 		return nil, err
+	}
+	return extractTree(format, body, root, opts)
+}
+
+// extractTree is extract on a body already parsed into root.
+func extractTree(format string, body []byte, root *node, opts Options) (*extraction, error) {
+	fn, ok := extractors[strings.ToLower(format)]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFormat, format)
 	}
 	if root.kind != nodeObject {
 		return nil, fmt.Errorf("%w: not a JSON object", ErrUnrecognisedBody)
@@ -480,10 +511,12 @@ func (x *extraction) walk(u *Unit, n *node, path string, keys bool, skip func(st
 }
 
 // opaque names members of an unknown block that are identifiers, signatures,
-// encrypted payloads or metadata rather than text.
+// encrypted payloads or metadata rather than text. cache_control (its type
+// and ttl) is prompt-cache metadata the model never reads.
 func opaque(key string) bool {
 	return key == "type" || key == "id" || strings.HasSuffix(key, "_id") ||
-		key == "signature" || strings.HasPrefix(key, "encrypted_") || key == "page_age"
+		key == "signature" || strings.HasPrefix(key, "encrypted_") || key == "page_age" ||
+		key == "cache_control"
 }
 
 // finish drops units with no text, numbers units and leaves, and builds each

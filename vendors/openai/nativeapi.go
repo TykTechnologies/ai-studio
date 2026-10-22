@@ -11,6 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 )
 
 // ResourceResponse is the native resource type of a Responses API response.
@@ -30,12 +31,12 @@ var nativeHeaderAllow = []string{"content-type", "accept", "openai-beta"}
 // ResponsesFilterFormat is the filter format of a Responses API body: the
 // proxy reads instructions, input items and prompt variables for the request
 // filters (and refuses a body it cannot read).
-const ResponsesFilterFormat = "openai_responses"
+const ResponsesFilterFormat = requestformat.OpenAIResponses
 
 // InputFilterFormat is the filter format of an embeddings, completions or
 // moderations body: the proxy reads "input", "prompt" and "suffix" (and
 // refuses token arrays, which it cannot screen, when filters are attached).
-const InputFilterFormat = "openai_input"
+const InputFilterFormat = requestformat.OpenAIInput
 
 // accountHeaders pick another organization or project than the LLM's API key
 // defaults to. They are dropped from every Responses request, so a response is

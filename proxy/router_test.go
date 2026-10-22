@@ -107,6 +107,8 @@ type routerHarnessOpts struct {
 	directLLMs  func(h *routerHarness) []uint
 	noResolver  bool
 	mutate      func(h *routerHarness)
+	// authHooks are set on the proxy before it serves.
+	authHooks *AuthHooks
 	// semantic makes "smart" a Semantic Router: "auto" classifies to the big
 	// route (score 0.87, shadow route "fast").
 	semantic bool
@@ -183,6 +185,9 @@ func newRouterHarness(t *testing.T, o routerHarnessOpts) *routerHarness {
 	h.proxy = NewProxy(h.service, &Config{Port: h.port}, budgetSvc)
 	if !o.noResolver {
 		h.proxy.SetRouteResolver(h.resolver)
+	}
+	if o.authHooks != nil {
+		h.proxy.SetAuthHooks(o.authHooks)
 	}
 	require.NoError(t, h.proxy.loadResources())
 	srv := &http.Server{Handler: h.proxy.createHandler()}

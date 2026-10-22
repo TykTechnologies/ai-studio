@@ -185,6 +185,9 @@ type scanJob struct {
 	// abandons count towards the breaker, since a sender can make a large
 	// run slow.
 	small bool
+	// excerptChars is the length of the masked excerpt each finding's
+	// evidence carries; 0 for none (evidence.excerpt off, or not allowed).
+	excerptChars int
 
 	res scanResult
 	// pieces holds each segment's pieces; rewrites the rewritten text of
@@ -717,6 +720,18 @@ func failureReason(budget context.Context, r callResult, small, request, local b
 	return unscannedProviderError
 }
 
+// evidence is what a finding's compliance event may say about the piece of
+// text the provider flagged: the piece's SHA-256 (the text exactly as sent,
+// which providers that log by hash key their records on) and, when the
+// filter asks for it, a masked excerpt around span (piece-relative).
+func (j *scanJob) evidence(text string, span *guardrails.Span) *guardrails.FindingEvidence {
+	ev := &guardrails.FindingEvidence{SHA256: guardrails.TextSHA256(text)}
+	if j.excerptChars > 0 {
+		ev.Excerpt, _ = guardrails.Excerpt(text, span, j.excerptChars)
+	}
+	return ev
+}
+
 // addVerdict maps one call's findings and rewrites onto the run's segments.
 // A finding that names no piece of the call (a verdict on the call as a
 // whole, or an index the provider got wrong) applies to every segment in the
@@ -728,6 +743,9 @@ func (j *scanJob) addVerdict(c call, v guardrails.Verdict) {
 		findings = []guardrails.Finding{{Detector: "flagged", Category: guardrails.CategoryOther, Label: "Flagged by provider", Score: 1, Severity: "warning", SegmentIndex: -1}}
 	}
 	for _, f := range findings {
+		if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
+			f.Evidence = j.evidence(c[f.SegmentIndex].text, f.Span)
+		}
 		f.Span = nil // piece-relative; meaningless on the whole segment
 		if f.SegmentIndex < 0 || f.SegmentIndex >= len(c) {
 			for _, parent := range parents(c) {
@@ -836,6 +854,7 @@ func (j *scanJob) scanSeams(ctx context.Context, todo []int, pieceMax int) {
 		for _, f := range r.verdict.Findings {
 			if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
 				flagged[c[f.SegmentIndex].parent] = true
+				f.Evidence = j.evidence(c[f.SegmentIndex].text, f.Span)
 				f.Span = nil
 				f.SegmentIndex = c[f.SegmentIndex].parent
 				j.res.findings = append(j.res.findings, f)
@@ -887,18 +906,30 @@ func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails
 		maxChars int
 		roles    map[string]bool
 		kinds    map[string]bool
+		segments []map[string]any
 	}
 	groups := map[string]*group{}
-	for i, reason := range unscanned {
+	for _, i := range slices.Sorted(maps.Keys(unscanned)) {
+		reason := unscanned[i]
 		g := groups[reason]
 		if g == nil {
 			g = &group{roles: map[string]bool{}, kinds: map[string]bool{}}
 			groups[reason] = g
 		}
+		chars := utf8.RuneCountInString(segs[i].Text)
 		g.count++
-		g.maxChars = max(g.maxChars, utf8.RuneCountInString(segs[i].Text))
+		g.maxChars = max(g.maxChars, chars)
 		g.roles[segs[i].Role] = true
 		g.kinds[segmentKind(segs[i])] = true
+		// Which messages or tool results were not checked: never their text.
+		if len(g.segments) < maxEvidenceSegments {
+			ref := map[string]any{"index": i, "role": segs[i].Role, "kind": segmentKind(segs[i]), "chars": chars,
+				"sha256": guardrails.TextSHA256(segs[i].Text)}
+			if name := safeLabel(segs[i].ToolName); name != "" {
+				ref["tool"] = name
+			}
+			g.segments = append(g.segments, ref)
+		}
 	}
 	reasons := make([]string, 0, len(groups))
 	for r := range groups {
@@ -923,14 +954,20 @@ func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails
 			"action":    action,
 			"roles":     roles,
 			"kinds":     kinds,
+			"segments":  g.segments,
+			// The code the caller was answered with when this blocked.
+			"reason_code": unscannedReasonCode(reason),
 		}
 		switch reason {
 		case unscannedSize:
 			meta["limit"] = cfg.Budget.MaxScanChars
+			meta["setting"] = "budget.max_scan_chars"
 		case unscannedPieces:
 			meta["limit"] = cfg.Budget.MaxPieces
+			meta["setting"] = "budget.max_pieces"
 		case unscannedTimeBudget:
 			meta["limit"] = cfg.Budget.TimeMs
+			meta["setting"] = "budget.time_ms"
 		}
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + unscannedDetector,

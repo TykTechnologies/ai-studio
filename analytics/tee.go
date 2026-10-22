@@ -194,6 +194,39 @@ func (t *Tee) RecordComplianceEvents(ctx context.Context, events []*models.Compl
 	t.toSinks(func(h AnalyticsHandler) { h.RecordComplianceEvents(context.Background(), c) })
 }
 
+func (t *Tee) RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error {
+	c := make([]models.MCPCallRecord, len(records))
+	copy(c, records)
+	for i := range c {
+		if id := c[i].MCPServerID; id != nil {
+			v := *id
+			c[i].MCPServerID = &v
+		}
+		if id := c[i].AppID; id != nil {
+			v := *id
+			c[i].AppID = &v
+		}
+		if id := c[i].CredentialID; id != nil {
+			v := *id
+			c[i].CredentialID = &v
+		}
+	}
+	// A batch the primary refuses is retried by the sender, so the sinks
+	// only get the batches the primary took (no duplicates on the retry).
+	// Handlers that do not record MCP calls (MCPCallRecorder) are skipped.
+	if r, ok := t.primary.(MCPCallRecorder); ok {
+		if err := r.RecordMCPCalls(ctx, records); err != nil {
+			return err
+		}
+	}
+	t.toSinks(func(h AnalyticsHandler) {
+		if r, ok := h.(MCPCallRecorder); ok {
+			_ = r.RecordMCPCalls(context.Background(), c)
+		}
+	})
+	return nil
+}
+
 // RecordExchange keeps a proxied request's log and chat record together for
 // handlers that store them as one (ExchangeRecorder) and splits them for the
 // others, as the package-level RecordExchange does.
@@ -258,3 +291,5 @@ func cloneCaptureEvent(e *agenttrace.Event) *agenttrace.Event {
 var _ AnalyticsHandler = (*Tee)(nil)
 var _ ExchangeRecorder = (*Tee)(nil)
 var _ CaptureRecorder = (*Tee)(nil)
+var _ MCPCallRecorder = (*Tee)(nil)
+var _ MCPCallRecorder = (*DatabaseHandler)(nil)

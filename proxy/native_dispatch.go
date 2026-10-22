@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 )
@@ -107,19 +108,7 @@ type nativeRoute struct {
 // splitNativePath splits /llm/{mode}/{slug}/{rest...}. rest keeps its leading
 // slash and is never empty.
 func splitNativePath(p string) (mode, slug, rest string, ok bool) {
-	tail, found := strings.CutPrefix(p, "/llm/")
-	if !found {
-		return "", "", "", false
-	}
-	mode, tail, found = strings.Cut(tail, "/")
-	if !found || (mode != "rest" && mode != "stream" && mode != "call") {
-		return "", "", "", false
-	}
-	slug, tail, found = strings.Cut(tail, "/")
-	if !found || slug == "" || tail == "" {
-		return "", "", "", false
-	}
-	return mode, slug, "/" + tail, true
+	return requestformat.SplitNativePath(p)
 }
 
 // resolveNative reports whether r is a native operation of its LLM's vendor.

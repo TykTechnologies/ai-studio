@@ -72,12 +72,6 @@ func (p *Proxy) nativeChainFor(r *http.Request, llm *models.LLM, app *models.App
 	return ch
 }
 
-// nativeChainHookFor returns the chain hook that applies to r on llm, or nil.
-func nativeChainHookFor(r *http.Request, llm *models.LLM) *nativeapi.ChainHook {
-	_, _, _, _, _, hook := resolveChainHook(r, llm)
-	return hook
-}
-
 // resolveChainHook matches r's method and canonical vendor path against
 // llm's vendor's chain hooks.
 func resolveChainHook(r *http.Request, llm *models.LLM) (mode, slug, rest string, nv *nativeVendor, canonical string, hook *nativeapi.ChainHook) {

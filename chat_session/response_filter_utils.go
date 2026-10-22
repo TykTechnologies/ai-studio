@@ -83,6 +83,7 @@ func ExecuteResponseFilters(
 			if msg == "" {
 				msg = fmt.Sprintf("Response blocked by filter: %s", filter.Name)
 			}
+			msg = output.Explain(msg)
 			slog.Info("chat response blocked by filter", "filter_name", filter.Name, "message", msg, "is_chunk", isChunk)
 			return true, msg, nil
 		}

@@ -320,11 +320,9 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	bt := newBedrockTrace(r, requestFilterFormatAnthropic)
 	defer bt.abandon()
 	ttftSeen := false
+	// Every event received is handled; a stream error is checked after the
+	// loop (see bedrockPumpStream).
 	for event := range stream.Events() {
-		if err := stream.Err(); err != nil {
-			log.Error().Err(err).Msg("Bedrock Anthropic stream error")
-			break
-		}
 		bt.observe(event)
 		if _, delta := event.(*types.ConverseStreamOutputMemberContentBlockDelta); delta && !ttftSeen {
 			ttftSeen = true

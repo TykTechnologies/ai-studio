@@ -75,6 +75,13 @@ const (
 	// Governed metadata events (Enterprise). Payload object: {object_type, object_id, values, validation_status, source}
 	TopicGovernedMetadataUpdated = "system.governed_metadata.updated"
 	TopicGovernedMetadataDeleted = "system.governed_metadata.deleted"
+
+	// Secret events. The payload never carries the secret: no object, only
+	// its ID. Edges get referenced values in their snapshot, so a change
+	// makes them pending.
+	TopicSecretCreated = "system.secret.created"
+	TopicSecretUpdated = "system.secret.updated"
+	TopicSecretDeleted = "system.secret.deleted"
 )
 
 // ObjectEventPayload is the standard payload for all system CRUD events
@@ -317,4 +324,10 @@ func (e *SystemEventEmitter) EmitEmbedderUpdated(embedder interface{}, objectID 
 // EmitEmbedderDeleted emits an event when an Embedder is deleted
 func (e *SystemEventEmitter) EmitEmbedderDeleted(objectID uint, userID uint) {
 	e.EmitObjectEvent(TopicEmbedderDeleted, "embedder", "deleted", objectID, userID, nil)
+}
+
+// EmitSecretChanged emits a secret event (TopicSecretCreated, Updated or
+// Deleted) without the secret itself.
+func (e *SystemEventEmitter) EmitSecretChanged(topic, action string, objectID uint, userID uint) {
+	e.EmitObjectEvent(topic, "secret", action, objectID, userID, nil)
 }

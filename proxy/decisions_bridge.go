@@ -21,6 +21,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -249,17 +250,18 @@ func (p *Proxy) decisionAttempt(ctx context.Context, r *http.Request, a llmAttem
 	if rt := timingFrom(r.Context()); rt != nil {
 		ctx = withRequestTiming(ctx, rt)
 	}
+	ctx = withRequestIDsFrom(ctx, r)
 	ctx = withLoopbackRelay(ctx, relay)
 	loopReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, attemptFailure{err: fmt.Errorf("%w: %v", errDriverSetup, err), status: http.StatusInternalServerError, driverError: true}
 	}
 	loopReq.Header.Set("Content-Type", "application/json")
-	if id := r.Header.Get("X-Request-ID"); id != "" {
-		loopReq.Header.Set("X-Request-ID", id)
+	if id := r.Header.Get(requestid.ClientHeader); id != "" {
+		loopReq.Header.Set(requestid.ClientHeader, id)
 	}
 
-	client := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.loopbackHeaders(r.Context(), a))
+	client := p.newInternalRoutingClient(r.Header.Get("Authorization"), withClientLoopbackHeaders(r, p.loopbackHeaders(r.Context(), a)))
 	resp, err := client.Do(loopReq)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

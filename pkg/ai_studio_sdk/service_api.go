@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/brokerdial"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
@@ -16,13 +17,20 @@ import (
 
 // Global SDK state for service API access
 var (
-	serviceClient   mgmtpb.AIStudioManagementServiceClient
 	pluginID        uint32
 	serviceBrokerID uint32
 	initialized     bool
 	initMutex       sync.Mutex
 	grpcBroker      *goplugin.GRPCBroker
-	brokerConn      *grpc.ClientConn // Shared connection for all services on this broker
+
+	// brokerConn is the one connection to the host's brokered server,
+	// shared by all services on this broker.
+	brokerConn brokerdial.Conn
+
+	// serviceClient is the management client on brokerConn's connection.
+	clientMu      sync.Mutex
+	serviceClient mgmtpb.AIStudioManagementServiceClient
+	clientConn    *grpc.ClientConn
 )
 
 // Initialize sets up the SDK with broker access
@@ -38,6 +46,7 @@ func Initialize(server *grpc.Server, broker *goplugin.GRPCBroker, pluginIDVal ui
 
 	// Store broker for service API access
 	grpcBroker = broker
+	brokerConn.SetBroker(broker)
 	pluginID = pluginIDVal // May be 0 initially, updated later
 	initialized = true
 
@@ -52,6 +61,13 @@ func SetServiceBrokerID(brokerID uint32) {
 	defer initMutex.Unlock()
 
 	serviceBrokerID = brokerID
+	// Studio names the broker on many calls; a connection already open to
+	// its brokered server stays in use.
+	brokerConn.SetID(brokerID, true)
+	// Dial now: go-plugin keeps the connection info for a broker ID only
+	// five seconds after the host accepts on it, so a plugin whose first
+	// host call comes later could never connect (eac.59).
+	brokerConn.Warm()
 	log.Info().
 		Uint32("broker_id", brokerID).
 		Bool("sdk_initialized", initialized).
@@ -93,63 +109,36 @@ func GetPluginID() uint32 {
 	return pluginID
 }
 
-// getServiceClient creates and returns the service client, creating it if necessary
-// Includes retry logic to handle race conditions where the broker server may not be ready yet
+// getServiceClient returns the management client on the shared broker
+// connection, dialling it if needed. It waits for the dial at most until ctx
+// ends (brokerdial.Conn): a dial the caller gave up on still completes, and
+// its connection serves the next call. Only one dial is ever in flight, and
+// a failed one is not retried for brokerdial.RetryAfter.
 func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClient, error) {
-	if serviceClient != nil {
-		return serviceClient, nil
+	initMutex.Lock()
+	ready, hasBroker, id := initialized, grpcBroker != nil, serviceBrokerID
+	initMutex.Unlock()
+	if !ready || !hasBroker {
+		return nil, fmt.Errorf("SDK not initialized - call ai_studio_sdk.Initialize() first (initialized=%v, broker=%v)", ready, hasBroker)
 	}
-
-	log.Debug().
-		Bool("initialized", initialized).
-		Bool("has_broker", grpcBroker != nil).
-		Uint32("broker_id", serviceBrokerID).
-		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
-		Msg("getServiceClient: checking prerequisites (AI STUDIO SDK dial attempt)")
-
-	if !initialized || grpcBroker == nil {
-		return nil, fmt.Errorf("SDK not initialized - call ai_studio_sdk.Initialize() first (initialized=%v, broker=%v)", initialized, grpcBroker != nil)
-	}
-
-	if serviceBrokerID == 0 {
+	if id == 0 && brokerConn.Current() == nil {
 		return nil, fmt.Errorf("service broker ID not set - call ai_studio_sdk.SetServiceBrokerID() with broker ID from config")
 	}
 
-	// Dial the brokered server where AI Studio management services are registered
-	// Retry with backoff to handle race conditions where server may not be ready yet
-	var conn *grpc.ClientConn
-	var err error
-	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
-		conn, err = grpcBroker.Dial(serviceBrokerID)
-		if err == nil {
-			break
-		}
-		if i < maxRetries-1 {
-			backoff := time.Duration(50*(i+1)) * time.Millisecond
-			log.Debug().
-				Int("attempt", i+1).
-				Dur("backoff", backoff).
-				Err(err).
-				Msg("Broker dial failed, retrying...")
-			time.Sleep(backoff)
-		}
-	}
+	conn, err := brokerConn.Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial service broker ID %d after %d attempts: %w", serviceBrokerID, maxRetries, err)
+		return nil, fmt.Errorf("failed to dial service broker ID %d: %w", id, err)
 	}
 
-	// Store connection for sharing with other services (e.g., EventService)
-	brokerConn = conn
-
-	// Create service client from the brokered connection
-	serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
-
-	log.Info().
-		Uint32("plugin_id", pluginID).
-		Uint32("broker_id", serviceBrokerID).
-		Msg("✅ Service client created via broker dial - plugin can now call host services")
-
+	clientMu.Lock()
+	defer clientMu.Unlock()
+	if serviceClient == nil || clientConn != conn {
+		serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
+		clientConn = conn
+		log.Info().
+			Uint32("broker_id", id).
+			Msg("✅ Service client created via broker dial - plugin can now call host services")
+	}
 	return serviceClient, nil
 }
 
@@ -157,9 +146,7 @@ func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClie
 // This allows other services (like EventService) to create clients on the same connection
 // without dialing again. Returns nil if no connection has been established yet.
 func GetSharedBrokerConnection() *grpc.ClientConn {
-	initMutex.Lock()
-	defer initMutex.Unlock()
-	return brokerConn
+	return brokerConn.Current()
 }
 
 // SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use.
@@ -167,20 +154,16 @@ func GetSharedBrokerConnection() *grpc.ClientConn {
 // the same connection instead of trying to dial again (which would fail since
 // go-plugin broker only accepts ONE connection per broker ID).
 func SetSharedBrokerConnection(conn *grpc.ClientConn) {
-	initMutex.Lock()
-	defer initMutex.Unlock()
-	if brokerConn == nil && conn != nil {
-		brokerConn = conn
-		// Also create the service client immediately since we have the connection
-		serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
-		log.Info().Msg("✅ AI Studio SDK: Shared broker connection set from external source")
-	}
+	brokerConn.Share(conn)
 }
 
 // createPluginContext creates the authentication context for service API calls
 func createPluginContext(methodScope string) *mgmtpb.PluginContext {
+	initMutex.Lock()
+	id := pluginID
+	initMutex.Unlock()
 	return &mgmtpb.PluginContext{
-		PluginId:    pluginID,
+		PluginId:    id,
 		MethodScope: methodScope,
 	}
 }

@@ -16,7 +16,7 @@ A plugin is a program you choose to run next to AI Studio or the Microgateway. E
 | CPU and memory limits | No | Apply them at the container or OS level if you need them. |
 | Filesystem isolation | No | A plugin can read and write whatever the host's user can. |
 | Network egress filtering | No | See [Network egress](#network-egress). |
-| Secret redaction in plugin config | No | See [Plugin configuration and secrets](#plugin-configuration-and-secrets). |
+| Secret redaction in plugin config | Partial: `$SECRET/` references are resolved for the plugin (in AI Studio, and encrypted in transit to edges), and the stored config keeps the reference; literal values are not redacted | See [Plugin configuration and secrets](#plugin-configuration-and-secrets). |
 
 ## Network egress
 
@@ -41,6 +41,7 @@ AI Studio and the Microgateway start every `file://` and `oci://` plugin with an
 | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` (and the lower-case forms) | Outbound proxy settings |
 | `GOMAXPROCS`, `GOMEMLIMIT`, `GOGC`, `GODEBUG`, `GOTRACEBACK` | Go runtime tuning |
 | `PLUGIN_RUNTIME`, `GATEWAY_MODE`, `MICROGATEWAY_MODE`, `EDGE_ID` | Runtime detection and edge identity, read by the SDK and shipped plugins |
+| `PLUGIN_GRPC_MAX_MSG_BYTES` | The largest gRPC message the plugin accepts (see [Plugin message size](./plugins-deployment.md#plugin-message-size)) |
 
 go-plugin adds its own handshake variables on top. Anything else in the host's environment (database settings, encryption keys, provider keys, the license and so on) is not passed to plugins.
 
@@ -68,7 +69,17 @@ Because the plugin receives the secret's value, adding a `$SECRET/` reference to
 
 `$ENV/NAME` is **not** resolved by AI Studio: its own environment holds platform secrets such as the encryption key and the database URL. A plugin may resolve `$ENV/NAME` itself, against the environment it is given (the default allowlist and `PLUGIN_ENV_PASSTHROUGH`).
 
-**Edges receive plugin configuration.** The configuration snapshot that AI Studio sends to every edge gateway includes the stored configuration of every active plugin, Studio-only plugins included. A literal credential therefore reaches every edge; a reference does not. Plugins running on edges receive references unresolved.
+**Edges receive plugin configuration.** The configuration snapshot that AI Studio sends to every edge gateway includes the stored configuration of every active plugin, Studio-only plugins included. A literal credential therefore reaches every edge.
+
+**Secret references on edges.** For a plugin that runs on edges (it has a gateway hook: `pre_auth`, `auth`, `post_auth`, `on_response`, `data_collection` or `custom_endpoint`), AI Studio also resolves each top-level `$SECRET/NAME` value and sends it encrypted with the edge encryption key (`MICROGATEWAY_ENCRYPTION_KEY`), the way LLM API keys travel. The plain configuration in the snapshot keeps the reference. The edge stores the value encrypted, decrypts it only for the plugin's `Initialize` configuration, and never returns it from its admin API. The rules:
+
+- Only top-level string values that are exactly `$SECRET/NAME` are resolved, as in AI Studio. A nested reference reaches the plugin unresolved.
+- A reference that cannot be resolved reaches the plugin as `refused-credential-reference`, never as the reference.
+- `$ENV/NAME` is not resolved for edges: nothing from AI Studio's environment is sent.
+- Studio-only plugins (UI, agent, object hooks) get no values on edges.
+- A reference set in an LLM's per-plugin configuration override is not resolved, since writing an override does not need the right to read secrets. Put the reference in the plugin's own configuration.
+- Changing a referenced secret changes the edge configuration checksum, so edges show as pending until the change is pushed; on the push the edge reloads the plugin with the new value.
+- Edges released before this change ignore the encrypted values and keep receiving the reference unresolved.
 
 What this means in practice:
 

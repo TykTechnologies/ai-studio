@@ -216,9 +216,41 @@ Sizing: each pool has at least one slot, so on a 2-CPU host the two pools togeth
 
 Long segments are split for providers with a size limit, with an overlap across each cut so text placed to straddle the cut is still seen whole; when the filter redacts, the overlaps are checked again after the redaction.
 
+### When a guardrail blocks a request
+
+The caller gets HTTP `400` with the filter's block message followed by why and the request id, for example:
+
+```
+Policy error: Wolf Defender: stop conversation - This conversation was stopped by the security guardrail.
+Reason: a tool result from fetch_results of 321,097 characters is longer than this guardrail scans
+(262,144 characters, budget.max_scan_chars), so it was not checked (guardrail_too_large_to_scan).
+Request ID: tyai_0192d8a4f6b37c1e9a5b2d4c6e8f0a1b.
+```
+
+On the gateway's own endpoints the JSON body also carries `reason_code`, `reason`, `filter` and `request_id`, and the response has an `X-Tyk-AI-Guardrail-Reason` header with the code. The bridges (`/ai/`, `/anthropic/`) and the Bedrock shims carry the reason in the error message. The reason names the cause and where it was, never the matched text, a score or the detector.
+
+| Reason code | Cause | What to do |
+|---|---|---|
+| `guardrail_detected` | The provider flagged the text (a likely prompt injection, credentials, personal data...) | Look the request id up under Compliance: the event shows the flagged message or tool result. A false positive is lifted in the provider (for Wolf Defender, by its SHA-256) or by a higher threshold. |
+| `guardrail_too_large_to_scan` | A message or tool result is longer than `budget.max_scan_chars` (256 KiB by default), so it was not checked; unchecked text is treated as flagged | Raise **Max characters scanned per segment** on the filter (up to 16 MiB) and push to edges. Skipping the App in the provider's policy does not help: the gateway decides before calling the provider. |
+| `guardrail_scan_budget_exceeded` | The request has more text than the filter scans per request (`budget.max_pieces`) or in its time (`budget.time_ms`) | Raise that budget, or check the provider's speed. |
+| `guardrail_unavailable` | The provider could not be reached or did not answer, and the filter fails closed | Check the provider; set **If the provider fails** to let requests through if availability matters more. |
+| `guardrail_unscanned` | The provider refused the text, or it could not be decoded | See the event's `reason`. |
+| `guardrail_unreadable_request` | The body has a repeated or case-variant JSON key | Fix the client. |
+
+Script filters' blocks are unchanged: their message only.
+
+**Triage in AI Studio.** Under **Compliance → Filter events**, an event's details start with **What happened** and **How to fix**, worked out from the event: the cause in plain words, the message or tool result it was about (tool, size), the setting that applies and the reason code the caller got. `guardrail.unscanned` events list their segments (index, role, kind, tool, size, SHA-256; never the text), the `setting` that applies and the `reason_code`.
+
+**Showing blocks to App owners.** With **Show this filter's blocks to app owners** (`"evidence": {"share_with_app_owners": true}`, off by default), the portal's App page lists the requests of that App the filter blocked, quarantined or changed in the last 7 days: time, what happened, the reason and the request id, never the text, scores or event metadata (`GET /common/apps/{id}/guardrail-blocks`, the App's owner only). Log-only findings are not shown.
+
 ### Compliance events and metrics
 
-Every hit records one compliance event per detector, of type `guardrail.` followed by the detector name (`guardrail.secrets.aws_access_key`, `guardrail.prompt_attack`, `guardrail.pii.email`). The event carries the provider, detector, category, count, the highest score, the action taken, the message roles involved and the summed latency of the provider calls. It never carries the matched text. A provider failure records `guardrail.error`, naming the kind of error (`timeout`, `http_503`, `input_rejected`, `suspended`) but never the provider's error message, which can quote the text it was sent. Segments not scanned in full record `guardrail.unscanned` with the reason (`size`, `pieces`, `time_budget`, `busy`, `input_rejected`, `provider_error`, `provider_panic`, `seam`, `undecodable`), the number of segments, their roles and kinds, the largest one's length and the limit that applied. A redaction that could not be written into the body records `guardrail.unredactable` (the tool result was quarantined or the request blocked instead). A request refused because its JSON reads differently to different parsers (a repeated or case-variant key) records `guardrail.unreadable_request`.
+Every hit records one compliance event per detector, of type `guardrail.` followed by the detector name (`guardrail.secrets.aws_access_key`, `guardrail.prompt_attack`, `guardrail.pii.email`). The event carries the provider, detector, category, count, the highest score, the action taken, the message roles involved, the summed latency of the provider calls, the gateway's request id (`request_id`, the `X-Tyk-AI-Request-ID` the gateway answers with, sent to an HTTP classifier in `meta` and recorded on the request's log row; see [Request IDs](/docs/proxy#request-ids)), and the caller's own `X-Request-ID` as `client_request_id` when it sent one. It never carries the matched text, unless the filter asks for a masked excerpt (below).
+
+**Which text was flagged.** `segments` lists up to five flagged segments per event: `index` (the segment's position among those the filter screened), `role`, `kind`, `tool`, and `sha256`, the SHA-256 of the exact text the provider was sent (the segment, or the piece of it that a long segment was split into). A provider that logs by hash, such as [Wolf Defender](/docs/guardrails-wolf-defender), keys its decision log and flag store on the same value, so the hash finds its record of the decision and lifts a false flag. The Compliance page shows them under **Flagged text** in an event's details.
+
+**Excerpts.** With **Show flagged text in compliance events** on (`"evidence": {"excerpt": true}`), each segment also carries `excerpt`: up to `evidence.excerpt_chars` characters (default 200, at most 1000) of that text, around the finding when the provider says where it is (the built-in library does; most classifiers do not, and the excerpt then starts at the text's beginning). Credentials and personal data in the excerpt are masked with the built-in library's `secrets` and `pii` patterns, whole even where the excerpt's edge would cut through one, and shown as `[masked]`. It is off by default and is never recorded for an LLM set not to log bodies. An excerpt is stored with the compliance event (and sent from edges on the analytics pulse), so anyone who can read compliance events can read it. A provider failure records `guardrail.error`, naming the kind of error (`timeout`, `http_503`, `input_rejected`, `suspended`) but never the provider's error message, which can quote the text it was sent. Segments not scanned in full record `guardrail.unscanned` with the reason (`size`, `pieces`, `time_budget`, `busy`, `input_rejected`, `provider_error`, `provider_panic`, `seam`, `undecodable`), the number of segments, their roles and kinds, the largest one's length and the limit that applied. A redaction that could not be written into the body records `guardrail.unredactable` (the tool result was quarantined or the request blocked instead). A request refused because its JSON reads differently to different parsers (a repeated or case-variant key) records `guardrail.unreadable_request`.
 
 Blocks count towards `aistudio_policy_blocks_total` like any filter block. These guardrail-specific series are exported:
 
@@ -296,7 +328,7 @@ Scripts on LLM requests can also read the request the way guardrails do: `input.
 
 ### HTTP classifier {#http}
 
-Any classifier or NER service behind a documented JSON contract, for wrapping self-hosted models such as Llama Prompt Guard 2 or LLM Guard, or an in-house model.
+Any classifier or NER service behind a documented JSON contract, for wrapping self-hosted models such as Llama Prompt Guard 2 or LLM Guard, or an in-house model. For a ready-made prompt-injection classifier that scores tool results, tool calls, user messages and tool definitions, see [Wolf Defender guardrail](./guardrails-wolf-defender.md).
 
 Connection: `endpoint` (required), `api_key` (sent as `Authorization: Bearer`, optional), `auth_header` (an alternative header name for the key).
 
@@ -360,7 +392,7 @@ A socket endpoint is an HTTP request to a local socket chosen by whoever can wri
 ```yaml
 services:
   guard:
-    image: registry.example.com/wolf-guard@sha256:...
+    image: registry.example.com/guard@sha256:...   # e.g. the Wolf Defender guardrail
     network_mode: none            # no network at all
     volumes: [guard-sock:/run/guard]
   midsommar:

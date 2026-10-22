@@ -324,12 +324,11 @@ func (p *Proxy) bedrockPumpStream(
 		})
 	}
 
+	// Every event received is sent on: the SDK closes Events when the
+	// stream fails, and its reader may already have failed on the next
+	// message when this one arrives, so an error is checked after the loop,
+	// never per event (an event checked that way was dropped).
 	for event := range stream.Events() {
-		if err := stream.Err(); err != nil {
-			log.Error().Err(err).Msg("Bedrock ConverseStream error")
-			break
-		}
-
 		bt.observe(event)
 		if _, delta := event.(*types.ConverseStreamOutputMemberContentBlockDelta); delta && !ttftSeen {
 			ttftSeen = true

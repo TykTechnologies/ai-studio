@@ -490,6 +490,7 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 		if blockMsg == "" {
 			blockMsg = "content blocked by policy"
 		}
+		blockMsg = stop.out.Explain(blockMsg)
 		cs.sendError(fmt.Errorf("blocked by filter '%s': %s", stop.filter.Name, blockMsg))
 		return false
 	}
@@ -881,7 +882,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					if msg == "" {
 						msg = "content blocked by policy"
 					}
-					return fmt.Sprintf("filter denied content in %s: %s", refs[i], msg), false
+					return fmt.Sprintf("filter denied content in %s: %s", refs[i], output.Explain(msg)), false
 				}
 
 				// Apply modifications for next filter

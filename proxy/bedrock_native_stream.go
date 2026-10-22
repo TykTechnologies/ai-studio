@@ -27,6 +27,8 @@ import (
 // response filters, tool use (held until classified when a response
 // guardrail scans tool calls) and the usage for analytics. A block ends the
 // stream with a validationException message, which the AWS SDKs raise.
+// Response hooks run as on every other stream: the header phase before the
+// status is written, OnStreamComplete with the frames once the stream ends.
 func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Request, llm *models.LLM, app *models.App, reqBody []byte) {
 	startTime := time.Now()
 	hasResponseFilters := p.hasResponseFilters(llm)
@@ -111,18 +113,32 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 	defer resp.Body.Close()
 
+	hooks := p.responseHookManager != nil && p.hasResponseHooks()
 	if resp.StatusCode != http.StatusOK {
 		// The vendor's error (JSON) goes to the client as it came.
 		for k, v := range resp.Header {
 			w.Header()[k] = v
 		}
+		if hooks {
+			p.executeStreamingHeaderHooks(w.Header(), r, llm, app)
+		}
 		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, io.LimitReader(resp.Body, 1<<20))
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		_, _ = w.Write(errBody)
+		// As on every other stream, an upstream error completes the stream
+		// too: plugins that hold per-request state (a load balancer's or rate
+		// limiter's in-flight count, a cache's pending entry) release it here.
+		if hooks {
+			go p.executeOnStreamComplete(r, resp, llm, app, errBody, reqBody, 0)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/vnd.amazon.eventstream")
 	w.Header().Set("X-Accel-Buffering", "no")
+	if hooks {
+		p.executeStreamingHeaderHooks(w.Header(), r, llm, app)
+	}
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
 	flush := func() {
@@ -173,6 +189,8 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 
 	buf := make([]byte, 32<<10)
+	// The frames as the vendor sent them, for OnStreamComplete
+	var full bytes.Buffer
 	chunkIndex := 0
 	isErr, clientGone := false, false
 	for {
@@ -186,6 +204,9 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			}
 			if capture != nil {
 				capture.Feed(chunk)
+			}
+			if hooks {
+				full.Write(chunk)
 			}
 			events := framer.feed(chunk)
 			var delta strings.Builder
@@ -301,5 +322,8 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		go func() {
 			recordBedrockStreamAnalytics(p, llm, app, modelID, reqBody, responseText, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens, r, startTime, bt)
 		}()
+	}
+	if !isErr && hooks {
+		go p.executeOnStreamComplete(r, resp, llm, app, full.Bytes(), reqBody, chunkIndex)
 	}
 }

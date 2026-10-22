@@ -89,7 +89,7 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	streamingFunc func(context.Context, []byte) error, relay *loopbackRelay) (*llms.ContentResponse, error) {
 	// Create internal routing HTTP client
 	// This routes SDK requests through /llm/call/ for plugin hook execution
-	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.loopbackHeaders(r.Context(), a))
+	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), withClientLoopbackHeaders(r, p.loopbackHeaders(r.Context(), a)))
 
 	// Create a modified LLM config with internal endpoint
 	// The SDK will route to /llm/call/{slug} instead of the external vendor
@@ -131,6 +131,8 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	if rt := timingFrom(r.Context()); rt != nil {
 		ctx = withRequestTiming(ctx, rt)
 	}
+	// And the request ids, so the inner hop logs under the client's id.
+	ctx = withRequestIDsFrom(ctx, r)
 	if relay != nil {
 		ctx = withLoopbackRelay(ctx, relay)
 	}

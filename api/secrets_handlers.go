@@ -69,6 +69,7 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 
+	a.emitSecretChanged(c, services.TopicSecretCreated, "created", secret.ID)
 	c.JSON(http.StatusCreated, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
 }
 
@@ -184,6 +185,7 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
+	a.emitSecretChanged(c, services.TopicSecretUpdated, "updated", secret.ID)
 	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
 }
 
@@ -224,7 +226,19 @@ func (a *API) deleteSecret(c *gin.Context) {
 		return
 	}
 
+	a.emitSecretChanged(c, services.TopicSecretDeleted, "deleted", uint(id))
 	c.Status(http.StatusNoContent)
+}
+
+// emitSecretChanged tells the control server a secret changed: the edges'
+// snapshot carries referenced values (LLM keys, plugin config secrets), so
+// they show as pending until the change is pushed. The event never carries
+// the secret.
+func (a *API) emitSecretChanged(c *gin.Context, topic, action string, id uint) {
+	if a.service == nil || a.service.SystemEvents == nil {
+		return
+	}
+	a.service.SystemEvents.EmitSecretChanged(topic, action, id, currentUserID(c))
 }
 
 // @Summary List all secrets

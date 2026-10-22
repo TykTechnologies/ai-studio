@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -18,9 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
-	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	goplugin "github.com/hashicorp/go-plugin"
@@ -96,6 +95,19 @@ type LoadedAIStudioPlugin struct {
 	LoadTime        time.Time
 	IsHealthy       bool
 	LastPing        time.Time
+}
+
+// rpcBrokerID is the broker ID a UI or portal RPC hands the plugin for host
+// services: the session broker's, or, while the plugin has reached none of
+// its brokered servers, a per-call one accepted now (startCallBroker). A
+// plugin built before 2.3 dials in the call, and only within five seconds
+// of an ID's accept, which the session broker is usually past: its first
+// RPC used to wait out the SDK's dial retries (about 50 s) and fail.
+func (lp *LoadedAIStudioPlugin) rpcBrokerID(purpose string) uint32 {
+	if c, ok := lp.GRPCClient.(*AIStudioPluginClient); ok && !c.hostConnected.Load() && c.broker != nil && c.service != nil {
+		return c.startCallBroker(lp.ID, purpose)
+	}
+	return lp.SessionBrokerID
 }
 
 // NewAIStudioPluginManager creates a new AI Studio plugin manager
@@ -206,58 +218,21 @@ type AIStudioPluginClient struct {
 	pluginStub  pb.PluginServiceClient
 	service     *Service           // Reference to AI Studio service for brokered servers
 	eventServer *PluginEventServer // Reference to plugin event server for pub/sub
+	// hostConnected: the plugin connected to one of its brokered servers
+	// (session or per-call). An SDK before 2.3 keeps its first connection
+	// for good, so the session loop stops offering fresh IDs then.
+	hostConnected atomic.Bool
 }
 
-// SetupServiceBroker creates a long-lived brokered server for AI Studio services,
-// serving plugin pluginID: its calls carry that ID and are checked against its
-// approved scopes. Returns the broker ID that the plugin can use to dial back
-// to host services.
+// SetupServiceBroker serves AI Studio services to plugin pluginID on a fresh
+// broker ID for one call (an agent session): its calls carry that ID and are
+// checked against its approved scopes. The server is stopped once the
+// plugin can no longer connect to it, unless it did (startCallBroker).
 func (c *AIStudioPluginClient) SetupServiceBroker(pluginID uint) (uint32, error) {
 	if c.broker == nil || c.service == nil {
 		return 0, fmt.Errorf("broker or service not available")
 	}
-
-	// Allocate broker ID and start brokered server
-	brokerID := c.broker.NextId()
-
-	log.Debug().
-		Uint32("broker_id", brokerID).
-		Bool("has_event_server", c.eventServer != nil).
-		Msg("Setting up long-lived brokered server for AI Studio service API access")
-
-	// Capture event server reference for closure
-	evtServer := c.eventServer
-
-	// Start brokered server with AI Studio management services
-	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, c.service)...)
-
-		// Register AI Studio management services on brokered server
-		// Use factory function to avoid circular import (set by grpc package)
-		if NewAIStudioManagementServerFunc != nil {
-			aiStudioServer := NewAIStudioManagementServerFunc(c.service)
-			if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-				mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-				log.Debug().
-					Uint32("broker_id", brokerID).
-					Msg("AI Studio management services registered on long-lived brokered server")
-			}
-		} else {
-			log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
-		}
-
-		// Register plugin event service if available
-		if evtServer != nil {
-			eventpb.RegisterPluginEventServiceServer(s, evtServer)
-			log.Debug().
-				Uint32("broker_id", brokerID).
-				Msg("Plugin event service registered on long-lived brokered server")
-		}
-
-		return s
-	})
-
-	return brokerID, nil
+	return c.startCallBroker(pluginID, "agent session"), nil
 }
 
 // Delegate all PluginServiceClient methods to the plugin stub (with correct signatures)
@@ -513,51 +488,11 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// This broker is used for both Initialize() and subsequent event service access.
 	// The plugin SDK stores this broker ID and uses it to dial back for pub/sub.
 	var serviceBrokerID uint32
+	var sessionBroker *trackedBroker
 	if clientWrapper.broker != nil && m.service != nil {
-		// Create brokered server for service API access (persists for plugin lifetime)
-		brokerID := clientWrapper.broker.NextId()
-
-		// Capture references for closure
-		evtServer := clientWrapper.eventServer
-		pluginID := plugin.ID
-
-		// Use a channel to ensure server is ready before proceeding
-		serverReady := make(chan struct{})
-
-		// Start broker server in background - this stays alive for the plugin's lifetime
-		go func() {
-			clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-				// The plugin's calls carry its ID and are checked against its
-				// approved scopes.
-				s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, m.service)...)
-
-				// Register AI Studio management service server using factory function
-				if NewAIStudioManagementServerFunc != nil {
-					serverImpl := NewAIStudioManagementServerFunc(m.service)
-					if mgmtServer, ok := serverImpl.(mgmtpb.AIStudioManagementServiceServer); ok {
-						mgmtpb.RegisterAIStudioManagementServiceServer(s, mgmtServer)
-					}
-				}
-
-				// Register plugin event service if available (for pub/sub support)
-				if evtServer != nil {
-					eventpb.RegisterPluginEventServiceServer(s, evtServer)
-					log.Debug().
-						Uint32("broker_id", brokerID).
-						Uint("plugin_id", pluginID).
-						Msg("Plugin event service registered on long-lived service broker")
-				}
-
-				// Signal that the server is ready
-				close(serverReady)
-
-				return s
-			})
-		}()
-
-		waitBrokeredServer(serverReady, brokerID, plugin.ID, "plugin services")
-
-		serviceBrokerID = brokerID
+		// Create brokered server for service API access (persists for plugin
+		// lifetime, or until the session loop replaces it; see renewSessionBroker)
+		serviceBrokerID, sessionBroker = clientWrapper.startTrackedBroker(plugin.ID, "plugin services")
 		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
 
 		log.Debug().
@@ -582,7 +517,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// Start session loop for plugins that need persistent broker connections (e.g., event pub/sub)
 	// This runs in a background goroutine and maintains a long-polling session
 	if serviceBrokerID > 0 {
-		go m.runPluginSessionLoop(pluginID, clientWrapper, serviceBrokerID)
+		go m.runPluginSessionLoop(pluginID, clientWrapper, serviceBrokerID, sessionBroker)
 		log.Debug().
 			Uint("plugin_id", pluginID).
 			Uint32("broker_id", serviceBrokerID).
@@ -1019,10 +954,73 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	return nil
 }
 
+// Session lengths. While the plugin has not connected to its session
+// broker, sessions are short so that a fresh broker ID is offered often: a
+// plugin built before 2.3 dials lazily, retrying for about 25 s, and can only
+// connect to an ID within five seconds of the host accepting on it, so it
+// connects on the first host call that overlaps a renewal. After
+// fastUnconnectedRenewals short sessions (about five minutes) a plugin that
+// still makes no host calls gets normal sessions, each still on a fresh ID.
+const (
+	sessionTimeoutMs            = 30000
+	unconnectedSessionTimeoutMs = 10000
+	fastUnconnectedRenewals     = 30
+)
+
+// unconnected reports whether the plugin has reached neither broker, its
+// session broker, nor any of its brokered servers. An SDK before 2.3 keeps
+// the first connection it makes (often to a per-call server, for an edge
+// payload) and never dials a later session broker, so a connection to any
+// of them ends the offers.
+func (c *AIStudioPluginClient) unconnected(broker *trackedBroker) bool {
+	return broker != nil && !broker.connected.Load() && !c.hostConnected.Load()
+}
+
+// renewSessionBroker returns the session broker for the plugin's next
+// session. go-plugin hands a plugin a broker ID's connection info once, when
+// the host accepts on it, and keeps it only five seconds, so a plugin whose
+// SDK dials lazily (every plugin built before AI Studio 2.3) and whose first
+// host call over the session broker (a UI RPC, say) came later could never
+// reach host services. When the plugin has not connected to the current
+// session broker, this serves it on a fresh ID, stops the unused server and
+// records the new ID as the plugin's SessionBrokerID; the next OpenSession
+// hands it to the plugin, whose SDK dials it. A plugin that connected to any
+// of its brokered servers keeps its broker (unconnected).
+func (m *AIStudioPluginManager) renewSessionBroker(pluginID uint, client *AIStudioPluginClient, current uint32, broker *trackedBroker, renewal int) (uint32, *trackedBroker) {
+	if !client.unconnected(broker) || client.broker == nil || client.service == nil {
+		return current, broker
+	}
+	next, nextBroker := client.startTrackedBroker(pluginID, "plugin services")
+	broker.stop()
+	m.mu.Lock()
+	if lp, ok := m.loadedPlugins[pluginID]; ok {
+		lp.SessionBrokerID = next
+	}
+	m.mu.Unlock()
+	ev := log.Debug()
+	if renewal <= 3 || renewal == fastUnconnectedRenewals {
+		ev = log.Info()
+	}
+	ev.Uint("plugin_id", pluginID).
+		Uint32("old_broker_id", current).
+		Uint32("broker_id", next).
+		Msg("Plugin has not connected to its service broker; serving it on a fresh broker ID")
+	return next, nextBroker
+}
+
+// sessionTimeout is the length of a renewal's session: short while the
+// plugin is unconnected, for the first fastUnconnectedRenewals renewals.
+func sessionTimeout(client *AIStudioPluginClient, broker *trackedBroker, renewal int) int32 {
+	if client.unconnected(broker) && renewal < fastUnconnectedRenewals {
+		return unconnectedSessionTimeoutMs
+	}
+	return sessionTimeoutMs
+}
+
 // runPluginSessionLoop maintains a long-lived session for plugins that need persistent
 // broker connections (e.g., for event pub/sub). Uses long-polling pattern where sessions
 // timeout after 30 seconds and are automatically re-opened.
-func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AIStudioPluginClient, brokerID uint32) {
+func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AIStudioPluginClient, brokerID uint32, broker *trackedBroker) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Store cancel function for cleanup
@@ -1044,7 +1042,7 @@ func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AISt
 			Msg("Plugin session loop ended")
 	}()
 
-	for {
+	for renewal := 0; ; renewal++ {
 		select {
 		case <-ctx.Done():
 			log.Debug().
@@ -1052,11 +1050,16 @@ func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AISt
 				Msg("Session loop cancelled")
 			return
 		default:
-			// Open session with 30 second timeout (long-polling pattern)
+			if renewal > 0 {
+				brokerID, broker = m.renewSessionBroker(pluginID, client, brokerID, broker, renewal)
+			}
+			// Open session (long-polling pattern), short while the
+			// plugin has not connected (see unconnectedSessionTimeoutMs)
+			timeoutMs := sessionTimeout(client, broker, renewal)
 			resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
 				ServiceBrokerId: brokerID,
 				PluginId:        uint32(pluginID),
-				TimeoutMs:       30000, // 30 second timeout
+				TimeoutMs:       timeoutMs,
 			})
 			if err != nil {
 				// Check if context was cancelled
@@ -1270,9 +1273,9 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 		return nil, fmt.Errorf("failed to marshal RPC payload: %w", err)
 	}
 
-	// Use the long-lived session broker ID (set up during plugin load)
-	// The session broker is already running and serves all RPC calls for this plugin
-	serviceBrokerID := loadedPlugin.SessionBrokerID
+	// The long-lived session broker serves RPC calls, once the plugin has
+	// connected to a broker (rpcBrokerID)
+	serviceBrokerID := loadedPlugin.rpcBrokerID("ui rpc")
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1342,7 +1345,7 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 		return nil, fmt.Errorf("failed to marshal portal RPC payload: %w", err)
 	}
 
-	serviceBrokerID := loadedPlugin.SessionBrokerID
+	serviceBrokerID := loadedPlugin.rpcBrokerID("portal rpc")
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -2088,50 +2091,12 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 	var serviceBrokerID uint32
 	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
 		if clientWrapper.broker != nil && clientWrapper.service != nil {
-			brokerID := clientWrapper.broker.NextId()
-
+			brokerID := clientWrapper.startCallBroker(pluginID, "scheduled task")
 			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("schedule_id", scheduleProto.Id).
 				Uint32("broker_id", brokerID).
-				Msg("Setting up broker for scheduled task execution")
-
-			// Start brokered server for this scheduled task
-			serverReady := make(chan struct{})
-			go func() {
-				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// The plugin's calls carry its ID and are checked against its
-					// approved scopes.
-					s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, clientWrapper.service)...)
-
-					// Register AI Studio management services
-					if NewAIStudioManagementServerFunc != nil {
-						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
-						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-							log.Debug().
-								Uint32("broker_id", brokerID).
-								Uint("plugin_id", pluginID).
-								Msg("AI Studio services registered for scheduled task")
-						}
-					}
-
-					// Register plugin event service if available (for pub/sub support)
-					if clientWrapper.eventServer != nil {
-						eventpb.RegisterPluginEventServiceServer(s, clientWrapper.eventServer)
-						log.Debug().
-							Uint32("broker_id", brokerID).
-							Uint("plugin_id", pluginID).
-							Msg("Plugin event service registered for scheduled task")
-					}
-
-					close(serverReady)
-					return s
-				})
-			}()
-
-			waitBrokeredServer(serverReady, brokerID, pluginID, "scheduled task")
-
+				Msg("Set up broker for scheduled task execution")
 			serviceBrokerID = brokerID
 		}
 	}
@@ -2216,50 +2181,12 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 	var serviceBrokerID uint32
 	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
 		if clientWrapper.broker != nil && clientWrapper.service != nil {
-			brokerID := clientWrapper.broker.NextId()
-
+			brokerID := clientWrapper.startCallBroker(pluginID, "edge payload")
 			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("edge_id", payload.EdgeId).
 				Uint32("broker_id", brokerID).
-				Msg("Setting up broker for edge payload routing")
-
-			// Start brokered server for this edge payload call
-			serverReady := make(chan struct{})
-			go func() {
-				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// The plugin's calls carry its ID and are checked against its
-					// approved scopes.
-					s := grpc.NewServer(PluginBrokerServerOptions(opts, pluginID, clientWrapper.service)...)
-
-					// Register AI Studio management services
-					if NewAIStudioManagementServerFunc != nil {
-						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
-						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-							log.Debug().
-								Uint32("broker_id", brokerID).
-								Uint("plugin_id", pluginID).
-								Msg("AI Studio services registered for edge payload routing")
-						}
-					}
-
-					// Register plugin event service if available (for pub/sub support)
-					if clientWrapper.eventServer != nil {
-						eventpb.RegisterPluginEventServiceServer(s, clientWrapper.eventServer)
-						log.Debug().
-							Uint32("broker_id", brokerID).
-							Uint("plugin_id", pluginID).
-							Msg("Plugin event service registered for edge payload routing")
-					}
-
-					close(serverReady)
-					return s
-				})
-			}()
-
-			waitBrokeredServer(serverReady, brokerID, pluginID, "edge payload")
-
+				Msg("Set up broker for edge payload routing")
 			serviceBrokerID = brokerID
 		}
 	}

@@ -56,6 +56,9 @@ type Config struct {
 	MockUpstreamURL string
 	// Vendors adds real-vendor LLMs from test-secrets/vendors.env when true.
 	Vendors bool
+	// Compressor, a plugin command, adds the Prompt Compressor scenario's
+	// LLMs and plugin instances (compressor.go).
+	Compressor string
 	// Minimal adds the minimal-configuration app and LLM (see MinimalApp).
 	Minimal   bool
 	Namespace string
@@ -107,6 +110,10 @@ func Run(ctx context.Context, cfg Config, log func(string, ...any)) (*State, err
 		APIKey: "mock-key", DefaultModel: MockModel,
 	})
 
+	if cfg.Compressor != "" {
+		llms = append(llms, compressorLLMSpecs(mock)...)
+	}
+
 	models := map[string]string{"mock": MockModel}
 	if cfg.Vendors {
 		vc, err := vendorconformance.Load()
@@ -146,12 +153,14 @@ func Run(ctx context.Context, cfg Config, log func(string, ...any)) (*State, err
 	state := &State{SeededAt: time.Now().UTC(), StudioURL: cfg.StudioURL, APIKey: s.apiKey,
 		LLMs: map[string]string{}, Models: models}
 	var ids []int
+	byName := map[string]int{}
 	for _, l := range llms {
 		id, err := s.EnsureLLM(ctx, l)
 		if err != nil {
 			return nil, err
 		}
 		ids = append(ids, id)
+		byName[l.Name] = id
 		state.LLMs[l.Name] = l.Vendor
 		log("LLM %-16s -> %s", l.Name, redactEndpoint(l.Endpoint))
 	}
@@ -176,6 +185,12 @@ func Run(ctx context.Context, cfg Config, log func(string, ...any)) (*State, err
 		}
 		state.MinimalAppID, state.MinimalAppSecret = minApp.ID, minApp.Secret
 		log("minimal configuration: LLM %s (model %s, no price), app %d without a budget", MinimalLLM, MinimalModel, minApp.ID)
+	}
+
+	if cfg.Compressor != "" {
+		if err := seedCompressor(ctx, s, cfg.Compressor, byName, log); err != nil {
+			return nil, err
+		}
 	}
 
 	ns := cfg.Namespace

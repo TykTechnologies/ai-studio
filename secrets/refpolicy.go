@@ -93,6 +93,19 @@ func ForEdgeCredential(resolved string) string {
 	return resolved
 }
 
+// CredentialRefForEdge resolves a credential reference for a snapshot sent
+// to edges: a reference the policy refuses, that cannot be resolved, or that
+// resolves to an empty value goes out as RefusedCredential. An empty
+// credential is what a client fills from its own environment, and a secret
+// stored empty is never what the writer of the reference meant.
+func CredentialRefForEdge(ref string) string {
+	resolved := ResolveRef(ref)
+	if resolved == "" {
+		return RefusedCredential
+	}
+	return ForEdgeCredential(resolved)
+}
+
 // NewReferences lists the keys of updated whose value is a $SECRET/ or $ENV/
 // reference that old does not already hold under the same key (new, changed
 // or moved). Writing those needs the right to read secrets, since the value

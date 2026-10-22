@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Section from "../common/Section";
 import UsedBySection from "../common/UsedBySection";
-import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link as RouterLink } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
+import AppMCPUsage from "../mcp-analytics/AppMCPUsage";
+import { adminAppPath } from "../mcp-analytics/mcpAnalytics";
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 import agentService from "../../services/agentService";
 import { resetAppBudget } from "../../services/appService";
 import SearchInput from "../common/SearchInput";
 import FailoverCell from "../common/FailoverCell";
 import OnBehalfOfCaption from "../common/OnBehalfOfCaption";
+import RequestIdCaption from "../common/RequestIdCaption";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import AppGovernanceFlags from "./AppGovernanceFlags";
@@ -151,7 +154,10 @@ const AppDetails = () => {
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split("T")[0],
   );
-  const [proxyLogSearchTerm, setProxyLogSearchTerm] = useState("");
+  // ?log_search= opens the logs on one request (the Compliance page links a
+  // guardrail event's request id here).
+  const [searchParams] = useSearchParams();
+  const [proxyLogSearchTerm, setProxyLogSearchTerm] = useState(() => searchParams.get("log_search") || "");
   const [debouncedProxyLogSearch] = useDebounce(proxyLogSearchTerm, 500);
   const isFirstSearchRender = useRef(true);
   const { id } = useParams();
@@ -688,6 +694,15 @@ const AppDetails = () => {
           </Box>
         </Section>
 
+        <AppMCPUsage
+          client={apiClient}
+          path={adminAppPath(id)}
+          startDate={startDate}
+          endDate={endDate}
+          boundServers={app?.attributes?.mcp_servers || []}
+          admin
+        />
+
         <Section title="App Information">
           <Grid container spacing={2}>
             <Grid item xs={3}>
@@ -979,7 +994,7 @@ const AppDetails = () => {
             <SearchInput
               value={proxyLogSearchTerm}
               onChange={handleProxyLogSearch}
-              placeholder="Search request or response..."
+              placeholder="Search request, response or request ID..."
             />
           </Box>
           <TableContainer sx={{ maxWidth: "100%", overflowX: "auto" }}>
@@ -1019,6 +1034,7 @@ const AppDetails = () => {
                       <StyledTableCell sx={{ verticalAlign: "top" }}>
                         {new Date(log.attributes.time_stamp).toLocaleString()}
                         <OnBehalfOfCaption attributes={log.attributes} />
+                        <RequestIdCaption attributes={log.attributes} />
                       </StyledTableCell>
                       <StyledTableCell sx={{ verticalAlign: "top" }}>
                         {log.attributes.vendor}

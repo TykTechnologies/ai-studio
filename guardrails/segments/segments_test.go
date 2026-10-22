@@ -613,7 +613,7 @@ func BenchmarkExtractLargeAgentLoop(b *testing.B) {
 }
 
 func TestSupports(t *testing.T) {
-	for _, f := range []string{"openai", "OpenAI", "ollama", "anthropic", "google_ai", "vertex", "bedrock"} {
+	for _, f := range []string{"openai", "OpenAI", "ollama", "anthropic", "google_ai", "vertex", "bedrock", "openai_responses"} {
 		if !Supports(f) {
 			t.Errorf("Supports(%q) = false", f)
 		}

@@ -96,6 +96,16 @@ message LLMInfo {
     google.protobuf.Timestamp created_at = 15;
     google.protobuf.Timestamp updated_at = 16;
     map<string, string> metadata = 17;  // Plugin-stored data
+    // The LLM has at least one request filter (a script or guardrail that
+    // reads request bodies), so a plugin can avoid lossy rewrites the
+    // filters would screen. Always set by hosts that know it: absent means
+    // an older host, so unknown.
+    optional bool has_request_filters = 18;
+    // The gateway may keep this LLM's request bodies: ANALYTICS_STORE_REQUESTS
+    // is on and the LLM is not set not to (dont_log_bodies), so a plugin can
+    // keep request text out of its own storage too. Always set by hosts
+    // that know it: absent means an older host, treated as not stored.
+    optional bool stores_request_bodies = 19;
 }
 
 // App Management Messages

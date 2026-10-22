@@ -19,9 +19,10 @@ const secretRefPrefix = "$SECRET/"
 //
 // A top-level string value that is exactly a secret reference, $SECRET/NAME,
 // is resolved here, so a plugin can keep a credential out of its stored
-// config. Only the Studio-side plugin process sees the value: the database
-// and the configuration snapshot sent to edges keep the reference. Who may
-// add a reference is checked where config is written (NewSecretReferences).
+// config. The database and the plain config in the snapshot sent to edges
+// keep the reference; edges get the value encrypted beside it, for plugins
+// they run (grpc pluginConfigSecretsForEdge). Who may add a reference is
+// checked where config is written (NewSecretReferences).
 //
 // $ENV/NAME is deliberately not resolved: AI Studio's environment holds its
 // own secrets (encryption key, database URL), and a config writer must not be

@@ -293,6 +293,13 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
     update({ tool_calls: Object.keys(next).length ? next : undefined });
   };
 
+  // evidence carries only what the admin set; the excerpt is off unless set.
+  const setEvidence = (patch) => {
+    const next = withoutEmpty({ ...(config.evidence || {}), ...patch });
+    if (!next.excerpt) delete next.excerpt_chars;
+    update({ evidence: Object.keys(next).length ? next : undefined });
+  };
+
   const setToolDefinitions = (patch) => {
     const next = withoutEmpty({ ...(config.tool_definitions || {}), ...patch });
     if (next.scan === false) delete next.scan;
@@ -862,6 +869,51 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             placeholder={responseFilter ? "Response blocked by policy" : "Request blocked by policy"}
             helperText="Shown to the caller when the guardrail blocks. Findings are never included."
           />
+        </Grid>
+
+        <Grid item xs={12}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={!!config.evidence?.excerpt}
+                onChange={(e) => setEvidence({ excerpt: e.target.checked || undefined })}
+                inputProps={{ "data-testid": "guardrail-evidence-excerpt" }}
+              />
+            }
+            label="Show flagged text in compliance events"
+          />
+          <FormHelperText>
+            Each compliance event names the flagged messages and tool results and the SHA-256 of the text the provider
+            was sent. With this on it also records a short excerpt of that text, with credentials and personal data
+            masked. Never recorded for an LLM set not to log bodies.
+          </FormHelperText>
+          <FormControlLabel
+            sx={{ mt: 1, display: "flex" }}
+            control={
+              <Checkbox
+                checked={!!config.evidence?.share_with_app_owners}
+                onChange={(e) => setEvidence({ share_with_app_owners: e.target.checked || undefined })}
+                inputProps={{ "data-testid": "guardrail-share-with-owners" }}
+              />
+            }
+            label="Show this filter's blocks to app owners"
+          />
+          <FormHelperText>
+            In the portal, an app's owners see the requests of their app this filter blocked, quarantined or changed:
+            when, why (the reason the caller got), the filter and the request ID. Never the flagged text.
+          </FormHelperText>
+          {config.evidence?.excerpt && (
+            <TextField
+              sx={{ mt: 1, maxWidth: 260 }}
+              type="number"
+              label="Excerpt length (characters)"
+              value={config.evidence?.excerpt_chars || ""}
+              onChange={(e) => setEvidence({ excerpt_chars: e.target.value === "" ? undefined : Number(e.target.value) })}
+              placeholder="200"
+              helperText="Up to 1000. Empty uses 200."
+              inputProps={{ min: 1, max: 1000, "data-testid": "guardrail-evidence-chars" }}
+            />
+          )}
         </Grid>
 
         {!responseFilter && (

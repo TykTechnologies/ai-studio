@@ -59,6 +59,8 @@ TABLE analytics_events
   column `decision_questions` integer
   column `decision_refusals` integer
   column `service_tier` text
+  column `gateway_request_id` text
+  column `client_request_id` text
   column `time_stamp` datetime
   column `created_at` datetime
   constraint CONSTRAINT `fk_analytics_events_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
@@ -66,6 +68,7 @@ TABLE analytics_events
   constraint CONSTRAINT `fk_llms_events` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
   index CREATE INDEX `idx_analytics_app` ON `analytics_events`(`app_id`,`created_at`)
   index CREATE INDEX `idx_analytics_failover_from` ON `analytics_events`(`failover_from_llm_id`)
+  index CREATE INDEX `idx_analytics_gateway_request` ON `analytics_events`(`gateway_request_id`)
   index CREATE INDEX `idx_analytics_request_kind` ON `analytics_events`(`request_kind`)
   index CREATE INDEX `idx_analytics_timestamp` ON `analytics_events`(`time_stamp`)
   index CREATE INDEX `idx_analytics_user` ON `analytics_events`(`user_id`)
@@ -436,6 +439,7 @@ TABLE plugins
   column `hook_types_customized` numeric DEFAULT false
   column `is_active` numeric
   column `service_scopes` JSON
+  column `config_secrets_encrypted` JSON
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime

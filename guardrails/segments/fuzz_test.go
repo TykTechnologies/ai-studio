@@ -5,13 +5,21 @@ import (
 	"testing"
 )
 
-var fuzzFormats = []string{FormatOpenAI, FormatOllama, FormatAnthropic, FormatGoogleAI, FormatBedrock}
+var fuzzFormats = []string{FormatOpenAI, FormatOllama, FormatAnthropic, FormatGoogleAI, FormatBedrock, FormatOpenAIResponses}
 
 // assertUnitsMapBack: an unchanged unit text maps back to no edits, and a
 // rewrite of every leaf maps back to one edit per leaf.
 func assertUnitsMapBack(t *testing.T, units []Unit) {
 	t.Helper()
 	for _, u := range units {
+		if u.whole == wholeNone {
+			// Detection-only (the model's own Responses items): never
+			// rewritten.
+			if _, ok := u.MapRewrite(u.Text); ok || len(u.Leaves) != 0 {
+				t.Fatalf("unit %d: a detection-only unit is rewritable", u.Index)
+			}
+			continue
+		}
 		if edits, ok := u.MapRewrite(u.Text); !ok || len(edits) != 0 {
 			t.Fatalf("unit %d: identity rewrite gave %v, %v", u.Index, edits, ok)
 		}
@@ -55,6 +63,20 @@ func FuzzExtractRewrite(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, fi uint8, body []byte) {
 		format := fuzzFormats[int(fi)%len(fuzzFormats)]
+		// The rewriter helpers never panic, and a breakpoint's position is
+		// one Cached can compare units against.
+		_ = CheckToolPairing(format, body)
+		_ = NativeContextManagement(format, body)
+		_ = NativeContextManagement(FormatOpenAIResponses, body)
+		_, _ = LastCacheBreakpoint(format, body)
+		bps, bpErr := CacheBreakpoints(format, body)
+		if units, err := ExtractUnits(format, body); err == nil && bpErr == nil {
+			for _, bp := range bps {
+				for _, u := range units {
+					_ = u.Cached(bp)
+				}
+			}
+		}
 		if units, err := Generic(body); err == nil {
 			assertUnitsMapBack(t, units)
 		}

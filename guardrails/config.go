@@ -72,6 +72,9 @@ const (
 	// DefaultStreamEveryLocal for in-process ones.
 	DefaultStreamEvery      = 1000
 	DefaultStreamEveryLocal = 250
+	// DefaultExcerptChars and MaxExcerptChars bound evidence.excerpt_chars.
+	DefaultExcerptChars = 200
+	MaxExcerptChars     = 1000
 )
 
 // DetectorConfig enables one detector (or a whole category for the built-in
@@ -253,6 +256,9 @@ type Config struct {
 	Stream          Stream          `json:"stream,omitempty"`
 	BlockMessage    string          `json:"block_message,omitempty"`
 	Budget          Budget          `json:"budget,omitzero"`
+	// Evidence configures what the filter's compliance events say about the
+	// text it flagged.
+	Evidence Evidence `json:"evidence,omitzero"`
 	// Shadow runs the filter without waiting for it: the request or
 	// response goes on at once, unchanged, and the classification runs in a
 	// bounded background pool that records compliance events when it
@@ -271,6 +277,36 @@ type Config struct {
 	// fail open or closed. ParseConfig folds it back into OnDetect; it is
 	// never stored.
 	OnDetectExt string `json:"on_detect_ext,omitempty"`
+}
+
+// Evidence configures what a compliance event says about the text a
+// guardrail flagged. Every event names its flagged segments (index, role,
+// tool) with the SHA-256 of the exact text the provider was sent, which is
+// how a provider such as Wolf Defender keys its own decision log. Excerpt
+// adds the text itself, masked.
+type Evidence struct {
+	// Excerpt adds up to ExcerptChars characters of each flagged text to the
+	// event, around the finding when the provider says where it is, with
+	// credentials and personal data masked. Off by default: an event
+	// otherwise never carries message text. Never applied on an LLM that
+	// does not log bodies, nor where no masker is registered (Community
+	// Edition).
+	Excerpt bool `json:"excerpt,omitempty"`
+	// ExcerptChars caps each excerpt; 0 means DefaultExcerptChars.
+	ExcerptChars int `json:"excerpt_chars,omitempty"`
+	// ShareWithAppOwners lets the owners of an App see, in the portal, the
+	// requests of their App this filter blocked, quarantined or changed:
+	// when, why (the reason the caller got), the filter and the request id,
+	// never the text or the event's metadata. Off by default.
+	ShareWithAppOwners bool `json:"share_with_app_owners,omitempty"`
+}
+
+// ExcerptLimit is the most characters of one excerpt.
+func (e Evidence) ExcerptLimit() int {
+	if e.ExcerptChars > 0 {
+		return e.ExcerptChars
+	}
+	return DefaultExcerptChars
 }
 
 // Budget bounds what a request-side guardrail spends on one request with a
@@ -500,6 +536,9 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	}
 	if err := cfg.Budget.normalize(cfg.TimeoutMs); err != nil {
 		return cfg, err
+	}
+	if n := cfg.Evidence.ExcerptChars; n < 0 || n > MaxExcerptChars {
+		return cfg, fmt.Errorf("%w: evidence.excerpt_chars must be between 0 and %d", ErrInvalidConfig, MaxExcerptChars)
 	}
 	return cfg, nil
 }

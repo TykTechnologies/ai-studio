@@ -8,8 +8,10 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/protobuf/proto"
 )
 
 // GRPCResponsePluginAdapter bridges gRPC response plugins to the AI Gateway response hook system
@@ -96,6 +98,9 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWriteHeaders(ctx context.Context, re
 		// Call gRPC plugin
 		pbResp, err := plugin.GRPCClient.OnBeforeWriteHeaders(ctx, pbReq)
 		if err != nil {
+			// Response hooks fail open: the response goes on without this
+			// plugin. One on an older SDK refuses messages over 4 MiB.
+			err = pluginlimits.AsTooLarge(err, plugin.Name, "OnBeforeWriteHeaders", proto.Size(pbReq))
 			log.Error().Err(err).Str("plugin_name", plugin.Name).Msg("gRPC OnBeforeWriteHeaders failed")
 			continue // Continue with other plugins
 		}
@@ -159,6 +164,9 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWrite(ctx context.Context, req *prox
 		// Call gRPC plugin
 		pbResp, err := plugin.GRPCClient.OnBeforeWrite(ctx, pbReq)
 		if err != nil {
+			// Response hooks fail open: the response goes on without this
+			// plugin. One on an older SDK refuses messages over 4 MiB.
+			err = pluginlimits.AsTooLarge(err, plugin.Name, "OnBeforeWrite", proto.Size(pbReq))
 			log.Error().Err(err).Str("plugin_name", plugin.Name).Msg("gRPC OnBeforeWrite failed")
 			continue // Continue with other plugins
 		}
@@ -213,6 +221,9 @@ func (a *GRPCResponsePluginAdapter) OnStreamComplete(ctx context.Context, req *p
 		// Call gRPC plugin
 		pbResp, err := plugin.GRPCClient.OnStreamComplete(ctx, pbReq)
 		if err != nil {
+			// Response hooks fail open: the response goes on without this
+			// plugin. One on an older SDK refuses messages over 4 MiB.
+			err = pluginlimits.AsTooLarge(err, plugin.Name, "OnStreamComplete", proto.Size(pbReq))
 			log.Error().Err(err).Str("plugin_name", plugin.Name).Msg("gRPC OnStreamComplete failed")
 			continue // Continue with other plugins
 		}

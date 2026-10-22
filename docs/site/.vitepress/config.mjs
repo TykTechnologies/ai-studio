@@ -51,7 +51,9 @@ export default defineConfig({
           { text: 'Data Sources & RAG', link: '/docs/datasources-rag' },
           { text: 'Embedders', link: '/docs/embedders' },
           { text: 'Filters & Policies', link: '/docs/filters' },
-          { text: 'Guardrails', link: '/docs/guardrails' }
+          { text: 'Guardrails', link: '/docs/guardrails' },
+          { text: 'Wolf Defender guardrail', link: '/docs/guardrails-wolf-defender' },
+          { text: 'Prompt Compressor', link: '/docs/prompt-compressor' } // Community plugin, edge gateways
         ]
       },
       {

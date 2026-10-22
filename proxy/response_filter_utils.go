@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -183,6 +184,11 @@ func runResponseFilters(
 		}
 	}
 
+	// The proxy's handlers keep the App, not its id, in the context.
+	if app, ok := r.Context().Value("app").(*models.App); ok && appID == 0 && app != nil {
+		appID = int64(app.ID)
+	}
+
 	// Build script input for response context
 	scriptInput := &scripting.ScriptInput{
 		RawInput:   responseText,
@@ -190,9 +196,11 @@ func runResponseFilters(
 		VendorName: string(llm.Vendor),
 		ModelName:  modelName,
 		Context: map[string]interface{}{
-			"llm_id":     int64(llm.ID),
-			"app_id":     appID,
-			"request_id": r.Header.Get("X-Request-ID"),
+			"llm_id":          int64(llm.ID),
+			"app_id":          appID,
+			"request_id":        filterRequestID(r),
+			"client_request_id": requestid.ClientFromContext(r.Context()),
+			"dont_log_bodies": llm.DontLogBodies,
 		},
 		IsChat:        false,
 		IsResponse:    true,
@@ -238,6 +246,7 @@ func runResponseFilters(
 			if msg == "" {
 				msg = fmt.Sprintf("Response blocked by filter: %s", filter.Name)
 			}
+			msg = responseBlockMessage(r, msg, output)
 			slog.Info("response blocked by filter", "filter_name", filter.Name, "message", msg, "is_chunk", isChunk, "is_final", isFinal)
 			return true, msg, nil
 		}

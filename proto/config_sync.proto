@@ -339,9 +339,19 @@ message AnalyticsEvent {
   // Vendor service tier the usage was billed at ("batch", "priority", "flex"...); empty for list-price traffic.
   string service_tier = 45;
 
+  // The gateway's request id (pkg/requestid, the X-Tyk-AI-Request-ID the edge
+  // answered with); request_id above is the edge's row key. client_request_id
+  // is the caller's own X-Request-ID, sanitised.
+  string gateway_request_id = 46;
+  string client_request_id = 47;
+
+  // no_usage marks a request that produced no usage (a policy block, an
+  // error): the hub records its request log row, but no chat record or spend.
+  bool no_usage = 48;
+
   // Agent tracing gateway span id (16 hex) of the logical call; empty while
   // tracing is off. Lands in proxy_logs.trace_span_id.
-  string trace_span_id = 46;
+  string trace_span_id = 49;
 }
 
 // Budget usage event for pulse batching

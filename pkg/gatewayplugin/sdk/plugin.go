@@ -3,6 +3,7 @@ package sdk
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	"github.com/hashicorp/go-plugin"
 )
 
@@ -43,7 +44,9 @@ func ServePlugin(impl interface{}) {
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: HandshakeConfig,
 		Plugins:         pluginMap,
-		GRPCServer:      plugin.DefaultGRPCServer,
+		// Not plugin.DefaultGRPCServer: that keeps gRPC's 4 MiB receive
+		// limit, which large request bodies exceed.
+		GRPCServer: pluginlimits.GRPCServer,
 	})
 }
 
