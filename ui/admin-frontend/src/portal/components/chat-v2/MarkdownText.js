@@ -38,7 +38,9 @@ const CodeHeader = ({ language, code }) => {
   );
 };
 
-const PrismHighlighter = ({ language, code }) => (
+// Exported for tests: the code-block renderer, which needs no assistant-ui
+// runtime to render.
+export const PrismHighlighter = ({ language, code }) => (
   <SyntaxHighlighter
     style={a11yDark}
     language={language || 'text'}
