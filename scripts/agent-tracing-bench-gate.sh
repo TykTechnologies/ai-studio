@@ -10,8 +10,11 @@
 #   - Gateway overhead (tracing on vs off in one process) is reported, not
 #     gated: shared runners vary too much for timing budgets.
 # soak (manual or nightly, make bench-agent-tracing-soak):
-#   - TestAssemblerSoak for AGENT_TRACE_SOAK (default 1h) at GOMAXPROCS=2
-#     with the >= 2,000 spans/s gate; run Postgres limited to 2 CPUs.
+#   - TestAssemblerSoak at GOMAXPROCS=2 on a Postgres limited to 2 CPUs:
+#     seeds about 4M spans (untimed), then AGENT_TRACE_SOAK (default 15m;
+#     1h on Linux or CI). Passes with every 1-minute window >= 2,000
+#     spans/s, the last >= 80% of the first, >= 5M spans stored and
+#     <= 0.05 statements per span.
 # overhead (local, quiet machine):
 #   - TestAgentTraceOverheadGate gating the added p50 (and p99 with
 #     AGENT_TRACE_BENCH_STRICT=1), and the per-request capture benchmark.
@@ -44,7 +47,9 @@ ci)
   ;;
 soak)
   : "${DATABASE_URL:?soak needs DATABASE_URL (Postgres)}"
-  AGENT_TRACE_SOAK=${AGENT_TRACE_SOAK:-1h} AGENT_TRACE_SOAK_STRICT=1 soak
+  # Seeds about 4M spans (untimed), then 15 minutes on top; AGENT_TRACE_SOAK=1h
+  # on Linux or CI, AGENT_TRACE_SOAK_SEED_SPANS to size the seed.
+  AGENT_TRACE_SOAK=${AGENT_TRACE_SOAK:-15m} AGENT_TRACE_SOAK_STRICT=1 soak
   ;;
 overhead)
   go test -tags "$tags" -count=1 -run TestAgentTraceOverheadGate -v ./proxy/ | grep -E 'agent_trace_overhead_test|^(--- |ok|FAIL)'

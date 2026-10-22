@@ -1196,7 +1196,7 @@ bench-agent-tracing: ## Agent tracing overhead (added p50 gated; quiet machine) 
 bench-agent-tracing-ci: ## The blocking CI perf gate: allocations, write amplification, overhead reported
 	scripts/agent-tracing-bench-gate.sh ci $(or $(BENCH_EDITION),ce)
 
-bench-agent-tracing-soak: ## One-hour assembler soak at GOMAXPROCS=2, >= 2,000 spans/s (needs DATABASE_URL, Postgres limited to 2 CPUs)
+bench-agent-tracing-soak: ## Assembler gate: seed ~4M spans, then 15 min at GOMAXPROCS=2, every minute >= 2,000 spans/s (AGENT_TRACE_SOAK=1h on Linux/CI; needs DATABASE_URL, Postgres limited to 2 CPUs)
 	scripts/agent-tracing-bench-gate.sh soak enterprise
 
 .PHONY: bench-agent-tracing bench-agent-tracing-ci bench-agent-tracing-soak
