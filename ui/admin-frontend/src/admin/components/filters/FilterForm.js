@@ -29,10 +29,8 @@ import {
 } from "../../../components/unsaved-changes";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import Editor from "react-simple-code-editor";
-import { highlight, languages } from "prismjs/components/prism-core";
-import "prismjs/components/prism-clike";
-import "prismjs/components/prism-javascript";
 import "prismjs/themes/prism-tomorrow.css";
+import highlightScript from "./highlightScript";
 import ScriptTemplateSelector from "./ScriptTemplateSelector";
 import ScriptTestPanel from "./ScriptTestPanel";
 import GuardrailConfigForm, { emptyGuardrailConfig, budgetErrors } from "./GuardrailConfigForm";
@@ -375,7 +373,7 @@ const FilterForm = () => {
                     <Editor
                       value={filter.script}
                       onValueChange={handleScriptChange}
-                      highlight={(code) => highlight(code, languages.js, "javascript")}
+                      highlight={highlightScript}
                       padding={10}
                       style={{
                         fontFamily: '"Fira code", "Fira Mono", "Monaco", monospace',
