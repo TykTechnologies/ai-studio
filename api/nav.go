@@ -88,9 +88,6 @@ func adminNav(in navInputs) []NavItem {
 		{ID: "overview", Text: "Overview", Icon: "house", Path: "/admin", Exact: true},
 		{ID: "dashboard", Text: "Analytics", Icon: "monitor-waveform", Path: "/admin/dash", Permission: string(r("analytics"))},
 	}
-	// Agent Call Tracing (Enterprise): only while it runs, never in CE.
-	out = append(out, when(f("feature_agent_tracing"), NavItem{ID: "agent-sessions", Text: "Agent sessions",
-		Icon: "account-tree", Path: "/admin/agent-sessions", Permission: string(r("traces"))})...)
 	out = append(out,
 		group("access", "Access", "users",
 			[]NavItem{page("users", "Users", "/admin/users", r("users"))},
@@ -110,6 +107,11 @@ func adminNav(in navInputs) []NavItem {
 			when(f("feature_chat"), page("catalog-tools", "Tool catalogs", "/admin/catalogs/tools", r("tool-catalogues"))),
 		))
 	}
+	// Agent Call Tracing (Enterprise): only while it runs, never in CE. It
+	// follows Access and Catalogs, which stay adjacent, and leads the things
+	// being governed: what agents did with them.
+	out = append(out, when(f("feature_agent_tracing"), NavItem{ID: "agent-sessions", Text: "Agent sessions",
+		Icon: "account-tree", Path: "/admin/agent-sessions", Permission: string(r("traces"))})...)
 	mcpServers := page("mcp-servers", "MCP servers", "/admin/mcp-servers", r("mcp-servers"))
 	mcpServers.Exact = true
 	out = append(out,
