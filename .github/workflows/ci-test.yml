@@ -323,9 +323,11 @@ jobs:
           CGO_ENABLED=0 go build -o /dev/null \
             -tags "studio_noui ${{ matrix.edition == 'ent' && 'enterprise' || '' }}" ./pkg/studio/...
 
+      # -timeout: the proxy package alone takes ~10 min under -race, past go
+      # test's per-package default of 10m.
       - name: Run AI Studio Unit Tests
         run: |
-          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short \
+          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short -timeout 25m \
             ${{ steps.flags.outputs.FULL }} \
             ${{ env.MODE == 'full' && format('-coverprofile=coverage-studio-{0}.out', matrix.edition) || '' }} \
             ./...
