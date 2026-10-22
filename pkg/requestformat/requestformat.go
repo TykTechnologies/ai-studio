@@ -19,6 +19,11 @@
 //   - To a Bedrock LLM they call AWS directly with OpenAI or Anthropic as the
 //     filter format, and run no post_auth.
 //
+// Model, IsStreaming and ParseUsage read the model, the streaming flag and
+// the token usage of an exchange in each vendor's wire shape. pkg/plugin_sdk
+// exposes them to plugins as RequestModel, IsStreamingRequest and
+// ResponseUsage.
+//
 // The package depends on nothing in this module but pkg/decisions, so
 // plugins can import it without the proxy, models or GORM.
 package requestformat

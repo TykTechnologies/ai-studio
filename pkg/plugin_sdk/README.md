@@ -150,6 +150,68 @@ updateReq := &mgmt.UpdateAppRequest{
 appResp, err := ctx.Services.AppManager().UpdateApp(ctx, updateReq)
 ```
 
+## Reading Model, Streaming and Usage
+
+Vendors put the model, the streaming flag and the token usage in different places. Bedrock Converse is the one hand-written parsers usually miss: its body has no `"model"` (the model ID is in the `/model/{modelId}/converse` path, escaped when it is an ARN), it streams by path (`/converse-stream`) rather than `"stream": true`, and it reports usage in camelCase (`usage.inputTokens`). Use these helpers instead of parsing bodies yourself. Pass `ctx.Vendor` and the path and body the hook received.
+
+They are plain functions compiled into your plugin, with no host call, so they work on any host version.
+
+### RequestModel
+
+`RequestModel(vendor, path string, body []byte) string` returns the model a request names, or `""`:
+
+- Bedrock: the `/model/{modelId}/` path segment, unescaped, so ARNs and inference-profile IDs come back whole (`arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20240620-v1:0`).
+- Google AI and Vertex: the `models/{model}:` path segment.
+- Everyone else, and Bedrock or Google requests whose path names no model (their OpenAI-compatible endpoints): the body's `"model"` field.
+
+```go
+func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    model := plugin_sdk.RequestModel(ctx.Vendor, req.Request.Path, req.Request.Body)
+    if model == "" {
+        return &pb.PluginResponse{Modified: false}, nil
+    }
+    // e.g. key a cache on ctx.LLMID + model, or match firewall rules on model
+    return &pb.PluginResponse{Modified: false}, nil
+}
+```
+
+### IsStreamingRequest
+
+`IsStreamingRequest(vendor, path string, body []byte) bool` reports whether the request asks for a streamed answer: Bedrock `converse-stream` / `invoke-with-response-stream`, Google `:streamGenerateContent` (or `alt=sse`), and otherwise `"stream": true` in the body.
+
+```go
+if plugin_sdk.IsStreamingRequest(ctx.Vendor, req.Request.Path, req.Request.Body) {
+    // don't answer a streaming request with a cached JSON body
+}
+```
+
+### ResponseUsage
+
+`ResponseUsage(vendor string, body []byte) plugin_sdk.Usage` reads the token usage from a response: a REST body (`OnBeforeWrite`) or a whole stream (`OnStreamComplete`'s `AccumulatedResponse`). It reads OpenAI Chat Completions and Responses, Anthropic, Google AI, Vertex, Bedrock Converse and Ollama, as REST JSON, SSE `data:` lines, newline-delimited JSON or Google's JSON array. For Bedrock it also reads raw eventstream frames. In a stream, counts reported later replace earlier ones.
+
+```go
+type Usage struct {
+    InputTokens      int
+    OutputTokens     int
+    TotalTokens      int  // the vendor's total, never less than Input+Output
+    CacheReadTokens  int
+    CacheWriteTokens int
+    Reported         bool // false when the body carried no usage at all
+}
+```
+
+`InputTokens` is the vendor's own input count. OpenAI and Google count cached tokens inside it; Anthropic and Bedrock count `CacheReadTokens` and `CacheWriteTokens` on top of it.
+
+```go
+func (p *MyPlugin) OnStreamComplete(ctx plugin_sdk.Context, req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error) {
+    usage := plugin_sdk.ResponseUsage(ctx.Vendor, req.AccumulatedResponse)
+    if usage.Reported {
+        p.countTokens(ctx.AppID, usage.TotalTokens)
+    }
+    return &pb.StreamCompleteResponse{Handled: true}, nil
+}
+```
+
 ## Building a Complete Plugin
 
 Here's a complete example of a rate limiter plugin that works in both contexts:
