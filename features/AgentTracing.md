@@ -22,7 +22,7 @@ These are from the SPEC preface; where the original draft disagrees, they win.
 
 Also recorded:
 - **FIPS readiness.** Stdlib crypto only.
-- **End-user pseudonyms (jyx.174, Martin's option B).** Without `trace-content:read`, `end_user` and `external_id` are HMAC pseudonyms (keys.PseudonymizeUserID / PseudonymizeExternalID, separate domains) on every read and export. jsonv1 leaves them out unless the caller passes `Identity` or `RawIdentity`, so a new read fails closed. Exact-id filters take the raw id only. Studio users are not masked.
+- **End-user pseudonyms (jyx.174, Martin's option B).** Without `trace-content:read`, `end_user` and `external_id` are HMAC pseudonyms (keys.PseudonymizeUserID / PseudonymizeExternalID, separate domains) on every read and export. jsonv1 leaves them out unless the caller passes `Identity` or `RawIdentity`, so a new read fails closed. Exact-id filters take the raw id only. Studio users are not masked. Decided (jyx.174): the built-in Auditor, like Viewer and Editor, sees pseudonyms and no content; grant `trace-content:read` through a custom role if needed.
 - **Content ceiling and default (§5.5 amendment, jyx.172).** `AGENT_TRACING_CONTENT_CEILING` bounds every App, default and header. `AGENT_TRACING_CONTENT_DEFAULT_MODE` applies to Apps without their own mode. Unset, the ceiling is the higher of the default and the request override. The resource maximum and the store cap bound everything. Both settings are environment-only until jyx.79 (the Agent Sessions page shows them read-only), and edges get the ceiling in the snapshot (missing is off). An invalid value of any content-mode variable is `off` (jyx.180).
 - **Header precedence (§4.2).** For session, user and agent, explicit `X-Tyk-*` headers and compatibility headers win over W3C baggage. `traceparent` still wins for the trace id and the parent span id.
 
@@ -189,5 +189,4 @@ Changing any of them needs `traces:write` (jyx.99).
 - `tyk_tracing_capture_dropped`, `tyk_tracing_export_attributes_dropped` and `tyk_tracing_queue_depth` are on Prometheus only, not the OTLP meter.
 - The hub bounds an edge's gateway events at ingest (jyx.171): it keeps only known types and outcomes, at most 64 per span, and drops an over-long name. Drops count as `tyk_tracing_capture_dropped{reason="edge_gateway_event_bounds"}`. The OTel export passes a stored `tyk.*` attribute only if `weaver/model/tyk.yaml` lists it.
 - `owner_may_view_content` is held back until the Portal views (.42): the API refuses `true`, responses leave it out, and a stored `true` reads as `false` (jyx.175).
-- The default Auditor role does not get `trace-content`. This is pending a product confirmation; restoring it is one line in `enterprise/features/rbac/seed.go`.
 - Several configuration variables are parsed but not yet used. The operator guide lists the ones that work.
