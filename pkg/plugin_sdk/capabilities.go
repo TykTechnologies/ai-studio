@@ -63,6 +63,10 @@ type StreamCompleteHandler interface {
 
 	// OnStreamComplete is called after a streaming response has finished.
 	// The accumulated_response contains all SSE chunks concatenated together.
+	// For a Bedrock stream (converse-stream) it is one SSE "data:" line per
+	// Converse event in the AWS JSON union form ({"contentBlockDelta":{...}},
+	// {"metadata":{"usage":{...}}}, an exception keyed by its type), not the
+	// AWS eventstream frames the client received. ResponseUsage reads it.
 	// This can be used to cache the complete response for future requests.
 	OnStreamComplete(ctx Context, req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error)
 }

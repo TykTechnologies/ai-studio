@@ -198,14 +198,16 @@ sets is in every plugin's `OnBeforeWrite` whatever the order. There is no
 per-App order and no other ordering control. On `/ai/`, `/v1/`, routers and
 `/anthropic/` the chain runs once per attempt on the `/llm/call/` inner hop,
 on the vendor-native body (Converse for Bedrock after 8xf.12). Each failover
-rung is its own inner hop with its own request ID, so every plugin runs once
-per rung.
+rung is its own inner hop, so every plugin runs once per rung, each time
+under the client's request ID (`proxy.RequestIDs` keeps it on the
+loopback).
 
-**Known gap: hub-spoke edges ignore the order.** A standalone
-microgateway honours `order_index`. An edge fed by Studio runs an LLM's
-plugins in plugin-ID (install) order, because the snapshot carries no
-per-LLM order (bug `midsommar-clean-701`). Until that is fixed, the order
-below holds on edges only if the plugins were installed in that order.
+**Edges honour the order too.** A standalone microgateway runs an LLM's
+plugins by `order_index`, and so does an edge fed by Studio: it sorts them
+by the LLM's `plugin_ids`, which the hub sends in that order
+(`GRPCProvider.GetPluginsForLLM`). Edges used to run them in plugin-ID
+(install) order (`midsommar-clean-701`, fixed in 2.3), so on older edges
+the order below holds only if the plugins were installed in that order.
 
 **Recommended `post_auth` order:** LLM Firewall (if run in `post_auth`) →
 response caches → Rate Limiter → Prompt Compressor → LLM Load Balancer.

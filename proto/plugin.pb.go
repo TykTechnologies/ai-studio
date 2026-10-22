@@ -1077,7 +1077,7 @@ type ResponseWriteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Body          []byte                 `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
 	Headers       map[string]string      `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	IsStreamChunk bool                   `protobuf:"varint,3,opt,name=is_stream_chunk,json=isStreamChunk,proto3" json:"is_stream_chunk,omitempty"`
+	IsStreamChunk bool                   `protobuf:"varint,3,opt,name=is_stream_chunk,json=isStreamChunk,proto3" json:"is_stream_chunk,omitempty"` // Always false today: OnBeforeWrite runs on buffered responses; streams get OnStreamComplete
 	Context       *PluginContext         `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1204,7 +1204,7 @@ func (x *ResponseWriteResponse) GetHeaders() map[string]string {
 // Streaming response hook messages - for caching/processing complete streaming responses
 type StreamCompleteRequest struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
-	AccumulatedResponse []byte                 `protobuf:"bytes,1,opt,name=accumulated_response,json=accumulatedResponse,proto3" json:"accumulated_response,omitempty"`                        // Full SSE response (all chunks concatenated)
+	AccumulatedResponse []byte                 `protobuf:"bytes,1,opt,name=accumulated_response,json=accumulatedResponse,proto3" json:"accumulated_response,omitempty"`                        // Full SSE response (all chunks concatenated); for Bedrock, one "data:" line per Converse event in AWS JSON union form
 	Headers             map[string]string      `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Response headers from upstream
 	StatusCode          int32                  `protobuf:"varint,3,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`                                                  // HTTP status code
 	Context             *PluginContext         `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`                                                                           // Plugin context with request metadata

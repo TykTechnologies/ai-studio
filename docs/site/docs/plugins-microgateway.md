@@ -117,6 +117,33 @@ Supports both unary responses and streaming (SSE) via the `stream_response` flag
 
 **Full Guide**: [Custom Endpoints Guide](plugins-custom-endpoints.md)
 
+## Where Request Plugins Run
+
+Pre-auth, post-auth and response plugins run on the gateway's `/llm/` endpoints, on the vendor's own API. The other LLM endpoints reach them through the gateway itself:
+
+- `/ai/{slug}`, the unified `/v1`, `/router/{slug}` and `/anthropic/{slug}` translate the client's request into the vendor's API and send it to the gateway's internal `/llm/call/{slug}/` hop, where the plugin chain runs once, on the vendor-native body and response. A failover waterfall makes one attempt per rung, and each attempt runs the chain again under the same request ID.
+- Auth plugins run once, on the endpoint the client called. The internal hop takes over that authentication and runs no auth plugin.
+
+**Bedrock (from AI Studio 2.3).** The Bedrock bridges (`/ai/`, `/v1`, routers and `/anthropic/`) take the internal hop like every other vendor. Before 2.3 they called AWS directly, and only auth plugins ran on them. A plugin attached to a Bedrock LLM now sees, on every endpoint:
+
+| What | Bedrock |
+|------|---------|
+| `Vendor` | `bedrock` |
+| Path | `/llm/call/{slug}/model/{modelId}/converse` or `.../converse-stream`. The body has no `model`: the model ID is in the path, and an ARN or inference profile shows up there with its `/`. |
+| Request body | a Converse request (`messages` of content blocks, `system`, `inferenceConfig`, `toolConfig`, ...) |
+| Buffered response (`OnBeforeWrite`) | a Converse response (`output.message`, `stopReason`, camelCase `usage.inputTokens`/`outputTokens`) |
+| Streamed response (`OnStreamComplete`) | one SSE `data:` line per Converse event in AWS JSON union form, such as `{"contentBlockDelta":{...}}` and `{"metadata":{"usage":{...}}}`; an exception is keyed by its type (`{"throttlingException":{...}}`) |
+
+Read the model, the streaming flag and the token usage with the SDK helpers `plugin_sdk.RequestModel`, `IsStreamingRequest` and `ResponseUsage` (see [Plugin SDK](plugins-sdk.md)) rather than parsing bodies by hand; they know each vendor's shape, Bedrock's included. From 2.3 the host also puts `model` and `stream` in `PluginContext.Metadata`, but a plugin that relies on them does not work on older hosts.
+
+What reaches the client from the internal hop:
+
+- **Blocks.** A plugin block keeps its status and message, in the error format of the endpoint the client called (OpenAI on `/ai/` and `/v1`, Anthropic on `/anthropic/`). A plugin that blocks a Bedrock call with a `200` and a body that is not a Converse response gives the client a `502` with the body's message. A 4xx never fails over to the next rung; a 5xx or 429 does.
+- **Headers.** `X-Cache*`, `X-Tyk-Compression*`, `X-LB-*` and `X-RateLimit-*` response headers are passed on, buffered and streaming. Other plugin headers stay on the internal hop.
+- **Refusals on Bedrock's own API.** When a plugin refuses a Bedrock runtime call (a `/model/{id}/` path, the internal hop included) with a status of 400 or more and sets no `X-Amzn-ErrorType`, the gateway answers in AWS's error shape: `X-Amzn-ErrorType` from the status (`AccessDeniedException` for 401 and 403, `ThrottlingException` for 429, `ValidationException` for other 4xx, ...) and `{"message": ...}` with the plugin's message, so AWS SDK clients show it.
+
+Data collectors get the proxy log the internal hop records, so for Bedrock traffic on the bridges they see Converse request and response bodies, as they see each other vendor's own API.
+
 ## Quick Start
 
 ### 1. Project Setup

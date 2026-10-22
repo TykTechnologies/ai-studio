@@ -261,6 +261,21 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
     *   **Application inference profiles are not shown.** If the default model is an application inference profile ARN (`arn:aws:bedrock:...:application-inference-profile/...`), the id contains neither word and Claude Code drops it. Requests still work; only the picker entry is missing. System inference profile ARNs contain "anthropic" and are shown.
     *   **Don't redirect this path.** Claude Code treats any redirect as a failed discovery, including an ingress redirect from `http://` to `https://`. Point `ANTHROPIC_BASE_URL` at the final URL.
 
+### How the translating endpoints reach the vendor
+
+The OpenAI-compatible endpoints (`/ai/{llmSlug}`, the Main Ingress `/v1`, routers) and the Anthropic Messages endpoint translate the request and send it through the gateway's own vendor-native endpoint, `/llm/call/{llmSlug}/`, before it goes to the vendor. Plugins, model checks, budgets, request and response filters, signing with the LLM's credentials and analytics all run there, once per attempt, on the vendor's own request and response.
+
+**Bedrock, from AI Studio 2.3.** Bedrock LLMs take the same route; before 2.3 the Bedrock bridges called AWS directly. What changes for Bedrock traffic on `/ai/`, `/v1`, routers and `/anthropic/`:
+
+*   **Plugins run.** Pre-auth, post-auth and response plugins attached to a Bedrock LLM run on these endpoints and see the Converse request and response (see [Microgateway Plugins](./plugins-microgateway.md#where-request-plugins-run)). Before, only auth plugins ran there.
+*   **Filters read Converse.** Request and response filters, guardrails and filter scripts run on the internal hop against the Converse request and response, so scripts see `input.format == "bedrock"` instead of the OpenAI or Anthropic body the client sent. Check custom filter scripts on Bedrock LLMs that parse `raw_input` in the client's shape; `input.messages` and the redaction helpers handle Converse.
+*   **Retries.** The AWS SDK no longer retries a call on its own. Retries are the failover waterfall's: a 5xx or 429 moves to the next rung, a 4xx does not.
+*   **Errors keep their status.** A refusal on the internal hop reaches the client in the endpoint's own error format with its real status: a guardrail block is a `400`, a plugin block keeps its status and message, a budget refusal is a `403`. On `/anthropic/`, a stream refused before it opens now gets that status instead of a `200` with an error event.
+*   **Headers.** `X-Cache*`, `X-Tyk-Compression*`, `X-LB-*` and `X-RateLimit-*` response headers from plugins reach the client, buffered and streaming (for every vendor on these endpoints). A client's `X-Tyk-Compression` header reaches the plugins and never AWS.
+*   **Request logs.** A buffered Bedrock call's request log names the LLM in its model column, as for every vendor on the vendor-native endpoint; the chat record keeps the model ID. Cache read and write tokens are priced. A failed native Bedrock stream leaves a request log row.
+
+AI Studio's embedded gateway shares this code, so Studio's own `/ai/` traffic to Bedrock (Chat included) takes the internal hop too. Plugins do not run on the embedded gateway, but its budget check, filters and analytics for Bedrock run on the internal hop, on the Converse body.
+
 ### 5. Legacy Endpoints (`/llm/rest/...`, `/llm/stream/...`)
 
 *   `/llm/rest/{llmSlug}/...` handles non-streaming (synchronous) requests only; `/llm/stream/{llmSlug}/...` handles Server-Sent Events streaming only.
