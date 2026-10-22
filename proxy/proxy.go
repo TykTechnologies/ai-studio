@@ -1141,6 +1141,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			// response IDs can be rewritten.
 			req.Header.Del("Accept-Encoding")
 		}
+		if llm.Vendor == models.BEDROCK {
+			return // signed at RoundTrip (sigV4Transport), after ReverseProxy's header changes
+		}
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
@@ -1148,9 +1151,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	// upstreamGuardedTransport enforces the internal-network policy at dial
 	// time (post-DNS), closing the DNS-rebinding TOCTOU window.
+	var transport http.RoundTripper = upstreamTransport
+	if llm.Vendor == models.BEDROCK {
+		transport = &sigV4Transport{base: upstreamTransport, sign: func(req *http.Request) error { return p.setVendorAuthHeader(req, llm) }}
+	}
 	httpProxy := &httputil.ReverseProxy{
 		Director:  proxyDirector,
-		Transport: upstreamTransport,
+		Transport: transport,
 		// ModifyResponse runs on this goroutine, before the deferred duration
 		// observation, so recording the upstream status here is race-free.
 		ModifyResponse: func(resp *http.Response) error {
