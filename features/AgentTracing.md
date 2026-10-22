@@ -18,12 +18,12 @@ These are from the SPEC preface; where the original draft disagrees, they win.
 | **D2** Edition | Enterprise only, under the existing licence (no new entitlement). Core holds inert hooks; ENT holds the assembler, correlation, content and redaction, keys, query and export, OTel, and the RBAC seed and audit wiring. |
 | **D3** Transport | The embedded gateway writes captures to a staging table through a `CaptureRecorder`. Edges send them in `AnalyticsPulse` field 15, with their own sub-buffer flushed every 10 s or 500 events, in chunks of at most 4 MB. Each event has an idempotency key (edge, span, seq) that the hub deduplicates on. The assembler waits a settle window before consuming. Loss on an edge restart is accepted and counted. |
 | **D4** Keys and scope | Everything is scoped by `app_id`, with `team_id` denormalised. HKDF-SHA256 derives one HMAC key (fingerprints, correlation index) and one AES-256-GCM payload key from `AGENT_TRACING_KEY`, falling back to `TYK_AI_SECRET_KEY`. Without a key, tracing does not start. A 1-byte key id allows rotation (`AGENT_TRACING_KEY_PREVIOUS`). Edges receive only the HMAC key, encrypted in the config sync. Payloads are sealed at the hub. |
-| **D5** Product defaults (jyx.5) | Retention is 30 d for metadata and 7 d for payloads. Turns close after 5 min idle, sessions after 30 min; both are overridable per App. Inferred sessions set `session.id` on export (switchable per exporter); `gen_ai.conversation.id` is client-supplied only. The Portal shows metadata only unless an admin opts an App in (`owner_may_view_content`). There is no server-side PDF. Tyk Gateway data arrives through the Tyk Pump HTTP sink (epic bv0), not an OTLP ingest. traceparent goes upstream by default, with a per-LLM opt-out; baggage is cut to an allowlist. Runaway-session alerts are Phase 2. |
+| **D5** Product defaults (jyx.5) | Retention is 30 d for metadata and 7 d for payloads. Turns close after 5 min idle, sessions after 30 min; both are overridable per App. Inferred sessions set `session.id` on export (switchable per exporter); `gen_ai.conversation.id` is client-supplied only. The Portal shows metadata only unless an admin opts an App in (`owner_may_view_content`; held back until the Portal views, jyx.175). There is no server-side PDF. Tyk Gateway data arrives through the Tyk Pump HTTP sink (epic bv0), not an OTLP ingest. traceparent goes upstream by default, with a per-LLM opt-out; baggage is cut to an allowlist. Runaway-session alerts are Phase 2. |
 
 Also recorded:
 - **FIPS readiness.** Stdlib crypto only.
 - **End-user pseudonyms (jyx.174, Martin's option B).** Without `trace-content:read`, `end_user` and `external_id` are HMAC pseudonyms (keys.PseudonymizeUserID / PseudonymizeExternalID, separate domains) on every read and export. jsonv1 leaves them out unless the caller passes `Identity` or `RawIdentity`, so a new read fails closed. Exact-id filters take the raw id only. Studio users are not masked.
-- **Content ceiling and default (§5.5 amendment, jyx.172).** `AGENT_TRACING_CONTENT_CEILING` bounds every App, default and header. `AGENT_TRACING_CONTENT_DEFAULT_MODE` applies to Apps without their own mode. Unset, the ceiling is the higher of the default and the request override. The resource maximum and the store cap bound everything. Both settings are environment-only until jyx.79, and edges get the ceiling in the snapshot (missing is off).
+- **Content ceiling and default (§5.5 amendment, jyx.172).** `AGENT_TRACING_CONTENT_CEILING` bounds every App, default and header. `AGENT_TRACING_CONTENT_DEFAULT_MODE` applies to Apps without their own mode. Unset, the ceiling is the higher of the default and the request override. The resource maximum and the store cap bound everything. Both settings are environment-only until jyx.79 (the Agent Sessions page shows them read-only), and edges get the ceiling in the snapshot (missing is off). An invalid value of any content-mode variable is `off` (jyx.180).
 - **Header precedence (§4.2).** For session, user and agent, explicit `X-Tyk-*` headers and compatibility headers win over W3C baggage. `traceparent` still wins for the trace id and the parent span id.
 
 ## Data flow
@@ -91,6 +91,16 @@ Also recorded:
   - runs correlation (`correlate/`, rules R1–R3; R4/R5 are Phase 2);
   - computes the rollups.
 - **One transaction per batch.** Spans, links, payloads, agents, traces and sessions are written, and the staged rows deleted, together. Reads come first and writes after, so the pattern is safe on SQLite.
+- **Set-based persistence (jyx.181).** A batch costs a fixed number of statements, not a few per session: 16 on Postgres for any number of sessions (0.032 per span at 500 events).
+  - `prefetch.go` reads the batch's sessions by id and external id with IN lists, then, on Postgres, each session's open turn and latest span with one `CROSS JOIN LATERAL` query each (the same index-backed `ORDER BY ... LIMIT 1` per session, in one round trip).
+  - Sessions and turns are written with multi-row upserts (`models.UpsertAgentTraceSessions` / `UpsertAgentTraceTraces`), the name join tables with multi-row insert-or-ignore.
+  - SQLite, which has no round trips, keeps the open-turn and latest-span reads per session (two statements per extra session).
+- **Purges and batch writes are serialised (jyx.182, `purgelock.go`).** A process mutex plus, on Postgres, an advisory lock: session-level for the whole purge or erasure, transaction-level in the batch write. The write transaction first locks the staged rows it consumed and the stored sessions it read (no-op updates); if any is gone, a purge ran since the batch read them, so the batch is dropped and its staged rows read again. A purge is therefore never undone by assembly. An inferred session's still-staged captures carry no session id and are not purged, so a later call can re-create the session; end-user erasure is the complete path.
+- **`exported_at` belongs to the exporter.** The turn upsert writes every column except `exported_at`, which only the OTel worker sets, so re-assembling a turn never makes it export again.
+- **CI gates** (`scripts/agent-tracing-bench-gate.sh`).
+  - `TestAssemblerStatementsPerBatch`: on Postgres the count is independent of the session count and at most 0.05 statements per span.
+  - `ci` (blocking, Enterprise with `DATABASE_URL`): a short soak gating at most 3 rows per span and, on Postgres, 0.05 statements per span; spans/s is reported only.
+  - `soak` (manual or nightly, `make bench-agent-tracing-soak`): seeds about 4M spans, then runs 15 minutes at GOMAXPROCS=2 on a 2-CPU Postgres. Every 1-minute window must reach 2,000 spans/s, the last at least 80% of the first, with at least 5M spans stored. Measured on 2026-10-22: about 7,900 to 8,400 spans/s, 1.4 rows per span.
 - **Background jobs.**
   - `CloseIdle` closes turns and sessions after their idle timeouts. A turn that asked for tools and never saw results is closed as `abandoned`.
   - `Retain` deletes, in chunks, rows past their retention. It runs every 10 min.
@@ -115,9 +125,10 @@ Also recorded:
 
 ### OTel export and metrics (ENT, `otelexport`)
 
-- **Worker.** Exports settled turns under lease `agent_trace_export`, poll 5 s, 100 turns per pass. `traces.exported_at` marks turns already sent; spans that arrive later are stored but not resent.
+- **Worker.** Exports settled turns under lease `agent_trace_export`, poll 5 s, 100 turns per pass. `traces.exported_at` marks turns already sent, and only the worker writes it; spans that arrive later are stored but not resent.
 - **Attribute names** all come from `mappings/genai-1.41.yaml`. The docs table is generated from it (`make agent-tracing-docs`) and checked in CI.
-- **One call, one span.** The assembled LLM span is exported under the gateway span id. While export is active, the proxy leaves out its own live span for captured requests. Hub replicas set this when the worker starts; edges get it through `assembled_export_active` (jyx.90).
+- **One call, one span.** The assembled LLM span is exported under the gateway span id. While export is active, the proxy leaves out its own live span for captured requests. Hub replicas set this when the worker starts; edges get it through `assembled_export_active` (jyx.90). An edge with `AGENT_TRACING_KEEP_LIVE_SPAN=true` keeps its live span under its own id, linked to the gateway span id, with metadata only (jyx.176).
+- **`user.id`.** `AGENT_TRACING_EXPORT_USER_ID_MODE`: `hashed` (default, keys.PseudonymizeUserID), `raw` or `off` (jyx.173).
 - **Metrics.**
   - Core instruments: `metrics/agenttracing.go` and `metrics/agentmetrics.go`.
   - The assembler records them after each commit.
@@ -177,6 +188,6 @@ Changing any of them needs `traces:write` (jyx.99).
 - There is no OTel Collector nightly compatibility job.
 - `tyk_tracing_capture_dropped`, `tyk_tracing_export_attributes_dropped` and `tyk_tracing_queue_depth` are on Prometheus only, not the OTLP meter.
 - The hub bounds an edge's gateway events at ingest (jyx.171): it keeps only known types and outcomes, at most 64 per span, and drops an over-long name. Drops count as `tyk_tracing_capture_dropped{reason="edge_gateway_event_bounds"}`. The OTel export passes a stored `tyk.*` attribute only if `weaver/model/tyk.yaml` lists it.
-- `owner_may_view_content` is stored but not yet consumed (Portal views, .42).
+- `owner_may_view_content` is held back until the Portal views (.42): the API refuses `true`, responses leave it out, and a stored `true` reads as `false` (jyx.175).
 - The default Auditor role does not get `trace-content`. This is pending a product confirmation; restoring it is one line in `enterprise/features/rbac/seed.go`.
 - Several configuration variables are parsed but not yet used. The operator guide lists the ones that work.
