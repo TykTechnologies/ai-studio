@@ -2,6 +2,10 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import CapturedMarkdown from "./CapturedMarkdown";
+// After CapturedMarkdown, as in the app (FilterForm's editor).
+import { highlight as prismHighlight, languages as prismLanguages } from "prismjs/components/prism-core";
+import "prismjs/components/prism-clike";
+import "prismjs/components/prism-javascript";
 
 // jyx.82: captured content must not make the viewer's browser fetch
 // anything, and must not carry script links.
@@ -43,5 +47,19 @@ describe("CapturedMarkdown", () => {
     render(<CapturedMarkdown content={"**bold** and `code`"} />);
     expect(screen.getByText("bold").tagName).toBe("STRONG");
     expect(screen.getByText("code").tagName).toBe("CODE");
+  });
+
+  it("highlights fenced code under a language alias", () => {
+    render(<CapturedMarkdown content={"```js\nconst a = 1;\n```"} />);
+    // As JavaScript, the keyword is a token of its own.
+    expect(screen.getByText("const")).toHaveStyle({ color: "rgb(220, 198, 224)" });
+  });
+
+  // #823 CI: the Prism builds of react-syntax-highlighter patch the shared
+  // prismjs module (refractor), so FilterForm's editor got hast objects back
+  // from Prism.highlight and crashed. CapturedMarkdown must leave it alone.
+  it("leaves the shared prismjs highlight returning a string", () => {
+    render(<CapturedMarkdown content={"```js\nconst a = 1;\n```"} />);
+    expect(typeof prismHighlight("const a = 1;", prismLanguages.js, "js")).toBe("string");
   });
 });
