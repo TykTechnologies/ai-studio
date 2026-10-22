@@ -113,6 +113,11 @@ func TestParseLoopbackError(t *testing.T) {
 		{"pass-through client error keeps its reason", 403, `{"status":403,"message":"Budget limit exceeded","error":"budget exceeded: team monthly budget exceeded"}`, true, "Budget limit exceeded: budget exceeded: team monthly budget exceeded", "", nil},
 		{"pass-through with no detail", 401, `{"status":401,"message":"invalid credential"}`, true, "invalid credential", "", nil},
 		{"pass-through server error hides its internals", 502, `{"status":502,"message":"failed to make upstream request","error":"dial tcp 10.0.0.7:443: connection refused"}`, true, "failed to make upstream request", "", nil},
+		// The edge's own refusals (8xf.36): the plugins' size limit is the
+		// gateway's, not the model context's.
+		{"edge refusal over the size limit", 413, `{"error":"request too large for the gateway's plugins (68157440 bytes)"}`, true, "request too large for the gateway's plugins (68157440 bytes)", "", "request_too_large"},
+		{"edge refusal keeps its details behind", 500, `{"error":"Plugin execution failed","details":"rpc error: plugin crashed"}`, true, "Plugin execution failed", "", nil},
+		{"pass-through 413", 413, `{"status":413,"message":"request too large for the gateway's plugins"}`, true, "request too large for the gateway's plugins", "", "request_too_large"},
 		{"plain text", 502, `Bad Gateway`, false, "", "", nil},
 		{"envelope without a message", 500, `{"error":{"type":"server_error"}}`, false, "", "", nil},
 	}

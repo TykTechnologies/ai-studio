@@ -99,7 +99,31 @@ func TestAgentTraceBedrock_NativeStreamKeepsToolCalls(t *testing.T) {
 	assert.Len(t, logs[0].TraceSpanID, 16)
 }
 
-// The /ai/ bridge's Bedrock stream (SDK events) keeps tool calls too.
+// waitBridgeCall waits for a bridge call's two llm_inference events: the
+// logical call on the outer hop, and the inner /llm/call/ hop that answered,
+// recorded as its attempt. Bedrock loops back as every other vendor does
+// (8xf.12); the inner hop's event has the usage.
+func waitBridgeCall(t *testing.T, sink *captureSink) (outer, inner *agenttrace.Event) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		outer, inner = nil, nil
+		for _, ev := range sink.llmEvents() {
+			if ev.AttemptOf.IsZero() {
+				outer = ev
+			} else {
+				inner = ev
+			}
+		}
+		return outer != nil && inner != nil
+	}, 5*time.Second, 10*time.Millisecond)
+	assert.Equal(t, outer.SpanID, inner.AttemptOf)
+	assert.Equal(t, "aws.bedrock", outer.Provider)
+	assert.EqualValues(t, 1, outer.Attempt)
+	return outer, inner
+}
+
+// The /ai/ bridge's Bedrock stream keeps tool calls too, on the inner hop
+// and on the outer call.
 func TestAgentTraceBedrock_AIStreamKeepsToolCalls(t *testing.T) {
 	sink := withCapture(t)
 	rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}
@@ -109,8 +133,10 @@ func TestAgentTraceBedrock_AIStreamKeepsToolCalls(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 	assert.Contains(t, string(body), `"tu1"`, "the client still gets the tool call")
 
-	ev := waitLLMEvent(t, sink)
-	assertBedrockToolCapture(t, ev, true)
+	outer, inner := waitBridgeCall(t, sink)
+	assertBedrockToolCapture(t, inner, true)
+	require.Len(t, outer.Extracts.ToolCalls, 1)
+	assert.Equal(t, "tu1", outer.Extracts.ToolCalls[0].ID)
 	logs := waitForLogs(t, h, 1)
 	assert.Equal(t, "Sure. ", logs[0].ResponseBody)
 }
@@ -125,8 +151,8 @@ func TestAgentTraceBedrock_AnthropicStreamKeepsToolCalls(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
 	assert.Contains(t, string(body), `"tu1"`)
 
-	ev := waitLLMEvent(t, sink)
-	assertBedrockToolCapture(t, ev, true)
+	_, inner := waitBridgeCall(t, sink)
+	assertBedrockToolCapture(t, inner, true)
 }
 
 // A non-streamed Converse answer through the /ai/ bridge: the tool call is
@@ -149,8 +175,9 @@ func TestAgentTraceBedrock_AIConverseKeepsToolCalls(t *testing.T) {
 	resp, body := h.post("/ai/primary/v1/chat/completions",
 		`{"model":"anthropic.claude-3","messages":[{"role":"user","content":"send it"}]}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
-	ev := waitLLMEvent(t, sink)
-	assertBedrockToolCapture(t, ev, false)
+	outer, inner := waitBridgeCall(t, sink)
+	assertBedrockToolCapture(t, inner, false)
+	require.Len(t, outer.Extracts.ToolCalls, 1)
 }
 
 // With tracing off nothing is captured and the paths behave as before.

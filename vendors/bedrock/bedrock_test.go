@@ -253,6 +253,67 @@ func TestProxySetAuthHeader(t *testing.T) {
 	})
 }
 
+// --- SigningRegion ---
+
+func TestSigningRegion(t *testing.T) {
+	llm := &models.LLM{
+		APIEndpoint: "https://bedrock-runtime.us-east-1.amazonaws.com",
+		Metadata:    models.JSONMap{"aws_region": "ap-south-1"},
+	}
+	tests := []struct {
+		name string
+		url  string
+		llm  *models.LLM
+		want string
+	}{
+		{"the LLM's own endpoint", "https://bedrock-runtime.us-east-1.amazonaws.com/model/m/converse", llm, "us-east-1"},
+		{"an override into another region", "https://bedrock-runtime.eu-west-1.amazonaws.com/model/m/converse", llm, "eu-west-1"},
+		{"a mantle endpoint", "https://bedrock-mantle.us-west-2.api.aws/model/m/converse", llm, "us-west-2"},
+		{"a host that names no region", "https://vpce-0abc.bedrock.example.internal/model/m/converse", llm, "us-east-1"},
+		{"a loopback host", "http://127.0.0.1:9000/model/m/converse", llm, "us-east-1"},
+		{"no region anywhere but metadata", "https://proxy.example.com/model/m/converse",
+			&models.LLM{APIEndpoint: "https://proxy.example.com", Metadata: models.JSONMap{"aws_region": "ap-south-1"}}, "ap-south-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("POST", tt.url, nil)
+			region, err := SigningRegion(req, tt.llm)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, region)
+		})
+	}
+
+	t.Run("no region at all", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", "https://proxy.example.com/model/m/converse", nil)
+		_, err := SigningRegion(req, &models.LLM{APIEndpoint: "https://proxy.example.com"})
+		assert.Error(t, err)
+	})
+
+	// The Host the request is sent with wins over its URL (sigV4 signs it).
+	t.Run("the Host header", func(t *testing.T) {
+		req, _ := http.NewRequest("POST", "http://127.0.0.1:9000/model/m/converse", nil)
+		req.Host = "bedrock-runtime.eu-central-1.amazonaws.com"
+		region, err := SigningRegion(req, llm)
+		require.NoError(t, err)
+		assert.Equal(t, "eu-central-1", region)
+	})
+}
+
+func TestRuntimeBaseURLFor(t *testing.T) {
+	for in, want := range map[string]string{
+		"eu-west-1": "https://bedrock-runtime.eu-west-1.amazonaws.com",
+		"https://bedrock-runtime.eu-west-1.amazonaws.com/":   "https://bedrock-runtime.eu-west-1.amazonaws.com",
+		"https://bedrock-runtime.eu-west-1.amazonaws.com/v1": "https://bedrock-runtime.eu-west-1.amazonaws.com",
+		"http://127.0.0.1:9000":                              "http://127.0.0.1:9000",
+	} {
+		got, err := RuntimeBaseURLFor(in)
+		require.NoError(t, err, in)
+		assert.Equal(t, want, got, in)
+	}
+	_, err := RuntimeBaseURLFor("")
+	assert.Error(t, err)
+}
+
 // --- AnalyzeResponse ---
 
 func TestAnalyzeResponse(t *testing.T) {

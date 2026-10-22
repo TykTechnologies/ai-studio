@@ -23,13 +23,15 @@ func postBridge(t *testing.T, h *failoverHarness, path, body string, headers ...
 
 // The /ai/ and /anthropic/ bridges to Bedrock re-encode the Converse stream
 // as OpenAI or Anthropic SSE. Response guardrails see its text per event and
-// in a final pass, and hold its tool calls; they never ran there before.
+// in a final pass, and hold its tool calls, on the /llm/call/ inner hop's
+// native stream (8xf.12); the bridge ends the stream with the block, on /ai/
+// as for every other vendor.
 func TestBedrockBridgeStreams_Guardrails(t *testing.T) {
 	type bridge struct {
 		name, path, body, auth, errMarker string
 	}
 	bridges := []bridge{
-		{"ai", "/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"tidy my inbox"}]}`, "Authorization", `"message":"Response blocked by filter`},
+		{"ai", "/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","stream":true,"messages":[{"role":"user","content":"tidy my inbox"}]}`, "Authorization", `"type":"policy_violation"`},
 		{"anthropic", "/anthropic/primary/v1/messages", `{"model":"anthropic.claude-3","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"tidy my inbox"}]}`, "x-api-key", "event: error"},
 	}
 	post := func(h *failoverHarness, b bridge) string {

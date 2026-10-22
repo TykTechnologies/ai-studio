@@ -41,6 +41,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
+	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/gorilla/mux"
 	"github.com/gosimple/slug"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -599,10 +600,10 @@ func (p *Proxy) createHandler() http.Handler {
 	// Wrap authenticated routes with credential validator
 	authenticatedHandler := p.credValidator.Middleware(r)
 
-	// OpenAI-compatible translation endpoints
-	// For most vendors these are PURE BRIDGE HANDLERS that route internally through /llm/call/
-	// where auth/plugins/filters run. However, Bedrock uses direct AWS SDK calls and bypasses
-	// internal routing, so auth must also run here to populate the app context.
+	// OpenAI-compatible translation endpoints: PURE BRIDGE HANDLERS that route
+	// internally through /llm/call/, where the plugins, budget and filters run,
+	// for every vendor (Bedrock's through its SDK client). Auth runs here too:
+	// it is the caller's credential, and the inner hop takes it as a hand-off.
 	aiRouter := mux.NewRouter()
 	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
@@ -618,8 +619,8 @@ func (p *Proxy) createHandler() http.Handler {
 	authenticatedAIHandler := p.credValidator.Middleware(aiRouter)
 
 	// Anthropic Messages bridge: lets Claude Code (native Anthropic Messages API) drive
-	// Bedrock-backed LLMs. Like /ai/, it uses direct AWS SDK calls, so auth must run here
-	// to populate the app context.
+	// Bedrock-backed LLMs. Like /ai/, it authenticates here and loops back through
+	// /llm/call/ for the rest.
 	anthropicRouter := mux.NewRouter()
 	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/messages", p.handleAnthropicMessagesEntry).Methods("POST")
 	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/models", p.handleAnthropicListModels).Methods("GET")
@@ -1025,7 +1026,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		if streaming, err := switches.DetectStreamingIntent(llm.Vendor, r); err == nil && streaming {
 			r = r.Clone(r.Context())
-			r.URL.Path = strings.Replace(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug), fmt.Sprintf("/llm/stream/%s", llmSlug), 1)
+			rewriteLLMPathPrefix(r.URL, fmt.Sprintf("/llm/rest/%s", llmSlug), fmt.Sprintf("/llm/stream/%s", llmSlug))
 			p.handleStreamingLLMRequest(w, r)
 			return
 		}
@@ -1110,13 +1111,32 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read filtered request body", err, false)
 		return
 	}
+	// The response hooks' contexts carry the model and stream flag.
+	r = withExchangeMetadata(r, string(llm.Vendor), reqBody)
 
 	// Check for upstream override from plugins (e.g., DLB load balancer)
 	upstreamEndpoint := switches.UpstreamEndpoint(llm)
+	overridden := false
 	if override := r.Context().Value("upstream_override"); override != nil {
 		if overrideURL, ok := override.(string); ok && overrideURL != "" {
 			logger.Debugf("Using upstream override from plugin: %s", overrideURL)
 			upstreamEndpoint = overrideURL
+			overridden = true
+		}
+	}
+	// A Bedrock runtime call (/model/{id}/converse, the loopback's included)
+	// goes to the runtime base URL, as on the native stream: an endpoint's
+	// trailing /v1 (the OpenAI-compatible API's) is not part of its path, a
+	// bare region (us-east-1) names that region's endpoint, and an LLM with
+	// no endpoint takes metadata.aws_region. Other paths keep the endpoint.
+	if llm.Vendor == models.BEDROCK && (!strings.Contains(upstreamEndpoint, "/") ||
+		strings.HasPrefix(strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug)), "/model/")) {
+		base, err := bedrockVendor.RuntimeBaseURL(llm)
+		if overridden {
+			base, err = bedrockVendor.RuntimeBaseURLFor(upstreamEndpoint)
+		}
+		if err == nil {
+			upstreamEndpoint = base
 		}
 	}
 
@@ -1142,6 +1162,14 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// with the endpoint's own path (see joinUpstreamPath for the rules).
 		remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
 		req.URL.Path = joinUpstreamPath(upstreamURL.Path, remainingPath)
+		// Keep the caller's escaping: a Bedrock model ID is an escaped ARN
+		// (arn%3Aaws%3A...%2F...), whose "/" would otherwise go upstream as
+		// a path separator, and SigV4 signs the escaped path.
+		req.URL.RawPath = ""
+		if r.URL.RawPath != "" {
+			remainingRaw := strings.TrimPrefix(r.URL.EscapedPath(), fmt.Sprintf("/llm/rest/%s", llmSlug))
+			req.URL.RawPath = joinUpstreamPath(upstreamURL.EscapedPath(), remainingRaw)
+		}
 		logger.Debugf("REST proxy path: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
 		req.Host = upstreamURL.Host
 		// Continue the trace into the upstream. Done before the vendor auth
@@ -1260,13 +1288,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 // the LLM's route slug, as post_auth plugins get it, so a plugin can match
 // the two phases of one request.
 func responsePluginContext(requestID string, r *http.Request, llm *models.LLM, app *models.App) *PluginContext {
+	metadata := make(map[string]string)
+	addExchangeMetadata(r.Context(), metadata)
 	return &PluginContext{
 		RequestID:   requestID,
 		LLMSlug:     slug.Make(llm.Name),
 		LLMID:       llm.ID,
 		AppID:       app.ID,
 		UserID:      app.UserID,
-		Metadata:    make(map[string]string),
+		Metadata:    metadata,
 		Vendor:      string(llm.Vendor),
 		RequestKind: decisions.KindForPath(r.URL.Path),
 	}
@@ -1974,6 +2004,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to read filtered streaming request body", err, false)
 		return
 	}
+	// The response hooks' contexts carry the model and stream flag.
+	r = withExchangeMetadata(r, string(llm.Vendor), reqBody)
 
 	// Bedrock uses SDK-mediated streaming (binary event stream → SSE conversion)
 	if llm.Vendor == models.BEDROCK {
@@ -2392,12 +2424,12 @@ func (p *Proxy) handleUnifiedLLMRequest(w http.ResponseWriter, r *http.Request) 
 	originalPath := r.URL.Path
 	if isStreaming {
 		// Rewrite path from /llm/call/{slug}/... to /llm/stream/{slug}/...
-		r.URL.Path = strings.Replace(r.URL.Path, fmt.Sprintf("/llm/call/%s", llmSlug), fmt.Sprintf("/llm/stream/%s", llmSlug), 1)
+		rewriteLLMPathPrefix(r.URL, fmt.Sprintf("/llm/call/%s", llmSlug), fmt.Sprintf("/llm/stream/%s", llmSlug))
 		slog.Debug("Unified handler routing to streaming", "original_path", originalPath, "rewritten_path", r.URL.Path, "llm_slug", llmSlug)
 		p.handleStreamingLLMRequest(w, r)
 	} else {
 		// Rewrite path from /llm/call/{slug}/... to /llm/rest/{slug}/...
-		r.URL.Path = strings.Replace(r.URL.Path, fmt.Sprintf("/llm/call/%s", llmSlug), fmt.Sprintf("/llm/rest/%s", llmSlug), 1)
+		rewriteLLMPathPrefix(r.URL, fmt.Sprintf("/llm/call/%s", llmSlug), fmt.Sprintf("/llm/rest/%s", llmSlug))
 		slog.Debug("Unified handler routing to REST", "original_path", originalPath, "rewritten_path", r.URL.Path, "llm_slug", llmSlug)
 		p.handleLLMRequest(w, r)
 	}

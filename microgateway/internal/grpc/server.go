@@ -926,8 +926,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			log.Warn().Err(err).Msg("Failed to bulk query app_llms join table")
 		}
 
-		// Bulk query llm_plugins relationships
-		if err := s.db.Where("llm_id IN ? AND is_active = ?", llmIDs, true).Find(&allLLMPlugins).Error; err != nil {
+		// Bulk query llm_plugins relationships, in each LLM's execution order:
+		// edges run an LLM's plugins in its plugin_ids order.
+		if err := s.db.Where("llm_id IN ? AND is_active = ?", llmIDs, true).Order("llm_id ASC, order_index ASC").Find(&allLLMPlugins).Error; err != nil {
 			log.Warn().Err(err).Msg("Failed to bulk query llm_plugins join table")
 		}
 

@@ -139,6 +139,9 @@ type loopbackRelay struct {
 	// reason from here instead (see attemptFailure.withLoopback).
 	failStatus int
 	failBody   []byte
+	// failHeader is the refusal's relayed headers: a rate limiter's 429
+	// carries its X-RateLimit-* retry hint, which the client is owed.
+	failHeader http.Header
 	// stream is the latest successful loopback response, whose trailer says
 	// whether the inner hop blocked its stream (hdrStreamBlocked).
 	stream *http.Response
@@ -203,11 +206,14 @@ func loopbackRelayFrom(ctx context.Context) *loopbackRelay {
 
 // relayedLoopbackHeaders are the plugin response headers passed on from the
 // inner hop to the /ai/ client, each name alone and as a "name-" prefix: the
-// cache plugins' X-Cache and the Prompt Compressor's X-Tyk-Compression.
-// Vendor and transport headers describe the loopback response, not the
-// translated one, and other X-Tyk- headers are internal (the failover token
-// is a per-process secret), so the list stays exact.
-var relayedLoopbackHeaders = []string{"X-Cache", "X-Tyk-Compression"}
+// cache plugins' X-Cache, the Prompt Compressor's X-Tyk-Compression, the load
+// balancer's X-LB (X-LB-Upstream, -Pool, -Latency-Ms) and the rate limiter's
+// X-RateLimit (-Limit, -Remaining, -Reset, -Tokens-Used, ...), which a vendor
+// may send as well: it describes the same caller's quota. Other vendor and
+// transport headers describe the loopback response, not the translated one,
+// and other X-Tyk- headers are internal (the failover token is a per-process
+// secret), so the list stays exact.
+var relayedLoopbackHeaders = []string{"X-Cache", "X-Tyk-Compression", "X-LB", "X-RateLimit"}
 
 // isRelayedLoopbackHeader reports whether an inner-hop response header is
 // passed on to the /ai/ client.
@@ -223,16 +229,26 @@ func isRelayedLoopbackHeader(key string) bool {
 
 // Relayed headers can come from a vendor (or a CDN in front of it) as well as
 // a plugin, so how much is copied onto the client response is capped. The
-// cache plugin sets at most seven short values.
+// cache plugin sets at most seven short values, the Prompt Compressor three,
+// the load balancer three and the rate limiter six; a vendor's own rate
+// limit headers (OpenAI sends six) come on top.
 const (
-	maxRelayedHeaderValues = 16
-	maxRelayedHeaderBytes  = 4 << 10
+	maxRelayedHeaderValues = 32
+	maxRelayedHeaderBytes  = 8 << 10
 )
 
 // capture keeps the relayed headers of the latest successful loopback
 // response. A driver that retries replaces the earlier response's headers.
-// Keys are taken in sorted order so the cap drops the same ones every time.
 func (l *loopbackRelay) capture(h http.Header) {
+	kept := relayedHeaders(h)
+	l.mu.Lock()
+	l.h = kept
+	l.mu.Unlock()
+}
+
+// relayedHeaders is the relayed part of h, within the caps. Keys are taken in
+// sorted order so the cap drops the same ones every time.
+func relayedHeaders(h http.Header) http.Header {
 	keys := make([]string, 0, len(h))
 	for k := range h {
 		if isRelayedLoopbackHeader(k) {
@@ -252,19 +268,18 @@ func (l *loopbackRelay) capture(h http.Header) {
 			size += len(k) + len(v)
 		}
 	}
-	l.mu.Lock()
-	l.h = kept
-	l.mu.Unlock()
+	return kept
 }
 
-// captureFailure keeps the status and the start of the body of a refused
-// loopback response. The body is put back together so the driver still reads
-// all of it.
+// captureFailure keeps the status, the relayed headers and the start of the
+// body of a refused loopback response. The body is put back together so the
+// driver still reads all of it.
 func (l *loopbackRelay) captureFailure(resp *http.Response) {
 	prefix, _ := io.ReadAll(io.LimitReader(resp.Body, maxRelayedErrorBody))
 	resp.Body = replayedBody{Reader: io.MultiReader(bytes.NewReader(prefix), resp.Body), Closer: resp.Body}
+	kept := relayedHeaders(resp.Header)
 	l.mu.Lock()
-	l.failStatus, l.failBody = resp.StatusCode, prefix
+	l.failStatus, l.failBody, l.failHeader = resp.StatusCode, prefix, kept
 	l.mu.Unlock()
 }
 
@@ -272,8 +287,22 @@ func (l *loopbackRelay) captureFailure(resp *http.Response) {
 // retry) superseded it.
 func (l *loopbackRelay) clearFailure() {
 	l.mu.Lock()
-	l.failStatus, l.failBody = 0, nil
+	l.failStatus, l.failBody, l.failHeader = 0, nil, nil
 	l.mu.Unlock()
+}
+
+// failureHeaders are the relayed headers of the refusal the latest loopback
+// response carried, or nil.
+func (l *loopbackRelay) failureHeaders() http.Header {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.failStatus == 0 {
+		return nil
+	}
+	return l.failHeader
 }
 
 // failure is the refusal the latest loopback response carried, when its body

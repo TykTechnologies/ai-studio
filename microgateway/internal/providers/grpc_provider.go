@@ -3,6 +3,7 @@ package providers
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -340,17 +341,23 @@ func (p *GRPCProvider) GetPlugin(id uint) (*database.Plugin, error) {
 	return nil, gorm.ErrRecordNotFound
 }
 
-// GetPluginsForLLM retrieves plugins associated with an LLM from the gRPC cache
+// GetPluginsForLLM retrieves plugins associated with an LLM from the gRPC
+// cache, in the order the LLM runs them: the order of its plugin_ids, which
+// the hub sends by order_index (the order set in Studio), as a standalone
+// gateway's DatabaseProvider returns them. The snapshot lists the plugins
+// themselves by id, so without this an edge ran them in install order. A
+// plugin the LLM's list does not name (a hub that sent no list) keeps the
+// snapshot's order, after the named ones.
 func (p *GRPCProvider) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) {
 	if err := p.ensureCacheValid(); err != nil {
 		return nil, err
 	}
-	
+
 	p.cacheMutex.RLock()
 	defer p.cacheMutex.RUnlock()
-	
+
 	var plugins []database.Plugin
-	
+
 	for _, pbPlugin := range p.configCache.Plugins {
 		if p.namespaceFilter.MatchesNamespace(pbPlugin.Namespace, p.namespace) && pbPlugin.IsActive {
 			// Check if plugin is associated with the LLM
@@ -362,7 +369,27 @@ func (p *GRPCProvider) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) {
 			}
 		}
 	}
-	
+
+	position := make(map[uint]int)
+	for _, pbLLM := range p.configCache.Llms {
+		if uint(pbLLM.Id) != llmID {
+			continue
+		}
+		for i, id := range pbLLM.PluginIds {
+			if _, seen := position[uint(id)]; !seen {
+				position[uint(id)] = i
+			}
+		}
+		break
+	}
+	rank := func(id uint) int {
+		if i, ok := position[id]; ok {
+			return i
+		}
+		return len(position)
+	}
+	sort.SliceStable(plugins, func(i, j int) bool { return rank(plugins[i].ID) < rank(plugins[j].ID) })
+
 	return plugins, nil
 }
 

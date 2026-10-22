@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
@@ -18,6 +19,17 @@ func joinUpstreamPath(upstreamPath, remainingPath string) string {
 // (requestformat.CanonicalVendorPath). Native operations are matched on it.
 func canonicalVendorPath(upstreamPath, remainingPath string) string {
 	return requestformat.CanonicalVendorPath(upstreamPath, remainingPath)
+}
+
+// rewriteLLMPathPrefix moves a request from one /llm/ route to another
+// (/llm/call/{slug} to /llm/rest/{slug}, say), in its escaped form too. A
+// Bedrock model ID arrives escaped (arn%3Aaws%3A...%2F...); rewriting only
+// Path would drop that escaping, so the ARN's "/" would split the segment.
+func rewriteLLMPathPrefix(u *url.URL, from, to string) {
+	u.Path = strings.Replace(u.Path, from, to, 1)
+	if u.RawPath != "" {
+		u.RawPath = strings.Replace(u.RawPath, from, to, 1)
+	}
 }
 
 // hasTraversalSegment reports whether a request path carries a ".." segment.

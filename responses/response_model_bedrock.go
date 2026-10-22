@@ -16,6 +16,9 @@ type BedrockConverseResponse struct {
 		InputTokens  int `json:"inputTokens"`
 		OutputTokens int `json:"outputTokens"`
 		TotalTokens  int `json:"totalTokens"`
+		// Prompt caching: Bedrock counts these apart from InputTokens.
+		CacheReadInputTokens  int `json:"cacheReadInputTokens"`
+		CacheWriteInputTokens int `json:"cacheWriteInputTokens"`
 	} `json:"usage"`
 	Metrics struct {
 		LatencyMs int `json:"latencyMs"`
@@ -46,11 +49,11 @@ func (r *BedrockConverseResponse) GetModel() string {
 }
 
 func (r *BedrockConverseResponse) GetCacheWritePromptTokens() int {
-	return 0
+	return r.Usage.CacheWriteInputTokens
 }
 
 func (r *BedrockConverseResponse) GetCacheReadPromptTokens() int {
-	return 0
+	return r.Usage.CacheReadInputTokens
 }
 
 // BedrockConverseStreamMetadataEvent represents the metadata event in a ConverseStream response.

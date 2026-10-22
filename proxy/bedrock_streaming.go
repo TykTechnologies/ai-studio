@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi"
@@ -129,14 +130,11 @@ func writeEventStreamError(encoder *eventstream.Encoder, w io.Writer, errMsg str
 
 // ExtractBedrockModelIDFromPath extracts the model ID from a Bedrock URL path.
 // Native Bedrock API paths contain /model/{modelId}/converse or /model/{modelId}/converse-stream.
+// Pass the escaped path (r.URL.EscapedPath()): the AWS SDKs escape the model
+// ID, so an ARN or inference profile arrives as arn%3Aaws%3Abedrock%3A...%2F...
+// and comes back unescaped and whole (requestformat.Model).
 func ExtractBedrockModelIDFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	for i, part := range parts {
-		if part == "model" && i+1 < len(parts) {
-			return parts[i+1]
-		}
-	}
-	return ""
+	return requestformat.Model(string(models.BEDROCK), path, nil)
 }
 
 // extractTextFromStreamEvent extracts text content from a ConverseStream event for response filtering.

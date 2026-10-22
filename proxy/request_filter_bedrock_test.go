@@ -5,16 +5,12 @@ package proxy
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -105,125 +101,4 @@ func TestHandleLLMRequest_ProxyLogStoresPostFilterBody(t *testing.T) {
 	require.NoError(t, db.Where("app_id = ? AND response_code = ?", app.ID, http.StatusOK).First(&proxyLog).Error)
 	assert.Contains(t, proxyLog.RequestBody, "[REDACTED]", "the proxy log must store the redacted prompt")
 	assert.NotContains(t, proxyLog.RequestBody, "SECRET-123", "the pre-filter prompt must not reach the database")
-}
-
-func TestBedrockScreenRequest(t *testing.T) {
-	app := &models.App{Model: gorm.Model{ID: 7}, UserID: 1}
-	body := []byte(`{"model":"claude","messages":[{"role":"user","content":"the code is SECRET-123"}]}`)
-
-	decode := func(t *testing.T) *ChatCompletionRequest {
-		var req ChatCompletionRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-		return &req
-	}
-
-	t.Run("no request filters is a pass-through", func(t *testing.T) {
-		p := newFilterTestProxy()
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "resp", ResponseFilter: true, Script: []byte(blockingFilterScript)}}}
-		req := decode(t)
-		r := httptest.NewRequest("POST", "/ai/bedrock/v1/chat/completions", bytes.NewReader(body))
-
-		got, gotBody, fail := p.bedrockScreenRequest(r, conf, app, req, body, "claude", time.Now())
-		require.NoError(t, fail.err)
-		assert.Same(t, req, got)
-		assert.Equal(t, body, gotBody)
-	})
-
-	t.Run("blocking filter is a 400 that does not fail over", func(t *testing.T) {
-		p := newFilterTestProxy()
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "guard", Script: []byte(blockingFilterScript)}}}
-		r := httptest.NewRequest("POST", "/ai/bedrock/v1/chat/completions", bytes.NewReader(body))
-
-		_, _, fail := p.bedrockScreenRequest(r, conf, app, decode(t), body, "claude", time.Now())
-		require.Error(t, fail.err)
-		assert.Contains(t, fail.err.Error(), "no secrets")
-		assert.Equal(t, http.StatusBadRequest, fail.status)
-		assert.True(t, fail.hasStatus)
-
-		ok, _ := shouldFailover(fail, models.ResolvedFailoverTriggers{OnTimeout: true, OnConnectionError: true, StatusCodes: map[int]bool{400: true}})
-		assert.False(t, ok, "a policy block must never fail over to a rung that may lack the filter")
-		p.analyzers.Wait()
-	})
-
-	t.Run("modifying filter reaches the translated request", func(t *testing.T) {
-		p := newFilterTestProxy()
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "redact", Script: []byte(redactingFilterScript)}}}
-		req := decode(t)
-		r := httptest.NewRequest("POST", "/ai/bedrock/v1/chat/completions", bytes.NewReader(body))
-
-		got, gotBody, fail := p.bedrockScreenRequest(r, conf, app, req, body, "claude", time.Now())
-		require.NoError(t, fail.err)
-		require.NotSame(t, req, got, "the caller's request must not be mutated: filters are per rung")
-		assert.Equal(t, "the code is [REDACTED]", got.Messages[0].Content)
-		assert.Equal(t, "the code is SECRET-123", req.Messages[0].Content)
-		assert.Contains(t, string(gotBody), "[REDACTED]")
-	})
-
-	t.Run("messages rewrite goes through the OpenAI reconstructor", func(t *testing.T) {
-		p := newFilterTestProxy()
-		script := `output := {block: false, messages: [{role: "user", content: "rewritten"}]}`
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "rewrite", Script: []byte(script)}}}
-		r := httptest.NewRequest("POST", "/ai/bedrock/v1/chat/completions", bytes.NewReader(body))
-
-		got, _, fail := p.bedrockScreenRequest(r, conf, app, decode(t), body, "claude", time.Now())
-		require.NoError(t, fail.err)
-		require.Len(t, got.Messages, 1)
-		assert.Equal(t, "rewritten", got.Messages[0].Content)
-		assert.Equal(t, "claude", got.Model, "non-message fields survive the rewrite")
-	})
-}
-
-func TestAnthropicScreenRequest(t *testing.T) {
-	app := &models.App{Model: gorm.Model{ID: 7}, UserID: 1}
-	body := []byte(`{"model":"claude","max_tokens":10,"system":"be terse","messages":[{"role":"user","content":"the code is SECRET-123"}]}`)
-
-	decode := func(t *testing.T) *AnthropicMessagesRequest {
-		var req AnthropicMessagesRequest
-		require.NoError(t, json.Unmarshal(body, &req))
-		return &req
-	}
-
-	t.Run("blocking filter writes an Anthropic 400 and stops the handler", func(t *testing.T) {
-		p := newFilterTestProxy()
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "guard", Script: []byte(blockingFilterScript)}}}
-		r := httptest.NewRequest("POST", "/anthropic/bedrock/v1/messages", bytes.NewReader(body))
-		w := httptest.NewRecorder()
-
-		_, _, ok := p.anthropicScreenRequest(w, r, conf, app, decode(t), body, "anthropic.claude", time.Now())
-		assert.False(t, ok)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Equal(t, "invalid_request_error", anthropicErrorType(t, w.Body.Bytes()))
-		assert.Contains(t, w.Body.String(), "no secrets")
-		p.analyzers.Wait()
-	})
-
-	t.Run("modifying filter reaches the translated request", func(t *testing.T) {
-		p := newFilterTestProxy()
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "redact", Script: []byte(redactingFilterScript)}}}
-		req := decode(t)
-		r := httptest.NewRequest("POST", "/anthropic/bedrock/v1/messages", bytes.NewReader(body))
-		w := httptest.NewRecorder()
-
-		got, gotBody, ok := p.anthropicScreenRequest(w, r, conf, app, req, body, "anthropic.claude", time.Now())
-		require.True(t, ok)
-		assert.Equal(t, http.StatusOK, w.Code, "nothing is written on the happy path")
-		require.NotSame(t, req, got)
-		assert.Contains(t, string(got.Messages[0].Content), "[REDACTED]")
-		assert.Contains(t, string(gotBody), "[REDACTED]")
-		assert.Equal(t, 10, got.MaxTokens)
-	})
-
-	t.Run("messages rewrite goes through the Anthropic reconstructor", func(t *testing.T) {
-		p := newFilterTestProxy()
-		script := `output := {block: false, messages: [{role: "system", content: "new system"}, {role: "user", content: "rewritten"}]}`
-		conf := &models.LLM{Vendor: models.BEDROCK, Filters: []*models.Filter{{Name: "rewrite", Script: []byte(script)}}}
-		r := httptest.NewRequest("POST", "/anthropic/bedrock/v1/messages", bytes.NewReader(body))
-		w := httptest.NewRecorder()
-
-		got, _, ok := p.anthropicScreenRequest(w, r, conf, app, decode(t), body, "anthropic.claude", time.Now())
-		require.True(t, ok)
-		require.Len(t, got.Messages, 1)
-		assert.True(t, strings.Contains(string(got.Messages[0].Content), "rewritten"))
-		assert.True(t, strings.Contains(string(got.System), "new system"))
-	})
 }
