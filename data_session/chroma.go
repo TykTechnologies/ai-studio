@@ -31,6 +31,7 @@ const ChromaSupported = true
 func newChromaStore(d *models.Datasource, embedder *embeddings.EmbedderImpl) (vectorstores.VectorStore, error) {
 	return chroma.New(
 		chroma.WithChromaURL(d.DBConnString),
+		chroma.WithHTTPClient(httpClient(d)),
 		chroma.WithEmbedder(embedder),
 		chroma.WithNameSpace(d.DBName),
 	)
@@ -101,7 +102,7 @@ func chromaMetadataValue(v any) (any, bool) {
 
 func (ds *DataSession) storeToChroma(ctx context.Context, store vectorstores.VectorStore, d *models.Datasource, contents []string, vectors [][]float32, metadatas []map[string]any) error {
 	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
+	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString), chromago.WithHTTPClient(httpClient(d)))
 	if err != nil {
 		return fmt.Errorf("failed to create chroma client: %w", err)
 	}
@@ -149,7 +150,7 @@ func (ds *DataSession) storeToChroma(ctx context.Context, store vectorstores.Vec
 
 func (ds *DataSession) searchChromaByVector(ctx context.Context, store vectorstores.VectorStore, d *models.Datasource, vector []float32, topK int) ([]schema.Document, error) {
 	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
+	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString), chromago.WithHTTPClient(httpClient(d)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create chroma client: %w", err)
 	}
@@ -310,7 +311,7 @@ func (ds *DataSession) searchChromaByVector(ctx context.Context, store vectorsto
 
 func (ds *DataSession) deleteChromaByMetadata(ctx context.Context, d *models.Datasource, filter map[string]string, filterMode string, dryRun bool) (int, error) {
 	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
+	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString), chromago.WithHTTPClient(httpClient(d)))
 	if err != nil {
 		return 0, fmt.Errorf("failed to create chroma client: %w", err)
 	}
@@ -356,7 +357,7 @@ func (ds *DataSession) deleteChromaByMetadata(ctx context.Context, d *models.Dat
 
 func (ds *DataSession) queryChromaByMetadata(ctx context.Context, d *models.Datasource, filter map[string]string, filterMode string, limit, offset int) ([]schema.Document, int, error) {
 	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
+	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString), chromago.WithHTTPClient(httpClient(d)))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create chroma client: %w", err)
 	}
@@ -440,7 +441,7 @@ func (ds *DataSession) queryChromaByMetadata(ctx context.Context, d *models.Data
 
 func (ds *DataSession) listChromaCollections(ctx context.Context, d *models.Datasource) ([]NamespaceInfo, error) {
 	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
+	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString), chromago.WithHTTPClient(httpClient(d)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create chroma client: %w", err)
 	}
@@ -471,7 +472,7 @@ func (ds *DataSession) listChromaCollections(ctx context.Context, d *models.Data
 
 func (ds *DataSession) deleteChromaCollection(ctx context.Context, d *models.Datasource, namespace string) error {
 	// Create Chroma v2 client
-	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString))
+	client, err := chromago.NewHTTPClient(chromago.WithBaseURL(d.DBConnString), chromago.WithHTTPClient(httpClient(d)))
 	if err != nil {
 		return fmt.Errorf("failed to create chroma client: %w", err)
 	}

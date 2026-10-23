@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores"
 	"github.com/google/uuid"
 	"github.com/pinecone-io/go-pinecone/pinecone"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -38,6 +40,10 @@ type Store struct {
 	apiKey    string
 	textKey   string
 	nameSpace string
+	// Tyk: the caller's outbound network policy for the REST API
+	// (httpClient) and the index's gRPC connection (dialOptions).
+	httpClient  *http.Client
+	dialOptions []grpc.DialOption
 }
 
 // New creates a new Store with options. Options for WithAPIKey, WithHost and WithEmbedder must be set.
@@ -47,7 +53,7 @@ func New(opts ...Option) (Store, error) {
 		return Store{}, err
 	}
 
-	s.client, err = pinecone.NewClient(pinecone.NewClientParams{ApiKey: s.apiKey})
+	s.client, err = pinecone.NewClient(pinecone.NewClientParams{ApiKey: s.apiKey, RestClient: s.httpClient})
 	if err != nil {
 		return Store{}, err
 	}
@@ -70,7 +76,7 @@ func (s Store) AddDocuments(ctx context.Context,
 		Namespace: nameSpace,
 	}
 
-	indexConn, err := s.client.Index(in)
+	indexConn, err := s.client.Index(in, s.dialOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +147,7 @@ func (s Store) SimilaritySearch(ctx context.Context, query string, numDocuments 
 		Namespace: nameSpace,
 	}
 
-	indexConn, err := s.client.Index(in)
+	indexConn, err := s.client.Index(in, s.dialOptions...)
 	if err != nil {
 		return nil, err
 	}

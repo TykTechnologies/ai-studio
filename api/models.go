@@ -408,6 +408,9 @@ type DatasourceResponse struct {
 		Files            []FileStoreResponse `json:"files"`
 		// Agent tracing content mode cap (Enterprise); "" is no cap.
 		TracingContentModeMax string `json:"tracing_content_mode_max"`
+		// AllowInternalHost: the datasource's own host may be an internal
+		// address (an administrator's switch).
+		AllowInternalHost bool `json:"allow_internal_host"`
 	} `json:"attributes"`
 }
 

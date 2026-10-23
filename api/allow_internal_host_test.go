@@ -119,3 +119,43 @@ func TestToolAPI_AllowInternalHost(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	assert.False(t, stored(tool.ID))
 }
+
+// The same through the datasource API.
+func TestDatasourceAPI_AllowInternalHost(t *testing.T) {
+	api, db := setupTestAPI(t)
+	do := asAdmin(t, api, db)
+	body := func(attrs map[string]any) map[string]any {
+		a := map[string]any{"name": "Internal vectors", "privacy_score": 1, "db_source_type": "pgvector",
+			"db_conn_string": "postgres://u:p@pg.internal:5432/vec", "db_name": "docs",
+			"embed_vendor": "openai", "embed_url": "https://api.openai.com/v1", "embed_model": "text-embedding-3-small"}
+		for k, v := range attrs {
+			a[k] = v
+		}
+		return map[string]any{"data": map[string]any{"type": "datasources", "attributes": a}}
+	}
+	stored := func(id uint) bool {
+		var ds models.Datasource
+		require.NoError(t, db.First(&ds, id).Error)
+		return ds.AllowInternalHost
+	}
+
+	w := performRequest(api.router, "POST", "/api/v1/datasources", body(map[string]any{"allow_internal_host": true}))
+	require.Equal(t, http.StatusForbidden, w.Code, "not an administrator: %s", w.Body.String())
+
+	w = do("POST", "/api/v1/datasources", body(map[string]any{"allow_internal_host": true}))
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), `"allow_internal_host":true`)
+	var ds models.Datasource
+	require.NoError(t, db.Where("name = ?", "Internal vectors").First(&ds).Error)
+	assert.True(t, stored(ds.ID))
+
+	w = do("PATCH", fmt.Sprintf("/api/v1/datasources/%d", ds.ID), body(nil))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.True(t, stored(ds.ID), "an update that omits it keeps it")
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/datasources/%d", ds.ID), body(map[string]any{"allow_internal_host": false}))
+	require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = do("PATCH", fmt.Sprintf("/api/v1/datasources/%d", ds.ID), body(map[string]any{"allow_internal_host": false}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.False(t, stored(ds.ID))
+}

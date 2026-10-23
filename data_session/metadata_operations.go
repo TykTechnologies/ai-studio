@@ -12,15 +12,12 @@ import (
 
 	pineconeSDK "github.com/pinecone-io/go-pinecone/pinecone"
 	weaviateSDK "github.com/weaviate/weaviate-go-client/v5/weaviate"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate/auth"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/filters"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	weaviateModels "github.com/weaviate/weaviate/entities/models"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	"google.golang.org/protobuf/types/known/structpb"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // This file contains vendor-specific implementations for metadata operations
@@ -168,9 +165,7 @@ func (ds *DataSession) DeleteNamespace(dsID uint, namespace string) error {
 // Pinecone implementations
 func (ds *DataSession) deletePineconeByMetadata(ctx context.Context, d *models.Datasource, filter map[string]string, filterMode string, dryRun bool) (int, error) {
 	// Create Pinecone client
-	pc, err := pineconeSDK.NewClient(pineconeSDK.NewClientParams{
-		ApiKey: d.DBConnAPIKey,
-	})
+	pc, err := pineconeClient(d)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create pinecone client: %w", err)
 	}
@@ -179,7 +174,7 @@ func (ds *DataSession) deletePineconeByMetadata(ctx context.Context, d *models.D
 	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{
 		Host:      d.DBConnString,
 		Namespace: d.DBName,
-	})
+	}, grpcDialer(d))
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -236,9 +231,7 @@ func (ds *DataSession) queryPineconeByMetadata(ctx context.Context, d *models.Da
 	// However, this is expensive and has pagination limits
 
 	// Create Pinecone client
-	pc, err := pineconeSDK.NewClient(pineconeSDK.NewClientParams{
-		ApiKey: d.DBConnAPIKey,
-	})
+	pc, err := pineconeClient(d)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create pinecone client: %w", err)
 	}
@@ -247,7 +240,7 @@ func (ds *DataSession) queryPineconeByMetadata(ctx context.Context, d *models.Da
 	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{
 		Host:      d.DBConnString,
 		Namespace: d.DBName,
-	})
+	}, grpcDialer(d))
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -350,15 +343,13 @@ func (ds *DataSession) queryPineconeByMetadata(ctx context.Context, d *models.Da
 
 func (ds *DataSession) listPineconeNamespaces(ctx context.Context, d *models.Datasource) ([]NamespaceInfo, error) {
 	// Create Pinecone client
-	pc, err := pineconeSDK.NewClient(pineconeSDK.NewClientParams{
-		ApiKey: d.DBConnAPIKey,
-	})
+	pc, err := pineconeClient(d)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pinecone client: %w", err)
 	}
 
 	// Get index connection (without specific namespace to get all stats)
-	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString})
+	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialer(d))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -386,9 +377,7 @@ func (ds *DataSession) listPineconeNamespaces(ctx context.Context, d *models.Dat
 
 func (ds *DataSession) deletePineconeNamespace(ctx context.Context, d *models.Datasource, namespace string) error {
 	// Create Pinecone client
-	pc, err := pineconeSDK.NewClient(pineconeSDK.NewClientParams{
-		ApiKey: d.DBConnAPIKey,
-	})
+	pc, err := pineconeClient(d)
 	if err != nil {
 		return fmt.Errorf("failed to create pinecone client: %w", err)
 	}
@@ -397,7 +386,7 @@ func (ds *DataSession) deletePineconeNamespace(ctx context.Context, d *models.Da
 	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{
 		Host:      d.DBConnString,
 		Namespace: namespace,
-	})
+	}, grpcDialer(d))
 	if err != nil {
 		return fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -450,7 +439,7 @@ func (ds *DataSession) buildPineconeMetadataFilter(filter map[string]string, fil
 // PGVector implementations
 func (ds *DataSession) deletePGVectorByMetadata(ctx context.Context, d *models.Datasource, filter map[string]string, filterMode string, dryRun bool) (int, error) {
 	// Connect to PostgreSQL
-	db, err := gorm.Open(postgres.Open(d.DBConnString), &gorm.Config{})
+	db, err := openPostgres(d)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
@@ -498,7 +487,7 @@ func (ds *DataSession) deletePGVectorByMetadata(ctx context.Context, d *models.D
 
 func (ds *DataSession) queryPGVectorByMetadata(ctx context.Context, d *models.Datasource, filter map[string]string, filterMode string, limit, offset int) ([]schema.Document, int, error) {
 	// Connect to PostgreSQL
-	db, err := gorm.Open(postgres.Open(d.DBConnString), &gorm.Config{})
+	db, err := openPostgres(d)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
@@ -577,7 +566,7 @@ func (ds *DataSession) queryPGVectorByMetadata(ctx context.Context, d *models.Da
 
 func (ds *DataSession) listPGVectorTables(ctx context.Context, d *models.Datasource) ([]NamespaceInfo, error) {
 	// Connect to PostgreSQL
-	db, err := gorm.Open(postgres.Open(d.DBConnString), &gorm.Config{})
+	db, err := openPostgres(d)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
@@ -626,7 +615,7 @@ func (ds *DataSession) listPGVectorTables(ctx context.Context, d *models.Datasou
 
 func (ds *DataSession) deletePGVectorTable(ctx context.Context, d *models.Datasource, namespace string) error {
 	// Connect to PostgreSQL
-	db, err := gorm.Open(postgres.Open(d.DBConnString), &gorm.Config{})
+	db, err := openPostgres(d)
 	if err != nil {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
@@ -731,13 +720,7 @@ func (ds *DataSession) deleteWeaviateByMetadata(ctx context.Context, d *models.D
 		return 0, fmt.Errorf("failed to parse weaviate URL: %w", err)
 	}
 
-	cfg := weaviateSDK.Config{
-		Host:   parsedURL.Host,
-		Scheme: parsedURL.Scheme,
-	}
-	if d.DBConnAPIKey != "" {
-		cfg.AuthConfig = auth.ApiKey{Value: d.DBConnAPIKey}
-	}
+	cfg := weaviateConfig(d, parsedURL)
 
 	client, err := weaviateSDK.NewClient(cfg)
 	if err != nil {
@@ -812,13 +795,7 @@ func (ds *DataSession) queryWeaviateByMetadata(ctx context.Context, d *models.Da
 		return nil, 0, fmt.Errorf("failed to parse weaviate URL: %w", err)
 	}
 
-	cfg := weaviateSDK.Config{
-		Host:   parsedURL.Host,
-		Scheme: parsedURL.Scheme,
-	}
-	if d.DBConnAPIKey != "" {
-		cfg.AuthConfig = auth.ApiKey{Value: d.DBConnAPIKey}
-	}
+	cfg := weaviateConfig(d, parsedURL)
 
 	client, err := weaviateSDK.NewClient(cfg)
 	if err != nil {
@@ -922,13 +899,7 @@ func (ds *DataSession) listWeaviateClasses(ctx context.Context, d *models.Dataso
 		return nil, fmt.Errorf("failed to parse weaviate URL: %w", err)
 	}
 
-	cfg := weaviateSDK.Config{
-		Host:   parsedURL.Host,
-		Scheme: parsedURL.Scheme,
-	}
-	if d.DBConnAPIKey != "" {
-		cfg.AuthConfig = auth.ApiKey{Value: d.DBConnAPIKey}
-	}
+	cfg := weaviateConfig(d, parsedURL)
 
 	client, err := weaviateSDK.NewClient(cfg)
 	if err != nil {
@@ -975,13 +946,7 @@ func (ds *DataSession) deleteWeaviateClass(ctx context.Context, d *models.Dataso
 		return fmt.Errorf("failed to parse weaviate URL: %w", err)
 	}
 
-	cfg := weaviateSDK.Config{
-		Host:   parsedURL.Host,
-		Scheme: parsedURL.Scheme,
-	}
-	if d.DBConnAPIKey != "" {
-		cfg.AuthConfig = auth.ApiKey{Value: d.DBConnAPIKey}
-	}
+	cfg := weaviateConfig(d, parsedURL)
 
 	client, err := weaviateSDK.NewClient(cfg)
 	if err != nil {
