@@ -48,6 +48,13 @@ func setupTrafficTest(t *testing.T) (string, *mockllm.MockLLMBackend) {
 // switched off and verify the real mounted route table.
 func setupTrafficTestWithGateway(t *testing.T, gwCfg config.GatewayConfig) (string, *mockllm.MockLLMBackend) {
 	t.Helper()
+	return setupTrafficTestSeeded(t, gwCfg, nil)
+}
+
+// setupTrafficTestSeeded is setupTrafficTestWithGateway with seed run on the
+// database, its LLM and its App before the gateway starts.
+func setupTrafficTestSeeded(t *testing.T, gwCfg config.GatewayConfig, seed func(db *gorm.DB, llm *mgwdb.LLM, app *mgwdb.App)) (string, *mockllm.MockLLMBackend) {
+	t.Helper()
 
 	// Shared-cache named in-memory DB: the server handles requests concurrently,
 	// so every pooled connection must see the same database.
@@ -130,6 +137,9 @@ func setupTrafficTestWithGateway(t *testing.T, gwCfg config.GatewayConfig) (stri
 		AppID:    app.ID,
 		IsActive: true,
 	}).Error)
+	if seed != nil {
+		seed(db, llm, app)
+	}
 
 	srv, err := server.New(cfg, serviceContainer, "test", "test", "test")
 	require.NoError(t, err)

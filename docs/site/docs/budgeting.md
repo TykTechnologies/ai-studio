@@ -66,7 +66,9 @@ When running multiple Microgateways in a hub-and-spoke architecture, budget trac
 
 4. **Blocks:** the same pulse lists the Apps every gateway must refuse regardless of its local numbers: Apps with a budget of $0, and Apps whose [team](#team-budgets-enterprise) has spent a blocking team budget. Gateways keep this list across restarts.
 
-5. **Alerts:** each pulse also has AI Studio check the Apps whose spend moved at the gateways against their App, LLM and team budgets, so the 80% and 100% alerts fire for gateway traffic too.
+5. **LLM budgets (Enterprise):** the pulse also carries the total spend of every LLM with a monthly budget, in that LLM's own budget period, and the LLMs every gateway must refuse: those with a budget of $0 and those whose budget is spent. A gateway refuses a request to an LLM whose budget is spent (by AI Studio's figure, or by its own spend since that figure if higher) with the same 403 as an App budget refusal, for example `Budget limit exceeded: LLM monthly budget exceeded: current=0.01099, estimated=0.00, limit=0.0005`. Gateways keep the list of refused LLMs across restarts.
+
+6. **Alerts:** each pulse also has AI Studio check the Apps whose spend moved at the gateways against their App, LLM and team budgets, so the 80% and 100% alerts fire for gateway traffic too.
 
 This provides **eventually-accurate** budget control. There may be a slight overrun window under very high concurrent load across multiple gateways, but the system converges quickly and prevents sustained overspending.
 

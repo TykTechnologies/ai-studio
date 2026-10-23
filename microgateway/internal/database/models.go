@@ -513,6 +513,15 @@ type BudgetBlock struct {
 	UpdatedAt time.Time
 }
 
+// LLMBudgetBlock is an LLM the control plane says this gateway must refuse
+// on budget grounds (Enterprise): its Studio budget is 0 or spent. Kept and
+// replaced like BudgetBlock.
+type LLMBudgetBlock struct {
+	LLMID     uint   `gorm:"primaryKey;autoIncrement:false"`
+	Reason    string `gorm:"size:255"`
+	UpdatedAt time.Time
+}
+
 // ModelRouter represents a model router configuration (Enterprise)
 // Routes incoming requests to LLM vendors based on model name patterns
 type ModelRouter struct {
