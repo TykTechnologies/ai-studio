@@ -81,9 +81,60 @@ func TestBedrockREST_SigV4SurvivesForwardedAndConnectionHeaders(t *testing.T) {
 		`{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`,
 		"X-Forwarded-For", "203.0.113.7", "Connection", "X-Hop", "X-Hop", "drop-me")
 	require.Equal(t, http.StatusOK, resp.StatusCode, "the SigV4 verifier rejected the request: %s", body)
-	// The signature covers the headers as sent: the appended
-	// X-Forwarded-For, and without the Connection-listed one.
+	// The signature covers the headers as sent, without the Connection-listed
+	// one. X-Forwarded-For goes out unsigned (8xf.39).
 	assert.Contains(t, received.Get("X-Forwarded-For"), "203.0.113.7")
-	assert.Contains(t, sigV4Between(received.Get("Authorization"), "SignedHeaders=", ","), "x-forwarded-for")
+	assert.NotContains(t, sigV4Between(received.Get("Authorization"), "SignedHeaders=", ","), "x-forwarded-for")
 	assert.Empty(t, received.Get("X-Hop"))
+}
+
+// awsFrontEnd is what AWS's front end does before it checks a signature: it
+// appends the caller's address to X-Forwarded-For, and adds headers of its
+// own.
+func awsFrontEnd(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("X-Front-End-Hop", "edge-1")
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			r.Header.Set("X-Forwarded-For", xff+",159.65.17.221")
+		} else {
+			r.Header.Set("X-Forwarded-For", "159.65.17.221")
+		}
+		next(w, r)
+	}
+}
+
+// Real AWS rejected every non-streaming Bedrock call with 403
+// SignatureDoesNotMatch (8xf.39): the gateway signed X-Forwarded-For (which
+// ReverseProxy always sets) and AWS's front end appends to it before it
+// checks. The forwarding headers are now left out of the signature, on
+// /llm/rest/ and on the bridges, whose inner hop is /llm/rest/.
+func TestBedrockREST_SigV4SurvivesAWSAppendingXForwardedFor(t *testing.T) {
+	var received http.Header
+	h := newFailoverHarness(t, awsFrontEnd(sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received)), serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.BEDROCK
+		primary.Failover = models.LLMFailover{}
+		primary.DefaultModel = "anthropic.claude-3"
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+	})
+	converse := `{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`
+	for _, tc := range []struct {
+		name, path, body string
+		headers          []string
+	}{
+		{"llm rest", "/llm/rest/primary/model/anthropic.claude-3/converse", converse, nil},
+		{"llm rest with a client XFF", "/llm/rest/primary/model/anthropic.claude-3/converse", converse, []string{"X-Forwarded-For", "203.0.113.7", "Forwarded", "for=203.0.113.7", "X-Real-IP", "203.0.113.7"}},
+		{"ai bridge", "/ai/primary/v1/chat/completions", `{"model":"anthropic.claude-3","messages":[{"role":"user","content":"hi"}]}`, nil},
+		{"anthropic bridge", "/anthropic/primary/v1/messages", `{"model":"claude","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`, []string{"x-api-key", h.apiKey}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, body := h.post(tc.path, tc.body, tc.headers...)
+			require.Equal(t, http.StatusOK, resp.StatusCode, "the SigV4 verifier rejected the request: %s", body)
+			assert.Contains(t, received.Get("X-Forwarded-For"), "159.65.17.221", "AWS appended to it")
+			signed := sigV4Between(received.Get("Authorization"), "SignedHeaders=", ",")
+			for _, h := range []string{"x-forwarded-for", "forwarded", "x-real-ip", "via"} {
+				assert.NotContains(t, strings.Split(signed, ";"), h)
+			}
+			assert.Contains(t, signed, "host")
+		})
+	}
 }
