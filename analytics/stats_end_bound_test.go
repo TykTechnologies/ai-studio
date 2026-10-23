@@ -65,11 +65,13 @@ func TestStatsEndBoundIsExclusive(t *testing.T) {
 		"GetToolOperationsUsageOverTime": func(db *gorm.DB, s, e time.Time) float64 {
 			return multi(GetToolOperationsUsageOverTime(db, 1, s, e))
 		},
-		"GetUniqueUsersPerDay":       func(db *gorm.DB, s, e time.Time) float64 { return chart(GetUniqueUsersPerDay(db, s, e)) },
-		"GetTokenUsagePerUser":       func(db *gorm.DB, s, e time.Time) float64 { return chart(GetTokenUsagePerUser(db, s, e, nil)) },
-		"GetTokenUsagePerApp":        func(db *gorm.DB, s, e time.Time) float64 { return chart(GetTokenUsagePerApp(db, s, e, nil)) },
-		"GetTokenUsageForApp":        func(db *gorm.DB, s, e time.Time) float64 { return chart(GetTokenUsageForApp(db, s, e, 1)) },
-		"GetChatInteractionsForChat": func(db *gorm.DB, s, e time.Time) float64 { return chart(GetChatInteractionsForChat(db, s, e, "chat-1")) },
+		"GetUniqueUsersPerDay": func(db *gorm.DB, s, e time.Time) float64 { return chart(GetUniqueUsersPerDay(db, s, e)) },
+		"GetTokenUsagePerUser": func(db *gorm.DB, s, e time.Time) float64 { return chart(GetTokenUsagePerUser(db, s, e, nil)) },
+		"GetTokenUsagePerApp":  func(db *gorm.DB, s, e time.Time) float64 { return chart(GetTokenUsagePerApp(db, s, e, nil)) },
+		"GetTokenUsageForApp":  func(db *gorm.DB, s, e time.Time) float64 { return chart(GetTokenUsageForApp(db, s, e, 1)) },
+		"GetChatInteractionsForChat": func(db *gorm.DB, s, e time.Time) float64 {
+			return chart(GetChatInteractionsForChat(db, s, e, "chat-1"))
+		},
 		"GetAppInteractionsOverTime": func(db *gorm.DB, s, e time.Time) float64 { return chart(GetAppInteractionsOverTime(db, s, e, 1)) },
 		"GetModelUsage":              func(db *gorm.DB, s, e time.Time) float64 { return chart(GetModelUsage(db, s, e, "gpt")) },
 		"GetVendorUsage":             func(db *gorm.DB, s, e time.Time) float64 { return chart(GetVendorUsage(db, s, e, "openai", nil)) },
