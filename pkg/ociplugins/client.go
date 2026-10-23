@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,7 +27,7 @@ type SecurityService interface {
 // pluginPuller pulls a plugin's manifest, config and binary from a registry.
 // ORASFetcher implements it; tests substitute a fake.
 type pluginPuller interface {
-	Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error)
+	Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*PullResult, error)
 }
 
 // OCIPluginClient handles OCI-based plugin operations
@@ -146,7 +145,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Fetch the plugin manifest and layers
-	manifestDesc, pluginConfig, binaryData, err := c.fetcher.Pull(ctx, ref, params)
+	pulled, err := c.fetcher.Pull(ctx, ref, params)
 	if err != nil {
 		// A copy that merely could not be checked still loads, as it did
 		// before hashes were recorded; one that failed its check never does.
@@ -160,28 +159,42 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		return nil, fmt.Errorf("failed to pull plugin: %w", err)
 	}
 
+	pluginConfig, binaryData := pulled.Config, pulled.Binary
+
 	// Tag-based references carry no digest, so pin them to the manifest digest
-	// the registry resolved the tag to; the cache is keyed by digest.
+	// the registry resolved the tag to; the cache is keyed by digest. For a
+	// multi-arch tag that is the platform manifest's digest, as it was before
+	// signatures were checked against the index, so existing caches stay valid.
 	cacheRef := ref
-	if cacheRef.Digest == "" && manifestDesc != nil {
+	if cacheRef.Digest == "" && pulled.Manifest != nil {
 		resolved := *ref
-		resolved.Digest = manifestDesc.Digest.String()
+		resolved.Digest = pulled.Manifest.Digest.String()
 		cacheRef = &resolved
 	}
 
-	// Verify signature if required. Verify the digest that was pulled
-	// (cacheRef), not the tag: a tag moved between the pull and the check
-	// would otherwise get a signed image verified and an unsigned one stored.
+	// The signature covers the top-level digest the reference resolved to
+	// (the index for a multi-arch plugin; publish-plugin.sh signs that), not
+	// the platform manifest. Verify that digest as pulled, not the tag: a tag
+	// moved between the pull and the check would otherwise get a signed image
+	// verified and an unsigned one stored.
+	signedRef := cacheRef
+	if pulled.Resolved != nil {
+		resolved := *ref
+		resolved.Digest = pulled.Resolved.Digest.String()
+		signedRef = &resolved
+	}
+
+	// Verify signature if required.
 	if c.config.RequireSignature {
 		var err error
 
 		// Use enterprise security service if available, otherwise fall back to built-in verifier
 		if c.securityService != nil {
 			log.Debug().Msg("Using enterprise security service for signature verification")
-			err = c.securityService.VerifySignature(ctx, cacheRef, params.PublicKey)
+			err = c.securityService.VerifySignature(ctx, signedRef, params.PublicKey)
 		} else {
 			log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
-			err = c.verifier.Verify(ctx, cacheRef, params.PublicKey)
+			err = c.verifier.Verify(ctx, signedRef, params.PublicKey)
 		}
 
 		if err != nil {
@@ -240,6 +253,9 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		// here with signatures required means it ran and passed.
 		SignatureChecked: c.config.RequireSignature,
 		SignatureKey:     params.PublicKey,
+	}
+	if c.config.RequireSignature {
+		metadata.SignedDigest = signedRef.Digest
 	}
 
 	if err := c.storage.StoreMetadata(cacheRef.Digest, params.Architecture, metadata); err != nil {

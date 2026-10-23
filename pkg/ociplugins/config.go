@@ -109,6 +109,10 @@ type PluginMetadata struct {
 	// SignatureKey is the public key ID the signature was checked with
 	// ("" for the default key).
 	SignatureKey string `json:"signature_key,omitempty"`
+	// SignedDigest is the digest the signature was checked against: the
+	// top-level index or manifest the reference resolved to. The cache key
+	// (Reference.Digest) is the platform manifest for a multi-arch tag.
+	SignedDigest string `json:"signed_digest,omitempty"`
 }
 
 // PluginConfig represents the configuration metadata stored in the OCI artifact

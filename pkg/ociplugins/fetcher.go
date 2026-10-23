@@ -44,12 +44,36 @@ func NewORASFetcher(config *OCIConfig) (*ORASFetcher, error) {
 	}, nil
 }
 
-// Pull fetches a plugin from an OCI registry and returns the manifest, config, and binary data
-func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
+// PullResult is what Pull fetched for a plugin reference.
+type PullResult struct {
+	// Resolved is the top-level descriptor the reference resolved to: the
+	// image index for a multi-arch plugin, else the manifest. Its digest is
+	// the one publish-plugin.sh signs, so signatures are checked against it.
+	// The platform manifest is bound to it through the index's
+	// content-addressed descriptor list.
+	Resolved *ocispec.Descriptor
+	// Manifest is the platform manifest the binary was read from (Resolved
+	// itself for a single-platform plugin).
+	Manifest *ocispec.Descriptor
+	Config   *PluginConfig
+	Binary   []byte
+}
+
+// Pull fetches a plugin from an OCI registry and returns the resolved
+// descriptor, platform manifest, config and binary data
+func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*PullResult, error) {
+	resolved, manifestDesc, pluginConfig, binaryData, err := f.pull(ctx, ref, params)
+	if err != nil {
+		return nil, err
+	}
+	return &PullResult{Resolved: resolved, Manifest: manifestDesc, Config: pluginConfig, Binary: binaryData}, nil
+}
+
+func (f *ORASFetcher) pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *ocispec.Descriptor, *PluginConfig, []byte, error) {
 	// Create remote repository
 	repo, err := remote.NewRepository(ref.FullRepo())
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create remote repository: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to create remote repository: %w", err)
 	}
 
 	// Configure for insecure (HTTP) registries if needed
@@ -59,7 +83,7 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 
 	// Configure authentication
 	if err := f.configureAuth(repo, ref.Registry, params.AuthConfig); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to configure authentication: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to configure authentication: %w", err)
 	}
 
 	// Determine reference (digest or tag)
@@ -76,18 +100,20 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 	// including the binaries for platforms this host will never run.
 	descriptor, err := repo.Resolve(ctx, reference)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to resolve reference: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to resolve reference: %w", err)
 	}
 
 	// Check if this is a multi-arch image index
 	switch descriptor.MediaType {
 	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
 		// Handle multi-arch index - resolve to platform-specific manifest
-		return f.pullFromIndex(ctx, repo, &descriptor, params)
+		manifestDesc, pluginConfig, binaryData, err := f.pullFromIndex(ctx, repo, &descriptor, params)
+		return &descriptor, manifestDesc, pluginConfig, binaryData, err
 	}
 
 	// Handle single-platform manifest
-	return f.pullFromManifest(ctx, repo, &descriptor, params)
+	manifestDesc, pluginConfig, binaryData, err := f.pullFromManifest(ctx, repo, &descriptor, params)
+	return &descriptor, manifestDesc, pluginConfig, binaryData, err
 }
 
 // pullFromManifest extracts plugin data from a single-platform manifest
