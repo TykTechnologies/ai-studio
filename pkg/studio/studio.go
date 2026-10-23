@@ -485,7 +485,7 @@ func New(opts Options) (_ *Studio, err error) {
 	if conf.MarketplaceEnabled && ociConfig != nil {
 		var ociClient *ociplugins.OCIPluginClient
 		if service.PluginService != nil {
-			ociClient, _ = ociplugins.NewOCIPluginClient(ociConfig)
+			ociClient, _ = service.NewOCIPluginClient(ociConfig)
 		}
 		service.MarketplaceService = services.NewMarketplaceService(
 			s.db,

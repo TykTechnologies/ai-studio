@@ -93,6 +93,12 @@ func (c *OCIPluginClient) SetSecurityService(service SecurityService) {
 	log.Debug().Msg("Enterprise security service configured for OCI plugin client")
 }
 
+// SecurityService returns the security service set with SetSecurityService,
+// or nil if none was set.
+func (c *OCIPluginClient) SecurityService() SecurityService {
+	return c.securityService
+}
+
 // FetchPlugin fetches a plugin by OCI reference, verifies it, and returns local information
 func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	startTime := time.Now()
