@@ -119,3 +119,58 @@ func TestEdgeSnapshot_OldEdgeGetsRefusedGuardrailKey(t *testing.T) {
 		t.Errorf("a v2.2.2 edge uses %q as the key, want the refused key", old.Connection["api_key"])
 	}
 }
+
+// A secret connection field whose reference resolves to an empty value goes
+// to the edge as the refused key, never empty (0eu): Bedrock's client would
+// otherwise sign with the edge's own AWS credentials. A field left empty, and
+// a non-secret field resolving empty, stay empty.
+func TestConfigJSONForEdge_ReferenceToEmptySecretIsRefused(t *testing.T) {
+	raw := map[string]any{
+		"provider": "bedrock",
+		"connection": map[string]any{
+			"region":            "$SECRET/EMPTY_REGION",
+			"access_key_id":     "$SECRET/EMPTY",
+			"secret_access_key": "$SECRET/EMPTY",
+			"session_token":     "",
+		},
+		"detectors": []any{map[string]any{"name": "hate"}},
+		"on_detect": ActionBlock,
+	}
+	empty := func(v string) string {
+		if strings.HasPrefix(v, "$SECRET/") {
+			return ""
+		}
+		return v
+	}
+	for _, encrypt := range []func(string) string{nil, fakeEncrypt} {
+		js, err := ConfigJSONForEdge(raw, empty, encrypt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, _ := ConfigFromJSON(js)
+		DecryptEdgeConnection(cfg, fakeDecrypt)
+		conn := cfg["connection"].(map[string]any)
+		for _, k := range []string{"access_key_id", "secret_access_key"} {
+			if conn[k] != secrets.RefusedCredential {
+				t.Errorf("encrypt=%v: %s = %q, want the refused key", encrypt != nil, k, conn[k])
+			}
+		}
+		if v, _ := conn["session_token"].(string); v != "" {
+			t.Errorf("an empty field became %q", v)
+		}
+		if spec, ok := ProviderSpec("bedrock"); ok && !isSecretField(spec, "region") {
+			if v, _ := conn["region"].(string); v != "" {
+				t.Errorf("a non-secret field resolving empty became %q", v)
+			}
+		}
+	}
+}
+
+func isSecretField(spec Spec, name string) bool {
+	for _, f := range spec.ConnectionFields {
+		if f.Name == name {
+			return f.Secret
+		}
+	}
+	return true
+}

@@ -34,7 +34,16 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string, encrypt 
 	}
 	if resolve != nil {
 		for k, v := range cfg.Connection {
-			cfg.Connection[k] = EdgeConnectionValue(cfg.Provider, k, resolve(v))
+			resolved := resolve(v)
+			// A secret field whose reference resolves to an empty value
+			// (a secret stored empty, an unset $ENV/ name) is refused, never
+			// sent empty: a provider client fills an empty key from its own
+			// environment (Bedrock's AWS default chain), as
+			// secrets.CredentialRefForEdge does for LLM keys.
+			if resolved == "" && v != "" && isSecretConnectionField(cfg.Provider, k) {
+				resolved = secrets.RefusedCredential
+			}
+			cfg.Connection[k] = EdgeConnectionValue(cfg.Provider, k, resolved)
 		}
 	}
 	if encrypt != nil {
