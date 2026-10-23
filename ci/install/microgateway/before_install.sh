@@ -7,7 +7,7 @@ USERNAME="tyk"
 getent group "$GROUPNAME" >/dev/null || groupadd -r "$GROUPNAME"
 getent passwd "$USERNAME" >/dev/null || useradd -r -g "$GROUPNAME" -d /home/tyk -s /sbin/nologin -c "Tyk service user" "$USERNAME"
 
-# Ensure home directory exists (needed by cosign for signature verification cache)
+# Ensure the service user's home directory exists
 if [ ! -d /home/tyk ]; then
     mkdir -p /home/tyk
     chown tyk:tyk /home/tyk

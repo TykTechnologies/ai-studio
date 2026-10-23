@@ -633,7 +633,7 @@ MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS=0  # 0=enabled, 1=disabled (dev only)
 ALLOW_INTERNAL_NETWORK_ACCESS=false  # false=enforced, true=bypassed (dev only)
 
 # OCI signature verification (ENT)
-AI_STUDIO_OCI_REQUIRE_SIGNATURE=false     # AI Studio default (permissive)
+AI_STUDIO_OCI_REQUIRE_SIGNATURE=true      # AI Studio default (since 2.3; was false)
 OCI_PLUGINS_REQUIRE_SIGNATURE=true        # Microgateway default (strict)
 
 # Transparency-log (Rekor) policy (ENT): required | optional | disabled
@@ -674,7 +674,7 @@ So does an invalid `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGN
 **AI Studio** ([config/oci_config.go](../config/oci_config.go)):
 ```go
 type OCIConfig struct {
-    RequireSignature bool  `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"false"`
+    RequireSignature bool  `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"true"`
     // ... other fields
 }
 ```

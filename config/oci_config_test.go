@@ -82,7 +82,7 @@ func TestOCIRequireSignatureParsing(t *testing.T) {
 		value string
 		want  bool
 	}{
-		{"", false}, // the default
+		{"", true}, // the default
 		{"false", false},
 		{"true", true},
 		{"TRUE", true},

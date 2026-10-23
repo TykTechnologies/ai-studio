@@ -32,10 +32,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh
 # Install Air for Go hot reloading (pinned to v1.61.7)
 RUN go install github.com/air-verse/air@v1.61.7
 
-# Install cosign for OCI plugin signature verification (pinned to v2.4.1)
-RUN curl -fsSL https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-$(dpkg --print-architecture) -o /usr/local/bin/cosign \
-    && chmod +x /usr/local/bin/cosign
-
 # Set working directory
 WORKDIR /app
 

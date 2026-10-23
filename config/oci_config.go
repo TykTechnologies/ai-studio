@@ -19,7 +19,9 @@ type OCIConfig struct {
 
 	// Security settings
 	AllowedRegistries []string `env:"AI_STUDIO_OCI_ALLOWED_REGISTRIES" envSeparator:","`
-	RequireSignature  bool     `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"false"` // More permissive default for AI Studio
+	// Signatures are required by default (Enterprise verifies them in-process;
+	// Community Edition cannot verify and records plugins as unverified)
+	RequireSignature bool `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"true"`
 	// Transparency-log policy (required|optional|disabled) and Sigstore
 	// trusted-root override for signature verification
 	TlogPolicy      string `env:"AI_STUDIO_OCI_TLOG_POLICY" envDefault:"required"`

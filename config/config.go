@@ -1494,8 +1494,9 @@ func getOCIConfig(getenv func(string) string) (OCIConfig, error) {
 		}
 	}
 
-	// Require signature verification. A security setting: an invalid value
-	// refuses to start rather than falling back to the default.
+	// Require signature verification, on by default. A security setting: an
+	// invalid value refuses to start rather than falling back to the default.
+	config.RequireSignature = true
 	if requireSigStr := getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
 		requireSig, err := strconv.ParseBool(strings.TrimSpace(requireSigStr))
 		if err != nil {
