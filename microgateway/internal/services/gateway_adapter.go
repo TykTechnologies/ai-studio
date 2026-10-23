@@ -842,6 +842,7 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		PriceMultipliers:             priceMultipliers,
 		TracingContentModeMax:        dbLLM.TracingContentModeMax,
 		TracingPropagationOptOut:     dbLLM.TracingPropagationOptOut,
+		AllowInternalHost:            dbLLM.AllowInternalHost,
 	}
 
 	log.Debug().
@@ -997,6 +998,7 @@ func (a *GatewayServiceAdapter) convertDatabaseToolToModel(dbTool *database.Tool
 		Namespace:           dbTool.Namespace,
 		Filters:             filters,
 		TracingContentModeMax: dbTool.TracingContentModeMax,
+		AllowInternalHost:     dbTool.AllowInternalHost,
 	}
 }
 
@@ -1041,6 +1043,9 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 			Endpoint:  dbDS.EmbedUrl,
 			APIKey:    embedAPIKey,
 			ModelName: dbDS.EmbedModel,
+			// The hub sends the effective switch (a linked embedder's is its
+			// LLM's); the edge's embedder is standalone.
+			AllowInternalHost: dbDS.EmbedAllowInternalHost,
 		}
 		if embedder.Vendor == models.VERTEX && embedder.Endpoint == "" {
 			embedder.Endpoint = connString
@@ -1066,6 +1071,7 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 		Active:           dbDS.Active,
 		Namespace:        dbDS.Namespace,
 		TracingContentModeMax: dbDS.TracingContentModeMax,
+		AllowInternalHost:     dbDS.AllowInternalHost,
 	}
 	ds.Embedder = embedder
 	return ds

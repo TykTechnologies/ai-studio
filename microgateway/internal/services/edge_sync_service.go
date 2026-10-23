@@ -484,6 +484,7 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			VendorWorkspaceID:                  pbLLM.VendorWorkspaceId,
 			TracingContentModeMax:              pbLLM.TracingContentModeMax,
 			TracingPropagationOptOut:           pbLLM.TracingPropagationOptOut,
+			AllowInternalHost:                  pbLLM.AllowInternalHost,
 		}
 		if pbLLM.ResourceSigningPrevExpiresAt != nil {
 			t := pbLLM.ResourceSigningPrevExpiresAt.AsTime()
@@ -976,6 +977,8 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig, l
 			Namespace:   pbPlugin.Namespace,
 			CreatedAt:   pbPlugin.CreatedAt.AsTime(),
 			UpdatedAt:   pbPlugin.UpdatedAt.AsTime(),
+
+			AllowInternalHost: pbPlugin.AllowInternalHost,
 		}
 
 		// Handle Config JSON field with proper conversion
@@ -1264,6 +1267,7 @@ func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 			Namespace:           pbTool.Namespace,
 			GovernedMetadata:    database.GovernedMetadataJSON(pbTool.GovernedMetadata),
 			TracingContentModeMax: pbTool.TracingContentModeMax,
+			AllowInternalHost:     pbTool.AllowInternalHost,
 		})
 
 		// Collect tool_filter join table entries
@@ -1328,6 +1332,9 @@ func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.Datasou
 			Namespace:             pbDS.Namespace,
 			GovernedMetadata:      database.GovernedMetadataJSON(pbDS.GovernedMetadata),
 			TracingContentModeMax: pbDS.TracingContentModeMax,
+
+			AllowInternalHost:      pbDS.AllowInternalHost,
+			EmbedAllowInternalHost: pbDS.EmbedAllowInternalHost,
 		})
 	}
 

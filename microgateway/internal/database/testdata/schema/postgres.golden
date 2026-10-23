@@ -238,6 +238,8 @@ TABLE datasources
   column namespace text(text) nullable=YES default=''::text
   column governed_metadata jsonb(jsonb) nullable=YES
   column tracing_content_mode_max text(text) nullable=YES
+  column allow_internal_host boolean(bool) nullable=NO default=false
+  column embed_allow_internal_host boolean(bool) nullable=NO default=false
 TABLE edge_instances
   constraint edge_instances_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX edge_instances_pkey ON edge_instances USING btree (id)
@@ -347,6 +349,7 @@ TABLE llms
   column price_multipliers jsonb(jsonb) nullable=YES
   column tracing_content_mode_max text(text) nullable=YES
   column tracing_propagation_opt_out boolean(bool) nullable=NO default=false
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE model_mappings
   constraint fk_pool_vendors_mappings FOREIGN KEY (vendor_id) REFERENCES pool_vendors(id) ON DELETE CASCADE
   constraint model_mappings_pkey PRIMARY KEY (id)
@@ -494,6 +497,7 @@ TABLE plugins
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
   column namespace text(text) nullable=YES default=''::text
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE pool_vendors
   constraint fk_model_pools_vendors FOREIGN KEY (pool_id) REFERENCES model_pools(id) ON DELETE CASCADE
   constraint fk_pool_vendors_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
@@ -564,3 +568,4 @@ TABLE tools
   column mcp_access_disabled boolean(bool) nullable=NO default=false
   column governed_metadata jsonb(jsonb) nullable=YES
   column tracing_content_mode_max text(text) nullable=YES
+  column allow_internal_host boolean(bool) nullable=NO default=false

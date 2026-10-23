@@ -39,6 +39,12 @@ type Plugin struct {
 
 	// Relationships
 	LLMs []LLM `json:"llms,omitempty" gorm:"many2many:llm_plugins;"`
+
+	// AllowInternalHost is the admin-only "Allow internal host" switch: the
+	// plugin (its OCI registry or grpc:// host)'s own host(s) may be internal addresses while blocking stays on for
+	// everything else (netguard.ExemptionFor). Off by default; never set
+	// from a community submission.
+	AllowInternalHost bool `json:"allow_internal_host" gorm:"not null;default:false"`
 }
 
 // PluginPermissionPrefix starts the permission resource key of every plugin;

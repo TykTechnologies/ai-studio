@@ -248,8 +248,12 @@ type LLMConfig struct {
 	// refused-credential placeholder, so an edge that does not read this field
 	// fails closed; edges lay these values over it.
 	MetadataSecretsEncrypted map[string]string `protobuf:"bytes,34,rep,name=metadata_secrets_encrypted,json=metadataSecretsEncrypted,proto3" json:"metadata_secrets_encrypted,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// The admin-only "Allow internal host" switch (w4e): the edge exempts
+	// only this LLM's own host(s) from internal-address blocking. Edges
+	// released before it ignore the field and keep blocking.
+	AllowInternalHost bool `protobuf:"varint,35,opt,name=allow_internal_host,json=allowInternalHost,proto3" json:"allow_internal_host,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
@@ -518,6 +522,13 @@ func (x *LLMConfig) GetMetadataSecretsEncrypted() map[string]string {
 		return x.MetadataSecretsEncrypted
 	}
 	return nil
+}
+
+func (x *LLMConfig) GetAllowInternalHost() bool {
+	if x != nil {
+		return x.AllowInternalHost
+	}
+	return false
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -1182,8 +1193,12 @@ type PluginConfig struct {
 	// hub and encrypted with the edge encryption key, by config key. The
 	// reference itself stays in config; edges lay these values over it.
 	ConfigSecretsEncrypted map[string]string `protobuf:"bytes,16,rep,name=config_secrets_encrypted,json=configSecretsEncrypted,proto3" json:"config_secrets_encrypted,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// The admin-only "Allow internal host" switch (w4e): the edge exempts
+	// only this plugin's own host(s) from internal-address blocking. Edges
+	// released before it ignore the field and keep blocking.
+	AllowInternalHost bool `protobuf:"varint,17,opt,name=allow_internal_host,json=allowInternalHost,proto3" json:"allow_internal_host,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PluginConfig) Reset() {
@@ -1326,6 +1341,13 @@ func (x *PluginConfig) GetConfigSecretsEncrypted() map[string]string {
 		return x.ConfigSecretsEncrypted
 	}
 	return nil
+}
+
+func (x *PluginConfig) GetAllowInternalHost() bool {
+	if x != nil {
+		return x.AllowInternalHost
+	}
+	return false
 }
 
 // ModelRouterConfig represents a model router configuration (Enterprise)
@@ -1828,8 +1850,12 @@ type ToolConfig struct {
 	// Agent tracing content mode cap for calls to this tool (Enterprise);
 	// empty is no cap.
 	TracingContentModeMax string `protobuf:"bytes,22,opt,name=tracing_content_mode_max,json=tracingContentModeMax,proto3" json:"tracing_content_mode_max,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// The admin-only "Allow internal host" switch (w4e): the edge exempts
+	// only this tool's own host(s) from internal-address blocking. Edges
+	// released before it ignore the field and keep blocking.
+	AllowInternalHost bool `protobuf:"varint,23,opt,name=allow_internal_host,json=allowInternalHost,proto3" json:"allow_internal_host,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ToolConfig) Reset() {
@@ -2016,6 +2042,13 @@ func (x *ToolConfig) GetTracingContentModeMax() string {
 	return ""
 }
 
+func (x *ToolConfig) GetAllowInternalHost() bool {
+	if x != nil {
+		return x.AllowInternalHost
+	}
+	return false
+}
+
 // DatasourceConfig represents a datasource configuration
 type DatasourceConfig struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
@@ -2048,8 +2081,15 @@ type DatasourceConfig struct {
 	// Agent tracing content mode cap for calls to this datasource
 	// (Enterprise); empty is no cap.
 	TracingContentModeMax string `protobuf:"bytes,24,opt,name=tracing_content_mode_max,json=tracingContentModeMax,proto3" json:"tracing_content_mode_max,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// The admin-only "Allow internal host" switch (w4e): the edge exempts
+	// only this datasource (vector store)'s own host(s) from internal-address blocking. Edges
+	// released before it ignore the field and keep blocking.
+	AllowInternalHost bool `protobuf:"varint,25,opt,name=allow_internal_host,json=allowInternalHost,proto3" json:"allow_internal_host,omitempty"`
+	// The switch of the datasource's embedder: its own, or its LLM's for a
+	// linked one.
+	EmbedAllowInternalHost bool `protobuf:"varint,26,opt,name=embed_allow_internal_host,json=embedAllowInternalHost,proto3" json:"embed_allow_internal_host,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DatasourceConfig) Reset() {
@@ -2248,6 +2288,20 @@ func (x *DatasourceConfig) GetTracingContentModeMax() string {
 		return x.TracingContentModeMax
 	}
 	return ""
+}
+
+func (x *DatasourceConfig) GetAllowInternalHost() bool {
+	if x != nil {
+		return x.AllowInternalHost
+	}
+	return false
+}
+
+func (x *DatasourceConfig) GetEmbedAllowInternalHost() bool {
+	if x != nil {
+		return x.EmbedAllowInternalHost
+	}
+	return false
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)
@@ -3137,7 +3191,7 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9c\f\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcc\f\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3180,7 +3234,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x11price_multipliers\x18\x1f \x01(\tR\x10priceMultipliers\x127\n" +
 	"\x18tracing_content_mode_max\x18  \x01(\tR\x15tracingContentModeMax\x12=\n" +
 	"\x1btracing_propagation_opt_out\x18! \x01(\bR\x18tracingPropagationOptOut\x12s\n" +
-	"\x1ametadata_secrets_encrypted\x18\" \x03(\v25.microgateway.LLMConfig.MetadataSecretsEncryptedEntryR\x18metadataSecretsEncrypted\x1aK\n" +
+	"\x1ametadata_secrets_encrypted\x18\" \x03(\v25.microgateway.LLMConfig.MetadataSecretsEncryptedEntryR\x18metadataSecretsEncrypted\x12.\n" +
+	"\x13allow_internal_host\x18# \x01(\bR\x11allowInternalHost\x1aK\n" +
 	"\x1dMetadataSecretsEncryptedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb5\a\n" +
@@ -3265,7 +3320,7 @@ const file_proto_common_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
 	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\x12\x12\n" +
 	"\x04kind\x18\f \x01(\tR\x04kind\x12\x16\n" +
-	"\x06config\x18\r \x01(\tR\x06config\"\xb4\x05\n" +
+	"\x06config\x18\r \x01(\tR\x06config\"\xe4\x05\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -3286,7 +3341,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"hook_types\x18\x0e \x03(\tR\thookTypes\x12&\n" +
 	"\x0fauth_plugin_ids\x18\x0f \x03(\rR\rauthPluginIds\x12p\n" +
-	"\x18config_secrets_encrypted\x18\x10 \x03(\v26.microgateway.PluginConfig.ConfigSecretsEncryptedEntryR\x16configSecretsEncrypted\x1aI\n" +
+	"\x18config_secrets_encrypted\x18\x10 \x03(\v26.microgateway.PluginConfig.ConfigSecretsEncryptedEntryR\x16configSecretsEncrypted\x12.\n" +
+	"\x13allow_internal_host\x18\x11 \x01(\bR\x11allowInternalHost\x1aI\n" +
 	"\x1bConfigSecretsEncryptedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x03\n" +
@@ -3336,7 +3392,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
-	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xc3\x06\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xf3\x06\n" +
 	"\n" +
 	"ToolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -3364,7 +3420,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x14rest_access_disabled\x18\x13 \x01(\bR\x12restAccessDisabled\x12.\n" +
 	"\x13mcp_access_disabled\x18\x14 \x01(\bR\x11mcpAccessDisabled\x12&\n" +
 	"\x0fauth_plugin_ids\x18\x15 \x03(\rR\rauthPluginIds\x127\n" +
-	"\x18tracing_content_mode_max\x18\x16 \x01(\tR\x15tracingContentModeMax\"\x97\a\n" +
+	"\x18tracing_content_mode_max\x18\x16 \x01(\tR\x15tracingContentModeMax\x12.\n" +
+	"\x13allow_internal_host\x18\x17 \x01(\bR\x11allowInternalHost\"\x82\b\n" +
 	"\x10DatasourceConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12+\n" +
@@ -3393,7 +3450,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"\aapp_ids\x18\x15 \x03(\rR\x06appIds\x12+\n" +
 	"\x11governed_metadata\x18\x16 \x01(\tR\x10governedMetadata\x12&\n" +
 	"\x0fauth_plugin_ids\x18\x17 \x03(\rR\rauthPluginIds\x127\n" +
-	"\x18tracing_content_mode_max\x18\x18 \x01(\tR\x15tracingContentModeMax\"\xd9\x02\n" +
+	"\x18tracing_content_mode_max\x18\x18 \x01(\tR\x15tracingContentModeMax\x12.\n" +
+	"\x13allow_internal_host\x18\x19 \x01(\bR\x11allowInternalHost\x129\n" +
+	"\x19embed_allow_internal_host\x18\x1a \x01(\bR\x16embedAllowInternalHost\"\xd9\x02\n" +
 	"\x11OAuthClientConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12,\n" +

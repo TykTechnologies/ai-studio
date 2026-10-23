@@ -41,6 +41,12 @@ type Embedder struct {
 	PrivacyScore int    `json:"privacy_score"`
 
 	UserID uint `json:"user_id"`
+
+	// AllowInternalHost is the admin-only "Allow internal host" switch: the
+	// embedder (a standalone one; a linked embedder uses its LLM's)'s own host(s) may be internal addresses while blocking stays on for
+	// everything else (netguard.ExemptionFor). Off by default; never set
+	// from a community submission.
+	AllowInternalHost bool `json:"allow_internal_host" gorm:"not null;default:false"`
 }
 
 // Embedders is a list of embedders.
@@ -67,6 +73,16 @@ var (
 
 // IsLinked reports whether the embedder takes its connection from an LLM.
 func (e *Embedder) IsLinked() bool { return e.LLMID != nil && *e.LLMID != 0 }
+
+// AllowsInternalHost is the embedder's effective "Allow internal host"
+// switch: its LLM's for a linked embedder (false when the LLM is not
+// loaded), its own otherwise.
+func (e *Embedder) AllowsInternalHost() bool {
+	if e.IsLinked() {
+		return e.LLM != nil && e.LLM.AllowInternalHost
+	}
+	return e.AllowInternalHost
+}
 
 // Validate checks the embedder's shape. Whether the vendor actually serves
 // embeddings is checked by the service layer (it needs the vendor drivers).

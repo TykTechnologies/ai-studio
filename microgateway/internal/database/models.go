@@ -91,6 +91,11 @@ type LLM struct {
 
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`
+	// AllowInternalHost is the hub's "Allow internal host" switch for this
+	// LLM: its own host(s) are exempt from internal-address blocking here
+	// (netguard.ExemptionFor); this edge's own environment still applies.
+	AllowInternalHost bool `gorm:"not null;default:false" json:"allow_internal_host"`
+
 	Filters []Filter        `gorm:"many2many:llm_filters;"`
 	Plugins []Plugin        `gorm:"many2many:llm_plugins;"`
 	Usage   []BudgetUsage   `gorm:"foreignKey:LLMID"`
@@ -340,6 +345,11 @@ type Plugin struct {
 
 	// Hub-and-Spoke Configuration
 	Namespace string `gorm:"default:'';index:idx_plugin_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
+
+	// AllowInternalHost is the hub's "Allow internal host" switch for this
+	// plugin: its own host(s) are exempt from internal-address blocking here
+	// (netguard.ExemptionFor); this edge's own environment still applies.
+	AllowInternalHost bool `gorm:"not null;default:false" json:"allow_internal_host"`
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_plugins;" json:"llms,omitempty"`
@@ -603,6 +613,11 @@ type Tool struct {
 	// (Enterprise); "" is no cap.
 	TracingContentModeMax string `json:"tracing_content_mode_max"`
 
+	// AllowInternalHost is the hub's "Allow internal host" switch for this
+	// tool: its own host(s) are exempt from internal-address blocking here
+	// (netguard.ExemptionFor); this edge's own environment still applies.
+	AllowInternalHost bool `gorm:"not null;default:false" json:"allow_internal_host"`
+
 	// Relationships
 	Filters []Filter `gorm:"many2many:tool_filters;" json:"filters,omitempty"`
 	Apps    []App    `gorm:"many2many:app_tools;" json:"apps,omitempty"`
@@ -632,6 +647,13 @@ type Datasource struct {
 	// TracingContentModeMax is the hub datasource's agent tracing content
 	// mode cap (Enterprise); "" is no cap.
 	TracingContentModeMax string `json:"tracing_content_mode_max"`
+
+	// AllowInternalHost is the hub's "Allow internal host" switch for this
+	// datasource (vector store): its own host(s) are exempt from internal-address blocking here
+	// (netguard.ExemptionFor); this edge's own environment still applies.
+	AllowInternalHost bool `gorm:"not null;default:false" json:"allow_internal_host"`
+	// EmbedAllowInternalHost is the switch of the datasource's embedder.
+	EmbedAllowInternalHost bool `gorm:"not null;default:false" json:"embed_allow_internal_host"`
 
 	// Relationships
 	Apps []App `gorm:"many2many:app_datasources;" json:"apps,omitempty"`

@@ -222,13 +222,16 @@ func blockInternalEnabled() bool {
 // This function performs no DNS resolution, so it is cheap on the request
 // path and cannot be raced against a later lookup.
 func ValidateUpstreamURL(u *url.URL) error {
-	return validateUpstreamURL(u, true)
+	return validateUpstreamURL(u, true, Exemption{})
 }
 
 // validateUpstreamURL is ValidateUpstreamURL; checkInternal false leaves the
 // internal-address decision to the dialer (the plugin transport, whose
 // PluginDialControl applies the plugin host rule instead).
-func validateUpstreamURL(u *url.URL, checkInternal bool) error {
+//
+// exempt is the asset's own exemption ("Allow internal host"): it lifts only
+// the internal-address check for its hosts, never LLM_UPSTREAM_ALLOWED_HOSTS.
+func validateUpstreamURL(u *url.URL, checkInternal bool, exempt Exemption) error {
 	if u == nil {
 		return fmt.Errorf("upstream URL is nil")
 	}
@@ -257,7 +260,7 @@ func validateUpstreamURL(u *url.URL, checkInternal bool) error {
 		return nil
 	}
 
-	if checkInternal && blockInternalEnabled() {
+	if checkInternal && blockInternalEnabled() && !exempt.Has(host) {
 		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && IsInternalIP(ip) {
 			return fmt.Errorf("upstream host %q is an internal address — blocked by %s", host, EnvBlockInternal)
 		}
@@ -359,6 +362,12 @@ func newUnguardedDialer() *net.Dialer {
 // DNS-rebinding window the Control hook closes: an exempted name is one the
 // operator has declared may resolve internally, not one an attacker chose.
 func HTTPTransport() *http.Transport {
+	return httpTransport(Exemption{})
+}
+
+// httpTransport is HTTPTransport with an asset's exemption: its hosts are
+// dialled unguarded too.
+func httpTransport(exempt Exemption) *http.Transport {
 	guarded := NewDialer()
 	unguarded := newUnguardedDialer()
 
@@ -368,7 +377,7 @@ func HTTPTransport() *http.Transport {
 		if err != nil {
 			host = address
 		}
-		if internalHostExempt(host) {
+		if internalHostExempt(host) || exempt.Has(host) {
 			return unguarded.DialContext(ctx, network, address)
 		}
 		return guarded.DialContext(ctx, network, address)
@@ -383,10 +392,12 @@ type validatingTransport struct {
 	// pluginHosts leaves internal addresses to the inner transport's
 	// PluginDialControl (PluginHTTPTransport).
 	pluginHosts bool
+	// exempt is the asset's own exemption (Exemption.HTTPTransport).
+	exempt Exemption
 }
 
 func (t validatingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if err := validateUpstreamURL(req.URL, !t.pluginHosts); err != nil {
+	if err := validateUpstreamURL(req.URL, !t.pluginHosts, t.exempt); err != nil {
 		return nil, err
 	}
 	return t.inner.RoundTrip(req)
