@@ -517,6 +517,17 @@ type Context struct {
 
 `ctx.RequestKind` is `"decision"` when the request goes to a [decision model](./decision-models.md) (`/v1/decisions` or `/v1/systemone`) and empty for chat, completion and embedding traffic; `ctx.IsDecision()` tests it. Decision bodies are not chat-shaped. Read them, in either wire format, with `plugin_sdk.ParseDecisionRequest(path, body)` and `plugin_sdk.ParseDecisionResponse(body, req)`, which return OpenAI Decisions types. Studio agent plugins can ask a decision model through the governed gateway path with `plugin_sdk.CallDecision(ctx, llmID, req)` (scope `llms.proxy`). Data collectors receive `request_kind`, `decision_questions` and `decision_refusals` on each analytics record.
 
+### Model and Stream Metadata (optional)
+
+From AI Studio 2.3, the Microgateway sets two keys in `ctx.Metadata` on post_auth calls and on every response hook call (`OnBeforeWriteHeaders`, `OnBeforeWrite`, `OnStreamComplete`), for every vendor:
+
+| Key | Value |
+|-----|-------|
+| `model` | The model the request names: Bedrock's `/model/{modelId}/` path segment (an escaped ARN or inference profile comes back unescaped and whole), Google's `models/{model}:` path segment, otherwise the body's `model` field. Absent when the request names none. |
+| `stream` | `"true"` when the request asks for a streamed answer (Bedrock `converse-stream`/`invoke-with-response-stream`, Google `:streamGenerateContent` or `alt=sse`, otherwise `"stream": true` in the body), else `"false"`. |
+
+They are a convenience only. Hosts before 2.3 do not set them, so a plugin that has to run on older hosts must not rely on them. Instead, read the request directly with `plugin_sdk.RequestModel(vendor, path, body)` and `plugin_sdk.IsStreamingRequest(vendor, path, body)`, which return the same values.
+
 ### Runtime Detection
 
 Plugins can adapt behavior based on runtime:

@@ -54,6 +54,12 @@ message LLMConfig {
   // traceparent propagation to its upstream is switched off.
   string tracing_content_mode_max = 32;
   bool tracing_propagation_opt_out = 33;
+  // Credential values of metadata (keys named like a key, secret or token:
+  // Bedrock's AWS keys), resolved on the hub and encrypted like
+  // api_key_encrypted, by metadata key. In metadata those keys carry the
+  // refused-credential placeholder, so an edge that does not read this field
+  // fails closed; edges lay these values over it.
+  map<string, string> metadata_secrets_encrypted = 34;
 }
 
 // AppConfig represents an application configuration with embedded relationships

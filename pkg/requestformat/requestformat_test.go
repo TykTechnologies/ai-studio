@@ -24,6 +24,10 @@ func TestFor(t *testing.T) {
 		// whatever Anthropic makes of it.
 		{"anthropic", "POST", "/llm/rest/claude/v1/responses", "", "anthropic"},
 		{"bedrock", "POST", "/llm/rest/br/model/x/converse", "", "bedrock"},
+		// An escaped ARN or inference profile (the AWS SDKs' form, and the
+		// loopback's) is still the native Converse body.
+		{"bedrock", "POST", "/llm/call/br/model/arn%3Aaws%3Abedrock%3Aus-east-1%3A123456789012%3Ainference-profile%2Fus.anthropic.claude-3/converse-stream", "https://bedrock-runtime.us-east-1.amazonaws.com", "bedrock"},
+		{"bedrock", "POST", "/llm/rest/br/model/arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3/converse", "", "bedrock"},
 		// Not the native pass-through: the vendor's format.
 		{"openai", "POST", "/ai/gpt/v1/responses", "", "openai"},
 		{"openai", "POST", "/llm/other/gpt/v1/responses", "", "openai"},

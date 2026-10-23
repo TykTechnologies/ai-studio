@@ -328,6 +328,8 @@ The `midsommar` module provides helper functions for common message modification
 
 **Vendor-Agnostic**: Helper functions automatically handle differences between OpenAI, Anthropic, Google AI, and other vendor formats.
 
+On Amazon Bedrock requests, `redact_pattern` and `tyk.redact` rewrite the text in the request body in place: system and content blocks, tool calls, tool results, images and documents are kept as they are, so Bedrock still accepts the request. Model settings under `additionalModelRequestFields` are never rewritten.
+
 ---
 
 #### **Message Modification Approaches**

@@ -84,10 +84,11 @@ func ForEdge(resolved string) string {
 const RefusedCredential = "refused-credential-reference"
 
 // ForEdgeCredential is ForEdge for a credential field: a value that is still
-// a reference goes out as RefusedCredential. Use ForEdge for fields where an
+// a reference, or still encrypted at rest ($ENC/, a value the hub could not
+// decrypt), goes out as RefusedCredential. Use ForEdge for fields where an
 // empty value has no fallback (endpoints, connection strings).
 func ForEdgeCredential(resolved string) string {
-	if IsReference(resolved) {
+	if IsReference(resolved) || strings.HasPrefix(resolved, "$ENC/") {
 		return RefusedCredential
 	}
 	return resolved

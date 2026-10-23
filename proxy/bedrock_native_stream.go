@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/rs/zerolog/log"
@@ -28,7 +29,9 @@ import (
 // guardrail scans tool calls) and the usage for analytics. A block ends the
 // stream with a validationException message, which the AWS SDKs raise.
 // Response hooks run as on every other stream: the header phase before the
-// status is written, OnStreamComplete with the frames once the stream ends.
+// status is written, OnStreamComplete once the stream ends. OnStreamComplete
+// gets the events as SSE data: lines (converseEventLine), the text form
+// plugins read every other vendor's stream in.
 func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Request, llm *models.LLM, app *models.App, reqBody []byte) {
 	startTime := time.Now()
 	hasResponseFilters := p.hasResponseFilters(llm)
@@ -57,7 +60,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	// a modelId in the body, then the LLM's default. modelId is not a
 	// Converse field, so it is taken out of what is forwarded.
 	body := reqBody
-	modelID := ExtractBedrockModelIDFromPath(r.URL.Path)
+	modelID := ExtractBedrockModelIDFromPath(r.URL.EscapedPath())
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(reqBody, &fields) == nil {
 		if raw, ok := fields["modelId"]; ok {
@@ -83,7 +86,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// A plugin's upstream_override (a load balancer's pick) replaces the
+	// LLM's endpoint, as on /llm/rest/; SigV4 signs for the region it names.
 	base, err := bedrockVendor.RuntimeBaseURL(llm)
+	if override, ok := r.Context().Value("upstream_override").(string); ok && override != "" {
+		log.Debug().Str("override", override).Msg("Using upstream override from plugin for Bedrock streaming")
+		base, err = bedrockVendor.RuntimeBaseURLFor(override)
+	}
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid Bedrock endpoint", err, false)
 		return
@@ -91,6 +100,11 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	upstream, err := url.Parse(base + "/model/" + url.PathEscape(modelID) + "/" + op)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid Bedrock endpoint", err, false)
+		return
+	}
+	if err := netguard.ValidateUpstreamURL(upstream); err != nil {
+		log.Error().Err(err).Msg("Bedrock streaming upstream URL blocked by SSRF policy")
+		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
 		return
 	}
 	upReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstream.String(), bytes.NewReader(body))
@@ -108,7 +122,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 	resp, err := (&http.Client{Timeout: p.config.llmTimeout(), Transport: upstreamTransport}).Do(upReq)
 	if err != nil {
-		respondWithError(w, http.StatusBadGateway, "Bedrock stream request failed", err, false)
+		// A vendor that cannot be reached answers 502 (a timeout 504) and
+		// leaves its row, as on every other stream.
+		status := loopbackAwareTransportStatus(r, err)
+		p.goAnalyzeFor(r, func() {
+			recordBedrockFailedAttempt(llm, app, modelID, reqBody, status, upstreamFailureBody(status, err), r, startTime)
+		})
+		respondWithError(w, status, "Bedrock stream request failed", err, false)
 		return
 	}
 	defer resp.Body.Close()
@@ -125,6 +145,9 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		w.WriteHeader(resp.StatusCode)
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		_, _ = w.Write(errBody)
+		p.goAnalyzeFor(r, func() {
+			recordBedrockFailedAttempt(llm, app, modelID, reqBody, resp.StatusCode, errBody, r, startTime)
+		})
 		// As on every other stream, an upstream error completes the stream
 		// too: plugins that hold per-request state (a load balancer's or rate
 		// limiter's in-flight count, a cache's pending entry) release it here.
@@ -189,7 +212,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 
 	buf := make([]byte, 32<<10)
-	// The frames as the vendor sent them, for OnStreamComplete
+	// The events as the vendor sent them, as data: lines, for OnStreamComplete
 	var full bytes.Buffer
 	chunkIndex := 0
 	isErr, clientGone := false, false
@@ -205,14 +228,14 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			if capture != nil {
 				capture.Feed(chunk)
 			}
-			if hooks {
-				full.Write(chunk)
-			}
 			events := framer.feed(chunk)
 			var delta strings.Builder
 			var release []byte
 			for _, ev := range events {
 				usageFrom(ev)
+				if hooks {
+					full.Write(converseEventLine(ev))
+				}
 				t := dialect.text(ev)
 				delta.WriteString(t)
 				if hold == nil {
@@ -326,4 +349,23 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	if !isErr && hooks {
 		go p.executeOnStreamComplete(r, resp, llm, app, full.Bytes(), reqBody, chunkIndex)
 	}
+}
+
+// converseEventLine is a Converse stream event as OnStreamComplete gets it:
+// an SSE data: line holding the event in the API's JSON union form, the AWS
+// wire JSON keyed by its event type ({"contentBlockDelta":{"delta":{"text":
+// "Hi"},"contentBlockIndex":0}}, {"metadata":{"usage":{"inputTokens":10}}}).
+// An exception is keyed by its type ({"throttlingException":{"message":..}}),
+// as the union lists it. An event that could not be decoded has no line.
+func converseEventLine(ev streamEvent) []byte {
+	name := strings.TrimPrefix(ev.name, "exception:")
+	if name == "" || !json.Valid(ev.data) {
+		return nil
+	}
+	line, err := json.Marshal(map[string]json.RawMessage{name: ev.data})
+	if err != nil {
+		return nil
+	}
+	out := append([]byte("data: "), line...)
+	return append(out, '\n', '\n')
 }

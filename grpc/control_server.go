@@ -1673,22 +1673,12 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			signingPrevExpiresAt = timestamppb.New(*signing.PreviousExpiresAt)
 		}
 
-		// Resolve secret references in metadata and serialize to JSON string
-		var metadataJSON string
-		if llm.Metadata != nil {
-			resolvedMetadata := make(models.JSONMap, len(llm.Metadata))
-			for k, v := range llm.Metadata {
-				if strVal, ok := v.(string); ok {
-					// Metadata carries credentials too (Bedrock keys), which
-					// vendor clients replace with their own when empty.
-					resolvedMetadata[k] = secrets.ForEdgeCredential(secrets.ResolveRef(strVal))
-				} else {
-					resolvedMetadata[k] = v
-				}
-			}
-			if metadataBytes, err := json.Marshal(resolvedMetadata); err == nil {
-				metadataJSON = string(metadataBytes)
-			}
+		// Resolve secret references in metadata and serialize to JSON
+		// string; its credentials travel encrypted, like the API key.
+		metadataJSON, metadataSecrets, err := s.llmMetadataForEdge(llm.Metadata)
+		if err != nil {
+			logger.Log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to encrypt LLM metadata credentials - excluding LLM from snapshot")
+			continue
 		}
 
 		// Serialize allowed_models to JSON string
@@ -1744,6 +1734,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			PriceMultipliers:                   priceMultipliersJSON,
 			TracingContentModeMax:              llm.TracingContentModeMax,
 			TracingPropagationOptOut:           llm.TracingPropagationOptOut,
+			MetadataSecretsEncrypted:           metadataSecrets,
 			FilterIds:        filterIDs,
 			PluginIds:        llmPluginOrder[llm.ID],
 			CreatedAt:        timestamppb.New(llm.CreatedAt),

@@ -122,6 +122,9 @@ func llmSecretValues(l *LLM) []string {
 // is re-read because a partial update (Model(&llm).Update("active", ...))
 // reaches the hook with only the fields the caller set.
 func (l *LLM) AfterSave(tx *gorm.DB) error {
+	// BeforeSave stored the credentials encrypted: give the caller back
+	// plaintext, and remember the ciphertext for the next unchanged save.
+	decryptLLMCredentials(l)
 	if l.ID == 0 {
 		return nil
 	}
@@ -141,6 +144,9 @@ func (l *LLM) AfterSave(tx *gorm.DB) error {
 func (l *LLM) AfterDelete(tx *gorm.DB) error {
 	if l.ID == 0 {
 		return nil
+	}
+	if tx.Statement.Unscoped {
+		forgetLLMCredentials(l.ID)
 	}
 	return clearSecretReferences(tx, SecretRefObjectLLM, l.ID)
 }

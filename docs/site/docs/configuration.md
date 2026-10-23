@@ -72,6 +72,7 @@ Remember that fundamental system parameters are typically set via environment va
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
 *   Log Level (`LOG_LEVEL`: `trace`, `debug`, `info`, `warn`, `error`; default `info`)
+*   SQL values in logs (`DB_LOG_SQL_PARAMS`, default off). AI Studio logs SQL statements at `debug`, and slow or failed ones at any level, with their placeholders only, never the values: those are rows' contents, credentials included. `DB_LOG_SQL_PARAMS=true` logs the values too (AI Studio logs a warning at startup when it is set). Use it only for local debugging. The Microgateway reads the same variable.
 
 ### Sharing a Postgres database
 Studio's table names are unprefixed and include common ones such as `users`, `roles` and `audit_records`. To run Studio in a database another application also uses, set `DATABASE_SCHEMA` to a lower-case schema name: Studio creates the schema if it does not exist (the database user needs the `CREATE` privilege on the database for that, or create the schema beforehand) and keeps all of its tables there, whatever `search_path` the database defaults to. A `DATABASE_URL` that sets a different `search_path` is refused.

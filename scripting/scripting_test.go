@@ -679,6 +679,35 @@ func TestHelperFunctions(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "redact_pattern on a Bedrock Converse body - text blocks rewritten in place",
+			sourceCode: `
+				tyk := import("tyk")
+
+				output := {
+					block: false,
+					payload: tyk.redact_pattern(input, "secret", "[REDACTED]"),
+					message: ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput: `{"system":[{"text":"keep secret"}],"messages":[{"role":"user","content":[{"text":"a secret"},{"image":{"format":"png","source":{"bytes":"AA"}}}]},` +
+					`{"role":"assistant","content":[{"toolUse":{"toolUseId":"t1","name":"f","input":{"q":"secret"}}}]}]}`,
+				Messages: []MessageContent{
+					{Role: llms.ChatMessageTypeSystem, Parts: []llms.ContentPart{llms.TextPart("keep secret")}},
+					{Role: llms.ChatMessageTypeHuman, Parts: []llms.ContentPart{llms.TextPart("a secret")}},
+				},
+				VendorName: "bedrock",
+				Format:     "bedrock",
+			},
+			checkPayload: func(t *testing.T, payload string) {
+				want := `{"system":[{"text":"keep [REDACTED]"}],"messages":[{"role":"user","content":[{"text":"a [REDACTED]"},{"image":{"format":"png","source":{"bytes":"AA"}}}]},` +
+					`{"role":"assistant","content":[{"toolUse":{"toolUseId":"t1","name":"f","input":{"q":"secret"}}}]}]}`
+				if payload != want {
+					t.Errorf("Payload:\n got  %s\n want %s", payload, want)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

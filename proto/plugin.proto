@@ -181,7 +181,7 @@ message HeadersResponse {
 message ResponseWriteRequest {
     bytes body = 1;
     map<string, string> headers = 2;
-    bool is_stream_chunk = 3;
+    bool is_stream_chunk = 3;            // Always false today: OnBeforeWrite runs on buffered responses; streams get OnStreamComplete
     PluginContext context = 4;
 }
 
@@ -193,7 +193,7 @@ message ResponseWriteResponse {
 
 // Streaming response hook messages - for caching/processing complete streaming responses
 message StreamCompleteRequest {
-    bytes accumulated_response = 1;      // Full SSE response (all chunks concatenated)
+    bytes accumulated_response = 1;      // Full SSE response (all chunks concatenated); for Bedrock, one "data:" line per Converse event in AWS JSON union form
     map<string, string> headers = 2;     // Response headers from upstream
     int32 status_code = 3;               // HTTP status code
     PluginContext context = 4;           // Plugin context with request metadata

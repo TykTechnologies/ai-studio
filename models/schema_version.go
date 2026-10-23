@@ -24,6 +24,11 @@ import (
 //     column or table, a changed column type, or a new NOT NULL column
 //     without a default. Added tables, nullable or defaulted columns and
 //     indexes leave it alone, so older readers keep working.
+//   - A change to the format of stored data that older code misreads (values
+//     encrypted at rest that it would use as written) also bumps
+//     SchemaVersion and raises MinReaderSchemaVersion to it, even when the
+//     goldens do not change: make schema-golden then rewrites only
+//     testdata/schema/VERSION, with the same hash.
 const (
 	// 2: cluster_nodes.label and leader_eligible (nullable, additive).
 	// 3: tyk_connections.host_key and its unique index (nullable, additive).
@@ -70,8 +75,12 @@ const (
 	//     idx_agent_trace_traces_open (app_id, session_id, turn_index) for
 	//     gateway turns and idx_agent_trace_traces_idle (started_at)
 	//     (additive).
-	SchemaVersion          = 22
-	MinReaderSchemaVersion = 1
+	// 23: data format only, no schema change (aa5). LLM api_key and
+	//     credential metadata are stored as $ENC/ when TYK_AI_SECRET_KEY is
+	//     set; older code would use the ciphertext as the key, so the minimum
+	//     reader is 23 and an older headless replica refuses the database.
+	SchemaVersion          = 23
+	MinReaderSchemaVersion = 23
 )
 
 // studioSchemaRowID is the one row of studio_schema.

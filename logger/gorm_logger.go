@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -15,14 +18,41 @@ import (
 type GormLogger struct {
 	SlowThreshold         time.Duration
 	IgnoreRecordNotFound  bool
+	// LogParams logs the SQL with its values. Off, a statement is logged
+	// with its placeholders only (ParamsFilter), at every level: the
+	// values are rows' contents, credentials included (an LLM's API key, a
+	// cluster event's payload). DB_LOG_SQL_PARAMS=true turns it on, for
+	// local debugging only.
+	LogParams bool
 }
+
+// sqlParamsEnv opts SQL values back into the logs.
+const sqlParamsEnv = "DB_LOG_SQL_PARAMS"
+
+var sqlParamsWarnOnce sync.Once
 
 // NewGormLogger creates a new GORM logger that uses zerolog
 func NewGormLogger() *GormLogger {
+	logParams := strings.EqualFold(os.Getenv(sqlParamsEnv), "true")
+	if logParams {
+		sqlParamsWarnOnce.Do(func() {
+			Log.Warn().Msgf("%s=true: SQL statements are logged with their values, which include credentials and other row contents. Use it for local debugging only.", sqlParamsEnv)
+		})
+	}
 	return &GormLogger{
 		SlowThreshold:        200 * time.Millisecond,
 		IgnoreRecordNotFound: true,
+		LogParams:            logParams,
 	}
+}
+
+// ParamsFilter implements gorm.ParamsFilter: without LogParams, a statement
+// is logged with no values.
+func (l *GormLogger) ParamsFilter(_ context.Context, sql string, params ...interface{}) (string, []interface{}) {
+	if l.LogParams {
+		return sql, params
+	}
+	return sql, nil
 }
 
 // LogMode implements gorm's logger.Interface

@@ -52,6 +52,17 @@ func bedrockStream(t *testing.T, text, args string) []byte {
 	return s
 }
 
+// bedrockStreamLines is bedrockStream(t, "Sure. ", `{"to":"x"}`) as
+// OnStreamComplete gets it: each event in the Converse JSON union form.
+const bedrockStreamLines = `data: {"messageStart":{"role":"assistant"}}` + "\n\n" +
+	`data: {"contentBlockDelta":{"contentBlockIndex":0,"delta":{"text":"Sure. "}}}` + "\n\n" +
+	`data: {"contentBlockStop":{"contentBlockIndex":0}}` + "\n\n" +
+	`data: {"contentBlockStart":{"contentBlockIndex":1,"start":{"toolUse":{"name":"send","toolUseId":"tu1"}}}}` + "\n\n" +
+	`data: {"contentBlockDelta":{"contentBlockIndex":1,"delta":{"toolUse":{"input":"{\"to\":\"x\"}"}}}}` + "\n\n" +
+	`data: {"contentBlockStop":{"contentBlockIndex":1}}` + "\n\n" +
+	`data: {"messageStop":{"stopReason":"tool_use"}}` + "\n\n" +
+	`data: {"metadata":{"usage":{"inputTokens":10,"outputTokens":5,"totalTokens":15}}}` + "\n\n"
+
 // A rich Converse request: tools, a toolUse / toolResult history, an image
 // and a document, and fields the gateway has never heard of.
 const richConverse = `{"messages":[` +
@@ -159,9 +170,10 @@ func (h *streamCompleteHook) OnStreamComplete(ctx context.Context, req *StreamCo
 }
 
 // Response hooks run on the native Bedrock stream as on every other stream
-// (eac.83): the header phase sets headers (never the framing ones), the
-// frames still go out byte for byte, and OnStreamComplete gets them with
-// the client's request body. A vendor error gets the header phase too.
+// (eac.83): the header phase sets headers (never the framing ones), once,
+// the frames still go out byte for byte, and OnStreamComplete gets the
+// events as AWS wire-JSON data: lines (8xf.10) with the client's request
+// body. A vendor error gets the header phase too.
 func TestBedrockNativeStream_RunsResponseHooks(t *testing.T) {
 	rec := &bedrockRecorder{reply: bedrockStream(t, "Sure. ", `{"to":"x"}`)}
 	h := bedrockHarness(t, rec)
@@ -178,12 +190,20 @@ func TestBedrockNativeStream_RunsResponseHooks(t *testing.T) {
 	assert.Equal(t, "application/vnd.amazon.eventstream", resp.Header.Get("Content-Type"))
 	select {
 	case got := <-hook.done:
-		assert.Equal(t, rec.reply, got.AccumulatedResponse)
+		assert.Equal(t, bedrockStreamLines, string(got.AccumulatedResponse))
 		assert.JSONEq(t, richConverse, string(got.RequestBody))
 		assert.Equal(t, http.StatusOK, got.StatusCode)
 	case <-time.After(5 * time.Second):
 		t.Fatal("OnStreamComplete was not called")
 	}
+	select {
+	case <-hook.done:
+		t.Fatal("OnStreamComplete was called twice")
+	case <-time.After(100 * time.Millisecond):
+	}
+	hook.mu.Lock()
+	assert.Equal(t, 1, hook.calls, "the header phase runs once")
+	hook.mu.Unlock()
 
 	rec.mu.Lock()
 	rec.status, rec.reply = http.StatusBadRequest, []byte(`{"message":"bad request"}`)
@@ -199,6 +219,24 @@ func TestBedrockNativeStream_RunsResponseHooks(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("OnStreamComplete was not called for the vendor error")
 	}
+}
+
+// An exception in the stream is keyed by its type, as the Converse union
+// lists it; a frame that could not be decoded has no line.
+func TestConverseEventLine(t *testing.T) {
+	var frame bytes.Buffer
+	require.NoError(t, eventstream.NewEncoder().Encode(&frame, eventstream.Message{
+		Headers: eventstream.Headers{
+			{Name: eventstreamapi.MessageTypeHeader, Value: eventstream.StringValue(eventstreamapi.ExceptionMessageType)},
+			{Name: eventstreamapi.ExceptionTypeHeader, Value: eventstream.StringValue("throttlingException")},
+			{Name: eventstreamapi.ContentTypeHeader, Value: eventstream.StringValue("application/json")},
+		},
+		Payload: []byte(`{"message":"slow down"}`),
+	}))
+	events := newEventFramer("application/vnd.amazon.eventstream").feed(frame.Bytes())
+	require.Len(t, events, 1)
+	assert.Equal(t, "data: {\"throttlingException\":{\"message\":\"slow down\"}}\n\n", string(converseEventLine(events[0])))
+	assert.Nil(t, converseEventLine(streamEvent{raw: []byte("junk")}))
 }
 
 // A plugin that holds per-request state until the stream completes (a load

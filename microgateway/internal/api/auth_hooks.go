@@ -15,11 +15,14 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/rs/zerolog/log"
 )
 
@@ -140,7 +143,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		// Check if plugin blocked the request
 		if pluginResp, ok := result.(*interfaces.PluginResponse); ok {
 			if pluginResp.Block {
-				writeBlockedPluginResponse(w, pluginResp)
+				writeBlockedPluginResponse(w, pluginResp, isBedrockRuntimeCall(vendor, r))
 				return true // Block request
 			}
 
@@ -405,6 +408,11 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			respondPluginChainError(w, err)
 			return true
 		}
+		// The model the request names and whether it streams, for every
+		// vendor (proxy.ExchangeMetadata); hosts before 2.3 do not set them.
+		for k, v := range proxy.ExchangeMetadata(vendor, r.URL.EscapedPath(), bodyBytes) {
+			postAuthMetadata[k] = v
+		}
 
 		// Who authenticated the request, and how (proxy.AuthIdentity). The
 		// subject is set when an auth plugin said who the call is for.
@@ -448,7 +456,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		// Check if plugin blocked
 		if pluginResp, ok := result.(*interfaces.PluginResponse); ok {
 			if pluginResp.Block {
-				writeBlockedPluginResponse(w, pluginResp)
+				writeBlockedPluginResponse(w, pluginResp, isBedrockRuntimeCall(vendor, r))
 				return true // Block request
 			}
 
@@ -676,7 +684,7 @@ var pluginFramingHeaders = map[string]bool{
 
 // writeBlockedPluginResponse writes the response a pre- or post-auth plugin
 // answered a request with instead of letting it through.
-func writeBlockedPluginResponse(w http.ResponseWriter, pluginResp *interfaces.PluginResponse) {
+func writeBlockedPluginResponse(w http.ResponseWriter, pluginResp *interfaces.PluginResponse, awsErrors bool) {
 	statusCode := pluginResp.StatusCode
 	if statusCode == 0 {
 		statusCode = http.StatusForbidden
@@ -690,9 +698,28 @@ func writeBlockedPluginResponse(w http.ResponseWriter, pluginResp *interfaces.Pl
 		w.Header().Set(key, value)
 	}
 
+	body := pluginResp.Body
+	// An AWS SDK reads a Bedrock error's type from X-Amzn-ErrorType and its
+	// text from {"message"}; a plugin's own refusal ({"error":{...}}, say)
+	// left it an unknown error without the message. Unless the plugin shaped
+	// it itself, a refusal on a Bedrock runtime call is put in that shape
+	// (the bridges read the message from it too).
+	if awsErrors && statusCode >= http.StatusBadRequest && w.Header().Get(bedrockVendor.ErrorTypeHeader) == "" {
+		w.Header().Set(bedrockVendor.ErrorTypeHeader, bedrockVendor.ErrorType(statusCode))
+		w.Header().Set("Content-Type", "application/json")
+		body = bedrockVendor.ErrorBody(body)
+	}
+
 	w.WriteHeader(statusCode)
 
-	if len(pluginResp.Body) > 0 {
-		w.Write(pluginResp.Body)
+	if len(body) > 0 {
+		w.Write(body)
 	}
+}
+
+// isBedrockRuntimeCall reports whether a request to an LLM of vendor is a
+// native Bedrock runtime call (/model/{id}/converse and the like), whose
+// client is an AWS SDK. Bedrock's OpenAI-compatible paths are not.
+func isBedrockRuntimeCall(vendor string, r *http.Request) bool {
+	return vendor == string(models.BEDROCK) && requestformat.Model(vendor, r.URL.EscapedPath(), nil) != ""
 }

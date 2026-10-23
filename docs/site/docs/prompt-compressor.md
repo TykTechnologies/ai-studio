@@ -23,10 +23,10 @@ On the edge it runs in the `post_auth` hook of the `/llm/` endpoints. The gatewa
 |---|---|
 | `/llm/rest`, `/llm/stream`, `/llm/call` | Yes |
 | `/ai/{slug}/v1`, the unified `/v1` and `/router/` to a non-Bedrock LLM | Yes, on the internal `/llm/call/` hop |
-| `/ai/` and `/anthropic/` to a Bedrock LLM | **No.** These bridges call AWS directly and run no `post_auth` plugins. A later release adds a hook for them. |
+| `/ai/`, the unified `/v1`, `/router/` and `/anthropic/` to a Bedrock LLM | Yes, from AI Studio 2.3, on the internal `/llm/call/` hop (Converse body). Before 2.3 these called AWS directly and ran no `post_auth` plugins. |
 | Studio Chat, and anything through Studio's embedded gateway | **No.** |
 
-Supported request formats: OpenAI Chat Completions (and OpenAI-compatible vendors), OpenAI Responses (Codex), Anthropic Messages, Google AI and Vertex (Gemini), Bedrock Converse on the `/llm/` endpoints, and Ollama. Any other body passes through unchanged. The format comes from the LLM's vendor, the path and the LLM's endpoint.
+Supported request formats: OpenAI Chat Completions (and OpenAI-compatible vendors), OpenAI Responses (Codex), Anthropic Messages, Google AI and Vertex (Gemini), Bedrock Converse (on the `/llm/` endpoints and, from 2.3, the Bedrock bridges' internal hop), and Ollama. Any other body passes through unchanged. The format comes from the LLM's vendor, the path and the LLM's endpoint.
 
 By default only tool outputs are compressed. A policy's `roles` can add user, assistant or system text. What is never rewritten, at any level and with any `roles`:
 
@@ -211,13 +211,22 @@ Vendors bill cached prompt tokens at a fraction of the input price, so a compres
 
 ## Plugin order with the cache plugins
 
-Plugins attached to an LLM run in the order they are listed on the LLM. With the LLM Cache or Advanced LLM Cache plugin, list the cache **before** the Prompt Compressor:
+Plugins attached to an LLM run in the order they are listed on the LLM, on edges too from AI Studio 2.3 (older edges run them in the order they were installed). Each `post_auth` plugin gets the body the previous one returned, and a `post_auth` block (a cache hit, a 429, a firewall block) answers at once, skipping later plugins. The recommended order is: LLM Firewall (when it runs in `post_auth`), the response caches, Rate Limiter, Prompt Compressor, LLM Load Balancer.
+
+With the LLM Cache or Advanced LLM Cache plugin, list the cache **before** the Prompt Compressor:
 
 - A cache hit answers before the compressor runs, so hits cost no compression work.
 - Cache keys are taken from the body the client sent. With the compressor first, the keys would be taken from the compressed body and so depend on the policy: every policy change would make the response cache miss.
 - A semantic cache compares the client's own text, not a compressed version of it.
+- An entry stored while compression was enforcing holds the model's answer to the compressed prompt, and is served to the same client body, also to a client that sent `X-Tyk-Compression: off`. To get a fresh, uncompressed answer, send `X-Cache: bypass` as well.
 
-Requests answered from the cache never reach the compressor, so they do not appear in its savings.
+Requests answered from the cache never reach the compressor, so they do not appear in its savings. The caches do not store or replay the compressor's `X-Tyk-Compression*` headers.
+
+The other plugins:
+
+- **Rate Limiter before the compressor.** It does not read the body, and token rules count the usage the vendor reports, which is that of the compressed body whatever the order. Placed first, it refuses a request with 429 before the compressor spends any work on it.
+- **LLM Firewall** screens the client's body in `pre_auth`, its default, so compression can neither hide a phrase nor create one. In `post_auth`, put it before the compressor. Request filters and guardrails run after the `post_auth` chain and screen the compressed body.
+- **LLM Load Balancer last.** Its token-aware routing then estimates the body the upstream receives.
 
 ## Scopes
 

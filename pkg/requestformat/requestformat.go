@@ -13,11 +13,16 @@
 // which is also the only route post_auth plugins see. The bridges carry
 // their own formats and never reach post_auth with them:
 //   - /ai/{slug} and /v1 (unified) take OpenAI-shaped bodies, and
-//     /anthropic/{slug} Anthropic-shaped ones. To a non-Bedrock LLM they are
+//     /anthropic/{slug} (Bedrock only) Anthropic-shaped ones. They are
 //     translated and re-enter the proxy on /llm/call/{slug}/, where post_auth
-//     sees the vendor-native body this package resolves.
-//   - To a Bedrock LLM they call AWS directly with OpenAI or Anthropic as the
-//     filter format, and run no post_auth.
+//     sees the vendor-native body this package resolves (a Converse body for
+//     Bedrock, from AI Studio 2.3; before, the Bedrock bridges called AWS
+//     directly and ran no post_auth).
+//
+// Model, IsStreaming and ParseUsage read the model, the streaming flag and
+// the token usage of an exchange in each vendor's wire shape. pkg/plugin_sdk
+// exposes them to plugins as RequestModel, IsStreamingRequest and
+// ResponseUsage.
 //
 // The package depends on nothing in this module but pkg/decisions, so
 // plugins can import it without the proxy, models or GORM.
