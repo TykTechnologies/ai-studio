@@ -10,6 +10,7 @@ import (
 	"time"
 
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/caarlos0/env/v9"
 	"github.com/joho/godotenv"
@@ -370,6 +371,17 @@ func Load(envFile string) (*Config, error) {
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse environment variables: %w%s", err, envVarsHint(err))
+	}
+
+	// Internal-address blocking for outbound calls (pkg/netguard), on unless
+	// LLM_UPSTREAM_BLOCK_INTERNAL=false. Applied here, once, at startup; an
+	// edge applies its own setting to the upstreams the hub pushes. An
+	// invalid value refuses to start.
+	if err := netguard.Configure(os.Getenv); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	if msg := netguard.DisabledWarning(); msg != "" {
+		log.Warn().Msg(msg)
 	}
 
 	// Post-process OCI plugin configuration

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -96,9 +97,15 @@ func TestPluginHTTPTransport_RefusesInternalDial(t *testing.T) {
 	if !errors.Is(err, ErrInternalPluginHost) {
 		t.Fatalf("dial to %s = %v, want ErrInternalPluginHost", server.URL, err)
 	}
+	// A name that resolves to 127.0.0.1 is refused at dial time too (OCI
+	// registry, signature and token-realm fetches use this transport).
+	_, port, _ := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	if _, err := client.Get("http://localhost:" + port); !errors.Is(err, ErrInternalPluginHost) {
+		t.Fatalf("dial to localhost = %v, want ErrInternalPluginHost", err)
+	}
 
 	// Guarded whatever LLM_UPSTREAM_BLOCK_INTERNAL says.
-	t.Setenv(EnvBlockInternal, "false")
+	setBlockInternal(t, "false")
 	if _, err := client.Get(server.URL); !errors.Is(err, ErrInternalPluginHost) {
 		t.Fatalf("with %s=false, dial = %v, want ErrInternalPluginHost", EnvBlockInternal, err)
 	}
