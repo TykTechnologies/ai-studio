@@ -32,6 +32,10 @@ type Chat struct {
 	ExtraContext        []FileStore  `gorm:"many2many:chat_filestores;" json:"extra_context"`
 	DefaultTools        []*Tool      `gorm:"many2many:chat_tools;" json:"default_tools"`
 	PromptTemplatesJSON string       `json:"-" gorm:"column:prompt_templates_json"`
+	// RenderImages lets the chat UIs load images in model responses. Off by
+	// default: model output can be shaped by prompt injection, and loading
+	// an image sends its URL (and whatever is in it) to that host.
+	RenderImages bool `json:"render_images" gorm:"not null;default:false"`
 }
 
 type Chats []Chat

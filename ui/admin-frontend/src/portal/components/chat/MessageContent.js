@@ -392,7 +392,8 @@ const MessageContent = ({
 	showSystemMessages,
 	onEditSuccess,
 	chatId,
-	userName
+	userName,
+	renderImages = false
 }) => {
 	const [isEditing, setIsEditing] = useState(false);
 	const [editText, setEditText] = useState('');
@@ -631,7 +632,7 @@ const MessageContent = ({
 						} else {
 							return (
 								<Box key={`content-${idx}`} sx={{ my: 1 }}>
-									<MarkdownMessage content={segment.text} />
+									<MarkdownMessage content={segment.text} renderImages={renderImages} />
 								</Box>
 							);
 						}
@@ -725,7 +726,7 @@ const MessageContent = ({
 						}
 					}}
 				>
-					<MarkdownMessage content={content} />
+					<MarkdownMessage content={content} renderImages={renderImages} />
 					{isUserMessage && (
 						<IconButton
 							className="edit-button"

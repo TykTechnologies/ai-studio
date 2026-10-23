@@ -42,6 +42,7 @@ const ChatView = () => {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showTools, setShowTools] = useState(true);
+  const [renderImages, setRenderImages] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [showSystemMessages, setShowSystemMessages] = useState(() => {
     const saved = localStorage.getItem('showSystemMessages');
@@ -411,6 +412,7 @@ const ChatView = () => {
         const currentChat = userEntitlements.chats.find((chat) => chat.id === chatId);
         if (currentChat) {
           setShowTools(currentChat.attributes.tool_support);
+          setRenderImages(currentChat.attributes.render_images === true);
           setChatName(currentChat.attributes.name);
           setChatDescription(currentChat.attributes.description);
 
@@ -916,6 +918,7 @@ const ChatView = () => {
                           showSystemMessages={showSystemMessages}
                           chatId={chatId}
                           userName={userName}
+                          renderImages={renderImages}
                           onEditSuccess={(editedText, messageId) => {
                             setMessages(prevMessages => {
                               const messageIndex = prevMessages.findIndex(msg => msg.id === messageId);

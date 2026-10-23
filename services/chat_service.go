@@ -84,6 +84,16 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 }
 
 // UpdateChat updates an existing chat
+// SetChatRenderImages sets whether the chat UIs render images in the chat's
+// responses ("Render images in responses"; off by default).
+func (s *Service) SetChatRenderImages(chat *models.Chat, render bool) error {
+	if err := s.DB.Model(chat).Update("render_images", render).Error; err != nil {
+		return err
+	}
+	chat.RenderImages = render
+	return nil
+}
+
 func (s *Service) UpdateChat(id uint, name string, description string, llmSettingsID, llmID uint, groupIDs []uint,
 	filterIDs []uint, ragN int, toolSupport bool, systemPrompt string, defaultDSID uint, defaultToolIDs []uint) (*models.Chat, error) {
 	// Start a transaction

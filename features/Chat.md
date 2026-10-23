@@ -35,6 +35,7 @@ Both share the same `ChatSession` (`chat_session/chat_session.go`), persistence 
     *   Adds/removes tools and datasources from the sidebar.
 *   **Administrator:**
     *   Configures `Chat` entities and tools (including client tools, on the Tools page with tool type "Client (human-in-the-loop)").
+    *   Chooses per chat whether images in responses render (`Chat.RenderImages`, "Render images in responses", default off; 2u2). Off, both UIs replace `img` with `BlockedImage` (`portal/components/chat/BlockedImage.js`): a `nofollow` link with alt text and host, never fetched, since model output can be shaped by prompt injection. v1 reads `render_images` from the entitlements chat (`ChatView` → `MessageContent` → `MarkdownMessage renderImages`), v2 from `session.chat.render_images` (`V2ChatSummary`, `MarkdownText` via `useChatUi`, `componentsFor`). Agent chats and `[CONTEXT]` blocks never render images. The API takes `render_images` as an optional boolean on create/update (absent on update keeps the stored value; `Service.SetChatRenderImages`).
     *   Reviews session logs (`/admin/users/:id/chat-log/:sessionId`).
 
 **2. Architecture & Data Flow (v2)**

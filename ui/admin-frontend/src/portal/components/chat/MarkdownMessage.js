@@ -5,8 +5,11 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { a11yDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import CodeCopyBtn from '../CopyCodeButton';
+import BlockedImage from './BlockedImage';
 
-const MarkdownMessage = ({ content }) => {
+// renderImages is the chat's "Render images in responses" setting. Off (the
+// default) an image is shown as a link and never loaded (BlockedImage).
+const MarkdownMessage = ({ content, renderImages = false }) => {
 	const inlineCodeStyle = {
 		padding: '2px 4px',
 		color: '#232629',
@@ -31,6 +34,7 @@ const MarkdownMessage = ({ content }) => {
 					<a target="_blank" rel="noopener noreferrer" {...props} />
 				),
 				pre: Pre,
+				...(renderImages ? {} : { img: ({ node, src, alt }) => <BlockedImage src={src} alt={alt} /> }),
 				code: ({ node, inline, className, children, ...props }) => {
 					const match = /language-(\w+)/.exec(className || '');
 					const language = match ? match[1] : 'text'; // Default to 'text' for unknown/unspecified languages
