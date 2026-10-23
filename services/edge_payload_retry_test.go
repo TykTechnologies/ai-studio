@@ -41,6 +41,7 @@ func TestRouteEdgePayload_RetryableFailures(t *testing.T) {
 			ErrorMessage: "failed to write KV data: " + status.Error(codes.Unavailable, "connection refused").Error()}}, true, true},
 		{"plugin unreachable", &edgePayloadPluginClient{err: status.Error(codes.Unavailable, "plugin exited")}, true, true},
 		{"plugin unhealthy", &edgePayloadPluginClient{}, false, true},
+		{"plugin without AcceptEdgePayload", &edgePayloadPluginClient{err: status.Error(codes.Unimplemented, "unknown method AcceptEdgePayload")}, true, false},
 		{"bad payload", &edgePayloadPluginClient{resp: &pb.EdgePayloadResponse{ErrorMessage: "invalid savings record"}}, true, false},
 		{"not a receiver", &edgePayloadPluginClient{resp: &pb.EdgePayloadResponse{
 			ErrorMessage: "plugin does not implement EdgePayloadReceiver"}}, true, false},
@@ -59,4 +60,12 @@ func TestRouteEdgePayload_RetryableFailures(t *testing.T) {
 	m := &AIStudioPluginManager{loadedPlugins: map[uint]*LoadedAIStudioPlugin{
 		7: {ID: 7, GRPCClient: &edgePayloadPluginClient{resp: &pb.EdgePayloadResponse{Success: true, Handled: true}}, IsHealthy: true}}}
 	assert.NoError(t, m.RouteEdgePayload(context.Background(), &pb.PluginControlPayload{PluginId: 7, Payload: []byte("x")}))
+
+	// A plugin Studio does not have is final: it will not appear.
+	db := setupTestDB(t)
+	m = NewAIStudioPluginManager(db, nil)
+	err := m.RouteEdgePayload(context.Background(), &pb.PluginControlPayload{PluginId: 4242, Payload: []byte("x")})
+	if assert.Error(t, err) {
+		assert.False(t, errors.Is(err, ErrEdgePayloadRetry), err.Error())
+	}
 }

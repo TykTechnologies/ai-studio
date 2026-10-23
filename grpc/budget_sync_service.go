@@ -333,14 +333,20 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	var blocks map[uint32]string
 	var llmBudgets map[uint32]AppBudgetData
 	var llmBlocks map[uint32]string
-	blocksIncluded := false
+	blocksIncluded, llmIncluded := false, false
 	src, _ := s.budgetSource.Load().(EdgeBudgetSource)
 	if src != nil {
 		found, err := src.EdgeBlocks()
+		// LLM budgets are sent only when computed; a failure leaves the
+		// edges' LLM state alone and does not hold back the App blocks.
+		var llmErr error
+		if llmBudgets, llmBlocks, llmErr = s.llmBudgets(now); llmErr != nil {
+			logger.Log.Error().Err(llmErr).Msg("Failed to compute LLM budget usage; keeping edges' last LLM set")
+		} else {
+			llmIncluded = true
+		}
 		if err != nil {
 			logger.Log.Error().Err(err).Msg("Failed to compute budget blocks; keeping edges' last set")
-		} else if llmBudgets, llmBlocks, err = s.llmBudgets(now); err != nil {
-			logger.Log.Error().Err(err).Msg("Failed to compute LLM budget usage; keeping edges' last set")
 		} else {
 			blocksIncluded = true
 			blocks = make(map[uint32]string, len(found))
@@ -378,7 +384,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	}
 
 	// Skip publishing if there is nothing to sync
-	if len(appBudgets) == 0 && !blocksIncluded {
+	if len(appBudgets) == 0 && !blocksIncluded && !llmIncluded {
 		logger.Log.Debug().Msg("No budget usage data to sync")
 		return
 	}
@@ -388,7 +394,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		BlocksIncluded:   blocksIncluded,
 		LLMBudgets:       llmBudgets,
 		LLMBlocks:        llmBlocks,
-		LLMIncluded:      blocksIncluded,
+		LLMIncluded:      llmIncluded,
 		AppUsages:        appUsages,           // Legacy field
 		AppBudgets:       appBudgets,          // New per-app periods
 		PeriodStart:      calendarPeriodStart, // Legacy field
@@ -427,9 +433,9 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 	for _, llm := range llms {
 		u := spend[llm.ID]
 		dollars := u.cost / 10000.0
-		if dollars > 0 {
-			usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end}
-		}
+		// Every budgeted LLM, unspent ones too: its period tells edges
+		// when it starts again (a new month, a budget reset).
+		usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end}
 		switch budget := *llm.MonthlyBudget; {
 		case budget <= 0:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded (budget is 0)"

@@ -8,6 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -114,20 +117,28 @@ func (s *DatabaseBudgetService) checkLLMBudget(llmID *uint, estimatedCost float6
 		return 0, 0, nil
 	}
 	spent := s.llmBudgetSpend().Spent(*llmID)
-	if spent+estimatedCost > limit {
+	// Spent once the spend reaches the budget, as Studio's check has it.
+	if spent+estimatedCost >= limit {
 		return spent, limit, fmt.Errorf("budget exceeded: LLM monthly budget exceeded: current=%s, estimated=%s, limit=%s",
 			formatBudgetAmount(spent), formatBudgetAmount(estimatedCost), formatBudgetAmount(limit))
 	}
 	return spent, limit, nil
 }
 
-// formatBudgetAmount prints a dollar amount: cents from a dollar up, and four
-// significant digits below, so a sub-cent budget does not read as 0.00.
+// formatBudgetAmount prints a dollar amount: cents from a dollar up, and
+// below a dollar six significant digits in plain decimals (at least two), so
+// a sub-cent budget does not read as 0.00 (0.0005, 0.00005, 0.99999).
 func formatBudgetAmount(v float64) string {
-	if v == 0 || v >= 1 || v <= -1 {
+	a := math.Abs(v)
+	if a == 0 || a >= 1 {
 		return fmt.Sprintf("%.2f", v)
 	}
-	return fmt.Sprintf("%.4g", v)
+	decimals := 6 - int(math.Floor(math.Log10(a))) - 1
+	out := strconv.FormatFloat(v, 'f', decimals, 64)
+	for strings.HasSuffix(out, "0") && len(out)-strings.IndexByte(out, '.') > 3 {
+		out = out[:len(out)-1]
+	}
+	return out
 }
 
 // SetWriteDB moves the usage writes to w, the gateway's writer handle.

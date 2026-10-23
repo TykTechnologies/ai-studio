@@ -34,6 +34,9 @@ type ControlPayloadQueue struct {
 	// Synchronization
 	mu             sync.Mutex
 	sequenceNumber uint64
+	// sendMu serialises sends: two at once fetch the same unsent rows and
+	// deliver them twice.
+	sendMu sync.Mutex
 
 	// State
 	started bool
@@ -166,6 +169,8 @@ func (q *ControlPayloadQueue) QueuePayload(pluginID uint, payload []byte, correl
 	q.mu.Lock()
 	q.totalQueued++
 	pendingCount := q.getPendingCountLocked()
+	// Payloads waiting to be retried are not ready to send.
+	ready := pendingCount - int64(q.waitingLocked(time.Now()))
 	q.mu.Unlock()
 
 	log.Debug().
@@ -175,10 +180,15 @@ func (q *ControlPayloadQueue) QueuePayload(pluginID uint, payload []byte, correl
 		Int64("pending_count", pendingCount).
 		Msg("Control payload queued")
 
-	// Check if we should trigger immediate send
-	if int(pendingCount) >= q.config.BatchThreshold {
+	// Check if we should trigger immediate send. One already running (or
+	// the next heartbeat) takes these too, so a busy queue skips it.
+	if int(ready) >= q.config.BatchThreshold {
 		go func() {
-			if err := q.SendPendingBatch(context.Background()); err != nil {
+			if !q.sendMu.TryLock() {
+				return
+			}
+			defer q.sendMu.Unlock()
+			if err := q.sendPendingBatch(context.Background()); err != nil {
 				log.Error().Err(err).Msg("Failed to send batch after threshold reached")
 			}
 		}()
@@ -190,6 +200,24 @@ func (q *ControlPayloadQueue) QueuePayload(pluginID uint, payload []byte, correl
 // SendPendingBatch sends all pending payloads to control
 // This should be called from the heartbeat worker
 func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
+	q.sendMu.Lock()
+	defer q.sendMu.Unlock()
+	return q.sendPendingBatch(ctx)
+}
+
+// waitingLocked counts the payloads waiting for their retry; q.mu is held.
+func (q *ControlPayloadQueue) waitingLocked(now time.Time) int {
+	n := 0
+	for _, at := range q.retryAt {
+		if now.Before(at) {
+			n++
+		}
+	}
+	return n
+}
+
+// sendPendingBatch is SendPendingBatch with q.sendMu held.
+func (q *ControlPayloadQueue) sendPendingBatch(ctx context.Context) error {
 	q.mu.Lock()
 	if q.grpcClient == nil {
 		q.mu.Unlock()

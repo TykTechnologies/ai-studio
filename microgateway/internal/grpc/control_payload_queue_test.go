@@ -2,6 +2,9 @@ package grpc
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,4 +105,75 @@ func TestControlPayloadQueue_CleanupDropsExpiredUnsent(t *testing.T) {
 
 	require.NoError(t, q.CleanupOldPayloads())
 	assert.Equal(t, []string{"fresh"}, unsentPayloads(t, db))
+}
+
+// countingControl counts each payload's deliveries; it is slow, so sends
+// overlap if the queue lets them.
+type countingControl struct {
+	pb.ConfigurationSyncServiceClient
+	mu        sync.Mutex
+	delivered map[string]int
+	retry     func(body string) bool
+}
+
+func (c *countingControl) SendPluginControlBatch(_ context.Context, b *pb.PluginControlBatch, _ ...grpc.CallOption) (*pb.PluginControlBatchResponse, error) {
+	time.Sleep(5 * time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	resp := &pb.PluginControlBatchResponse{Success: true}
+	for i, p := range b.Payloads {
+		if c.retry(string(p.Payload)) {
+			resp.Errors = append(resp.Errors, &pb.PluginPayloadError{PluginId: p.PluginId, Retry: true, PayloadIndex: uint32(i)})
+			continue
+		}
+		c.delivered[string(p.Payload)]++
+	}
+	return resp, nil
+}
+
+// rlk review: with payloads waiting for a retry, every QueuePayload passed
+// the batch threshold and started its own send, and the overlapping sends
+// delivered the same payloads several times. Sends are serialised, and
+// payloads waiting for a retry do not count towards the threshold.
+func TestControlPayloadQueue_NoDuplicateDeliveryUnderLoad(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1) // one in-memory database for every goroutine
+	q := NewControlPayloadQueue(db, &config.ControlPayloadConfig{Enabled: true, MaxPayloadSizeBytes: 1 << 20,
+		MaxBatchSizeBytes: 10 << 20, BatchThreshold: 10, RetentionHours: 24}, "edge-1", "default")
+	require.NoError(t, q.Start())
+	control := &countingControl{delivered: map[string]int{}, retry: func(b string) bool { return strings.HasPrefix(b, "waiting") }}
+	q.SetGRPCClient(control, nil)
+
+	// More payloads waiting for a retry than the threshold.
+	for i := 0; i < 20; i++ {
+		require.NoError(t, q.QueuePayload(42, []byte(fmt.Sprintf("waiting-%d", i)), "", nil))
+	}
+	require.NoError(t, q.SendPendingBatch(context.Background()))
+	require.NoError(t, q.SendPendingBatch(context.Background()))
+
+	var wg sync.WaitGroup
+	for w := 0; w < 10; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 15; i++ {
+				assert.NoError(t, q.QueuePayload(42, []byte(fmt.Sprintf("p-%d-%d", w, i)), "", nil))
+			}
+		}(w)
+	}
+	wg.Wait()
+	// Drain: what threshold sends left behind goes with these.
+	for i := 0; i < 20; i++ {
+		require.NoError(t, q.SendPendingBatch(context.Background()))
+	}
+
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	assert.Len(t, control.delivered, 150)
+	for body, n := range control.delivered {
+		assert.Equal(t, 1, n, "%s delivered %d times", body, n)
+	}
 }
