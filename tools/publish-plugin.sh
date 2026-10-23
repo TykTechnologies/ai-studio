@@ -374,14 +374,55 @@ sys.exit(1 if want and have and want > have else 0)
   fi
 }
 
+# AI Studio verifies plugin signatures with cosign 2.x (pkg/ociplugins runs
+# `cosign verify --key`), which finds a signature only as the legacy
+# sha256-<hex>.sig tag next to the image.  cosign v3 stores it as an OCI
+# referrer in the new bundle format instead, which 2.x cannot find: every
+# install fails "no signatures found" while cosign v3 still verifies it.  So
+# with cosign v3 or later, sign in the legacy format.
+cosign_sign_flags() {
+  local major
+  major="$(cosign version --json 2>/dev/null | python3 -c '
+import json, re, sys
+m = re.match(r"v?(\d+)", json.load(sys.stdin).get("gitVersion", ""))
+print(m.group(1) if m else "")
+' 2>/dev/null || true)"
+  if [ -n "$major" ] && [ "$major" -ge 3 ]; then
+    printf '%s' "--new-bundle-format=false --use-signing-config=false"
+  fi
+}
+
+# legacy_sig_tag is the tag cosign 2.x reads the signature of a digest from.
+legacy_sig_tag() {
+  local digest="$1"
+  printf 'sha256-%s.sig' "${digest#sha256:}"
+}
+
+# The signature must also be readable by the cosign AI Studio ships: a
+# `cosign verify` with a newer cosign on this host proves nothing about that.
+legacy_sig_missing_msg() {
+  printf '%s' "the signature of $1 is not stored as the legacy $2 tag that AI Studio's
+       cosign 2.x verifies, so installs would fail \"no signatures found\". It was
+       probably signed by cosign v3 or later in the new bundle format. Sign it again
+       with this tool (it passes --new-bundle-format=false
+       --use-signing-config=false to cosign v3), or with cosign 2.x."
+}
+
 # Read a signature back, tolerating the registry's write-to-read lag.  cosign
 # returns BLOB_UNKNOWN for a few seconds after pushing a signature, which would
-# otherwise fail a release that actually succeeded.
+# otherwise fail a release that actually succeeded.  Besides `cosign verify`,
+# the legacy .sig tag must exist (legacy_sig_tag).
 verify_signature() {
   local ref="$1" attempt=1 max="${VERIFY_ATTEMPTS:-6}"
+  local sig_ref="${ref%@*}:$(legacy_sig_tag "${ref##*@}")"
   while :; do
     if cosign verify --key "$PUB_KEY" "$ref" >/dev/null 2>&1; then
-      return 0
+      if oras manifest fetch "$sig_ref" >/dev/null 2>&1; then
+        return 0
+      fi
+      if [ "$attempt" -ge "$max" ]; then
+        die "$(legacy_sig_missing_msg "$ref" "${sig_ref##*:}")"
+      fi
     fi
     if [ "$attempt" -ge "$max" ]; then
       # Final attempt with output shown, so a genuine failure is diagnosable.
@@ -615,7 +656,10 @@ EOF
     step "Signing $TARGET@$DIGEST"
     # Sign by digest: signing by tag would sign whatever the tag resolves to at
     # that moment, which is the failure mode we are engineering out.
-    run cosign sign --yes --key "$SIGN_KEY" "$TARGET@$DIGEST"
+    # In the legacy format with cosign v3+, so AI Studio's cosign 2.x
+    # finds it (cosign_sign_flags).
+    # shellcheck disable=SC2046
+    run cosign sign --yes $(cosign_sign_flags) --key "$SIGN_KEY" "$TARGET@$DIGEST"
   fi
 
   # Always read the signature back when we have a public key, including in
@@ -625,6 +669,7 @@ EOF
     step "Verifying the signature with $PUB_KEY"
     if [ "$DRY_RUN" = "1" ]; then
       run cosign verify --key "$PUB_KEY" "$TARGET@$DIGEST"
+      run oras manifest fetch "$TARGET:$(legacy_sig_tag "$DIGEST")"
     else
       verify_signature "$TARGET@$DIGEST"
     fi
@@ -852,6 +897,12 @@ for m in doc.get("manifests", []):
   if [ -n "$PUB_KEY" ] && [ -f "$PUB_KEY" ] && [ -n "$got_digest" ]; then
     if cosign verify --key "$PUB_KEY" "$TARGET@$got_digest" >/dev/null 2>&1; then
       info "  ok  signature verifies against $PUB_KEY"
+      if oras manifest fetch "$TARGET:$(legacy_sig_tag "$got_digest")" >/dev/null 2>&1; then
+        info "  ok  signature is in the legacy .sig format AI Studio's cosign 2.x reads"
+      else
+        warn "FAIL  $(legacy_sig_missing_msg "$TARGET@$got_digest" "$(legacy_sig_tag "$got_digest")")"
+        failures=$((failures + 1))
+      fi
     else
       warn "FAIL  no valid signature for $TARGET@$got_digest under $PUB_KEY"
       failures=$((failures + 1))
