@@ -24,6 +24,16 @@ type SecurityService interface {
 	VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error
 }
 
+// SignatureCapability is implemented by a SecurityService that may be
+// unable to verify signatures. The Community Edition service reports false:
+// its VerifySignature accepts everything, so the client still loads plugins
+// when signatures are required but records them as unverified (Verified and
+// SignatureChecked false), and an Enterprise build sharing the cache
+// verifies them again.
+type SignatureCapability interface {
+	VerifiesSignatures() bool
+}
+
 // pluginPuller pulls a plugin's manifest, config and binary from a registry.
 // ORASFetcher implements it; tests substitute a fake.
 type pluginPuller interface {
@@ -96,6 +106,19 @@ func (c *OCIPluginClient) SetSecurityService(service SecurityService) {
 // or nil if none was set.
 func (c *OCIPluginClient) SecurityService() SecurityService {
 	return c.securityService
+}
+
+// signaturesEnforced reports whether fetched plugins have their signatures
+// checked: signatures are required and the security service can verify them
+// (not the Community Edition service, see SignatureCapability).
+func (c *OCIPluginClient) signaturesEnforced() bool {
+	if !c.config.RequireSignature {
+		return false
+	}
+	if capability, ok := c.securityService.(SignatureCapability); ok && !capability.VerifiesSignatures() {
+		return false
+	}
+	return true
 }
 
 // FetchPlugin fetches a plugin by OCI reference, verifies it, and returns local information
@@ -203,9 +226,15 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 				Reason:    err.Error(),
 			}
 		}
-		log.Debug().
-			Str("reference", ref.FullReference()).
-			Msg("Signature verification passed")
+		if c.signaturesEnforced() {
+			log.Debug().
+				Str("reference", ref.FullReference()).
+				Msg("Signature verification passed")
+		} else {
+			log.Warn().
+				Str("reference", ref.FullReference()).
+				Msg("OCI plugin signature NOT verified: signature verification is not available in this edition; the plugin is recorded as unverified")
+		}
 	} else {
 		log.Debug().
 			Str("reference", ref.FullReference()).
@@ -236,7 +265,8 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Track whether signature was actually verified
-	signatureVerified := c.config.RequireSignature && params.PublicKey != ""
+	enforced := c.signaturesEnforced()
+	signatureVerified := enforced && params.PublicKey != ""
 	binarySum := sha256.Sum256(binaryData)
 
 	metadata := &PluginMetadata{
@@ -250,11 +280,11 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		Version:      version,
 		BinarySHA256: hex.EncodeToString(binarySum[:]),
 		// The signature check above returns early on failure, so reaching
-		// here with signatures required means it ran and passed.
-		SignatureChecked: c.config.RequireSignature,
+		// here with signatures enforced means it ran and passed.
+		SignatureChecked: enforced,
 		SignatureKey:     params.PublicKey,
 	}
-	if c.config.RequireSignature {
+	if enforced {
 		metadata.SignedDigest = signedRef.Digest
 	}
 
@@ -315,7 +345,7 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 		if err != nil {
 			reason = fmt.Sprintf("no readable metadata: %v", err)
 		}
-		if c.config.RequireSignature {
+		if c.signaturesEnforced() {
 			return nil, &ErrCacheCorrupted{Path: execPath, Reason: reason + "; signatures are required, so the plugin must be fetched and verified again"}
 		}
 		return nil, &ErrCacheUnchecked{Path: execPath, Reason: reason}
@@ -324,10 +354,10 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 	if err := checkFileSHA256(execPath, metadata.BinarySHA256); err != nil {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: err.Error()}
 	}
-	if c.config.RequireSignature && !metadata.SignatureChecked {
+	if c.signaturesEnforced() && !metadata.SignatureChecked {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "cached without signature verification, which is now required"}
 	}
-	if c.config.RequireSignature && metadata.SignatureKey != params.PublicKey {
+	if c.signaturesEnforced() && metadata.SignatureKey != params.PublicKey {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "signature was verified with a different public key"}
 	}
 

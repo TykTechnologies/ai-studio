@@ -58,6 +58,12 @@ func (s *communityService) VerifySignature(ctx context.Context, ref *OCIReferenc
 	return nil
 }
 
+// VerifiesSignatures reports that CE cannot verify signatures, so OCI
+// clients record plugins as unverified (ociplugins.SignatureCapability).
+func (s *communityService) VerifiesSignatures() bool {
+	return false
+}
+
 // VerifyBundle always returns nil in CE (no verification)
 func (s *communityService) VerifyBundle(ctx context.Context, ref *OCIReference, issuer, subject string) error {
 	s.logSecurityWarning("OCI bundle verification")
