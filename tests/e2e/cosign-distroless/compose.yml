@@ -41,16 +41,25 @@ services:
       AI_STUDIO_PLUGIN_ALLOWED_SOURCES: ${STUDIO_ALLOWED_SOURCES:-}
       # Overrides the common "true" for the internal-host scenarios
       ALLOW_INTERNAL_NETWORK_ACCESS: ${STUDIO_ALLOW_INTERNAL:-true}
+      LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: ${STUDIO_ALLOWED_INTERNAL_HOSTS:-}
       # AI_STUDIO_OCI_REQUIRE_SIGNATURE deliberately unset: the default (true) is under test
+
+  # The edge's /data is a volume (not tmpfs) so a scenario can corrupt the
+  # OCI cache from outside; this makes it writable by the distroless user.
+  gateway-data-init:
+    image: busybox:1.36
+    command: ["chown", "65532:65532", "/data"]
+    volumes: ["gateway-data:/data"]
 
   gateway:
     image: c1g-e2e/microgateway:${EDITION:-ent}
-    depends_on: [studio]
+    depends_on:
+      studio: {condition: service_started}
+      gateway-data-init: {condition: service_completed_successfully}
     # An edge exits when the control plane is not reachable yet; retry.
     restart: on-failure
     ports: ["127.0.0.1:18081:8080"]
-    tmpfs: ["/data:uid=65532,gid=65532,exec"] # plugin binaries run from /data/oci
-    volumes: ["${KEYS_DIR:?}:/keys:ro"]
+    volumes: ["${KEYS_DIR:?}:/keys:ro", "gateway-data:/data"]
     extra_hosts: ["internal-reg.test:10.0.0.6"]
     environment:
       <<: *common
@@ -67,12 +76,24 @@ services:
       DATABASE_DSN: file:/data/edge.db?mode=rwc
       PLUGINS_CONFIG_PATH: ""
       OCI_PLUGINS_CACHE_DIR: /data/oci
-      OCI_PLUGINS_INSECURE_REGISTRIES: registry:5000
+      OCI_PLUGINS_INSECURE_REGISTRIES: ${GATEWAY_INSECURE_REGISTRIES:-registry:5000}
       OCI_PLUGINS_REQUIRE_SIGNATURE: "true"
       OCI_PLUGINS_TLOG_POLICY: ${GATEWAY_TLOG_POLICY:-required}
       PLUGINS_ALLOWED_SOURCES: ${GATEWAY_ALLOWED_SOURCES:-}
       # Overrides the common "true" for the grpc internal-host scenario
       ALLOW_INTERNAL_NETWORK_ACCESS: ${GATEWAY_ALLOW_INTERNAL:-true}
+      LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: ${GATEWAY_ALLOWED_INTERNAL_HOSTS:-}
+      HTTPS_PROXY: ${GATEWAY_HTTPS_PROXY:-}
+      HTTP_PROXY: ${GATEWAY_HTTP_PROXY:-}
+      NO_PROXY: ${GATEWAY_NO_PROXY:-}
+
+  # An internal forward proxy for the proxy scenarios (profile "proxy").
+  proxy:
+    image: ubuntu/squid:6.6-24.04_beta
+    profiles: ["proxy"]  # the image's default config allows the local network
+
+volumes:
+  gateway-data:
 
 networks:
   default:

@@ -156,6 +156,80 @@ expect "edge opt-out: not refused by policy (it dials 10.0.0.6)" wait_in_gateway
 expect "edge opt-out: no policy refusal" bash -c "! docker compose -f '$HERE/compose.yml' logs gateway 2>&1 | grep -q 'is an internal address.*e-internal-ok'"
 export GATEWAY_ALLOW_INTERNAL=
 
+log "9f. per-host opt-out: LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS (c1g.32)"
+# Internal blocking on everywhere; only the named hosts are allowed.
+export STUDIO_ALLOW_INTERNAL=false GATEWAY_ALLOW_INTERNAL=false
+export STUDIO_ALLOWED_INTERNAL_HOSTS=registry,internal-reg.test GATEWAY_ALLOWED_INTERNAL_HOSTS=registry,internal-reg.test
+start
+[ "$(studio_oci s-allowlisted "$(studio_ref "$V2")" | status_of)" = 201 ] && pass "Studio: allow-listed internal registry loads (blocking on)" || fail "Studio allow-listed registry"
+r=$(api POST /api/v1/plugins "{\"name\":\"s-allow-ireg\",\"command\":\"$INTERNAL_REF\",\"hook_type\":\"post_auth\",\"is_active\":true}")
+[ "${r%% *}" = 201 ] && pass "Studio: allow-listed internal-reg.test accepted" || fail "Studio allow-listed internal-reg.test: ${r:0:200}"
+push_to_edge "e-allowlisted=oci://$REPO@$V2?pubkey=E2E" "e-allow-ireg=$INTERNAL_REF"
+expect "edge: allow-listed internal registry loads" in_gateway 'Plugin pre-warmed successfully .*plugin_name=e-allowlisted$'
+expect "edge: allow-listed internal-reg.test is not refused by policy (it dials 10.0.0.6)" wait_in_gateway 'Failed to pre-warm plugin .*dial tcp 10\.0\.0\.6.*plugin_name=e-allow-ireg' 90
+
+log "9g. DNS down: a verified cache hit loads, a corrupted one is refused (c1g.33)"
+# The internal-host check applies (no opt-out). Cache asset-catalog from
+# docker.tyk.io, then recreate the edge with an unreachable upstream DNS
+# (compose.dhn.yml) and the same /data volume: its plugins load again at start.
+export STUDIO_ALLOW_INTERNAL= GATEWAY_ALLOW_INTERNAL=false STUDIO_ALLOWED_INTERNAL_HOSTS= GATEWAY_ALLOWED_INTERNAL_HOSTS=
+start
+AC_REF="oci://docker.tyk.io/studio-plugins/asset-catalog@sha256:bd2e24de558d1be9778c7aea5eb0d809e22c9f7b5324259c0c689823d4d1f6e3"
+push_to_edge "e-dns=$AC_REF"
+expect "edge: plugin fetched and cached while DNS works" in_gateway 'Plugin pre-warmed successfully .*plugin_name=e-dns$'
+recreate_edge() { # recreate only the edge, keeping its /data volume
+  COMPOSE_OVERLAY=compose.dhn.yml compose up -d --force-recreate --no-deps gateway >/dev/null 2>&1
+  for _ in $(seq 1 60); do in_gateway 'Initial configuration synced' && break; sleep 2; done
+  sleep 10
+}
+recreate_edge
+expect "edge: DNS down, verified cache hit loads with a warning" wait_in_gateway 'Plugin registry name does not resolve; loading the verified cached copy' 30
+expect "edge: DNS down, the cached plugin is loaded" wait_in_gateway 'Plugin pre-warmed successfully .*plugin_name=e-dns$' 30
+# Corrupt the cached binary: the integrity check fails, and the fetch it
+# needs is refused while the registry name does not resolve.
+# (The edge is stopped first: a running plugin's binary cannot be written.)
+compose stop gateway >/dev/null 2>&1
+docker run --rm -v c1g-e2e_gateway-data:/data busybox:1.36 sh -c 'for f in /data/oci/bins/*; do echo corrupted > "$f"; done' >/dev/null
+recreate_edge
+expect "edge: DNS down, corrupted cache refused" wait_in_gateway 'Failed to pre-warm plugin .*plugin_name=e-dns$' 30
+glog | grep -E 'Failed to pre-warm plugin .*plugin_name=e-dns$' | head -1 | cut -c1-300
+export GATEWAY_ALLOW_INTERNAL=
+
+log "9h. internal HTTPS proxy in front of a public registry (c1g.33)"
+# NO_PROXY=studio: the edge's gRPC connection to the control plane is direct.
+export COMPOSE_PROFILES=proxy GATEWAY_ALLOW_INTERNAL=false GATEWAY_HTTPS_PROXY=http://proxy:3128 GATEWAY_HTTP_PROXY=http://proxy:3128 GATEWAY_NO_PROXY=studio GATEWAY_TLOG_POLICY=required
+start
+AC_REF="oci://docker.tyk.io/studio-plugins/asset-catalog@sha256:bd2e24de558d1be9778c7aea5eb0d809e22c9f7b5324259c0c689823d4d1f6e3"
+push_to_edge "e-via-proxy=$AC_REF" "e-ireg-via-proxy=$INTERNAL_REF"
+expect "edge: public registry fetched and verified through the internal proxy" in_gateway 'signature check passed .*reference=docker.tyk.io/studio-plugins/asset-catalog'
+expect "edge: an internal registry is refused even through the proxy" in_gateway 'Failed to pre-warm plugin .*internal-reg.test.*ALLOW_INTERNAL_NETWORK_ACCESS.*plugin_name=e-ireg-via-proxy'
+# Squid logs a CONNECT tunnel when it closes: stop the edge first.
+compose stop gateway >/dev/null 2>&1; sleep 3
+expect "proxy: the edge's registry traffic went through it (CONNECT docker.tyk.io:443)" bash -c "docker compose -f '$HERE/compose.yml' --profile proxy exec -T proxy cat /var/log/squid/access.log | grep -q 'CONNECT docker.tyk.io:443'"
+
+log "9i. proxy-only network: the edge cannot resolve the registry name (dhn check)"
+export COMPOSE_OVERLAY=compose.dhn.yml
+start
+push_to_edge "e-dhn=$AC_REF"
+DHN_REFUSED=0; wait_in_gateway 'Failed to pre-warm plugin .*plugin_name=e-dhn$' 60 && DHN_REFUSED=1
+echo "INFO: without an allow-list entry, docker.tyk.io (unresolvable on the edge) via the proxy: $([ $DHN_REFUSED = 1 ] && echo refused || echo loaded)"
+glog | grep -E 'Failed to pre-warm plugin .*plugin_name=e-dhn$' | head -1 | cut -c1-400
+# The registry redirects blob downloads to its CDN (dl.cloudsmith.io), which
+# the edge cannot resolve either; try the registry alone, then both.
+for hosts in docker.tyk.io docker.tyk.io,dl.cloudsmith.io; do
+  export GATEWAY_ALLOWED_INTERNAL_HOSTS=$hosts
+  start
+  push_to_edge "e-dhn-allow=$AC_REF"
+  if wait_in_gateway 'Plugin pre-warmed successfully .*plugin_name=e-dhn-allow$' 60; then
+    echo "INFO: dhn workaround (LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS=$hosts): YES, fetched and verified through the proxy"
+    glog | grep -E 'signature check passed' | head -1 | cut -c1-200
+  else
+    echo "INFO: dhn workaround (LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS=$hosts): NO"
+    glog | grep -E 'Failed to pre-warm plugin .*plugin_name=e-dhn-allow$' | head -1 | sed -E 's/signature=[^&"]*/signature=<redacted>/' | cut -c1-700
+  fi
+done
+export COMPOSE_OVERLAY= COMPOSE_PROFILES= GATEWAY_ALLOW_INTERNAL= GATEWAY_HTTPS_PROXY= GATEWAY_HTTP_PROXY= GATEWAY_NO_PROXY= GATEWAY_ALLOWED_INTERNAL_HOSTS=
+
 log "10. Community Edition: loads unverified, warns once"
 export EDITION=ce STUDIO_TLOG_POLICY=required GATEWAY_TLOG_POLICY=required
 start

@@ -1,0 +1,6 @@
+# Overlay for the proxy-only scenario: the edge cannot resolve names outside
+# the docker network (its upstream DNS is unreachable), so it reaches
+# registries only through the proxy.
+services:
+  gateway:
+    dns: ["192.0.2.1"]

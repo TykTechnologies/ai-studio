@@ -3,7 +3,9 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE=(docker compose -f "$HERE/compose.yml")
+# COMPOSE_OVERLAY names an extra compose file in this directory (e.g.
+# compose.dhn.yml); COMPOSE_PROFILES (read by docker compose) enables the proxy.
+compose() { docker compose -f "$HERE/compose.yml" ${COMPOSE_OVERLAY:+-f "$HERE/$COMPOSE_OVERLAY"} "$@"; }
 STUDIO=http://127.0.0.1:18080
 REPO=registry:5000/studio-plugins/request_enricher
 ADMIN_EMAIL=e2e-admin@test.local
@@ -15,18 +17,18 @@ log() { printf '\n### %s\n' "$*"; }
 # up [service...]: start the stack (or services) with the current env and
 # connect the registry container to the network as "registry".
 up() {
-  "${COMPOSE[@]}" up -d "$@" >/dev/null
+  compose up -d "$@" >/dev/null
   docker network connect --alias registry c1g-e2e c1g-e2e-registry 2>/dev/null || true
 }
 
-down() { "${COMPOSE[@]}" down -v >/dev/null 2>&1 || true; }
+down() { compose --profile proxy down -v >/dev/null 2>&1 || true; }
 
 wait_studio() {
   for _ in $(seq 1 90); do
     curl -sf "$STUDIO/health" >/dev/null 2>&1 && return 0
     sleep 1
   done
-  echo "studio did not become healthy"; "${COMPOSE[@]}" logs --tail 50 studio; return 1
+  echo "studio did not become healthy"; compose logs --tail 50 studio; return 1
 }
 
 # login: register the first user (admin) and roll an API key.
@@ -57,5 +59,5 @@ api() {
 # digest TAG: the registry digest of a request_enricher tag.
 digest() { oras resolve --plain-http "localhost:15000/studio-plugins/request_enricher:$1"; }
 
-studio_logs() { "${COMPOSE[@]}" logs --no-color studio 2>&1; }
-gateway_logs() { "${COMPOSE[@]}" logs --no-color gateway 2>&1; }
+studio_logs() { compose logs --no-color studio 2>&1; }
+gateway_logs() { compose logs --no-color gateway 2>&1; }
