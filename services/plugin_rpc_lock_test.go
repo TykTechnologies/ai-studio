@@ -29,12 +29,61 @@ func (f *blockingRPCPluginClient) PortalCall(ctx context.Context, req *pb.Portal
 	return &pb.PortalCallResponse{Success: true, Data: `{}`}, nil
 }
 
+func (f *blockingRPCPluginClient) hold() {
+	f.entered <- struct{}{}
+	<-f.release
+}
+
+func (f *blockingRPCPluginClient) GetAsset(context.Context, *pb.GetAssetRequest, ...grpc.CallOption) (*pb.GetAssetResponse, error) {
+	f.hold()
+	return &pb.GetAssetResponse{Success: true}, nil
+}
+
+func (f *blockingRPCPluginClient) GetManifest(context.Context, *pb.GetManifestRequest, ...grpc.CallOption) (*pb.GetManifestResponse, error) {
+	f.hold()
+	return &pb.GetManifestResponse{Success: true, ManifestJson: "{}"}, nil
+}
+
+func (f *blockingRPCPluginClient) ListAssets(context.Context, *pb.ListAssetsRequest, ...grpc.CallOption) (*pb.ListAssetsResponse, error) {
+	f.hold()
+	return &pb.ListAssetsResponse{Success: true}, nil
+}
+
+func (f *blockingRPCPluginClient) CreateResourceInstance(context.Context, *pb.CreateResourceInstanceRequest, ...grpc.CallOption) (*pb.CreateResourceInstanceResponse, error) {
+	f.hold()
+	return &pb.CreateResourceInstanceResponse{Success: true, Instance: &pb.ResourceInstanceProto{Id: "i"}}, nil
+}
+
+func (f *blockingRPCPluginClient) ListResourceInstances(context.Context, *pb.ListResourceInstancesRequest, ...grpc.CallOption) (*pb.ListResourceInstancesResponse, error) {
+	f.hold()
+	return &pb.ListResourceInstancesResponse{Success: true}, nil
+}
+
+func (f *blockingRPCPluginClient) ExecuteScheduledTask(context.Context, *pb.ExecuteScheduledTaskRequest, ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	f.hold()
+	return &pb.ExecuteScheduledTaskResponse{Success: true}, nil
+}
+
 // bqo: a plugin RPC in flight must not hold the manager's lock, or a
 // session renewal (a writer) waits for the RPC's 30 s timeout.
 func TestPluginRPC_DoesNotBlockWriters(t *testing.T) {
 	for name, call := range map[string]func(m *AIStudioPluginManager) (interface{}, error){
 		"ui":     func(m *AIStudioPluginManager) (interface{}, error) { return m.CallPluginRPCAs(7, "slow", nil, nil) },
 		"portal": func(m *AIStudioPluginManager) (interface{}, error) { return m.CallPluginPortalRPC(7, "slow", nil, nil) },
+		// mj3: the plugin manager's other plugin calls.
+		"asset": func(m *AIStudioPluginManager) (interface{}, error) {
+			b, _, err := m.GetPluginAsset(7, "a.js")
+			return b, err
+		},
+		"manifest":    func(m *AIStudioPluginManager) (interface{}, error) { return m.GetPluginManifest(7) },
+		"list assets": func(m *AIStudioPluginManager) (interface{}, error) { return m.ListPluginAssets(7, "") },
+		"create instance": func(m *AIStudioPluginManager) (interface{}, error) {
+			return m.CreateResourceInstance(7, "t", []byte("{}"), 1)
+		},
+		"list instances": func(m *AIStudioPluginManager) (interface{}, error) { return m.ListResourceInstances(7, "t") },
+		"scheduled task": func(m *AIStudioPluginManager) (interface{}, error) {
+			return m.ExecuteScheduledTask(context.Background(), 7, &pb.PluginContext{}, &pb.ScheduleDefinition{Id: "s"})
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			client := &blockingRPCPluginClient{entered: make(chan struct{}, 1), release: make(chan struct{})}
