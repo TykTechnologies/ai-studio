@@ -32,7 +32,6 @@ func setupOCITestAPI(t *testing.T) (*API, *services.Service) {
 // error naming the setting, not a server error) and never reach the
 // registry (midsommar-clean-c1g.10).
 func TestOCIPluginAPI_SourcePolicyRefusesWith400(t *testing.T) {
-	t.Skip("fails until midsommar-clean-c1g.23 is fixed (500 instead of 400); remove this skip with the fix")
 	api, service := setupOCITestAPI(t)
 	reg := ocitest.NewRegistry(t)
 	manifest := reg.PushPlugin("plugins/demo", "1.0.0", "linux/amd64", []byte("binary"))
