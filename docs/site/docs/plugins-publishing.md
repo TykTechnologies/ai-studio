@@ -37,6 +37,15 @@ forgotten bump fails loudly instead of overwriting a release.
    (`1.0.2-linux_amd64`), then assembles the multi-platform index at `1.0.2`.
 5. **Signs the index by digest** with cosign, then verifies the signature it
    just made. A signature that did not take fails the command.
+
+   AI Studio verifies plugins with cosign 2.x, which reads a signature only
+   from the legacy `sha256-<digest>.sig` tag. cosign v3 stores it as an OCI
+   referrer in its new bundle format instead, which cosign 2.x cannot find
+   ("no signatures found" on every install). With cosign v3 or later on
+   `PATH`, the tool therefore signs with `--new-bundle-format=false
+   --use-signing-config=false`. The read-back, and `make plugin-verify`, also
+   require the `.sig` tag, so a release cosign 2.x cannot read fails here
+   rather than at install.
 6. **Writes the marketplace entry**: pulls the marketplace repo, generates
    `plugins/<name>/<version>/manifest.yaml`, carries the README, icon and
    changelog across, commits and pushes to `main` so the index CI fires.
