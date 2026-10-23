@@ -152,8 +152,8 @@ type MCPServer struct {
 	// (w4e): Studio's own calls to the upstream (wizard tool discovery) may
 	// reach an internal address. Admin-only like UpstreamURL; never set from
 	// a submission.
-	AllowInternalHost bool `gorm:"not null;default:false" json:"-"`
-	SourceAPIID string `gorm:"size:64" json:"source_api_id"`
+	AllowInternalHost bool   `gorm:"not null;default:false" json:"-"`
+	SourceAPIID       string `gorm:"size:64" json:"source_api_id"`
 
 	AuthMode        string `gorm:"size:32;not null;default:custom" json:"auth_mode"`
 	AuthDetailsJSON string `gorm:"column:auth_details;type:text" json:"-"`
@@ -369,6 +369,10 @@ type MCPServerResponse struct {
 	ToolCatalogueIDs []uint                   `json:"tool_catalogue_ids,omitempty"`
 	ToolCatalogues   []MCPServerCatalogueView `json:"tool_catalogues,omitempty"`
 	Bundle           []MCPServerPolicyPinView `json:"bundle,omitempty"`
+
+	// AllowInternalHost is the server's admin-only "Allow internal host"
+	// switch (w4e); this is the administrator API shape.
+	AllowInternalHost bool `json:"allow_internal_host"`
 }
 
 // ToResponse converts the server to its administrator API shape.
@@ -379,7 +383,8 @@ func (m *MCPServer) ToResponse(detail bool) MCPServerResponse {
 		Description: m.Description, LongDescription: m.LongDescription, LogoURL: m.LogoURL, Tags: m.Tags(),
 		Kind: m.Kind, ListenPath: m.ListenPath, TransportPath: m.TransportPath,
 		EndpointURL: m.EndpointURL, EndpointURLs: m.EndpointURLs(), UpstreamURL: m.UpstreamURL, SourceAPIID: m.SourceAPIID,
-		AuthMode: m.AuthMode, AuthDetails: m.AuthDetails(), Primitives: m.Primitives(), GatewayTags: m.GatewayTags(),
+		AllowInternalHost: m.AllowInternalHost,
+		AuthMode:          m.AuthMode, AuthDetails: m.AuthDetails(), Primitives: m.Primitives(), GatewayTags: m.GatewayTags(),
 		DefinitionHash: m.DefinitionHash, DashboardState: m.DashboardState, Origin: m.Origin, SubmissionID: m.SubmissionID,
 		PrivacyScore: m.PrivacyScore, IsActive: m.IsActive, Brokerable: m.Brokerable,
 		OwnerUserID: m.OwnerUserID, CommunitySubmitted: m.CommunitySubmitted,

@@ -39,6 +39,9 @@ func (a *API) registerMCPServer(c *gin.Context) {
 		webhookBadRequest(c, "connection_id and the proxy fields are required")
 		return
 	}
+	if _, ok := allowInternalHostUpdate(c, false, in.AllowInternalHost); !ok {
+		return
+	}
 	dryRun := isDryRun(c)
 	preview, srv, err := a.tykMCPService().RegisterServer(c.Request.Context(), actor, in, dryRun)
 	if err != nil {

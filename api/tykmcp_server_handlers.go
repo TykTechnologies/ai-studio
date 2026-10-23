@@ -124,6 +124,16 @@ func (a *API) updateMCPServer(c *gin.Context) {
 		webhookBadRequest(c, "invalid request body")
 		return
 	}
+	if p.AllowInternalHost != nil {
+		current, err := a.tykMCPService().GetServer(c.Request.Context(), id)
+		if err != nil {
+			tykMCPErrorResponse(c, err, "Failed to update MCP server")
+			return
+		}
+		if _, ok := allowInternalHostUpdate(c, current.AllowInternalHost, p.AllowInternalHost); !ok {
+			return
+		}
+	}
 	view, err := a.tykMCPService().UpdateServer(c.Request.Context(), actor, id, p)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to update MCP server")

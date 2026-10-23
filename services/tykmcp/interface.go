@@ -278,7 +278,10 @@ type ServerPatch struct {
 	Tags              *[]string `json:"tags"`
 	PrivacyScore      *int      `json:"privacy_score"`
 	ClearPrivacyScore bool      `json:"clear_privacy_score"`
-	LockVersion       int       `json:"lock_version"`
+	// AllowInternalHost sets the server's "Allow internal host" switch;
+	// nil keeps it. Administrators only (checked by the API, w4e).
+	AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
+	LockVersion       int   `json:"lock_version"`
 }
 
 // PinInput names one policy in a bundle by its Tyk policy id.
@@ -336,6 +339,11 @@ type RegisterInput struct {
 	UpstreamAuthHeaderName string   `json:"upstream_auth_header_name"`
 	UpstreamAuthToken      string   `json:"upstream_auth_token"`
 	AllowedTools           []string `json:"allowed_tools"`
+	// AllowInternalHost is the wizard's "Allow internal host" switch,
+	// stored on the server (AI Studio's tool discovery may then reach the
+	// upstream's host on an internal address). Administrators only
+	// (checked by the API); never taken from a submission (w4e).
+	AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 
 	// REST API to MCP
 	SourceAPIID string              `json:"source_api_id"`

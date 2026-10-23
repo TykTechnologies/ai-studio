@@ -80,6 +80,8 @@ export const buildPayload = (f) => {
       body.upstream_auth_token = f.upstream_auth_token;
     }
     body.allowed_tools = selectedTools(f);
+    // Stored on the server; sent only when on (administrators only, w4e).
+    if (f.allow_internal_host) body.allow_internal_host = true;
   } else {
     body.source_api_id = f.source_api_id;
     body.primitives = f.primitives

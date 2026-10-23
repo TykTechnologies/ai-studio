@@ -255,6 +255,10 @@ describe("MCPServerRegister", () => {
     expect(body.upstream_auth_header_name).toBeUndefined();
     expect(body.allowed_tools).toEqual(["t1", "t2"]);
     expect(buildPayload({ kind: "remote", tool_access: "all", allowed_tools: ["t1"], manual_tools: "t2", primitives: [], gateway_tags: [] }).allowed_tools).toEqual([]);
+    // The Allow internal host switch is stored with the server, sent only when on (w4e).
+    const remote = { kind: "remote", tool_access: "all", allowed_tools: [], manual_tools: "", primitives: [], gateway_tags: [] };
+    expect(buildPayload({ ...remote, allow_internal_host: true }).allow_internal_host).toBe(true);
+    expect(buildPayload(remote)).not.toHaveProperty("allow_internal_host");
     expect(body.tags).toEqual(["a", "b"]);
     expect(body.privacy_score).toBeUndefined();
     expect(body.gateway_tags).toEqual(["edge-eu"]);
