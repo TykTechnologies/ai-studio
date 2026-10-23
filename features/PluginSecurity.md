@@ -42,9 +42,9 @@ Plugin security provides multiple layers of protection against malicious or misc
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │ Tier 4: Supply Chain Security (ENT ONLY)                    │
-│ • OCI Manifest Signature Verification (Cosign)              │
-│ • Keyless Signing Support                                    │
-│ • Policy-Based Verification                                  │
+│ • OCI Signature Verification (in-process, sigstore-go)      │
+│ • cosign v2 (.sig tag) and v3 (Sigstore bundle) formats      │
+│ • Transparency-log (Rekor) checks, keyless support           │
 │ • Multiple Public Key Support                                │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -191,53 +191,42 @@ ALLOW_INTERNAL_NETWORK_ACCESS=true  # Allows internal IPs (development only)
 
 **⚠️ ENTERPRISE EDITION ONLY**
 
-**Purpose**: Verifies plugin authenticity using cryptographic signatures (Cosign)
+**Purpose**: Verifies plugin authenticity using cryptographic signatures, in-process: no `cosign` binary is run or needed, so verification works in distroless images.
 
-**Implementation**: [enterprise/features/plugin_security/signature_verifier.go](../enterprise/features/plugin_security/signature_verifier.go)
+**Implementation**: [enterprise/features/plugin_security/signature_verifier.go](../enterprise/features/plugin_security/signature_verifier.go) (cosign v2), [bundle_verifier.go](../enterprise/features/plugin_security/bundle_verifier.go) (cosign v3, keyless), [trusted_root.go](../enterprise/features/plugin_security/trusted_root.go), built on sigstore-go and the core OCI client (`pkg/ociplugins`). The `sigstore-go` dependency is in the enterprise module only; Community binaries do not link it.
 
-**Verification Methods**:
+**Defaults**: `AI_STUDIO_OCI_REQUIRE_SIGNATURE` and `OCI_PLUGINS_REQUIRE_SIGNATURE` default to `true` (AI Studio's default was `false` before 2.3.0), as do the Helm charts.
 
-#### A. Key-Based Verification
-```bash
-# Sign plugin during build
-cosign sign --key cosign.key registry/plugin:v1.0.0
+**Signature formats** (a plugin verifies if either does; a failure reports both attempts):
 
-# Verify during fetch (ENT automatic)
-OCI_PLUGINS_PUBKEY_1="-----BEGIN PUBLIC KEY-----..."
-OCI_PLUGINS_REQUIRE_SIGNATURE=true
-```
+| Format | Where it lives | Binding to the artifact |
+|---|---|---|
+| cosign v2 (what `tools/publish-plugin.sh` writes) | manifest tagged `sha256-<hex>.sig`; each `application/vnd.dev.cosign.simplesigning.v1+json` layer has the signature in `dev.cosignproject.cosign/signature` and an optional Rekor bundle in `dev.sigstore.cosign/bundle` | the signed payload's `critical.image.docker-manifest-digest` must equal the digest asked about (the `.sig` tag's location proves nothing); `critical.type` must be `cosign container image signature` |
+| cosign v3 | a Sigstore bundle (`application/vnd.dev.sigstore.bundle.v0.3+json`) attached as an OCI referrer of the digest (referrers API, or the `sha256-<hex>` tag-schema fallback) | sigstore-go `WithArtifactDigest(sha256, digest)`; a DSSE bundle must be an in-toto statement with predicate `https://sigstore.dev/cosign/sign/v1` (attestations such as SLSA provenance or SBOMs are not signatures) |
 
-#### B. Keyless Verification (OIDC)
-```go
-// Verify using certificate identity
-err := securityService.VerifyBundle(ctx, ref,
-    "https://github.com/login/oauth",  // Issuer
-    "user@company.com")                // Subject
-```
+**Which digest is verified**: the client (`pkg/ociplugins` `FetchPlugin`) resolves the reference once and passes the **top-level** digest it resolved to: the multi-arch index for a multi-arch plugin (what `publish-plugin.sh` signs), else the manifest. If the index has no valid signature, the **platform manifest that was pulled** (taken from the index content, never from a tag or second resolution) is verified with the same key; another platform's manifest is never consulted. A digest that is not `sha256:<64 hex>` fails closed. The cache records `ResolvedDigest`, `ManifestDigest` and `SignedDigest`; with signatures enforced a cache hit requires `ResolvedDigest` to be the requested digest and `SignedDigest` to be it or its platform manifest, so entries from earlier releases are verified once more.
 
-#### C. Policy-Based Verification
-```bash
-# Create policy file
-cat > policy.yaml <<EOF
-apiVersion: policy.sigstore.dev/v1beta1
-kind: ClusterImagePolicy
-metadata:
-  name: plugin-policy
-spec:
-  images:
-  - glob: "registry.company.com/plugins/*"
-  authorities:
-  - keyless:
-      url: https://fulcio.sigstore.dev
-EOF
+**Transparency log** (`AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY`, `ociplugins.OCIConfig.EffectiveTlogPolicy()`):
 
-# Verify with policy
-err := securityService.VerifyWithPolicy(ctx, ref, "policy.yaml")
-```
+| Policy | cosign v2 | cosign v3 |
+|---|---|---|
+| `required` (default) | the Rekor bundle's signed entry timestamp is checked offline against the trusted root's Rekor key for that log ID, within the key's validity window; the hashedrekord entry must record this payload's hash, this signature and **the verification key** | `WithTransparencyLog(1)` + `WithIntegratedTimestamps(1)` |
+| `optional` | as `required` when the bundle annotation is present; accepted without one | as `required` when the bundle has tlog entries; key only otherwise |
+| `disabled` | key only | key only (`WithCurrentTime`) |
 
-**Public Key Resolution**:
+Any other value fails closed. `optional` gives no protection against someone who can write to the registry and strip the entry; use it only in transition, and `disabled` only for air-gapped signing (`--tlog-upload=false`).
 
-The verifier supports multiple key reference formats:
+**Trusted root**: a snapshot of the Sigstore public-good `trusted_root.json` is embedded (`trusted_root.json`, refreshed with `refresh-trusted-root.sh` / `go generate`). `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` replace it (read with `ociplugins.ReadTrustedRootFile`: a regular file of at most 4 MiB); an invalid override fails closed and never falls back to the embedded root.
+
+**Keyless** (`VerifyBundle(ctx, ref, issuer, subject)`): a cosign v3 bundle whose Fulcio certificate chains to the trusted root, with exact OIDC issuer and SAN, a tlog entry and an SCT. Nothing calls it today.
+
+**Not supported**: cosign policy files. `VerifyWithPolicy` returns an error and is deprecated in both service interfaces.
+
+**Fail closed**: with signatures required, an OCI client with no security service refuses every plugin (`no signature verifier configured`). Every OCI client in Studio and in both Microgateway service containers is built with the security service (`services.NewServiceWithOCI`, `Service.NewOCIPluginClient`, `plugins.NewPluginManagerWithOCI`, which requires it).
+
+**Limits**: signature manifests, payloads and bundles are read with a 1 MiB cap; at most 32 simplesigning layers per `.sig` manifest and 16 bundle referrers are tried; key files must be regular files of at most 64 KiB.
+
+**Public Key Resolution** (`ociplugins.ResolvePublicKey`, returns PEM bytes, no temp files):
 
 ```bash
 # 1. Numbered keys
@@ -258,12 +247,19 @@ OCI_PLUGINS_PUBKEY_FILE_COSIGN=/etc/ai-studio/cosign.pub
 
 # 5. Environment variable reference
 # Reference: "env:OCI_PLUGINS_PUBKEY_CI"
+
+# 6. The embedded Tyk key: "embedded:default" (always the first default key)
 ```
 
+**Core seams the Enterprise verifier uses** (`pkg/ociplugins`, documented in `doc.go`):
+- `NewRemoteRepository(cfg, ref, authConfigName)`: the repository client plugin pulls use (insecure-registry list, registry auth, netguard SSRF guard).
+- `WithAuthConfig` / `AuthConfigFrom`: the plugin reference's `?auth=` name, carried on the context to `VerifySignature`.
+- `ResolvePublicKey`, `ParsePublicKey`, `PublicKeyPath`, `ReadTrustedRootFile`.
+- `SignatureCapability`: a service that cannot verify (the Community one) reports it, and plugins load recorded as unverified.
+
 **Community Edition Behavior**:
-- ⚠️ Signature verification skipped (no-op)
-- `RequireSignature` setting ignored
-- Logs one-time warning: "Plugin Security: OCI signature verification is disabled in Community Edition"
+- ⚠️ Signatures are not verified; OCI plugins load and are recorded as unverified (`Verified` and `SignatureChecked` false), so an Enterprise build on the same cache verifies them again
+- A warning is logged once per process when `RequireSignature` is set (the default)
 
 ---
 
@@ -535,84 +531,10 @@ ENT: "🔒 SECURITY: plugin command targets internal network address: grpc://127
 
 ### OCI Signature Verification
 
-**File**: [enterprise/features/plugin_security/signature_verifier.go](../enterprise/features/plugin_security/signature_verifier.go)
+See [Tier 4](#4-oci-signature-verification-tier-4---supply-chain-security) for the design. Failures are `*ociplugins.ErrSignatureVerificationFailed` with a reason naming each format tried and why it failed, never key material or tool output:
 
-**Dependencies**:
-- **Cosign CLI**: Sigstore signing tool (must be installed)
-- **Public Keys**: PEM-formatted public keys for verification
-
-**Verification Process**:
-```go
-func (v *SignatureVerifier) Verify(ctx, ref, pubKeyID) error {
-    // 1. Resolve public key reference
-    pubKeyPath, err := v.getPublicKeyPath(pubKeyID)
-
-    // 2. Build cosign verify command
-    cmd := exec.CommandContext(ctx, "cosign", "verify",
-        "--key", pubKeyPath,
-        ref.FullReference())
-
-    // 3. Run verification
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return ErrSignatureVerificationFailed
-    }
-
-    return nil
-}
 ```
-
-**Public Key Resolution Examples**:
-```go
-// Numeric reference → OCI_PLUGINS_PUBKEY_1
-pubKeyPath, err := verifier.getPublicKeyPath("1")
-
-// Named reference → OCI_PLUGINS_PUBKEY_CI
-pubKeyPath, err := verifier.getPublicKeyPath("CI")
-
-// Direct file path
-pubKeyPath, err := verifier.getPublicKeyPath("/etc/keys/cosign.pub")
-
-// File reference
-pubKeyPath, err := verifier.getPublicKeyPath("file:/etc/keys/cosign.pub")
-
-// Environment variable
-pubKeyPath, err := verifier.getPublicKeyPath("env:MY_PUBKEY")
-```
-
-**Advanced Features**:
-
-**Keyless Signing** (OIDC-based):
-```go
-// No pre-shared key required
-err := securityService.VerifyBundle(ctx, ref,
-    "https://token.actions.githubusercontent.com",  // Issuer
-    "https://github.com/myorg/repo/.github/workflows/build.yml@refs/heads/main")  // Subject
-```
-
-**Policy-Based Verification**:
-```yaml
-# policy.yaml
-apiVersion: policy.sigstore.dev/v1beta1
-kind: ClusterImagePolicy
-metadata:
-  name: require-keyless-signature
-spec:
-  images:
-  - glob: "registry.company.com/plugins/*"
-  authorities:
-  - keyless:
-      url: https://fulcio.sigstore.dev
-      identities:
-      - issuer: https://token.actions.githubusercontent.com
-        subject: "https://github.com/myorg/*"
-```
-
-**Error Messages**:
-```
-CE: No error (skipped)
-ENT (failure): "signature verification failed: cosign verify failed: no signatures found"
-ENT (success): Signature verification passed (logged at debug level)
+with key "1": cosign v3 bundle: no signatures found; cosign v2 signature (sha256-<hex>.sig): no valid signature: layer 0: signature is for sha256:<other>, not sha256:<hex>
 ```
 
 ---
@@ -745,7 +667,8 @@ func (s *enterpriseService) ValidateGRPCHost(host string) error {
     return s.grpcValidator.ValidateHost(host)  // Returns error if internal
 }
 
-// VerifySignature performs Cosign verification in ENT
+// VerifySignature verifies cosign v3 bundles and cosign v2 signatures
+// in-process (sigstore-go) in ENT
 func (s *enterpriseService) VerifySignature(ctx, ref, pubKeyID) error {
     return s.signatureVerifier.Verify(ctx, ref, pubKeyID)
 }
@@ -842,11 +765,18 @@ When upgrading from Community Edition to Enterprise Edition:
   - Use public IP/hostname instead
   - Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (development only)
 
-**ENT: "signature verification failed: no signatures found"**
-- **Cause**: Plugin image not signed
+**ENT: "signature verification failed ... no signatures found"**
+- **Cause**: Plugin image not signed (neither a cosign v3 bundle nor a cosign v2 `.sig` tag)
 - **Solution**:
-  - Sign plugin: `cosign sign --key cosign.key registry/plugin:v1`
-  - Or disable verification: `OCI_PLUGINS_REQUIRE_SIGNATURE=false` (not recommended)
+  - Sign plugin: `cosign sign --key cosign.key registry/plugin@sha256:<digest>` (or `tools/publish-plugin.sh`)
+  - Or disable verification: `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false` / `OCI_PLUGINS_REQUIRE_SIGNATURE=false` (not recommended)
+
+**ENT: "no transparency-log entry, which ..._TLOG_POLICY=required needs"**
+- **Cause**: Signed with `--tlog-upload=false`
+- **Solution**: Set `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` to `disabled` (air-gapped signing)
+
+**"no signature verifier configured"**
+- **Cause**: An OCI client was built without the plugin security service while signatures are required (a wiring bug; every client should have it)
 
 **ENT: "public key not found"**
 - **Cause**: Public key reference not configured
@@ -876,14 +806,15 @@ When upgrading from Community Edition to Enterprise Edition:
 
 ### Enterprise Edition Tests
 
-**Location**: `enterprise/features/plugin_security/` (when implemented)
+**Location**: `enterprise/features/plugin_security/` (`-tags enterprise`)
 
 **Coverage**:
 - ✅ GRPC host validation (internal IPs, public IPs, localhost)
-- ✅ Signature verification (valid, invalid, keyless)
-- ✅ Public key resolution (all formats)
-- ✅ Policy-based verification
-- ✅ Development bypass
+- ✅ cosign v2 and v3 signatures with generated keys against an in-process registry (`pkg/ociplugins/ocitest`), wrong key, wrong digest, tampered payload, attestations, size and count caps
+- ✅ Transparency-log policies, Rekor SET and key binding (test trusted roots, sigstore-go's virtual Sigstore)
+- ✅ Real cosign v2.4.1 and v3.1.4 signatures from `testdata/` (offline), a copied signature failing, and a network-gated check against a published plugin (`TYK_PLUGIN_SIGNATURE_NETWORK_TEST=1`)
+- ✅ Keyless `VerifyBundle`; `VerifyWithPolicy` refused
+- ✅ No `os/exec` in the package (guard test)
 
 ---
 

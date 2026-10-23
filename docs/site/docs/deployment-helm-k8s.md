@@ -91,7 +91,7 @@ config:
   tykAiSecretKey: "CHANGE-ME-first-secret"
   tykAiLicense: "your-license-key"                      # Enterprise only, ignored by CE
   ociCacheDir: "./data/cache/plugins"
-  ociRequireSignature: "false"
+  ociRequireSignature: "false"                          # Development only: loads unsigned plugins (default "true")
   gatewayMode: "control"
   grpcPort: "50051"
   grpcHost: "0.0.0.0"
@@ -226,7 +226,7 @@ config:
   tykAiSecretKey: "CHANGE-ME-first-secret"
   tykAiLicense: "your-license-key"
   ociCacheDir: "./data/cache/plugins"
-  ociRequireSignature: "false"
+  ociRequireSignature: "true"
   gatewayMode: "control"
   grpcPort: "50051"
   grpcHost: "0.0.0.0"
@@ -583,7 +583,7 @@ kubectl describe pod <pod-name>
 - **Ingress not working**: Verify DNS records and TLS configuration
 - **Login fails on HTTP**: Set `devMode: "true"` — session cookies require this when not using HTTPS
 - **Marketplace page is empty**: Set `ociCacheDir: "./data/cache/plugins"` in your config values — the marketplace service will not start without it
-- **Plugin signature verification**: Docker images use distroless bases without cosign. Set `ociRequireSignature: "false"` to disable signature verification
+- **Plugin refused because its signature does not verify**: signatures are verified in-process (Enterprise Edition) and required by default (`ociRequireSignature: "true"` for AI Studio, `microgateway.config.ociPluginsRequireSignature: "true"` for the Microgateway). Configure the plugin's signing key, or set these to `"false"` to load unsigned plugins. See [Signature Verification](./plugins-deployment.md#signature-verification)
 
 ### Microgateway cannot connect to AI Studio
 

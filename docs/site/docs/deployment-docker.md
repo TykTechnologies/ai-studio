@@ -178,7 +178,9 @@ TYK_AI_LICENSE=your-license-key
 # AI_STUDIO_OCI_CACHE_DIR must be set to enable the marketplace.
 # Without it, the Marketplace page will be empty.
 AI_STUDIO_OCI_CACHE_DIR=./data/cache/plugins
-AI_STUDIO_OCI_REQUIRE_SIGNATURE=false  # cosign not available in distroless images
+# Signatures are required by default (verified in-process, Enterprise Edition);
+# set to false to load unsigned plugins
+AI_STUDIO_OCI_REQUIRE_SIGNATURE=true
 
 # =============================================================================
 # SMTP (Optional — required for email invites/notifications)
@@ -263,7 +265,9 @@ LOG_LEVEL=info
 # OCI Plugin Support
 # =============================================================================
 OCI_PLUGINS_CACHE_DIR=/var/lib/microgateway/plugins
-OCI_PLUGINS_REQUIRE_SIGNATURE=false  # cosign not available in distroless images
+# Signatures are required by default (verified in-process, Enterprise Edition);
+# set to false to load unsigned plugins
+OCI_PLUGINS_REQUIRE_SIGNATURE=true
 
 # =============================================================================
 # Enterprise Edition — REQUIRED for EE images, must be set before first start
@@ -411,9 +415,9 @@ AI_STUDIO_OCI_CACHE_DIR=./data/cache/plugins
 
 Restart AI Studio after making this change. The marketplace is enabled by default (`MARKETPLACE_ENABLED=true`), but it will not function without the OCI cache directory configured.
 
-### Plugin signature verification not available
+### Plugin refused: signature verification failed
 
-The Docker images use distroless base images which do not include the `cosign` CLI. Plugin signature verification requires cosign to be available in the container. Plugins will still install and run, but signature verification will be skipped. If you require signature verification, use a [bare metal / VM package deployment](./deployment-packages.md) where cosign can be installed on the host system.
+AI Studio and the Microgateway verify OCI plugin signatures themselves (Enterprise Edition), so the distroless images need no `cosign` binary. Signatures are required by default. A plugin that is unsigned, or signed with a key that is not configured, is refused with a reason naming the signature formats tried. Configure the signing key (`OCI_PLUGINS_PUBKEY_*`), or set `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false` / `OCI_PLUGINS_REQUIRE_SIGNATURE=false` to load unsigned plugins. Plugins signed without a transparency-log entry (`cosign sign --tlog-upload=false`) need `AI_STUDIO_OCI_TLOG_POLICY=disabled` / `OCI_PLUGINS_TLOG_POLICY=disabled`. See [Signature Verification](./plugins-deployment.md#signature-verification).
 
 ### Port conflicts
 

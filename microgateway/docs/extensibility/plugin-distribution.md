@@ -8,7 +8,7 @@ OCI plugin distribution features:
 - **Industry Standard**: Uses OCI artifact format for plugin distribution
 - **Container Registries**: Compatible with Nexus, Harbor, Artifactory, GHCR, ECR
 - **Content Addressing**: Immutable plugin versions using digest-based references
-- **Digital Signatures**: Cosign-based plugin signing and verification
+- **Digital Signatures**: plugins are signed with cosign at publish time; the gateway verifies signatures in-process (Enterprise Edition), accepting cosign v2 (`.sig` tag) and cosign v3 (Sigstore bundle referrer) signatures
 - **Efficient Caching**: Content-addressed storage with efficient updates
 - **No Container Runtime**: Direct binary execution without container overhead
 
@@ -22,7 +22,7 @@ Plugin Author → OCI Registry → Edge Gateway
 
 ### Components
 - **ORAS**: OCI Registry As Storage for pushing/pulling artifacts
-- **Cosign**: Container signing for plugin verification
+- **Cosign**: signs plugins at publish time (the gateway verifies signatures itself and does not need cosign installed)
 - **OCI Registry**: Standard container registry (Nexus/Harbor/etc.)
 - **Microgateway**: Gateway pulls, verifies, and executes plugins
 
@@ -164,6 +164,9 @@ plugins:
 ```
 
 ### Plugin Pull and Verification
+
+The gateway pulls and verifies plugins itself (`OCI_PLUGINS_REQUIRE_SIGNATURE`, default `true`; transparency-log policy `OCI_PLUGINS_TLOG_POLICY`, default `required`). The commands below are for checking an artifact by hand before you deploy it:
+
 ```bash
 # Manual plugin pull for testing
 oras pull registry.company.com/plugins/my-plugin@sha256:abc123... \

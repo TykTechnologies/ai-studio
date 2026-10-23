@@ -36,7 +36,15 @@ forgotten bump fails loudly instead of overwriting a release.
 4. **Pushes each binary** as an OCI artifact to a version-scoped platform tag
    (`1.0.2-linux_amd64`), then assembles the multi-platform index at `1.0.2`.
 5. **Signs the index by digest** with cosign, then verifies the signature it
-   just made. A signature that did not take fails the command.
+   just made. A signature that did not take fails the command. Signing is the
+   only step that needs the cosign CLI: AI Studio and the Microgateway verify
+   signatures in-process (Enterprise Edition), and accept both cosign v2
+   signatures (the `.sig` tag this tool writes) and cosign v3 Sigstore bundles
+   (OCI referrers). If you sign with `--tlog-upload=false` (air-gapped), the
+   hosts need `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` set to
+   `disabled`; with a private Sigstore deployment, point
+   `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` at its trusted
+   root. See [Signature Verification](./plugins-deployment.md#signature-verification).
 6. **Writes the marketplace entry**: pulls the marketplace repo, generates
    `plugins/<name>/<version>/manifest.yaml`, carries the README, icon and
    changelog across, commits and pushes to `main` so the index CI fires.
