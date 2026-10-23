@@ -34,6 +34,11 @@ func (f *blockingRPCPluginClient) hold() {
 	<-f.release
 }
 
+func (f *blockingRPCPluginClient) Ping(context.Context, *pb.PingRequest, ...grpc.CallOption) (*pb.PingResponse, error) {
+	f.hold()
+	return &pb.PingResponse{Healthy: true}, nil
+}
+
 func (f *blockingRPCPluginClient) GetAsset(context.Context, *pb.GetAssetRequest, ...grpc.CallOption) (*pb.GetAssetResponse, error) {
 	f.hold()
 	return &pb.GetAssetResponse{Success: true}, nil
@@ -76,6 +81,7 @@ func TestPluginRPC_DoesNotBlockWriters(t *testing.T) {
 			return b, err
 		},
 		"manifest":    func(m *AIStudioPluginManager) (interface{}, error) { return m.GetPluginManifest(7) },
+		"ping":        func(m *AIStudioPluginManager) (interface{}, error) { return nil, m.PingPlugin(7) },
 		"list assets": func(m *AIStudioPluginManager) (interface{}, error) { return m.ListPluginAssets(7, "") },
 		"create instance": func(m *AIStudioPluginManager) (interface{}, error) {
 			return m.CreateResourceInstance(7, "t", []byte("{}"), 1)

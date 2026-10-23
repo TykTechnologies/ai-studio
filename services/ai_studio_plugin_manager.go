@@ -1745,10 +1745,11 @@ func (m *AIStudioPluginManager) IsPluginLoaded(pluginID uint) bool {
 
 // PingPlugin performs a health check on a loaded plugin
 func (m *AIStudioPluginManager) PingPlugin(pluginID uint) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	// The ping runs without the lock (up to 5 s); only reading the plugin
+	// and recording the answer take it (mj3).
+	m.mu.RLock()
 	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	m.mu.RUnlock()
 	if !exists {
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
@@ -1760,6 +1761,12 @@ func (m *AIStudioPluginManager) PingPlugin(pluginID uint) error {
 		Timestamp: time.Now().Unix(),
 	})
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// A plugin reloaded meanwhile has a record of its own.
+	if m.loadedPlugins[pluginID] != loadedPlugin {
+		return fmt.Errorf("plugin %d was reloaded during the ping", pluginID)
+	}
 	if err != nil {
 		loadedPlugin.IsHealthy = false
 		return fmt.Errorf("plugin ping failed: %w", err)
