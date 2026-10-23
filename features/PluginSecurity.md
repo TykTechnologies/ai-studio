@@ -300,6 +300,44 @@ allowed by this installation (allowed: oci). Set <SETTING> to change this.`),
 allows all. The parsed policy travels on `plugin_security.Config.SourcePolicy`
 (Studio: `AppConf.PluginSourcePolicy`; gateway: `PluginConfig.SourcePolicy`).
 
+**Enforcement points (AI Studio)** — components read the policy from
+configuration at check time (`services/plugin_source_policy.go`;
+`SetSourcePolicy` overrides it), so one built without a setter or a security
+service never fails open:
+
+| Point | Where | Result |
+|---|---|---|
+| Plugin API create/update | `api/validation.go` `validatePluginCommand` | `400` |
+| OCI create / refresh | `api/plugin_handlers.go` → `PluginService.CreateOCIPluginFromReference`, `RefreshOCIPlugin` | `400`, before any registry request |
+| Service layer | `PluginService.validatePluginCommand` (create, marketplace upgrade plan), `UpdatePlugin` (command or OCI reference), `MarketplaceService.InstallFromMarketplace` | error |
+| Manifest fetch | `PluginManifestService.ParsePluginManifest` | error, before any registry request |
+| Load time | `AIStudioPluginManager.validateCommandForLoad` (load and config-only paths) | not spawned; WARN with plugin ID, name and source |
+
+**Enforcement points (Microgateway)** — the policy is set on the plugin
+manager by the shared `newPluginManager` builder both service containers use:
+
+| Point | Where | Result |
+|---|---|---|
+| Management API | `internal/api/handlers/validation.go` (create/update), pre-warm handler | `400` |
+| Every plugin load | `PluginManager.createPluginClient`, first statement (hub-pushed configs, global data-collection plugins, local config) | not loaded; WARN with plugin ID; `failed` in plugin health |
+| OCI pre-fetch / pre-warm | `PreFetchOCIPlugin` (first statement), `PreWarmOCIPlugins` (skipped when `oci` is refused) | no registry request |
+
+Existing plugin records with a refused source are kept (readable, editable,
+deletable) but do not load and cannot be saved with that command.
+
+**UI**: `GET /api/v1/plugin-policy` (plugins read permission) returns
+`plugin_allowed_sources` and `oci_require_signature`; it is not on the public
+`/auth/config`. The plugin wizard and form list only the allowed sources in
+their help text, reject a refused command client-side with the backend's
+wording, and note that OCI artifacts must be signed when they must. The
+marketplace disables install and upgrade, with a tooltip naming
+`AI_STUDIO_PLUGIN_ALLOWED_SOURCES`, when `oci` is refused. The client-side
+`pluginSourceOf` (`ui/admin-frontend/src/admin/services/pluginService.js`)
+uses the same rules as `SourceOf`.
+
+**Helm**: `config.pluginAllowedSources` (AI Studio) and
+`microgateway.config.pluginsAllowedSources` (gateways), empty by default.
+
 ---
 
 ## Architecture

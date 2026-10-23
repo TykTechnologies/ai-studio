@@ -134,6 +134,9 @@ config:
   # OCI Plugin / Marketplace Configuration
   ociCacheDir: "./data/cache/plugins"
   ociRequireSignature: "true"
+  # Plugin deployment types AI Studio accepts: comma-separated oci, file,
+  # grpc. Empty allows all; an unknown value stops startup.
+  pluginAllowedSources: ""
 
   # Hub-Spoke: Control Plane Mode
   gatewayMode: "control"
@@ -182,6 +185,9 @@ microgateway:
     pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
     ociPluginsCacheDir: "/var/lib/microgateway/plugins"
     ociPluginsRequireSignature: "true"
+    # Plugin deployment types the gateways accept (oci, file, grpc); empty allows all.
+    # Each gateway enforces its own setting, whatever the hub pushes.
+    pluginsAllowedSources: ""
     logLevel: "info"
   # Secrets — MUST match AI Studio config values
   secrets:

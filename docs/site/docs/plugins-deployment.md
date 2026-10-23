@@ -14,6 +14,8 @@ Tyk AI Studio supports three plugin deployment methods: local filesystem (`file:
 
 Deploy plugins from the local filesystem.
 
+> **Can be turned off:** an installation can refuse this deployment type with `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` (AI Studio) and `PLUGINS_ALLOWED_SOURCES` (Microgateway). See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
+
 > **Safety settings:** By default, local filesystem plugin loading has safety restrictions that prevent loading from arbitrary paths. For development, you may need to adjust these settings in your configuration to allow local path loading and absolute paths. See the Security Considerations section below for details on `ALLOW_INTERNAL_NETWORK_ACCESS` and `PLUGIN_COMMAND_ALLOWLIST`.
 
 ### Building Your Plugin
@@ -111,6 +113,8 @@ spec:
 ## grpc:// - Remote gRPC
 
 Deploy plugins as remote gRPC services.
+
+> **Can be turned off:** an installation can refuse this deployment type with `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` (AI Studio) and `PLUGINS_ALLOWED_SOURCES` (Microgateway). See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
 
 ### Running Plugin as gRPC Server
 
@@ -230,6 +234,8 @@ Register with service DNS:
 > gateway *consumes* an `oci://` plugin.
 
 Deploy plugins as OCI artifacts in container registries.
+
+> **Can be turned off:** an installation can refuse this deployment type with `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` (AI Studio) and `PLUGINS_ALLOWED_SOURCES` (Microgateway). See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
 
 ### Prerequisites
 

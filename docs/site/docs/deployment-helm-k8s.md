@@ -469,6 +469,34 @@ Notes on the defaults:
 - Readiness probes `/ready`, which checks the database and plugin health, rather
   than `/health`, which only reports that the process is alive.
 
+### Plugin Sources and Signatures
+
+Plugin signatures are required by default, and both AI Studio and the
+gateways can refuse whole plugin deployment types. Each gateway enforces its
+own setting, whatever AI Studio pushes:
+
+```yaml
+config:
+  ociRequireSignature: "true"         # AI_STUDIO_OCI_REQUIRE_SIGNATURE (default "true")
+  pluginAllowedSources: "oci"         # AI_STUDIO_PLUGIN_ALLOWED_SOURCES: oci, file, grpc; "" allows all
+
+microgateway:
+  config:
+    ociPluginsRequireSignature: "true"  # OCI_PLUGINS_REQUIRE_SIGNATURE (default "true")
+    pluginsAllowedSources: "oci"        # PLUGINS_ALLOWED_SOURCES: oci, file, grpc; "" allows all
+```
+
+| Value | Environment variable | Default |
+|---|---|---|
+| `config.ociRequireSignature` | `AI_STUDIO_OCI_REQUIRE_SIGNATURE` | `"true"` |
+| `config.pluginAllowedSources` | `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` | `""` (all sources) |
+| `microgateway.config.ociPluginsRequireSignature` | `OCI_PLUGINS_REQUIRE_SIGNATURE` | `"true"` |
+| `microgateway.config.pluginsAllowedSources` | `PLUGINS_ALLOWED_SOURCES` | `""` (all sources) |
+
+An unknown source stops the pod at startup. See
+[Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources)
+and [Signature Verification](./plugins-deployment.md#signature-verification).
+
 ### Egress Policy
 
 By default the gateway will connect to any upstream an LLM configuration names,

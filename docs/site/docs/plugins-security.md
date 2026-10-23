@@ -136,12 +136,49 @@ For production, OCI is the recommended way to distribute plugins.
 
 See [Deployment Options](./plugins-deployment.md) for registry authentication and packaging.
 
+## Hardening: restrict plugin sources
+
+A hardened installation can refuse whole plugin deployment types. Each process enforces its own setting:
+
+| Setting | Process | Values | Default |
+|---|---|---|---|
+| `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` | AI Studio | comma-separated `oci`, `file`, `grpc` (case and spaces ignored) | empty: all three |
+| `PLUGINS_ALLOWED_SOURCES` | Microgateway | the same | empty: all three |
+
+An unknown value (`ocii`) or a list that names no source (`,`) stops the process at startup, so a typo never opens everything up or locks everything out. A restricted policy is logged at startup.
+
+How a command is classified: `oci://…` is `oci`, `grpc://…` is `grpc`, and every other command (a path, `file://…`, even `http://…`) is run as a local executable and counts as `file`. The prefixes are case-sensitive, exactly as the plugin is run.
+
+What is refused when a source is not allowed:
+
+- **AI Studio:** creating or updating a plugin with that command (API `400`, also marketplace installs and upgrades), fetching an OCI plugin or its manifest (no registry request is made), and loading the plugin. The console offers only the allowed types and disables marketplace installs when `oci` is not allowed.
+- **Microgateway:** its management API (`400`), every plugin load (plugins the hub pushes, global data-collection plugins from `PLUGINS_CONFIG_PATH`, local configuration) and OCI pre-fetching and pre-warming. **An edge enforces its own setting whatever AI Studio allows**: a plugin the hub pushes with a refused source is not loaded, and the refusal shows in the edge's plugin health and logs (with the plugin ID).
+- Existing plugins with a source that is now refused are kept, so you can read, edit or delete them, but they do not load and cannot be saved with that command.
+
+Example profiles:
+
+```bash
+# OCI only, signed (Enterprise Edition): the most locked-down profile
+AI_STUDIO_PLUGIN_ALLOWED_SOURCES=oci
+AI_STUDIO_OCI_ALLOWED_REGISTRIES=registry.example.com
+AI_STUDIO_OCI_REQUIRE_SIGNATURE=true     # the default
+PLUGINS_ALLOWED_SOURCES=oci              # on every Microgateway
+OCI_PLUGINS_ALLOWED_REGISTRIES=registry.example.com
+
+# Local binaries and OCI, but no remote gRPC plugin processes
+AI_STUDIO_PLUGIN_ALLOWED_SOURCES=oci,file
+AI_STUDIO_PLUGIN_ALLOWED_DIRS=/opt/plugins
+PLUGINS_ALLOWED_SOURCES=oci,file
+```
+
+The source policy decides which deployment types are accepted at all. Within an allowed type the existing controls still apply: `AI_STUDIO_PLUGIN_ALLOWED_DIRS` limits where `file` plugins may live, `*_OCI_ALLOWED_REGISTRIES` limits which registries `oci` plugins come from, signatures are checked for `oci` plugins, and internal-network blocking applies to `grpc` hosts.
+
 ## Production checklist
 
 1. Install only plugins you trust; prefer OCI artifacts pinned by digest from an allowlisted registry, with signatures required (Enterprise Edition).
 2. Keep `ALLOW_INTERNAL_NETWORK_ACCESS` unset (or `false`).
 3. Set `PLUGIN_BLOCK_INTERNAL_URLS=true`.
-4. Keep `AI_STUDIO_PLUGIN_ALLOWED_DIRS` to the directories you actually deploy plugins into.
+4. Keep `AI_STUDIO_PLUGIN_ALLOWED_DIRS` to the directories you actually deploy plugins into, and allow only the plugin sources you use (`AI_STUDIO_PLUGIN_ALLOWED_SOURCES`, `PLUGINS_ALLOWED_SOURCES`; see [Hardening: restrict plugin sources](#hardening-restrict-plugin-sources)).
 5. Review the scopes a plugin's manifest requests before approving them.
 6. Do not store credentials in plugin configuration unless you would hand them to the plugin's author, and keep `PLUGIN_ENV_PASSTHROUGH` to the variables your plugins need (act on any warning it logs).
 7. Restrict egress at the network layer if plugins must not reach internal services.

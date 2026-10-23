@@ -29,6 +29,10 @@ An edge gateway (`GATEWAY_MODE=edge`) does not serve the microgateway management
 
 Before 2.2.2 an edge served the full management API. One of its routes, `POST /api/v1/auth/token`, needed no credentials and issued a token with any scopes, including `admin`, which an attacker could use to load a malicious plugin onto the edge. Upgrade every edge, and keep edge ports reachable only by the clients that need the gateway. An upgraded edge applies AI Studio's configuration in full when it starts, replacing anything written through the old API.
 
+### Edges enforce their own plugin source policy
+
+An edge accepts only the plugin deployment types its own `PLUGINS_ALLOWED_SOURCES` allows (`oci`, `file`, `grpc`; all by default), whatever AI Studio allows. A plugin AI Studio pushes with a refused type is not loaded on that edge: the refusal is logged with the plugin ID and shows in the edge's plugin health, and the edge's other plugins load as usual. AI Studio does not know an edge's policy in advance. See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
+
 ## Edge Gateway Management UI
 
 The Edge Gateways page in the Admin UI provides visibility into all connected edge instances. Access it via **Admin > Edge Gateways** in the sidebar.
