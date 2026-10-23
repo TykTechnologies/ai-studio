@@ -18,6 +18,7 @@ import (
 
 // MarketplaceService handles marketplace operations
 type MarketplaceService struct {
+	sourcePolicyHolder
 	db               *gorm.DB
 	fetcher          *marketplace.Fetcher
 	ociClient        *ociplugins.OCIPluginClient
@@ -446,6 +447,9 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 
 	// Build OCI reference
 	ociRef := marketplacePlugin.OCIReference()
+	if err := s.checkSource(ociRef); err != nil {
+		return nil, err
+	}
 
 	// Use existing PluginService to create and load the plugin
 	pluginName := req.Name

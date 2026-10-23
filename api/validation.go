@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
@@ -100,6 +101,11 @@ func sanitizeStringForLogging(input string) string {
 // The implementation lives in plugin_security.ValidateCommand so the plugin
 // manager can apply the same checks again at load time (defense-in-depth).
 // securityService is used for enterprise features like GRPC host whitelisting.
+// The command's deployment type must also be one the installation allows
+// (AI_STUDIO_PLUGIN_ALLOWED_SOURCES).
 func validatePluginCommand(command string, securityService plugin_security.Service) error {
+	if err := appconfig.Get("").PluginSourcePolicy.Check(command); err != nil {
+		return err
+	}
 	return plugin_security.ValidateCommand(command, securityService)
 }

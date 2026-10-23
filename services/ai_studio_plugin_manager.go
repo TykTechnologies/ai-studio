@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"os"
@@ -53,6 +54,7 @@ func SetGlobalEventServer(server *PluginEventServer) {
 // AIStudioPluginManager manages AI Studio plugin lifecycle and execution
 // Reuses proven patterns from microgateway's plugin manager
 type AIStudioPluginManager struct {
+	sourcePolicyHolder
 	db              *gorm.DB
 	ociClient       *ociplugins.OCIPluginClient
 	manifestService *PluginManifestService
@@ -431,6 +433,14 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// Create plugin client based on command type
 	client, err := m.createPluginClient(plugin.Command)
 	if err != nil {
+		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+		if errors.As(err, &notAllowed) {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Str("source", string(notAllowed.Source)).
+				Msg("Plugin not loaded: its source is not allowed by AI_STUDIO_PLUGIN_ALLOWED_SOURCES")
+		}
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
 
@@ -1465,6 +1475,11 @@ func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTyp
 // validation (direct DB writes, migrations, imports, replication), so this is
 // a second layer of defense applied at load time.
 func (m *AIStudioPluginManager) validateCommandForLoad(command string) error {
+	// The plugin source policy comes from configuration (or SetSourcePolicy),
+	// not the security service, so a manager without one still enforces it.
+	if err := m.checkSource(command); err != nil {
+		return err
+	}
 	svc := m.getSecurityService()
 	if svc == nil {
 		svc = plugin_security.NewService(&plugin_security.Config{
