@@ -53,6 +53,8 @@ func RedactLLMCredentials(l *LLM) *LLM {
 	if _, ok := LLMCredentialValue(out.APIKey); ok {
 		out.APIKey = CredentialRedacted
 	}
+	// Its filters' guardrail connection secrets too (2ze).
+	out.Filters = redactLLMFilters(l.Filters)
 	if l.Metadata != nil {
 		out.Metadata = make(JSONMap, len(l.Metadata))
 		for k, v := range l.Metadata {
