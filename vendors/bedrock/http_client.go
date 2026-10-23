@@ -38,6 +38,12 @@ func newSDKHTTPClient(base bedrockruntime.HTTPClient) *sdkHTTPClient {
 	return &sdkHTTPClient{base: base}
 }
 
+// SDKHTTPClient wraps base as the clients this package builds are wrapped,
+// for a Bedrock client built elsewhere (the proxy's loopback client).
+func SDKHTTPClient(base bedrockruntime.HTTPClient) bedrockruntime.HTTPClient {
+	return newSDKHTTPClient(base)
+}
+
 // Do sends r with its body hidden behind a plain io.ReadCloser.
 func (c *sdkHTTPClient) Do(r *http.Request) (*http.Response, error) {
 	if r.Body != nil && r.Body != http.NoBody {

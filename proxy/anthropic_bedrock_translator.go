@@ -1,15 +1,13 @@
 package proxy
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -21,8 +19,9 @@ import (
 
 // handleAnthropicMessagesEntry is the entry point for POST /anthropic/{routeId}/v1/messages.
 // It lets Claude Code (which speaks the native Anthropic Messages API) drive Claude models
-// hosted in Amazon Bedrock, with AI Studio applying auth, budget, filters, and analytics.
-// Auth runs in the credential-validator middleware before this handler (mirroring /ai/).
+// hosted in Amazon Bedrock. Auth runs in the credential-validator middleware before this
+// handler (mirroring /ai/); the translated Converse call loops back through /llm/call/,
+// where the plugins, budget, filters, response hooks and analytics run.
 func (p *Proxy) handleAnthropicMessagesEntry(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	routeID := vars["routeId"]
@@ -42,16 +41,12 @@ func (p *Proxy) handleAnthropicMessagesEntry(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// The bridge's own span and request metrics: it calls Bedrock directly,
-	// never through the /llm/ handlers that record them.
+	// The outer hop's own span, as on /ai/. The loopback carries its context
+	// across, so the inner hop (which records the request metrics) joins it.
 	r, span := startProxySpan(r, conf)
-	done := bedrockMetrics(r, conf, true)
 	sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 	w = sw
-	defer func() {
-		endProxySpan(span, sw.status)
-		done(sw.status)
-	}()
+	defer func() { endProxySpan(span, sw.status) }()
 
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
@@ -69,10 +64,22 @@ func (p *Proxy) handleAnthropicMessagesEntry(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	modelID, ok := p.resolveAnthropicModelID(w, conf)
+	if !ok {
+		return
+	}
+	input, err := p.buildConverseInputFromAnthropic(modelID, &req)
+	if err != nil {
+		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return
+	}
+	// The bridge has no failover: one rung, the route's own LLM.
+	a := llmAttempt{conf: conf, slug: routeID, model: modelID}
+
 	if req.Stream {
-		p.handleBedrockAnthropicMessagesStream(w, r, conf, &req, reqBody)
+		p.handleBedrockAnthropicMessagesStream(w, r, a, &req, input, reqBody)
 	} else {
-		p.handleBedrockAnthropicMessages(w, r, conf, &req, reqBody)
+		p.handleBedrockAnthropicMessages(w, r, a, &req, input, reqBody)
 	}
 }
 
@@ -95,267 +102,162 @@ func (p *Proxy) resolveAnthropicModelID(w http.ResponseWriter, conf *models.LLM)
 	return modelID, true
 }
 
-// anthropicScreenRequest runs conf's request filters over the Anthropic-shaped
-// bridge body before it is translated to Converse. The /llm/call/ loopback hop
-// that runs them for every other vendor never happens for Bedrock, so the
-// bridge runs them itself. On a block it has already written the 400 (and
-// recorded the policy block and a ProxyLog) and returns false; otherwise it
-// returns the request and body as the filters left them.
-func (p *Proxy) anthropicScreenRequest(
-	w http.ResponseWriter,
-	r *http.Request,
-	conf *models.LLM,
-	app *models.App,
-	req *AnthropicMessagesRequest,
-	reqBody []byte,
-	modelID string,
-	timestamp time.Time,
-) (*AnthropicMessagesRequest, []byte, bool) {
-	if !p.hasRequestFilters(conf) {
-		return req, reqBody, true
+// respondAnthropicAttemptFailure answers a Converse call that failed before
+// anything was written in the Anthropic error envelope: with the inner hop's
+// refusal (a policy, plugin or budget block, the vendor's own error) when
+// the relay could read it, else with what the SDK made of the failure.
+func respondAnthropicAttemptFailure(w http.ResponseWriter, f attemptFailure, message string) {
+	status := f.statusOr(http.StatusBadGateway)
+	detail := message
+	switch {
+	case f.inner != nil:
+		detail = f.inner.Message
+	case f.err != nil:
+		detail = fmt.Sprintf("%s: %s", message, f.err.Error())
 	}
+	f.applyHeaders(w.Header())
+	respondWithAnthropicError(w, status, anthropicErrorTypeFor(status), detail)
+}
 
-	filtered, err := p.runRequestFilters(conf, r, reqBody, requestFilterFormatAnthropic, modelID)
-	if err != nil {
-		recordPolicyBlock(r.Context(), "request_filter", "firewall")
-		fail := attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
-		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
-		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return nil, nil, false
+// anthropicErrorTypeFor is the Anthropic API's error type for an HTTP status.
+func anthropicErrorTypeFor(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "invalid_request_error"
+	case http.StatusUnauthorized:
+		return "authentication_error"
+	case http.StatusForbidden:
+		return "permission_error"
+	case http.StatusNotFound:
+		return "not_found_error"
+	case http.StatusRequestEntityTooLarge:
+		return "request_too_large"
+	case http.StatusTooManyRequests:
+		return "rate_limit_error"
+	case http.StatusServiceUnavailable, 529:
+		return "overloaded_error"
 	}
-	if bytes.Equal(filtered, reqBody) {
-		return req, reqBody, true
+	if status >= 400 && status < 500 {
+		return "invalid_request_error"
 	}
-
-	var out AnthropicMessagesRequest
-	if err := json.Unmarshal(filtered, &out); err != nil {
-		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", "request filter produced an invalid request")
-		return nil, nil, false
-	}
-	return &out, filtered, true
+	return "api_error"
 }
 
 // handleBedrockAnthropicMessages handles a non-streaming /v1/messages request.
-func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Request, conf *models.LLM, req *AnthropicMessagesRequest, reqBody []byte) {
-	timestamp := time.Now()
-
-	app, err := p.getAppFromContext(r, conf)
+func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Request, a llmAttempt, req *AnthropicMessagesRequest, input *bedrockruntime.ConverseInput, reqBody []byte) {
+	relay := &loopbackRelay{}
+	output, err := p.newBedrockLoopbackClient(r, a).Converse(bedrockLoopbackContext(r.Context(), r, relay), input)
 	if err != nil {
-		respondWithAnthropicError(w, http.StatusUnauthorized, "authentication_error", "authentication required")
+		f := classifyBedrockError(err, nil).withLoopback(relay)
+		respondAnthropicAttemptFailure(w, f, "Bedrock Converse failed")
+		p.captureOuterCallAs(r, requestFilterFormatAnthropic, llmAttempt{}, 1, f.statusOr(http.StatusBadGateway), reqBody, nil)
 		return
 	}
 
-	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		status, msg := budgetDenial(err, "budget exceeded")
-		errType := "permission_error"
-		if status == http.StatusServiceUnavailable {
-			errType = "overloaded_error"
-		}
-		respondWithAnthropicError(w, status, errType, fmt.Sprintf("%s: %s", msg, err.Error()))
-		return
-	}
-
-	modelID, ok := p.resolveAnthropicModelID(w, conf)
-	if !ok {
-		return
-	}
-
-	req, reqBody, ok = p.anthropicScreenRequest(w, r, conf, app, req, reqBody, modelID, timestamp)
-	if !ok {
-		return
-	}
-
-	// NewBedrockClient returns a cached *bedrockruntime.Client (sync.Map keyed by LLM ID
-	// + credential fingerprint) — it is not constructed per request.
-	client, err := bedrockVendor.NewBedrockClient(conf)
-	if err != nil {
-		respondWithAnthropicError(w, http.StatusInternalServerError, "api_error", "failed to create Bedrock client")
-		return
-	}
-
-	input, err := p.buildConverseInputFromAnthropic(modelID, req)
-	if err != nil {
-		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return
-	}
-
-	output, err := client.Converse(r.Context(), input)
-	if err != nil {
-		respondWithAnthropicError(w, http.StatusBadGateway, "api_error", fmt.Sprintf("Bedrock Converse failed: %s", err.Error()))
-		return
-	}
-
-	response := converseOutputToAnthropicResponse(output, echoModel(req.Model, modelID))
+	response := converseOutputToAnthropicResponse(output, echoModel(req.Model, a.model))
 	respBody, err := json.Marshal(response)
 	if err != nil {
 		respondWithAnthropicError(w, http.StatusInternalServerError, "api_error", "failed to marshal response")
 		return
 	}
 
-	// Response filters (non-streaming)
-	if p.hasResponseFilters(conf) {
-		blocked, blockMsg, filterErr := ExecuteBufferedResponseFilters(
-			conf, p.gatewayService,
-			BufferedResponse{Body: respBody, Format: requestFilterFormatAnthropic, RequestBody: reqBody},
-			http.StatusOK, r,
-		)
-		if filterErr != nil {
-			log.Error().Err(filterErr).Msg("Response filter error on Bedrock Anthropic response")
-		} else if blocked {
-			respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("Response blocked by filter: %s", blockMsg))
-			bt := newBedrockTrace(r, requestFilterFormatAnthropic)
-			bt.handOff()
-			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp, bt)
-			return
-		}
-	}
-
-	bt := newBedrockTrace(r, requestFilterFormatAnthropic)
-	bt.handOff()
-	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp, bt)
-
+	relay.applyTo(w.Header())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(respBody)
+	p.captureOuterCallAs(r, requestFilterFormatAnthropic, a, 1, http.StatusOK, reqBody, respBody)
 }
 
 // handleBedrockAnthropicMessagesStream handles a streaming /v1/messages request, translating
 // the Bedrock Converse event stream into the Anthropic Messages SSE event sequence.
-func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *http.Request, conf *models.LLM, req *AnthropicMessagesRequest, reqBody []byte) {
-	timestamp := time.Now()
-
-	app, err := p.getAppFromContext(r, conf)
-	if err != nil {
-		respondWithAnthropicError(w, http.StatusUnauthorized, "authentication_error", "authentication required")
-		return
-	}
-
-	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		status, msg := budgetDenial(err, "budget exceeded")
-		errType := "permission_error"
-		if status == http.StatusServiceUnavailable {
-			errType = "overloaded_error"
-		}
-		respondWithAnthropicError(w, status, errType, fmt.Sprintf("%s: %s", msg, err.Error()))
-		return
-	}
-
-	modelID, ok := p.resolveAnthropicModelID(w, conf)
-	if !ok {
-		return
-	}
-
-	// Before the SSE headers: a filter block is a real 400 with an error
-	// envelope, not a 200 whose only event says the request was refused.
-	req, reqBody, ok = p.anthropicScreenRequest(w, r, conf, app, req, reqBody, modelID, timestamp)
-	if !ok {
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-transform")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
+func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *http.Request, a llmAttempt, req *AnthropicMessagesRequest, input *bedrockruntime.ConverseInput, reqBody []byte) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		respondWithAnthropicError(w, http.StatusInternalServerError, "api_error", "streaming not supported")
 		return
 	}
 
-	// NewBedrockClient returns a cached *bedrockruntime.Client (sync.Map keyed by LLM ID
-	// + credential fingerprint) — it is not constructed per request.
-	client, err := bedrockVendor.NewBedrockClient(conf)
-	if err != nil {
-		writeAnthropicSSEError(w, flusher, "api_error", "failed to create Bedrock client")
-		return
-	}
-
-	streamInput, err := p.buildConverseInputFromAnthropic(modelID, req)
-	if err != nil {
-		writeAnthropicSSEError(w, flusher, "invalid_request_error", err.Error())
-		return
-	}
-
-	output, err := client.ConverseStream(r.Context(), &bedrockruntime.ConverseStreamInput{
-		ModelId:         streamInput.ModelId,
-		Messages:        streamInput.Messages,
-		System:          streamInput.System,
-		InferenceConfig: streamInput.InferenceConfig,
-		ToolConfig:      streamInput.ToolConfig,
+	relay := &loopbackRelay{}
+	output, err := p.newBedrockLoopbackClient(r, a).ConverseStream(bedrockLoopbackContext(r.Context(), r, relay), &bedrockruntime.ConverseStreamInput{
+		ModelId:         input.ModelId,
+		Messages:        input.Messages,
+		System:          input.System,
+		InferenceConfig: input.InferenceConfig,
+		ToolConfig:      input.ToolConfig,
 	})
 	if err != nil {
-		writeAnthropicSSEError(w, flusher, "api_error", fmt.Sprintf("Bedrock ConverseStream failed: %s", err.Error()))
+		// Before the SSE headers: a refusal (a filter block, a budget, a
+		// plugin) is a real status with an error envelope, not a 200 whose
+		// only event says the request was refused.
+		f := classifyBedrockError(err, nil).withLoopback(relay)
+		respondAnthropicAttemptFailure(w, f, "Bedrock ConverseStream failed")
+		p.captureOuterCallAs(r, requestFilterFormatAnthropic, llmAttempt{}, 1, f.statusOr(http.StatusBadGateway), reqBody, nil)
 		return
 	}
 
 	stream := output.GetStream()
 	if stream == nil {
-		writeAnthropicSSEError(w, flusher, "api_error", "Bedrock returned no stream")
+		respondWithAnthropicError(w, http.StatusBadGateway, "api_error", "Bedrock returned no stream")
 		return
 	}
 	defer stream.Close()
 
-	// With response filters, the Anthropic SSE this bridge writes is
-	// screened as the native streams are (stream_screen.go).
-	var out http.ResponseWriter = w
-	var outFlusher http.Flusher = flusher
-	var screen *streamScreen
-	if p.hasResponseFilters(conf) {
-		screen = p.newStreamScreen(w, flusher, r, conf, "anthropic", "text/event-stream", reqBody, requestFilterFormatAnthropic)
-		out, outFlusher = screen, screen
-	}
+	relay.applyTo(w.Header())
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
 	st := &anthropicStreamState{
-		w:         out,
-		flusher:   outFlusher,
+		w:         w,
+		flusher:   flusher,
 		msgID:     "msg_" + uuid.New().String(),
-		echoModel: echoModel(req.Model, modelID),
+		echoModel: echoModel(req.Model, a.model),
 		started:   map[int32]bool{},
 		stopped:   map[int32]bool{},
-		proxy:     p,
-		conf:      conf,
-		request:   r,
 	}
 
-	bt := newBedrockTrace(r, requestFilterFormatAnthropic)
-	defer bt.abandon()
-	ttftSeen := false
 	// Every event received is handled; a stream error is checked after the
 	// loop (see bedrockPumpStream).
 	for event := range stream.Events() {
-		bt.observe(event)
-		if _, delta := event.(*types.ConverseStreamOutputMemberContentBlockDelta); delta && !ttftSeen {
-			ttftSeen = true
-			bt.firstToken()
-			metrics.ObserveTimeToFirstToken(r.Context(), string(conf.Vendor), conf.Name, time.Since(timestamp).Seconds())
-		}
 		st.handleEvent(event)
-		if screen != nil && screen.Blocked() {
-			return // the screen ended the stream with an error event
-		}
 	}
-	if err := stream.Err(); err != nil {
+	streamErr := stream.Err()
+	// The inner hop's trailer says whether its filters blocked the stream;
+	// it arrives once the stream is read to its end, which Close does.
+	_ = stream.Close()
+	if msg := relay.streamBlocked(); msg != "" {
+		writeAnthropicSSEError(w, flusher, "invalid_request_error", "Response blocked by filter: "+msg)
+		return
+	}
+	if streamErr != nil {
 		// The stream broke: end it with an error event, never with the
-		// message_stop that would read as a complete answer. Held tool
-		// calls are dropped with it.
-		log.Error().Err(err).Msg("Bedrock Anthropic stream error")
+		// message_stop that would read as a complete answer.
+		log.Error().Err(streamErr).Msg("Bedrock Anthropic stream error")
 		writeAnthropicSSEError(w, flusher, "api_error", "the Bedrock stream failed before it completed")
 		return
 	}
 
 	st.finish()
-	if screen != nil && screen.Finish() {
-		return
+	if agenttrace.From(r.Context()) != nil {
+		p.captureOuterCallAs(r, requestFilterFormatAnthropic, a, 1, http.StatusOK, reqBody, st.answer())
 	}
+}
 
-	// Record analytics after the stream completes (ProxyLog first so ChatRecord can enrich it).
-	responseText := st.textBuffer
-	inputTokens, outputTokens := st.inputTokens, st.outputTokens
-	cacheWrite, cacheRead := st.cacheWriteTokens, st.cacheReadTokens
-	bt.handOff()
-	p.goAnalyze(func() {
-		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWrite), int(cacheRead), r, timestamp, bt)
-	})
+// answer is the streamed reply's text, stop reason and usage in the
+// non-streamed shape, for the agent tracing capture.
+func (s *anthropicStreamState) answer() []byte {
+	resp := AnthropicMessagesResponse{
+		ID: s.msgID, Type: "message", Role: "assistant", Model: s.echoModel,
+		Content:    []AnthropicResponseBlock{{Type: "text", Text: s.textBuffer}},
+		StopReason: s.stopReason,
+		Usage: AnthropicUsage{
+			InputTokens: int(s.inputTokens), OutputTokens: int(s.outputTokens),
+			CacheCreationInputTokens: int(s.cacheWriteTokens), CacheReadInputTokens: int(s.cacheReadTokens),
+		},
+	}
+	b, _ := json.Marshal(resp)
+	return b
 }
 
 // buildConverseInputFromAnthropic maps an Anthropic Messages request to a Bedrock Converse input.
@@ -556,10 +458,6 @@ type anthropicStreamState struct {
 	cacheWriteTokens int32
 	cacheReadTokens  int32
 	textBuffer       string
-
-	proxy   *Proxy
-	conf    *models.LLM
-	request *http.Request
 }
 
 func (s *anthropicStreamState) ensureMessageStart() {
@@ -601,8 +499,8 @@ func (s *anthropicStreamState) ensureBlockStart(idx int32, isTool bool, toolID, 
 	})
 }
 
-// handleEvent processes a single Converse stream event. Response filters
-// screen what it writes (streamScreen) when the LLM has any.
+// handleEvent processes a single Converse stream event. The inner hop's
+// response filters screened the stream it reads.
 func (s *anthropicStreamState) handleEvent(event types.ConverseStreamOutput) {
 	switch v := event.(type) {
 	case *types.ConverseStreamOutputMemberMessageStart:

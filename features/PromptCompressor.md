@@ -182,14 +182,101 @@ manifest's `rbac.rpc_methods`, which the host enforces
 - Host-service broker re-offered until the plugin connects, on the edge
   (eac.59) and Studio (eac.62).
 
-## 6. Plugin order with caches
+## 6. Plugin order and interactions (8xf.26, 2026-10-22)
 
-The edge chain follows the LLM's plugin order. Recommend the response
-caches (LLM Cache, Advanced LLM Cache) **before** the compressor: a hit
-answers in `post_auth` and the compressor never runs; keys come from the
-client's body. With the compressor first, keys would depend on the policy,
-so every policy change would miss the response cache. Cache hits never
-reach the compressor, so they are not in its savings.
+**How the chain runs.** All of an LLM's plugins run in one order (the
+LLM's ordered plugin list: Studio's LLM form, `PUT /llms/{id}/plugins`,
+`llm_plugins.order_index`). `pre_auth` plugins run before any `post_auth`
+plugin. Each `post_auth` plugin gets the body the previous one returned, so
+plugins after the compressor see the compressed body and plugins before it
+see the client's body. A `post_auth` block (a cache hit, a 429, a firewall
+block, `failed_closed`) answers at once: later plugins, request filters and
+every response hook are skipped for that request. Response hooks run in the
+same order, not reversed, and every plugin's `OnBeforeWriteHeaders` runs
+before any `OnBeforeWrite` (`proxy/proxy.go`), so a header the compressor
+sets is in every plugin's `OnBeforeWrite` whatever the order. There is no
+per-App order and no other ordering control. On `/ai/`, `/v1/`, routers and
+`/anthropic/` the chain runs once per attempt on the `/llm/call/` inner hop,
+on the vendor-native body (Converse for Bedrock after 8xf.12). Each failover
+rung is its own inner hop, so every plugin runs once per rung, each time
+under the client's request ID (`proxy.RequestIDs` keeps it on the
+loopback).
+
+**Edges honour the order too.** A standalone microgateway runs an LLM's
+plugins by `order_index`, and so does an edge fed by Studio: it sorts them
+by the LLM's `plugin_ids`, which the hub sends in that order
+(`GRPCProvider.GetPluginsForLLM`). Edges used to run them in plugin-ID
+(install) order (`midsommar-clean-701`, fixed in 2.3), so on older edges
+the order below holds only if the plugins were installed in that order.
+
+**Recommended `post_auth` order:** LLM Firewall (if run in `post_auth`) →
+response caches → Rate Limiter → Prompt Compressor → LLM Load Balancer.
+
+- **Caches before the compressor.** A hit answers in `post_auth` and the
+  compressor never runs. Keys come from the client's body, so a policy
+  change does not empty the cache and the semantic layer embeds what the
+  client wrote. Cache hits are not in the compressor's savings.
+  - Consequence, accepted: an entry stored while a policy was enforcing
+    holds an answer the model gave to the compressed prompt, and it is
+    served to the same client body after the policy changes, or to a client
+    that sent `X-Tyk-Compression: off` (the bypass skips compression, not
+    the cache). Compression is meant to leave answers equivalent, and
+    entries expire with their TTL. A client that wants a fresh,
+    uncompressed answer sends both bypasses (`X-Cache: bypass` works for
+    both caches).
+  - With the compressor first instead: keys are taken from the compressed
+    body. That is still deterministic (R1), so identical requests under one
+    policy hit. A policy or level change, or a client bypass, misses. Every
+    hit still pays for compression (cheap for repeats, since engine answers
+    are memoised), and each hit leaves a pending record the response hooks
+    never take. That record ages out (300 s, 8,192 entries, oldest first),
+    so a very high hit rate can push out the record of a long stream.
+  - A cache must not store the headers that describe one request:
+    `X-Tyk-Compression*` (always present by `OnBeforeWrite`), `X-RateLimit-*`,
+    `X-LB-*`, `Server-Timing` and request IDs. None of those plugins runs
+    for a hit. Both caches drop them in `storableHeaders`: Advanced LLM
+    Cache 1.3.0 when storing and again when replaying (w3m), LLM Cache
+    1.3.0 likewise (d8r).
+- **Rate Limiter before the compressor.** It does not read the body (keys
+  are App, user, LLM, API key). It has no pre-request token estimate: token
+  rules add the vendor's reported usage once per request, from the response
+  hooks. That usage is what the vendor counted for the compressed body, so
+  compression is reflected whatever the order. Cache reads count where the
+  vendor's total includes them (OpenAI, Google, Bedrock) and not where
+  there is no total (Anthropic: input + output). Putting it first means a
+  request refused with 429 is never compressed. Cache hits before it are
+  not rate limited at all. A request answered before the vendor (a block
+  later in the chain, a request filter) never runs the response hooks that
+  give back its concurrent slots. From 1.2.0 the plugin keeps an in-process
+  record of each request's slots and a sweep releases those of requests
+  older than 10 minutes; its own 429 or 503 releases the slots earlier
+  rules took at once (1g2). The record is per process: a plugin restart
+  forgets it (8xf.33), and with a shared Redis each gateway releases only
+  its own requests' slots.
+- **LLM Firewall screens the client's body.** By default it runs in
+  `pre_auth`, before every `post_auth` plugin, so compression can neither
+  hide a phrase (levels 2 and 3 drop lines, cut head and tail, mask turns)
+  nor create one. Level 1 strips ANSI escapes and carriage-return frames,
+  which can join a phrase split by them in the forwarded body; the firewall
+  does not see that form. Request filters and guardrails screen the forwarded body (they
+  run after `post_auth`), which is why lossy levels are capped on LLMs with
+  request filters. A firewall in `post_auth` must come before the
+  compressor. From 1.2.0 it checks only in the configured `hook_phase`
+  (before, it checked in both phases: ayb).
+- **LLM Load Balancer last.** It never blocks and never changes the body;
+  it sets `upstream_override`. Token-aware routing estimates tokens from
+  the body it sees, so after the compressor it estimates what the upstream
+  will receive (before it, it overestimates, which is safe). Last also
+  means any block happens before it counts an active connection. A request
+  blocked after it, by a request filter, holds that count until the
+  5-minute stale sweep. It retries nothing itself: gateway failover re-runs
+  the chain per rung on `/ai/`.
+
+**When the compressor moves to `pre_upstream` (eac.28/eac.29)**, it runs
+after the whole `post_auth` chain and the request filters. Every plugin
+above then sees the client's body whatever the order, and caches always key
+on it. The caches still need their header filtering, and the Load
+Balancer then always overestimates.
 
 ## 6a. Editions
 

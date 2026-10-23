@@ -187,10 +187,11 @@ func policyViolationBody(err error) []byte {
 // parseLoopbackError reads a refusal body from the loopback hop as the error
 // the client should be given. It understands the error envelope every vendor
 // uses in one form or another ({"error":{"message":...}}: OpenAI's, the inner
-// hop's own for a policy or budget refusal, Anthropic's and Google's), and the
+// hop's own for a policy or budget refusal, Anthropic's and Google's), the
 // pass-through's own error body ({"status":...,"message":...,"error":"..."}),
-// which the credential check and the upstream failure paths write. Anything
-// else is left to the driver's error.
+// which the credential check and the upstream failure paths write, and the
+// edge's ({"error":"..."}, a plugin chain's refusal). Anything else is left
+// to the driver's error.
 func parseLoopbackError(status int, body []byte) (*APIError, bool) {
 	var envelope struct {
 		Error json.RawMessage `json:"error"`
@@ -217,16 +218,30 @@ func parseLoopbackError(status int, body []byte) (*APIError, bool) {
 		Message string `json:"message"`
 		Error   string `json:"error"`
 	}
-	if json.Unmarshal(body, &passThrough) != nil || passThrough.Message == "" {
+	if json.Unmarshal(body, &passThrough) != nil {
 		return nil, false
 	}
 	message := passThrough.Message
-	// The detail of a client error is the reason (which credential check or
-	// budget failed); the detail of a server error is our internals.
-	if status < http.StatusInternalServerError && passThrough.Error != "" && passThrough.Error != message {
+	switch {
+	case message == "" && passThrough.Error != "":
+		// The edge's own refusals ({"error": message, "details": ...}, its
+		// respondWithError): a plugin chain that failed, a body over the
+		// plugins' size limit. The details are internals and stay behind.
+		message = passThrough.Error
+	case message == "":
+		return nil, false
+	case status < http.StatusInternalServerError && passThrough.Error != "" && passThrough.Error != message:
+		// The detail of a client error is the reason (which credential check
+		// or budget failed); the detail of a server error is our internals.
 		message += ": " + passThrough.Error
 	}
-	return &APIError{Message: message}, true
+	apiErr := &APIError{Message: message}
+	if status == http.StatusRequestEntityTooLarge {
+		// The gateway's own size limit (the plugins'), not the model's
+		// context: OpenAI's code for a 413 would say the prompt is too long.
+		apiErr.Code = "request_too_large"
+	}
+	return apiErr, true
 }
 
 // writeOAIError writes apiErr at status, filling in the type and code the
@@ -249,6 +264,7 @@ func writeOAIError(w http.ResponseWriter, status int, apiErr *APIError) {
 // refusal the loopback hop wrote when it could be read, otherwise as
 // respondRelayingOAIError does from the driver's error.
 func respondAttemptFailure(w http.ResponseWriter, f attemptFailure, message string) {
+	f.applyHeaders(w.Header())
 	if f.inner == nil {
 		respondRelayingOAIError(w, f.status, message, f.err)
 		return
@@ -267,6 +283,7 @@ func (f attemptFailure) withLoopback(relay *loopbackRelay) attemptFailure {
 	if f.timedOut || f.driverError {
 		return f
 	}
+	f.headers = relay.failureHeaders()
 	inner, status, ok := relay.failure()
 	if !ok {
 		return f

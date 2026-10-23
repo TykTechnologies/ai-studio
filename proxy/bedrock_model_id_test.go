@@ -14,7 +14,9 @@ func TestExtractBedrockModelIDFromPath(t *testing.T) {
 		{"no model segment", "/api/v1/chat/completions", ""},
 		{"model at end", "/model/", ""},
 		{"empty path", "", ""},
-		{"model with cross-region ARN", "/model/arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2/converse", "arn:aws:bedrock:us-east-1::foundation-model"},
+		{"model with cross-region ARN", "/model/arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2/converse", "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2"},
+		{"escaped ARN", "/model/arn%3Aaws%3Abedrock%3Aus-east-1%3A%3Afoundation-model%2Fanthropic.claude-v2/converse", "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-v2"},
+		{"escaped inference profile on the gateway path", "/llm/rest/my-llm/model/arn%3Aaws%3Abedrock%3Aus-east-1%3A123456789012%3Ainference-profile%2Fus.anthropic.claude-3/converse-stream", "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3"},
 	}
 
 	for _, tt := range tests {

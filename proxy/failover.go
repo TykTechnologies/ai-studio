@@ -185,6 +185,23 @@ type attemptFailure struct {
 	// read. The drivers keep little of it: Google's keeps no message at all.
 	// When set it is what the client is told.
 	inner *APIError
+	// headers are the plugin headers the loopback hop's refusal carried
+	// (relayedLoopbackHeaders: a rate limiter's X-RateLimit-* retry hint),
+	// for the client's error response.
+	headers http.Header
+}
+
+// applyHeaders sets the refusal's relayed headers on dst, replacing any
+// relayed headers there (a failed rung's never stay).
+func (f attemptFailure) applyHeaders(dst http.Header) {
+	for k := range dst {
+		if isRelayedLoopbackHeader(k) {
+			delete(dst, k)
+		}
+	}
+	for k, v := range f.headers {
+		dst[k] = v
+	}
 }
 
 // errDriverSetup wraps a driver construction failure so classification can
@@ -225,17 +242,6 @@ func classifyBedrockError(err error, attemptCtx context.Context) attemptFailure 
 		return attemptFailure{err: err, status: status, hasStatus: true}
 	}
 	return attemptFailure{err: err, status: http.StatusBadGateway}
-}
-
-// requestForAttempt is r with the failover marker on its context for a
-// fallback rung. Bedrock rungs run inline rather than through the loopback
-// hop, so their analytics read the marker from the context instead of the
-// loopback headers.
-func requestForAttempt(r *http.Request, a llmAttempt) *http.Request {
-	if a.origin == nil {
-		return r
-	}
-	return r.WithContext(withFailoverMarker(r.Context(), failoverMarker{FromLLMID: a.origin.ID, Attempt: a.index}))
 }
 
 // shouldFailover decides whether the next rung is worth trying after f, and

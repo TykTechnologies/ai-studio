@@ -301,9 +301,10 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Bedrock uses direct AWS SDK calls (no internal routing); each rung of
-	// the waterfall decides per attempt below, so a Bedrock primary can fall
-	// over to an OpenAI-shaped LLM and vice versa.
+	// Bedrock rungs translate with the AWS SDK rather than a langchaingo
+	// driver, over the same /llm/call/ loopback; each rung of the waterfall
+	// decides per attempt below, so a Bedrock primary can fall over to an
+	// OpenAI-shaped LLM and vice versa.
 
 	// Handle streaming if requested. Tools no longer divert to the buffered
 	// path: a client that asked for a stream and got Content-Type
@@ -333,10 +334,11 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
 		if a.conf.Vendor == models.BEDROCK {
 			var fail attemptFailure
-			respBody, fail = p.bedrockChatCompletionAttempt(actx, requestForAttempt(r, a), a, &req, reqBody)
+			var attemptRelay *loopbackRelay
+			respBody, attemptRelay, fail = p.bedrockChatCompletionAttempt(actx, r, a, &req)
 			cancel()
 			if fail.err == nil {
-				served = a
+				served, relay = a, attemptRelay
 				break
 			}
 			last = fail
@@ -596,8 +598,11 @@ func (p *Proxy) handleChatCompletionStream(
 		if a.conf.Vendor == models.BEDROCK {
 			// A Bedrock rung pumps its own stream: once it opens, the response
 			// is committed to it and it writes everything through [DONE].
-			opened, fail := p.bedrockStreamAttempt(w, flusher, requestForAttempt(r, a), a, req, reqBody, completionID, created)
+			opened, answer, fail := p.bedrockStreamAttempt(w, flusher, r, a, req, completionID, created)
 			if opened {
+				if answer != nil {
+					p.captureOuterCall(r, a, tried, http.StatusOK, reqBody, answer)
+				}
 				return
 			}
 			last = fail
@@ -792,6 +797,9 @@ func (p *Proxy) failStreamBlocked(w http.ResponseWriter, flusher http.Flusher, f
 // loopback hop's refusal when the relay read one.
 func (p *Proxy) failStreamAttempt(w http.ResponseWriter, flusher http.Flusher, framesSent int, f attemptFailure, message string) {
 	if f.inner == nil {
+		if framesSent == 0 {
+			f.applyHeaders(w.Header())
+		}
 		p.failStream(w, flusher, framesSent, f.status, message, f.err)
 		return
 	}

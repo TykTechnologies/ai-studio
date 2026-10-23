@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,8 +9,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -20,86 +19,21 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Bedrock is served by the AWS SDK directly rather than through the loopback
-// hop, so each rung of the failover waterfall is run inline here. The shape is
-// deliberately "open the call, then write": everything that can fail before a
-// byte is written (auth, budget, client, model id, the Converse call itself)
-// happens first and is returned as an attemptFailure the loop can act on;
-// only a successful call is turned into a response and written.
+// A Bedrock rung of the failover waterfall is a translator, as every other
+// vendor's is: the AWS SDK client it calls is pointed at the proxy's own
+// /llm/call/{slug} (newBedrockLoopbackClient), and the inner hop does the
+// rest (the authentication hand-off, plugins, budget, filters, signing,
+// response hooks, analytics) against the native Converse body. What fails
+// before a byte is written (the request, the inner hop's refusal, the
+// Converse call) is returned as an attemptFailure the loop can act on; only
+// a successful call is turned into a response and written.
 
-// bedrockPrepare resolves the app and checks its budget against this rung.
-func (p *Proxy) bedrockPrepare(r *http.Request, conf *models.LLM) (*models.App, attemptFailure) {
-	// Get app from context (auth already ran via middleware)
-	app, err := p.getAppFromContext(r, conf)
-	if err != nil {
-		return nil, attemptFailure{err: fmt.Errorf("authentication required: %w", err), status: http.StatusUnauthorized, hasStatus: true}
-	}
-
-	// Check budget
-	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		status, msg := budgetDenial(err, "budget exceeded")
-		return app, attemptFailure{err: fmt.Errorf("%s: %w", msg, err), status: status, hasStatus: true,
-			inner: budgetDenialError(status, "Budget limit exceeded", err)}
-	}
-	return app, attemptFailure{}
-}
-
-// bedrockScreenRequest runs conf's request filters over the OpenAI-shaped
-// bridge body before it is translated to Converse. Every other vendor gets
-// this on the /llm/call/ loopback hop; Bedrock talks to the AWS SDK directly,
-// so the bridge has to run them itself. The request comes back as the filters
-// left it, decoded into a rung-local copy so one rung's filters never leak
-// into the next rung or the caller's request. A block is a 400 that never
-// fails over (4xx are the caller's problem, see shouldFailover) and is
-// recorded as a policy block and a ProxyLog exactly like the pass-through.
-func (p *Proxy) bedrockScreenRequest(
-	r *http.Request,
-	conf *models.LLM,
-	app *models.App,
-	req *ChatCompletionRequest,
-	reqBody []byte,
-	model string,
-	timestamp time.Time,
-) (*ChatCompletionRequest, []byte, attemptFailure) {
-	if !p.hasRequestFilters(conf) {
-		return req, reqBody, attemptFailure{}
-	}
-
-	filtered, err := p.runRequestFilters(conf, r, reqBody, requestFilterFormatOpenAI, model)
-	if err != nil {
-		recordPolicyBlock(r.Context(), "request_filter", "firewall")
-		fail := attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
-		modelID := bedrockVendor.GetModelID(conf, model)
-		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
-		return nil, nil, fail
-	}
-	if bytes.Equal(filtered, reqBody) {
-		return req, reqBody, attemptFailure{}
-	}
-
-	var out ChatCompletionRequest
-	if err := json.Unmarshal(filtered, &out); err != nil {
-		return nil, nil, attemptFailure{
-			err:       fmt.Errorf("request filter produced an invalid request: %w", err),
-			status:    http.StatusBadRequest,
-			hasStatus: true,
-		}
-	}
-	return &out, filtered, attemptFailure{}
-}
-
-// bedrockConverseInput builds the client and the Converse request for model.
-func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model string) (*bedrockruntime.Client, string, *bedrockruntime.ConverseInput, attemptFailure) {
-	// Create Bedrock client
-	client, err := bedrockVendor.NewBedrockClient(conf)
-	if err != nil {
-		return nil, "", nil, attemptFailure{err: fmt.Errorf("%w: failed to create Bedrock client: %v", errDriverSetup, err), status: http.StatusInternalServerError, driverError: true}
-	}
-
+// bedrockConverseInput builds the Converse request for model.
+func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model string) (*bedrockruntime.ConverseInput, attemptFailure) {
 	// Determine model ID
 	modelID := bedrockVendor.GetModelID(conf, model)
 	if modelID == "" {
-		return client, "", nil, attemptFailure{err: fmt.Errorf("model ID is required"), status: http.StatusBadRequest, hasStatus: true}
+		return nil, attemptFailure{err: fmt.Errorf("model ID is required"), status: http.StatusBadRequest, hasStatus: true}
 	}
 
 	// Convert OpenAI messages to Converse format
@@ -116,7 +50,7 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 		toolConfig = bedrockVendor.BuildToolConfig(toolDefs)
 	}
 
-	return client, modelID, &bedrockruntime.ConverseInput{
+	return &bedrockruntime.ConverseInput{
 		ModelId:         aws.String(modelID),
 		Messages:        converseMsgs,
 		System:          systemBlocks,
@@ -127,111 +61,52 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 
 // bedrockChatCompletionAttempt runs one non-streaming Bedrock rung of the
 // waterfall for the /ai/v1/chat/completions endpoint, translating OpenAI
-// format <-> Converse API format. Nothing is written: on success the caller
-// writes the returned body. Every attempt leaves a ProxyLog, a failed one
-// with the status Bedrock returned, so a failed primary and the fallback that
-// served can be read together.
-func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Request, a llmAttempt, req *ChatCompletionRequest, reqBody []byte) (body []byte, failure attemptFailure) {
-	timestamp := time.Now()
-	conf := a.conf
-	done := bedrockMetrics(r, conf, false)
-	defer func() { done(failure.statusOr(http.StatusOK)) }()
-
-	app, fail := p.bedrockPrepare(r, conf)
+// format <-> Converse API format over the loopback. Nothing is written: on
+// success the caller writes the returned body, with the inner hop's plugin
+// headers from relay.
+func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Request, a llmAttempt, req *ChatCompletionRequest) (body []byte, relay *loopbackRelay, failure attemptFailure) {
+	input, fail := bedrockConverseInput(a.conf, req, a.model)
 	if fail.err != nil {
-		return nil, fail
+		return nil, nil, fail
 	}
 
-	req, reqBody, fail = p.bedrockScreenRequest(r, conf, app, req, reqBody, a.model, timestamp)
-	if fail.err != nil {
-		return nil, fail
-	}
-
-	client, modelID, input, fail := bedrockConverseInput(conf, req, a.model)
-	if fail.err != nil {
-		return nil, fail
-	}
-
-	// Call Converse API
-	output, err := client.Converse(ctx, input)
+	relay = &loopbackRelay{}
+	output, err := p.newBedrockLoopbackClient(r, a).Converse(bedrockLoopbackContext(ctx, r, relay), input)
 	if err != nil {
-		// Bedrock's SDK errors carry the HTTP status the service returned;
-		// flattening every one of them to 502 turned "no such model" into a
-		// retryable server fault.
-		fail := classifyBedrockError(fmt.Errorf("Bedrock Converse failed: %w", err), ctx)
-		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
-		return nil, fail
+		// The inner hop's refusal (a policy or budget block, the vendor's
+		// own error) when the relay could read it, else the status the SDK
+		// read: "no such model" is not a retryable server fault.
+		return nil, relay, classifyBedrockError(fmt.Errorf("Bedrock Converse failed: %w", err), ctx).withLoopback(relay)
 	}
 
 	// Convert Converse response to OpenAI format. The model echoed is the one
 	// that answered.
-	response := converseOutputToOpenAI(output, a.model)
-
-	// Marshal response
-	respBody, err := json.Marshal(response)
+	respBody, err := json.Marshal(converseOutputToOpenAI(output, a.model))
 	if err != nil {
-		return nil, attemptFailure{err: fmt.Errorf("failed to marshal response: %w", err), status: http.StatusInternalServerError, hasStatus: true}
+		return nil, relay, attemptFailure{err: fmt.Errorf("failed to marshal response: %w", err), status: http.StatusInternalServerError, hasStatus: true}
 	}
-
-	// Execute response filters (non-streaming)
-	if p.hasResponseFilters(conf) {
-		// The bridge answers in the OpenAI shape it was asked in.
-		blocked, blockMsg, filterErr := ExecuteBufferedResponseFilters(
-			conf, p.gatewayService,
-			BufferedResponse{Body: respBody, Format: requestFilterFormatOpenAI, RequestBody: reqBody},
-			http.StatusOK, r,
-		)
-		if filterErr != nil {
-			log.Error().Err(filterErr).Msg("Response filter error on Bedrock response")
-		} else if blocked {
-			bt := newBedrockTrace(r, requestFilterFormatOpenAI)
-			bt.handOff()
-			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp, bt)
-			return nil, attemptFailure{err: fmt.Errorf("Response blocked by filter: %s", blockMsg), status: http.StatusBadRequest, hasStatus: true}
-		}
-	}
-
-	// Record analytics (and the agent tracing capture, when on)
-	bt := newBedrockTrace(r, requestFilterFormatOpenAI)
-	bt.handOff()
-	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp, bt)
-
-	return respBody, attemptFailure{}
+	return respBody, relay, attemptFailure{}
 }
 
 // bedrockStreamAttempt runs one streaming Bedrock rung for the
 // /ai/v1/chat/completions endpoint with stream=true. It reports whether the
 // stream was opened: once it is, the response is committed to this rung and
-// the pump writes everything including [DONE]. A failure to open is returned
-// with nothing written, so the loop can move on to the next rung.
+// the pump writes everything including [DONE]. A failure to open (the inner
+// hop's refusal included) is returned with nothing written, so the loop can
+// move on to the next rung. answer is the reply as the pump assembled it,
+// for the agent tracing capture (nil with tracing off).
 func (p *Proxy) bedrockStreamAttempt(
 	w http.ResponseWriter,
 	flusher http.Flusher,
 	r *http.Request,
 	a llmAttempt,
 	req *ChatCompletionRequest,
-	reqBody []byte,
 	completionID string,
 	created int64,
-) (opened bool, failure attemptFailure) {
-	timestamp := time.Now()
-	conf := a.conf
-	done := bedrockMetrics(r, conf, true)
-	defer func() { done(failure.statusOr(http.StatusOK)) }()
-
-	app, fail := p.bedrockPrepare(r, conf)
+) (opened bool, answer []byte, failure attemptFailure) {
+	converseInput, fail := bedrockConverseInput(a.conf, req, a.model)
 	if fail.err != nil {
-		return false, fail
-	}
-
-	req, reqBody, fail = p.bedrockScreenRequest(r, conf, app, req, reqBody, a.model, timestamp)
-	if fail.err != nil {
-		return false, fail
-	}
-
-	client, modelID, converseInput, fail := bedrockConverseInput(conf, req, a.model)
-	if fail.err != nil {
-		return false, fail
+		return false, nil, fail
 	}
 
 	// Call ConverseStream
@@ -243,61 +118,45 @@ func (p *Proxy) bedrockStreamAttempt(
 		ToolConfig:      converseInput.ToolConfig,
 	}
 
-	output, err := client.ConverseStream(r.Context(), input)
+	relay := &loopbackRelay{}
+	output, err := p.newBedrockLoopbackClient(r, a).ConverseStream(bedrockLoopbackContext(r.Context(), r, relay), input)
 	if err != nil {
 		// Nothing has been written yet, so the caller can still be given the
-		// status Bedrock actually returned instead of a 200 whose only frame
-		// says the request failed.
-		fail := classifyBedrockError(fmt.Errorf("Bedrock ConverseStream failed: %w", err), nil)
-		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
-		return false, fail
+		// status the inner hop or Bedrock returned instead of a 200 whose
+		// only frame says the request failed.
+		return false, nil, classifyBedrockError(fmt.Errorf("Bedrock ConverseStream failed: %w", err), nil).withLoopback(relay)
 	}
 
 	stream := output.GetStream()
 	if stream == nil {
-		fail := attemptFailure{err: fmt.Errorf("Bedrock returned no stream"), status: http.StatusBadGateway}
-		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
-		return false, fail
+		return false, nil, attemptFailure{err: fmt.Errorf("Bedrock returned no stream"), status: http.StatusBadGateway}
 	}
 	defer stream.Close()
 
-	p.bedrockPumpStream(w, flusher, r, conf, app, req, reqBody, stream, modelID, a.model, completionID, created, timestamp)
-	return true, attemptFailure{}
+	// The inner hop's plugin headers go out with the first frame.
+	relay.applyTo(w.Header())
+	return true, p.bedrockPumpStream(w, flusher, r, relay, stream, a.model, completionID, created), attemptFailure{}
 }
 
 // bedrockPumpStream re-encodes a Converse event stream as OpenAI SSE frames.
-// servedModel is echoed on every chunk.
+// servedModel is echoed on every chunk. The inner hop screened the stream; a
+// block it ended the stream with (its trailer, read through relay) ends this
+// one as on every other vendor's bridge. It returns the reply it relayed in
+// the non-streamed shape while agent tracing is on, else nil.
 func (p *Proxy) bedrockPumpStream(
 	w http.ResponseWriter,
 	flusher http.Flusher,
 	r *http.Request,
-	conf *models.LLM,
-	app *models.App,
-	req *ChatCompletionRequest,
-	reqBody []byte,
+	relay *loopbackRelay,
 	stream *bedrockruntime.ConverseStreamEventStream,
-	modelID string,
 	servedModel string,
 	completionID string,
 	created int64,
-	timestamp time.Time,
-) {
+) []byte {
 	isFirstChunk := true
-	bt := newBedrockTrace(r, requestFilterFormatOpenAI)
-	defer bt.abandon()
-	ttftSeen := false
-	var inputTokens, outputTokens int32
-	var cacheWriteTokens, cacheReadTokens int32
 	var textBuffer strings.Builder
-
-	// With response filters, the OpenAI SSE this bridge writes is screened
-	// as the native streams are (stream_screen.go): text per event and at
-	// the end, tool calls held until classified.
-	var screen *streamScreen
-	if p.hasResponseFilters(conf) {
-		screen = p.newStreamScreen(w, flusher, r, conf, "openai", "text/event-stream", reqBody, requestFilterFormatOpenAI)
-		w, flusher = screen, screen
-	}
+	var finishReason string
+	var usage *CompletionUsage
 
 	// Bedrock numbers every content block in one sequence, text and tool use
 	// alike, but OpenAI's tool_calls[].index counts tool calls only - it is what
@@ -306,6 +165,8 @@ func (p *Proxy) bedrockPumpStream(
 	toolCallIndexes := map[int32]int{}
 	toolArgsSeen := map[int32]bool{}
 	nextToolCallIndex := 0
+	// The tool calls as relayed, for the tracing capture.
+	var toolCalls []map[string]interface{}
 
 	sendChunk := func(delta ChatCompletionDelta) {
 		if isFirstChunk {
@@ -323,25 +184,25 @@ func (p *Proxy) bedrockPumpStream(
 			}},
 		})
 	}
+	addArgs := func(index int, fragment string) {
+		if index >= len(toolCalls) {
+			return
+		}
+		fn := toolCalls[index]["function"].(map[string]interface{})
+		fn["arguments"] = fn["arguments"].(string) + fragment
+	}
 
 	// Every event received is sent on: the SDK closes Events when the
 	// stream fails, and its reader may already have failed on the next
 	// message when this one arrives, so an error is checked after the loop,
 	// never per event (an event checked that way was dropped).
 	for event := range stream.Events() {
-		bt.observe(event)
-		if _, delta := event.(*types.ConverseStreamOutputMemberContentBlockDelta); delta && !ttftSeen {
-			ttftSeen = true
-			bt.firstToken()
-			metrics.ObserveTimeToFirstToken(r.Context(), string(conf.Vendor), conf.Name, time.Since(timestamp).Seconds())
-		}
 		switch v := event.(type) {
 		case *types.ConverseStreamOutputMemberMessageStart:
 			// Send first chunk with role
 			if isFirstChunk {
 				sendChunk(ChatCompletionDelta{})
 			}
-			_ = v
 
 		case *types.ConverseStreamOutputMemberContentBlockStart:
 			// The opening fragment of a tool call: it is the only place Bedrock
@@ -355,6 +216,10 @@ func (p *Proxy) bedrockPumpStream(
 			blockIndex := aws.ToInt32(v.Value.ContentBlockIndex)
 			toolCallIndexes[blockIndex] = nextToolCallIndex
 			nextToolCallIndex++
+			toolCalls = append(toolCalls, map[string]interface{}{
+				"id": aws.ToString(toolUse.Value.ToolUseId), "type": "function",
+				"function": map[string]interface{}{"name": aws.ToString(toolUse.Value.Name), "arguments": ""},
+			})
 
 			sendChunk(ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{{
 				Index: toolCallIndexes[blockIndex],
@@ -374,6 +239,7 @@ func (p *Proxy) bedrockPumpStream(
 			if !isTool || toolArgsSeen[blockIndex] {
 				continue
 			}
+			addArgs(toolIndex, "{}")
 			sendChunk(ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{{
 				Index:    toolIndex,
 				Function: &ChatCompletionFunctionDelta{Arguments: "{}"},
@@ -391,6 +257,7 @@ func (p *Proxy) bedrockPumpStream(
 					continue
 				}
 				toolArgsSeen[blockIndex] = true
+				addArgs(toolIndex, fragment)
 				sendChunk(ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{{
 					Index:    toolIndex,
 					Function: &ChatCompletionFunctionDelta{Arguments: fragment},
@@ -399,13 +266,12 @@ func (p *Proxy) bedrockPumpStream(
 			}
 
 			if textDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberText); ok {
-				// Accumulate text for logging
 				textBuffer.WriteString(textDelta.Value)
 				sendChunk(ChatCompletionDelta{Content: textDelta.Value})
 			}
 
 		case *types.ConverseStreamOutputMemberMessageStop:
-			finishReason := bedrockVendor.ConvertConverseStopReason(v.Value.StopReason)
+			finishReason = bedrockVendor.ConvertConverseStopReason(v.Value.StopReason)
 			chunkResp := ChatCompletionChunk{
 				ID:      completionID,
 				Object:  "chat.completion.chunk",
@@ -421,16 +287,14 @@ func (p *Proxy) bedrockPumpStream(
 
 		case *types.ConverseStreamOutputMemberMetadata:
 			if v.Value.Usage != nil {
-				inputTokens = aws.ToInt32(v.Value.Usage.InputTokens)
-				outputTokens = aws.ToInt32(v.Value.Usage.OutputTokens)
-				cacheWriteTokens = aws.ToInt32(v.Value.Usage.CacheWriteInputTokens)
-				cacheReadTokens = aws.ToInt32(v.Value.Usage.CacheReadInputTokens)
+				inputTokens := int(aws.ToInt32(v.Value.Usage.InputTokens))
+				outputTokens := int(aws.ToInt32(v.Value.Usage.OutputTokens))
 
 				// Send final chunk with usage
-				usage := CompletionUsage{
-					PromptTokens:     int(inputTokens),
-					CompletionTokens: int(outputTokens),
-					TotalTokens:      int(inputTokens + outputTokens),
+				usage = &CompletionUsage{
+					PromptTokens:     inputTokens,
+					CompletionTokens: outputTokens,
+					TotalTokens:      inputTokens + outputTokens,
 				}
 				chunkResp := ChatCompletionChunk{
 					ID:      completionID,
@@ -441,42 +305,61 @@ func (p *Proxy) bedrockPumpStream(
 						Index: 0,
 						Delta: ChatCompletionDelta{},
 					}},
-					Usage: &usage,
+					Usage: usage,
 				}
 				sendSSEChunk(w, flusher, chunkResp)
 			}
 		}
-		if screen != nil && screen.Blocked() {
-			// The screen ended the stream with an error and [DONE].
-			return
-		}
 	}
-	if err := stream.Err(); err != nil {
+	streamErr := stream.Err()
+	// The inner hop's trailer says whether its filters blocked the stream;
+	// it arrives once the stream is read to its end, which Close does.
+	_ = stream.Close()
+	if msg := relay.streamBlocked(); msg != "" {
+		framesSent := 0
+		if !isFirstChunk {
+			framesSent = 1
+		}
+		p.failStreamBlocked(w, flusher, framesSent, msg)
+		return nil
+	}
+	if streamErr != nil {
 		// The stream broke: end it with an OpenAI error object and [DONE],
 		// which SDKs raise, rather than a bare [DONE] that reads as a
-		// complete answer. Held tool calls are dropped with it.
-		log.Error().Err(err).Msg("Bedrock ConverseStream error")
+		// complete answer.
+		log.Error().Err(streamErr).Msg("Bedrock ConverseStream error")
 		b, _ := json.Marshal(ChatCompletionStreamError{Error: ChatCompletionErrorDetail{
 			Message: "the Bedrock stream failed before it completed", Type: "upstream_error"}})
 		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", b)
 		flusher.Flush()
-		return
+		return nil
 	}
 
 	// Send [DONE] marker
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
-	if screen != nil && screen.Finish() {
-		return
-	}
 
-	// Record proxy log and analytics in a single goroutine to ensure correct ordering:
-	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
-	responseText := textBuffer.String()
-	bt.handOff()
-	p.goAnalyze(func() {
-		recordBedrockStreamAnalytics(p, conf, app, modelID, reqBody, responseText, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp, bt)
-	})
+	if agenttrace.From(r.Context()) == nil {
+		return nil
+	}
+	// The stream was relayed as it came; the capture reads the answer in
+	// the non-streamed shape.
+	if finishReason == "" {
+		finishReason = "stop"
+	}
+	msg := ChatCompletionMessage{Role: "assistant", Content: textBuffer.String(), ToolCalls: toolCalls}
+	if len(toolCalls) > 0 {
+		msg.Content = ""
+	}
+	answer := &ChatCompletionResponse{
+		ID: completionID, Object: "chat.completion", Created: created, Model: servedModel,
+		Choices: []ChatCompletionChoice{{Index: 0, Message: msg, FinishReason: finishReason}},
+	}
+	if usage != nil {
+		answer.Usage = *usage
+	}
+	b, _ := json.Marshal(answer)
+	return b
 }
 
 // --- Helper functions ---
@@ -580,10 +463,13 @@ func sendSSEChunk(w http.ResponseWriter, flusher http.Flusher, chunk ChatComplet
 	flusher.Flush()
 }
 
-func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, output *bedrockruntime.ConverseOutput, reqBody []byte, respBody []byte, r *http.Request, timestamp time.Time, bt *bedrockTrace) {
+// recordBedrockFailedAttempt leaves a ProxyLog for a native Bedrock stream
+// that failed before anything was relayed, with the status and body Bedrock
+// returned (or the transport's failure), so a failed rung's row sits beside
+// the fallback's row exactly as an OpenAI-shaped rung's would.
+func recordBedrockFailedAttempt(llm *models.LLM, app *models.App, modelID string, reqBody []byte, status int, respBody []byte, r *http.Request, timestamp time.Time) {
 	const maxBodySize = 65535
 
-	// Record proxy log
 	proxyLog := &models.ProxyLog{
 		AppID:        app.ID,
 		UserID:       app.UserID,
@@ -593,51 +479,7 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 		ModelName:    modelID,
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(respBody), maxBodySize),
-		ResponseCode: http.StatusOK,
-	}
-	if llm.DontLogBodies {
-		proxyLog.RequestBody = ""
-		proxyLog.ResponseBody = ""
-	}
-	applyFailoverMarker(proxyLog, r.Context())
-
-	// Chat analytics, recorded with the proxy log
-	var record *models.LLMChatRecord
-	if output.Usage != nil {
-		record = bedrockChatRecord(p, llm, app, modelID,
-			int(aws.ToInt32(output.Usage.InputTokens)),
-			int(aws.ToInt32(output.Usage.OutputTokens)),
-			int(aws.ToInt32(output.Usage.CacheWriteInputTokens)),
-			int(aws.ToInt32(output.Usage.CacheReadInputTokens)),
-			timestamp)
-	}
-	recordBedrockExchange(p, llm, app, proxyLog, record, r)
-	bt.setOutput(output)
-	bt.setResponse(respBody)
-	captureBedrock(r, llm, app, modelID, reqBody, proxyLog, record, bt)
-}
-
-// recordBedrockFailedAttempt leaves a ProxyLog for a Bedrock rung that failed
-// before anything was written, with the status Bedrock returned, so the row
-// sits beside the fallback's row exactly as an OpenAI-shaped rung's would.
-func recordBedrockFailedAttempt(llm *models.LLM, app *models.App, modelID string, reqBody []byte, fail attemptFailure, r *http.Request, timestamp time.Time) {
-	const maxBodySize = 65535
-
-	detail := ""
-	if fail.err != nil {
-		detail = fail.err.Error()
-	}
-	body, _ := json.Marshal(map[string]interface{}{"error": map[string]string{"message": detail}})
-	proxyLog := &models.ProxyLog{
-		AppID:        app.ID,
-		UserID:       app.UserID,
-		TimeStamp:    timestamp,
-		LLMID:        llm.ID,
-		Vendor:       string(llm.Vendor),
-		ModelName:    modelID,
-		RequestBody:  truncateString(string(reqBody), maxBodySize),
-		ResponseBody: string(body),
-		ResponseCode: fail.status,
+		ResponseCode: status,
 	}
 	if llm.DontLogBodies {
 		proxyLog.RequestBody = ""

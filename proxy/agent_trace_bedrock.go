@@ -12,9 +12,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/extract"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authidentity"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 )
 
 // bedrockTrace is what a Bedrock path captures for agent tracing: the
@@ -67,68 +64,6 @@ func (bt *bedrockTrace) firstToken() {
 		return
 	}
 	bt.ttft = time.Since(bt.start)
-}
-
-// observe reads one Converse stream event (the SDK paths).
-func (bt *bedrockTrace) observe(event types.ConverseStreamOutput) {
-	if bt == nil {
-		return
-	}
-	bt.mu.Lock()
-	defer bt.mu.Unlock()
-	switch v := event.(type) {
-	case *types.ConverseStreamOutputMemberContentBlockStart:
-		if tu, ok := v.Value.Start.(*types.ContentBlockStartMemberToolUse); ok {
-			c := &bedrockCall{id: aws.ToString(tu.Value.ToolUseId), name: aws.ToString(tu.Value.Name)}
-			bt.calls = append(bt.calls, c)
-			bt.byIndex[aws.ToInt32(v.Value.ContentBlockIndex)] = c
-		}
-	case *types.ConverseStreamOutputMemberContentBlockDelta:
-		if d, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberToolUse); ok {
-			if c := bt.byIndex[aws.ToInt32(v.Value.ContentBlockIndex)]; c != nil {
-				frag := aws.ToString(d.Value.Input)
-				if bt.argBytes+len(frag) > bedrockMaxArgs {
-					c.unavailable = true
-					return
-				}
-				bt.argBytes += len(frag)
-				c.args.WriteString(frag)
-			}
-		}
-	case *types.ConverseStreamOutputMemberMessageStop:
-		bt.stop = string(v.Value.StopReason)
-		bt.complete = true
-	}
-}
-
-// setOutput reads a non-streamed Converse output.
-func (bt *bedrockTrace) setOutput(output *bedrockruntime.ConverseOutput) {
-	if bt == nil || output == nil {
-		return
-	}
-	bt.mu.Lock()
-	defer bt.mu.Unlock()
-	bt.complete = true
-	bt.stop = string(output.StopReason)
-	msg, ok := output.Output.(*types.ConverseOutputMemberMessage)
-	if !ok {
-		return
-	}
-	for _, block := range msg.Value.Content {
-		tu, ok := block.(*types.ContentBlockMemberToolUse)
-		if !ok {
-			continue
-		}
-		c := &bedrockCall{id: aws.ToString(tu.Value.ToolUseId), name: aws.ToString(tu.Value.Name)}
-		if tu.Value.Input != nil {
-			if raw, err := tu.Value.Input.MarshalSmithyDocument(); err == nil {
-				c.args.Write(raw)
-			} else {
-				c.unavailable = true
-			}
-		}
-		bt.calls = append(bt.calls, c)
-	}
 }
 
 // setExtracts sets extracts captured elsewhere (the native stream's
@@ -297,19 +232,6 @@ func uintString(v uint) string {
 		return ""
 	}
 	return strconv.FormatUint(uint64(v), 10)
-}
-
-// bedrockMetrics counts a Bedrock bridge request in flight and observes its
-// duration when the returned func is called with the status the client saw.
-// The bridges call Bedrock directly, so the /llm/ handlers that record these
-// never run for them.
-func bedrockMetrics(r *http.Request, llm *models.LLM, streaming bool) func(status int) {
-	start := time.Now()
-	metrics.IncrementInflight(r.Context(), string(llm.Vendor))
-	return func(status int) {
-		metrics.DecrementInflight(r.Context(), string(llm.Vendor))
-		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, streaming, time.Since(start).Seconds(), status)
-	}
 }
 
 // statusOr is the status a failed attempt answered with, or ok when it did

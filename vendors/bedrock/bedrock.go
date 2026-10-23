@@ -120,9 +120,33 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 
 // RuntimeBaseURL is the Bedrock runtime base URL requests to llm go to: the
 // configured endpoint (without a trailing /v1), or for a plain region
-// https://bedrock-runtime.{region}.amazonaws.com.
+// https://bedrock-runtime.{region}.amazonaws.com. An LLM with no endpoint
+// takes the region from metadata.aws_region, as its SDK client does.
 func RuntimeBaseURL(llm *models.LLM) (string, error) {
-	endpoint := strings.TrimSuffix(strings.TrimSuffix(llm.APIEndpoint, "/"), "/v1")
+	if strings.TrimSpace(llm.APIEndpoint) == "" {
+		return RuntimeBaseURLFor(metadataString(llm.Metadata, "aws_region"))
+	}
+	return RuntimeBaseURLFor(llm.APIEndpoint)
+}
+
+// Region is the region llm's requests are signed for when the host they go
+// to names none: its endpoint's, else metadata.aws_region.
+func Region(llm *models.LLM) (string, error) {
+	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
+	if err != nil {
+		// An endpoint that names no region (a VPC endpoint, a proxy)
+		// takes it from metadata.aws_region.
+		if region = metadataString(llm.Metadata, "aws_region"); region == "" {
+			return "", fmt.Errorf("failed to parse region: %w", err)
+		}
+	}
+	return region, nil
+}
+
+// RuntimeBaseURLFor is RuntimeBaseURL for an endpoint other than the LLM's
+// own, such as a plugin's upstream_override.
+func RuntimeBaseURLFor(endpoint string) (string, error) {
+	endpoint = strings.TrimSuffix(strings.TrimSuffix(endpoint, "/"), "/v1")
 	switch {
 	case endpoint == "":
 		return "", fmt.Errorf("bedrock endpoint is empty")
@@ -488,13 +512,9 @@ func (v *Bedrock) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, _ i
 }
 
 func (v *Bedrock) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
-	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
+	region, err := SigningRegion(r, llm)
 	if err != nil {
-		// An endpoint that names no region (a VPC endpoint, a proxy)
-		// takes it from metadata.aws_region.
-		if region = metadataString(llm.Metadata, "aws_region"); region == "" {
-			return fmt.Errorf("failed to parse region: %w", err)
-		}
+		return err
 	}
 
 	accessKeyID, secretAccessKey, sessionToken, err := extractAWSCredentials(llm)
@@ -540,6 +560,25 @@ func (v *Bedrock) ProvidesChat() bool {
 
 func (v *Bedrock) DecisionEndpoint() string {
 	return ""
+}
+
+// SigningRegion is the region a request to Bedrock is signed for. AWS accepts
+// only a signature for the region of the endpoint it reached, so a request
+// sent to an endpoint that names its region (bedrock-runtime.{region}.…,
+// say a plugin's upstream_override into another region) is signed for that
+// region. Any other host (a VPC endpoint, a proxy) takes the LLM's region:
+// its endpoint's, else metadata.aws_region.
+func SigningRegion(r *http.Request, llm *models.LLM) (string, error) {
+	host := r.Host
+	if host == "" && r.URL != nil {
+		host = r.URL.Host
+	}
+	if host != "" {
+		if region, err := ParseRegionFromEndpoint("https://" + host); err == nil {
+			return region, nil
+		}
+	}
+	return Region(llm)
 }
 
 // --- Internal helpers ---

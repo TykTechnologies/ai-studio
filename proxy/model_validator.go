@@ -300,7 +300,7 @@ func HuggingFaceModelExtractor(r *http.Request, body []byte) (string, error) {
 // The model ID is sent in the URL path (e.g., /model/{modelId}/converse) or request body.
 func BedrockModelExtractor(r *http.Request, body []byte) (string, error) {
 	// Check URL path for model ID
-	if modelID := ExtractBedrockModelIDFromPath(r.URL.Path); modelID != "" {
+	if modelID := ExtractBedrockModelIDFromPath(r.URL.EscapedPath()); modelID != "" {
 		return modelID, nil
 	}
 

@@ -134,11 +134,16 @@ func withUpstreamContentType(r *http.Request, resp *http.Response) *http.Request
 // hop: the LLM and model that answered, how many rungs were tried, the
 // status, and the extracts from the OpenAI-shaped exchange. The usage and
 // cost belong to the inner hop that answered (its chat record); the
-// assembler folds the inner hops in as attempts of this call. Bedrock rungs
-// answer on this hop and fill the capture themselves (captureBedrock).
+// assembler folds the inner hops in as attempts of this call.
 func (p *Proxy) captureOuterCall(r *http.Request, served llmAttempt, tried, status int, reqBody, respBody []byte) {
+	p.captureOuterCallAs(r, requestFilterFormatOpenAI, served, tried, status, reqBody, respBody)
+}
+
+// captureOuterCallAs is captureOuterCall for a bridge whose client speaks
+// format (the /anthropic/ bridge's Anthropic Messages).
+func (p *Proxy) captureOuterCallAs(r *http.Request, format string, served llmAttempt, tried, status int, reqBody, respBody []byte) {
 	rec := agenttrace.From(r.Context())
-	if rec == nil || served.conf == nil || served.conf.Vendor == models.BEDROCK {
+	if rec == nil || served.conf == nil {
 		if rec != nil && served.conf == nil {
 			rec.Update(func(ev *agenttrace.Event) {
 				ev.Kind = agenttrace.KindLLMInference
@@ -152,10 +157,10 @@ func (p *Proxy) captureOuterCall(r *http.Request, served llmAttempt, tried, stat
 	p.goAnalyzeFor(r, func() {
 		fp := agenttrace.CurrentFingerprinter()
 		var x agenttrace.Extracts
-		if resp, err := extract.ParseResponse(requestFilterFormatOpenAI, respBody, fp); err == nil {
+		if resp, err := extract.ParseResponse(format, respBody, fp); err == nil {
 			resp.Apply(&x)
 		}
-		if req, err := extract.ParseRequestExtracts(requestFilterFormatOpenAI, reqBody, fp); err == nil {
+		if req, err := extract.ParseRequestExtracts(format, reqBody, fp); err == nil {
 			req.Apply(&x)
 		}
 		rec.Update(func(ev *agenttrace.Event) {
