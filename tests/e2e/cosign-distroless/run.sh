@@ -26,6 +26,10 @@ glog() { gateway_logs | sed 's/\x1b\[[0-9;]*m//g'; }
 slog() { studio_logs | sed 's/\x1b\[[0-9;]*m//g'; }
 in_gateway() { glog | grep -qE "$1"; }
 in_studio() { slog | grep -qE "$1"; }
+wait_in_gateway() { # <pattern> <seconds>
+  for _ in $(seq 1 "$2"); do in_gateway "$1" && return 0; sleep 1; done
+  return 1
+}
 status_of() { cut -d' ' -f1; }
 
 start() { # env assignments for compose, then start and wait for the edge
@@ -127,6 +131,31 @@ push_to_edge "e-grpc-internal=grpc://10.0.0.5:50051"
 expect "edge refuses grpc://10.0.0.5 pushed by the hub" in_gateway 'Failed to pre-warm plugin .*(internal|blocked).*plugin_name=e-grpc-internal'
 export GATEWAY_ALLOW_INTERNAL=
 
+log "9e. oci:// on a registry hostname resolving to an internal address (c1g.32)"
+INTERNAL_REF="oci://internal-reg.test:5000/studio-plugins/request_enricher:1.0.0-v2?pubkey=E2E"
+# Studio refuses it at create; the edge refuses one the hub pushes anyway.
+export STUDIO_ALLOW_INTERNAL=false
+start
+r=$(api POST /api/v1/plugins "{\"name\":\"s-internal-reg\",\"command\":\"$INTERNAL_REF\",\"hook_type\":\"post_auth\",\"is_active\":true}")
+[[ $r == 400*internal-reg.test*ALLOW_INTERNAL_NETWORK_ACCESS* ]] && pass "Studio: create refused (400 naming the host and the setting)" || fail "Studio create internal registry: ${r:0:200}"
+r=$(studio_oci s-internal-oci "$INTERNAL_REF")
+[[ $r != 201* && $r == *internal-reg.test*ALLOW_INTERNAL_NETWORK_ACCESS* ]] && pass "Studio: /plugins/oci refused" || fail "Studio /plugins/oci internal registry: ${r:0:200}"
+export STUDIO_ALLOW_INTERNAL= GATEWAY_ALLOW_INTERNAL=false
+start
+push_to_edge "e-internal-reg=$INTERNAL_REF"
+expect "edge refuses a hub-pushed plugin on an internal registry" in_gateway 'Failed to pre-warm plugin .*internal-reg.test.*ALLOW_INTERNAL_NETWORK_ACCESS.*plugin_name=e-internal-reg'
+# The documented opt-out: with ALLOW_INTERNAL_NETWORK_ACCESS=true the host is
+# no longer refused by policy (the fetch then fails only on the network).
+export GATEWAY_ALLOW_INTERNAL=true
+start
+r=$(api POST /api/v1/plugins "{\"name\":\"s-internal-ok\",\"command\":\"$INTERNAL_REF\",\"hook_type\":\"post_auth\",\"is_active\":true}")
+[ "${r%% *}" = 201 ] && pass "Studio opt-out: create accepted" || fail "Studio opt-out create: ${r:0:200}"
+push_to_edge "e-internal-ok=$INTERNAL_REF"
+# The registry dial times out after ~30s, so wait for the outcome.
+expect "edge opt-out: not refused by policy (it dials 10.0.0.6)" wait_in_gateway 'Failed to pre-warm plugin .*dial tcp 10\.0\.0\.6.*plugin_name=e-internal-ok' 90
+expect "edge opt-out: no policy refusal" bash -c "! docker compose -f '$HERE/compose.yml' logs gateway 2>&1 | grep -q 'is an internal address.*e-internal-ok'"
+export GATEWAY_ALLOW_INTERNAL=
+
 log "10. Community Edition: loads unverified, warns once"
 export EDITION=ce STUDIO_TLOG_POLICY=required GATEWAY_TLOG_POLICY=required
 start
@@ -136,6 +165,13 @@ expect "CE edge loads an unsigned plugin" in_gateway 'Plugin pre-warmed successf
 [ "$(slog | grep -c 'SECURITY WARNING: OCI RequireSignature is enabled')" = 1 ] && pass "CE Studio warns once" || fail "CE Studio warning count"
 [ "$(glog | grep -c 'SECURITY WARNING: OCI RequireSignature is enabled')" = 1 ] && pass "CE gateway warns once" || fail "CE gateway warning count"
 expect "CE records the plugin as NOT verified" in_gateway 'signature NOT verified: signature verification is not available in this edition'
+
+log "10b. Community Edition: oci:// on an internal registry hostname refused too (c1g.32)"
+export STUDIO_ALLOW_INTERNAL=false GATEWAY_ALLOW_INTERNAL=false
+start
+r=$(api POST /api/v1/plugins "{\"name\":\"c-internal-reg\",\"command\":\"$INTERNAL_REF\",\"hook_type\":\"post_auth\",\"is_active\":true}")
+[[ $r == 400*internal-reg.test* ]] && pass "CE Studio: create refused" || fail "CE Studio internal registry: ${r:0:200}"
+export STUDIO_ALLOW_INTERNAL= GATEWAY_ALLOW_INTERNAL=
 
 down
 echo

@@ -15,6 +15,7 @@ services:
     ports: ["127.0.0.1:18080:8080"]
     tmpfs: ["/data:uid=65532,gid=65532,exec"] # plugin binaries run from /data/oci
     volumes: ["${KEYS_DIR:?}:/keys:ro"]
+    extra_hosts: ["internal-reg.test:10.0.0.6"]
     environment:
       <<: *common
       TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
@@ -38,6 +39,8 @@ services:
       AI_STUDIO_OCI_INSECURE_REGISTRIES: registry:5000
       AI_STUDIO_OCI_TLOG_POLICY: ${STUDIO_TLOG_POLICY:-required}
       AI_STUDIO_PLUGIN_ALLOWED_SOURCES: ${STUDIO_ALLOWED_SOURCES:-}
+      # Overrides the common "true" for the internal-host scenarios
+      ALLOW_INTERNAL_NETWORK_ACCESS: ${STUDIO_ALLOW_INTERNAL:-true}
       # AI_STUDIO_OCI_REQUIRE_SIGNATURE deliberately unset: the default (true) is under test
 
   gateway:
@@ -48,6 +51,7 @@ services:
     ports: ["127.0.0.1:18081:8080"]
     tmpfs: ["/data:uid=65532,gid=65532,exec"] # plugin binaries run from /data/oci
     volumes: ["${KEYS_DIR:?}:/keys:ro"]
+    extra_hosts: ["internal-reg.test:10.0.0.6"]
     environment:
       <<: *common
       TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}

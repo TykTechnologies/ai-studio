@@ -38,7 +38,7 @@ push_edges() { api POST /api/v1/edges/reload-all | cut -c1-200; }
 wait_gateway_log() {
   local pattern=$1 secs=${2:-90}
   for _ in $(seq 1 "$secs"); do
-    gateway_logs | grep -qE "$pattern" && return 0
+    gateway_logs | sed 's/\x1b\[[0-9;]*m//g' | grep -qE "$pattern" && return 0
     sleep 1
   done
   return 1
