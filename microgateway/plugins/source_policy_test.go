@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -32,14 +33,33 @@ func requireSourceNotAllowed(t *testing.T, err error) {
 	require.True(t, errors.As(err, &notAllowed), "want ErrPluginSourceNotAllowed, got %v", err)
 }
 
+// syncBuffer is a bytes.Buffer safe for the plugin goroutines that keep
+// logging while the test reads it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // captureLogs sends the global logger to a buffer for the rest of the test.
-func captureLogs(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *syncBuffer {
 	t.Helper()
-	var logs bytes.Buffer
+	logs := &syncBuffer{}
 	saved := log.Logger
-	log.Logger = zerolog.New(&logs)
+	log.Logger = zerolog.New(logs)
 	t.Cleanup(func() { log.Logger = saved })
-	return &logs
+	return logs
 }
 
 // acceptingVerifier is a security service that accepts every signature.
