@@ -510,6 +510,58 @@ func TestUpdateApp_OmittedBudgetIsKept(t *testing.T) {
 	assert.Nil(t, reload().MonthlyBudget, "an explicit null clears the budget")
 }
 
+// A PATCH whose attributes hold only metadata changes only the metadata: it
+// used to blank the App's name, owner and LLM, tool and datasource access
+// (midsommar-clean-dg5).
+func TestUpdateApp_MetadataOnlyPatchKeepsTheRest(t *testing.T) {
+	api, db := setupTestAPI(t)
+	user := &models.User{Email: "metaonly@example.com", Name: "Meta Only", IsAdmin: true, EmailVerified: true}
+	require.NoError(t, user.Create(db))
+	llm := &models.LLM{Name: "Meta LLM", PrivacyScore: 5, Vendor: "Test", DefaultModel: "m"}
+	require.NoError(t, db.Create(llm).Error)
+	ds := &models.Datasource{Name: "Meta DS", PrivacyScore: 1, UserID: user.ID}
+	require.NoError(t, db.Create(ds).Error)
+	tool := &models.Tool{Name: "Meta Tool", PrivacyScore: 1}
+	require.NoError(t, db.Create(tool).Error)
+	app := &models.App{Name: "Meta App", Description: "keep me", UserID: user.ID,
+		Metadata: map[string]interface{}{"old": "x"}}
+	require.NoError(t, db.Create(app).Error)
+	require.NoError(t, db.Model(app).Association("LLMs").Append(llm))
+	require.NoError(t, db.Model(app).Association("Datasources").Append(ds))
+	require.NoError(t, db.Model(app).Association("Tools").Append(tool))
+
+	body := map[string]interface{}{"data": map[string]interface{}{"type": "app", "attributes": map[string]interface{}{
+		"metadata": map[string]interface{}{"prompt_compressor": map[string]interface{}{"policy": "off"}}}}}
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/apps/%d", app.ID), body)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	got := models.NewApp()
+	require.NoError(t, got.Get(db, app.ID))
+	assert.Equal(t, "Meta App", got.Name)
+	assert.Equal(t, "keep me", got.Description)
+	assert.Equal(t, user.ID, got.UserID)
+	require.Len(t, got.LLMs, 1)
+	assert.Equal(t, llm.ID, got.LLMs[0].ID)
+	require.Len(t, got.Datasources, 1)
+	assert.Equal(t, ds.ID, got.Datasources[0].ID)
+	require.Len(t, got.Tools, 1)
+	assert.Equal(t, tool.ID, got.Tools[0].ID)
+	assert.Equal(t, map[string]interface{}{"policy": "off"}, got.Metadata["prompt_compressor"])
+	assert.NotContains(t, got.Metadata, "old", "a metadata key present replaces the metadata")
+
+	// An attribute that is present still changes, empty lists included.
+	body = map[string]interface{}{"data": map[string]interface{}{"type": "app", "attributes": map[string]interface{}{
+		"name": "Renamed", "tool_ids": []uint{}}}}
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/apps/%d", app.ID), body)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = models.NewApp()
+	require.NoError(t, got.Get(db, app.ID))
+	assert.Equal(t, "Renamed", got.Name)
+	assert.Empty(t, got.Tools)
+	assert.Len(t, got.LLMs, 1)
+	assert.Equal(t, "keep me", got.Description)
+}
+
 // The key probe fails closed: an unreadable body must not read as "every key
 // omitted", which would keep values the caller asked to change, nor as
 // "nothing to keep".
