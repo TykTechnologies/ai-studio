@@ -23,9 +23,9 @@ import (
 func TestLLMBudget_EnforcedOnEdge(t *testing.T) {
 	const overToken, appBudgetToken = "llm-over-budget-token", "app-over-budget-token"
 	var (
-		db          *gorm.DB
-		under, over *mgwdb.LLM
-		budgetedApp *mgwdb.App
+		db                *gorm.DB
+		under, over, free *mgwdb.LLM
+		budgetedApp       *mgwdb.App
 	)
 	baseURL, backend := setupTrafficTestSeeded(t, config.GatewayConfig{}, func(d *gorm.DB, llm *mgwdb.LLM, app *mgwdb.App) {
 		db, under = d, llm
@@ -34,6 +34,11 @@ func TestLLMBudget_EnforcedOnEdge(t *testing.T) {
 			APIKeyEncrypted: llm.APIKeyEncrypted, DefaultModel: "gpt-4", IsActive: true, MonthlyBudget: 0.0005}
 		require.NoError(t, d.Create(over).Error)
 		require.NoError(t, d.Create(&mgwdb.AppLLM{AppID: app.ID, LLMID: over.ID, IsActive: true}).Error)
+		// monthly_budget 0 and no llm_blocks entry: no limit on the edge.
+		free = &mgwdb.LLM{Name: "No Budget", Slug: "no-budget", Vendor: "openai", Endpoint: llm.Endpoint,
+			APIKeyEncrypted: llm.APIKeyEncrypted, DefaultModel: "gpt-4", IsActive: true}
+		require.NoError(t, d.Create(free).Error)
+		require.NoError(t, d.Create(&mgwdb.AppLLM{AppID: app.ID, LLMID: free.ID, IsActive: true}).Error)
 		require.NoError(t, d.Create(&mgwdb.APIToken{Token: overToken, Name: "over", AppID: app.ID, IsActive: true}).Error)
 		budgetedApp = &mgwdb.App{Name: "Budgeted", IsActive: true, MonthlyBudget: 0.0005}
 		require.NoError(t, d.Create(budgetedApp).Error)
@@ -55,7 +60,7 @@ func TestLLMBudget_EnforcedOnEdge(t *testing.T) {
 		services.NewBudgetSyncHandler(db).HandleBudgetSync(ev)
 	}
 	sync(uint64(now.UnixNano()), services.BudgetSyncPayload{
-		LLMBudgets: map[uint32]services.AppBudgetData{uint32(over.ID): spend(0.010992), uint32(under.ID): spend(0.0001)},
+		LLMBudgets: map[uint32]services.AppBudgetData{uint32(over.ID): spend(0.010992), uint32(under.ID): spend(0.0001), uint32(free.ID): spend(50)},
 		AppBudgets: map[uint32]services.AppBudgetData{uint32(budgetedApp.ID): spend(0.01)},
 	})
 	t.Cleanup(func() { sync(uint64(time.Now().UnixNano()), services.BudgetSyncPayload{}) })
@@ -74,6 +79,9 @@ func TestLLMBudget_EnforcedOnEdge(t *testing.T) {
 
 	status, body = gatewayPost(t, baseURL+"/ai/mock-openai/v1/chat/completions", overToken, chat)
 	assert.Equal(t, 200, status, "an LLM under its budget is served: %s", body)
+
+	status, body = gatewayPost(t, baseURL+"/ai/no-budget/v1/chat/completions", overToken, chat)
+	assert.Equal(t, 200, status, "an LLM with monthly_budget 0 and no llm_blocks entry is not refused: %s", body)
 
 	// A spent App budget is refused as before, on the LLM under its budget.
 	before = backend.GetRequestCount()

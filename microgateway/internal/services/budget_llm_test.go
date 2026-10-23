@@ -130,3 +130,42 @@ func TestBudgetSync_OldControlLeavesLLMBudgets(t *testing.T) {
 	_, _, err = svc.CheckBudgetStatus(app.ID, &id, 0)
 	assert.ErrorContains(t, err, "budget is 0", "the LLM blocks are kept")
 }
+
+// A sync from a control plane before 2.3 (blocks_included, no LLM fields)
+// leaves an edge that has learned no LLM budgets sane: it refuses no LLM on
+// the control plane's say, its own spend still enforces each LLM's budget in
+// the calendar month, and the App blocks apply as before.
+func TestBudgetSync_OldControlOnFreshEdge(t *testing.T) {
+	svc, h, app := newLLMBudgetTestService(t)
+	svc.budgetBlocks = h.blocks
+	blockedApp := &database.App{Name: "blocked", IsActive: true}
+	require.NoError(t, svc.db.Create(blockedApp).Error)
+	spent := &database.LLM{Name: "spent", Slug: "spent", Vendor: "openai", MonthlyBudget: 1, IsActive: true}
+	fresh := &database.LLM{Name: "fresh", Slug: "fresh", Vendor: "openai", MonthlyBudget: 1, IsActive: true}
+	free := &database.LLM{Name: "free", Slug: "free", Vendor: "openai", IsActive: true} // monthly_budget 0
+	for _, l := range []*database.LLM{spent, fresh, free} {
+		require.NoError(t, svc.db.Create(l).Error)
+	}
+
+	ev, err := eventbridge.NewEvent(BudgetSyncTopic, "control", eventbridge.DirDown, BudgetSyncPayload{
+		SequenceNumber: 1, BlocksIncluded: true, Blocks: map[uint32]string{uint32(blockedApp.ID): "app monthly budget is 0"}})
+	require.NoError(t, err)
+	h.HandleBudgetSync(ev)
+
+	_, _, err = svc.CheckBudgetStatus(blockedApp.ID, &fresh.ID, 0)
+	assert.EqualError(t, err, "budget exceeded: app monthly budget is 0", "App blocks apply as before")
+
+	for _, l := range []*database.LLM{spent, fresh, free} {
+		_, _, err = svc.CheckBudgetStatus(app.ID, &l.ID, 0)
+		assert.NoError(t, err, "no LLM is refused on an old control plane's say: %s", l.Name)
+	}
+
+	require.NoError(t, svc.RecordUsage(app.ID, &spent.ID, 10, 1.5*10000, 5, 5))
+	require.NoError(t, svc.RecordUsage(app.ID, &free.ID, 10, 50*10000, 5, 5))
+	_, _, err = svc.CheckBudgetStatus(app.ID, &spent.ID, 0)
+	assert.ErrorContains(t, err, "LLM monthly budget exceeded", "this edge's own spend enforces the budget")
+	_, _, err = svc.CheckBudgetStatus(app.ID, &fresh.ID, 0)
+	assert.NoError(t, err)
+	_, _, err = svc.CheckBudgetStatus(app.ID, &free.ID, 0)
+	assert.NoError(t, err, "monthly_budget 0 with no llm_blocks entry is no limit")
+}
