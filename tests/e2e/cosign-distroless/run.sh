@@ -120,6 +120,13 @@ export STUDIO_ALLOWED_SOURCES=
 out=$(docker run --rm -e GATEWAY_MODE=standalone -e ENCRYPTION_KEY=c1ge2eencryptionkey0123456789abc -e PLUGINS_ALLOWED_SOURCES=ocii "c1g-e2e/microgateway:$EDITION" 2>&1)
 [[ $? -ne 0 && $out == *'invalid PLUGINS_ALLOWED_SOURCES'* ]] && pass "gateway refuses PLUGINS_ALLOWED_SOURCES=ocii" || fail "gateway ocii"
 
+log "9d. a hub-pushed grpc:// plugin on an internal address is refused by the edge (c1g.31)"
+export GATEWAY_ALLOW_INTERNAL=false
+start
+push_to_edge "e-grpc-internal=grpc://10.0.0.5:50051"
+expect "edge refuses grpc://10.0.0.5 pushed by the hub" in_gateway 'Failed to pre-warm plugin .*(internal|blocked).*plugin_name=e-grpc-internal'
+export GATEWAY_ALLOW_INTERNAL=
+
 log "10. Community Edition: loads unverified, warns once"
 export EDITION=ce STUDIO_TLOG_POLICY=required GATEWAY_TLOG_POLICY=required
 start

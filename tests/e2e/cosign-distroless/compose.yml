@@ -67,6 +67,8 @@ services:
       OCI_PLUGINS_REQUIRE_SIGNATURE: "true"
       OCI_PLUGINS_TLOG_POLICY: ${GATEWAY_TLOG_POLICY:-required}
       PLUGINS_ALLOWED_SOURCES: ${GATEWAY_ALLOWED_SOURCES:-}
+      # Overrides the common "true" for the grpc internal-host scenario
+      ALLOW_INTERNAL_NETWORK_ACCESS: ${GATEWAY_ALLOW_INTERNAL:-true}
 
 networks:
   default:
